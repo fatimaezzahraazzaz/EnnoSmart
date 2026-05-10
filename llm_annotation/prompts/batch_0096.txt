@@ -1,0 +1,247 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 96/135, 8 chunks)
+
+### CHUNK_ID: projet_21__chunk_000015_sub01
+```
+fonctionne efficacement grâce à ses principes de conception inspirés (hautes cheminées, murs poreux, masse thermique). Figure 3 : Schéma montrant la ventilation naturelle utilisée dans le bâtiment Eastgate à Harare
+
+Suite au succès d’Eastgate, Mick Pearce a affiné l’approche biomimétique pour le Council House 2 à Melbourne, un bâtiment de bureaux de dix étages achevé en 2006. Les cheminées de ventilation sur les façades nord et sud imitent directement les conduits d’aération des termitières. Les cheminées nord sont peintes en noir pour absorber la chaleur solaire, encourageant l’air chaud à monter et sortir du bâtiment - exactement comme l’air chaud monte à travers la cheminée centrale d’une termitière. Le système intègre des leçons tirées d’Eastgate avec de nouveaux matériaux et technologies, démontrant l’évolution du concept biomimétique dans un climat différent.
+
+Le système thermique et de ventilation s’inspire de mécanismes naturels de régulation thermique, comme ceux observés dans les (termitières). Dans ces structures naturelles, l’air frais entre à la base, est réchauffé dans la masse, puis expulsé par des ouvertures supérieures, générant une ventilation naturelle par différence de densité (effet cheminée).
+
+Figure 4 : Schéma du principe de la régulation thermique dans le bâtiment
+
+Plus récemment, l’architecte Diébédo Francis Kéré a conçu la startup Lions Campus, Lac Turkana, Kenya. Situé sur les rives du lac Turkana, ce centre de formation ICT est dominé par trois grandes tours de ventilation en terre cuite émulant les termitières qui parsèment la région. Les tours sont construites en pierre locale avec un enduit en béton. Elles sont conçues pour refroidir passivement l’intérieur du bâtiment en aspirant l’air chaud vers le haut grâce à l’effet de cheminée, permettant à l’air frais d’entrer par des ouvertures basses ajustables. Cette technique reflète le système de ventilation naturelle des termitières.
+
+Figure 5 : Photo du bâtiment et du principe de l’approche climatique
+```
+
+### CHUNK_ID: projet_21__chunk_000019
+```
+[SECTION : Limites des travaux liés au biomimétisme appliqué]
+L’étude de Zillante et al. propose une analyse conceptuelle du biomimétisme, s’appuyant sur l’observation de mécanismes naturels pour identifier des principes de conception (ventilation naturelle, inertie thermique, morphologie). Toutefois, elle n’offre pas une méthodologie opérationnelle de transposition des stratégies biologiques vers des systèmes constructifs.
+
+Les projets emblématiques (Eastgate Centre de Harare par Mick Pearce et Council House 2 de Melbourne, 2006) démontrent la faisabilité du biomimétisme inspiré des termitières. Néanmoins, la documentation disponible reste principalement descriptive. Les données techniques de dimensionnement des cheminées de ventilation (sections, hauteurs, gradients thermiques requis) ne sont pas communiquées. De plus, ces projets concernent des climats très différents (subtropical semi-aride pour Harare, océanique tempéré chaud Cfb/Cfa pour Melbourne) du climat tempéré océanique d’Île-de-France ou de Nantes. L’application des principes des terriers de chiens de prairie (ventilation par gradient d’altitude et effet Venturi) à des systèmes hybrides couplant puits climatique et cheminées solaires à tirage assisté n’est documentée ni par la biologie ni par l’ingénierie du bâtiment.
+
+La transposition des mécanismes naturels reste souvent conceptuelle et partiellement simplifiée. Les performances réelles dépendent d’ajustements techniques (ventilateurs d’appoint, régulations hybrides).
+
+De plus, les retours d’expérience quantifiés et comparables sont rares et la reproductibilité dans d’autres contextes climatiques ou culturels n’est pas systématiquement démontrée.
+
+Le biomimétisme constitue ainsi davantage un cadre d’inspiration qu’un corpus méthodologique consolidé scientifiquement pour la conception thermique passive.
+```
+
+### CHUNK_ID: projet_21__chunk_000023_sub02
+```
+les terriers, des études d’Elliott de 1978 sur le comportement et l’écologie des rongeurs fouisseurs, et des recherches de Hoogland de 1995 sur les chiens de prairie à queue noire.
+
+Figure 6 : Les constructions animales : zoom sur le terrier du chien de prairie,
+
+Transposition au système de puits climatique et cheminées solaires
+
+Les caractéristiques des terriers de chiens de prairie nous ont conduits à réaliser une architecture basée sur les principes d’une extension semi-enterrée ventilée et rafraîchie. Dans ce même esprit que des projets architecturaux précurseurs tels que le Musée des Beaux-Arts de Houston inspiré des galeries souterraines pour une circulation fluide, l’Eastgate Centre utilisant des conduits souterrains et des cheminées solaires, ou les Earthships (géonefs) qui sont des constructions semi-enterrées auto-suffisantes, nous avons développé notre propre solution adaptée au contexte patrimonial senlisien.
+
+La ventilation du bâtiment repose en partie sur le même principe que celui des terriers : un puits climatique avec une entrée d’air en partie sud du site et une sortie en partie nord, à travers des cheminées solaires situées sur l’extension. À l’instar des terriers, la sortie d’air se fait à altitude plus élevée que son entrée. À vitesse plus élevée en toiture, la pression est plus faible selon la loi de Bernoulli. Ce gradient de pression, aidé par un système mécanique sur les cheminées, crée ainsi un renouvellement d’air dans les salles de danse. Même une légère brise peut tirer l’air, depuis le dôme inférieur vers le dôme supérieur, reproduisant le mécanisme observé dans les terriers.
+
+Le système que nous avons développé constitue un dispositif hybride associant un puits climatique en prise d’air et une sortie d’air exploitant le tirage thermique et aéraulique extérieur par le biais d’une cheminée de ventilation naturelle. Ce dispositif est de type hybride, c’est-à-dire assisté par ventilateur, et régulé en débit de façon à garantir le respect des débits hygiéniques en toutes conditions. Cette régulation permet de pallier les périodes où les conditions extérieures ne sont pas suffisantes pour assurer le tirage naturel nécessaire.
+```
+
+### CHUNK_ID: projet_21__chunk_000023_sub03
+```
+garantir le respect des débits hygiéniques en toutes conditions. Cette régulation permet de pallier les périodes où les conditions extérieures ne sont pas suffisantes pour assurer le tirage naturel nécessaire.
+
+Afin d’augmenter l’efficacité des cheminées solaires, nous avons mis en œuvre des coudes girouettes permettant d’optimiser l’orientation des cheminées pour la sortie d’air et la prise d’air extérieur par le totem à vent, en s’adaptant aux dominantes de vent qui sont principalement orientées ouest à sud-sud-ouest sur le site.
+
+Figure 7 : Cheminée de ventilation naturelle inspirée du terrier
+
+Rafraîchissement adiabatique inspiré des termitières et des nids d’abeilles
+
+Afin d’assurer un confort hygrothermique meilleur des usagers, nous avons complété le puits climatique par un système de rafraîchissement adiabatique : une centrale de traitement d’air (CTA) adiabatique. Ce système repose sur le refroidissement de l’air ambiant par l’évaporation de l’eau.
+
+Bien que ce principe ne soit a priori pas utilisé par les chiens de prairie dans leurs terriers, l’utilisation de l’évapotranspiration pour la thermorégulation dans le vivant et dans les constructions animales est une pratique courante. Nous la retrouvons notamment dans certaines termitières, thermorégulées en grande partie par la gestion de l’humidité, et dans les nids d’abeilles par l’insertion de gouttelettes d’eau en vue de les faire évaporer devant les pupes.
+
+Le système développé comporte deux étapes de rafraîchissement : l’air neuf est rafraîchi une première fois via un échangeur adiabatique, puis une seconde fois pour environ 50% du débit dans une seconde partie de l’échangeur.
+
+Figure 8 : Système de régulation du bâtiment
+
+La CTA est alimentée par un système de récupération d’eau pluviale de 20 mètres cubes que nous avons développé. Celui-ci permet également l’entretien/nettoyage (sols principalement) et l’arrosage (avec le surplus non utilisé, en été notamment). Un point de puisage intérieur sera mis en place au niveau du local ménage (pour entretien) et un point de puisage extérieur sera prévu pour l’arrosage et si besoin entretien des surfaces extérieures. Le point de puisage extérieur pourra aussi être mise à profit pour des usages externes au projet.
+```
+
+### CHUNK_ID: projet_21__chunk_000023_sub04
+```
+puisage extérieur sera prévu pour l’arrosage et si besoin entretien des surfaces extérieures. Le point de puisage extérieur pourra aussi être mise à profit pour des usages externes au projet.
+
+Nous avons réalisé une étude de la fluctuation du niveau de la cuve de récupération des eaux pluviales sur la saison estivale avec les hypothèses suivantes : 100 usages sanitaires par jour à 4 litres par usage, 160 litres par jour pour l’échangeur adiabatique du 15 juin au 30 septembre, et 150 litres par jour pour l’entretien.
+
+Figure 9 : Diagramme de marnage de la cuve en saison estivale
+
+Intégration dans un système de ventilation globale
+
+Le système de ventilation global du conservatoire combine plusieurs technologies. La base repose sur une centrale de traitement d’air double-flux avec récupération de chaleur, permettant de limiter les déperditions thermiques liées au renouvellement d’air tout en assurant une qualité d’air intérieur conforme aux exigences d’un établissement recevant du public. Ce système mécanique est complété par des stratégies de ventilation naturelle, sur l’existant par la mise en place d’ouvrants et sur l’extension par des ouvrants et le dispositif hybride de puits climatique et cheminées solaires.
+
+Les débits de ventilation hygiénique ont été dimensionnés précisément pour chaque type de local, avec un débit de base de 25 mètres cubes par heure et par personne. Les simulations ont permis de déterminer les débits totaux nécessaires pour chaque espace, variant de 25 mètres cubes par heure pour des locaux individuels comme la direction ou le secrétariat, à 500 mètres cubes par heure pour la grande salle de piano accueillant 20 personnes. Le puits climatique a été spécifiquement dimensionné pour l’alimentation en air neuf des studios de danse, locaux à forte densité d’occupation et à besoins thermiques spécifiques.
+```
+
+### CHUNK_ID: projet_21__chunk_000023_sub05
+```
+piano accueillant 20 personnes. Le puits climatique a été spécifiquement dimensionné pour l’alimentation en air neuf des studios de danse, locaux à forte densité d’occupation et à besoins thermiques spécifiques.
+
+L’ensemble constitue un système hybride articulant ventilation mécanique avec récupération de chaleur, rafraîchissement passif et adiabatique, géothermie de surface par le biais du puits climatique, et ventilation nocturne automatisée. La complexité de ce couplage et l’optimisation des interactions entre ces différents composants, inspirée directement des mécanismes observés dans les constructions animales, ont nécessité des travaux de conception et de dimensionnement spécifiques, allant au-delà de l’application directe de solutions techniques standards.
+```
+
+### CHUNK_ID: projet_21__chunk_000027
+```
+[SECTION : Conception bioclimatique intégrée de l’extension]
+Nos travaux de conception ont placé l’approche bioclimatique au cœur de ce projet architectural. Nous avons développé l’extension en strates, du sol au ciel, cherchant une stabilité thermique tout en captant l’énergie du soleil et du vent. Cette approche a eu pour objectif d’exploiter les différentes caractéristiques thermiques des niveaux du bâtiment, le sous-sol bénéficiant de la stabilité thermique du sol et les niveaux supérieurs de l’exposition solaire
+
+Nous avons positionné l’extension au centre du U formé par le bâti pour préserver les espaces libres périphériques tout en créant une configuration favorable aux échanges thermiques.
+
+En outre, l’implantation de l’extension au cœur de la cour existante permet de conserver l’intégralité des façades extérieures du bâtiment patrimonial.
+
+Les patios sont utilisés pour apport de lumière naturelle et ventilation naturelle pour les locaux attenants.
+```
+
+### CHUNK_ID: projet_21__chunk_000029
+```
+[SECTION : ZAC PIRMIL B10 - Développement d’un modèle de régulation thermique passive multicritère pour bâtiment collectif bas-carbone]
+Ce projet concerne la construction d’un ensemble immobilier sur l’îlot B10 de la ZAC Pirmil-les-Isles à Rezé, comprenant 89 logements répartis dans quatre bâtiments (de R+4 à R+8). Nous avons défini une démarche de conception bioclimatique visant à limiter les besoins énergétiques par des stratégies passives de régulation thermique.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 96,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

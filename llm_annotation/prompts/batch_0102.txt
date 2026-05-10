@@ -1,0 +1,351 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 102/135, 8 chunks)
+
+### CHUNK_ID: projet_22__chunk_000021
+```
+[SECTION : Les vergers de pommiers]
+Le pommier (Malus pumila) est une espèce d’arbre fruitier appartenant à la famille des rosacées et au genre Malus. Il comprend 26-30 espèces et sa hauteur est de 2-15 m selon les variétés.
+
+En verger de production, les pommiers sont composés d’une partie productive, greffé à un support porte-greffe. En Europe, le plus utilisé est le M9 (85%), et il favorise la formation de boutons floraux, permet une productivité rapide et régulière, donnant des fruits bien calibrés, et une compatibilité assez élevée avec les greffons.
+
+Le cycle de développement du pommier se déroule sur une année et comporte cinq stades :
+
+Repos hivernal
+
+Débourrement printanier (éclosion des bourgeons)
+
+Induction florale
+
+Floraison et pollinisation
+
+Développement des fruits
+
+Une bonne conduite du verger est primordiale pour conserver la pérennité du pommier, notamment en fertilisant et en préparant le sol avant plantation, en réalisant des tailles et des éclaircissages, pour maintenir la production et la maitrise de la charge de l’arbre.
+
+Par ailleurs, le gel et la grêle constituent un réel problème d’un point de vue brûlure au niveau des fleurs, déformation et perte des fruits. Il est donc indispensable de protéger les arbres contre ces fléaux climatiques.
+
+Dans ce contexte, le renfort des systèmes de production repose sur une meilleure compréhension des interactions entre sol, plante et climat.
+```
+
+### CHUNK_ID: projet_22__chunk_000025
+```
+[SECTION : Variétés, porte-greffes et système de conduite]
+Les performances des vergers dépendent fortement du couple variété/porte-greffe et du système de conduite. Les recherches actuelles portent sur l’évaluation de nouveaux porte-greffes (alternatifs au M9), l’adaptation des variétés aux contraintes climatiques, la redéfinition des architectures (axe, biaxe…). Ainsi, il semble que les porte-greffes de type Geneva soient réputés plus performants en conditions de replantation et de stress.
+
+Il est établi que la vigueur et la productivité varient fortement selon les combinaisons et que la réponse aux systèmes de conduit est spécifique à chaque variété.
+
+Toutefois, nous sommes face à une absence de modèles prédictifs intégrant l’ensemble des interactions variété/porte-greffe-conduite.
+```
+
+### CHUNK_ID: projet_23__chunk_000014_sub00
+```
+[SECTION : Tests microbiologiques sur l’eau de rinçage]
+En parallèle, nous avons réalisé des tests microbiologiques sur l’eau servant à fabriquer et à rincer. Ne pouvant pas sous-traiter cette partie (temps d’analyses trop long), au sein de notre laboratoire, nous avons travaillé sur un protocole d’analyses de l’eau en faisant de la recherche bibliographique sur les techniques de contrôle de la propreté microbiologique de l’eau. Pour élaborer notre protocole, nous nous sommes basés sur un protocole interne existant sur l’évaluation de la propreté d’un produit désinfectant et sur la norme NF EN ISO 8199 : 2018 : Qualité de l'eau - Exigences et lignes directrices générales pour les examens microbiologiques sur milieu de culture et sur un mémoire :2019 : Contrôle qualité de l’eau purifiée produite par SAIDAL Constantine.
+
+Par la suite, nous avons mené des essais de ce protocole sur des prélèvements d’eau de l’installation : nous avons obtenu des résultats aléatoires, parfois conformes et parfois non conformes.
+
+Figure  : Exemple d’analyses microbiologiques d’un prélèvement du système d’eau purifiée
+
+Dans l’exemple ci-dessus, les résultats étaient non conformes car ils devaient être inférieurs à 100 UFC/mL, alors que nous avons obtenu des valeurs de 350-980 UFC/mL. Nous avons émis l’hypothèse que le prélèvement avait été effectué dans de mauvaises conditions d’hygiène, ou bien que le volume d’écoulement n’avait pas été suffisant.
+
+Nous avons également réalisé des prélèvements sur d’autres vannes.
+
+Nos analyses de l’ensemble des résultats obtenus ont mis en évidence un mode de prélèvement non adapté. Nous avons donc été contraints de redéfinir le protocole de prélèvement, notamment en prélevant plusieurs fois au niveau de la même vanne, ou en augmentant le volume d’écoulement.
+
+Après redéfinition du protocole d’analyse, nous avons pu obtenir des résultats corrects.
+```
+
+### CHUNK_ID: projet_23__chunk_000031_sub00
+```
+[PAGE 9]
+CIR 2024
+ Des exigences économiques et de cadence industrielle spécifiques au secteur.
+De plus, aucune méthodologie validée ne traite du nettoyage d’équipements ayant contenu
+des produits détergents.
+Les guides et normes existants (ISO, Bonnes Pratiques de
+Fabrication) proposent des protocoles de nettoyage basés sur l’utilisation de détergents, ce
+qui n’est pas applicable lorsque les produits eux-mêmes sont des agents nettoyants.
+Cela justifie le besoin de développer une solution de nettoyage sur mesure, adaptée aux
+particularités des lignes de fabrication de détergents
+II.3.2.
+Verrous et incertitudes scientifiques, techniques,
+technologiques
+Le développement du nouveau système de fabrication des détergents s’est heurté à plusieurs
+verrous techniques et scientifiques majeurs, qui ont nécessité une phase importante de R&D.
+Deux grandes problématiques se sont particulièrement distinguées pour garantir précision,
+reproductibilité et robustesse du procédé : le nettoyage des équipements et le nouveau mode
+de formulation des produits.
+II.3.2.1.
+Verrou 1 : Nettoyage des équipements de production de détergents
+Il n’existe pas à ce jour de protocole validé ou normé pour le nettoyage d’équipements ayant
+contenu des produits détergents, en particulier dans un système automatisé de NEP.
+Cette
+absence de référentiel normatif constitue un véritable verrou technique, dans un contexte où
+les détergents présentent des caractéristiques particulières (forte viscosité, mousse
+abondante) qui rendent leur élimination difficile.
+Ce verrou soulève plusieurs incertitudes
+critiques :
+ L’efficacité des cycles de NEP sur des résidus invisibles ou microbiologiques reste
+incertaine, notamment dans les zones difficiles d’accès des cuves inox ou de la
+tuyauterie, où des biofilms peuvent se former,
+ Il existe une problématique spécifique au secteur : en tant que fabricant de détergents,
+l’utilisation d’un autre détergent pour nettoyer nos équipements est incohérente.
+Le
+nettoyage devient paradoxal : comment nettoyer des tuyaux de fabrication de
+détergents avec un détergent ?
+ En l’absence de méthode validée, la validation du nettoyage devient un enjeu
+complexe, où il est indispensable de développer des tests expérimentaux spécifiques,
+adaptés à la nature des produits manipulés et aux contraintes du procédé.
+Ceci nous
+impose de définir un protocole de traçabilité par fluorescence, ainsi que des tests
+microbiologiques spécifiques.
+```
+
+### CHUNK_ID: projet_23__chunk_000056_sub00
+```
+[SECTION : Tests microbiologiques sur l’eau de rinçage]
+En parallèle, nous avons réalisé des tests microbiologiques sur l’eau servant à fabriquer et à rincer. Ne pouvant pas sous-traiter cette partie (temps d’analyses trop long), au sein de notre laboratoire, nous avons travaillé sur un protocole d’analyses de l’eau en faisant de la recherche bibliographique sur les techniques de contrôle de la propreté microbiologique de l’eau. Pour élaborer notre protocole, nous nous sommes basés sur un protocole interne existant sur l’évaluation de la propreté d’un produit désinfectant et sur la norme NF EN ISO 8199 : 2018 : Qualité de l'eau - Exigences et lignes directrices générales pour les examens microbiologiques sur milieu de culture et sur un mémoire :2019 : Contrôle qualité de l’eau purifiée produite par SAIDAL Constantine.
+
+Par la suite, nous avons mené des essais de ce protocole sur des prélèvements d’eau de l’installation : nous avons obtenu des résultats aléatoires, parfois conformes et parfois non conformes.
+
+Figure 4 : Exemple d’analyses microbiologiques d’un prélèvement du système d’eau purifiée
+
+Dans l’exemple ci-dessus, les résultats étaient non conformes car ils devaient être inférieurs à 100 UFC/mL, alors que nous avons obtenu des valeurs de 350-980 UFC/mL. Nous avons émis l’hypothèse que le prélèvement avait été effectué dans de mauvaises conditions d’hygiène, ou bien que le volume d’écoulement n’avait pas été suffisant.
+
+Nous avons également réalisé des prélèvements sur d’autres vannes.
+
+Nos analyses de l’ensemble des résultats obtenus ont mis en évidence un mode de prélèvement non adapté. Nous avons donc été contraints de redéfinir le protocole de prélèvement, notamment en prélevant plusieurs fois au niveau de la même vanne, ou en augmentant le volume d’écoulement.
+
+Après redéfinition du protocole d’analyse, nous avons pu obtenir des résultats corrects.
+```
+
+### CHUNK_ID: projet_23__chunk_000035
+```
+[PAGE 13]
+
+CIR 2024
+Tige de la boule de rinçage (1) Tige de la boule de rinçage (2)
+Figure 2 : Tige de la boule de rinçage après les NEP, sous UV
+Finalement, nous avons réalisé des essais avec l’agent fluorescent pour évaluer la qualité du
+nettoyage. Après les NEP, des résidus étaient toujours visibles. Nous avons supposé que
+l’agent fluorescent était plus difficile à nettoyer qu’un produit détergent. Notre méthode devait
+donc être revue.
+Nous avons par exemple pensé à tester une autre nature d’agent fluorescent. Nous devons
+donc faire des recherches dessus pour lister les molécules fluorescentes qui pourraient nous
+intéresser.
+II.4.2.1.3. Tests microbiologiques sur l’eau de rinçage
+En parallèle, nous avons réalisé des tests microbiologiques sur l’eau servant à fabriquer et à
+rincer. Ne pouvant pas sous-traiter cette partie (temps d’analyses trop long), au sein de notre
+laboratoire, nous avons travaillé sur un protocole d’analyses de l’eau en faisant de la recherche
+bibliographique sur les techniques de contrôle de la propreté microbiologique de l’eau. Pour
+élaborer notre protocole, nous nous sommes basés sur un protocole interne existant sur
+l’évaluation de la propreté d’un produit désinfectant et sur la norme NF EN ISO 8199 : 2018 :
+Qualité de l'eau - Exigences et lignes directrices générales pour les examens microbiologiques
+sur milieu de culture et sur un mémoire :2019 : Contrôle qualité de l’eau purifiée produite par
+SAIDAL Constantine.
+Par la suite, nous avons mené des essais de ce protocole sur des prélèvements d’eau de
+l’installation : nous avons obtenu des résultats aléatoires, parfois conformes et parfois non
+conformes.
+HCM - CONFIDENTIEL PAGE 13
+Ce document est la propriété de la société HCM
+Il ne peut être reproduit ou transmis à des tiers sans son autorisation expresse
+```
+
+### CHUNK_ID: projet_23__chunk_000008
+```
+[SECTION : Verrou 1 : Nettoyage des équipements de production de détergents]
+Il n’existe pas à ce jour de protocole validé ou normé pour le nettoyage d’équipements ayant contenu des produits détergents, en particulier dans un système automatisé de NEP. Cette absence de référentiel normatif constitue un véritable verrou technique, dans un contexte où les détergents présentent des caractéristiques particulières (forte viscosité, mousse abondante) qui rendent leur élimination difficile. Ce verrou soulève plusieurs incertitudes critiques :
+
+L’efficacité des cycles de NEP sur des résidus invisibles ou microbiologiques reste incertaine, notamment dans les zones difficiles d’accès des cuves inox ou de la tuyauterie, où des biofilms peuvent se former,
+
+Il existe une problématique spécifique au secteur : en tant que fabricant de détergents, l’utilisation d’un autre détergent pour nettoyer nos équipements est incohérente. Le nettoyage devient paradoxal : comment nettoyer des tuyaux de fabrication de détergents avec un détergent ?
+
+En l’absence de méthode validée, la validation du nettoyage devient un enjeu complexe, où il est indispensable de développer des tests expérimentaux spécifiques, adaptés à la nature des produits manipulés et aux contraintes du procédé. Ceci nous impose de définir un protocole de traçabilité par fluorescence, ainsi que des tests microbiologiques spécifiques.
+```
+
+### CHUNK_ID: projet_23__chunk_000026_sub00
+```
+[PAGE 4]
+CIR 2024
+Le projet satisfait les cinq critères d’éligibilité suivants :
+Nouveauté Les travaux menés ont permis d'approfondir les connaissances sur :
+ Le comportement des matières premières dans un nouveau mode
+d’introduction par aspiration,
+ Les interactions entre formulation, agitation et distribution dans un
+système fermé et automatisé,
+ Les méthodes d’évaluation de la propreté des équipements ayant
+contenu des détergents, sujet non traité dans la littérature scientifique.
+Ces travaux ont mené à des innovations techniques, notamment :
+ La redéfinition de protocoles de nettoyage dans un contexte où les
+produits à nettoyer sont eux-mêmes des détergents,
+ La définition de nouvelles méthodes de formulation en l'absence de
+repères visuels (QSV).
+Créativité Les travaux ont fait preuve de créativité sur plusieurs aspects :
+ Conception d’essais expérimentaux pour recalibrer la quantité d’eau à
+introduire dans chaque formule en l’absence de visuel sur les cuves,
+ Mobilisation de plusieurs disciplines (formulation, microbiologie,
+ingénierie des procédés) pour résoudre des problèmes complexes dans
+le secteur de la détergence.
+Incertitude L'incertitude technique principale concernait :
+ L’efficacité des protocoles de NEP sur des équipements ayant contenu
+des détergents concentrés, dont les propriétés rendent le nettoyage
+contre-intuitif,
+ L'impossibilité d'observer le mélange dans la cuve, soulevant des doutes
+sur l’homogénéisation des produits,
+ La difficulté à identifier la cause des non-conformités observées sur
+certaines fabrications pilotes.
+Ces incertitudes ont nécessité une phase expérimentale approfondie et la
+définition de nouveaux outils de validation.
+Systématicité Les travaux ont été menés de façon rigoureuse, suivant une démarche
+scientifique :
+ Définition d’hypothèses (ex : lien entre défaut de mélange et non-
+conformité des produits),
+ Mise en œuvre de protocoles d’essais reproductibles en laboratoire et en
+production,
+ Réalisation d’essais itératifs (formulations, nettoyages, contrôles
+analytiques),
+ Suivi de l’avancement par des réunions regroupant les services R&D,
+production, qualité et réglementaire.
+Cette approche systématique a structuré la progression du projet et permis une
+documentation précise des résultats.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 102,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

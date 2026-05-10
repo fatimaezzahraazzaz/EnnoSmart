@@ -1,0 +1,89 @@
+{
+  "batch_id": 40,
+  "chunks": [
+    {
+      "chunk_id": "projet_9__chunk_000084",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\raw\\docx\\TCP RI_CIR_2024_Ed.1.1 RD.docx",
+      "file_name": "TCP RI_CIR_2024_Ed.1.1 RD.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Description des ressources humaines]\n[TABLEAU]\n| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération | Contribution directe à l’acquisition de nouvelles connaissances | Temps déclaré pour l’opération (heures) |\n| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |\n| Berry Alexis | BTS Conception de produits industriels- Lycée Godefroy-de-Bouillon | Technicien R&I | Réalisation des essais de tenue aux chocs et chutes sur machine pour prototypage ainsi que des essais de sécurisation du dispositif médical | 30 |\n| Jeannin Céline | BTS Assistante de Direction - Lycée Edgar Quinet | Définition et choix des matériaux | Contribution à la recherche des matériaux recyclables, résistants aux chocs et à l'abrasion à définir pour l'emballage des dispositifs médicaux | 13,34 |\n| Moigner Geoffrey | Ingénieur Filière Machines Mécanismes et systèmes - Institut Français de Mécanique Avancée | Chef de projet R&I | Participation aux réunions techniques et validation des définitions d'architecture des solutions techniques d'emballage pour les dispositifs médicaux fragiles et agressifs | 25 |\n| Vergne Hervé | Brevet de technicien spécialité \"bureau d'étude\" (construction mécanique) | Responsable R&I | Participation aux réunions techniques et validation des travaux liés à la résolution des problématiques de tenue aux chocs, à la résistance à l'abrasion et à la sécurisation du dispositif médical en vue de développement un système d'emballage performant et recyclable | 60 |\n| Ytournel Jérôme | BTS CPI - Conception de Produits Industriels - Lycée Jean Zay | Technicien qualité dvlpt | Analyse dimensionnelle | 1 |\n| Nathalie Techer | Brevet de technicien supérieur mécanique et automatisme industriels | Technicienne R&I | Recherche et définition d'architecture des solutions techniques d'emballage pour les dispositifs médicaux fragiles et agressifs | 138,5 |\n| Bodiment Vicky | Diplôme universitaire en technique d'automatisation des fabrications mécaniques - Institut universitaire de technologie de Montluçon | Technicien R&I | Recherche et définition d'architecture des solutions techniques d'emballage pour les dispositifs médicaux fragiles et agressifs + réalisation des prototypes | 135 |",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_9_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_9__chunk_000122_sub00",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\raw\\pdf\\TCP-suspension-INPI.docx.pdf",
+      "file_name": "TCP-suspension-INPI.docx.pdf",
+      "file_category": "pdf_native",
+      "source_type": "text",
+      "text": "[PAGE 8]\n8\nmultiples dispositifs peut être déclinée avec ou sans couvercle 21 et/ou avec ou sans\nsuremballage.\nMATERIAUX\n[0065] L’enveloppe 2 est réalisée en matériau souple, pour amortir les vibrations engendrées\npar un impact unique ou des secousses en série, mais suffisamment rigide pour assurer\nun maintien en suspension du dispositif dans le volume de suspension.\n[0066] On utilise de préférence un polyuréthane thermoplastique (TPU) ou un élastomère\nthermoplastique (TPE) ou un silicone (LSR).\nLe TPU présente l’avantage d’une\nrésistance particulièrement élevée à l’abrasion, ce qui permet d’emballer des dispositifs\navec des arêtes abrasives ou tranchantes sans risque de détérioration de l’enveloppe.\nLe\ntableau ci-dessous présente les tenues mécaniques en élasticité (tenue élongation à la\nrupture) pour les différents matériaux utilisables pour l’enveloppe.\nMatériau Technologie de mise en forme (élongation à la rupture)\nThermoformage Injection\nTPU 350-500% 300-700%\nTPE 300-600% 300-800%\nLSR ------- 300-800%\n[0067] Le boîtier 10, le couvercle 21 ainsi que le suremballage 26 utilisent des\ncaractéristiques de matériaux identiques ou similaires, avec un niveau de rigidité\nsupérieur à celui de l’enveloppe 2, dans une perspective de protection contre les chocs.\nOn utilise de préférence du polyéthylène téréphtalate amorphe (APET) ou polyéthylène\ntéréphtalate modifié au glycol (PETG).\nL’APET et le PETG présentent une excellente\nrésistance aux chocs et sont recyclables.\nLe PETG présente une flexibilité plus élevée\nque l’APET.\nLe polypropylène (PP) ou le polycarbonate (PC) peuvent également être\nutilisés.\n[0068] Les opercules 15 et 27 sont avantageusement réalisés à l’aide d’un matériau\nsélectivement étanche, par exemple une feuille textile non-tissée de fibres de\npolyéthylène haute densité (HDPE) commercialisée sous le nom de « Tyvek\n» (marque déposée).\nCes feuilles ont une épaisseur comprise entre 0,5 et 10 μm.\nPar « sélectivement étanche », on entend un matériau dont les caractéristiques lui\npermettent de réguler les échanges de l’extérieur vers l’intérieur de l’emballage.\nEn\noutre, le matériau crée une barrière stérile en ce sens qu’il empêche les contaminations\nsusceptibles d’intervenir par l’entremise de microorganismes, bactéries ou matières\nbiologiquement active qui pourraient venir en contact ou à proximité immédiate de\nl’emballage.",
+      "_parent_chunk_id": "projet_9__chunk_000122",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_9__chunk_000007",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\cir_final\\TCP R&I_CIR_2024_VF_1.docx",
+      "file_name": "TCP R&I_CIR_2024_VF_1.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Raisonnement scientifique, démarche expérimentale appliquée et description des travaux réalisés en 2024]\nAfin de répondre aux objectifs ambitieux et résoudre notre problématique majeure, nous avons poursuivi une démarche expérimentale et itérative.\n\nEn effet, les travaux de R&D menés en 2024 ont porté sur quatre principaux axes :\n\nInvestigations et définition de solutions techniques d’emballage pour les dispositifs médicaux fragiles et agressifs ;\n\nRéalisation de prototypes par impression 3D, puis des prototypes thermoformés à partir de moules fabriqués en impression 3D pour les différentes solutions identifiées ;\n\nRéalisation des essais mécaniques afin d’évaluer les différentes solutions techniques développées ;\n\nDéveloppement d’une solution performante d’emballage pour les dispositifs médicaux agressifs et fragiles.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_9_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_9__chunk_000014_sub01",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\cir_final\\TCP R&I_CIR_2024_VF_1.docx",
+      "file_name": "TCP R&I_CIR_2024_VF_1.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "par thermoformage d’un film PETG/TPU ; Figure 12 : Système d’emballage compound 6ème solution technique : emballage suspendu effectué par thermoformage d’un film TPU. Figure 13 : Système d’emballage suspendu\n\nPuis, nous avons réalisé des tests de chocs sur toutes les faces, toutes les arêtes et les quatre coins de notre système selon la norme ASTM4169 comme illustré dans la figure ci-dessous.\n\nFigure 14 : Identification des faces, arêtes et coins\n\nEnsuite, nous avons mené des tests pour évaluer la sécurité du dispositif médical lors des opérations.\n\nLes résultats de ces essais pour chaque solution technique définie sont :\n\nFourreau : Après introduction du DM, nous avons remarqué que les formes obtenues après déformation ne suffisent pas pour un réel amortissement. Par conséquent, pour le simulateur cardiaque, nous avons considéré que les chocs peuvent endommager celui-ci malgré une absence totale de marque.\n\nEn outre, la mise en place du DM est assez difficile car nous devons étirer le film TPU rendu élastique par les fentes réalisées. De même, pour sortir le DM de son fourreau, le risque de chute du DM est important ;\n\nRosace : Lors des essais d’amortissement, nous avons constaté que les petites sphères permettent un bon amortissement aux chocs.\n\nNous avons ensuite mené des tests d’abrasion sur des prothèses de genoux. Les résultats obtenus ont été satisfaisants.\n\nCependant, lors de la dépose de la prothèse sur le plan de travail, celle-ci peut facilement nous échapper ;\n\nSphère : Les résultats des tests d’amortissement et d’abrasion réalisés sur les prothèses de genoux ont été satisfaisants. Toutefois, ce système ne permet pas la sécurisation de la prothèse car la dépose de celle-ci sur le plan de travail s’avère dangereuse. En effet, lors de sa manipulation, la prothèse est tenue par l’intérieur et nous sommes obligés de la déposer côté sphère ;",
+      "_parent_chunk_id": "projet_9__chunk_000014",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_9__chunk_000014_sub02",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\cir_final\\TCP R&I_CIR_2024_VF_1.docx",
+      "file_name": "TCP R&I_CIR_2024_VF_1.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "celle-ci sur le plan de travail s’avère dangereuse. En effet, lors de sa manipulation, la prothèse est tenue par l’intérieur et nous sommes obligés de la déposer côté sphère ;\n\nCube : Avec cette solution technologique, pour la réalisation des essais d’amortissement et d’abrasion, nous avons enroulé le DM dans la cavité prévu à cet effet. En effet, le DM est tenu dans le ¼ des cavités qui une fois enroulé le maintiennent parfaitement. Nous n’avons pas constaté de particules avec le DM que nous avons testé.\n\nEn revanche, le fait d’enrouler le DM ne permet pas de répondre à la sécurisation de celui-ci, qui peut facilement nous échapper et chuter hors champ opératoire ;\n\nCompound : Afin de réaliser les tests d’amortissement et d’abrasion, nous avons défini le DM en sandwich dans une coque thermoforme avec le TPU en contact avec celui-ci. Les résultats obtenus montrent l’absence de forme amortissante. Par conséquent, cette solution technique ne répond pas à une de nos problématiques.\n\nToutefois, la sécurisation du DM est assurée du fait de la forme de la coque (Cf. Figure ci-dessous).\n\nFigure 15 : Sécurisation du dispositif médical – solution technique compound\n\nSuspendu : Pour effectuer les essais d’amortissement et d’abrasion, le film TPU thermoformé est tendu à la forme du DM dans une coque en laissant de l’espace entre la coque et le film TPU. Une fois la coque fermée, le DM ne peut plus bouger. Les résultats à la suite des tests de chocs sont positifs même avec des DM fragiles comme un simulateur cardiaque.\n\nDe plus, la mise en place du DM est facile car la coque est ouverte. Étant donnée la forme de la coque nous pouvons ouvrir facilement celle-ci pour mettre à disposition le DM au chirurgien.\n\nPar ailleurs, les matériaux définis dans ce système sont recyclables.\n\nÀ la suite des résultats obtenus dans le cadre de cette étude, la solution technique que nous avons retenue est celle qui s’appuie sur un système d’emballage suspendu.",
+      "_parent_chunk_id": "projet_9__chunk_000014",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_9__chunk_000015",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\raw\\docx\\CIR 2024 emballage suspension.docx",
+      "file_name": "CIR 2024 emballage suspension.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "ENTITE\n\nJUSTIFICATIF DES TRAVAUX DE R&D DECLARES AU TITRE DU CREDIT IMPOT RECHERCHE (CIR) DE L’ANNEE 2024\n\nFICHE DESCRIPTIVE\n\nEMBALLAGE POUR DEVICE MEDICAL EN SUSPENSION\n\nSigle du projet\n\nTable des matières\n\n1. PROJET 1, ANNÉE 2023 : Fiche descriptive 3\n\n1.1. Intitulé du projet 3\n\n1.2. Indicateurs de R&D 3\n\n1.3. Objectifs du projet 4\n\n1.3.1. Contexte du projet 4\n\n1.3.2. Objectifs visés 4\n\n1.3.3. Performances à atteindre 4\n\n1.4. Etat de l’art 4\n\n1.4.1. Etat de l’art externe 4\n\n1.4.2. Etat de l’art interne 4\n\n1.4.3. Insuffisances des solutions existantes 5\n\n1.5. Verrous et incertitudes scientifiques, techniques, technologiques 5\n\n1.5.1. Verrous à lever 5\n\n1.5.2. Problèmes techniques à résoudre 5\n\n1.5.3. Aléas et incertitudes scientifiques et/ou technologiques 5\n\n1.6. Démarche expérimentale, travaux R&D réalisés 5\n\n1.6.1. Grands principes de la solution 5\n\n1.6.1.1. Caractère innovant du concept 5\n\n1.6.1.2. Description du concept 5\n\n1.6.1.3. Grands principes du concept 5\n\n1.6.2. Raisonnement scientifique et démarche expérimentale appliquée 5\n\n1.6.3. Partenariats & phasage des travaux 5\n\n1.6.3.1. Partenariats et projets collaboratifs 6\n\n1.6.3.2. Phasage des travaux 6\n\n1.6.4. Description des travaux réalisés 6\n\n1.6.4.1. Description des travaux antérieurs 6\n\n1.6.4.2. Description des travaux réalisés en 2023 6\n\n1.6.4.3. Résultats obtenus 6\n\n1.7. Acquisition des connaissances et contribution technique, scientifique ou technologique 6\n\n1.7.1. Résumé 6\n\n1.7.2. Contribution 6\n\n1.7.3. Accroissement des connaissances 7\n\n1.8. Annexes 7\n\n1.8.1. Annexe 1 : Contribution de la société [x], agréée au titre du Crédit d’impôt de recherche sur l’année 2023 7\n\n1.8.2. Annexe 2 : Rôle et contribution technique du personnel R&D 7",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_9_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_9__chunk_000048",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\raw\\docx\\TCP R&I_CIR_2024_Ed1.1.docx",
+      "file_name": "TCP R&I_CIR_2024_Ed1.1.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Raisonnement scientifique, démarche expérimentale appliquée et description des travaux réalisés en 2024]\nAfin de répondre aux objectifs ambitieux et résoudre notre problématique majeure, nous avons poursuivi une démarche expérimentale et itérative.\n\nEn effet, les travaux de R&D menés en 2024 ont porté sur quatre principaux axes :\n\nInvestigations et définition de solutions techniques d’emballage pour les dispositifs médicaux fragiles et agressifs ;\n\nRéalisation de prototypes par impression 3D, puis des prototypes thermoformés à partir de moules fabriqués en impression 3D pour les différentes solutions identifiées ;\n\nRéalisation des essais mécaniques afin d’évaluer les différentes solutions techniques développées ;\n\nDéveloppement d’une solution performante d’emballage pour les dispositifs médicaux agressifs et fragiles.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_9_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_9__chunk_000055_sub01",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\raw\\docx\\TCP R&I_CIR_2024_Ed1.1.docx",
+      "file_name": "TCP R&I_CIR_2024_Ed1.1.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "est obtenue par thermoformage d’un film PETG/TPU ; Figure : Système d’emballage compound 6ème solution technique : emballage suspendu effectué par thermoformage d’un film TPU. Figure : Système d’emballage suspendu\n\nPuis, nous avons réalisé des tests de chocs sur toutes les faces, toutes les arêtes et les quatre coins de notre système selon la norme ASTM4169 comme illustré dans la figure ci-dessous.\n\nFigure : Identification des faces, arêtes et coins\n\nEnsuite, nous avons mené des tests pour évaluer la sécurité du dispositif médical lors des opérations.\n\nLes résultats de ces essais pour chaque solution technique définie sont :\n\nFourreau : Après introduction du DM, nous avons remarqué que les formes obtenues après déformation ne suffisent pas pour un réel amortissement. Par conséquent, pour le simulateur cardiaque, nous avons considéré que les chocs peuvent endommager celui-ci malgré une absence totale de marque.\n\nEn outre, la mise en place du DM est assez difficile car nous devons étirer le film TPU rendu élastique par les fentes réalisées. De même, pour sortir le DM de son fourreau, le risque de chute du DM est important ;\n\nRosace : Lors des essais d’amortissement, nous avons constaté que les petites sphères permettent un bon amortissement aux chocs.\n\nNous avons ensuite mené des tests d’abrasion sur des prothèses de genoux. Les résultats obtenus ont été satisfaisants.\n\nCependant, lors de la dépose de la prothèse sur le plan de travail, celle-ci peut facilement nous échapper ;\n\nSphère : Les résultats des tests d’amortissement et d’abrasion réalisés sur les prothèses de genoux ont été satisfaisants. Toutefois, ce système ne permet pas la sécurisation de la prothèse car la dépose de celle-ci sur le plan de travail s’avère dangereuse. En effet, lors de sa manipulation, la prothèse est tenue par l’intérieur et nous sommes obligés de la déposer côté sphère ;",
+      "_parent_chunk_id": "projet_9__chunk_000055",
+      "_is_subchunk": true
+    }
+  ]
+}

@@ -1,0 +1,299 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 33/135, 8 chunks)
+
+### CHUNK_ID: projet_7__chunk_000017_sub00
+```
+[SECTION : Rappel des travaux réalisés en 2022]
+Toujours dans l’objectif d’analyser et résoudre les problématiques liées au fonctionnement du compresseur aux niveaux souhaités en termes de débit, de pression, de qualité de l’air en sortie du compresseur et de discrétion vibro-acoustique, nous avions poursuivi nos travaux en 2022, en portant nos efforts d’abord sur l’étude des performances de la nouvelle solution de sécheur à membrane définie précédemment. En effet, nous avions travaillé sur le développement d’un prototype de la solution et l’étude de ses performances. Pour cela, nous avions couplé l’ensemble sécheur avec le banc d’essais du TGM100, et réalisé des mesures du point de rosée à la sortie du sécheur (sortie 3ème étage) et à la sortie du compresseur (sortie 4ème étage).
+
+Nous avions alors constaté au niveau de la sortie du 3ème étage un point de rosée qui diminuait dans le temps de 0°c à -29°c en 4h, et un point de rosée qui diminuait en fonction du temps de -5°c à -36°c durant 1h20min à la sortie du 4ème étage. En outre, nos essais avaient mis en évidence une pollution du sécheur avec de l’eau et de l’huile, causée par l’architecture de la purge. Il a donc été nécessaire de vider les sécheurs et de redéfinir l’ensemble purge (plans et PID). Nous avions également défini une électrovanne à chaque filtre au lieu d’une seule électrovanne en sortie des filtres.
+
+La nouvelle architecture du sécheur est illustrée sur la figure suivante.
+
+Figure : Architecture technique du nouveau sécheur à membrane
+
+Nous avions ensuite réalisé de nouveaux essais qui avait montré la décroissance du point de rosée en fonction du temps de -11°c à -30°c en 22min à la sortie du 4ème étage et de -38°c à -48°c en 6H à la sortie du 3ème étage. Nous avions ainsi pu résoudre la problématique constatée et atteindre les performances souhaitées en termes de qualité de l’air à la sortie du compresseur.
+```
+
+### CHUNK_ID: projet_7__chunk_000019
+```
+[SECTION : Développement d’un prototype du contrepoids sans plomb]
+Dans le but d’assurer l’équilibrage du compresseur tout en limitant l’impact sur l’environnement, nous avions défini précédemment l’architecture d’un contrepoids en fonte sans plomb (Figure 9), tout en cherchant à s’approcher le plus du centre de gravité et du poids du contre-poids avec plomb.
+
+En 2023, nous avons développé un prototype de la solution pour étudier ses performances.
+
+Les figures suivantes illustrent les fonderies des contrepoids réalisés en plomb et sans plomb.
+
+Figure : Fonderie du contrepoids avec plomb (à gauche) et sans plomb (à droite)
+
+Les figures ci-dessous présentent les contre-poids que nous avons développés après usinage.
+
+Figure : Contrepoids usinés
+```
+
+### CHUNK_ID: projet_7__chunk_000027
+```
+[SECTION : Relevés des températures avec et sans caisson insonorisé]
+Les premiers essais ont été réalisés avec le caisson insonorisé. Le tableau suivant présente le relevé des températures pour une variation du débit d’eau de refroidissement de 7.5m3/h à 4.5m3/h.
+
+Figure : Relevé des températures
+
+Notre analyse de ces résultats montre :
+
+Des pressions d’air / eau / huile constantes ;
+
+Un début de hausse de la température d’entrée/sortie d’air à chaque étage ;
+
+Un ∆p de la pression d’eau diminuant avec la diminution du débit d’eau.
+
+Nous avons ensuite réalisé de nouveaux essais sans caisson, ce qui a donné les résultats suivants.
+
+Tableau  : Résultats obtenus sans caisson insonorisé
+
+Ces résultats montrent des pressions d’air / eau / huile toujours stables.
+
+La variation du débit d’eau est ici de 4.5m3/h à 3m3/h.
+
+Nous constatons des hausses des températures d’entrée/sortie d’air à chaque étage (max. 180°) et une différence de la pression d’eau avoisinant l’équilibre avec la diminution du débit d’eau.
+```
+
+### CHUNK_ID: projet_7__chunk_000031
+```
+[SECTION : Analyse de l’impact de la température d’entrée de l’eau]
+Finalement, nous avons réalisé un ensemble d’essais avec un débit de 6m3/h pour analyser l’impact de la température d’entrée de l’eau sur la température de l’air en sortie clapet de chaque étage, la température d’air en sortie des réfrigérants, les différences de températures de l’air à chaque étage et la température de l’air en sortie du compresseur.
+
+Les résultats que nous avons obtenus sont présentés ci-après.
+
+Figure : Température de l’air en sortie clapet de chaque étage en fonction de la température d’entrée d’eau pour un débit de 6m3/h
+
+Ces résultats montrent qu’une augmentation de la température de l’eau augmente la température d’air en sortie de chaque clapet allant de 4.5°c à 23°c suivant l’étage.
+
+De même, nous constatons que l’augmentation de la température de l’eau augmente, à chaque étage, la température de l’air en sortie de réfrigérant d’en moyenne 10°c.
+
+Figure : Température de l’air en sortie du réfrigérant pour chaque étage en fonction de la température d’entrée d’eau pour un débit de 6m3/h
+
+Figure : Delta de température de l’air à chaque étage en fonction de la température d’entrée d’eau pour un débit de 6m3/h
+
+Ces résultats montrent que l’augmentation de la température d’eau diminue le delta de température au 1er étage et qu’elle est insignifiante au 4ème. Au 3ème, elle n’augmente le delta que de 4.6°.
+
+En revanche, au 2ème étage, elle augmente le delta de température de 14.4°c.
+
+Figure : Température de l’air en sortie du compresseur en fonction de la température d’entrée d’eau pour un débit de 6m3/h
+
+L’augmentation de la température d’entrée d’eau augmente la température de sortie d’air du compresseur. Avec un débit de 6m3/h, l’air en sortie du compresseur passe de 36.1°C à 43.5° pour une température d’entrée de 32°c, soit une augmentation de 7.4° d’air pour une augmentation de 10°C de la température d’eau.
+```
+
+### CHUNK_ID: projet_7__chunk_000034_sub00
+```
+[SECTION : Conclusion et contribution scientifique, technique ou technologique]
+Les travaux de R&D que nous avons réalisés dans le cadre de cette opération de R&D en 2023 s’inscrivent dans la continuité de nos études visant à analyser et résoudre les problématiques liées au développement de compresseurs à pistons oscillants axiaux fonctionnant à des pressions de refoulement élevés allant jusqu’à 300 bars, tout en assurant une discrétion acoustique et une stabilité vibratoire.
+
+Dans un premier temps, nous avons développé et étudié un nouveau contre-poids sans plomb devant assurer l’équilibrage du compresseur, avec moins d’impact écologique. Nous avons pour cela suivi une procédure d’équilibrage dynamique qui nous a permis de déterminer les redéfinitions à réaliser sur le contre-poids pour limiter les niveaux vibratoires du compresseur. Cette étude a démontré les difficultés liées à l’atteinte des performances souhaitées avec le contre-poids sans plomb. Une étude plus poussée sera menée dans la suite du projet.
+
+Dans un deuxième temps, nous avons étudié l’écoulement de l’eau dans le circuit de refroidissement du compresseur dans l’objectif d’identifier la répartition du débit entre les différentes portions du circuit ainsi que les éventuelles zones où la circulation n’est pas suffisante pour assurer un refroidissement optimal. Nous avons analysé deux configurations :
+
+Inversement de l’entrée et de la sortie du circuit ;
+
+Conservation de l’entrée et de la sortie, avec ajout d’une une seconde entrée.
+
+Toutefois, les résultats de cette étude n’ont pas été concluants, ce qui nous a amenés à réaliser des redéfinitions sur la fonderie pour assurer une circulation meilleure de l’eau de refroidissement.
+
+En outre, nous avons mené une étude sur le premier étage du compresseur pour résoudre la problématique de chauffe de l’air en sortie. En effet, nous avons réalisé des redéfinitions afin d’agrandir le volume de passage d’air et de diminuer les pertes de charges.
+```
+
+### CHUNK_ID: projet_7__chunk_000134
+```
+[PAGE 4]
+
+dh-23-20_rt-01-v01 4/13
+1 Introduction
+Girodin Sauer a demandé la réalisation de l’étude de l’écoulement d’eau dans le circuit de refroidis-
+sement du compresseur TGM100 Horizontal V2. Il s’agit d’un compresseur d’air à pistons comportant
+quatre étages successifs, la pression d’air étant amenée de la pression ambiante à 250bar en sortie du
+dernier étage. Cette compression provoque un fort dégagement de chaleur qui nécessite l’utilisation
+d’un circuit de refroidissement pour lequel le fluide utilisé est de l’eau. Elle circule autour des têtes
+des cylindres puis dans des tubes de refroidissement au nombre de deux par étage de compression,
+permettant d’abaisser la température d’air avant l’étage suivant ou la sortie du compresseur. L’objec-
+tif de l’étude du circuit de refroidissement est d’identifier la répartition du débit entre les différentes
+portions du circuit ainsi que les éventuelles zones où la circulation n’est pas suffisante pour assurer un
+refroidissement optimal.
+Il s’agit de la poursuite de l’étude précédemment réalisée, on reprend ainsi le modèle et la mise
+◦
+en donnée présentés dans le rapport n dh-20-26_rt-01-v03. Les nouvelles simulations réalisées sont
+dans les conditionnements suivants :
+1. Entrée au cylindre 3, et sortie au cylindre 4 – on inverse donc l’écoulement par rapport à l’étude
+précédente – pour un débit de 5m3/h;
+2. Entrée aux cylindres 1 et 4, et sortie au cylindre 3, pour un débit total 5m3/h répartis équitable-
+ment entre les deux entrées.
+®
+Les simulations ont été réalisées avec le module Flow Simulation de Solidworks édité par Dassault
+Systèmes.
+Cedocumentestlapropriétéd’Andheo. Ilnepeutêtrecommuniquéàdestierset/ou
+reproduitsanssonautorisationécriteetsoncontenunepeutêtredivulgué.
+@copyrightAndheo2023
+```
+
+### CHUNK_ID: projet_7__chunk_000001
+```
+[SECTION : Intitulé du projet]
+[TABLEAU]
+| NOM DU PROJET | Analyse et résolution des problématiques liées au développement d’un compresseur en barillet multi-étage aux performances accrues | Analyse et résolution des problématiques liées au développement d’un compresseur en barillet multi-étage aux performances accrues |
+| ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| CHEF(S) DE PROJET | S. DE NOUAL | S. DE NOUAL |
+| Ce projet a-t-il fait l’objet d’un rescrit CIR ou JEI ou a-t-il servi à l’attribution d’un agrément. | NON | NON |
+| Préciser si le projet a-t-il fait l’objet d’une collaboration avec le ministère de la défense (DGA) ou de l’intérieur. | NON | NON |
+| Date de début : 2015 | Date de début : 2015 | Date de fin : - |
+| THÉSAURUS | B4 : Mécanique, Génie mécanique, Génie civil | B4 : Mécanique, Génie mécanique, Génie civil |
+| MOT CLÉS | Compresseur à pistons Compresseur à barillet multi-étages Pression de refoulement Vibrations Nuisances acoustiques | Compresseur à pistons Compresseur à barillet multi-étages Pression de refoulement Vibrations Nuisances acoustiques |
+```
+
+### CHUNK_ID: projet_7__chunk_000002_sub01
+```
+des compresseurs à pistons à barillet multiétages présentant de meilleures performances mécaniques en termes de pression et de débit, tout en assurant une limitation des vibrations et des nuisances acoustiques.
+
+En effet, nous avons porté nos efforts sur l’atteinte d’un débit variant entre 90 et 100 m3/h à une pression allant jusqu’à 300 bars en position verticale ainsi qu’en position horizontale, avec un air sec à la sortie du compresseur. De plus, notre solution devra respecter les exigences du milieu militaire et plus précisément celles d’une utilisation sur un sous-marin, en termes notamment d’encombrement et de fiabilité.
+
+Le processus de compression à ces hauts niveaux implique plusieurs problématiques et verrous liés principalement au niveau sonore du compresseur, aux vibrations subies par ses différents composants, à l’échauffement et à la résistance mécanique.
+
+C’est pourquoi nous avons, en continuité de nos travaux antérieurs, porté nos efforts en 2023 sur l’analyse de ces problématiques, et la recherche et développement de nouvelles solutions techniques permettant de les résoudre.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 33,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

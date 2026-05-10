@@ -1,0 +1,139 @@
+{
+  "batch_id": 4,
+  "annotations": [
+    {
+      "chunk_id": "projet_1__chunk_000083_sub01",
+      "entities": [
+        {"text": "glycolyse", "label": "DOMAINE_RD", "start": 162, "end": 171},
+        {"text": "respiration mitochondriale", "label": "DOMAINE_RD", "start": 196, "end": 222},
+        {"text": "mélatonine", "label": "MATERIAU_SPECIFIQUE", "start": 304, "end": 314},
+        {"text": "respiration cellulaire", "label": "DOMAINE_RD", "start": 781, "end": 803},
+        {"text": "kératinocytes", "label": "COMPOSANT_TECHNIQUE", "start": 738, "end": 751},
+        {"text": "in vitro", "label": "METHODE_RD", "start": 877, "end": 885},
+        {"text": "espèces réactives de l’oxygène (ROS)", "label": "MATERIAU_SPECIFIQUE", "start": 962, "end": 998},
+        {"text": "mélanogénèse", "label": "DOMAINE_RD", "start": 1008, "end": 1020},
+        {"text": "NHEK (kératinocytes épidermiques humains normaux)", "label": "COMPOSANT_TECHNIQUE", "start": 1112, "end": 1161},
+        {"text": "H2O2", "label": "MATERIAU_SPECIFIQUE", "start": 1176, "end": 1180},
+        {"text": "mélanocytes épidermiques humains normaux faiblement pigmentés (NHEM-LP)", "label": "COMPOSANT_TECHNIQUE", "start": 1207, "end": 1278},
+        {"text": "mélanine", "label": "MATERIAU_SPECIFIQUE", "start": 1196, "end": 1204},
+        {"text": "effet antioxydant", "label": "RESULTAT_RD", "start": 1614, "end": 1631},
+        {"text": "ex vivo", "label": "METHODE_RD", "start": 1799, "end": 1806},
+        {"text": "explants de peau", "label": "COMPOSANT_TECHNIQUE", "start": 1735, "end": 1751},
+        {"text": "couche cornée", "label": "COMPOSANT_TECHNIQUE", "start": 1969, "end": 1982},
+        {"text": "Mélatonine encapsulée dans des liposomes", "label": "TECHNOLOGIE_RD", "start": 2150, "end": 2190},
+        {"text": "Mélatonine encapsulée au phytol", "label": "TECHNOLOGIE_RD", "start": 2192, "end": 2223}
+      ]
+    },
+    {
+      "chunk_id": "projet_1__chunk_000083_sub02",
+      "entities": [
+        {"text": "mélatonine", "label": "MATERIAU_SPECIFIQUE", "start": 39, "end": 49},
+        {"text": "liposomes", "label": "TECHNOLOGIE_RD", "start": 175, "end": 184},
+        {"text": "phytol", "label": "MATERIAU_SPECIFIQUE", "start": 211, "end": 217},
+        {"text": "explants de peau abdominale humaine", "label": "COMPOSANT_TECHNIQUE", "start": 220, "end": 255},
+        {"text": "micro-imagerie Raman", "label": "METHODE_RD", "start": 327, "end": 347},
+        {"text": "mélatonine liposomale", "label": "MATERIAU_SPECIFIQUE", "start": 596, "end": 617},
+        {"text": "couche cornée", "label": "COMPOSANT_TECHNIQUE", "start": 632, "end": 645},
+        {"text": "mélatonine encapsulée au phytol", "label": "MATERIAU_SPECIFIQUE", "start": 720, "end": 751},
+        {"text": "vectorisation", "label": "METHODE_RD", "start": 925, "end": 938},
+        {"text": "perfluorodécaline", "label": "MATERIAU_SPECIFIQUE", "start": 1149, "end": 1166},
+        {"text": "effet « glow »", "label": "RESULTAT_RD", "start": 1180, "end": 1194},
+        {"text": "glossmètre", "label": "EQUIPEMENT_RD", "start": 1303, "end": 1313},
+        {"text": "Immunight", "label": "MATERIAU_SPECIFIQUE", "start": 1564, "end": 1573},
+        {"text": "Regenight", "label": "MATERIAU_SPECIFIQUE", "start": 1716, "end": 1725},
+        {"text": "complexe oxygénant", "label": "COMPOSANT_TECHNIQUE", "start": 1944, "end": 1962}
+      ]
+    },
+    {
+      "chunk_id": "projet_1__chunk_000102_sub01",
+      "entities": [
+        {"text": "glycolyse", "label": "DOMAINE_RD", "start": 162, "end": 171},
+        {"text": "respiration mitochondriale", "label": "DOMAINE_RD", "start": 196, "end": 222},
+        {"text": "mélatonine", "label": "MATERIAU_SPECIFIQUE", "start": 304, "end": 314},
+        {"text": "respiration cellulaire", "label": "DOMAINE_RD", "start": 781, "end": 803},
+        {"text": "kératinocytes", "label": "COMPOSANT_TECHNIQUE", "start": 738, "end": 751},
+        {"text": "in vitro", "label": "METHODE_RD", "start": 877, "end": 885},
+        {"text": "espèces réactives de l’oxygène (ROS)", "label": "MATERIAU_SPECIFIQUE", "start": 962, "end": 998},
+        {"text": "mélanogénèse", "label": "DOMAINE_RD", "start": 1008, "end": 1020},
+        {"text": "NHEK (kératinocytes épidermiques humains normaux)", "label": "COMPOSANT_TECHNIQUE", "start": 1112, "end": 1161},
+        {"text": "H2O2", "label": "MATERIAU_SPECIFIQUE", "start": 1176, "end": 1180},
+        {"text": "mélanine", "label": "MATERIAU_SPECIFIQUE", "start": 1196, "end": 1204},
+        {"text": "mélanocytes épidermiques humains normaux faiblement pigmentés (NHEM-LP)", "label": "COMPOSANT_TECHNIQUE", "start": 1207, "end": 1278},
+        {"text": "effet antioxydant", "label": "RESULTAT_RD", "start": 1614, "end": 1631},
+        {"text": "explants de peau", "label": "COMPOSANT_TECHNIQUE", "start": 1735, "end": 1751},
+        {"text": "ex vivo", "label": "METHODE_RD", "start": 1799, "end": 1806},
+        {"text": "couche cornée", "label": "COMPOSANT_TECHNIQUE", "start": 1969, "end": 1982},
+        {"text": "Mélatonine encapsulée dans des liposomes", "label": "TECHNOLOGIE_RD", "start": 2150, "end": 2190},
+        {"text": "Mélatonine encapsulée au phytol", "label": "TECHNOLOGIE_RD", "start": 2192, "end": 2223}
+      ]
+    },
+    {
+      "chunk_id": "projet_1__chunk_000102_sub02",
+      "entities": [
+        {"text": "mélatonine", "label": "MATERIAU_SPECIFIQUE", "start": 39, "end": 49},
+        {"text": "liposomes", "label": "TECHNOLOGIE_RD", "start": 175, "end": 184},
+        {"text": "phytol", "label": "MATERIAU_SPECIFIQUE", "start": 211, "end": 217},
+        {"text": "explants de peau abdominale humaine", "label": "COMPOSANT_TECHNIQUE", "start": 220, "end": 255},
+        {"text": "micro-imagerie Raman", "label": "METHODE_RD", "start": 327, "end": 347},
+        {"text": "mélatonine liposomale", "label": "MATERIAU_SPECIFIQUE", "start": 596, "end": 617},
+        {"text": "couche cornée", "label": "COMPOSANT_TECHNIQUE", "start": 632, "end": 645},
+        {"text": "mélatonine encapsulée au phytol", "label": "MATERIAU_SPECIFIQUE", "start": 720, "end": 751},
+        {"text": "vectorisation", "label": "METHODE_RD", "start": 925, "end": 938},
+        {"text": "perfluorodécaline", "label": "MATERIAU_SPECIFIQUE", "start": 1149, "end": 1166},
+        {"text": "effet « glow »", "label": "RESULTAT_RD", "start": 1180, "end": 1194},
+        {"text": "glossmètre", "label": "EQUIPEMENT_RD", "start": 1303, "end": 1313},
+        {"text": "Immunight", "label": "MATERIAU_SPECIFIQUE", "start": 1564, "end": 1573},
+        {"text": "Regenight", "label": "MATERIAU_SPECIFIQUE", "start": 1716, "end": 1725},
+        {"text": "complexe oxygénant", "label": "COMPOSANT_TECHNIQUE", "start": 1944, "end": 1962}
+      ]
+    },
+    {
+      "chunk_id": "projet_1__chunk_000001_sub00",
+      "entities": [
+        {"text": "phytobiologie", "label": "DOMAINE_RD", "start": 165, "end": 178},
+        {"text": "produits cosmétiques", "label": "DOMAINE_RD", "start": 245, "end": 265}
+      ]
+    },
+    {
+      "chunk_id": "projet_1__chunk_000002_sub00",
+      "entities": [
+        {"text": "cosmétique", "label": "DOMAINE_RD", "start": 1115, "end": 1125}
+      ]
+    },
+    {
+      "chunk_id": "projet_1__chunk_000013_sub00",
+      "entities": [
+        {"text": "mélatonine", "label": "MATERIAU_SPECIFIQUE", "start": 188, "end": 198},
+        {"text": "poudre", "label": "MATERIAU_SPECIFIQUE", "start": 218, "end": 224},
+        {"text": "liposomale", "label": "TECHNOLOGIE_RD", "start": 226, "end": 236},
+        {"text": "vectorisée au phytol", "label": "TECHNOLOGIE_RD", "start": 238, "end": 258},
+        {"text": "explants de peau humaine", "label": "COMPOSANT_TECHNIQUE", "start": 296, "end": 320},
+        {"text": "ex vivo", "label": "METHODE_RD", "start": 343, "end": 350},
+        {"text": "mélatonine poudre", "label": "MATERIAU_SPECIFIQUE", "start": 484, "end": 501},
+        {"text": "Immunight", "label": "MATERIAU_SPECIFIQUE", "start": 504, "end": 513},
+        {"text": "Regenight", "label": "MATERIAU_SPECIFIQUE", "start": 516, "end": 525},
+        {"text": "mélatonine liposomale", "label": "MATERIAU_SPECIFIQUE", "start": 533, "end": 554},
+        {"text": "mélatonine vectorisée au phytol", "label": "MATERIAU_SPECIFIQUE", "start": 593, "end": 624},
+        {"text": "trichrome de Masson", "label": "METHODE_RD", "start": 821, "end": 840},
+        {"text": "citrate synthétase", "label": "COMPOSANT_TECHNIQUE", "start": 1004, "end": 1022},
+        {"text": "coenzyme A", "label": "MATERIAU_SPECIFIQUE", "start": 1081, "end": 1091},
+        {"text": "acide dinitrothiobenzoïque", "label": "MATERIAU_SPECIFIQUE", "start": 1150, "end": 1176},
+        {"text": "complexe I", "label": "COMPOSANT_TECHNIQUE", "start": 1431, "end": 1441},
+        {"text": "NADH déshydrogénase", "label": "MATERIAU_SPECIFIQUE", "start": 1474, "end": 1493},
+        {"text": "complexe IV", "label": "COMPOSANT_TECHNIQUE", "start": 1645, "end": 1656},
+        {"text": "dosage spectrophotométrique", "label": "METHODE_RD", "start": 1661, "end": 1688},
+        {"text": "cytochrome c oxydase", "label": "MATERIAU_SPECIFIQUE", "start": 1692, "end": 1712}
+      ]
+    },
+    {
+      "chunk_id": "projet_1__chunk_000028_sub01",
+      "entities": [
+        {"text": "citrate synthétase", "label": "COMPOSANT_TECHNIQUE", "start": 884, "end": 902},
+        {"text": "coenzyme A", "label": "MATERIAU_SPECIFIQUE", "start": 970, "end": 980},
+        {"text": "acide dinitrothiobenzoïque", "label": "MATERIAU_SPECIFIQUE", "start": 1039, "end": 1065},
+        {"text": "complexe I", "label": "COMPOSANT_TECHNIQUE", "start": 1726, "end": 1736},
+        {"text": "NADH déshydrogénase", "label": "MATERIAU_SPECIFIQUE", "start": 1772, "end": 1791}
+      ]
+    }
+  ]
+}

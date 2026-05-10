@@ -1,0 +1,85 @@
+{
+  "batch_id": 134,
+  "chunks": [
+    {
+      "chunk_id": "projet_32__chunk_000010",
+      "project_id": "projet_32_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_32_\\cir_final\\CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_name": "CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Recherche et développement d’une méthodologie robuste d’analyse de l’hydrogène en phase gazeuse]\nNotre objectif principal consiste à développer et à mettre en œuvre une méthodologie d’analyse de l’hydrogène par chromatographie en phase gazeuse, en réponse aux verrous scientifiques et techniques identifiés. À cette fin, nous avons structuré nos travaux autour de trois axes principaux : la maîtrise du détecteur TCD, l’optimisation de la séparation chromatographique et le développement progressif du protocole expérimental.\n\nLes premiers essais expérimentaux réalisés ont mis en évidence plusieurs difficultés majeures. D’une part, le détecteur TCD a présenté une sensibilité limitée à l’hydrogène, en particulier à faibles concentrations, ce qui nous a conduits à conclure qu’un réglage fin du débit du gaz vecteur et du courant du filament est nécessaire. Nous avons également constaté une dérive du signal de base, fortement influencée par les conditions de température et de pression.\n\nD’autre part, des difficultés de séparation ont été observées, notamment liées à la co-élution des gaz légers (H₂, O₂, N₂) et au temps de rétention très court de l’hydrogène, rendant son intégration analytique délicate.\n\nPar ailleurs, la diffusivité élevée de l’hydrogène a induit des contraintes supplémentaires en termes d’étanchéité du système, avec des risques de pertes d’échantillon et d’instabilité des mesures.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_32_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_32__chunk_000011",
+      "project_id": "projet_32_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_32_\\cir_final\\CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_name": "CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Développement et optimisation expérimentale du détecteur TCD]\nAfin de surmonter ces limitations, plusieurs itérations ont été mises en œuvre. Nous avons réalisé une analyse comparative du choix du gaz vecteur (argon vs hélium), mettant en évidence un compromis optimal en faveur de l’argon pour la détection de l’hydrogène. En parallèle, nous avons mené plusieurs compagnes d’essais sur :\n\nLe débit du gaz vecteur ;\n\nLa température du détecteur et du filament ;\n\nNos travaux ont permis de réduire le bruit de fond et de renforcer le rapport signal/bruit.\n\nDes phases de préchauffage et de stabilisation instrumentale ont également été intégrées avant chaque série d’analyses, limitant ainsi les dérives du signal. Enfin, une maintenance préventive (contrôle du filament, vérification des raccords et des joints) a été mise en œuvre afin de garantir la stabilité des mesures.\n\nPar ailleurs, nous avons réalisé des tests de répétabilité sur des gammes de concentrations étendues, permettant d’identifier les conditions optimales pour la détection précise de l’hydrogène, même à faibles concentrations. Ces travaux ont conduit à une meilleure compréhension des paramètres influençant la sensibilité du TCD et à l’établissement d’un protocole standardisé pour la calibration et la validation des mesures.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_32_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_32__chunk_000012",
+      "project_id": "projet_32_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_32_\\cir_final\\CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_name": "CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Développement méthodologique de la séparation chromatographique des gaz légers]\nNos travaux ont également porté sur l’optimisation de la séparation des gaz légers. Initialement basée sur une configuration simple, la méthode a évolué vers une configuration à deux colonnes en série, combinant :\n\nUne colonne Molecular Sieve 5A, adaptée à la séparation des gaz permanents ;\n\nUne colonne adsorbante de type Hayesep Q / Carboxen, permettant d’augmenter la résolution globale.\n\nPar ailleurs, nous avons effectué des affinements expérimentaux sur :\n\nLe flux de gaz vecteur ;\n\nLe volume d’injection, via la mise en œuvre de boucles calibrées de faible volume (0,5-1 ml), afin de limiter l’élution précoce du pic d’hydrogène ;\n\nLes conditions opératoires (température, pression, débits).\n\nAfin de mieux contrôler le temps de rétention de l’hydrogène et de limiter les phénomènes de co-élution. Des tests de co-élution sur des mélanges modèles nous ont permis d’identifier les conditions critiques et de parfaire les paramètres chromatographiques, conduisant à une séparation plus fiable et reproductible des composants légers.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_32_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_32__chunk_000013",
+      "project_id": "projet_32_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_32_\\cir_final\\CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_name": "CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Analyse et traitement des signaux chromatographiques]\nNous nous sommes concentrés également sur l’analyse fine des signaux chromatographiques. La figure ci-dessous illustre des cas typiques de déconvolution de pics chromatographiques, mettant en évidence la superposition de plusieurs composés et la nécessité de recourir à des méthodes de traitement du signal pour perfectionner l’interprétation des données.\n\nFigure : Déconvolution de pics chromatographiques et mise en évidence des phénomènes de co-élution\n\nOn observe notamment :\n\nDes pics partiellement superposés, caractéristiques de phénomènes de co-élution ;\n\nLa nécessité de décomposer le signal global en contributions individuelles afin d’identifier et quantifier correctement chaque espèce.\n\nCes observations ont confirmé la complexité de l’analyse des gaz légers et ont guidé les choix de réglages méthodologiques et expérimentaux, orientés vers la robustesse et la reproductibilité de la séparation chromatographique.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_32_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_32__chunk_000014",
+      "project_id": "projet_32_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_32_\\cir_final\\CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_name": "CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Développement et adaptation expérimentale du protocole d’analyse de l’hydrogène]\nLe protocole expérimental initial a été affiné de manière itérative afin de tenir compte des contraintes rencontrées. La plage de calibration a été réduite à une zone ciblée (0,1-10 % vol) pour accroitre la qualité et la reproductibilité des mesures.\n\nNous avons prioritairement concentré nos travaux sur :\n\nLa reproductibilité du signal ;\n\nLa stabilité du système ;\n\nLa validation partielle des performances analytiques (linéarité, répétabilité, justesse à court terme).\n\nCertaines étapes initialement prévues, telles que la validation complète ou l’analyse de matrices complexes, ont été temporairement reportées afin de consolider les bases méthodologiques.\n\nLes ajustements méthodologiques mis en œuvre ont permis d’obtenir :\n\nUne stabilité significativement améliorée du signal TCD ;\n\nUne séparation renforcée des gaz légers ;\n\nUne quantification reproductible de l’hydrogène sur la plage étudiée.\n\nBien que la validation complète de la méthode reste à finaliser, nos premiers résultats démontrent la faisabilité technique de l’analyse de l’hydrogène par GC-TCD et constituent une base solide pour les phases ultérieures, incluant l’intégration du FID et la validation normative.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_32_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_32__chunk_000015",
+      "project_id": "projet_32_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_32_\\cir_final\\CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_name": "CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Conclusion et contribution scientifique, technique ou technologique]\nCe projet s’inscrit dans le cadre de la recherche et développement d’une méthodologie analytique robuste dédiée à la détection et à la quantification de l’hydrogène dans des matrices gazeuses complexes.\n\nEn effet, nos travaux de R&D ont permis de définir un cadre méthodologique rigoureux, reposant sur la maîtrise des paramètres chromatographiques, la caractérisation des performances du détecteur TCD et l’exploitation avancée des signaux analytiques.\n\nÀ cette fin, nous avons mis en œuvre un protocole expérimental itératif, fondé sur l’optimisation des conditions opératoires, la définition de plages de calibration pertinentes et l’évaluation progressive des performances métrologiques. Ces travaux ont contribué à identifier et à lever partiellement les verrous scientifiques et techniques, tout en établissant une base méthodologique robuste, reproductible et transposable à des environnements analytiques complexes.\n\nPar ailleurs, nous avons renforcé la compréhension des mécanismes d’interactions physico-chimiques impliqués dans les processus de séparation et de détection de l’hydrogène. Nous avons également formalisé des protocoles expérimentaux standardisés, favorisant la fiabilité, la traçabilité et la reproductibilité des mesures dans des conditions opératoires variables.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_32_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_32__chunk_000016",
+      "project_id": "projet_32_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_32_\\cir_final\\CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_name": "CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Description des ressources humaines]\n[TABLEAU]\n| NOM Prénom | Diplôme | Fonction dans l’opération | Contribution directe à l’acquisition de nouvelles connaissances |\n| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------- |\n| Paul Crussy | Master de Sciences Technologies Santé Mention Sciences de la Mer, Licence 3 Biologie des Organisme et Ecologie, DUT Génie Biologique Génie de l'Environnement | Ingénieur consultant | Recherche et développement d’une méthodologie d’analyse de l’hydrogène en phase gazeuse. |",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_32_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_32__chunk_000017",
+      "project_id": "projet_32_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_32_\\cir_final\\CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_name": "CIR2025_ENERGEO_NATRAN_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Annexe 1 : Analyse de l’état de l’art]\nL’hydrogène, en tant que molécule diatomique légère, hautement diffusible et dotée d’une conductivité thermique exceptionnelle, présente des propriétés physico-chimiques singulières qui compliquent sa détection et sa quantification avec précision, notamment à faibles teneurs dans des matrices gazeuses multi composantes et dynamiques. Ces caractéristiques intrinsèques imposent le développement de protocoles analytiques rigoureux, capables de minimiser les phénomènes de diffusion, d’adsorption et d’interférence, tout en assurant la reproductibilité et la fidélité métrologique des mesures.’\n\nÀ cet égard, nous avons entrepris une analyse des connaissances existantes relatives à la chromatographie en phase gazeuse (GC), afin de dresser un état des avancées scientifiques et techniques dans ce domaine. Cette revue vise à identifier les contributions majeures et à mettre en évidence les problématiques scientifiques émergentes ainsi que les leviers d’investigation méthodologique pour la quantification fiable de l’hydrogène au sein de matrices complexes, tout en garantissant un haut niveau de robustesse et de cohérence métrologique.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_32_\\extracted\\chunks.json"
+    }
+  ]
+}

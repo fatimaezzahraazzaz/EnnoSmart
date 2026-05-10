@@ -1,0 +1,247 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 70/135, 8 chunks)
+
+### CHUNK_ID: projet_15__chunk_000015_sub00
+```
+[SECTION : Analyse de l’état de l’art]
+La gestion des transitoires de courant dans les systèmes électriques constitue un enjeu majeur pour la fiabilité et la sécurité des équipements. Lors de la mise sous tension, la charge des condensateurs haute tension entraîne un courant d’appel potentiellement élevé, pouvant endommager les composants et réduire la durée de vie du système. De même, une décharge non maîtrisée peut engendrer des surtensions dangereuses. Face à ces défis, diverses stratégies ont été développées pour limiter ces phénomènes et accroitre la gestion de l’énergie stockée dans les condensateurs.
+
+À cet égard, nous avons mené une analyse des connaissances existantes sur la limitation d’appel du courant. Notre recherche a ressorti une étude effectuée en 2016 portant sur la limitation des courants de défaut en courant continu (DC) dans les convertisseurs modulaires multiniveaux en demi-pont (HB-MMC), largement employés pour le transport en courant continu haute tension (HVDC). Ces convertisseurs présentent une vulnérabilité aux défauts DC, engendrant des courants de court-circuit élevés susceptibles d’endommager les semi-conducteurs et d’affecter la stabilité du réseau. Les solutions classiques impliquent la mise en œuvre de parafoudres (arrester banks) et de disjoncteurs DC hybrides, mais celles-ci souffrent de pertes en conduction importantes, d’une usure prématurée et de coûts de maintenance élevés.
+
+Dans cette optique, Ahmed et al propose une approche novatrice mettant en œuvre des condensateurs externes préchargés insérés dans le circuit de défaut pour générer une tension opposée, limitant ainsi efficacement l’appel de courant. Ainsi, l’objectif principal est de développer un système de limitation de courant sans parafoudre, capable de réduire les transitoires de courant tout en minimisant les pertes et la complexité du système. Pour atteindre cet objectif, les auteurs ont développé un dispositif incluant des stations de charge assurant le maintien de la tension des condensateurs et une commande des interrupteurs de puissance, permettant d’activer le dispositif en cas de défaut.
+```
+
+### CHUNK_ID: projet_15__chunk_000015_sub02
+```
+une étude théorique, suivie d’une modélisation et d’une validation par des essais expérimentaux du circuit développé. Figure : Le schéma du circuit de précharge proposé avec condensateur de Miller virtuel
+
+Les résultats obtenus montrent une charge progressive et linéaire du condensateur avec une réduction significative des contraintes de courant, augmentant ainsi la fiabilité du système. Cependant, cette étude ne traite ni des conditions extrêmes de décharge, ni de la conformité aux normes de sécurité, et n’inclut pas de dispositif dédié de décharge sécurisée.
+
+En outre, Xingtong et al. se sont penchés sur la problématique de la suppression du courant d’appel lors de la mise sous tension de condensateurs shunt haute tension. L’objectif principal de cette étude est de proposer une stratégie de précharge permettant de réduire significativement le courant d’appel en chargeant au préalable un condensateur monophasé avant la fermeture synchrone du disjoncteur triphasé. Pour cela, les auteurs ont effectué une modélisation théorique afin de déterminer la tension cible de précharge, suivie de la définition d’un dispositif de précharge adéquat. Une simulation sous PSCAD valide cette approche en prenant en compte la dispersion temporelle du disjoncteur sous vide.
+
+Figure : Schéma proposé de précharge du condensateur
+
+Les résultats montrent une réduction du courant d’appel sous 1.6 p.u., avec une diminution des pics de courant de fermeture respectivement à 0.33, 0.6 et 0.5 fois leurs valeurs initiales, ainsi qu’un raccourcissement notable de la durée du transitoire. Toutefois, cette étude ne prévoit pas de dispositif dédié de décharge sécurisée et ne propose pas de circuit unique combinant précharge et décharge.
+
+De surcroît, nous avons recensé une étude portant sur la précharge des condensateurs de bus DC à partir d’une batterie haute tension, un enjeu essentiel pour limiter les courants d’appel et renforcer la fiabilité des convertisseurs d’énergie. L’objectif principal de ces travaux est d’éliminer les circuits de précharge traditionnels, basés sur des résistances et des relais, en exploitant le flux d’énergie bidirectionnel d’un convertisseur résonant CLLLC. Cette approche permet d’alimenter progressivement le condensateur de bus DC (2,4 mF, 450 V) sans provoquer de transitoires destructeurs.
+```
+
+### CHUNK_ID: projet_15__chunk_000024_sub01
+```
+un dispositif incluant des stations de charge assurant le maintien de la tension des condensateurs et une commande des interrupteurs de puissance, permettant d’activer le dispositif en cas de défaut.
+
+Les simulations réalisées sur un système HVDC à neuf niveaux (±100 kV, 400 MVA) ont démontré que cette solution permet de réduire significativement l’intensité des courants de court-circuit, avec des performances similaires aux convertisseurs CDSM-MMC, tout en nécessitant moins de semi-conducteurs et en limitant les pertes en conduction. Cependant, cette approche requiert la mise en place d’un système de précharge et de gestion dynamique des condensateurs, ce qui introduit une complexité supplémentaire dans l’architecture globale.
+
+Cependant, certaines limitations persistent :
+
+Cette étude ne prend pas en compte le contrôle précis de la montée en tension, ce qui peut entraîner des transitoires brusques et des surtensions ;
+
+La gestion limitée de la précharge et décharge des condensateurs dans cette étude ;
+
+Cette étude ne considère pas l’impact des variations de courant sur l’échauffement des composants, pouvant affecter leur durée de vie.
+
+D’autre part, nous avons identifié les travaux de Lei et al., qui ont étudié la gestion du courant d’appel lors de la mise sous tension d’un condensateur électrolytique de bus DC et ont proposé des solutions visant à limiter les transitoires de courant, un défi majeur en raison des contraintes de fiabilité et de durée de vie des composants du circuit d’entrée. Pour répondre à cette problématique, l’objectif de l’article est de développer un circuit de précharge compact, fiable et efficace, en remplaçant les résistances et relais traditionnels par une approche basée sur un MOSFET et un condensateur de Miller virtuel, permettant ainsi de limiter le courant d’appel à une valeur constante. Afin de valider cette approche, Lei et al. ont mené une étude théorique, suivie d’une modélisation et d’une validation par des essais expérimentaux du circuit développé.
+
+Figure 1 : Le schéma du circuit de précharge proposé avec condensateur de Miller virtuel
+```
+
+### CHUNK_ID: projet_15__chunk_000024_sub03
+```
+cette étude se limite à un système de compensation réactive en moyenne tension et ne prend pas en compte la gestion des courts-circuits entre transistors avec un temps mort optimisé.
+
+De surcroît, nous avons recensé un brevet publié en 2020 portant sur le développement d’une approche de précharge d’un condensateur par une batterie. Dans ce contexte, la problématique traitée concerne la gestion de l’énergie lors de la précharge des condensateurs, un enjeu critique pour éviter les transitoires de courant destructeurs et garantir une charge optimale des composants capacitifs. Ainsi, l’objectif principal de cette invention est de proposer une solution robuste et flexible qui assure une précharge contrôlée tout en minimisant la dissipation d’énergie dans la résistance de précharge.
+
+Pour atteindre cet objectif, les inventeurs ont mis en œuvre une modélisation théorique du système, suivie de tests expérimentaux sur un circuit comprenant une batterie de 400V, une résistance de précharge de 15 Ω et un hacheur à transistor MOSFET. Les résultats montrent une réduction efficace des pics de courant tout en maintenant une montée progressive de la tension aux bornes du condensateur. De plus, le système intègre des protections thermiques pour surveiller la température de la résistance et ajuster dynamiquement le cycle de précharge en conséquence. En revanche, ces travaux ne peuvent pas être applicables dans le cadre de notre étude, car celle-ci se concentre exclusivement sur la phase de précharge sans prendre en compte une approche efficace de la décharge des condensateurs. D’autre part, bien que le brevet propose une approche intéressante en incluant un contrôle dynamique du courant de précharge, il ne couvre pas le développement complet de la montée en puissance et de la décharge, éléments essentiels de notre approche visant une gestion globale de l’énergie dans un système électrique triphasé.
+```
+
+### CHUNK_ID: projet_15__chunk_000030_sub01
+```
+Ce choix permet d’analyser la dynamique de charge du condensateur dans des conditions extrêmes, en prenant en compte les caractéristiques de la charge et la lenteur du processus de précharge.
+
+Dans cette configuration, le temps nécessaire pour précharger le condensateur de 0 V à 456 V (soit 95% de l’amplitude de la tension entre phases) est de moins de 32 secondes. Ce résultat est illustré dans la figue ci-dessous, où on peut observer le comportement du condensateur au fil du temps. La montée en tension est relativement rapide, ce qui est un bon indicateur de l’efficacité du circuit dans cette configuration.
+
+Figure 7 : Tension du bus DC dans le cas d’une amplitude minimale
+
+Concernant la tension du bus DC à la fin de la précharge, on constate que, après 60 secondes, la tension atteint 460 V, ce qui est conforme aux hypothèses définies. Ce comportement est montré dans la Figure 3, illustrant la convergence de la tension vers la valeur finale. La différence entre la tension finale et la tension théorique attendue est inférieure à 1%, ce qui montre une précision satisfaisante dans le processus de charge.
+
+Les résultats de cette simulation démontrent que, même dans des conditions de tension minimale entre phases, le système remplit les exigences de performance. Avec une capacité de 17 000 µF et une résistance de 297 Ω, la tension du condensateur atteint une plage de 480-750 V. De plus, la précharge se termine en 32 secondes, ce qui est bien en delà de la limite de 60 secondes qui offre ainsi une marge confortable par rapport au système.
+
+Ces résultats nous permettent de confirmer la viabilité de cette solution proposée et de valider l’architecture du système de précharge. Cette architecture est adaptée à une mise en œuvre dans des environnements où la tension d’alimentation peut fluctuer, tout en garantissant une stabilité et une opération dans les limites de sécurité.
+
+Essais Expérimentaux pour la Validation de l’Architecture : Simulation en décharge
+```
+
+### CHUNK_ID: projet_15__chunk_000005_sub00
+```
+[SECTION : Analyse de l’état de l’art]
+L’état de l’art est développé de manière détaillée en annexe 2.7.1.1.1.
+
+La maîtrise des transitoires de charge et de décharge des condensateurs haute tension dépasse la simple limitation du courant d’appel : elle exige une décharge sécurisée de l’énergie emmagasinée pour éviter toute surtension résiduelle, une topologie unique combinant précharge et décharge afin de réduire la complexité architecturale et d’augmenter la fiabilité, ainsi qu’une prise en compte rigoureuse des contraintes d’isolation haute tension pour garantir la sécurité des installations et la durabilité des équipements.
+
+À cet égard, nous avons mené une analyse des connaissances existantes sur la limitation d’appel de courant, et notre recherche a mis en évidence une étude menée par Ahmed et al. portant sur la limitation des courants de défaut en continu dans les convertisseurs modulaires. Ils ont proposé d’insérer des condensateurs externes préchargés dans le circuit de défaut pour générer une tension opposée, réduisant sensiblement les pics de courant de court-circuit. Les simulations sur un système à neuf niveaux (± 100 kV, 400 MVA) ont montré des performances équivalentes à celles des convertisseurs CDSM-MMC, avec moins de semi-conducteurs et des pertes en conduction réduites. Cependant, cette solution nécessite un module de précharge et une gestion dynamique des condensateurs séparés, n’intègre pas de circuit unique réunissant précharge et décharge, ne prévoit pas de dispositif dédié de décharge sécurisée, et ignore les dimensions d’isolation requises pour les hautes tensions.
+
+Lei et al. ont développé un circuit de précharge compact pour condensateur électrolytique de bus DC, remplaçant résistances et relais par un MOSFET associé à un « condensateur de Miller virtuel ». Leur architecture garantit une charge progressive et linéaire du condensateur, limitant le courant d’appel à une valeur constante et augmentant la fiabilité. L’étude combine modélisation théorique, simulation et essais expérimentaux, mais reste cantonnée à une application monophasée à 240 V et 470 µF (cf. Figure 1). Elle ne traite ni des conditions extrêmes de décharge, ni de la conformité aux normes de sécurité, et ne prévoit aucun dispositif de décharge sécurisée.
+```
+
+### CHUNK_ID: projet_15__chunk_000015_sub01
+```
+un dispositif incluant des stations de charge assurant le maintien de la tension des condensateurs et une commande des interrupteurs de puissance, permettant d’activer le dispositif en cas de défaut.
+
+Les simulations réalisées sur un système HVDC à neuf niveaux (±100 kV, 400 MVA) ont démontré que cette solution permet de réduire significativement l’intensité des courants de court-circuit, avec des performances similaires aux convertisseurs CDSM-MMC, tout en nécessitant moins de semi-conducteurs et en limitant les pertes en conduction. Cependant, cette approche requiert la mise en place d’un système de précharge et de gestion dynamique des condensateurs, ce qui introduit une complexité supplémentaire dans l’architecture globale.
+
+Cependant, cette approche ne propose pas un système de précharge et de gestion dynamique des condensateurs, ce qui accroît la complexité architecturale et n’intègre ni circuit unique de précharge et décharge, ni dispositif dédié de décharge sécurisée, ni dimensionnement des contraintes d’isolation haute tension.
+
+D’autre part, nous avons identifié les travaux de Lei et al., qui ont étudié la gestion du courant d’appel lors de la mise sous tension d’un condensateur électrolytique de bus DC et ont proposé des solutions visant à limiter les transitoires de courant, un défi majeur en raison des contraintes de fiabilité et de durée de vie des composants du circuit d’entrée. Pour répondre à cette problématique, l’objectif de l’article est de développer un circuit de précharge compact, fiable et efficace, en remplaçant les résistances et relais traditionnels par une approche basée sur un MOSFET et un condensateur de Miller virtuel, permettant ainsi de limiter le courant d’appel à une valeur constante. Afin de valider cette approche, Lei et al. ont mené une étude théorique, suivie d’une modélisation et d’une validation par des essais expérimentaux du circuit développé.
+
+Figure : Le schéma du circuit de précharge proposé avec condensateur de Miller virtuel
+```
+
+### CHUNK_ID: projet_15__chunk_000017_sub00
+```
+[SECTION : Développement et modélisation de l’architecture du système de précharge et décharge du condensateur]
+L’un des principaux objectifs de notre étude est de développer une approche efficace pour la gestion de l’énergie dans ce type de système. Pour y parvenir, nous avons mis en œuvre une modélisation permettant d’analyser et de prédire le comportement du circuit en fonction des paramètres électriques critiques. Dans ce cadre, nous avons défini une architecture robuste, illustrée sur la figure ci-après, pour la gestion de la précharge et de la décharge des condensateurs haute tension au sein d’un réseau triphasé. Cette architecture repose sur un module de conversion mettant en œuvre des composants électroniques spécifiquement dimensionnés et des stratégies de commande avancées, afin de garantir un haut niveau de sécurité, de fiabilité et de performance. Une des difficultés initiales portait sur le choix des tensions d'isolation entre les alimentations dédiées au pilotage et les parties actives, qui présentaient des niveaux de tension très élevés, posant ainsi un défi majeur pour la mise en œuvre d’une solution de commande sécurisée. Par ailleurs, l’adaptation du pilotage de JFETs à des circuits de commande spécifiés pour des MOSFETs a constitué une difficulté supplémentaire, nécessitant un ajustement des niveaux de commande, des temps de commutation et des protections associées pour garantir un fonctionnement optimal.
+
+Figure : Architecture de précharge et décharge du condensateur
+
+Dans l’architecture présentée, la partie gauche du schéma représente le réseau triphasé d’alimentation, qui n’appartient pas directement au système étudié. Les diodes D1 à D6 constituent le pont de redressement, convertissant la tension alternative du réseau en tension continue. L’objectif est alors de charger le condensateur C1 de manière progressive afin de limiter le courant prélevé sur le réseau et de protéger les composants internes.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 70,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

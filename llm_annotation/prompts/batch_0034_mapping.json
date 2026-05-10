@@ -1,0 +1,89 @@
+{
+  "batch_id": 34,
+  "chunks": [
+    {
+      "chunk_id": "projet_7__chunk_000003",
+      "project_id": "projet_7_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_7_\\cir_final\\GIRODIN_TGM100_CIR-2023_VF.docx",
+      "file_name": "GIRODIN_TGM100_CIR-2023_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Objectifs visés et performances à atteindre]\nLe présent projet de R&D vise à investiguer et résoudre les problématiques liées au développement d’un compresseur à pistons en barillet multi-étages capable d’atteindre en position verticale ainsi qu’en position horizontale les caractéristiques suivantes :\n\nUn débit variant entre 90 et 100 m3/h à une pression de refoulement de 300 bars ;\n\nUne discrétion acoustique et vibratoire ;\n\nUn encombrement réduit afin d’être conforme aux exigences d’une utilisation sur un sous-marin ;\n\nUn air sec à la sortie du compresseur avec un point de rosée autour entre -40°C et -20°C pour éviter d’abimer les circuits ou tuyauteries utilisant cet air.\n\nNous avons en 2023 porté nos efforts sur :\n\nLa réduction des vibrations générées par le fonctionnement du compresseur ;\n\nL’analyse et résolution de la problématique d’échauffement de l’air en sortie du compresseur ;\n\nLe développement d’une nouvelle solution pour réduire l’humidité de l’air en sortie du compresseur ;\n\nL’étude de l’impact du débit de l’eau de refroidissement sur la température de l’air dans les étages du compresseur et à sa sortie ;\n\nL’étude de l’écoulement de l’eau dans le circuit de refroidissement du compresseur.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_7_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_7__chunk_000006",
+      "project_id": "projet_7_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_7_\\cir_final\\GIRODIN_TGM100_CIR-2023_VF.docx",
+      "file_name": "GIRODIN_TGM100_CIR-2023_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Insuffisances des solutions existantes]\nNotre analyse des connaissances liées aux compresseurs à pistons oscillants axiaux a mis en avant un manque de connaissances sur les compresseurs à pistons à barillet. En effet, la majorité des brevets publiés et des études menées dans ce contexte portent sur des compresseurs à plateau oscillant destinés aux systèmes de circulation d’agent frigorigène, en particulier des systèmes de climatisation de véhicules automobiles. Ceux-ci fournissent des pressions de refoulement de l’ordre de 20 ou 40 bars, bien inférieures aux performances recherchées dans ce projet et non conformes à l’application sur un sous-marin.\n\nDes solutions ont été proposées pour augmenter la fiabilité de ces compresseurs ou réduire la quantité d’huile enfermée. Toutefois, nous n’avons pas identifié des travaux portant sur la résolution des problématiques liées à l’atteinte des performances accrues escomptées dans ce projet.\n\nEn outre, notre recherche bibliographique a ressorti des travaux de recherche portant sur la caractérisation vibro-acoustique et la réduction des vibrations et nuisances sonores dans les compresseurs à pistons. Cependant, vue la technologie particulière du compresseur étudié dans ce projet (système à barillet) et les contraintes imposées par les niveaux de fonctionnement recherchés sur le compresseur, les solutions présentées dans ces travaux ne sont pas transférables en l’état au contexte de notre projet.\n\nNous devons donc mener de nouvelles études pour rechercher des solutions permettant de lever les verrous et résoudre les problématiques inhérentes à notre solution, notamment en termes de vibrations, de niveau sonore, d’échauffement, et d’humidité de l’air.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_7_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_7__chunk_000021_sub00",
+      "project_id": "projet_7_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_7_\\cir_final\\GIRODIN_TGM100_CIR-2023_VF.docx",
+      "file_name": "GIRODIN_TGM100_CIR-2023_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Etude de l’écoulement de l’eau dans le circuit de refroidissement du compresseur]\nLa pression d’air étant amenée de la pression ambiante à 250 bars en sortie du dernier étage, nous constatons un fort dégagement de chaleur qui nécessite la mise en œuvre d’un circuit de refroidissement pour lequel le fluide utilisé est de l’eau. Elle circule autour des têtes des cylindres puis dans des tubes de refroidissement au nombre de deux par étage de compression, permettant d’abaisser la température d’air avant l’étage suivant ou la sortie du compresseur. L’objectif de cette étude du circuit de refroidissement, menée en partenariat avec Andhéo, est d’identifier la répartition du débit entre les différentes portions du circuit ainsi que les éventuelles zones où la circulation n’est pas suffisante pour assurer un refroidissement optimal.\n\nCette étude s’inscrit dans la continuité de nos études antérieures. Nous avons ainsi conservé le même modèle défini précédemment.\n\nLes figures suivantes présentent une vue globale et des vues en coupe de la géométrie étudiée.\n\nFigure : Modèle du compresseur étudié\n\nSeuls les éléments composant le circuit de refroidissement sont représentés. Les tubes de refroidissement sont au nombre de huit, soit deux par étage de compression. L’eau circule dans ces derniers autour d’une multitude de tubes dans lesquels transite l’air à refroidir.\n\nLe corps supérieur, situé au niveau de la tête des cylindres de compression, contient quatre cavités pour le circuit de refroidissement. Ces cavités communiquent chacune avec les tubes de refroidissement de deux étages, ainsi qu’avec une autre cavité directement. En numérotant les cavités par le numéro de l’étage du compresseur, on obtient le circuit suivant :\n\nLa cavité 1 communique avec la cavité 3 ainsi qu’avec les tubes de refroidissement situés entre les étages 1 et 2, et entre l’étage 4 et l’extérieur.\n\nLa cavité 2 communique avec la cavité 4 ainsi qu’avec les tubes de refroidissement situés entre les étages 1 et 2, et entre les étages 2 et 3.",
+      "_parent_chunk_id": "projet_7__chunk_000021",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_7__chunk_000022_sub00",
+      "project_id": "projet_7_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_7_\\cir_final\\GIRODIN_TGM100_CIR-2023_VF.docx",
+      "file_name": "GIRODIN_TGM100_CIR-2023_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Résultats des simulations réalisées dans le cas d’une entré au cylindre 3 et d’une sortie au cylindre 4 à 5 m3/h]\nPour cette simulation, l’entrée et la sortie ont été inversées par rapport à l’étude précédente. L’entrée se situe donc au niveau du cylindre 3, et la sortie au niveau du cylindre 4. Le débit appliqué est de 5 m3/h (imposé sur l’entrée), et la pression est de 2.8 bars (imposée sur la sortie).\n\nLes résultats ont montré que le débit était réparti comme suit entre les différentes paires de tubes de refroidissement et au travers des canaux entre les cylindres :\n\n1.17 m3/h entre les cavités 1 et 2 ;\n\n1.18 m3/h entre les cavités 3 et 2 ;\n\n1.35 m3/h entre les cavités 3 et 4 ;\n\n1.29 m3/h entre les cavités 1 et 4 ;\n\n2.46 m3/h entre les cavités 3 et 1 ;\n\n2.35 m3/h entre les cavités 2 et 4.\n\nLe sens de circulation correspond à l’inverse de celui de notre étude précédente.\n\nLes pertes de charges mesurées pour chaque paire de tubes sont les suivantes, pour une perte de charge globale de 38.5 mbar :\n\n18.0 mbar dans les tubes entre les cavités 1 et 2 ;\n\n19.4 mbar dans les tubes entre les cavités 3 et 2 ;\n\n25.6 mbar dans les tubes entre les cavités 3 et 4 ;\n\n25.4 mbar dans les tubes entre les cavités 1 et 4.\n\nLa figure suivante montre les lignes de courant, colorées par la vitesse, dans la partie supérieure du système de refroidissement. La vitesse maximale atteinte est localement de 2.9 m/s, pour une vitesse moyenne globale de 0.39 m/s.\n\nFigure : Lignes de courant colorées par la vitesse de 0 m/s à 1.5 m/s dans une vue de dessus en coupe de la partie supérieure du compresseur. Annotations précisant les zones de recirculation identifiées et le sens de l’écoulement.",
+      "_parent_chunk_id": "projet_7__chunk_000022",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_7__chunk_000033",
+      "project_id": "projet_7_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_7_\\cir_final\\GIRODIN_TGM100_CIR-2023_VF.docx",
+      "file_name": "GIRODIN_TGM100_CIR-2023_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Développement d’un nouveau séparateur de condensats]\nDans l’objectif de produire de l’air sec en sortie du compresseur, nous avions développé précédemment un séparateur de condensats positionné en amont de la filtration protégeant la membrane de séchage. Selon cette solution, l’air et l’eau entrent dans le séparateur et passent au travers de l’éclateur. L’eau est alors projetée (en partie) sur les parois du bol par un effet centrifuge. L’eau coule entre le disque et les parois pour ainsi finir au fond du bol. Le disque permet ainsi de limiter la remontée de liquide vers la sortie. Ensuite, le liquide est purgé cycliquement via l’ouverture en bas du bol afin d’être évacué.\n\nEn 2023, afin de maximiser l’éclatement de l’eau contre les parois du séparateur et donc mieux séparer l’air de l’eau, nous avons développé un nouvel éclateur avec plus d’ailettes, dont l’architecture est présentée sur la figure suivante.\n\nFigure : Ancien éclateur (à gauche) / Nouvel éclateur (à droite)\n\nLa figure ci-dessous illustre la nouvelle architecture du mécanisme séparateur de condensants.\n\nFigure : Nouvelle architecture du séparateur",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_7_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_7__chunk_000049_sub01",
+      "project_id": "projet_7_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_7_\\raw\\docx\\CR Soufflage carter TGM_INTERNE_FR_Rev1.docx",
+      "file_name": "CR Soufflage carter TGM_INTERNE_FR_Rev1.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "cela est nécessaire. Mesures : Le débitmètre est installé en sortie de reniflard, lui-même connecté au carter, afin de quantifier les remontées d’air depuis celui-ci. - TGM15-30 (30m3/h @ 250bar)\n\nValeur du soufflage carter maximum en utilisation normale : 60l/min = 3.6m3/h @250bar\n\n- TGM60/100 Agosta (60m3/h @ 250bar)\n\nValeur du soufflage carter maximum en utilisation normale : 120 l/min = 7.2m3/h @250bar\n\n- TGM100 (100m3/h @250bar)\n\nValeur du soufflage carter maximum en utilisation normale : 120 l/min = 7.2m3/h @250bar\n\nAVERTISSEMENT\n\nLe débitmètre étant proche d’émanations d’air humide et de vapeur d’huile, il se peut que la mesure soit parfois faussée suite à des gouttelettes qui viendraient polluer le capteur.\n\nSi le soufflage carter est important lorsque le compresseur n’est toujours pas à sa pression maximum, il faut absolument intervenir et changer au moins la segmentation du 4ème étage.\n\nSynthèse :\n\nTous ces relevés ont été effectués après rodage des compresseurs et donc après rodage des segments. On peut donc parler de relevés en configuration standard.\n\nOn notera que la technologie et le dimensionnement du TGM60/100 et du TGM100 étant très similaire, il est logique de retrouver les mêmes valeurs de soufflage maximum.\n\nReste à étoffer ces relevés avec d’autres pressions et d’autres configuration afin d’accroitre notre éventail de données sur ce phénomène.",
+      "_parent_chunk_id": "projet_7__chunk_000049",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_7__chunk_000067_sub00",
+      "project_id": "projet_7_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_7_\\raw\\excel\\Relevés de vibrations TMG 100.xlsx",
+      "file_name": "Relevés de vibrations TMG 100.xlsx",
+      "file_category": "excel",
+      "source_type": "text",
+      "text": "[FEUILLE : 13-07-2023]\n[TABLEAU 1 | B21:P51]\n| Données du test | | | | Données du test | | | | Données du test | | | | Données du test | | |\n| ------------------------- | --------------------------------------------------------- | ------------------- | --- | ------------------------- | --------------------------------------------------------- | ------------------- | --- | ------------------------- | --------------------------------------------------------- | ------------------- | --- | ------------------------- | --------------------------------------------------------- | --------------- |\n| Temperature ambiante °C | 25.90 | | | Temperature ambiante °C | 25.90 | | | Temperature ambiante °C | 25.90 | | | Temperature ambiante °C | 25.90 | |\n| Hygrometrie % | 44.50 | | | Hygrometrie % | 44.50 | | | Hygrometrie % | 44.50 | | | Hygrometrie % | 44.50 | |\n| Vitesse en tr/min | 905 | | | Vitesse en tr/min | 905 | | | Vitesse en tr/min | 905 | | | Vitesse en tr/min | 905 | |\n| Poids sur la poulie en kg | 2.25 | | | Poids sur la poulie en kg | 1 | | | Poids sur la poulie en kg | 1.25 | | | Poids sur la poulie en kg | 2.50 | |\n| Relevé par: | G.\nBONILLA | | | Relevé par: | G.\nBONILLA | | | Relevé par: | G.\nBONILLA | | | Relevé par: | G.",
+      "_parent_chunk_id": "projet_7__chunk_000067",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_8__chunk_000002",
+      "project_id": "projet_8_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_8_\\cir_final\\Girodin_Récupération de l'hélium_CIR 2024_VF.docx",
+      "file_name": "Girodin_Récupération de l'hélium_CIR 2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Contexte de l’opération]\nDevant la demande croissante en services Internet, en informatique en nuage (Cloud Computing) et en analyse de Big Data dans divers secteurs industriels, le marché de la fibre optique a connu une croissance très importante, avec une valeur estimée à 8,76 milliards de dollars en 2022.\n\nL’hélium intervient à deux étapes clés de la fabrication des fibres optiques : d’une part lors de la production de la préforme, le précurseur de la fibre, où il est utilisé notamment pour renforcer celle-ci, et d’autre part durant l’étirage de la préforme en fibre, où il sert à un refroidissement efficace. À ce jour, les industriels ne disposent d’aucune alternative viable à l’hélium pour la fabrication de la préforme.\n\nL’hélium, une fois utilisé, est rejeté dans l’atmosphère, où il s’échappe facilement en raison de sa légèreté. Toutefois, ce gaz est parmi les plus rares et les plus précieux, et les réserves présentes sous la croûte terrestre sont limitées et difficiles à exploiter. Ainsi, le recycler et en préserver l’usage représente un enjeu important pour les générations à venir.\n\nLa récupération de l’hélium diminue aussi la quantité de gaz gaspillé, ce qui améliore l’efficacité du processus industriel. En assurant un approvisionnement constant en hélium, les systèmes de recyclage de l’hélium garantissent un refroidissement contrôlé des fibres, assurant leur qualité et leur performance. De plus, la réutilisation de l’hélium contribue à diminuer les dépenses énergétiques associées à la production et au transport du gaz neuf. Enfin, en limitant le gaspillage et la consommation d’énergie, ces systèmes réduisent l’impact environnemental de la fabrication des fibres optiques, participant à une industrie plus durable.\n\nC’est dans ce contexte que nous avons démarré en 2023 une nouvelle opération de R&D visant à analyser et résoudre les problématiques liées au développement d’un procédé complet novateur de récupération, compression et filtration de l’hélium, tenant compte des contraintes particulières de cette industrie. En 2024, nous nous sommes focalisés sur la phase de filtration du gaz récupéré, pour obtenir l’hélium à la pureté souhaitée.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_8_\\extracted\\chunks.json"
+    }
+  ]
+}

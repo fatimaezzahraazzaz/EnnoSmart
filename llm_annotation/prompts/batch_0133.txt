@@ -1,0 +1,233 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 133/135, 8 chunks)
+
+### CHUNK_ID: projet_32__chunk_000003
+```
+[SECTION : Objectifs visés et performances à atteindre]
+Notre projet vise à développer une méthode fiable et reproductible pour l’analyse de l’hydrogène (H₂) dans des matrices gazeuses complexes, en mettant en œuvre un système de chromatographie en phase gazeuse équipé des détecteurs TCD et FID. Notre approche consiste à surmonter les enjeux techniques et analytiques liés à la faible sensibilité du TCD, à la co-élution des gaz légers et aux phénomènes de diffusion rapide de l’hydrogène.
+
+Ainsi, les performances que nous cherchons à atteindre sont :
+
+Définir des conditions chromatographiques optimales (type et séquence de colonnes, gaz vecteur, température, débits et volume d’injection) pour garantir une séparation nette des gaz légers (H₂, O₂, N₂, CO) et des composés carbonés éventuels.
+
+Caractériser la sensibilité, la linéarité et la stabilité du détecteur TCD ainsi que la complémentarité avec le FID, en intégrant les signaux pour assurer la cohérence métrologique des mesures.
+
+Déterminer la plage de quantification fiable de l’hydrogène (ppm à % vol.) et établir une calibration robuste à l’aide de gaz étalons certifiés, tout en évaluant les limites de détection (LOD), de quantification (LOQ) et la répétabilité.
+
+Valider la reproductibilité des mesures et la stabilité du signal sur différentes séries d’analyses, constituant ainsi une base solide pour une validation expérimentale.
+
+En résumé, le projet vise à établir une méthode robuste, scientifiquement fondée et directement exploitable, capable de surmonter les verrous techniques et analytiques associés à l’étude de l’hydrogène dans des mélanges gazeux complexes, renforçant ainsi la maîtrise des processus industriels et fournissant des données fiables pour la recherche et développement.
+```
+
+### CHUNK_ID: projet_32__chunk_000004
+```
+[SECTION : Analyse de l’état de l’art]
+Une analyse approfondie de l’état de l’art, détaillant les études présentées dans cette partie, est intégralement développée en annexe 1.7.1.
+
+L’hydrogène, en tant que molécule diatomique légère, hautement diffusible et dotée d’une conductivité thermique exceptionnelle, présente des caractéristiques physico-chimiques singulières qui compliquent sa détection et sa quantification avec précision, notamment à faibles teneurs dans des matrices gazeuses multi composantes et dynamiques. Ces caractéristiques intrinsèques imposent le développement de protocoles analytiques rigoureux, capables de minimiser les phénomènes de diffusion, d’adsorption et d’interférence, tout en assurant la reproductibilité et la fidélité métrologique des mesures.’
+
+À cet égard, nous avons entrepris une analyse des connaissances existantes relatives à la chromatographie en phase gazeuse (GC), afin de dresser un état des avancées scientifiques et techniques dans ce domaine. Cette revue vise à identifier les contributions majeures et à mettre en évidence les problématiques scientifiques émergentes ainsi que les leviers d’investigation méthodologique pour la quantification fiable de l’hydrogène au sein de matrices complexes, tout en garantissant un haut niveau de robustesse et de cohérence métrologique.
+```
+
+### CHUNK_ID: projet_32__chunk_000005
+```
+[SECTION : Prise des connaissances sur les approches existantes pour la détection de l’hydrogène]
+Notre analyse a ressorti l’article de Budiman et al. portant sur la comparaison des détecteurs GC-TCD et GC-FID pour l’analyse de mélanges gazeux, en évaluant sensibilité, linéarité et reproductibilité via des protocoles de calibration dédiés. Les résultats montrent que le FID offre une meilleure sensibilité et précision pour les composés carbonés, tandis que le TCD, plus universel, reste moins sensible et dépend fortement des conditions opératoires, soulignant la complémentarité des deux détecteurs dans des configurations hybrides.
+
+Par ailleurs, Toonen et al. ont étudié la détection de l’hydrogène par GC-TCD sur micro-chromatographe, révélant les limitations liées au gaz vecteur : l’hélium induit non-linéarité, inversion de signal et pics atypiques, compliquant la quantification à forte concentration. L’emploi d’un gaz mixte (8,5 % H₂ dans He) stabilise la réponse et étend la plage de quantification, tout en conservant une bonne corrélation de calibration. Cependant, ces avancées confirment que la détection de l’hydrogène repose sur des phénomènes thermo physiques complexes et mettent en lumière plusieurs limites : sensibilité limitée et forte dépendance du TCD aux conditions opératoires, calibration rigoureuse nécessaire, complexité introduite par les gaz vecteurs mixtes, et absence de méthodologies pleinement adaptées aux spécificités analytiques de l’hydrogène dans des matrices complexes.
+```
+
+### CHUNK_ID: projet_32__chunk_000006
+```
+[SECTION : Prise des connaissances sur les approches GC-FID mettant en œuvre l’hydrogène comme gaz vecteur]
+Bernardoni et al. ont développé une méthode GC-FID reposant sur l’hydrogène comme un gaz vecteur afin de proposer une approche analytique plus rapide et durable pour l’analyse de solvants. Leur objectif était de définir une méthode générique capable d’analyser simultanément un grand nombre de composés dans des matrices complexes. Les travaux ont permis de séparer plus de 30 solvants en un temps réduit, avec des performances satisfaisantes en termes de linéarité, de sensibilité et de précision, comparables aux méthodes classiques utilisant l’hélium.
+
+Par ailleurs, Buse et al. ont étudié le développement d’une approche de quantification simultanée d’alcools volatils et de glycols en matrice plasmatique par GC-FID, en recourant à l’hydrogène comme gaz vecteur. Leur approche repose sur une méthode analytique unifiée, intégrant une préparation d’échantillon par déprotéinisation et une séparation multi-composants en une seule injection. Les résultats montrent une réduction du temps d’analyse d’environ 45 % sans perte de résolution, ainsi qu’une bonne reproductibilité, une récupération proche de 100 % et une sensibilité adaptée aux exigences cliniques.
+
+Ces contributions confirment les avantages de la mise en œuvre de l’hydrogène comme gaz vecteur, notamment en termes de rapidité et d’efficacité analytique. Toutefois, certaines limites persistent : phénomènes de co-élution pour certains composés, compromis entre rapidité et qualité de séparation, dépendance aux conditions opératoires et aux matrices, ainsi que difficulté à discriminer des analytes structurellement proches sans techniques complémentaires. Ces éléments soulignent que le développement de méthodes chromatographiques universelles et robustes pour des matrices complexes demeure un défi scientifique encore ouvert.
+```
+
+### CHUNK_ID: projet_32__chunk_000007_sub00
+```
+[SECTION : Prise des connaissances sur les approches de séparation isotopique de l’hydrogène]
+La séparation des isotopes de l’hydrogène constitue un enjeu analytique majeur en raison de leurs propriétés physico-chimiques très proches, nécessitant des approches chromatographiques particulièrement sensibles et sélectives. Min Li et al. ont d’abord étudié la mise en œuvre de MOFs à faible charge comme phase stationnaire en chromatographie cryogénique, visant à renforcer les interactions sélectives avec les isotopes et favoriser la résolution chromatographique. Les résultats montrent une évolution significative des facteurs de séparation et une structuration fine des matériaux optimisant la performance analytique. Cependant, la méthode nécessite des températures cryogéniques strictes et reste fortement dépendante des propriétés des matériaux, limitant sa robustesse et sa transposabilité.
+
+Dans un second travail, Min Li et al. ont proposé des composites MOFs de type pillared-layer pour surmonter les limites des colonnes classiques. Cette approche permet d’obtenir une résolution de base entre H₂ et HD en moins de 11 minutes avec une répétabilité élevée (RSD ≈ 1 %). Les performances demeurent néanmoins sensibles aux conditions opératoires (température, débit, pression, composition du matériau), limitant la généralisation à des applications réelles.
+
+De surcroit, Preda et al. ont exploré la séparation des isotopes par GC sur colonne à tamis moléculaire 5A, en utilisant un détecteur TCD basé sur les différences de conductivité thermique. Cette méthode fournit une séparation satisfaisante de H₂, HD et D₂ en temps relativement court, avec des performances dépendantes du débit et du volume injecté, mais reste limitée par des contraintes expérimentales importantes et certaines séparations imparfaites.
+
+En dernier lieu, Shaowei Li et al., confirment que même dans des conditions fortement contrôlées, la discrimination des isotopes reste complexe, nécessitant des températures cryogéniques et une optimisation fine des paramètres chromatographiques.
+```
+
+### CHUNK_ID: projet_32__chunk_000007_sub01
+```
+lieu, Shaowei Li et al., confirment que même dans des conditions fortement contrôlées, la discrimination des isotopes reste complexe, nécessitant des températures cryogéniques et une optimisation fine des paramètres chromatographiques.
+
+Dans l’ensemble, ces études mettent en évidence que la séparation et la quantification des isotopes de l’hydrogène reposent sur des processus chromatographiques complexes, fortement sensibles aux conditions opératoires. Les principales limitations concernent la dépendance aux températures cryogéniques, aux paramètres instrumentaux et aux propriétés des matériaux, ainsi que la transposabilité restreinte à des matrices gazeuses complexes. La maîtrise de ces processus demeure un défi scientifique majeur, soulignant la nécessité de développer des méthodes analytiques robustes, reproductibles et généralisables pour des applications réelles.
+```
+
+### CHUNK_ID: projet_32__chunk_000008
+```
+[SECTION : Verrous et incertitudes scientifiques, techniques, technologiques]
+L’analyse de l’état de l’art nous a permis d’identifier plusieurs axes d’investigation qui conditionnent la capacité à développer une méthodologie robuste de d’analyse et de quantification de l’hydrogène dans des matrices gazeuses complexes.
+
+Le premier verrou que nous avons identifié concerne le développement de méthodologies analytiques adaptées aux caractéristiques physico-chimiques spécifiques de l’hydrogène. En effet, sa forte diffusivité, sa faible masse molaire et sa conductivité thermique élevée induisent des phénomènes complexes de transfert et d’interaction, susceptibles de perturber la fidélité des mesures. Ainsi, une incertitude majeure réside dans la capacité à maîtriser et modéliser ces phénomènes dans des conditions analytiques réelles, notamment en présence de matrices multi-composants variables.
+
+Le second verrou concerne la maîtrise globale de la chaîne analytique, depuis la séparation chromatographique jusqu’à la détection et à l’exploitation métrologique des signaux. Les travaux existants mettent en évidence des limitations liées à la co-élution des gaz légers ainsi qu’à la forte dépendance du détecteur TCD aux conditions opératoires. Par ailleurs, l’intégration de configurations hybrides GC-TCD/FID, bien que pertinente en termes de complémentarité, introduit des complexités en matière de calibration, de synchronisation et d’interprétation des signaux. Il en découle une incertitude sur la capacité à définir un compromis robuste entre résolution chromatographique, stabilité du signal et cohérence métrologique, permettant d’assurer une quantification fiable, reproductible et traçable sur une large plage de concentration.
+
+Enfin, nous avons identifié que la robustesse et la transposabilité des méthodes développées constituent un défi majeur. Les approches issues de l’état de l’art restent souvent dépendantes de conditions expérimentales spécifiques et difficilement généralisables. Il en résulte une incertitude sur la capacité à déployer une méthodologie stable et reproductible dans des conditions complexes et variables.
+
+Ces verrous et incertitudes conditionnent directement la nécessité de développer une méthodologie expérimentale structurée, reposant sur la maitrise des paramètres chromatographiques, la compréhension fine des phénomènes physico-chimiques et la mise en œuvre de protocoles de calibration robustes, afin de garantir une quantification fiable et reproductible de l’hydrogène dans des matrices gazeuses complexes.
+```
+
+### CHUNK_ID: projet_32__chunk_000009
+```
+[SECTION : Raisonnement scientifique et démarche expérimentale appliquée]
+Dans le cadre de ce projet, nous avons suivi une démarche scientifique progressive, structurée autour d’une phase d’analyse des verrous identifiés et d’un développement expérimental itératif. Cette approche nous a permis de formuler des hypothèses de travail relatives aux mécanismes physico-chimiques gouvernant la détection et la séparation de l’hydrogène en chromatographie en phase gazeuse, puis de les confronter à des essais expérimentaux.
+
+Notre objectif est de développer une méthodologie analytique fiable et reproductible pour la détection et la quantification de l’hydrogène dans des matrices gazeuses complexes, en maîtrisant l’ensemble de la chaîne analytique, depuis l’injection de l’échantillon jusqu’à l’exploitation des signaux chromatographiques.
+
+Pour ce faire, nous avons structuré notre démarche autour de cycles itératifs combinant paramétrage expérimental, acquisition de données et analyse critique des résultats. Chaque itération nous a conduit à l’ajustement des conditions opératoires (choix du gaz vecteur, configuration des colonnes, paramètres du détecteur TCD, volume d’injection), dans une logique d’optimisation progressive des performances analytiques.
+
+Par ailleurs, une attention particulière a été portée à la caractérisation des sources d’incertitude et des phénomènes perturbateurs, tels que la co-élution des gaz légers, la dérive du signal ou les effets de diffusion, afin de renforcer la robustesse et la fiabilité de la méthode développée. Cette démarche a permis d’établir un cadre expérimental cohérent, constituant une base solide pour garantir la reproductibilité des résultats et la transposabilité de la méthodologie à des environnements analytiques complexes.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 133,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

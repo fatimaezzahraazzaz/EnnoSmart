@@ -1,0 +1,379 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 25/135, 8 chunks)
+
+### CHUNK_ID: projet_6__chunk_000039_sub05
+```
+échantillon Estimation du module de Young de l’échantillon pseudocubique A l’issue des mesures ci-dessus, nous avons cherché à estimer le module de Young de l’échantillon pseudocubique par trois méthodes :
+
+Méthode n°1 : Le déplacement en compression est estimé selon la relation suivante : déplacement compression = déplacement bobine (PiloteZ) – déplacement châssis pot vibrant (51) – déplacement en sortie (1817)
+
+Méthode n°2 : Le déplacement en compression est estimé selon la relation suivante : déplacement compression = déplacement bobine (PiloteZ) – déplacement en sortie (1817)
+
+Méthode n°3 : Le déplacement en compression est estimé selon la relation suivante : déplacement compression = déplacement bobine (PiloteZ)
+
+Les graphiques suivants présentent les estimations des modules de Young pour les trois mesures avec les trois méthodes de calcul. L’axe des ordonnées a été redéfini pour les méthodes n°1 et n°2 afin de réaliser une étude comparative avec la méthode n°3. Les résultants sont plus précis avec la méthode n°3. Les autres méthodes font apparaître des pics incohérents liés à des modes du montage.
+
+Les premiers résultats obtenus avec la méthode n°3 révèlent une estimation du module E similaire à celui déterminé avec le viscoanalyseur, même si nous pouvons observer quelques fluctuations entre 100 et 150Hz, ainsi qu’une augmentation significative à partir de 180Hz qui est probablement lié à un mode d’outillage.
+
+Figure : Estimation du module de Young avec la méthode 1
+
+Figure : Estimation du module de Young avec la méthode 2
+
+Figure : Estimation du module de Young avec la méthode 3
+
+Réalisation de nouveaux essais en configuration verticale
+
+Nous avons redéfini la configuration du pot vibrant en position verticale dans le but de réduire le découplage excessif identifié dans le plan horizontal lors des campagnes d'essai antérieures. De plus, nous avons réalisé des redéfinitions sur l’outillage par l’intégration d’une grande équerre instrumentée à l’aide d’un capteur d’effort pour permettre un suivi précis des sollicitations appliquées.
+
+Le dispositif expérimental permet ainsi une précharge réglable avec moins de découplage et plus de rigidité.
+
+Nous avons étudié deux montages :
+
+Pot vibrant en-dessous et capteur d’effort au-dessus (1ère configuration) ;
+```
+
+### CHUNK_ID: projet_6__chunk_000039_sub06
+```
+expérimental permet ainsi une précharge réglable avec moins de découplage et plus de rigidité. Nous avons étudié deux montages : Pot vibrant en-dessous et capteur d’effort au-dessus (1ère configuration) ;
+
+Pot vibrant au-dessus et capteur d’effort en-dessous. Ce montage permettra l’ajout d’une masse sur l’échantillon (2ème configuration).
+
+Nous avons mené des essais Sinus Dwell sur l’échantillon 1 de 20 à 2000Hz par pas de 10Hz avec le profil suivant.
+
+[TABLEAU]
+| Fréquence | Déplacement appliqué |
+| --------- | -------------------- |
+| 5Hz | 0.5mm |
+| 3000Hz | 0.0005mm |
+
+Pour étudier la répétabilité des résultats, nous avons réalisé nos mesures avec des valeurs différentes de pré-contrainte :
+
+3 mesures effectuées avec 50N de précontrainte (Sine_2, Sine_3, Sine_4)
+
+1 mesure à 100N (Sine_5)
+
+1 mesure à 150N (Sine_6)
+
+1 mesure à 200N (Sine_7)
+
+Figure  : Résultats des mesures du module de Young
+
+Ces résultats sont concluants quant à la répétabilité de la méthode 3. La valeur de pré-contrainte n’impacte donc pas la mesure. Toutefois, nous observons toujours un décrochage à environ 128Hz. Nous avons donc cherché à estimer un profil d’input convenable pour obtenir des résultats exploitables et corrélables avec les tests DMA sur viscoanalyseur. En effet, nous avons réalisé de nouveaux essais Sinus Dwell de 20 à 2000Hz par pas de 10Hz avec le profil suivant (Sine_8). L’objectif a été de déplacer le décrochage constaté à 128 Hz. Cependant, les résultats ont montré que ce pic était toujours présent. Cela peut être dû au mode de l’échantillon ou à la résonnance de l’outillage.
+
+[TABLEAU]
+| Fréquence | Déplacement appliqué |
+| --------- | -------------------- |
+| 5Hz | 0.032mm |
+| 200Hz | 0.032mm |
+
+Pour analyser ces hypothèses, nous avons d’abord réalisé un essai identique aux essais Sine_5 avec l’échantillon 2. Nous avons alors constaté la présence du pic avec un décalage à 140 Hz. Ensuite, nous avons réalisé sur l’échantillon 1 un essai identique au Sine_9 avec la pose d’accélérateurs sur l’outillage pour déterminer la source du pic.
+
+Figure : Définition des accélérateurs sur l’outillage
+```
+
+### CHUNK_ID: projet_6__chunk_000013_sub00
+```
+[SECTION : Développement du moyen expérimental]
+Nous avons travaillé également en 2024 sur le développement d’un moyen expérimental permettant d’atteindre de hautes fréquences (5 kHz) et de caractériser les performances de grands échantillons dont la taille peut atteindre 25cm, représentatifs des plots de découplage vibratoire qui seront développés dans la suite de notre étude.
+
+L'enjeu est de dépasser les limitations des bancs DMA traditionnels tout en assurant la reproductibilité et la précision des mesures sur des matériaux potentiellement hétérogènes ou anisotropes comme les structures auxétiques.
+
+Pour cela, nous avons réalisé des essais d’analyse mécanique dynamique (DMA) sur des échantillons en polymère dont les propriétés sont connues sur deux bancs d’essais :
+
+Le banc DMA (viscoanalyseur) du CEVAA.
+
+Le nouveau banc d’essai RAPID. Il s’agit à l’origine d’un pot vibrant avec des spécificités de pilotage. Au fur et à mesure de nos travaux et en fonction des résultats des essais, nous avons réalisé un ensemble de redéfinitions pour atteindre nos objectifs.
+
+L’objectif est d’atteindre sur le banc RAPID des résultats fiables et cohérents avec ceux du DMA.
+
+Dans un premier temps, nous avons conduit des essais comparatifs sur des échantillons en polyuréthane (PU) à l’aide des deux bancs. Des essais Sine dwell sur une large bande de fréquence ont été réalisés, avec diverses précontraintes (50 à 200 N). Les premiers essais (Figure 22) sur le banc RAPID ont révélé des résonances importantes de l'outillage (vers 65-90 Hz, 150 Hz, 530 Hz), ce qui a nécessité une instrumentation plus poussée avec six capteurs triaxes. Nos essais ultérieurs nous ont permis d'identifier l'origine des pics de résonance liés à l'outillage (la plaque supérieure du capteur d'effort, les profilés verticaux et transversaux, et la liaison glissière).
+
+Au fur et à mesure de nos essais, nous avons réalisé plusieurs redéfinitions sur le dispositif expérimental et analysé des échantillons de géométrie pseudocubique, ce qui nous a permis de réduire significativement les résonances parasites, notamment le pic à 130 Hz (Figure 34). L'analyse des pics autour de 600 Hz a montré qu'ils étaient liés à des modes propres de l'échantillon et de l'outillage.
+```
+
+### CHUNK_ID: projet_6__chunk_000038_sub01
+```
+est représentatif des premiers essais. L’intérêt de cette mesure est de réaliser un essai sur viscoanalyseur représentatif d’un essai sinus dwell sur le banc RAPID que nous cherchons à développer.
+
+Nous avons réalisé également des mesures à 20Hz en faisant varier le déplacement dynamique de 0.5 à 3mm par pas de 0.5mm, ce qui correspond à une accélération. Les résultats des essais révèlent une tendance légèrement décroissante du module de Young en fonction du déplacement dynamique appliqué à l’échantillon n°2. L’objectif de cette mesure sur le viscoanalyseur est d’évaluer l’impact de la variation du déplacement dynamique en traction sur le calcul du module de Young. Par corrélation, cela permettra d’évaluer si le déplacement dynamique en compression a également un impact sur la mesure du module E, et ainsi de déterminer le profil de vibration en entrée le plus adapté et le plus cohérent.
+
+Figure : Résultats des mesures à 20Hz avec variation du déplacement dynamique de 0.5 à 3mm par pas de 0.5mm
+
+Finalement, nous avons réalisé des mesures à 200Hz en faisant varier Ddyn de 0.1 à 0.8mm par pas de 0.1mm. Les résultats des essais ci-dessous montrent une très faible variation du module de Young en fonction du déplacement dynamique appliqué. Cette mesure est complémentaire à la mesure précédente puisqu’il est nécessaire d’avoir au moins 2 points (fréquence, amplitude accélération/déplacement) pour tracer le profil de vibration en entrée.
+
+Figure : Mesures à 200Hz avec variation du déplacement dynamique de 0.1 à 0.8mm par pas de 0.1mm
+
+L’analyse croisée de ces trois mesures permet d’estimer que des déplacements compris entre 0,5 et 1,5 mm à 20 Hz, et entre 0,1 et 0,3 mm à 200 Hz, sont des valeurs cohérentes pour l’évaluation du module de Young.
+```
+
+### CHUNK_ID: projet_6__chunk_000003_sub00
+```
+[SECTION : Objectifs visés et performances à atteindre]
+L’enjeu de cette opération de R&D est d’exploiter les caractéristiques des matériaux auxétiques pour développer de nouvelles solutions d’isolation vibratoire.
+
+Le premier objectif est de développer un plot de découplage des moteurs électriques des véhicules constitué d’un composite à renfort fibreux de nature auxétique qui présentera des caractéristiques équivalentes aux plots élastomères, avec une première fréquence de résonance supérieure à 5 KHz, et qui permettra d’atteindre la transmissibilité théorique présentée sur la Figure 2 en annexe 1.
+
+En termes de performances, cette solution devra :
+
+Présenter des fréquences de résonance supérieures à 5 kHz ;
+
+Assurer une atténuation efficace des transmissions vibratoires dans la bande de fréquences de 0 à 5 kHz ;
+
+Limiter le déplacement sous charge statique à moins de 2 cm ;
+
+Présenter une raideur de 1.5×10⁵ à 1×10⁶ N/m ;
+
+Présenter une fréquence de découplage inférieure à 10 Hz.
+
+Notre deuxième objectif est de développer un plot de découplage des bâtiments navals de défense permettant de décaler les fréquences de résonance, situées aux environs de 1 kHz, vers des valeurs plus élevées.
+
+Durant cette première année d’étude, nous nous sommes concentrés sur le premier objectif. Nos travaux s’inscrivent dans le cadre d'une phase d'étude préliminaire visant à lever des verrous scientifiques et techniques majeurs liés à la caractérisation des matériaux auxétiques, dont les propriétés dynamiques et vibratoires à hautes fréquences sont encore peu explorées dans des conditions expérimentales représentatives. Plus précisément, cette phase initiale vise à :
+
+Développer un protocole expérimental permettant d’analyser le comportement vibro-acoustique des matériaux auxétiques, dont la réponse dynamique est complexe et non linéaire, en vue de leur application dans des systèmes de découplage vibratoire à haute performance.
+```
+
+### CHUNK_ID: projet_6__chunk_000009
+```
+[SECTION : Phasage du projet]
+La démarche suivie dans le cadre de ce projet pluriannuel est la suivante :
+
+Phase préliminaire (2024) :
+
+Recherche et mise en œuvre de moyens et méthodes d’essais permettant de mener à bien l’étude expérimentale ;
+
+Définition d’un premier protocole d’essai prenant en compte les particularités techniques des matériaux auxétiques ;
+
+Réalisation des premières caractérisations d’échantillons de structures auxétiques et analyse et discussion des résultats.
+
+Etape 1 (2025) :
+
+Réalisation de simulations numériques et corrélation avec les essais expérimentaux menés en 2024 ;
+
+Caractérisation statique et vibratoire des coupons composites auxétiques, développés par GEMTEX, sur banc d’essais.
+
+Etape 2 (2026) :
+
+Développement et caractérisation des plots de découplage sur banc moteur puis sur véhicule de série, en collaboration avec nos partenaires.
+
+Développement de plots de découplage pour les bâtiments naval défense.
+
+Etape 3 (2027) : Développement d’un système piézoélectrique semi-actif pour augmenter les performances des plots auxétiques.
+```
+
+### CHUNK_ID: projet_6__chunk_000040_sub01
+```
+l’accéléromètre de la plaque supérieur comme pilote : Sine_46 profil similaire à Sine 45, avec recherche de pilotage ; Sine_47 profil similaire à Sine 45, avec recherche de pilotage ;
+
+Sine_48 profil similaire à Sine 45, avec recherche de pilotage.
+
+Toutefois, les résultats n’ont pas été concluants (matériau très absorbant). C’est pourquoi, nous avons analysé un nouveau profil Sine_49 pour répondre aux propriétés du matériau : 5 - 3000Hz et 0,005 – 3.10-7 mm.
+
+La figure suivante illustre le résultat de l’étude comparative des résultats obtenus avec les profils Sine_30, Sine_45 et Sine_49.
+
+Figure : Etude comparative des résultats obtenus avec les profils Sine_30, Sine_45 et Sine_49
+
+Nous remarquons ainsi que l’essai est concluant jusqu’à 450Hz. Ensuite, nous constatons l’apparition de bruit.
+
+Nous avons réalisé des redéfinitions sur le montage expérimental : définition de profilés en acier, suppression des traverses, augmentation du nombre des équerres pour tenir la plaque, raccourcissement de la plaque. Puis, nous avons mené de nouveaux essais sur l’échantillon 2 noir avec les profils de balayage sinusoïdal suivants :
+
+Sine_49 profil [5-3000 Hz]; [0.005-3e-7mm]
+
+Sine_50 profil [5-3000 Hz] ; [0.5-0.0005mm] avec remplacement des profilés en aluminium par des profilés en acier
+
+Sine_51 resserrage des vis pour un meilleur encastrement
+
+Sine_52 Ajout de vis sur les profilés verticaux pour un meilleur encastrement
+
+Sine_53 remplacement des vis M12
+
+Sine_54 changement de la plaque
+
+Figure : Mesures du module de Young après redéfinition du montage expérimental
+
+Figure : Mesures du module de Young après redéfinition du montage expérimental – Zoom sur l’intervalle [0, 1000Hz]
+
+Figure : Mesures du module de Young après redéfinition du montage expérimental – Zoom sur l’intervalle [0,800Hz]
+
+Figure : Modules de Young estimé avec les profils Sine_45, Sine_50 et Sine_54
+
+Ces résultats révèlent la suppression du pic à 590Hz et l’apparition d’un pic vers 640Hz après l’ajout de la troisième vis sur les profilés. La redéfinition de la plaque a donc donné des résultats satisfaisants.
+```
+
+### CHUNK_ID: projet_6__chunk_000038_sub00
+```
+[SECTION : Résultats des essais réalisés sur le viscoanalyseur]
+Les échantillons que nous avons analysés sur le viscoanalyseur sont en polyuréthane (PU) et présentent les caractéristiques géométriques suivantes.
+
+[TABLEAU]
+| Dimensions des échantillons | Hauteur h (mm) | Largeur l (mm) | Epaisseur e (mm) |
+| --------------------------- | -------------- | -------------- | ---------------- |
+| Echantillon n°1 | 54.3 | 13.1 | 7.75 |
+| Echantillon n°2 | 54.4 | 15.2 | 7.65 |
+| Echantillon n°3 | 53.5 | 16.4 | 7.85 |
+
+Tableau  : Propriétés des échantillons testés
+
+Nous avons d’abord réalisé des pré-tests de 1 à 200Hz sur l’échantillon n°1 pour évaluer le déplacement dynamique maximal admissible :
+
+Ddyn = 2mm Essai stoppé à 1Hz
+
+Ddyn = 1mm Essai stoppé à 10Hz
+
+Ddyn = 0.5mm Essai OK
+
+Ddyn = 0.75mm Essai stoppé à 10Hz
+
+Ddyn = 0.6mm Essai OK
+
+Puis, nous avons mené des essais de 1 à 200Hz sur les trois échantillons avec des déplacements dynamiques de 0.5mm et 0.6mm (soit 6 essais au total). La figure ci-dessous présente les résultats que nous avons obtenus après post-traitement des données. Nous constatons que le module croît légèrement de 7MPa en basse fréquence (f=1Hz) à 9-10MPa en moyenne fréquence (f=200Hz).
+
+Figure  : Module de Young mesuré pour les différents échantillons
+
+Nous avons réalisé des essais supplémentaires sur l’échantillon 2.
+
+Les mesures point par point de 20 à 200Hz par pas de 10Hz à Ddyn = 0.5mm ont donné le résultat suivant.
+
+Figure : Résultats des mesures point par point de 20 à 200Hz sur l’échantillon 2
+
+Ce résultat montre que le module de Young augmente légèrement de 7.7MPa (f=20Hz) à 9.5MPa (f=200Hz), ce qui est représentatif des premiers essais. L’intérêt de cette mesure est de réaliser un essai sur viscoanalyseur représentatif d’un essai sinus dwell sur le banc RAPID que nous cherchons à développer.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 25,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

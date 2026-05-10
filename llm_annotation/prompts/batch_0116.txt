@@ -1,0 +1,316 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 116/135, 8 chunks)
+
+### CHUNK_ID: projet_27__chunk_000008_sub00
+```
+[SECTION : Développement d’un harnais opto-pyrotechnique haute puissance pour environnement spatial sévère]
+Notre projet vise à établir une base scientifique et technologique solide pour le développement et la qualification d’un nouveau système opto-pyrotechnique de harnais capable de transmettre de la puissance optique élevée, tout en garantissant la résistance, la fiabilité et l’intégrité des fibres dans un environnement spatial pyrotechnique sévère, caractérisé par de fortes contraintes thermiques, vibratoires, mécaniques et chimiques.
+
+Nous avons identifié que la principale limitation scientifique et technique réside dans le fait que, contrairement aux harnais électriques largement maîtrisés, la mise en œuvre de fibres optiques dans ces environnements reste faiblement documentée et technologiquement risquée, en raison de leur sensibilité aux micro-courbures, aux contraintes mécaniques, aux dilatations thermiques différentielles et aux phénomènes de vieillissement accéléré.
+
+Les difficultés que nous avons rencontrées ne concernaient pas la fibre isolée, mais le comportement du harnais dans son ensemble, impliquant l’interaction complexe entre fibre, câble optique, gaines, contacts, connecteurs et procédés d’assemblage, soumis simultanément à des impulsions optiques de forte puissance et à des conditions spatiales extrêmes. Ce couplage entre contraintes optiques et contraintes thermomécaniques nous a empêché toute extrapolation directe des solutions issues des télécommunications.
+
+Pour surmonter cette limitation, nous avons mené un développement progressif, passant d’un démonstrateur TRL4 à un prototype TRL6, en construisant à chaque étape des preuves expérimentales de la tenue du système. Le premier défi a été de définir une architecture de harnais répondant à des exigences antagonistes : pertes optiques très faibles, masse et encombrement limités, compatibilité chimique avec les normes spatiales, et résistance à des cycles sévères de température, vibrations et chocs. Pour ce faire, nous avons réalisé plusieurs itérations afin de satisfaire ces exigences, certaines valeurs initiales s’étant révélées irréalistes au regard des propriétés physiques des matériaux disponibles.
+```
+
+### CHUNK_ID: projet_27__chunk_000008_sub01
+```
+vibrations et chocs. Pour ce faire, nous avons réalisé plusieurs itérations afin de satisfaire ces exigences, certaines valeurs initiales s’étant révélées irréalistes au regard des propriétés physiques des matériaux disponibles.
+
+Nous avons également constaté que le câble optique joue un rôle central dans la transmission des contraintes mécaniques et thermiques vers la fibre. La nature de la gaine et sa composition chimique influencent directement les pertes d’insertion et leur évolution sous sollicitation. Ces effets, fortement non linéaires et difficilement prédictibles par le calcul, ont été caractérisés grâce à des développements spécifiques, chacun proposant différentes structures mécaniques, gaines et formulations de matériaux. Nous avons suivi ces essais de manière rigoureuse, en mesurant les dérives des performances optiques en fonction des cycles thermiques et du vieillissement, ce qui a permis une comparaison objective des solutions.
+
+Nous avons aussi étudié les contacts et interfaces optiques, qui concentrent une part importante des pertes et des risques de défaillance sous vibrations et chocs. Plusieurs technologies ont été évaluées sur la base des pertes d’insertion et des pertes de retour. Notre choix ne s’est pas limité à la performance instantanée : nous avons privilégié la capacité de ces interfaces à maintenir leurs propriétés optiques après des sollicitations thermomécaniques répétées, un aspect crucial pour un harnais pyrotechnique spatial.
+```
+
+### CHUNK_ID: projet_27__chunk_000009
+```
+[SECTION : Validation expérimentale et qualification environnementale du système optique]
+Les prototypes de harnais ont été soumis à des campagnes d’essais représentatives des conditions spatiales : cycles thermiques, vibrations et chocs. Nous avons mesuré les pertes de transmission par injection laser avec référence de chemin optique et les pertes de retour par OTDR, afin d’isoler précisément la contribution de chaque sous-ensemble et d’évaluer la stabilité optique sous contraintes.
+
+Ces essais nous ont permis de relier quantitativement les choix de matériaux, de structure de câble et de contacts aux variations de performance, et ainsi de réduire progressivement l’incertitude liée au comportement opto-mécanique du harnais dans un environnement sévère.
+
+Les résultats de ces itérations nous ont conduits à définir des bases ciblées pour les exigences et les niveaux d’essais du modèle TRL6, garantissant la robustesse du système tout en restant dans une zone techniquement réaliste.
+
+Grâce à ces travaux, nous avons commencé à transformer un concept encore peu maîtrisé en un système expérimental validé pour des applications pyrotechniques spatiales, en documentant les lois de comportement, en validant les choix technologiques et en établissant des méthodes de qualification qui n’existaient pas auparavant pour ce type de système. Cette phase constitue une pré-étude essentielle, préparant le terrain pour la qualification industrielle à grande échelle.
+```
+
+### CHUNK_ID: projet_27__chunk_000010
+```
+[SECTION : Conclusion et contribution scientifique, technique ou technologique]
+Ce projet s’inscrit dans le cadre du développement de solutions novatrices permettant de transmettre de la puissance optique élevée dans des environnements pyrotechniques spatiaux sévères, tout en garantissant la résistance, la fiabilité et l’intégrité des fibres optiques. Nous avons travaillé en collaboration avec Latécoère pour mener les travaux de R&D, ce qui nous a permis d’investiguer les verrous scientifiques et technologiques liés à la mise en œuvre de harnais opto-pyrotechniques complexes, soumis simultanément à des contraintes optiques, mécaniques et thermiques extrêmes.
+
+Nos travaux ont contribué à la résolution d’une problématique majeure : la maîtrise du comportement global des harnais opto‑pyrotechniques à forte puissance dans un environnement spatial sévère. La première phase a consisté en une pré-étude et le développement de démonstrateurs expérimentaux, permettant de caractériser et d’optimiser les matériaux, la structure des câbles, les interfaces et les procédés d’assemblage.
+
+Les résultats obtenus ont permis de documenter les lois de comportement, de valider les choix technologiques et d’établir des méthodes de qualification inédites pour ce type de système. Les suites de ce projet seront directement liées à la qualification du modèle de vol, qui s’étalera sur plusieurs années et conduira à une production prévue entre 2035 et 2040.
+```
+
+### CHUNK_ID: projet_27__chunk_000011
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération | Contribution directe à l’acquisition de nouvelles connaissances |
+| ----------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Robin DRAYE | Master électronique, électrotechnique, spécialité Signal, Imagerie et Applications | Responsable Technique en charge de la conception, et des essais des harnais opto-pyrotechniques | Développement et évaluation de prototypes de harnais opto-pyrotechniques haute puissance, caractérisation des performances sous contraintes sévères et formalisation des procédés d’assemblage et de qualification environnementale. |
+```
+
+### CHUNK_ID: projet_28__chunk_000021_sub00
+```
+[SECTION : Classification par régression logistique]
+Dans cette sous-section, nous présentons les résultats des tests de l'algorithme de Régression Logistique sur l'ensemble de test. L'ensemble de test contient 1315 rangées de données qui représentent les profils des organisations. Les tests de performance ont été effectués en double : dans le cas de l'imputation générale des données, et dans le cas de l'utilisation de MICE. Dans ce jeu de test, nous avons effectué 20 cycles de MICE pour imputer les données manquantes.
+
+La courbe de gauche de la figure 16 ci-dessous est la courbe d'apprentissage de la régression logistique avec imputation générale. La courbe de droite est la courbe d'apprentissage pour le même algorithme avec imputation MICE. Nous pouvons observer un sous-ajustement dans les deux courbes.
+
+La courbe de gauche de la figure 17 ci-dessous est la courbe ROC de la régression logistique avec une imputation générale. La courbe de droite est la courbe ROC pour le même algorithme avec imputation MICE. L'aire sous la courbe (AUC) de la représentation de droite est plus large que celle de gauche, ce qui montre qu'avec MICE, la régression logistique est plus performante.
+
+La matrice de gauche de la figure 18 ci-dessous concerne les résultats de l'algorithme de régression logistique avec imputation générale. Nous pouvons observer l'existence de 31 faux négatifs et de 7 faux positifs. La matrice de droite illustre les résultats de l'algorithme de régression logistique avec imputation MICE. Nous pouvons observer la présence de 27 faux négatifs et de 0 faux positif. Cela montre que la régression logistique donne de meilleurs résultats avec les données imputées par MICE.
+
+Figure 15 : Visualisation des données T-SNE en 2 dimensions
+
+Figure 16 : Courbes d'apprentissage de la régression logistique exploitant l'imputation générale et l'imputation MICE
+
+La précision du modèle a été testée à l'aide de la méthode de validation croisée en segmentant l'ensemble de données en cinq sous-ensembles. La moyenne de validation croisée pour l'algorithme de régression logistique est de 0,9931701360969655 en exploitant l'imputation générale, et de 0,9942956735030553 en exploitant l'imputation MICE.
+```
+
+### CHUNK_ID: projet_28__chunk_000000
+```
+JUSTIFICATIF DES TRAVAUX DE R&D DECLARES AU TITRE DU CREDIT IMPOT RECHERCHE (CIR) DE L’ANNEE 2020
+
+FICHE DESCRIPTIVE DU PROJET
+
+« Développement expérimental d’une solution de Matchmaking B2B intelligente avec des recommandations appropriées »
+
+Année 2020
+
+SIGLE : Matchmaking
+
+Table des matières
+
+1. PROJET 1, ANNÉE 2020 : Fiche descriptive 3
+
+1.1. Intitulé du projet 3
+
+1.2. Indicateurs de R&D 4
+
+1.3. Objectifs du projet 5
+
+1.3.1. Contexte du projet 5
+
+1.3.2. Objectifs visés 5
+
+1.4. Verrous scientifiques, techniques, technologiques 6
+
+1.4.1. Verrou 1 : Caractère aléatoire non-linéaire des règles métier et incertitudes sur les données 6
+
+1.4.2. Verrou 2 : Matchmaking avancé avec basé sur l’opinion mining 7
+
+1.5. Etat de l’art 8
+
+1.5.3. Etudes des approches existantes sur le Matchmaking B2B 8
+
+1.5.4. Insuffisances des solutions existantes 15
+
+1.6. Démarche expérimentale, travaux R&D réalisés 15
+
+1.6.5. Raisonnement scientifique et démarche expérimentale appliquée 15
+
+1.6.6. Description des travaux réalisés 17
+
+1.6.6.1. Développement et mise en œuvre d’un algorithme hybride de matchmaking 17
+
+1.6.6.1.1. Propositions mathématiques 18
+
+1.6.6.1.2. Distribution des couches - Présence de non-linéarité, incertitude et statut de Pareto 21
+
+1.6.6.2. Description de haut niveau de l'algorithme de prétraitement 27
+
+1.6.6.2.1. Etude de l’impact des variables et règles statiques du matchmaking d'entreprises 27
+
+1.6.6.2.2. Résolution basée sur le raisonnement approximatif et la théorie des croyances avec les règles du marché 29
+
+1.6.6.3. Présentation des expérimentations 32
+
+1.6.6.3.1. Analyse de la complexité avec d'autres méthodes similaires 32
+
+1.6.6.3.2. Expérimentations et résultats obtenus 34
+
+1.6.6.3.2.1. Visualisation des données 35
+
+1.6.6.3.2.2. Classification par régression logistique 35
+
+1.6.6.3.2.3. Classification par arbre de décision 38
+
+1.6.6.3.2.4. Conclusion des essais 40
+
+1.6.6.3.3. Recommandation basée sur la maximisation de l'espérance et données manquantes 41
+
+1.6.6.3.4. Matchmaking avancé avec les fonctionnalités d’opinion mining 43
+
+1.6.6.3.4.1. Analyse de sentiments par mots-clés et lexique sur les produits et les entreprises 43
+
+1.6.6.3.4.2. Matching textuel et thématique 46
+
+1.6.6.3.4.3. Modèle basé sur la logique floue pour l'extraction d'opinions positives 47
+
+1.7. Contribution scientifique, technique ou technologique 48
+
+1.8. Annexes 49
+```
+
+### CHUNK_ID: projet_28__chunk_000010_sub01
+```
+chaque agent ait un partenaire commercial. Ils ont évalué ce concept par le biais d’une simulation. L'analyse des performances a montré une augmentation significative de l'efficacité nette avec le Matchmaking.
+
+Certaines solutions et technologies s’appuient sur des ontologies comme dans le travail [Bao & Xia]. En effet, les auteurs ont développé un algorithme hybride de mise en correspondance de services qui combine des approches de similarité basées sur la syntaxe et sur l'ontologie. En particulier, ils ont introduit une nouvelle mesure de similarité d'ontologie pour améliorer le taux de rappel (recall) et de précision. Le résultat de la simulation montre que l’algorithme hybride peut augmenter la précision de Matchmaking pendant la période de découverte des services par rapport à d'autres algorithmes de Matchmaking. Ci-dessous l’architecture dans laquelle l’algorithme fonctionne :
+
+Figure 2 : Illustration d’une approche Matchmaking basée sur les ontologies
+
+D’autres travaux se focalisent sur des modèles mathématiques pour le Matchmaking dans le domaine des jeux vidéo [Christiansen et al.]. Dans ce travail, un Framework mathématique pour l'analyse des systèmes de Matchmaking est développé. Le modèle mathématique gère la compétence ou l'évaluation estimée, le calcul des probabilités de gain sur la base de la compétence estimée et la mise à jour de la compétence estimée à la fin d'un jeu.
+
+Dans le domaine de l’industrie, le Matchmaking est traité sous « les graphes de connaissances » ( knowledge graphs ). En effet, dans le travail [Zhao et al.] (présenté dans une conférence internationale de l’informatique industrielle), un développement collaboratif pour un graphe de connaissances industrielles ouvert est proposé pour collecter des connaissances à quatre égards. Sur cette base, une procédure de Matchmaking à plusieurs niveaux est définie, comprenant la correspondance des caractéristiques, la correspondance numérique et la correspondance des fonctions.
+
+Les figures suivantes présentent le graphe de connaissances défini ainsi que les procédures de Matchmaking :
+
+Figure 3 : Graphe de connaissances
+
+Figure 4 : Architecture de Matchmaking
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 116,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

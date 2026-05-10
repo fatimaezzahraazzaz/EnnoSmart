@@ -1,0 +1,364 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 1/135, 8 chunks)
+
+### CHUNK_ID: projet_1__chunk_000056_sub00
+```
+[PAGE 26]
+CIR 2024
+scientifique rend donc incertaine notre capacité à retranscrire la réalité scientifique de ce terme
+marketing.
+Par conséquent, il est complexe d’identifier un outil de mesure précis et
+reproductible pour quantifier l’évolution du « glow » de la peau, avant et après application des
+différents candidats développés.
+En outre, dans la littérature, il n’a jamais été prouvé la capacité de la mélatonine à stimuler
+la respiration mitochondriale des kératinocytes à la faible concentration que nous
+utilisons (0.0015%), concentration liée à des contraintes règlementaires.
+Ainsi, si cette faible
+concentration s’avère insuffisante, il nous sera difficile de déterminer comment augmenter
+l’efficacité de la mélatonine sans dépasser les contraintes règlementaires.
+Enfin, nous n’avons aucune certitude que la mélatonine réussira à pénétrer les tissus jusqu’à
+notre cible biologique.
+La vectorisation pourrait alors devenir indispensable pour garantir la
+délivrance de l’actif et l’activation de son potentiel pro-oxygénant.
+II.9.3.
+Démarche expérimentale, travaux R&D réalisés
+II.9.3.1.
+Raisonnement scientifique et démarche expérimentale appliquée
+Ce projet se déroule en plusieurs phases avec :
+ Identification d’actifs potentiellement intéressants pour la respiration cellulaire
+ Evaluation de l’impact de la mélatonine sur l’innocuité cellulaire, la respiration
+cellulaire, la production d’ATP par voie respiratoire, le potentiel antioxydant (contre les
+espèces réactives de l’oxygène), la production de mélanine par les mélanocytes, par
+analyses in vitro sur monocouches cellulaires :
+o Sur kératinocytes, validation de l’innocuité par test de viabilité cellulaire,
+vérification du pouvoir oxygénant par mesure de consommation d’oxygène,
+vérification du pouvoir énergisant par voie respiratoire en quantifiant la
+production d’ATP
+o Vérification du potentiel cytoprotecteur par mesure des espèces réactives de
+l’oxygène sur kératinocytes et surveillance de l’impact de la mélatonine sur la
+production (indésirable) de mélanine par les mélanocytes, en quantifiant la
+mélanine
+ En parallèle, par analyse in vivo, évaluation d’actifs complémentaires à la mélatonine
+pour obtenir un effet « glow »
+o Evaluation visuelle
+o Evaluation par outil de mesure
+ Evaluation de la pénétration cutanée
+ Confirmation in vivo de l’impact de la mélatonine sur la peau de panélistes
+II.9.3.1.
+```
+
+### CHUNK_ID: projet_1__chunk_000057_sub00
+```
+[PAGE 27]
+CIR 2024
+Pour cela, dans un premier temps, la société Qima avait réalisé des analyses in vitro sur
+culture de kératinocytes en monocouche cellulaire.
+Après validation de l’innocuité de la
+mélatonine par un test de viabilité cellulaire sur kératinocytes épidermiques humains normaux
+(NHEK) cultivés en condition d’hypoxie, un protocole de culture et de traitement avait été défini.
+L’effet sur la respiration mitochondriale en condition basale avait alors été évalué,
+notamment le pouvoir oxygénant de la mélatonine.
+En condition basale, nous avions noté que
+la mélatonine induisait une augmentation significative de la respiration basale à 30 minutes,
+malgré une variabilité initiale des réponses cellulaire, qui avait nécessité l’élimination de
+certaines valeurs aberrantes.
+En condition de stress, là-aussi la mélatonine induisait une
+augmentation significative de la respiration maximale à 30 minutes, confirmant son rôle de
+stimulateur du métabolisme respiratoire.
+L’analyse du pouvoir énergisant de la mélatonine par quantification de la production d’ATP,
+avait également révélé que, par rapport au contrôle, la mélatonine induisait une augmentation
+significative de l’ATP dès 30 minutes et après deux heures.
+Nous avions également analysé la glycolyse, à savoir la production d’ATP sans passer par la
+voie mitochondriale/respiratoire.
+Celle-ci avait été évaluée par mesure du taux d’acidification
+extracellulaire (ECAR), étroitement lié à la diminution du pH provoqué par l’activité glycolique.
+D’un point de vue physiologique, nous avions conclu que les conditions expérimentales dites
+de « normoxie » correspondaient en réalité à une hyperoxie, tandis que l’ « hypoxie »
+expérimentale reflétait une réelle normoxie.
+Nous avions validé nos mesures de la glycolyse
+sur le profil de l’ECAR observé dans des cellules non traitées cultivées en « normoxie »
+pendant 72 heures (48 h + 24 h).
+Nous avions alors mis en avant que, en condition de « normoxie » expérimentale, les
+cellules produisaient plus d’ATP notamment, mais que cette performance énergétique reposait
+majoritairement sur la glycolyse, et non exclusivement à la respiration mitochondriale.
+A l’inverse, en « hypoxie » expérimentale (normoxie réelle), la mélatonine n’induisait pas
+d’augmentation significative de l’ECAR, par rapport à son contrôle.
+```
+
+### CHUNK_ID: projet_1__chunk_000027_sub00
+```
+[SECTION : Description des travaux antérieurs]
+En 2022, nous avions évalué le potentiel de la mélatonine en analysant son impact sur plusieurs paramètres-clés : innocuité cellulaire, respiration cellulaire, production d’ATP par voie respiratoire dans des kératinocytes.
+
+Pour cela, dans un premier temps, la société Qima avait réalisé des analyses in vitro sur culture de kératinocytes en monocouche cellulaire. Après validation de l’innocuité de la mélatonine par un test de viabilité cellulaire sur kératinocytes épidermiques humains normaux (NHEK) cultivés en condition d’hypoxie, un protocole de culture et de traitement avait été défini.
+
+L’effet sur la respiration mitochondriale en condition basale avait alors été évalué, notamment le pouvoir oxygénant de la mélatonine. En condition basale, nous avions noté que la mélatonine induisait une augmentation significative de la respiration basale à 30 minutes, malgré une variabilité initiale des réponses cellulaire, qui avait nécessité l’élimination de certaines valeurs aberrantes. En condition de stress, là-aussi la mélatonine induisait une augmentation significative de la respiration maximale à 30 minutes, confirmant son rôle de stimulateur du métabolisme respiratoire.
+
+L’analyse du pouvoir énergisant de la mélatonine par quantification de la production d’ATP, avait également révélé que, par rapport au contrôle, la mélatonine induisait une augmentation significative de l’ATP dès 30 minutes et après deux heures.
+
+Nous avions également analysé la glycolyse, à savoir la production d’ATP sans passer par la voie mitochondriale/respiratoire. Celle-ci avait été évaluée par mesure du taux d’acidification extracellulaire (ECAR), étroitement lié à la diminution du pH provoqué par l’activité glycolique.
+
+D’un point de vue physiologique, nous avions conclu que les conditions expérimentales dites de « normoxie » correspondaient en réalité à une hyperoxie, tandis que l’ « hypoxie » expérimentale reflétait une réelle normoxie. Nous avions validé nos mesures de la glycolyse sur le profil de l’ECAR observé dans des cellules non traitées cultivées en « normoxie » pendant 72 heures (48 h + 24 h).
+
+Nous avions alors mis en avant que, en condition de « normoxie » expérimentale, les cellules produisaient plus d’ATP notamment, mais que cette performance énergétique reposait majoritairement sur la glycolyse, et non exclusivement à la respiration mitochondriale.
+```
+
+### CHUNK_ID: projet_1__chunk_000083_sub00
+```
+[SECTION : Description des travaux antérieurs]
+En 2022, nous avions évalué le potentiel de la mélatonine en analysant son impact sur plusieurs paramètres-clés : innocuité cellulaire, respiration cellulaire, production d’ATP par voie respiratoire dans des kératinocytes.
+
+Pour cela, dans un premier temps, la société Qima avait réalisé des analyses in vitro sur culture de kératinocytes en monocouche cellulaire. Après validation de l’innocuité de la mélatonine par un test de viabilité cellulaire sur kératinocytes épidermiques humains normaux (NHEK) cultivés en condition d’hypoxie, un protocole de culture et de traitement avait été défini.
+
+L’effet sur la respiration mitochondriale en condition basale avait alors été évalué, notamment le pouvoir oxygénant de la mélatonine. En condition basale, nous avions noté que la mélatonine induisait une augmentation significative de la respiration basale à 30 minutes, malgré une variabilité initiale des réponses cellulaire, qui avait nécessité l’élimination de certaines valeurs aberrantes. En condition de stress, là-aussi la mélatonine induisait une augmentation significative de la respiration maximale à 30 minutes, confirmant son rôle de stimulateur du métabolisme respiratoire.
+
+L’analyse du pouvoir énergisant de la mélatonine par quantification de la production d’ATP, avait également révélé que, par rapport au contrôle, la mélatonine induisait une augmentation significative de l’ATP dès 30 minutes et après deux heures.
+
+Nous avions également analysé la glycolyse, à savoir la production d’ATP sans passer par la voie mitochondriale/respiratoire. Celle-ci avait été évaluée par mesure du taux d’acidification extracellulaire (ECAR), étroitement lié à la diminution du pH provoqué par l’activité glycolique.
+
+D’un point de vue physiologique, nous avions conclu que les conditions expérimentales dites de « normoxie » correspondaient en réalité à une hyperoxie, tandis que l’ « hypoxie » expérimentale reflétait une réelle normoxie. Nous avions validé nos mesures de la glycolyse sur le profil de l’ECAR observé dans des cellules non traitées cultivées en « normoxie » pendant 72 heures (48 h + 24 h).
+
+Nous avions alors mis en avant que, en condition de « normoxie » expérimentale, les cellules produisaient plus d’ATP notamment, mais que cette performance énergétique reposait majoritairement sur la glycolyse, et non exclusivement à la respiration mitochondriale.
+```
+
+### CHUNK_ID: projet_1__chunk_000102_sub00
+```
+[SECTION : Description des travaux antérieurs]
+En 2022, nous avions évalué le potentiel de la mélatonine en analysant son impact sur plusieurs paramètres-clés : innocuité cellulaire, respiration cellulaire, production d’ATP par voie respiratoire dans des kératinocytes.
+
+Pour cela, dans un premier temps, la société Qima avait réalisé des analyses in vitro sur culture de kératinocytes en monocouche cellulaire. Après validation de l’innocuité de la mélatonine par un test de viabilité cellulaire sur kératinocytes épidermiques humains normaux (NHEK) cultivés en condition d’hypoxie, un protocole de culture et de traitement avait été défini.
+
+L’effet sur la respiration mitochondriale en condition basale avait alors été évalué, notamment le pouvoir oxygénant de la mélatonine. En condition basale, nous avions noté que la mélatonine induisait une augmentation significative de la respiration basale à 30 minutes, malgré une variabilité initiale des réponses cellulaire, qui avait nécessité l’élimination de certaines valeurs aberrantes. En condition de stress, là-aussi la mélatonine induisait une augmentation significative de la respiration maximale à 30 minutes, confirmant son rôle de stimulateur du métabolisme respiratoire.
+
+L’analyse du pouvoir énergisant de la mélatonine par quantification de la production d’ATP, avait également révélé que, par rapport au contrôle, la mélatonine induisait une augmentation significative de l’ATP dès 30 minutes et après deux heures.
+
+Nous avions également analysé la glycolyse, à savoir la production d’ATP sans passer par la voie mitochondriale/respiratoire. Celle-ci avait été évaluée par mesure du taux d’acidification extracellulaire (ECAR), étroitement lié à la diminution du pH provoqué par l’activité glycolique.
+
+D’un point de vue physiologique, nous avions conclu que les conditions expérimentales dites de « normoxie » correspondaient en réalité à une hyperoxie, tandis que l’ « hypoxie » expérimentale reflétait une réelle normoxie. Nous avions validé nos mesures de la glycolyse sur le profil de l’ECAR observé dans des cellules non traitées cultivées en « normoxie » pendant 72 heures (48 h + 24 h).
+
+Nous avions alors mis en avant que, en condition de « normoxie » expérimentale, les cellules produisaient plus d’ATP notamment, mais que cette performance énergétique reposait majoritairement sur la glycolyse, et non exclusivement à la respiration mitochondriale.
+```
+
+### CHUNK_ID: projet_1__chunk_000026
+```
+[SECTION : Raisonnement scientifique et démarche expérimentale appliquée]
+Ce projet se déroule en plusieurs phases avec :
+
+Identification d’actifs potentiellement intéressants pour la respiration cellulaire
+
+Evaluation de l’impact de la mélatonine sur l’innocuité cellulaire, la respiration cellulaire, la production d’ATP par voie respiratoire, le potentiel antioxydant (contre les espèces réactives de l’oxygène), la production de mélanine par les mélanocytes, par analyses in vitro sur monocouches cellulaires :
+
+Sur kératinocytes, validation de l’innocuité par test de viabilité cellulaire, vérification du pouvoir oxygénant par mesure de consommation d’oxygène, vérification du pouvoir énergisant par voie respiratoire en quantifiant la production d’ATP
+
+Vérification du potentiel cytoprotecteur par mesure des espèces réactives de l’oxygène sur kératinocytes et surveillance de l’impact de la mélatonine sur la production (indésirable) de mélanine par les mélanocytes, en quantifiant la mélanine
+
+En parallèle, par analyse in vivo, évaluation d’actifs complémentaires à la mélatonine pour obtenir un effet « glow »
+
+Evaluation visuelle
+
+Evaluation par outil de mesure
+
+Evaluation de la pénétration cutanée
+
+Confirmation in vivo de l’impact de la mélatonine sur la peau de panélistes
+```
+
+### CHUNK_ID: projet_1__chunk_000042_sub00
+```
+[PAGE 12]
+CIR 2024
+Etant donné ses propriétés énergisantes et protectrices, nous avons donc retenu la
+mélatonine comme candidat prioritaire pour remplacer la perfluorodécaline et développer
+de nouvelles stratégies d’oxygénation cutanée.
+II.3.2.
+Verrous et incertitudes scientifiques, techniques,
+technologiques
+Plusieurs verrous freinent la réalisation de ce projet.
+En effet, il est très difficile d’identifier une molécule pro-oxygénante capable d’égaler
+l’efficacité de la perfluorodécaline, référence inégalée jusqu’ici dans le domaine cosmétique.
+Aucun actif connu de présente à ce jour un profile comparable.
+De plus, définir des
+conditions expérimentales pertinentes est un défi majeur : les modèles d’ »hypoxie »
+utilisés se rapprochent en réalisé d’une normoxie, rendant difficile la transposition des résultats
+in vitro à la peau humaine.
+Un second obstacle concerne la conservation de l’effet « glow », paramètre esthétique clé.
+Ce terme, très utilisé en marketing, est dépourvu de définition scientifique, et reste associé de
+façon subjective à la lumière, la clarté ou la brillance.
+Par ailleurs, l’absence d’outils de mesure
+standardisé complique son évaluation objective et reproductible.
+Sur le plan biologique, la littérature n’a jamais démontré la capacité de la mélatonine à
+stimuler la respiration mitochondriale des kératinocytes aux faibles concentrations
+autorisées (0.0015%).
+Si ce dosage s’avère insuffisant, il sera difficile d’accroître l’efficacité
+sans dépasser les limites réglementaires.
+Dans ce cas, le recours ) des systèmes de
+vectorisation deviendrait indispensable pour garantir sa délivrance et activer son potentiel pro-
+oxygénant.
+II.4.
+Démarche expérimentale, travaux R&D réalisés
+II.4.1.
+```
+
+### CHUNK_ID: projet_1__chunk_000082
+```
+[SECTION : Raisonnement scientifique et démarche expérimentale appliquée]
+Ce projet se déroule en plusieurs phases avec :
+
+Identification d’actifs potentiellement intéressants pour la respiration cellulaire
+
+Evaluation de l’impact de la mélatonine sur l’innocuité cellulaire, la respiration cellulaire, la production d’ATP par voie respiratoire, le potentiel antioxydant (contre les espèces réactives de l’oxygène), la production de mélanine par les mélanocytes, par analyses in vitro sur monocouches cellulaires :
+
+Sur kératinocytes, validation de l’innocuité par test de viabilité cellulaire, vérification du pouvoir oxygénant par mesure de consommation d’oxygène, vérification du pouvoir énergisant par voie respiratoire en quantifiant la production d’ATP
+
+Vérification du potentiel cytoprotecteur par mesure des espèces réactives de l’oxygène sur kératinocytes et surveillance de l’impact de la mélatonine sur la production (indésirable) de mélanine par les mélanocytes, en quantifiant la mélanine
+
+En parallèle, par analyse in vivo, évaluation d’actifs complémentaires à la mélatonine pour obtenir un effet « glow »
+
+Evaluation visuelle
+
+Evaluation par outil de mesure
+
+Evaluation de la pénétration cutanée
+
+Confirmation in vivo de l’impact de la mélatonine sur la peau de panélistes
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 1,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

@@ -1,0 +1,241 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 56/135, 8 chunks)
+
+### CHUNK_ID: projet_12__chunk_000072
+```
+[SECTION : Évaluation de la qualité d’un réseau de neurone]
+Nous avons donc un logiciel qui nous permet d’entrainer un algorithme IA à guider un parachute dans un environnement simulé avec ou sans vent. Nous avons ensuite alors réalisé des travaux cherchant à mettre en place une stratégie d’évaluation du réseau de neurones.
+
+En effet, par essence le réseau de neurone ne donne pas exactement une commande ou une poussée directement mais une distribution de probabilité pour ce paramètre. Ainsi chaque scénario durant la phase de test est unique (en supposant une graine différente). À ceci ce rajoute la génération de vent qui est aléatoire. Des travaux de développement ont ainsi dû être effectués afin de pouvoir générer un vent de manière reproductible afin de tester différents réseaux de neurones sur le même profil.
+
+Nous avons alors choisi 6 profils de vent : 3 qui soufflent principalement à gauche, 3 qui soufflent à droite avec 3 niveaux d’intensité différents.
+
+Les résultats sont montrés en Figure 17 et Figure 18. Le chiffre de chaque panneau montre la récompense moyenne pour chaque scénario et le chiffre tout en haut montre la moyenne globale. Les différentes trajectoires pour une même position sont représentées par des trajectoires de différentes couleurs. La courbe en tiret noir représente la trajectoire du parachute s’il n’y avait pas de correction de trajectoire par l’IA. Cela permet de se rendre compte de la correction apportée par l’IA.
+
+Figure 17 Évaluation du réseau de neurone au début de l’entrainement
+
+Figure 18 Évaluation du réseau de neurone après 200 epoch d’entrainement
+
+En comparant les Figure 17 et Figure 18 on observe qu’après 200 epoch il y a une amélioration globale de la qualité de guidage de l’IA. Il existe cependant encore des situations où le parachute sort du domaine de simulation : notamment au panneau en bas à gauche.
+```
+
+### CHUNK_ID: projet_12__chunk_000073
+```
+[SECTION : Adaptation d’un réseau de neurone à une modélisation physique différente]
+Fournir et analyser les résultats obtenus.
+
+Afin de tester les limites on peut également comparer les performances d’un même réseau de neurones en changeant le modèle de parachute durant la phase de test. Nous allons changer le taux de rotation du parachute en le multipliant par 3 pour un cas et en le divisant par 2. Ainsi pour un même input le parachute tournera 3 fois plus vite (ou 2 fois moins vite). La question est maintenant d’étudier la réaction du réseau de neurone à cette perturbation.
+
+Figure 19 Évaluation du réseau de neurone à 200 epoch avec un taux de rotation plus élevé
+
+La Figure 19 montre le résultat de l’évaluation du réseau de neurone avec un taux de rotation plus élevé. Ceci permet d’avoir meilleure réactivité face au vent mais la modélisation physique du système n’est plus la même. Or on voit sur cette courbe que ce n’est pas un souci pour notre réseau de neurones. Il arrive à tirer profit de l’avantage procuré par le taux de rotation plus élevé.
+
+Figure 20 Évaluation du réseau de neurone à 200 epoch avec un taux de rotation moindre
+
+La Figure 20 montre la performance du réseau de neurone lorsque l’on vient diviser son taux de rotation par 2. Ceci correspond à un désavantage pour notre IA, en effet un taux de rotation plus faible signifie un temps de réaction plus grand pour contrer le vent. Ce désavantage est bien visible sur les courbes et même sur la moyenne globale. On note cependant que l’algorithme permet tout de même de guider environ la moitié des parachutes jusqu’au bout des 30 sec de scénarios.
+```
+
+### CHUNK_ID: projet_12__chunk_000090_sub00
+```
+[SECTION : Travaux autour de l’atterrissage de fusées basé sur des approches fondamentales]
+Dans l’article BOJUN et al., les auteurs se concentrent sur la rentrée atmosphérique guidée pour atteindre un site d’atterrissage prévu avant d’atterrir avec une descente motorisée. En se basant sur la caractéristique des algorithmes prédictifs qui permettent de modifier le modèle embarqué, un nouvel algorithme de guidage d’entrée prédictif basé sur le contrôle d’attitude à double canal d’un véhicule d’entrée à faible hauteur de levage est proposé. Étant donné que la précision du guidage prédictif dépend entièrement des écarts entre le modèle dynamique embarqué et l’environnement réel lorsque la fusée entre dans l’atmosphère, une méthode d’identification adaptative embarquée de la déviation aérodynamique est ajoutée pour réduire l’erreur méthodologique. Les résultats de la simulation montrent que les performances de guidage d’entrée prédictive adaptative ne dépendent plus de la connaissance de l’aérodynamique et de la dispersion de la densité. La méthode d’ajustement aérodynamique adaptatif adapte à plusieurs reprises le modèle embarqué à des environnements variés en temps réel, réduisant ainsi l’erreur de guidage des algorithmes prédictifs traditionnels d’une précision d’un mètre à l’autre.
+```
+
+### CHUNK_ID: projet_12__chunk_000030
+```
+[SECTION : Généralisation du réseau de neurones à des modèles physiques différents]
+Nous avons évalué la capacité du réseau à s’adapter à des modèles différents de parachute en faisant varier leur taux de rotation.
+
+Augmentation du taux de rotation (multiplié par 3) : le parachute devient plus réactif face au vent, et l’algorithme parvient à exploiter cet avantage (Figure 19).
+
+Diminution du taux de rotation (divisé par 2) : le parachute met plus de temps à réagir, ce qui constitue un désavantage. Malgré cela, environ 50 % des parachutes atteignent la fin du scénario (Figure 20).
+
+Nos travaux ont permis de valider la robustesse du réseau de neurones face aux variations des paramètres physiques et environnementaux du parachute. En testant différents modèles avec des taux de rotation modifiés, nous avons démontré la capacité de l’algorithme à adapter ses performances aux conditions imposées. Toutefois, ces analyses ont également mis en évidence des axes d’évolution nécessaires pour garantir un guidage plus stable et fiable, notamment en présence de contraintes dynamiques plus complexes. Cette étude constitue ainsi une base solide pour affiner le modèle et renforcer sa résilience, ouvrant la voie à une optimisation accrue du guidage en conditions réelles.
+```
+
+### CHUNK_ID: projet_12__chunk_000032_sub01
+```
+la commande a renforcé le réalisme du modèle, mais a également allongé le processus d’apprentissage. Des études supplémentaires sont nécessaires pour quantifier précisément cet allongement et renforcer l’efficacité du modèle.
+
+L’apprentissage en suivant une approche « par morceaux » semble plus efficace en termes de temps d’entraînement que de lancer directement l’IA dans un environnement complet et complexe. Des résultats préliminaires suggèrent que cette méthode peut accélérer le processus d’apprentissage, mais il est nécessaire de mener des tests plus approfondis pour confirmer ces observations.
+
+L’architecture SIGMA a été repensée pour être plus modulaire et générique, permettant l’extension du cadre d’étude à différents types de véhicules. La mise en œuvre d’un modèle de guidage de parachute illustre cette flexibilité et ouvre la voie à d’autres applications.
+
+En somme, ces avancées constituent des progrès majeurs pour la simulation et le contrôle par intelligence artificielle de véhicules guidés. L’ensemble des travaux menés cette année a permis de poser des bases solides pour des développements futurs, notamment en matière d’introduction des contraintes physiques et d’augmentation de la robustesse des algorithmes d’apprentissage.
+```
+
+### CHUNK_ID: projet_12__chunk_000036
+```
+[SECTION : Analyse de l’état de l’art]
+Le développement des technologies de guidage pour les engins spatiaux a connu des avancées significatives ces dernières années, notamment grâce à l’intelligence artificielle (IA) et aux algorithmes d’apprentissage automatique. La mise en œuvre de ces approches permet de renforcer l’adaptabilité des systèmes aux environnements complexes et incertains, tout en augmentant leur robustesse face aux perturbations externes.
+
+Dans le domaine spatial, l’IA est de plus en plus exploitée pour la navigation autonome, le contrôle d’attitude et les manœuvres de précision, avec des applications allant de l’atterrissage planétaire à l’amarrage de véhicules en orbite. Toutefois, malgré les progrès réalisés, plusieurs défis demeurent, notamment la validation expérimentale des modèles, la gestion des incertitudes et la prise en compte des contraintes physiques strictes.
+
+Dans cette optique, il est essentiel d’examiner les avancées récentes mises en œuvre dans le domaine du guidage spatial par IA afin d’évaluer les approches existantes, d’identifier leurs limites et d’explorer les perspectives d’évolution. À cet égard, nous avons effectué une analyse approfondie des travaux récents relatifs au guidage, à la sécurité des algorithmes d’IA, ainsi qu’aux applications spécifiques au guidage de parachutes et de fusées.
+```
+
+### CHUNK_ID: projet_12__chunk_000037_sub01
+```
+offrant une meilleure robustesse face aux incertitudes et aux perturbations. Toutefois, la question de la transférabilité en conditions réelles et l’absence de validation expérimentale restent des défis majeurs à relever.
+
+En outre, Oestreich et al. ont effectué une étude sur la mise en œuvre de l’apprentissage par renforcement pour réaliser des manœuvres de docking autonomes en six degrés de liberté (6-DOF) dans l’espace. L’objectif principal est de développer une politique de contrôle basée sur l’algorithme Proximal Policy Optimization (PPO), capable de s’adapter à des conditions dynamiques incertaines tout en minimisant les coûts de commande et d’erreur. Oestreich et al. ont conçu et entraîné un réseau de neurones profond afin d’approximer une loi de contrôle en boucle fermée, testée sur un scénario simulé de transposition et docking du module Apollo. L’approche a été comparée aux techniques d’optimisation de trajectoire conventionnelles (GPOPS-II), démontrant une bonne capacité d’adaptation aux variations des conditions initiales, bien qu’elle reste légèrement sous-optimale en termes d’effort de contrôle. Toutefois, des défis subsistent, notamment la garantie du respect strict des contraintes physiques et de trajectoire, la sensibilité aux hyperparamètres d’entraînement et l’absence de validation expérimentale en conditions réelles. Ainsi, cette étude reste limitée à une phase de docking et n’explore pas des scénarios plus complexes tels que l’atterrissage de fusées réutilisables ou le guidage sous contraintes physiques strictes.
+```
+
+### CHUNK_ID: projet_12__chunk_000041_sub02
+```
+pris en compte les forces de frottement. Très rapidement, nous avons observé que les parachutes atteignaient des vitesses latérales démesurées lors de l’entraînement de l’IA. Entrainement au guidage de parachute
+
+L’algorithme de guidage du parachute se voit confronté à un problème où le parachute, initialisé à une position aléatoire entre -5 et 5, doit maintenir une position centrale (x = 0). Il connaît sa position, sa vitesse et son orientation, et génère en sortie une commande comprise entre -1 et 1. La Figure 10 illustre ce problème, où les tirets gris représentent le centre (la position cible pour l’IA) et les tirets rouges délimitent les frontières du domaine d’entraînement. L’apprentissage par renforcement est réalisé à l’aide de l’algorithme PPO, une méthode de référence dans le domaine, comme cela a été fait pour le guidage des fusées.
+
+Figure Représentation de l’entrainement de l’IA au guidage d’un parachute simple
+
+Fort de l’expérience acquise durant l’entrainement d’un algorithme guidant une fusée, les fonctions de récompense que nous emploierons seront très similaire ici. En particulier, nous mettons en œuvre encore une fois l’approche bonus/malus dès que l’IA se dirige ou non vers la position cible.
+
+Résultat de l’entrainement sans vent
+
+Les Figures 11 et 12 présentent les résultats de l’entraînement dans un environnement sans vent pour des scénarios de 30 secondes. Dans le panneau de gauche, la trajectoire moyenne de 50 parachutes est indiquée par une ligne noire, accompagnée d’une zone bleue représentant l’écart-type autour de cette moyenne. Le panneau de droite, quant à lui, affiche le nombre de parachutes encore présents dans le domaine de simulation (la sortie de ce domaine entraînant l’arrêt de la simulation). Pour faciliter la visualisation, les 50 parachutes commencent tous à la position -1 lors de l’évaluation du réseau de neurones.
+
+En observant la Figure 11 (après 1 epoch), on constate qu’au début de l’entraînement, presque aucun parachute n’atteint la fin du scénario. En revanche, après 19 epochs, comme le montre la Figure 12, l’ensemble des parachutes parviennent à se maintenir avec succès sur la position 0.
+
+Figure Guidage de parachute après 1 epoch
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 56,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

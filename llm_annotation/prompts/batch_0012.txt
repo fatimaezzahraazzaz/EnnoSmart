@@ -1,0 +1,270 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 12/135, 8 chunks)
+
+### CHUNK_ID: projet_3__chunk_000861_sub00
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération (chef de projet, chercheur, technicien de R&D…) | Contribution directe à l’acquisition de nouvelles connaissances | Temps déclaré pour l’opération (heures) |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| BRACCONI Manon | Licence professionnelle Bioexpérimentation industrielle, ESTBA | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 5 |
+| COMPAGNIE Sandrine | BTS Biotechnologie - Académie Lille | Technicienne de R&D | Evaluation et traitement des données | 1 |
+| GORNY Diane | DEA biologie et pharmacologie de l'hémostase et des vaisseaux - Université Paris VII | Chercheur | Suivi de projet, évaluation et traitement des données | 479 |
+| GROS DAILLON Janice | Licence professionnelle Biologie Analytique et Expérimentale - CNAM | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...), réalisation des expérimentations, analyse des résultats | 1252 |
+| LAURIN Miguel | DUT chimie, IUT Besançon | Technicien de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 729 |
+| MORISSEAU Clara | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 204 |
+| PATRICIO Lucie | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Responsable de la plateforme Animalerie | Garant de l'état sanitaire des animaux, suivi des animaux en procédure sévère, contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations | 573 |
+| PFEND Charlaine | Baccalauréat professionnel technicien en expérimentation animale, Académie de Limoges | Zootechnicienne | Contrôle des conditions d'hébergement des animaux, surveillances du respect des réglementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 332 |
+| RAZANAKOLONA Mahita | Doctorat Sciences Pharmacologiques, Université Paris-Saclay | Chercheur chef de projet | Conception et soumission de procédures expérimentales et saisines, suivi de projet, évaluation et traitement des données, interprétation des données, rédaction de rapport de synthèse, abstract et/ou publication | 294 |
+| ROUSSEL Delphine | Doctorat Sciences de la vie - Université Paris VI | Chercheur | Elaboration de la stratégie générale, direction scientifique et technique, conseil, présentations scientifiques et représentation en congrès | 127 |
+| VINCENT Paul | BEPA Technicien expérimentation animale - Ministère de l'agriculture et de l'alimentation | Zootechnicien | Contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 273 |
+| DI BISCEGLIE CABALLERO Sonia | Doctorat Neurosciences - Université Aix-Marseille | Chercheur | Evaluation et traitement des données | 603 |
+| KHELOUFI Marouane | Doctorat Pathologie cardio-vasculaire - Université Sorbonne Paris Cité | Chercheur | Suivi de projet, évaluation et traitement des données | 25 |
+```
+
+### CHUNK_ID: projet_3__chunk_000962_sub00
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération (chef de projet, chercheur, technicien de R&D…) | Contribution directe à l’acquisition de nouvelles connaissances | Temps déclaré pour l’opération (heures) |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| BRACCONI Manon | Licence professionnelle Bioexpérimentation industrielle, ESTBA | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 5 |
+| COMPAGNIE Sandrine | BTS Biotechnologie - Académie Lille | Technicienne de R&D | Evaluation et traitement des données | 1 |
+| GORNY Diane | DEA biologie et pharmacologie de l'hémostase et des vaisseaux - Université Paris VII | Chercheur | Suivi de projet, évaluation et traitement des données | 479 |
+| GROS DAILLON Janice | Licence professionnelle Biologie Analytique et Expérimentale - CNAM | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...), réalisation des expérimentations, analyse des résultats | 1252 |
+| LAURIN Miguel | DUT chimie, IUT Besançon | Technicien de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 729 |
+| MORISSEAU Clara | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 204 |
+| PATRICIO Lucie | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Responsable de la plateforme Animalerie | Garant de l'état sanitaire des animaux, suivi des animaux en procédure sévère, contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations | 573 |
+| PFEND Charlaine | Baccalauréat professionnel technicien en expérimentation animale, Académie de Limoges | Zootechnicienne | Contrôle des conditions d'hébergement des animaux, surveillances du respect des réglementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 332 |
+| RAZANAKOLONA Mahita | Doctorat Sciences Pharmacologiques, Université Paris-Saclay | Chercheur chef de projet | Conception et soumission de procédures expérimentales et saisines, suivi de projet, évaluation et traitement des données, interprétation des données, rédaction de rapport de synthèse, abstract et/ou publication | 294 |
+| ROUSSEL Delphine | Doctorat Sciences de la vie - Université Paris VI | Chercheur | Elaboration de la stratégie générale, direction scientifique et technique, conseil, présentations scientifiques et représentation en congrès | 127 |
+| VINCENT Paul | BEPA Technicien expérimentation animale - Ministère de l'agriculture et de l'alimentation | Zootechnicien | Contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 273 |
+| DI BISCEGLIE CABALLERO Sonia | Doctorat Neurosciences - Université Aix-Marseille | Chercheur | Evaluation et traitement des données | 603 |
+| KHELOUFI Marouane | Doctorat Pathologie cardio-vasculaire - Université Sorbonne Paris Cité | Chercheur | Suivi de projet, évaluation et traitement des données | 25 |
+```
+
+### CHUNK_ID: projet_3__chunk_001014_sub31
+```
+Grubbs' test | | | | | | | | | | | | | | | | | | | | | | | | | | SHR-Vehicle group [TABLEAU]
+| | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | | | | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST |
+| --------------------------------------------- | -------------------------------- | -------------------------------- | -------------------------------- | -------------------------------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | ------ | ------ | --- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- |
+| Rat number | II-1 | II-2 | II-3 | II-4 | II-4 | II-5 | II-6 | II-7 | II-8 | II-9 | II-10 | II-11 | II-12 | MEAN | SD | n | z | II-1 | II-2 | II-3 | II-4 | II-5 | II-6 | II-7 | II-8 | II-9 | II-10 | II-11 | II-12 |
+| Maximal Amplitude (mmHg) | 42,965 | 49,998 | 37,017 | 36,863 | 36,863 | 34,029 | 32,143 | 38,184 | 34,683 | 35,216 | 45,221 | 39,617 | 47,468 | 39,45 | 5,71 | 12 | 2,41 | 0,62 | 1,85 | 0,43 | 0,45 | 0,95 | 1,28 | 0,22 | 0,83 | 0,74 | 1,01 | 0,03 | 1,40 |
+| AUC of the micturition contraction (mmHg x s) | 100,719 | 185,615 | 78,861 | 55,129 | 55,129 | 25,796 | 27,245 | 68,278 | 52,739 | 52,917 | 61,672 | 75,633 | 51,257 | 69,66 | 42,03 | 12 | 2,41 | 0,74 | 2,76 | 0,22 | 0,35 | 1,04 | 1,01 | 0,03 | 0,40 | 0,40 | 0,19 | 0,14 | 0,44 |
+| Duration of the micturition contraction (s) | 7,734 | 12,204 | 9,392 | 7,988 | 7,988 | 4,407 | 4,823 | 9,211 | 5,268 | 5,647 | 7,854 | 8,575 | 7,669 | 7,56 | 2,24 | 12 | 2,41 | 0,08 | 2,07 | 0,81 | 0,19 | 1,41 | 1,22 | 0,73 | 1,02 | 0,85 | 0,13 | 0,45 | 0,05 |
+| Micturition Δ pressure Threshold (mmHg) | 7,428 | 11,231 | 12,000 | 11,767 | 11,767 | 11,451 | 9,287 | 10,965 | 13,457 | 11,500 | 11,223 | 9,522 | 11,421 | 10,94 | 1,54 | 12 | 2,41 | 2,27 | 0,19 | 0,69 | 0,54 | 0,33 | 1,07 | 0,02 | 1,63 | 0,36 | 0,18 | 0,92 | 0,31 |
+| Baseline intravesical pressure (mmHg) | 11,949 | 15,522 | 10,774 | 15,674 | 15,674 | 14,362 | 14,818 | 11,699 | 12,176 | 10,342 | 16,360 | 12,442 | 15,443 | 13,46 | 2,11 | 12 | 2,41 | 0,72 | 0,97 | 1,27 | 1,05 | 0,43 | 0,64 | 0,83 | 0,61 | 1,48 | 1,37 | 0,48 | 0,94 |
+| Intercontraction interval (s) | 320,848 | 1111,309 | 635,084 | 329,181 | 329,181 | 269,336 | 292,417 | 467,740 | 771,372 | 654,778 | 315,900 | 314,995 | 419,751 | 491,89 | 256,18 | 12 | 2,41 | 0,67 | 2,42 | 0,56 | 0,64 | 0,87 | 0,78 | 0,09 | 1,09 | 0,64 | 0,69 | 0,69 | 0,28 |
+| Voided volume (µl) | 81,167 | 987,667 | 606,500 | 312,000 | 312,000 | 195,154 | 231,917 | 426,750 | 668,600 | 544,167 | 199,583 | 256,833 | 330,111 | 403,37 | 257,02 | 12 | 2,41 | 1,25 | 2,27 | 0,79 | 0,36 | 0,81 | 0,67 | 0,09 | 1,03 | 0,55 | 0,79 | 0,57 | 0,29 |
+| Infused volume (µl) | 267,374 | 926,091 | 529,237 | 274,317 | 274,317 | 224,447 | 243,681 | 389,783 | 642,810 | 545,648 | 263,250 | 262,496 | 349,792 | 409,91 | 213,49 | 12 | 2,41 | 0,67 | 2,42 | 0,56 | 0,64 | 0,87 | 0,78 | 0,09 | 1,09 | 0,64 | 0,69 | 0,69 | 0,28 |
+| Voiding efficiency (%) | 45,989 | 107,412 | 118,445 | 120,781 | 120,781 | 89,198 | 99,848 | 113,055 | 108,364 | 99,532 | 79,255 | 99,743 | 92,831 | 97,87 | 20,29 | 12 | 2,41 | 2,56 | 0,47 | 1,01 | 1,13 | 0,43 | 0,10 | 0,75 | 0,52 | 0,08 | 0,92 | 0,09 | 0,25 |
+| Compliance | 0,033 | 0,068 | 0,034 | 0,020 | 0,020 | 0,017 | 0,021 | 0,029 | 0,043 | 0,037 | 0,017 | 0,025 | 0,026 | 0,03 | 0,01 | 12 | 2,41 | 0,13 | 2,61 | 0,22 | 0,73 | 0,94 | 0,67 | 0,12 | 0,86 | 0,41 | 1,00 | 0,45 | 0,31 |
+| | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
+| | Data excluded after Grubbs' test | Data excluded after Grubbs' test | Data excluded after Grubbs' test | Data excluded after Grubbs' test | | | | | | | | | | | | | | | | | | | | | | | | | |
+```
+
+### CHUNK_ID: projet_3__chunk_000151
+```
+[SECTION : Verrous et incertitudes scientifiques, techniques, technologiques]
+La mise en place d’un modèle du SOPK est un défi complexe en raison de la nature multifactorielle et hétérogène de cette pathologie. De ce fait, plusieurs verrous scientifiques et techniques doivent être surmontés pour développer un modèle fiable et pertinent.
+
+La physiopathologie du SOPK est complexe. En effet, celui-ci se manifeste par une combinaison variable de symptômes, rendant difficile la création d’un modèle unique reproduisant tous les aspects de la maladie. De plus, le SOPK implique des interactions complexes entre des facteurs génétiques, hormonaux, métaboliques et environnementaux, difficiles à reproduire expérimentalement.
+
+Par ailleurs, les modèles animaux sont limités, ceux-ci ne reproduisant pas parfaitement la physiologie humaine, notamment en ce qui concerne le cycle menstruel et la régulation hormonale. De plus, les modèles animaux doivent souvent être induits par des interventions pharmacologiques ne reflétant pas toujours la pathogénèse naturelle du SOPK.
+
+La reproduction de l’hyperandrogénie, caractéristique phare du SOPK, dans les modèles n’est pas toujours fidèle en terme de niveau et d’effets des androgènes observés chez la femme. Par ailleurs, la réponse aux androgènes peut considérablement varier entre les individus, rendant difficile la standardisation des modèles.
+
+Les modèles actuels souffrent d’une variabilité importante due aux différences génétiques, aux protocoles expérimentaux et aux conditions environnementales. En effet, il n’existe pas de modèle standardisé pour étudier le SOPK. Il est donc particulièrement complexe de réussir à définir un modèle pertinent reproductible et robuste, respectant la règle des 3R, ainsi que la législation française en matière d’expérimentation animale.
+
+Par ailleurs, il est particulièrement complexe d’avoir une forte valeur translationnelle.
+```
+
+### CHUNK_ID: projet_3__chunk_000152
+```
+[SECTION : Raisonnement scientifique et démarche expérimentale appliquée]
+Le développement d’un modèle animal valide, reproductible et robuste initie nos travaux de recherche dans le domaine du SOPK. Ainsi, la mise en place de ce modèle de SOPK chez le rat se déroule en deux phases.
+
+La première partie du projet consiste à confirmer les observations décrites par Bourgneuf, décrivant les rats GK comme un modèle spontané de SPOK. En parallèle, cette première phase doit également permettre de consolider les approches expérimentales sur l’appréciation du SOPK, comme la mise en évidence d’un désordre métabolique, la description d’une obésité viscérale, l’identification de cycles œstraux irréguliers ou encore la description histologique d’ovaires dystrophiques.
+
+Dans un second temps, nous envisageons de développer un modèle de rats SOPK suite à une supplémentation en létrozole chez des rats sains. Selon la littérature, et en pesant les avantages et les inconvénients de chaque paramètre, nous définirons la dose, la voie d’administration, la durée du traitement, ainsi que l’âge d’initiation du traitement par le létrozole. Plusieurs phénotypes de rats avec SOPK seront recherchés, en s’appuyant sur la littérature. De plus, nous ajouterons une évaluation de la fertilité par accouplement, étant considérée comme le symptôme principal du SOPK, et afin de répondre au souhait principal de Pelvipharm de disposer d’un modèle expérimental permettant l’évaluation fonctionnelle de la maladie. Enfin, l’efficacité d’un médicament de référence utilisé chez la femme sera testée dans le modèle, afin d’apporter notamment une valeur translationnelle au modèle.
+
+Une fois validé, ce modèle pourra être utilisé et redéfini ultérieurement pour l’évaluation de différents candidats médicaments dans le traitement du SOPK.
+```
+
+### CHUNK_ID: projet_3__chunk_000164
+```
+[SECTION : Conclusion et contribution scientifique, technique ou technologique]
+Ces travaux ont pour objectif de développer un modèle expérimental de rat pertinent pour mieux comprendre la physiopathologie du SOPK, et de contribuer à la recherche de nouveaux traitements curatifs ou symptomatiques.
+
+A ce jour, nous avons validé nos techniques expérimentales pour l’exploration du SOPK chez le rat. Nos premiers résultats chez les rates GK ont montré que ces dernières présentaient un cycle œstral irrégulier ou absent. De plus, les premières observations des coupes histologiques des ovaires semblent indiquer la présence de nombreux follicules atrétiques. Si cette dernière observation se confirme avec les analyses quantitatives en cours, cela reflétera une dystrophie folliculaire, l’une des signatures du SOPK. Ainsi, nos premiers résultats semblent confirmer la présence d’un SOPK spontané chez les rates GK, avec la détection d’au moins deux des trois critères de Rotterdam. De plus, ces rates ont une intolérance au glucose et un profil lipidique perturbé, suggérant un trouble métabolique accompagnant le SOPK.
+
+Nous avons également défini un protocole expérimental pour le développement d’un modèle de rats SOPK induit par une supplémentation en létrozole, en mesurant mûrement chaque aspect du design (méthode d’induction, âge d’induction, durée d’induction, composé de référence, sélection de critères d’évaluation expérimentaux pertinents), afin d’en favoriser le succès. Il reste à présent à le mettre en application en 2025. En fonction des résultats obtenus, nous pourrons soit valider notre modèle, soit redéfinir certains paramètres pour le rendre plus robuste et plus reproductible.
+```
+
+### CHUNK_ID: projet_3__chunk_000175
+```
+[SECTION : Verrous et incertitudes scientifiques, techniques, technologiques]
+La mise en place d’un modèle du SOPK est un défi complexe en raison de la nature multifactorielle et hétérogène de cette pathologie. De ce fait, plusieurs verrous scientifiques et techniques doivent être surmontés pour développer un modèle fiable et pertinent.
+
+La physiopathologie du SOPK est complexe. En effet, celui-ci se manifeste par une combinaison variable de symptômes, rendant difficile la création d’un modèle unique reproduisant tous les aspects de la maladie. De plus, le SOPK implique des interactions complexes entre des facteurs génétiques, hormonaux, métaboliques et environnementaux, difficiles à reproduire expérimentalement.
+
+Par ailleurs, les modèles animaux sont limités, ceux-ci ne reproduisant pas parfaitement la physiologie humaine, notamment en ce qui concerne le cycle menstruel et la régulation hormonale. De plus, les modèles animaux doivent souvent être induits par des interventions pharmacologiques ne reflétant pas toujours la pathogénèse naturelle du SOPK.
+
+La reproduction de l’hyperandrogénie, caractéristique phare du SOPK, dans les modèles n’est pas toujours fidèle en terme de niveau et d’effets des androgènes observés chez la femme. Par ailleurs, la réponse aux androgènes peut considérablement varier entre les individus, rendant difficile la standardisation des modèles.
+
+Les modèles actuels souffrent d’une variabilité importante due aux différences génétiques, aux protocoles expérimentaux et aux conditions environnementales. En effet, il n’existe pas de modèle standardisé pour étudier le SOPK. Il est donc particulièrement complexe de réussir à définir un modèle pertinent reproductible et robuste, respectant la règle des 3R, ainsi que la législation française en matière d’expérimentation animale.
+
+Par ailleurs, il est particulièrement complexe d’avoir une forte valeur translationnelle.
+```
+
+### CHUNK_ID: projet_3__chunk_000176
+```
+[SECTION : Raisonnement scientifique et démarche expérimentale appliquée]
+Le développement d’un modèle animal valide, reproductible et robuste initie nos travaux de recherche dans le domaine du SOPK. Ainsi, la mise en place de ce modèle de SOPK chez le rat se déroule en deux phases.
+
+La première partie du projet consiste à confirmer les observations décrites par Bourgneuf13, décrivant les rats GK comme un modèle spontané de SPOK. En parallèle, cette première phase doit également permettre de consolider les approches expérimentales sur l’appréciation du SOPK, comme la mise en évidence d’un désordre métabolique, la description d’une obésité viscérale, l’identification de cycles œstraux irréguliers ou encore la description histologique d’ovaires dystrophiques.
+
+Dans un second temps, nous envisageons de développer un modèle de rats SOPK suite à une supplémentation en létrozole chez des rats sains. Selon la littérature, et en pesant les avantages et les inconvénients de chaque paramètre, nous définirons la dose, la voie d’administration, la durée du traitement, ainsi que l’âge d’initiation du traitement par le létrozole. Plusieurs phénotypes de rats avec SOPK seront recherchés, en s’appuyant sur la littérature. De plus, nous ajouterons une évaluation de la fertilité par accouplement, étant considérée comme le symptôme principal du SOPK, et afin de répondre au souhait principal de Pelvipharm de disposer d’un modèle expérimental permettant l’évaluation fonctionnelle de la maladie. Enfin, l’efficacité d’un médicament de référence utilisé chez la femme sera testée dans le modèle, afin d’apporter notamment une valeur translationnelle au modèle.
+
+Une fois validé, ce modèle pourra être utilisé et redéfini ultérieurement pour l’évaluation de différents candidats médicaments dans le traitement du SOPK.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 12,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

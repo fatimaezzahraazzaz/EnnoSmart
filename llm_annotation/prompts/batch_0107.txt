@@ -1,0 +1,328 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 107/135, 8 chunks)
+
+### CHUNK_ID: projet_23__chunk_000007
+```
+[SECTION : Verrous et incertitudes scientifiques, techniques, technologiques]
+Le développement du nouveau système de fabrication des détergents s’est heurté à plusieurs verrous techniques et scientifiques majeurs, qui ont nécessité une phase importante de R&D. Deux grandes problématiques se sont particulièrement distinguées pour garantir précision, reproductibilité et robustesse du procédé : le nettoyage des équipements et le nouveau mode de formulation des produits.
+```
+
+### CHUNK_ID: projet_23__chunk_000013_sub00
+```
+[SECTION : Essais sur la cuve de remplissage Stoppil de 60 L]
+Cette cuve fait partie de la conditionneuse. Nous l’avons remplie avec de l’eau et l’agent fluorescent. Pour que cette solution passe par tous les tuyaux de la conditionneuse, nous devions conditionner des flacons pour nous assurer que l’agent fluorescent puisse aller dans tous les recoins de la tuyauterie. Nous avons ainsi conditionné une vingtaine de flacon. A la lampe UV, nous avons observé que la cuve était bien marquée, ainsi que les têtes de remplissage.
+
+Nous avons ensuite effectué une NEP. Au test UV à l’issue de cette NEP, nous avons constaté qu’il restait des résidus au niveau du bourrelet de la cuve, de la boule de lavage et tous les fonds des sorties en bas de cuve vers les têtes de lavage étaient fluorescents. Concernant les têtes de lavage, l’intérieur était correctement nettoyé, mais l’extérieur n’était pas nettoyé.
+
+Nous avons alors réalisé une seconde NEP, en augmentant la pression distribuée par la boule de lavage, afin d’atteindre des zones plus éloignées et d’avoir plus de pression pour décoller les résidus des parois. Nous avons constaté que l’augmentation des vitesses pompes pour augmenter la pression entraînait d’importants mouvements de la tuyauterie.
+
+Nous avons donc conclu quant à la nécessité d’installer une pièce pour pouvoir augmenter la pression en impactant moins le mouvement de la tuyauterie.
+
+Par ailleurs, au test UV, nous avons constaté que les mêmes zones restaient fluorescentes.
+
+[TABLEAU]
+| | |
+| ------------------------------- | ------------------------------- |
+| Tige de la boule de rinçage (1) | Tige de la boule de rinçage (2) |
+
+Figure  : Tige de la boule de rinçage après les NEP, sous UV
+
+Finalement, nous avons réalisé des essais avec l’agent fluorescent pour évaluer la qualité du nettoyage. Après les NEP, des résidus étaient toujours visibles. Nous avons supposé que l’agent fluorescent était plus difficile à nettoyer qu’un produit détergent. Notre méthode devait donc être revue.
+```
+
+### CHUNK_ID: projet_25__chunk_000000
+```
+[SECTION : Analyse et calcul de l’impact carbone des acheminements]
+Dans le cadre de notre démarche environnementale et de notre stratégie d’innovation continue, nous avons engagé un nouveau développement structurant visant à intégrer une analyse complète de l’impact carbone lié à l’acheminement des véhicules.
+
+Nous avons développé un module permettant de mesurer et d’analyser l’impact carbone (émissions de CO₂) généré par l’acheminement d’un véhicule entre son point de départ et son point d’arrivée, selon le mode de transport choisi.
+
+Deux cas principaux sont pris en compte :
+- Transport par camion, lorsque le véhicule est chargé et transporté sur un porte-voitures ;
+- Convoyage par conducteur (convoyeur), lorsque le véhicule est acheminé par la route en roulant.
+
+Cette fonctionnalité offre au client final une visibilité claire sur son impact carbone, quel que soit le type d’acheminement retenu, et constitue un véritable outil d’aide à la décision.
+```
+
+### CHUNK_ID: projet_25__chunk_000002
+```
+[SECTION : Positionnement stratégique et différenciation marché]
+Ces développements renforcent notre positionnement technologique et environnemental sur le marché du convoyage et du transport automobile.
+
+Contrairement aux acteurs concurrents tels que Hiflow et Driiveme, notre solution intégrera une analyse carbone détaillée ainsi qu’une interface mobile couvrant l’ensemble de la chaîne opérationnelle.
+```
+
+### CHUNK_ID: projet_25__chunk_000003
+```
+JUSTIFICATIF DES TRAVAUX DECLARES AU TITRE DU CREDIT D’IMPOT INNOVATION (CII) de l’année 2025
+
+FICHE DESCRIPTIVE DU PROJET EZY Retail/ EZY Parc
+
+Mise en œuvre d’un système unifié de gestion des flux de convoyage et de parc automobile
+
+Table des matières
+
+1. Présentation de la société FRED 3
+
+2. Présentation du projet 3
+
+2.1. Contexte du projet 3
+
+2.2. Objectifs et performances recherchés 3
+
+2.3. Situation du produit sur le marché et description des innovations 4
+
+2.3.1. Situation du produit sur le marché 4
+
+2.3.2. Description des innovations 7
+
+2.4. Présentation de la démarche de conception et réalisation 8
+
+2.4.1. Conception des plateformes métier : Ezy Retail et Eyz Parc 9
+
+2.4.1.1. Plateforme Ezy Retail : gestion digitalisée du convoyage 9
+
+2.4.1.2. Plateforme Eyz Parc : gestion digitalisée des parcs automobiles 11
+
+2.4.2. Analyse et calcul de l’impact carbone des acheminements 13
+
+2.5. Synthèse des progrès et des innovations 13
+
+2.6. Indicateurs d’innovation 14
+
+2.7. Annexe 15
+```
+
+### CHUNK_ID: projet_25__chunk_000004
+```
+[SECTION : Contexte du projet]
+Le secteur de la logistique automobile connaît une transformation progressive portée par la digitalisation des processus et l’augmentation des exigences en matière de traçabilité, de performance opérationnelle et de conformité documentaire. Les activités de convoyage et de gestion de parcs de véhicules reposent encore largement sur des processus hétérogènes, souvent partiellement digitalisés, impliquant de multiples acteurs (transporteurs, convoyeurs, équipes logistiques, clients finaux) et générant des risques d’erreurs, de pertes d’information et de manque de visibilité en temps réel.
+
+Dans ce contexte, les enjeux principaux concernent la capacité à centraliser les données, automatiser les flux opérationnels, sécuriser les échanges documentaires et améliorer la coordination entre les différentes parties prenantes. Par ailleurs, les nouvelles exigences environnementales et réglementaires introduisent des besoins émergents, notamment en matière de mesure et de pilotage de l’impact carbone des opérations de transport.
+
+C’est dans ce cadre que s’inscrit le développement de la plateforme qui regroupe les deux solutions Ezy Retail et Eyz Parc, visant à proposer une approche intégrée, digitalisée et évolutive de la gestion du convoyage et des parcs de véhicules, tout en adressant les limites des solutions existantes.
+```
+
+### CHUNK_ID: projet_25__chunk_000005
+```
+[SECTION : Objectifs et performances recherchés]
+L’objectif du projet est de concevoir et développer une plateforme digitale intégrée dédiée à la gestion du convoyage et des parcs de véhicules, permettant d’améliorer l’efficacité opérationnelle, la traçabilité et la qualité des données tout au long du cycle logistique.
+
+Au niveau fonctionnel :
+
+Assurer la gestion complète et dématérialisée des demandes de transport et de convoyage de véhicules ;
+
+Permettre le suivi en temps réel des opérations et des statuts des véhicules ;
+
+Centraliser la gestion des stocks de véhicules et des opérations associées (entrées, sorties, préparation).
+
+Automatiser la collecte, la validation et l’archivage des documents liés aux opérations ;
+
+Améliorer la coordination entre les différents acteurs (clients, prestataires, équipes internes).
+
+Au niveau technique :
+
+Mettre en place une architecture permettant l’interopérabilité entre les différents modules (convoyage et gestion de parc) ;
+
+Développer des mécanismes d’automatisation des flux de données et des processus documentaires ;
+
+Assurer la fiabilité, la sécurisation et la traçabilité des informations échangées ;
+
+Intégrer des modules analytiques, notamment pour l’évaluation de l’impact carbone des acheminements.
+
+Au niveau éco-conception :
+
+Réduire l’utilisation du papier grâce à la dématérialisation complète des processus ;
+
+Permettre la mesure et l’analyse des émissions de CO₂ liées aux opérations de transport ;
+
+Au niveau ergonomique :
+
+Offrir une expérience utilisateur fluide, adaptée aux différents profils (opérateurs, convoyeurs, clients).
+```
+
+### CHUNK_ID: projet_25__chunk_000006_sub00
+```
+[SECTION : Situation du produit sur le marché]
+Dans un marché en forte évolution, plusieurs solutions numériques ont été développées afin de répondre aux besoins de gestion des opérations de convoyage de véhicules et de pilotage des parcs automobiles. Ces solutions adressent principalement des problématiques de logistique automobile, de gestion de flotte et de digitalisation des opérations terrain.
+
+Afin de positionner précisément la solution développée dans le cadre du projet, une analyse comparative des solutions existantes a été menée, en se basant sur les usages cibles identifiés ainsi que sur les fonctionnalités attendues couvrant à la fois les activités de convoyage et de gestion de parc.
+
+L’évaluation s’est appuyée sur un ensemble de fonctionnalités clés couvrant les différents processus métiers, incluant notamment :
+
+Gestion convoyages :
+
+Création digitale des demandes de transport ;
+
+Gestion digitale des missions convoyeur ;
+
+Suivi opérationnel en temps réel des opérations de convoyage ;
+
+Monitoring numérique de l’état du véhicule / état des lieux digitalisé ;
+
+Dématérialisation des documents logistiques de livraison ;
+
+Communication client SMS / email / notifications ;
+
+Services de ravitaillement / recharge / préparation énergétique.
+
+Gestion Parc :
+
+Suivi digitalisé des véhicules en stock ;
+
+Localisation précise du véhicule dans le parc ;
+
+Gestion des statuts véhicule (sur parc, atelier, avarie, attente…) ;
+
+Gestion des entrées / sorties véhicules sur site ;
+
+Demandes de préparation véhicule (nettoyage, contrôle, accessoires, petite réparation) ;
+
+Suivi documentaire complet du véhicule au-delà de la livraison.
+
+Gestion parc + convoyage : Calcul de l’impact carbone des acheminements.
+
+À l’issue de cette analyse, les principales solutions concurrentes identifiées sont les suivantes :
+
+OTOQI : plateforme spécialisée dans le convoyage de véhicules, offrant une couverture complète des opérations de transport et de suivi en temps réel. La solution est fortement orientée exécution opérationnelle, avec une digitalisation avancée des missions convoyeurs, mais présente des limitations sur la gestion fine des parcs (localisation intra-site, statuts détaillés, gestion des flux internes).
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 107,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

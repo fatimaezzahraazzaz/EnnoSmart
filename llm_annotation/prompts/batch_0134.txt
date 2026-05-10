@@ -1,0 +1,261 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 134/135, 8 chunks)
+
+### CHUNK_ID: projet_32__chunk_000010
+```
+[SECTION : Recherche et développement d’une méthodologie robuste d’analyse de l’hydrogène en phase gazeuse]
+Notre objectif principal consiste à développer et à mettre en œuvre une méthodologie d’analyse de l’hydrogène par chromatographie en phase gazeuse, en réponse aux verrous scientifiques et techniques identifiés. À cette fin, nous avons structuré nos travaux autour de trois axes principaux : la maîtrise du détecteur TCD, l’optimisation de la séparation chromatographique et le développement progressif du protocole expérimental.
+
+Les premiers essais expérimentaux réalisés ont mis en évidence plusieurs difficultés majeures. D’une part, le détecteur TCD a présenté une sensibilité limitée à l’hydrogène, en particulier à faibles concentrations, ce qui nous a conduits à conclure qu’un réglage fin du débit du gaz vecteur et du courant du filament est nécessaire. Nous avons également constaté une dérive du signal de base, fortement influencée par les conditions de température et de pression.
+
+D’autre part, des difficultés de séparation ont été observées, notamment liées à la co-élution des gaz légers (H₂, O₂, N₂) et au temps de rétention très court de l’hydrogène, rendant son intégration analytique délicate.
+
+Par ailleurs, la diffusivité élevée de l’hydrogène a induit des contraintes supplémentaires en termes d’étanchéité du système, avec des risques de pertes d’échantillon et d’instabilité des mesures.
+```
+
+### CHUNK_ID: projet_32__chunk_000011
+```
+[SECTION : Développement et optimisation expérimentale du détecteur TCD]
+Afin de surmonter ces limitations, plusieurs itérations ont été mises en œuvre. Nous avons réalisé une analyse comparative du choix du gaz vecteur (argon vs hélium), mettant en évidence un compromis optimal en faveur de l’argon pour la détection de l’hydrogène. En parallèle, nous avons mené plusieurs compagnes d’essais sur :
+
+Le débit du gaz vecteur ;
+
+La température du détecteur et du filament ;
+
+Nos travaux ont permis de réduire le bruit de fond et de renforcer le rapport signal/bruit.
+
+Des phases de préchauffage et de stabilisation instrumentale ont également été intégrées avant chaque série d’analyses, limitant ainsi les dérives du signal. Enfin, une maintenance préventive (contrôle du filament, vérification des raccords et des joints) a été mise en œuvre afin de garantir la stabilité des mesures.
+
+Par ailleurs, nous avons réalisé des tests de répétabilité sur des gammes de concentrations étendues, permettant d’identifier les conditions optimales pour la détection précise de l’hydrogène, même à faibles concentrations. Ces travaux ont conduit à une meilleure compréhension des paramètres influençant la sensibilité du TCD et à l’établissement d’un protocole standardisé pour la calibration et la validation des mesures.
+```
+
+### CHUNK_ID: projet_32__chunk_000012
+```
+[SECTION : Développement méthodologique de la séparation chromatographique des gaz légers]
+Nos travaux ont également porté sur l’optimisation de la séparation des gaz légers. Initialement basée sur une configuration simple, la méthode a évolué vers une configuration à deux colonnes en série, combinant :
+
+Une colonne Molecular Sieve 5A, adaptée à la séparation des gaz permanents ;
+
+Une colonne adsorbante de type Hayesep Q / Carboxen, permettant d’augmenter la résolution globale.
+
+Par ailleurs, nous avons effectué des affinements expérimentaux sur :
+
+Le flux de gaz vecteur ;
+
+Le volume d’injection, via la mise en œuvre de boucles calibrées de faible volume (0,5-1 ml), afin de limiter l’élution précoce du pic d’hydrogène ;
+
+Les conditions opératoires (température, pression, débits).
+
+Afin de mieux contrôler le temps de rétention de l’hydrogène et de limiter les phénomènes de co-élution. Des tests de co-élution sur des mélanges modèles nous ont permis d’identifier les conditions critiques et de parfaire les paramètres chromatographiques, conduisant à une séparation plus fiable et reproductible des composants légers.
+```
+
+### CHUNK_ID: projet_32__chunk_000013
+```
+[SECTION : Analyse et traitement des signaux chromatographiques]
+Nous nous sommes concentrés également sur l’analyse fine des signaux chromatographiques. La figure ci-dessous illustre des cas typiques de déconvolution de pics chromatographiques, mettant en évidence la superposition de plusieurs composés et la nécessité de recourir à des méthodes de traitement du signal pour perfectionner l’interprétation des données.
+
+Figure : Déconvolution de pics chromatographiques et mise en évidence des phénomènes de co-élution
+
+On observe notamment :
+
+Des pics partiellement superposés, caractéristiques de phénomènes de co-élution ;
+
+La nécessité de décomposer le signal global en contributions individuelles afin d’identifier et quantifier correctement chaque espèce.
+
+Ces observations ont confirmé la complexité de l’analyse des gaz légers et ont guidé les choix de réglages méthodologiques et expérimentaux, orientés vers la robustesse et la reproductibilité de la séparation chromatographique.
+```
+
+### CHUNK_ID: projet_32__chunk_000014
+```
+[SECTION : Développement et adaptation expérimentale du protocole d’analyse de l’hydrogène]
+Le protocole expérimental initial a été affiné de manière itérative afin de tenir compte des contraintes rencontrées. La plage de calibration a été réduite à une zone ciblée (0,1-10 % vol) pour accroitre la qualité et la reproductibilité des mesures.
+
+Nous avons prioritairement concentré nos travaux sur :
+
+La reproductibilité du signal ;
+
+La stabilité du système ;
+
+La validation partielle des performances analytiques (linéarité, répétabilité, justesse à court terme).
+
+Certaines étapes initialement prévues, telles que la validation complète ou l’analyse de matrices complexes, ont été temporairement reportées afin de consolider les bases méthodologiques.
+
+Les ajustements méthodologiques mis en œuvre ont permis d’obtenir :
+
+Une stabilité significativement améliorée du signal TCD ;
+
+Une séparation renforcée des gaz légers ;
+
+Une quantification reproductible de l’hydrogène sur la plage étudiée.
+
+Bien que la validation complète de la méthode reste à finaliser, nos premiers résultats démontrent la faisabilité technique de l’analyse de l’hydrogène par GC-TCD et constituent une base solide pour les phases ultérieures, incluant l’intégration du FID et la validation normative.
+```
+
+### CHUNK_ID: projet_32__chunk_000015
+```
+[SECTION : Conclusion et contribution scientifique, technique ou technologique]
+Ce projet s’inscrit dans le cadre de la recherche et développement d’une méthodologie analytique robuste dédiée à la détection et à la quantification de l’hydrogène dans des matrices gazeuses complexes.
+
+En effet, nos travaux de R&D ont permis de définir un cadre méthodologique rigoureux, reposant sur la maîtrise des paramètres chromatographiques, la caractérisation des performances du détecteur TCD et l’exploitation avancée des signaux analytiques.
+
+À cette fin, nous avons mis en œuvre un protocole expérimental itératif, fondé sur l’optimisation des conditions opératoires, la définition de plages de calibration pertinentes et l’évaluation progressive des performances métrologiques. Ces travaux ont contribué à identifier et à lever partiellement les verrous scientifiques et techniques, tout en établissant une base méthodologique robuste, reproductible et transposable à des environnements analytiques complexes.
+
+Par ailleurs, nous avons renforcé la compréhension des mécanismes d’interactions physico-chimiques impliqués dans les processus de séparation et de détection de l’hydrogène. Nous avons également formalisé des protocoles expérimentaux standardisés, favorisant la fiabilité, la traçabilité et la reproductibilité des mesures dans des conditions opératoires variables.
+```
+
+### CHUNK_ID: projet_32__chunk_000016
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme | Fonction dans l’opération | Contribution directe à l’acquisition de nouvelles connaissances |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------- |
+| Paul Crussy | Master de Sciences Technologies Santé Mention Sciences de la Mer, Licence 3 Biologie des Organisme et Ecologie, DUT Génie Biologique Génie de l'Environnement | Ingénieur consultant | Recherche et développement d’une méthodologie d’analyse de l’hydrogène en phase gazeuse. |
+```
+
+### CHUNK_ID: projet_32__chunk_000017
+```
+[SECTION : Annexe 1 : Analyse de l’état de l’art]
+L’hydrogène, en tant que molécule diatomique légère, hautement diffusible et dotée d’une conductivité thermique exceptionnelle, présente des propriétés physico-chimiques singulières qui compliquent sa détection et sa quantification avec précision, notamment à faibles teneurs dans des matrices gazeuses multi composantes et dynamiques. Ces caractéristiques intrinsèques imposent le développement de protocoles analytiques rigoureux, capables de minimiser les phénomènes de diffusion, d’adsorption et d’interférence, tout en assurant la reproductibilité et la fidélité métrologique des mesures.’
+
+À cet égard, nous avons entrepris une analyse des connaissances existantes relatives à la chromatographie en phase gazeuse (GC), afin de dresser un état des avancées scientifiques et techniques dans ce domaine. Cette revue vise à identifier les contributions majeures et à mettre en évidence les problématiques scientifiques émergentes ainsi que les leviers d’investigation méthodologique pour la quantification fiable de l’hydrogène au sein de matrices complexes, tout en garantissant un haut niveau de robustesse et de cohérence métrologique.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 134,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

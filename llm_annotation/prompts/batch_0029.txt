@@ -1,0 +1,311 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 29/135, 8 chunks)
+
+### CHUNK_ID: projet_6__chunk_000004_sub00
+```
+[SECTION : Analyse de l’état de l’art]
+Ce chapitre présente une synthèse de la littérature sur l’isolation vibratoire et les matériaux auxétiques, basée sur des articles scientifiques et des thèses. Les détails de notre recherche bibliographique figurent en annexe 1-1.9.1.2. Etat de l’art.
+
+Les technologies d’isolation vibratoire sont classées en quatre grandes familles : passives, actives et semi-actives. Les systèmes passifs utilisent des dispositifs tels que les coussins en caoutchouc, les ressorts mécaniques, ou les isolateurs à câbles métalliques. Ils sont les plus répandus dans les applications industrielles et structurelles du fait de leur simplicité et de leur robustesse. Toutefois, ils présentent un compromis difficile entre efficacité en basses fréquences et stabilité mécanique.
+
+Les systèmes actifs recourent à des actionneurs dynamiquement contrôlés (piézoélectriques, électromagnétiques…) pour générer des forces opposées aux vibrations. Ils sont très efficaces à basse fréquence (0–100 Hz)1, mais leur développement est freiné par leur fort besoin énergétique, leur complexité, leur sensibilité à l’instabilité et leur exigence en fiabilité2. Les systèmes semi-actifs combinent quant à eux des éléments passifs (ressorts, amortisseurs) avec un module de contrôle embarqué (capteur, contrôleur, actionneur comme des alliages à mémoire de forme ou des fluides magnétorhéologiques - MR)1.
+
+S’ajoutent à ces systèmes les approches récentes fondées sur des structures bio-inspirées, des métamatériaux mécaniques, et des dispositifs à raideur négative.
+```
+
+### CHUNK_ID: projet_6__chunk_000011
+```
+[SECTION : Analyse mécanique dynamique de structures auxétiques]
+Nous avons mené une campagne d’essais sur des structures imprimées en TPU et en PLA, avec des géométries internes de type nids-d’abeilles ou sablier (Figure 6). Les structures présentent des coefficients de Poisson négatifs (auxétiques) ou positifs (non auxétiques), ce qui a permis de réaliser une étude comparative de leur réponse dynamique sur une même base matériau. Les essais ont été réalisés sur le banc DMA du CEVAA, avec balayage en fréquence de 1 à 200 Hz, pour un déplacement piloté de 0.1 mm sous une précontrainte de 0.2mm.
+
+Les résultats des essais DMA, présentés en annexe 1-1.9.1.3.1. Analyse mécanique dynamique de structures auxétiques, ont montré que la transition vers un comportement auxétique s'accompagnait généralement d'une augmentation de la raideur mécanique pour les échantillons en TPU, bien que cet effet soit atténué pour certaines configurations 25 et 35a (Tableau 2). Pour le PLA, qui est un polymère plus rigide, les différences de comportement entre structures auxétiques et conventionnelles sont moins prononcées (Tableau 4). Les essais en traction ont confirmé cette tendance (Tableau 5), les échantillons auxétiques présentant une raideur plus élevée que leurs équivalents non auxétiques.
+
+Cependant, les mesures de résonance par DMA n'ont pas été concluantes, suggérant que les fréquences d'excitation étaient trop basses (limitées à 200 Hz). L'application de la loi WLF (Williams-Landel-Ferry) a permis de recomposer des courbes de raideur à des fréquences plus élevées, mais n'a pas révélé de résonances claires (Figure 7). Ces essais ont néanmoins permis de caractériser le module de Young des échantillons, valeurs qui seront exploitées comme données d'entrée pour les simulations prévues en 2025.
+```
+
+### CHUNK_ID: projet_6__chunk_000018_sub00
+```
+[SECTION : Travaux de R&D réalisés par GEMTEX : Développement d’échantillons de composites fibreux auxétiques]
+GEMTEX ont travaillé sur le développement d’échantillons de matériaux auxétiques en utilisant :
+
+Des fils composites hybrides (élastomère + aramide) ;
+
+Un tissu tissé aux propriétés mécaniques et géométriques spécifiques ;
+
+Un procédé thermoformage pour générer une géométrie auxétique stable ;
+
+La première étape des travaux de GEMTEX a été le filage de l’élastomère de la matière Vistamaxx 6202 (copolymère PP/PE) par voie fondue. Le résultat est un multifilament souple (80 monofilaments) utilisé comme âme dans le fil composite. Un ajout de 5 % de polypropylène (PP) a été réalisé pour améliorer l’homogénéité du fil, augmenter la contrainte maximale et le module d’élasticité et réduire la variabilité.
+
+La deuxième étape a été la réalisation du fil composite sec par guipage :
+
+Structure : âme en élastomère + guipage avec deux multifilaments de para-aramide (Twaron®)
+
+Procédé : guipage à torsion alternée (100 t/m) pour bloquer partiellement l’élasticité
+
+Deux variantes ont été analysées :
+
+GUIPE1 : 72 % élastomère
+
+GUIPE2 : 62 % élastomère
+
+Les résultats ont alors révélé que le GUIPE2 montrait une contrainte maximale plus élevée (399 MPa) et un module plus élevé (9 GPa) que GUIPE1.
+
+L’étape suivante a été le tissage du renfort avec ces fils pour une utilisation sur des zones inclinées à 15° dans la future géométrie auxétique
+
+Ensuite, un thermoformage des éprouvettes composites par compression à chaud à 130 °C pendant 6 minutes a été réalisé. Les résultats ont montré avec le GUIPE1 une meilleure rigidité en flexion (G ≈ 197 mN·cm) et avec le GUIPE2 une meilleure déformation à rupture. De plus, les essais de traction et flexion effectués ont donné un module en traction allant jusqu'à 0,64 GPa.
+
+Finalement, des premiers essais de géométrie auxétique ont été réalisés. Cela a nécessité la conception d’un moule imprimé 3D en PLA. Puis, à partir du fil GUIPE1, un tissu double couche a été réalisé aux dimensions souhaitées pour une cellule (sur la base des éprouvettes de DMA du CEVAA).
+
+L’ensemble a été mis dans une étuve à 110°C pendant 1h30.
+```
+
+### CHUNK_ID: projet_6__chunk_000024_sub00
+```
+[SECTION : Travaux de recherche sur les structures architecturées auxétiques]
+Les matériaux auxétiques présentent un coefficient de Poisson négatif. Ils se distinguent par une réponse mécanique singulière : lorsqu’ils sont étirés dans une direction, ils s’élargissent perpendiculairement.
+
+Dans leur travail de recherche, Onur et Ranjbar36 distinguent plusieurs types de structures cellulaires auxétiques, notamment :
+
+Les structures re-entrantes, 2D ou 3D, aux propriétés orthotropes ;
+
+Les structures à unités rotatives, dont le coefficient de Poisson peut atteindre -1 ;
+
+Les structures à côtes manquantes, obtenues en retirant des éléments dans un réseau classique ;
+
+Les structures chirales et anti-chirales, qui présentent d’excellentes performances en compression et en cisaillement.
+
+Les auteurs36 soulignent également qu’il est possible de rendre un matériau non-auxétique auxétique en modifiant la séquence d’empilement des lamelles dans un stratifié composite, à condition que le matériau soit fortement anisotrope. Des logiciels spécialisés permettent d’optimiser cette séquence en fonction de critères mécaniques tels que la rigidité ou la résistance à la flexion.
+
+Plusieurs travaux de recherche ont démontré les performances vibro-acoustiques des matériaux auxétiques. A titre d’exemple, certains travaux ont porté sur l’étude de la transmission des vibrations et des performances d’isolation des structures trichirales avec des paramètres géométriques uniformes et à gradient. Des analyses par éléments finis (FEA) ont été réalisées et ont révélé que la distribution de la bande interdite (bandgap) pouvait être contrôlée en modifiant la cellule unitaire. De plus, une étude comparative menée dans le cadre de cette recherche a montré l’absence de bande interdite apparente pour la structure tétrachirale, tandis que la structure hexachirale présentait une bande interdite dans la plage de 750 Hz à 1120 Hz. La structure trichirale, quant à elle, possède plusieurs bandes interdites dans la plage de 1 Hz à 2000 Hz, avec une largeur de bande nettement plus importante.
+
+D’autres travaux ont permis de réduire et d’optimiser la réponse dynamique de pales de ventilateur pour les trois premières fréquences fondamentales, à l’aide d’une structure cellulaire auxétique à géométrie rentrante comme matériau de noyau.
+```
+
+### CHUNK_ID: projet_6__chunk_000025_sub00
+```
+[SECTION : Travaux de recherche sur les composites auxétiques]
+La majorité des travaux liés à l’isolation vibratoire à l’aide de matériaux auxétiques concernent le comportement dynamique de matériaux auxétiques architecturés. En revanche, peu de travaux abordent l’effet des propriétés auxétiques des composites sur leur comportement vibratoire. La présence d’une microstructure conduit d’ailleurs à des effets dynamiques supplémentaires, notamment la micro-inertie et des termes d’ordre supérieur ont un effet sur la réponse dynamique de composites, comme l’ont montré des travaux récents,.
+
+Les matériaux auxétiques sont dotés de propriétés uniques et incomparables en comparaison des matériaux usuels, notamment en termes de dureté, résistance à l’indentation, à l’impact, au cisaillement et à la fracturation. Des matériaux sandwichs incorporant des couches viscoélastiques présentant un comportement auxétique témoignent de propriétés élastiques élevées et d’un effet d’amortissement amélioré par le caractère auxétique. De plus, des travaux académiques ont démontré par le biais d’une approche micromécanique et en utilisant la transformée de Laplace-Carson la réponse de composites constitués d’inclusions elliptiques au sein d’une matrice, toutes deux dotées d’un comportement viscoélastique. L’utilisation de renforts auxétiques dans les composites conduit à un bon compromis entre amélioration des propriétés mécaniques et propriétés d’amortissement.
+
+Le bénéfice de propriétés statiques apporté par la nature auxétique du renfort s’explique par le rapport entre le module de cisaillement G et le module de compressibilité K, qui pour un matériau isotrope est piloté par le coefficient de Poisson (les limites de l’intervalle de variation sont les limites thermodynamiques dans le cas isotrope) selon la relation :
+
+Cette relation montre qu’il est théoriquement possible de concevoir des microstructures présentant une grande variation de volume pour des coefficients de Poisson négatifs proches de -1, dont le bénéfice en termes d’absorption de chocs est exprimé par la relation ci-dessous et prédisant une dureté très importante pour cette valeur du coefficient de Poisson proche de sa limite inférieure – 1, liée à la compaction de la matière (grande capacité de variation de volume) :
+```
+
+### CHUNK_ID: projet_6__chunk_000025_sub01
+```
+très importante pour cette valeur du coefficient de Poisson proche de sa limite inférieure – 1, liée à la compaction de la matière (grande capacité de variation de volume) :
+
+Le caractère auxétique des renforts de composites est susceptible d’induire un comportement auxétique du composite, malgré la présence de la matrice (non auxétique). Ce concept d’inclusions de renfort auxétique de composites a déjà été éprouvé numériquement par le biais d’approches numériques et le développement de schémas d’homogénéisation à double échelle,, ,,,,: la microstructure constituant l’élément de renfort est remplacée par un milieu continu de substitution dont les propriétés effectives alimentent des calculs menés sur composites à l’échelle macroscopique. Bien que ces premiers travaux n’aient permis d’explorer que des géométries 2D avec des renforts auxétiques de type réentrant et hexachiral plan au sein d’une matrice époxy, ils montrent que le coefficient de Poisson de composites comportant des inclusions de nature auxétique peut atteindre des valeurs très négatives (proches de -2.5). Les composites ainsi conçus par cette démarche d’ingénierie virtuelle héritent de l’effet auxétique des inclusions, ce pour des taux de renfort supérieur
+
+Afin d’explorer d’une façon plus systématique des topologies de renforts auxétiques, le LEM3 développe depuis quelques années des méthodes d’optimisation topologique multi-échelles, ce qui a permis de concevoir des métamatériaux auxétiques, d’en formuler une loi de comportement appuyée par une compréhension des mécanismes de déformation microscopiques responsables de leur caractère auxétique, et de mesurer leurs propriétés mécaniques.
+```
+
+### CHUNK_ID: projet_6__chunk_000027
+```
+[SECTION : Analyse mécanique dynamique de structures auxétiques]
+En parallèle du développement de composites fibreux à géométrie auxétique réalisé par GEMTEX, le CEVAA a conduit une campagne d’essais dynamiques sur des structures imprimées en 3D aux géométries auxétiques variées. L’objectif a été d’identifier les conditions géométriques permettant d’optimiser la raideur dynamique et le comportement vibratoire des structures à Poisson négatif, et d’identifier les problématiques techniques liées à ce sujet.
+
+En effet, nous avons cherché à caractériser les propriétés mécaniques dynamiques de différentes structures auxétiques et conventionnelles, en menant des essais DMA sur des échantillons présentant des coefficients de poisson positifs et négatifs imprimés en 3D avec différents nombres de cellules, présentés ci-dessous. Les échantillons analysés ont des géométries hexagonales et hexagonales réentrantes.
+
+Ces essais ont permis de caractériser les premières réponses mécaniques dynamiques des matériaux selon leur géométrie interne, et vont servir de base de comparaison pour la suite du programme expérimental sur le nouveau banc.
+
+Figure : Echantillons analysés
+
+L’ensemble des essais ont été réalisés sur un banc DMA du CEVAA.
+
+Les essais sont réalisés de 1 à 200Hz avec des paliers, comme montré sur le tableau ci-dessous. Nous avons piloté un déplacement de 0.1mm avec une précontrainte de 0.2mm.
+
+[TABLEAU]
+| Points | Fréquence |
+| ------ | --------- |
+| 1 | 1 |
+| 2 | 2,13166 |
+| 3 | 4,54399 |
+| 4 | 9,68625 |
+| 5 | 20,6478 |
+| 6 | 44,0142 |
+| 7 | 93,8234 |
+| 8 | 200 |
+
+Tableau  : Conditions des essais
+
+Nous présentons ci-après les résultats des différents essais menés.
+```
+
+### CHUNK_ID: projet_7__chunk_000169
+```
+[PAGE 14]
+
+PV-EM 22-0167
+5.2 Mesures de dureté
+Elles ont été réalisées en comparatif entre les différents lots, par la méthode Vickers à cœur des pièces. Les
+résultats obtenus sont donnés ci-dessous :
+Dureté à cœur Lot N°1 2016 - montés dans AGOSTA 5H30
+/Coupe à droite /Coupe à gauche
+- Mesure 1 : 232 HV30 - Mesure 1 : 223 HV30
+- Mesure 2 : 223 HV30 - Mesure 2 : 206 HV30
+- Mesure 3 : 225 HV30 - Mesure 3 : 223 HV30
+- Mesure 4 : 230 HV30 - Mesure 4 : 223 HV30
+- Mesure 5 : 227 HV30 - Mesure 5 : 214 HV30
+Moyenne : 227 HV30 Moyenne : 218 HV30
+Dureté à cœur Lot N°2 2016 DEFAILLANT 180H
+/Coupe à droite /Coupe à gauche
+- Mesure 1 : 214 HV30 - Mesure 1 : 223 HV30
+- Mesure 2 : 218 HV30 - Mesure 2 : 220 HV30
+- Mesure 3 : 223 HV30 - Mesure 3 : 212 HV30
+- Mesure 4 : 218 HV30 - Mesure 4 : 223 HV30
+- Mesure 5 : 218 HV30 - Mesure 5 : 216 HV30
+Moyenne : 218 HV30 Moyenne : 219 HV30
+Dureté à cœur Lot N°3 2019 NEUF
+/Coupe à droite /Coupe à gauche
+- Mesure 1 : 195 HV30 - Mesure 1 : 193 HV30
+- Mesure 2 : 197 HV30 - Mesure 2 : 198 HV30
+- Mesure 3 : 195 HV30 - Mesure 3 : 194 HV30
+- Mesure 4 : 191 HV30 - Mesure 4 : 197 HV30
+- Mesure 5 : 198 HV30 - Mesure 5 : 207 HV30
+Moyenne : 195 HV30 Moyenne : 198 HV30
+MD-EM-003A
+Page 14/15
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 29,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

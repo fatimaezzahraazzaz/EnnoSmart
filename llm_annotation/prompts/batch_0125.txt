@@ -1,0 +1,281 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 125/135, 8 chunks)
+
+### CHUNK_ID: projet_29__chunk_000015_sub07
+```
+entre les entités EV et EVSE à travers les logiques EVCC et SECC, assurant ainsi l’interopérabilité du système. Figure : Modèle d’architecture IoEV développé pour le système de véhicule électrique
+
+Les travaux entrepris dans cette étude couvrent la modélisation des nœuds logiques et des attributs EV et EVSE, la simulation de différentes topologies de communication sur trois scénarios représentatifs (borne isolée, parking à multiples points de recharge et réseau urbain), ainsi que la mise en œuvre d’un prototype opérationnel intégrant des modules SONOFF modifiés, un broker MQTT Mosquitto déployé sur Raspberry Pi, une interface Node-RED et une base de données MySQL. Les résultats obtenus montrent que les solutions filaires présentent les meilleures performances en termes de latence, généralement inférieure à quelques millisecondes. Les technologies sans fil demeurent toutefois adaptées pour les bornes isolées, avec par exemple une latence de l’ordre de 0,158 seconde pour ZigBee et de 1 à 2 millisecondes pour le Wi-Fi selon la charge.
+
+Le banc d’essai expérimental confirme la faisabilité de la chaîne de supervision proposée, avec une latence moyenne observée d’environ 49 millisecondes. Malgré ces résultats prometteurs, l’étude présente plusieurs limites, notamment l’absence d’analyse approfondie en matière de cybersécurité, le manque d’évaluation des performances en situation de congestion, la portée restreinte du prototype qui ne reflète pas les charges de communication élevées des dispositifs IED, ainsi que l’insuffisance de tests de longue durée pour évaluer la scalabilité du système.
+```
+
+### CHUNK_ID: projet_30__chunk_000031_sub00
+```
+[SECTION : Grand principe de la solution]
+Le projet repose sur le développement d’une plateforme modulaire open-source, hébergée par la fondation Eclipse, visant à permettre le déploiement de réseaux de neurones optimisés sur des architectures embarquées à ressources contraintes.
+
+L’approche proposée consiste à repenser la chaîne de conception des modèles en intégrant dès l’amont les contraintes matérielles. Elle s’appuie sur une pipeline unifiée couvrant le conditionnement des données, la modélisation, l’apprentissage, la validation, puis les phases de transformation (quantification, optimisation) et de génération de code embarqué. L’objectif est de concevoir la structure des modèles, leur représentation numérique et leur mise en œuvre, afin de réduire les coûts mémoire et computationnels tout en préservant leurs performances.
+
+Comme illustré dans la Figure 3 par la chaîne fonctionnelle (conditionnement des données - modélisation - apprentissage - validation - transformation post-apprentissage - génération de code embarqué), la solution s’appuie sur un pipeline unifié de transformation des réseaux de neurones, permettant de passer d’un modèle abstrait à une implémentation optimisée et embarquable.
+
+Figure : Pipeline de conception, d’optimisation et de mise en œuvre de réseaux de neurones pour architectures embarquées contraintes
+
+Cette démarche soulève des incertitudes scientifiques majeures, notamment sur la capacité à maintenir la précision des modèles après transformation, à prédire l’impact des optimisations sur des architectures hétérogènes, et à concilier des contraintes antagonistes (performance, latence, portabilité, certifiabilité).
+
+Dans ce contexte, GLR TECHNOLOGIES a contribué à la levée de ces verrous à travers plusieurs axes de recherche et développement :
+
+Développement de mécanismes d’optimisation et de génération d’exécutables pour architectures embarquées ;
+
+Conception de stratégies de quantification avancées et multi-précision, accompagnées du développement de kernels dédiés ;
+
+Transformation et compression des modèles via des approches d’optimisation adaptées ;
+
+Adaptation aux architectures hétérogènes (CPU, GPU, FPGA, multicœurs, microcontrôleurs) ;
+
+Mise en œuvre de chaînes d’exécution optimisées et robustes pour environnements contraints ;
+
+Contribution à un écosystème open-source structuré et interopérable ;
+
+Premières explorations en apprentissage distribué sur systèmes embarqués.
+```
+
+### CHUNK_ID: projet_30__chunk_000016
+```
+[SECTION : Grand principe de la solution]
+Le projet s’inscrit dans le développement d’une plateforme modulaire open-source, hébergée par la fondation Eclipse, visant à faciliter le déploiement de réseaux de neurones optimisés sur des architectures embarquées à ressources contraintes.
+
+L’approche adoptée repense la chaîne de conception des modèles en intégrant dès l’amont les contraintes matérielles. Elle repose sur un pipeline unifié couvrant : le conditionnement des données, la modélisation, l’apprentissage, la validation, ainsi que les phases de transformation (quantification, optimisation).
+
+La Figure 1 illustre ce pipeline, mettant en évidence la transition d’un modèle abstrait vers une implémentation optimisée et embarquable. Cette démarche soulève des incertitudes scientifiques importantes, notamment sur la préservation de la précision après transformation, la prédiction de l’impact des optimisations sur des architectures hétérogènes, et la conciliation de contraintes antagonistes (performance, latence, portabilité, robustesse).
+
+Figure : Pipeline de conception, d’optimisation et de mise en œuvre de réseaux de neurones pour architectures embarquées contraintes
+
+Pour ce faire, GLR TECHNOLOGIES a contribué à lever ces verrous via plusieurs axes de recherche et développement :
+
+Développement de mécanismes d’optimisation et de génération d’exécutables pour architectures embarquées ;
+
+Conception de stratégies de quantification avancées et multi-précision avec kernels dédiés ;
+
+Transformation et compression des modèles par des approches adaptées d’optimisation ;
+
+Adaptation aux architectures hétérogènes (CPU, GPU, FPGA, multicœurs, microcontrôleurs) ;
+
+Mise en œuvre de chaînes d’exécution robustes et optimisées pour environnements contraints ;
+
+Contribution à un écosystème open-source structuré et interopérable ;
+
+Explorations initiales en apprentissage distribué sur systèmes embarqués.
+
+Cette solution illustre une démarche expérimentale à l’interface entre intelligence artificielle et systèmes embarqués, proposant un cadre unifié pour la conception, l’optimisation et le déploiement de modèles dans des environnements fortement contraints.
+```
+
+### CHUNK_ID: projet_30__chunk_000036
+```
+[SECTION : Optimisation et fiabilisation des exécutions pour systèmes embarqués critiques]
+Notre objectif a consisté également à concevoir une chaîne d’exécution pour modèles de Deep Learning, optimisée pour les architectures embarquées et répondant à des contraintes critiques de traçabilité, de conformité et de performance. Notre démarche a nécessité de relever des incertitudes techniques importantes, notamment sur la capacité à concilier efficacité d’inférence, compacité des binaires et robustesse logicielle.
+
+Pour quantifier et valider ces optimisations, nous avons mis en œuvre une compagne de tests et de benchmarks. Celui-ci permet de générer des données d’entrée, d’exécuter les modèles sur différents backends et de mesurer des indicateurs précis tels que la latence, le temps d’initialisation et la taille des binaires. Les évaluations menées sur cibles embarquées ont confirmé la pertinence de l’approche, avec des gains significatifs en compacité et en performance, et un ratio d’exécution proche du natif sur des plateformes limitées (facteur ~1,2 sur Raspberry Pi).
+
+Nous avons également intégré une dimension forte de robustesse logicielle, en développant des stratégies de test avancées couvrant l’ensemble de la chaîne de traitement, du niveau opérateur au niveau graphe. La génération automatisée de tests unitaires et d’intégration, fondée sur les métadonnées des opérateurs, a permis de maîtriser l’explosion combinatoire des cas à tester tout en assurant une couverture élevée (>90 % sur les opérateurs clés). Cette approche constitue une réponse méthodologique aux enjeux de fiabilité, de non-régression et de validation expérimentale dans un contexte de développement évolutif.
+```
+
+### CHUNK_ID: projet_30__chunk_000003
+```
+[SECTION : Objectifs visés et Performances à atteindre]
+Dans le cadre du projet AIDGE, initiative open-source portée par l’Eclipse Foundation et menée en collaboration avec plusieurs acteurs académiques et industriels (CEA, INRIA, Thales, Airbus), GLR TECHNOLOGIES contribue au développement de briques méthodologiques et technologiques novatrices dédiées à l’intelligence artificielle embarquée.
+
+Les travaux visent la conception et l’expérimentation d’un Framework permettant de transformer et d’exécuter des réseaux de neurones profonds sur des architectures embarquées fortement contraintes. Dans ce cadre, nos développements portent principalement sur :
+
+L’étude méthodologique et la transformation des graphes de calcul, visant à articuler complexité algorithmique et contraintes matérielles ;
+
+La conception de stratégies de quantification avancées, incluant la quantification post-apprentissage et consciente de l’apprentissage, pour garantir robustesse et précision des modèles sur cibles limitées ;
+
+L’expérimentation et la conception de primitives algorithmiques dédiées (kernels forward/backward) et de mécanismes d’exécution adaptés aux contraintes embarquées ;
+
+Les investigations initiales en apprentissage distribué sécurisé, permettant l’entraînement de modèles sur plusieurs nœuds sans centralisation des données.
+
+Ces travaux s’inscrivent également dans une démarche d’interopérabilité et d’évaluation expérimentale, avec le développement de protocoles rigoureux permettant de comparer les performances des modèles selon différentes configurations d’exécution et architectures matérielles.
+
+Les performances visées concernent la capacité à exécuter efficacement des modèles sur des cibles à ressources limitées, tout en maîtrisant la latence d’inférence, la taille du code généré et la robustesse des implémentations, et en garantissant un haut niveau de fiabilité, de reproductibilité et de validité scientifique.
+```
+
+### CHUNK_ID: projet_30__chunk_000014
+```
+[SECTION : Raisonnement scientifique et démarche expérimentale appliquée]
+Notre projet s’inscrit dans une démarche expérimentale et itérative visant à lever des verrous et des incertitudes scientifiques, techniques et méthodologiques, notamment liées à l’adaptation de modèles de Deep Learning à des architectures embarquées contraintes, à l’optimisation de leur exécution sur des environnements hétérogènes et à la conception de chaînes d’exécution robustes.
+
+Dans un premier temps, nous avons posé l’hypothèse que l’intégration précoce des contraintes matérielles dans la conception des modèles permettrait d’accroitre leur efficacité sur cibles embarquées. Nous avons ainsi structuré une chaîne de traitement unifiée couvrant modélisation, apprentissage et transformation, afin d’optimiser la représentation numérique et l’exécution.
+
+Dans un deuxième temps, nous avons exploré la complexité computationnelle des opérateurs, en postulant que le développement de kernels optimisés constituait un levier clé de performance. Cela nous a conduits à concevoir des primitives de calcul adaptées aux contraintes de mémoire, de parallélisme et de précision sur différents backends.
+
+Dans un troisième temps, nous avons étudié la portabilité des modèles sur architectures hétérogènes, en émettant l’hypothèse qu’une architecture logicielle modulaire, fondée sur des mécanismes d’abstraction et d’orchestration, garantirait la cohérence et la reproductibilité des traitements.
+
+Enfin, nous avons analysé la génération d’exécutables optimisés pour systèmes embarqués, en mettant en évidence les compromis entre généricité et spécialisation, ainsi que les contraintes liées à la latence, à l’empreinte mémoire et à la complexité logicielle.
+
+L’ensemble de ces travaux nous a permis de structurer une démarche expérimentale rigoureuse, basée sur des protocoles d’évaluation adaptés, d’identifier les limites des approches proposées et d’orienter les axes futurs de R&D. Ils contribuent directement à la levée des verrous scientifiques et technologiques, notamment en matière de quantification, de déploiement sur architectures contraintes et de conception de chaînes d’exécution optimisées et modulaires.
+```
+
+### CHUNK_ID: projet_30__chunk_000026
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération | Contribution directe à l’acquisition de nouvelles connaissances |
+| --------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gallas GAYE | Ingénieur diplômé de l'Institut National des Sciences Appliquées de Rennes, Spécialité : Electronique | Ingénieur R&D - Développement de kernels et optimisation des opérateurs Deep Learning pour systèmes embarqués | Développement de kernels manquants pour opérateurs Deep Learning, intégration multi-backends (CPU/GPU), validation expérimentale des performances et robustesse sur architectures embarquées contraintes |
+| Houssem ROUIS | Master parcours type Systèmes embarqués et traitement de l'information | Ingénieur R&D - Validation expérimentale et benchmarks | Évaluation expérimentale des performances sur plateformes embarquées, benchmarks sur latence, taille binaire et consommation mémoire, identification de compromis entre portabilité, compacité et performance |
+| Grégoire KUBLER | Master mention Electronique, énergie électrique, automatique | Ingénieur R&D -Architecture et orchestration | Conception de l’architecture modulaire et interopérable du Framework, implémentation de pipelines ONNX, orchestration multi-backends et contribution à la reproductibilité et portabilité des modèles |
+| Adam MAROUNI | Ingénieur diplômé de ESIEE PARIS | Ingénieur R&D - Middleware et apprentissage fédéré | Mise en place du middleware pour apprentissage fédéré, collecte et centralisation des données, gestion du parc informatique pour entraînement distribué, levée des verrous liés à la coordination des ressources et à l’intégration open-source |
+```
+
+### CHUNK_ID: projet_30__chunk_000028_sub00
+```
+[SECTION : Analyse des approches de réduction de complexité, d’optimisation architecturale et de recherche automatique pour l’inférence embarquée des réseaux de neurones]
+Notre analyse a mis en évidence l’étude de Han et al. portant sur la compression des réseaux de neurones profonds via une approche combinée de pruning, quantification et codage entropique. La problématique abordée par ces travaux concerne la réduction de l’empreinte mémoire et du coût computationnel des modèles de grande taille, afin de faciliter leur déploiement sur des systèmes contraints. Les auteurs proposent une méthodologie en trois étapes : l’élimination des connexions redondantes par pruning, la réduction de la précision des poids via une quantification avec partage de paramètres, et l’application d’un codage de type Huffman pour compresser davantage les modèles. Les résultats obtenus montrent des gains significatifs, avec des taux de compression pouvant atteindre un facteur 35 à 49 sur certains réseaux, sans perte notable de précision, ainsi qu’une réduction importante des besoins en mémoire et en bande passante. Toutefois plusieurs limitations subsistent :
+
+L’approche repose sur des étapes successives nécessitant des ajustements manuels et ne propose pas de cadre unifié permettant d’adapter dynamiquement la compression aux contraintes spécifiques des architectures cibles ;
+
+Les expérimentations sont majoritairement réalisées sur des architectures matérielles relativement puissantes, sans prise en compte explicite des contraintes propres aux systèmes embarqués fortement limités ;
+
+L’impact des transformations sur la stabilité globale du modèle et sur son comportement en conditions réelles reste peu formalisé, ce qui limite la transposabilité directe de ces méthodes dans des environnements embarqués critiques.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 125,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

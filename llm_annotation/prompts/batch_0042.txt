@@ -1,0 +1,320 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 42/135, 8 chunks)
+
+### CHUNK_ID: projet_9__chunk_000009_sub02
+```
+des matériaux selon la technologie de mise en forme Les résultats obtenus montrent que nous avons des matériaux équivalents en élongation à la rupture quel que soit la technologie employée.
+
+Après avoir répondu aux contraintes imposées dans le cadre de ce projet, nous avons mené des études afin d’augmenter les performances techniques de notre système d’emballage en termes de vibrations, de tenue aux chocs, et de sécurisation du dispositif médical. Pour ce faire, nous avons, d’une part, défini un couvercle de protection pour fixation sur la paroi interne, au-dessus de l’enveloppe et formant une cuve supérieure inversée.
+
+Afin d’avoir un maintien du couvercle par les plots de façon sûre, sans risque de détachement, et sans vibrations, nous avons défini une pluralité d’ouvertures agencées sur un rebord de couvercle et en alignement avec les ouvertures de l’enveloppe.
+
+En outre, pour garantir la stérilisation du dispositif médical, nous avons réalisé un système d’acheminement de gaz stérilisant depuis l’extérieur du couvercle jusqu’au dispositif médical en définissant des canaux de distribution au niveau du couvercle de protection et de l’enveloppe amortissante.
+
+Pour une rigidité supérieure à celle de l’opercule de fermeture, nous avons défini le couvercle de protection en petg.
+
+D’autre part, nous avons développé un suremballage pour loger le boîtier, l’enveloppe et un éventuel couvercle de protection. Celui-ci comporte une surface de fermeture contre laquelle un opercule de suremballage est susceptible d’être appliqué.
+```
+
+### CHUNK_ID: projet_9__chunk_000020
+```
+[SECTION : Objectifs visés]
+Afin d’établir la preuve d’efficacité les normes NF EN ISO 11607-1 et NF EN ISO 11607-2 qui encadrent respectivement les propriétés des matériaux et la performance de l’emballage sont utilisées
+
+La norme NF EN ISO 11607-1 spécifie les exigences et les méthodes d’essai pour les matériaux, les systèmes de barrière stérile préformés, les systèmes de barrière stérile et les systèmes d’emballage destinés a maintenir l’état de stérilité des dispositifs médicaux stérilisés au stade terminal jusqu’ au point d’utilisation.
+
+Les normes ISTA 3 et ASTM 4169 -23 spécifient les exigences et les méthodes d’essai pour les tests de transport :
+
+Essais climatiques
+
+Essais mécaniques
+
+Gerbage en transport
+
+Vibration en chargement libre
+
+Pression haute altitude
+```
+
+### CHUNK_ID: projet_10__chunk_000016_sub00
+```
+[SECTION : Première itération : évaluation des modèles de traitement de langage existants]
+Dans cette première partie de nos travaux, nous avons évalué les performances des modèles Transformers déjà existants en vue de résoudre notre problématique. Pour cela, nous avons décidé d’entrainer les trois modèles suivants :
+
+Modèle n°1 : Le modèle DistilCamemBERT affiné pour la tâche d’inférence du langage naturel (NLI) pour la langue française ;
+
+Modèle n°2 : Le modèle multilingue mDeBERTa qui peut effectuer une inférence de langage naturel (NLI) sur 100 langues et est donc également adapté à la classification multilingue Zero-Shot ;
+
+Modèle n°3 : Le modèle basé sur bart-large entrainé sur le jeu de données MultiNLI (MNLI).
+
+Nous avons mis en œuvre ces trois modèles afin de classifier automatiquement les six thèmes définis : économie, immigration, laïcité, environnement, sécurité et santé. Pour ce faire nous avons effectué un réglage (Fine Tuning) sur les trois modèles en s’appuyant sur des données personnalisées. Cependant, nous avons obtenu des performances non satisfaisantes.
+
+Figure 1 : Performances des modèles DistilCamemBERT, mDeBERTa et bart-large pour la tâche de classification automatique.
+
+Le tableau ci-dessus présente les résultats obtenus pour les trois modèles mis en œuvre en termes d'exactitude (accuracy) et de score F1. Ces métriques sont employées pour évaluer les performances des modèles dans la classification des thèmes définis.
+
+Le modèle DistilCamemBERT affiche une exactitude de 61 % et un score F1 de 60 %. Ces résultats montrent que ce modèle a des performances non satisfaisantes dans la classification des textes. L'exactitude indique qu'environ 61 % des prédictions du modèle sont correctes, tandis que le score F1, légèrement inférieur, indique un équilibre entre la précision (proportion de vraies prédictions parmi les prédictions positives) et le rappel (proportion de vraies prédictions positives parmi les cas positifs réels), ce qui signifie que le modèle a une performance équilibrée mais pas optimale.
+```
+
+### CHUNK_ID: projet_10__chunk_000058_sub00
+```
+[SECTION : Phase exploratoire : évaluation des modèles de traitement de langage existants]
+Dans cette partie de nos travaux, nous avons mené une phase exploratoire des modèles Transformers déjà existants en vue de résoudre notre problématique. Pour cela, nous avons décidé de s’appuyer sur les trois modèles suivants :
+
+Modèle n°1 : Le modèle DistilCamemBERT affiné pour la tâche d’inférence du langage naturel (NLI) pour la langue française ;
+
+Modèle n°2 : Le modèle multilingue mDeBERTa qui peut effectuer une inférence de langage naturel (NLI) sur 100 langues et est donc également adapté à la classification multilingue Zero-Shot ;
+
+Modèle n°3 : Le modèle basé sur bart-large entrainé sur le jeu de données MultiNLI (MNLI).
+
+Nous avons mis en œuvre les trois modèles ci-dessus afin de classifier automatiquement les six thèmes définis : économie, immigration, laïcité, environnement, sécurité et santé. Pour ce faire nous avons effectué un réglage (Fine Tuning) sur les trois modèles en s’appuyant sur des données personnalisées, cependant, nous avons obtenu des performances non satisfaisantes.
+
+Figure 1 : Performances des modèles DistilCamemBERT, mDeBERTa et bart-large.
+
+Le tableau ci-dessus présente les résultats obtenus pour les trois modèles mis en œuvre en termes d'exactitude (accuracy) et de score F1. Ces métriques sont utilisées pour évaluer les performances des modèles dans la classification des thèmes définis.
+
+Le modèle DistilCamemBERT affiche une exactitude de 61 % et un score F1 de 60 %. Ces résultats montrent que ce modèle a des performances non satisfaisantes dans la classification des textes. L'exactitude indique qu'environ 61 % des prédictions du modèle sont correctes, tandis que le score F1, légèrement inférieur, indique un équilibre entre la précision (proportion de vraies prédictions parmi les prédictions positives) et le rappel (proportion de vraies prédictions positives parmi les cas positifs réels), ce qui signifie que le modèle a une performance équilibrée mais pas optimale.
+```
+
+### CHUNK_ID: projet_10__chunk_000078_sub00
+```
+[SECTION : Première itération : évaluation des modèles de traitement de langage existants]
+Dans cette première partie de nos travaux, nous avons évalué les performances des modèles Transformers déjà existants en vue de résoudre notre problématique. Pour cela, nous avons décidé d’entrainer les trois modèles suivants :
+
+Modèle n°1 : Le modèle DistilCamemBERT affiné pour la tâche d’inférence du langage naturel (NLI) pour la langue française ;
+
+Modèle n°2 : Le modèle multilingue mDeBERTa qui peut effectuer une inférence de langage naturel (NLI) sur 100 langues et est donc également adapté à la classification multilingue Zero-Shot ;
+
+Modèle n°3 : Le modèle basé sur bart-large entrainé sur le jeu de données MultiNLI (MNLI).
+
+Nous avons mis en œuvre ces trois modèles afin de classifier automatiquement les six thèmes définis : économie, immigration, laïcité, environnement, sécurité et santé. Pour ce faire nous avons effectué un réglage (Fine Tuning) sur les trois modèles en s’appuyant sur des données personnalisées. Cependant, nous avons obtenu des performances non satisfaisantes.
+
+Figure 1 : Performances des modèles DistilCamemBERT, mDeBERTa et bart-large pour la tâche de classification automatique.
+
+Le tableau ci-dessus présente les résultats obtenus pour les trois modèles mis en œuvre en termes d'exactitude (accuracy) et de score F1. Ces métriques sont employées pour évaluer les performances des modèles dans la classification des thèmes définis.
+
+Le modèle DistilCamemBERT affiche une exactitude de 61 % et un score F1 de 60 %. Ces résultats montrent que ce modèle a des performances non satisfaisantes dans la classification des textes. L'exactitude indique qu'environ 61 % des prédictions du modèle sont correctes, tandis que le score F1, légèrement inférieur, indique un équilibre entre la précision (proportion de vraies prédictions parmi les prédictions positives) et le rappel (proportion de vraies prédictions positives parmi les cas positifs réels), ce qui signifie que le modèle a une performance équilibrée mais pas optimale.
+```
+
+### CHUNK_ID: projet_10__chunk_000036_sub00
+```
+[SECTION : Phase exploratoire : Evaluation des modèles de traitement de langage existants]
+Dans cette partie de nos travaux, nous avons mené une phase exploratoire des modèles Transformers déjà existants en vue de résoudre notre problématique. Pour cela, nous avons décidé de s’appuyer sur les trois modèles suivants :
+
+Modèle n°1 : Le modèle DistilCamemBERT affiné pour la tâche d’inférence du langage naturel (NLI) pour la langue française ;
+
+Modèle n°2 : Le modèle multilingue mDeBERTa qui peut effectuer une inférence de langage naturel (NLI) sur 100 langues et est donc également adapté à la classification multilingue Zero-Shot ;
+
+Modèle n°3 : Le modèle basé sur bart-large entrainé sur le jeu de données MultiNLI (MNLI).
+
+Nous avons mis en œuvre les trois modèles ci-dessus afin de classifier automatiquement les thèmes six thèmes définis : économie, immigration, laïcité, environnement, sécurité et santé. Pour ce faire nous avons effectué un réglage (Fine Tuning) sur les trois modèles en s’appuyant sur des données personnalisées, cependant, nous avons obtenu des performances non satisfaisantes.
+
+Figure 1 : Performances des modèles DistilCamemBERT, mDeBERTa et bart-large.
+
+Le tableau ci-dessus présente les résultats obtenus pour les trois modèles mis en œuvre en termes d'exactitude (accuracy) et de score F1. Ces métriques sont utilisées pour évaluer les performances des modèles dans la classification des thèmes définis.
+
+Le modèle DistilCamemBERT affiche une exactitude de 61 % et un score F1 de 60 %. Ces résultats montrent que ce modèle a des performances non satisfaisantes dans la classification des textes. L'exactitude indique qu'environ 61 % des prédictions du modèle sont correctes, tandis que le score F1, légèrement inférieur, indique un équilibre entre la précision (proportion de vraies prédictions parmi les prédictions positives) et le rappel (proportion de vraies prédictions positives parmi les cas positifs réels), ce qui signifie que le modèle a une performance équilibrée mais pas optimale.
+```
+
+### CHUNK_ID: projet_10__chunk_000106
+```
+[PAGE 1]
+
+Nouveau Modèle NLP
+Objectif et besoin fonctionnel
+La plateforme, après avoir collecter beaucoup de texte depuis le Web notamment les réseaux
+sociaux, doit être capable de classifier ces textes en six thématiques différentes demandés par le
+client : économie, immigration, laïcité, environnement, sécurité, santé.
+Dans un premier temps nous avons essayé les modèles existants pour résoudre cette problématique.
+Ces modèles s’avèrent non satisfaisantes. Nous avons alors grâce à nos travaux R&D,
+appliqué un nouveau modèle.
+Etat de l’art
+Actuellement il existe essentiellement trois modèles qui peuvent être utilisé pour résoudre notre
+problématique :
+— Modèle n°1 : C’est un modèle DistilCamemBERT affiné pour la tâche d’inférence du
+langage naturel
+(NLI) pour la langue française.
+— Modèle n°2 : C’est un modèle multilingue mDeBERTa qui peut effectuer une
+inférence de langage
+naturel (NLI) sur 100 langues et est donc également adapté à la classification multilingue Zero-Shot.
+— Modèle n°3 : C’est un modèle basé sur bart-large entrainé sur le jeu de données MultiNLI
+(MNLI). Ces modèles donnent des résultats insatisfaisants pour la classification des thèmes.
+Nous avons essayé de réaliser un réglage fin (Fine Tuning) sur les modèles par des données
+personnalisées mais la performance reste insatisfaisante. Voici les résultats obtenus :
+Exactitude f1 score
+modèle n°1 0.61 0.6
+modèle n°2 0.71 0.71
+modèle n°3 0.7066 0.6981
+```
+
+### CHUNK_ID: projet_10__chunk_000109
+```
+[PAGE 4]
+
+— GridSearchCV : est une technique permettant de rechercher les meilleures valeurs de paramètre à
+partir de l’ensemble donné de la grille de paramètres. Il s’agit essentiellement d’une
+méthode de validation croisée. le modèle et les paramètres doivent être introduits. Les meilleures
+valeurs de paramètres sont extraites, puis les prédictions sont faites.[8]
+Ces deux techniques donnent des valeurs différentes d’hyperparamètres mais ces
+valeurs fournissent pratiquement les mêmes mesures de performance. La seule différence est au
+niveau du temps d’exécution. Optuna est plus rapide que GridSearchCV.
+Le deuxième test effectué est concernant la méthode utilisée pour la transformation des données.
+Nous avons essayé TF-IDF, Tokenizer de Keras et Tokenizer pré-entraîné basé sur CamemBERT. TF-IDF
+donne le meilleur résultat. En second lieu arrive le tokenizer de Keras et enfin le tokenizer
+préentraîné.
+Le dernier test effectué est concernant la longueur maximale des données à l’entrée.
+Nous avons testé le modèle sur les valeurs 10, 15 et 20. La longueur 15 est la meilleure.
+Le résultat final était comme suit :
+Exactitude f1 score
+NB 0.71 0.70
+Puisque le résultat des tests précédents ne satisfait pas notre besoin. Nous avons créé et appliqué un
+nouveau modèle spécifique que nous avons nommé ABiThemeModel. Ce nouveau modèle est
+basée sur la combinaison de deux modèles linguistiques pré-entraîné :
+— CamemBERT : est un modèle linguistique de pointe pour le français basé sur l’architecture
+RoBERTa pré-entraîné sur le sous-corpus français du nouveau corpus multilingue OSCAR.
+— LaBSE(language-agnostic BERT sentence embedding) : est une version plus petite du BERT
+multilingue compris 109 langues.
+Le tableau ci-dessous représente le résultat final de notre nouveau modèle ABiThemeModel :
+Exactitude f1 score
+ABiThemeModel 0.91 0.92
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 42,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

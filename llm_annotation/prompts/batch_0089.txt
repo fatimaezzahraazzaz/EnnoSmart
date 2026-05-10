@@ -1,0 +1,320 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 89/135, 8 chunks)
+
+### CHUNK_ID: projet_20__chunk_000005_sub00
+```
+[SECTION : Analyse de l’état de l’art]
+Nous présentons dans ce chapitre un résumé de notre analyse de l’état de l’art détaillée en annexe 1-1.8.1.1. Etat de l’art.
+
+Le secteur du bâtiment est responsable d'environ 40 % de la consommation énergétique mondiale. Les émissions de carbone de ce secteur se déclinent en deux formes principales : le carbone opérationnel, lié à l'usage du bâtiment, et le carbone incorporé, correspondant aux émissions générées lors de la fabrication, du transport, de la mise en œuvre et de la fin de vie des matériaux, qui peut représenter jusqu'à 80 % des émissions totales sur le cycle de vie. Dans ce contexte, les matériaux de construction biosourcés, faisant l’objet de cette opération de R&D, sont définis comme des matériaux issus totalement ou partiellement de la biomasse végétale ou animale, intégrés dans des applications du bâtiment. Ces matériaux, issus notamment du bois, du chanvre, de la paille, des granulats végétaux ou d’agro-ressources, sont particulièrement intéressants dans le contexte de la Réglementation Environnementale 2020, notamment en raison de leur capacité de stockage temporaire du carbone, de leurs bonnes performances thermiques, de leur déphasage thermique et de leur aptitude à la régulation hygrométrique, ainsi que de leur faible émission de composés organiques volatils.
+
+Les recherches académiques menées ces dernières années ont permis de caractériser les propriétés intrinsèques de ces matériaux lorsqu'ils sont incorporés dans des matrices minérales conventionnelles. La thèse de Mouatassim a démontré que l'incorporation d'agro-agrégats végétaux dans des matrices de plâtre, d'argile et de ciment permet de réduire significativement la conductivité thermique tout en maintenant des propriétés mécaniques acceptables. Le projet BTONLIN mené par l'EISTC de Caen a pour sa part évalué l'incorporation de fibres de lin dans le béton, tandis que le projet CobBauge a caractérisé les propriétés mécaniques et thermiques de la bauge. La thèse de Gourovitch a proposé quant à elle une analyse multiscalaire des matériaux biosourcés locaux dans le contexte de la réhabilitation résiliente des logements, examinant les enjeux de filière et d'approvisionnement local.
+```
+
+### CHUNK_ID: projet_20__chunk_000031
+```
+[SECTION : Projet PIRMIL ILOT A1 - Développement et validation d’une technique d’isolation par paille hachée insufflée en façade]
+Ce projet pilote avait pour objectif de développer et expérimenter des solutions constructives bas carbone reposant sur l’intégration massive de matériaux biosourcés et de matériaux issus du réemploi. La conception initiale prévoyait des façades à ossature bois préfabriquées (FOB 200 mm) intégrant une isolation en chènevotte insufflée au sein de la structure, complétée par un mélange terre-chènevotte côté intérieur jouant un rôle d’inertie thermique et d’absorption hygrométrique. Cette composition de paroi visait à améliorer le cycle de vie du bâtiment avec des matériaux pouvant retourner au sol ou être compostés en fin de vie. La structure porteuse combinait poteaux bois, planchers mixtes bois-béton à faible épaisseur de béton (environ 12 cm), et noyaux béton limités aux zones nécessaires à la stabilité, cette mixité étant présentée comme un moyen de réduire les quantités de béton et l’empreinte carbone globale. Le projet intégrait également des solutions de réemploi identifiées pour le plancher technique, la moquette de sol et le bardage métallique, ces éléments étant considérés comme neutres en carbone.
+
+Nous avons réalisé une étude expérimentale de ces solutions pour valider la faisabilité technique de ces solutions et optimiser leurs performances, comme décrit dans les paragraphes ci-après.
+```
+
+### CHUNK_ID: projet_20__chunk_000034_sub00
+```
+[SECTION : Mise en œuvre d’un parement intérieur terre-chanvre haute inertie]
+Nous avons développé un parement intérieur en terre-chanvre préfabriqué visant à augmenter l’inertie thermique d’absorption des façades ossature bois. Nous avons réalisé trois campagnes d’essais en partenariat avec la CAVAC dans les locaux de l’IUT de Rennes. Nous avons cherché à atteindre un mélange terre-chanvre sans chaux, avec un état de surface stabilisé non friable prêt à enduire, effusivité la plus haute possible (>400 J/(K.m².s^(1/2))), conductivité autour de 0,15 W/mK, masse volumique autour de 1000 kg/m³, et chaleur spécifique haute autour de 1200 J/kgK. La tenue structurelle devait permettre la préfabrication d’éléments pour faciliter la pose et limiter l’apport d’humidité dans les façades FOB.
+
+Les essais initiaux ont révélé des problématiques importantes : retrait important vis-à-vis des coffrages bois ou métal, développement de moisissures sur mélanges non ventilés ou partiellement ventilés, absence de consolidation par ajout de chaux, et non-conformité sur plusieurs critères (densité, cohésion, planéité face intérieure, retrait).
+
+Figure : Composants principaux
+
+Figure : Résultats des essais
+
+Ces résultats nous ont conduits à développer différentes solutions en parallèle :
+
+Solution 1 (solution retenue) : éléments monolithiques terre-liant-chanvre fournis par KelligEmren (Lorient). Utilisation de chenevotte, terre argileuse de Loire Atlantique, éléments manuportables avec tests grandes dimensions via ventouses. Caractéristiques mécaniques : conductivité ±0,4 W/mK, masse volumique ±1850 kg/m³, chaleur spécifique ±850 J/kgK. Un calepinage d’éléments préfabriqués a été défini en cohérence avec l’outil de production et les exigences architecturales.
+
+Solution 2 : éléments monolithiques terre crue extrudée avec intégration de chenevotte fine pour améliorer la tenue. Terre argileuse de Biganos, mise en œuvre via queue d’aronde face intérieure pour maintien sur façade FOB. Masse volumique ±1450 kg/m³, conductivité et chaleur spécifique à caractériser.
+
+Solution 3 : éléments monolithiques terre-chanvre ou terre-chaux-chanvre. Chenevotte, terre argileuse de Bretagne, éléments manuportables. Tests en cours pour améliorer densité, état de surface et stabilité en phase sèche. Objectif masse volumique 1000 kg/m³, autres caractéristiques à caractériser.
+```
+
+### CHUNK_ID: projet_20__chunk_000065_sub01
+```
+; verrous d’assemblage et de comportement global (diaphragme, sismique). Façades MOB : inertie thermique native faible ; nécessité de combiner diffusivité (déphasage) et effusivité (absorption) au sein d’un complexe perspirant.
+
+[TABLEAU]
+| ID Verrou | Description | Impact R&D |
+| --------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| V1 | Connectique bois/béton (goujons) : capacité et ductilité sous vent/séisme zone 3, rôle de diaphragme. | Dimensionnement Eurocodes sans ATEx ; sécurité structurale. |
+| V2 | Formulation terre/chanvre haute densité : retrait, cohésion, stabilité hygro-biologique, état de surface. | Faisabilité de préfabrication et durabilité du parement intérieur. |
+| V3 | Insufflation chènevotte en façade verticale : tassement post-manipulation/transport. | Pérennité de l’isolant ; choix de filière alternative (paille, panneaux). |
+| V4 | Justification réglementaire des FOB perspirantes R+6 (AEV/hygro/feu). | Cadre assurantiel : ATEx cas B (CSTB/SOCOTEC). |
+
+4. Méthodologie R&D
+
+4.1 Modélisation numérique et calculs de référence
+
+• Référentiels : Eurocodes 2 (béton), 5 (bois) ; charges : vent zone 3 (Qp≈93 daN/m²), séisme zone 3, catégorie III, sol D (à confirmer), DCM, q=2.
+• Modèle éléments finis (Robot) : bâtiment global, extraction des efforts dans les planchers préfa ; vérification que les efforts sur goujons < capacité calculée (Prd).
+• Plancher : prise en compte des chargements permanents/exploitation (cat. B 250 daN/m² + charges cloisons), comportement diaphragme avec poutres métalliques en membrures et dalles béton comme diagonales de poutre au vent.
+
+4.2 Thermique et inertie (NF EN ISO 13786 / Règles Th-Bat)
+
+• Grandeurs : diffusivité (déphasage), effusivité (absorption), capacité thermique surfacique C_m_surf ;
+• Méthodes : forfaitaire / simplifiée / détaillée ; optimisation d’épaisseur de terre/chanvre (~8 cm) ; comparaisons matériaux ;
+• STD (RE2020) : quantification des DH et influence de l’épaisseur de terre/chanvre à l’échelle d’un plateau.
+
+4.3 Essais expérimentaux et validation
+```
+
+### CHUNK_ID: projet_20__chunk_000000_sub01
+```
+| | V4 | Justification FOB perspirantes R+6 (AEV/hygro/feu) et parcours ATEx Cas B. | Cadre assurantiel ; exigences d’essais et modélisations WUFI. | 4. Méthodologie R&D (numérique et expérimentale)
+
+4.1 Modélisation EF (Robot) – modèle global, extraction des efforts de diaphragme ; vérification efforts connecteurs < capacités ; charges vent zone 3 (~95 daN/m²) ; sismique zone 3 (DCM).
+
+4.2 Thermique – NF EN ISO 13786 / Règles Th-Bat : calculs de capacité thermique surfacique (terre/chanvre), diffusivité/effusivité ; STD RE2020 : effet DH et ventilation nocturne.
+
+4.3 Expérimental – campagnes 2024 : insufflation chènevotte (tassement non conforme) ; mise au point terre/chanvre (retrait/moisissures sans ventilation) ; orientation paille IELO ; programme d’essais de connexions jusqu’à ruine.
+
+5. Travaux réalisés et résultats intermédiaires
+
+Plancher préfa : validations numériques (statique/dynamique) ; confort vibratoire niveau V ; REI 60 ; essai de ruine planifié. Façades : optimum terre/chanvre 7–8 cm ; réduction DH ~5% vs doublage standard ; choix paille IELO / panneaux ; partenaire industriel pour préfabrication terre/chanvre.
+
+✅ 1. Campagne insufflation chènevotte (sept.–oct. 2024)
+
+Compatibilité machine confirmée pour l’insufflation.
+
+Problème majeur : tassement important après mise en vertical et vibrations → non-conformité pour usage en façade.
+
+Décision : abandon de la chènevotte insufflée au profit d’alternatives :
+
+Paille insufflée (procédé IELO),
+
+Panneaux BioFib,
+
+Laine de bois.
+[Programme_...nD_IlotA1_ | Word]
+
+✅ 2. Campagnes terre/chanvre (juin–sept. 2024)
+
+Formulation sans chaux testée.
+
+Problèmes observés :
+
+Retrait dimensionnel significatif,
+
+Moisissures sur éprouvettes non ventilées.
+
+Conséquence : nécessité d’un partenaire industriel pour mise au point et préfabrication (KelligEmren).
+[Programme_...nD_IlotA1_ | Word]
+
+✅ 3. Plancher hybride bois/béton
+
+Programme d’essais prévu : connexions (goujons / remontées de tranchant) jusqu’à la ruine pour corréler calculs EF et comportement réel.
+
+À date (20/01/2025) :
+
+Validations numériques statique/dynamique favorables,
+
+Efforts connecteurs < capacités calculées,
+
+Confort vibratoire niveau V,
+
+Tenue au feu REI 60 confirmée par conception,
+
+Essais physiques planifiés pour fiabilisation.
+[Programme_...nD_IlotA1_ | Word]
+
+✅ 4. Performances thermiques et confort d’été
+
+Épaisseur optimale terre/chanvre : 7–8 cm (stabilisation de la capacité thermique surfacique).
+```
+
+### CHUNK_ID: projet_20__chunk_000003_sub00
+```
+[SECTION : Contexte de l’opération de R&D]
+Le secteur de la construction est aujourd’hui confronté à un enjeu majeur de réduction des émissions de gaz à effet de serre, dans un contexte où le bâtiment représente une part significative des impacts environnementaux, tant en phase de construction que sur l’ensemble du cycle de vie des ouvrages. En France, cet enjeu s’est traduit par une évolution progressive du cadre réglementaire, culminant avec l’entrée en vigueur de la réglementation environnementale RE2020, qui introduit des exigences renforcées en matière de performance énergétique, de confort d’été et, surtout, de réduction de l’empreinte carbone des bâtiments neufs.
+
+Dans ce contexte, la substitution partielle des matériaux conventionnels à forte intensité carbone, tels que le béton ou l’acier, par des matériaux biosourcés, comme le bois, le chanvre ou le lin, apparaît comme un levier prioritaire pour réduire l’impact carbone des opérations de construction, notamment grâce au stockage de carbone biogénique et à la substitution partielle des matériaux conventionnels à forte intensité carbone.
+
+Cette orientation est soutenue par les politiques publiques, en particulier à travers le label Bâtiment Biosourcé, récemment révisé, qui vise à encourager l’usage de ces matériaux dans les projets de construction. En parallèle, de nombreux travaux de recherche ont permis de caractériser les propriétés intrinsèques des matériaux biosourcés et de démontrer leur intérêt potentiel. Toutefois, ces travaux restent majoritairement centrés sur une approche matériau ou sur des configurations constructives limitées, ce qui restreint leur transposabilité à des projets architecturaux réels soumis à des contraintes réglementaires, fonctionnelles et d’usage élevées.
+
+En pratique, la généralisation des matériaux biosourcés demeure freinée par plusieurs incertitudes techniques et scientifiques, notamment concernant leur comportement hygrothermique et biologique à long terme, leur intégration dans des systèmes constructifs variés, la maîtrise du confort d’été dans des structures à faible inertie, ainsi que la justification de leurs performances au feu et de leur durabilité. Ces limites constituent des verrous importants pour des projets visant simultanément un haut niveau de performance environnementale et le respect des exigences carbone de la RE2020.
+```
+
+### CHUNK_ID: projet_20__chunk_000009_sub01
+```
+leur développement sur le marché de la construction. Cette analyse institutionnelle confirme que les obstacles au déploiement des matériaux biosourcés ne sont pas uniquement techniques mais également réglementaires et politiques.
+
+En complément de la littérature scientifique, des guides techniques récents soulignent que le déploiement des matériaux biosourcés dans le bâtiment reste conditionné par la maîtrise de plusieurs verrous techniques. Le guide technique des matériaux biosourcés & géosourcés, EnviroBOITE-BDM & APAVE, version 2022  souligne que, malgré leurs avantages environnementaux et fonctionnels, les matériaux biosourcés nécessitent une maîtrise renforcée des risques par rapport aux matériaux conventionnels. Les principaux défis identifiés concernent leur sensibilité à l’eau (pluie, remontées capillaires, vapeur d’eau, eau de gâchage), leur comportement au feu (réaction et résistance au feu, transmission par les façades), ainsi que le manque de référentiels techniques reconnus pour certaines filières, ce qui complique leur assurabilité et leur mise en œuvre. Le document insiste sur le fait que ces contraintes imposent une conception spécifique, intégrée très en amont du projet, avec des justifications techniques adaptées (règles professionnelles, ATEx, essais, appréciations de laboratoire) afin de sécuriser les ouvrages et les acteurs de la construction.
+
+De plus, la Fédération Française du Bâtiment (FFB) a publié un article où elle souligne que les isolants biosourcés représentent seulement 5% du marché de l’isolation, vue la méconnaissance de leurs caractéristiques physiques spécifiques. Les principaux risques identifiés sont :
+
+La putrescibilité et propagation rapide des moisissures ;
+
+Le stockage et transport délicats (protection contre intempéries impérative)
+
+Le tassement des isolants en vrac (ouate de cellulose)
+
+Le comportement au feu (stockage de chaleur retardant la combustion).
+```
+
+### CHUNK_ID: projet_20__chunk_000018_sub00
+```
+[SECTION : Réemploi et économie circulaire]
+Le projet intègre une démarche de réemploi des matériaux issus de la démolition et de la réhabilitation.
+
+Nous avons développé une méthodologie structurée de diagnostic ressources avant démolition. Cette démarche a consisté à identifier systématiquement les gisements de matériaux présentant un potentiel de réemploi in situ ou ex situ, dans le but de satisfaire les ambitions du projet en termes d’économie circulaire et de réduction des déchets de chantier.
+
+Pour chaque gisement identifié, nous avons établi un protocole d’évaluation comprenant : la localisation précise, la quantification (surface, volume, poids), l’état d’usage, la faisabilité de démontage, les risques sanitaires, et le potentiel de réemploi. Cette reconnaissance in situ a permis de caractériser chaque matériau selon des critères techniques (performances résiduelles, dimensions, nature) et opérationnels (temps et coût de dépose, mode de stockage, surface de stockage nécessaire).
+
+Nous avons classifié les gisements selon leur destination : réemploi sur site avec le même usage, réemploi sur site avec un usage différent, réemploi hors site, ou recyclage. Cette hiérarchisation suit la réglementation européenne (directive 2008/98/CE) et française (ordonnance n°2010-1579) qui privilégie la prévention des déchets et le réemploi avant le recyclage.
+
+Figure  : Exemple de l’étude réalisée pour le recyclage des tuiles mécaniques à emboitement
+
+Par ailleurs, les murs porteurs du bâtiment historique ont été conservés et réhabilités, la charpente existante a été maintenue et les tuiles de couverture ont été conservées.
+
+Nous avons en outre réemployé les tuiles démontées lors des interventions sur le bâti directement sur site, pour constituer un marquage au sol au niveau du parvis. Ce dispositif, composé de tuiles anciennes réutilisées, crée une continuité historique tout en évitant la mise en décharge de matériaux patrimoniaux.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 89,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

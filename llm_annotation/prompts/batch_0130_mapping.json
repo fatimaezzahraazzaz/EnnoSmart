@@ -1,0 +1,92 @@
+{
+  "batch_id": 130,
+  "chunks": [
+    {
+      "chunk_id": "projet_30__chunk_000031_sub01",
+      "project_id": "projet_30_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_30_\\cir_final\\CIR2025_GLRT_AIDGE_VF.docx",
+      "file_name": "CIR2025_GLRT_AIDGE_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "Mise en œuvre de chaînes d’exécution optimisées et robustes pour environnements contraints ; Contribution à un écosystème open-source structuré et interopérable ; Premières explorations en apprentissage distribué sur systèmes embarqués.\n\nAinsi, la solution s’inscrit dans une démarche de recherche et développement expérimental, à l’interface entre intelligence artificielle et systèmes embarqués, visant à proposer un cadre unifié pour la conception, l’optimisation et le déploiement de modèles dans des environnements fortement contraints.",
+      "_parent_chunk_id": "projet_30__chunk_000031",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_31__chunk_000002_sub00",
+      "project_id": "projet_31_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_31_\\cir_final\\CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_name": "CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Contexte du projet]\nLes systèmes mécaniques de grande dimension, tels que les grues de levage à longue portée, sont soumis à des phénomènes oscillatoires complexes liés à la flexibilité de leur structure. En effet, la flèche de ces systèmes, pouvant atteindre plusieurs dizaines de mètres, se comporte comme un système dynamique distribué dans lequel l’énergie est alternativement stockée (énergie potentielle élastique) et dissipée (mécanismes d’amortissement). Ce comportement engendre des oscillations de la charge, particulièrement marquées lors des phases transitoires (démarrage, freinage, variation de consigne), et amplifiées par des perturbations externes telles que le vent ou les variations de charge.’\n\nLa maîtrise de ces oscillations constitue un enjeu central pour garantir à la fois la sécurité des opérations de levage et la précision du positionnement. Cette problématique repose notamment sur la capacité à modéliser le comportement dynamique du système afin d’en anticiper les réponses en régime transitoire. Toutefois, la modélisation de tels systèmes oscillants flexibles demeure complexe en raison de leur nature distribuée, de la présence de non-linéarités et de la variabilité des conditions d’exploitation, rendant difficile la prédiction précise de leur comportement dynamique. Dans les architectures de commande électromécaniques, cette problématique est traitée à travers des systèmes d’entraînement électrique pilotés par des variateurs de vitesse, permettant d’agir indirectement sur la dynamique globale du système, notamment en contribuant à l’atténuation des phénomènes oscillatoires.\n\nToutefois, les stratégies de commande classiquement employées présentent des compromis. D’une part, les approches basées sur le contrôle en vitesse, notamment intégrant des mécanismes de type Time Delay Control (TDC), permettent de limiter l’excitation des modes propres du système en adaptant les consignes, mais peuvent présenter des limitations en termes de réactivité lors des phases transitoires. D’autre part, les approches en contrôle de couple offrent une réponse dynamique plus rapide, mais au détriment de la maîtrise directe de la vitesse et du comportement oscillatoire.",
+      "_parent_chunk_id": "projet_31__chunk_000002",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_31__chunk_000002_sub01",
+      "project_id": "projet_31_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_31_\\cir_final\\CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_name": "CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "phases transitoires. D’autre part, les approches en contrôle de couple offrent une réponse dynamique plus rapide, mais au détriment de la maîtrise directe de la vitesse et du comportement oscillatoire.\n\nPar ailleurs, le cadre applicatif dans lequel s’inscrit ce projet impose des contraintes fortes. Les systèmes mécatroniques étudiés évoluent dans des environnements variables, souvent caractérisés par une information partielle sur l’état du système, ce qui limite l’accès à des mesures directes telles que la position ou la vitesse de la flèche. De plus, la variabilité des configurations mécaniques et des conditions d’exploitation introduit des incertitudes supplémentaires sur les paramètres du système, complexifiant la conception de stratégies de commande robustes et généralisables.\n\nDans ce cadre, le besoin scientifique identifié consiste à développer une approche de commande capable d’assurer simultanément :\n\nUne forte réactivité lors des phases de mise en mouvement ;\n\nUne stabilité dynamique garantissant l’absence d’oscillations résiduelles ;\n\nEt un fonctionnement robuste indépendamment des caractéristiques précises du système.\n\nC’est dans ce contexte que s’inscrit notre projet, dont l’objectif est de développer une approche de commande novatrice pour systèmes oscillants, reposant sur une stratégie hybride combinant contrôle en couple et contrôle en vitesse, et intégrant des mécanismes avancés de gestion des transitions afin d’optimiser les performances dynamiques tout en garantissant la stabilité du système.",
+      "_parent_chunk_id": "projet_31__chunk_000002",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_31__chunk_000003",
+      "project_id": "projet_31_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_31_\\cir_final\\CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_name": "CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Objectifs visés et performances à atteindre]\nNotre objectif principal consiste à développer une approche novatrice capable de maîtriser le comportement dynamique de systèmes mécaniques flexibles soumis à des phénomènes oscillatoires, tout en s’affranchissant des limitations des approches classiques.\n\nIl s’agit notamment de développer une loi de commande hybride permettant de concilier des exigences a priori antagonistes : assurer une forte réactivité lors des phases transitoires, tout en garantissant une atténuation efficace des oscillations et une stabilité globale du système.\n\nL’approche visée doit également être robuste face aux incertitudes liées aux paramètres mécaniques (variation de charge, conditions environnementales) et aux contraintes d’observabilité partielle du système (absence de mesures directes de certaines variables critiques).\n\nAinsi, les performances attendues concernent la réduction significative des oscillations résiduelles, l’optimisation du temps de stabilisation après transitoire, la limitation des dépassements dynamiques, ainsi que la capacité à maintenir un comportement stable et maîtrisé en présence de perturbations externes, notamment de type vent.\n\nEnfin, un objectif clé réside dans la continuité de la commande lors des transitions entre différents modes de fonctionnement (contrôle en couple et contrôle en vitesse), afin d’éviter toute excitation supplémentaire des modes oscillatoires.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_31_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_31__chunk_000004_sub00",
+      "project_id": "projet_31_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_31_\\cir_final\\CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_name": "CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Analyse de l’état de l’art]\nLa classe de systèmes dynamiques sous-actionnés se caractérisent par des comportements oscillatoires complexes, résultant de la flexibilité des structures, ainsi que des couplages dynamiques entre variables commandées et non commandées. La modélisation et le contrôle de ces systèmes ont fait l’objet de nombreux travaux visant à garantir à la fois la précision du positionnement et la réduction des oscillations de la charge. À cet égard, nous avons entrepris une analyse des connaissances afin d’identifier les avancées et les contributions scientifiques dans ce domaine. Notre recherche a notamment identifié l’étude de Mojallizadeh et al. qui propose une revue approfondie des stratégies de commande des grues oscillantes. Ces travaux mettent en évidence que les approches de modélisation existantes reposent principalement sur deux grandes classes : des modèles simplifiés de type pendulaire, permettant de capturer certaines non-linéarités globales, et des modèles distribués plus complexes, capables de représenter les phénomènes vibratoires fins des câbles. Par ailleurs, différentes stratégies de commande sont étudiées, incluant des approches en boucle ouverte telles que l’input shaping, ainsi que des méthodes en boucle fermée basées sur des techniques non linéaires.\n\nCependant, ces travaux soulignent également plusieurs limitations majeures. D’une part, les modèles simplifiés ne permettent pas de représenter fidèlement la dynamique réelle du système, notamment les effets liés à la flexibilité des câbles, aux mouvements tridimensionnels de la charge ou aux perturbations externes. D’autre part, les stratégies de commande existantes reposent généralement sur une connaissance partielle du système ou sur des mesures difficilement accessibles en pratique, ce qui limite leur applicabilité dans des contextes réels et contraints. Enfin, la nature sous-actionnée de ces systèmes, associée à des phénomènes de non-collocation et de couplages dynamiques forts, rend particulièrement délicate la maîtrise simultanée de la dynamique rapide et de la stabilité oscillatoire.",
+      "_parent_chunk_id": "projet_31__chunk_000004",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_31__chunk_000004_sub01",
+      "project_id": "projet_31_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_31_\\cir_final\\CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_name": "CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "sous-actionnée de ces systèmes, associée à des phénomènes de non-collocation et de couplages dynamiques forts, rend particulièrement délicate la maîtrise simultanée de la dynamique rapide et de la stabilité oscillatoire.\n\nEn outre, Ramli et al. proposent une revue exhaustive des stratégies de contrôle appliquées aux systèmes de grues, mettant en évidence les principaux défis liés à la stabilisation des charges suspendues, notamment la réduction des oscillations (anti-sway) et l’optimisation du positionnement du chariot. Les travaux analysés couvrent un large spectre d’approches, incluant les commandes en boucle ouverte, les contrôleurs en boucle fermée (PID, LQR), ainsi que des méthodes avancées telles que le contrôle adaptatif, robuste ou flou. Une attention particulière est portée à la modélisation des systèmes oscillants de type pendulaire (simple et double), qui constituent une source majeure de complexité dynamique. Toutefois, bien que ces approches permettent de limiter les oscillations en régime établi ou lors de trajectoires planifiées, elles reposent majoritairement sur des stratégies de contrôle unifiées ou sur des lois de commande spécifiques à un mode donné. Elles ne traitent pas explicitement la problématique de transition dynamique entre différents modes de commande (par exemple couple/vitesse), ni l’intégration de mécanismes de compensation en temps réel tels que le Time Delay Control pour gérer les phases transitoires. Par conséquent, ces travaux, bien que pertinents pour la stabilisation des systèmes oscillants, ne répondent pas directement aux enjeux de continuité de commande et de robustesse lors de changements de régime, qui constituent le cœur de notre approche.",
+      "_parent_chunk_id": "projet_31__chunk_000004",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_31__chunk_000004_sub02",
+      "project_id": "projet_31_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_31_\\cir_final\\CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_name": "CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "la stabilisation des systèmes oscillants, ne répondent pas directement aux enjeux de continuité de commande et de robustesse lors de changements de régime, qui constituent le cœur de notre approche.\n\nNous avons analysé également une thèse portant sur la commande robuste des systèmes non linéaires, qui met en évidence les difficultés majeures liées à la modélisation, à la stabilité et à l’applicabilité réelle de ces systèmes complexes. Les travaux proposés s’articulent autour de deux approches principales : d’une part, la synthèse systématique de lois de commande pour une classe spécifique de systèmes non linéaires caractérisés par des couplages multiplicatifs, avec des garanties de stabilité démontrées via des fonctions de Lyapunov, d’autre part, une approche basée sur la représentation des systèmes non linéaires par des modèles linéaires par morceaux, permettant de concevoir des régulateurs robustes tout en réduisant le conservatisme des méthodes classiques. Toutefois, bien que ces contributions apportent des avancées significatives en termes de robustesse et de formalisation théorique, elles reposent sur des cadres de modélisation relativement structurés et sur des stratégies de commande globales ou multi-modèles. Elles ne traitent pas explicitement des problématiques de transition dynamique entre différents modes de commande ni de la gestion en temps réel des phases transitoires dans des systèmes oscillants.",
+      "_parent_chunk_id": "projet_31__chunk_000004",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_31__chunk_000004_sub03",
+      "project_id": "projet_31_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_31_\\cir_final\\CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_name": "CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "multi-modèles. Elles ne traitent pas explicitement des problématiques de transition dynamique entre différents modes de commande ni de la gestion en temps réel des phases transitoires dans des systèmes oscillants.\n\nPar ailleurs, Wen et al. traitent la problématique du contrôle des oscillations dans les systèmes de grue portique équipés de câbles flexibles, dont la dynamique est particulièrement complexe en raison du couplage entre le mouvement du chariot (modélisé par des équations différentielles ordinaires) et les vibrations du câble (décrites par des équations aux dérivées partielles). Pour répondre à ce défi, les auteurs proposent deux stratégies de commande basées sur l’approche de backstepping : un contrôleur à retour d’état en frontière, puis un contrôleur à retour de sortie intégrant un observateur afin d’estimer les états non mesurables. Les travaux reposent sur une transformation du système hybride ODE-PDE en un système cible plus simple, permettant de démontrer rigoureusement sa stabilité exponentielle via des outils mathématiques avancés (théorie des semi-groupes et fonctions de Lyapunov). Les résultats, validés par des simulations numériques, montrent une réduction significative des oscillations, avec de meilleures performances que des approches classiques telles que le contrôle PD. Toutefois, une limitation majeure de cette approche, au regard de notre travail, réside dans sa forte dépendance à une modélisation précise et à l’accès (ou estimation) de variables distribuées, ce qui complexifie son implémentation en temps réel. À l’inverse, notre approche basée sur le Time Delay Control et le contrôle en couple privilégie des variables globales plus facilement mesurables et offre une meilleure robustesse face aux incertitudes, tout en renforçant la réactivité dynamique du système.",
+      "_parent_chunk_id": "projet_31__chunk_000004",
+      "_is_subchunk": true
+    }
+  ]
+}

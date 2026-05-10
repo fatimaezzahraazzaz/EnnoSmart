@@ -1,0 +1,275 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 90/135, 8 chunks)
+
+### CHUNK_ID: projet_20__chunk_000020_sub00
+```
+[SECTION : Développement de bâtiments passifs intégrant massivement des matériaux biosourcés Lisière CARQUEFOU - Programme de 90 logements labélisés Passivhaus]
+Ce projet architectural porte sur le développement d’un quartier écologique où cohabitent :
+
+Des logements à haute qualité d’usage, pour une diversité d’habitats et d’habitants ;
+
+Des espaces d’échanges et de rencontres : liens et transversalités de parcours se connectent au réseau paysager existant ;
+
+Un paysage affirmé mettant en valeur les essences locales et développant une programmation mixte (zones fruitières, haies bocagères, …).
+
+Ces travaux s’inscrivent dans le cadre du développement du premier quartier labellisé PassivHaus en France, nécessitant d’adapter l’utilisation des matériaux biosourcés aux exigences thermiques du standard passif (performances d’enveloppe Uparoi ≤ 0,10-0,14 W/m².K). Le projet a atteint le label Biosourcé niveau 2 avec 76,5 kg/m² de surface de plancher en matière biosourcée.
+
+Dans le cadre ce projet, nos travaux ont porté sur la conception et la mise en œuvre de bâtiments intégrant des matériaux naturels, biosourcés et géo-sourcés.
+
+Cinq bâtiments, dits « plots », ont été réalisés selon des principes communs afin de constituer un ensemble cohérent. Les bâtiments présentent des morphologies de type longères, avec des toitures à pente et à faîtage. Les façades sont conçues pour offrir des ouvertures généreuses, notamment au sud et à l’ouest, et intègrent des loggias.
+
+Figure : Plan masse du projet Carquefou avec repérage des maisons individuelles étudiées (bandes F et H) et bâtiments collectifs
+
+Dans le cadre de ce projet, nos travaux ont porté sur la mise en œuvre de matériaux biosourcés, intégrés aux structures, aux façades, aux aménagements intérieurs et aux espaces extérieurs des bâtiments.
+
+Nous avons exploité majoritairement le bois, ainsi que des isolants à base de fibres végétales (fibre de bois, ouate de cellulose…).
+```
+
+### CHUNK_ID: projet_20__chunk_000065_sub00
+```
+Programme de R&D – Ilot A1 Pirmil-Les-Isles
+Reformulation à sémantique Recherche & Développement
+
+Ce document reformule, en langage et structuration R&D, les contenus issus EXCLUSIVEMENT des pièces suivantes : 
+• 01 – Notice architecturale, environnementale, technique et paysagère (15/03/2024)
+• 02 – Notice programmatique (15/03/2024)
+• 02 – BRIAND – Avancement Démarches Innovations (indices 22/11/2024 et 20/01/2025).
+
+1. Positionnement scientifique et industriel
+
+Problématique générale : développer des systèmes constructifs bas carbone et réversibles combinant préfabrication hors site et performances mécaniques et hygro-thermo-acoustiques élevées, en contexte tertiaire. Deux objets de recherche sont ciblés : (i) un plancher hybride bois/béton préfabriqué et (ii) une paroi légère à inertie améliorée associant matériaux biosourcés (chanvre/paille) et terre.
+
+2. Objectifs R&D et hypothèses testables
+
+OBJ1 – Plancher hybride préfabriqué : démontrer la capacité portante et le rôle diaphragme d’un plateau mince béton armé (≈10 cm) rigidifié par solives bois lamellé collé (GL24–GL28), assemblé par connecteurs bois/béton (goujons).
+
+Hypothèses associées : (H1) les efforts sur connecteurs sous vent/séisme zone 3 restent inférieurs à leur résistance de calcul ; (H2) la réponse vibratoire atteint un niveau de confort visé (niveau V) ; (H3) la tenue au feu est REI 60 avec les dispositions décrites.
+
+OBJ2 – Façade ossature bois (FOB) à inertie accrue : quantifier l’amélioration du confort d’été via (i) un isolant à fort déphasage et (ii) un parement intérieur à forte effusivité (terre/chanvre).
+
+Hypothèses associées : (H4) une épaisseur ≈ 8 cm de terre/chanvre maximise la capacité thermique surfacique (C_m_surf) selon NF EN ISO 13786/Règles Th-Bat ; (H5) les réductions de degrés-heures d’inconfort (DH) sont mesurables à l’échelle d’un plateau tertiaire ; (H6) les performances d’isolement et d’affaiblissement acoustiques visées sont atteignables.
+
+3. État de l’art synthétique et verrous scientifiques/techniques
+
+Planchers bois/béton : solutions connues mais peu industrialisées hors site ; verrous d’assemblage et de comportement global (diaphragme, sismique). Façades MOB : inertie thermique native faible ; nécessité de combiner diffusivité (déphasage) et effusivité (absorption) au sein d’un complexe perspirant.
+```
+
+### CHUNK_ID: projet_20__chunk_000065_sub02
+```
+de terre/chanvre (~8 cm) ; comparaisons matériaux ; • STD (RE2020) : quantification des DH et influence de l’épaisseur de terre/chanvre à l’échelle d’un plateau. 4.3 Essais expérimentaux et validation
+
+• Campagne insufflation chènevotte (sept.–oct. 2024) : compatibilité machine confirmée ; tassement important après mise en vertical et vibrations → non conformité en façade ; alternatives étudiées : paille insufflée (procédé IELO), laine de bois, panneaux BioFib.
+• Campagnes terre/chanvre (juin–sept. 2024) : mélanges sans chaux ; problèmes de retrait et moisissures sur éprouvettes non ventilées ; nécessité d’un partenaire industriel pour mise au point (KelligEmren).
+• Plancher : programme d’essais localisés de connexions (goujons / remontées de tranchant) jusqu’à la ruine pour fiabiliser les résultats calculatoires.
+
+5. Matériaux, paramètres et cibles fonctionnelles
+
+Plancher : dalle béton CEM IIIA (≈10 cm), solives bois LC GL24–GL28, acier S235–S355 ; performance feu visée REI 60 ; confort vibratoire niveau V. Façades : MOB 200 mm, isolant biosourcé (paille ou panneaux à base de chanvre) et parement intérieur terre/chanvre (~8 cm) pour accroître C_m_surf. Cibles acoustiques : DnTAtr ≈ 33 dB côté est ; parties opaques ≥ ~39 dB (Rw+Ctr) avec DV feuilleté acoustique.
+
+6. Résultats R&D intermédiaires (au 20/01/2025)
+
+• Plancher préfa : validations numériques statique/dynamique favorables ; efforts connecteurs < capacités ; trajectoire de justification dans le cadre Eurocodes (travail en cours avec SOCOTEC) ; essais de ruine planifiés.
+• Façades : optimum d’épaisseur terre/chanvre ≈ 7–8 cm (stabilisation C_m_surf) ; réduction d’environ 5% des heures d’inconfort >26°C sur un niveau type ; insufflation chènevotte non retenue → choix paille IELO ; partenaire KelligEmren sélectionné pour préfabrication d’éléments terre/chanvre.
+
+7. Plan d’expériences et validations complémentaires
+```
+
+### CHUNK_ID: projet_20__chunk_000011
+```
+[SECTION : Développement de solutions biosourcées à haute exigence acoustique et thermique pour un équipement d’enseignement artistique - Projet Senlis : Conservatoire de musique et de danse]
+Ce projet porte sur le développement d’un conservatoire de musique et de danse dans l’ancien mess des officiers du quartier Ordener-Senlis.
+
+Nous avons dans le cadre de ce projet développé et expérimenté un ensemble de solutions bas carbone, basées principalement sur la mise en œuvre et l’hybridation de matériaux biosourcés. Nous avons pour cela dû prendre en compte des contraintes spécifiques liées à la réhabilitation du patrimoine militaire XIXe siècle, aux exigences acoustiques très élevées (conservatoire) et à l’objectif zéro climatisation mécanique dans un climat tempéré (Oise) avec canicules croissantes. Ce dernier point a fait l’objet d’une étude présentée dans le dossier CIR intitulé « systèmes de régulation thermique passive ».
+
+Le projet consiste en une réhabilitation lourde de l’ancien mess de la caserne Ordener de Senlis. Le bâtiment existant possède une forme de U. Afin de limiter l’imperméabilisation du sol, nous avons prévu une extension et la réalisation d’un sous-sol dans le creux du U. Les deux ailes ont été réhabilitées sans modification structurelle. Au niveau des coursives existantes, deux façades sont prévues pour permettre la création d’une circulation périphérique protégée.
+
+Figure : Vue aérienne du projet
+
+Nous présentons ci-après les principales solutions que nous avons réalisées et étudiées dans le cadre de ce projet. Celles-ci portent principalement sur le développement d’une superstructure en bois et d’ouvrages maçonnés sur la zone d’extension, ainsi que la réalisation de façades en blocs de chanvre au niveau des circulations coursives.
+```
+
+### CHUNK_ID: projet_20__chunk_000021
+```
+[SECTION : Développement de façades préfabriquées à ossature bois intégrant des isolants biosourcés innovants pour des logements collectifs - Projet PRIMIL – Ilot B10]
+Ce projet a porté sur la construction d’un ensemble immobilier sur l’ilot B10 de la ZAC Pirmil les Isles, comprenant 89 logements. Il s’inscrit dans une démarche de développement et d’expérimentation de solutions constructives intégrant une part significative de matériaux biosourcés, avec un objectif explicite de réduction de l’impact carbone et d’atteinte des seuils réglementaires et volontaires (RE2020, label biosourcé, cadre France 2030). Les travaux menés portent sur la conception, le dimensionnement, la mise en œuvre et l’évaluation environnementale de ces solutions à l’échelle d’un îlot de logements collectifs.
+
+La figure suivante illustre l’axonométrie générale du projet et montre les différents matériaux définis.
+```
+
+### CHUNK_ID: projet_20__chunk_000003_sub01
+```
+et de leur durabilité. Ces limites constituent des verrous importants pour des projets visant simultanément un haut niveau de performance environnementale et le respect des exigences carbone de la RE2020.
+
+C’est dans ce contexte que Ylé Architectes a engagé en 2024 une opération de recherche et développement, visant à développer et expérimenter des systèmes constructifs intégrant une part élevée de matériaux biosourcés, tout en levant les verrous scientifiques et techniques associés à leur mise en œuvre dans des projets de construction réels.
+```
+
+### CHUNK_ID: projet_20__chunk_000029
+```
+[SECTION : Analyse de l’impact carbone des solutions biosourcées définies]
+L’analyse carbone démontre les bénéfices environnementaux de l’intégration massive de matériaux biosourcés. Pour le lot 3 Superstructure, l’impact atteint 118,42 kgeqCO2/m² SDP grâce à l’utilisation de béton bas carbone calculé avec le configurateur BETie du SNPBE. Ce résultat représente un gain de 68 kgeqCO2/m² soit 36% par rapport à un projet standard, et valide le seuil demandé de 150 kgeqCO2/m² avec une marge de 30 kg.
+
+Pour le lot 5 Cloisonnements et doublages, l’impact de 0,96 kgeqCO2/m² SDP est obtenu grâce au doublage Pavaflex en fibre de bois et à l’isolation des combles en ouate de cellulose. Le gain par rapport à une solution en laine de verre est de 5,7 kgeqCO2/m², validant le seuil visé de 25 kgeqCO2/m².
+
+Le lot 6 Façades et menuiseries extérieures présente des résultats différenciés selon le type d’isolant. Avec la paille hachée, l’impact en base est de 30,7 kgeqCO2/m² SDP, réductible à 0,6 kgeqCO2/m² avec les options proposées, pour un seuil demandé de 0 kgeqCO2/m². Avec le Biofib’Trio, l’impact en base est de 47,6 kgeqCO2/m² SDP, réductible à 17,5 kgeqCO2/m² avec options, pour un seuil demandé de 25 kgeqCO2/m². Le poids carbone devient négatif grâce à l’effet de puits carbone du bardage bois et des isolants biosourcés. Le dépassement des seuils en configuration de base s’explique par une surface vitrée supérieure au minimum réglementaire, comprise entre 21 et 24% de la surface habitable contre 17% minimum imposé par la RE2020.
+
+Pour le lot 7 Revêtements, l’utilisation de peintures Unikalo allégées en carbone permet d’atteindre 27,9 kgeqCO2/m² SDP, quasi conforme au seuil demandé de 25 kgeqCO2/m². À l’échelle de l’îlot, le seuil RE2020-2028 est atteint, démontrant la performance globale du projet.
+
+Le tableau suivant récapitule les résultats par lot.
+```
+
+### CHUNK_ID: projet_20__chunk_000034_sub01
+```
+Chenevotte, terre argileuse de Bretagne, éléments manuportables. Tests en cours pour améliorer densité, état de surface et stabilité en phase sèche. Objectif masse volumique 1000 kg/m³, autres caractéristiques à caractériser.
+
+Les calculs d’inertie d’absorption sont basés sur la capacité thermique surfacique selon les Règles Th-bat Fascicule Inertie RE2020, en utilisant la méthode simplifiée de la norme NF EN ISO 13786. Deux mélanges fictifs ont été définis pour les calculs : mélange "max" très haute densité (conductivité 0,5 W/mK, masse volumique 1900 kg/m³, chaleur spécifique 850 J/kgK) et mélange "min" haute densité (conductivité 0,4 W/mK, masse volumique 1000 kg/m³, chaleur spécifique 850 J/kgK). Nous avons déterminé l’épaisseur optimale à 8 cm par stabilisation de la capacité thermique surfacique selon les deux méthodes de calcul.
+
+Figure  : Evolution de la capacité thermique surfacique en fonction de l’épaisseur et de la méthode de calcul
+
+La comparaison avec d’autres matériaux d’une épaisseur de 8 cm montre que le béton et la terre crue comprimée présentent une capacité thermique surfacique supérieure, celle du béton étant environ deux fois plus élevée. À l’inverse, le béton de chanvre et les systèmes isolants associés à un parement en BA13 présentent des capacités thermiques inférieures, voire nulles lorsque l’isolant est directement en contact avec l’ambiance intérieure.
+
+Pour le projet Pirmil, les façades à ossature bois intégrant un parement en terre-chanvre représentent environ 20 % de l’inertie globale d’un niveau, contre 2 % en l’absence de ce parement.
+
+Figure : Evolution de la capacité thermique surfacique en fonction de la composition du complexe
+
+La modélisation thermique réglementaire RE2020, réalisée à l’aide du logiciel Pléiades, montre que, sans influence sur les indicateurs Bbio, CEP, Cep,nr et Ic énergie, l’apport du complexe terre-chanvre permet un gain progressif sur la réduction des degrés-heures, avec une stagnation observée autour d’une épaisseur de 7 à 8 cm.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 90,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

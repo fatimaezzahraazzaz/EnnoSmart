@@ -1,0 +1,386 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 20/135, 8 chunks)
+
+### CHUNK_ID: projet_4__chunk_000448
+```
+[PAGE 22]
+
+En parallèle, les populations de pucerons de 3 rameaux de 5 photinias sont suivies de manière
+à évaluer la pression en ravageur sur l’ensemble de la plateforme expérimentale (Figure 7).
+Figure 7 : Localisation des dispositifs expérimentaux sur la station expérimentale de Roville-
+aux-Chênes et des photinias destinés au suivi
+3. Indice de Shannon
+L’indice de Shannon est calculé en considérant les espèces et genre de prédateurs des
+pucerons rencontrés sur les plantes de service au sein du dispositif A. Cet indice permet
+d’exprimer la diversité spécifique d’un peuplement étudié, en prenant en compte la richesse
+et l’abondance relative des espèces. S’il est homogène, constitué d’une seule et même espèce,
+alors l’indice est égal à zéro. Plus l’indice est important, plus la diversité est grande. L’indice
+est calculé selon la formule :
+H' : indice de biodiversité de Shannon
+i : une espèce du milieu d’étude
+S : richesse spécifique
+pi : Proportion d’une espèce i par rapport au nombre total d’individus dans le milieu d’étude,
+qui se calcule de la façon suivante :
+ni : nombre d'individus pour l'espèce i
+N : effectif total.
+4. Traitements statistiques des données
+Les résultats sont analysés statistiquement par des ANOVA à 1 ou 2 facteurs à l’aide du logiciel
+R Studio, avec un risque alpha de 5%. Avant chaque analyse, les conditions de réalisation de
+l’ANOVA, à savoir la normalité des résidus (test de Shapiro-Wilk) et l’homogénéité des
+variances (test de Bartlett), sont vérifiées. Dans le cas où les conditions de l’ANOVA ne sont
+pas respectées, l’information est spécifiée. Si les tests statistiques post-hoc (test de Tukey ;
+comparaison multiple des moyennes) montrent des différences significatives à 5%, des lettres
+sont apposées sur les graphiques ; 2 lettres différentes correspondant à des groupes
+significativement différents. Dans le cadre des notations de comptage pour lesquelles les
+valeurs nulles sont surreprésentées, un modèle linéaire binomial négatif a été utilisé plutôt
+qu’un modèle linéaire classique.
+16
+```
+
+### CHUNK_ID: projet_4__chunk_000013_sub00
+```
+[PAGE 14]
+CIR 2024
+ Plantes nourricières : elles fournissent nectar et pollen, essentiels à la survie et à la
+reproduction des auxiliaires9
+Pour identifier les plantes adéquates à l’essai, le mélange d’espèces est conseillé, pour couvrir
+toute la saison et attirer une diversité d’auxiliaires.
+Ces auxiliaires peuvent être des prédateurs
+(consommation des pucerons) ou des parasitoïdes (pondant leurs œufs sur ou dans les
+pucerons, les tuant durant leur développement).
+II.3.1.10.
+Conclusions
+La lutte contre le mildiou de l’oignon repose donc aujourd’hui essentiellement sur des solutions
+chimiques.
+Or, dans un objectif de réduction de l’usage des produits phytosanitaires, il devient
+urgent de développer des alternatives biologiques plus respectueuses de l’environnement et
+de la santé humaine.
+Concernant les ravageurs du navet, les options de lutte sont limitées.
+Les filets de protection
+apparaissent comme une piste prometteuse, mais leur efficacité dépend de leur facilité de
+manipulation, de leur robustesse et de leur étanchéité.
+Des tests sont nécessaires pour
+évaluer leur durabilité, leur capacité de réutilisation, et leur adaptation à une utilisation en plein
+champ, notamment en agriculture biologique.
+Pour les pucerons sur photinia, une approche combinant produits phytopharmaceutiques et
+auxiliaires naturels est à privilégier.
+Cela inclut des traitements ciblés à l’huile paraffinique ou
+au savon à des moments stratégiques, ainsi que l’introduction de plantes de services étalant
+leur floraison sur toute la période de végétation, afin de soutenir les auxiliaires tout au long du
+cycle de la culture.
+II.3.2.
+Verrous et incertitudes scientifiques, techniques,
+technologiques
+Dans le cadre de nos travaux, nous sommes confrontés à différentes sortes de verrous liés à :
+ La définition du protocole expérimental : il est difficile d’établir des protocoles fiables
+pour des produits ou des méthodes innovantes, car les guides EPPO ou CEB restent
+très généraux.
+Une réflexion scientifique amont est donc nécessaire, surtout dans les
+approches systémiques combinant plusieurs leviers
+ La mise en place des essais : certains essais posent des contraintes de logistique
+importante (ex : pose manuelle des filets anti-insectes) ou nécessitent de travailler
+avec des variétés spécifiques.
+```
+
+### CHUNK_ID: projet_4__chunk_000038_sub00
+```
+[PAGE 39]
+CIR 2024
+la main tous les mètres, ce qui est relativement contraignant et semble très compliqué à mettre
+en œuvre à grande échelle.
+Par ailleurs, pour la réalisation des essais, nous sommes contraints de travailler avec certaines
+variétés plutôt que d’autres pour espérer par exemple avoir un bon développement des
+maladies.
+Par exemple dans le cadre de l’étude du mildiou sur oignon, le semi est plus dense
+qu’avec d’autres variétés.
+Il entraîne donc plus de végétation, ce qui permet de maintenir
+l’hygrométrie sur le feuillage, et favorise ainsi le développement des maladies.
+II.8.2.2.3.
+Présence de bio-agresseurs
+Les bio-agresseurs (pathogènes, insectes ravageurs, adventice) sont de nature et de quantité
+variables au cours de nos expérimentations.
+Or, la qualité, la fiabilité et l’exploitabilité des
+résultats issus de nos expérimentations est parfois directement tributaire de ces infestations.
+Ainsi, une pression trop faible, trop élevée ou hétérogène pourrait être dommageable pour la
+qualité de nos expérimentations, limitant le caractère discriminant de l’essai ou mettant en péril
+la viabilité de l’essai.
+En effet, l’analyse des modalités de traitement nécessite une répartition
+homogène de l’espèce incriminée à travers les parcelles expérimentales.
+Malheureusement,
+les contaminations, attaques ou infestations sont extrêmement difficiles à contrôler en
+conditions réelles de culture, ce qui peut réduire considérablement la puissance statistique
+des analyses conduites à partir des données recueillies.
+De plus, comme nous ne disposons
+pas de station fixe, mais que nous réalisons nos essais directement chez les agriculteurs, nous
+ne pouvons pas agir pour favoriser les maladies ou les ravageurs (inoculation, brumisation…).
+II.8.2.2.4.
+Identification de la parcelle expérimentale
+Dans le cas des essais contre ravageurs, il est nécessaire d’identifier une parcelle où
+l’infestation peut être suffisamment importante, sinon, il ne sera pas possible d’identifier les
+performances des traitements par rapport à la parcelle témoin.
+De même, pour avoir une
+pression suffisante de la maladie, telle le mildiou de l’oignon, il était indispensable de prendre
+en compte le précédant cultural de la parcelle, pour nous assurer d’avoir une pression
+suffisante de la maladie.
+Par ailleurs, il faut tenir compte de l’environnement autour de la parcelle.
+```
+
+### CHUNK_ID: projet_4__chunk_000053
+```
+[PAGE 54]
+
+CIR 2024
+Nous avons posé les trois filets le jour du semis le 06/08/2024 sur des arceaux espacés de
+1 m, permettant de protéger deux lignes de semis. Les bords étaient recouverts de terre, afin
+d’éviter la prise au vent et l’arrachage des filets.
+II.8.3.6.1.b. Identification des parcelles expérimentales
+Pour identifier le lieu d’implantation de l’essai, nous avons dû prendre en compte le niveau
+d’infestation sur le site d’essai. Nous avons ainsi réalisé notre expérimentation sur un sol de
+type limono-sableux, (19.2% argile/33.5% limon/64.6% sable) sur la commune de Plobsheim.
+Nous avons réalisé la plantation avec une semence de ferme. Chaque parcelle traitée avait
+pour dimension 1 m de large sur 9 m de long, soit une surface de 9 m².
+Nous avons alors réparti les parcelles en trois blocs selon un dispositif de Fisher randomisé31,
+chaque bloc correspondant à une répétition. La répétition de chaque traitement devait ainsi
+permettre d’estimer la variabilité résiduelle, non due aux traitements eux-mêmes, et ainsi
+d’augmenter la précision des estimations.
+Figure 22 : Plan de l’expérimentation
+II.8.3.6.2. Récoltes, mesures et analyses statistiques : résultats obtenus
+II.8.3.6.2.a. Données météorologiques pour confrontation des résultats
+Pendant toute la durée de l’essai, nous avons référencé les températures minimales,
+moyennes et maximales, ainsi que la pluviométrie, grâce à la station météorologique de
+Strasbourg-Entzheim, située à 10 km de notre site d’expérimentation.
+31 Affectation au hasard des emplacements de modalité dans un dispositif expérimental. La randomisation permet
+des estimations non biaisées des effets des traitements et diminue la variabilité expérimentale
+PLANETE Légumes Fleurs et Plantes - CONFIDENTIEL PAGE 54
+Ce document est la propriété de la société PLANETE Légumes Fleurs et Plantes
+Il ne peut être reproduit ou transmis à des tiers sans son autorisation expresse
+```
+
+### CHUNK_ID: projet_4__chunk_000412_sub01
+```
+sur les pucerons mais aussi sur les auxiliaires. Livrables : un compte rendu d’expérimentation reprenant tous les résultats obtenus dans les différents essais et sur les différentes stations sera réalisé. Un document de synthèse regroupant les résultats des trois années
+sera également rédigé en fin de projet.
+Les résultats pourront également être valorisés par des publications
+scientifiques dans des revues spécialisées telles que Innovations agronomiques, Biological control ou encore
+Environnemental Entomology.
+- La mise au point d’itinéraires de culture techniquement et économiquement viables pour les
+horticulteurs, les pépiniéristes et les maraîchers issus d’une co-construction entre les partenaires du
+projet, les producteurs et les experts membres du COPIL se basant sur les résultats d’enquête, sur
+les résultats techniques obtenus lors des différents essais ainsi que sur les références existantes et
+publiées.
+Les itinéraires seront mis au point sur les gammes suivantes : les plantes à massif,
+aromatiques et jeunes plants de légumes (cultures courtes de maximum 12 semaines), de pépinière
+(culture longue supérieure à 12 semaines), les cultures légumières dites basses comme la fraise et
+hautes comme les légumes ratatouilles (concombre, tomate, aubergine, courgette) palissés.
+Livrables : Sur la base des résultats des ateliers de co-conception et des résultats d’essai, des fiches
+techniques synthétiseront les différents itinéraires optimisés afin de faciliter le transfert vers les acteurs de la
+filière.
+Les résultats des essais concernant les itinéraires techniques seront inclus dans les comptes rendus
+30/34
+```
+
+### CHUNK_ID: projet_4__chunk_000414_sub01
+```
+en oeuvre : L’action de valorisation et communication des résultats représente 11% du budget total du projet. La communication sera réalisée dès le début et tout au long du projet. IV.3 - Modalités d’évaluation du projet
+Définir des « indicateurs de résultats » permettant d’évaluer directement les résultats obtenus en fin de projet,
+détailler les moyens de mesure et de calcul des indicateurs, présenter l’état initial (TO) des indicateurs choisis
+Le calcul d’indicateurs d’évolution des pratiques vers l'agro-écologie est au moins attendue.
+Les indicateurs de résultats rendent compte des effets directs (sur les bénéficiaires) des actions conduites
+relativement à ce qui en était attendu.
+- ex : amélioration de la pertinence du conseil, amélioration des pratiques
+des agriculteurs du fait de l’utilisation de l’OAD
+Indicateurs d’évaluation sociaux :
+- Nombre de producteurs enquêtés
+- Nombre de producteurs présents aux ateliers de co-conception
+Indicateurs d’évaluation techniques :
+- Comptes rendus techniques annuels avec les résultats collecté et analysés
+- Comptes rendus des comités de pilotage
+- Itinéraires techniques permettant de produire sans produits phytosanitaires de synthèse une gamme
+diversifiée de plantes exemptes de puceron : plante à massif et pépinière
+- IFT des systèmes de culture mis en place
+Indicateurs d’évaluation économiques :
+- Qualité (classe commerciale) et valorisation (financière) des productions
+- Coût des itinéraires de production sans produits phytosanitaires de synthèse et comparaison de
+rentabilité économique des différentes productions avec l’itinéraire technique de référence producteur
+32/34
+```
+
+### CHUNK_ID: projet_4__chunk_000089
+```
+[SECTION : Description des travaux réalisés l’année N]
+Exposer l’originalité des développements réalisés, les modélisations à titre probatoire, les simulations, les essais et les prototypes recherche.
+
+Bien identifier la chronologie des phases ou étapes de l’opération R&D .
+
+Exposer les hypothèses considérées et la théorie adoptée, décrire les outils numériques, le prototype et/ou l’expérimentation réalisés.
+
+Fournir une analyse des résultats obtenus pour chaque phase.
+
+Fournir éventuellement en annexe : maquettes, graphiques, plans, photos, rapports d’essai… permettant de mieux appréhender la technicité de l’opération.
+
+Fournir une analyse des résultats obtenus pour chaque phase.
+
+Montrer que la démarche suivie est reproductible.
+
+Les sous-chapitres suivants sont indicatifs et non obligatoires.
+```
+
+### CHUNK_ID: projet_4__chunk_000116
+```
+[SECTION : Description des travaux réalisés l’année N]
+Exposer l’originalité des développements réalisés, les modélisations à titre probatoire, les simulations, les essais et les prototypes recherche.
+
+Bien identifier la chronologie des phases ou étapes de l’opération R&D .
+
+Exposer les hypothèses considérées et la théorie adoptée, décrire les outils numériques, le prototype et/ou l’expérimentation réalisés.
+
+Fournir une analyse des résultats obtenus pour chaque phase.
+
+Fournir éventuellement en annexe : maquettes, graphiques, plans, photos, rapports d’essai… permettant de mieux appréhender la technicité de l’opération.
+
+Fournir une analyse des résultats obtenus pour chaque phase.
+
+Montrer que la démarche suivie est reproductible.
+
+Les sous-chapitres suivants sont indicatifs et non obligatoires.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 20,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

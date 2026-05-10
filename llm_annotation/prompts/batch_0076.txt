@@ -1,0 +1,371 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 76/135, 8 chunks)
+
+### CHUNK_ID: projet_16__chunk_000011_sub02
+```
+Le projet SERVAL constitue une rupture technologique dans le domaine des véhicules militaires blindés, que ce soit sur les démarches et approches de développements ou sur les systèmes innovants développés.
+
+En effet, ce projet nous a permis de mettre en œuvre une démarche révolutionnaire d’étude et de définition de l’architecture électrique des véhicules militaires tout en tenant compte des diverses contraintes imposées, notamment celles liées au volume alloué, poids et complexité des systèmes électroniques embarqués, dans le cadre de notre véhicule du futur SERVAL.
+
+Les travaux R&D menés depuis 2018 ont permis de développer une démarche de définition d’architecture électronique adaptée aux véhicules blindés en utilisant les méthode de conception 3D permettant ainsi un gain de temps de développement de 40% par rapport aux méthodes de routage classique tout en assurant une performance technique considérable en terme de pertinence de choix des équipements, en terme de prédiction et d’anticipation des problématiques qui pourraient rencontrer les équipes fabriquant le prototype.
+```
+
+### CHUNK_ID: projet_16__chunk_000007_sub05
+```
+était insuffisante. En effet, la configuration du véhicule SERVAL implique que la longueur minimale intégrable est de 6m. Or, avec cette longueur, des problématiques d’atténuation des données ont été constatées.
+
+Dans un premier temps, nous avons analysé les solutions déjà utilisées sur le véhicule GRIFFON. Deux solutions ont été testées, cependant les résultats sont insatisfaisants. Ces câbles sont plus courts et utilisent des gauges (diamètre de fil) incompatibles avec la connectique du SERVAL. Cela remet ainsi en cause la tenue mécanique dans le temps des soudures et la fiabilité du câble.
+
+Dans un second temps, nous avons cherché à définir d’autres solutions techniques :
+
+Câble USB créée fil à fil,
+
+Câble constitué de gauge de taille plus importante mais restant compatible avec la connectique,
+
+Câble avec intégration d’un répétiteur USB.
+
+Cependant, toutes ces solutions n’étaient pas concluantes. La clé USB demeure non reconnue par le système et la longueur importante nécessaire implique une perte des données. De plus certaines solutions ont été réalisables, mais n’étaient pas acceptées par les règles du métier câblage et les normes (Cf figure suivante par exemple).
+
+Nous avons ensuite réalisé une recherche de solution visant des câbles USB à performances techniques accrues. Nos choix se sent porté sur l’étude de deux différents câbles USB "Haute performance", permettant d’assurer le transfert des flux de communication tout en ayant une architecture compatible avec la connectique du SERVAL :
+
+Afin d’évaluer les performances de ces deux câbles USB, nous avons réalisé une campagne d’essais fonctionnelless dont les premiers résultats étaient satisfaisants.
+
+Travaux 2022- Poursuite
+
+Les solutions techniques des cables USB étant définis et les premiers tests fonctionnels étant validé, nous avons procédé début 2022 à des essais sur le Banc système du véhicule SERVAL sur les câbles pour les clés d’extraction de données. Ces essais permetteront d’évaluer les performances d’extraction et d’enrégistrement des deonnées dans le sconditions réelles. Les solutions câbles testés sont :
+
+W3050 pour la clé journal
+
+W3051B pour la clé mission
+
+Ces 2 câbles ont été réalisés en 2 définitions différentes pour l’ultime test.
+
+• 1er définition mod 1
+
+o Définition Thales, utilisé sur Griffon
+```
+
+### CHUNK_ID: projet_16__chunk_000007_sub07
+```
+étant fonctionnelles : Clés reconnues par la VCS (icone verte) Archive possible du journal de bord Chargement/sauvegarde possible nous avons décidés de retenir la définition mod 2 réalisée par 2IS.
+
+Suite à ces essais, nous avons lancé la conception et la fabrication de la solution renetnue. La partie "avant" (à partir de la nacelle tireur) du câble est identique suivant les versions, nous avons mis en place un connecteur (PI ADU) afin de n’échanger que la partie située dans la zone charge utile. 
+Dans ce cas l’échange du câble n'a qu'un impact mineur sur la reconfiguration.
+
+Développement d’un kit de continuité pour les câbles radio
+
+Rappel travaux 2021
+
+Dans les différentes variantes du véhicule SERVAL, deux types de système radio sont utilisés : NCT contact et PR4G. Chaque variante possède deux à trois configuations pour une même radio. Les deux types de radios ne sont pas intégrées en même temps dans le véhicule et se situent au même endroit dans le véhicule. Or, les câbles par défaut se connectent à la radio NCT contact. Par conséquent, le passage au système radio PR4G, nécessitera des câbles d'adaptation permettant la connexion.
+
+Analyse des solutions déjà existantes
+
+De ce fait, nous avons cherché à développer un système permettant la communalité des câbles radio que nous avons appelé « Kit de continuité ».
+
+Les perfromances techniques à atteindre avec ce développement permettront de faciliter l’interchangeabilité des radios lors de changement de type ou de configuration de radion au sein d’un véhéicule ou en passant d’une variante à une autre dans un même véhicule.
+
+Le kit de continuité développé par AMETRA est une première dans les véhcules militaires blindés et a vocation à se généraliser dans les autres véhicules de NEXTER.
+
+Travaux 2022
+
+La phase de conception et définition étant initié en 2021, l’année 2022 a été consacré à la réalisation et l’expérimentation du Kit de continuité. Trois configurations différentes étant envisagées :
+
+Marche pied central : INF/MO81/MO120/MMP/SATCP/RAV/GEN/OA
+
+Marche pied central conf SAN : SAN/NCT OTP
+
+connecteurs coudés uniquement
+
+Armoire déport droit : PC/OA/SA2R ACQ/SA2R TDR/NCT OTM
+```
+
+### CHUNK_ID: projet_16__chunk_000007_sub08
+```
+Trois configurations différentes étant envisagées : Marche pied central : INF/MO81/MO120/MMP/SATCP/RAV/GEN/OA Marche pied central conf SAN : SAN/NCT OTP connecteurs coudés uniquement Armoire déport droit : PC/OA/SA2R ACQ/SA2R TDR/NCT OTM
+
+Ainsi, trois différents kits de continuités ont été développé
+
+1 kit : 2 PR4G a/s X-Contact INF
+
+1 kit : 2 PR4G a/s X-Contact SAN
+
+1 kit : 3 PR4G a/s X-Contact PC
+
+Complément OA lié au kit 3 PR4G a/s X-Contact PC
+
+La figure suivant représente la matrice des Kit :
+
+Et la figure suivante présente la matrice des câbles :
+
+Nous avons ensuite réalisé une étude approfondie de chacun des kits selon les différentes configurations. Le but était de chercher à diminuer au maximum le nombre de kit d’un côté et de simplifier au maximum les câblages en prévoyant des architectures droites non coudées par exemple. Les connecteurs ont été dafini droit sur les radios pour communaliser au maximum les kits. Ces optimistaions architecturales ont nécessités de déploiement d’essai supplémentaires afin de s’assurer des performances de tranferts des données en temps réel.
+
+Suite à ces travaux préliminaires, nous avons entrepris plusieurs étapes d'optimisation pour atteindre nos objectifs techniques fixés. Les études d'optimisation ont été menées avec rigueur et méthodologie, en prenant en compte les différentes configurations des kits et en mettant l'accent sur la réduction du nombre de kits nécessaires et la simplification des câblages. Tout d'abord, nous avons poursuivi notre analyse des différentes architectures possibles pour les kits. En nous basant sur les données recueillies lors des essais précédents, nous avons identifié des schémas d'agencement plus efficaces qui minimisent les contraintes de câblage. Les architectures linéaires, sans coudes ni angles, ont été privilégiées, ce qui a permis de rationaliser davantage les assemblages. Cette approche a également eu un impact positif sur la maintenance, en réduisant les risques potentiels de défaillance dus aux câblages complexes.
+```
+
+### CHUNK_ID: projet_16__chunk_000007_sub11
+```
+les niveaux de courant et les fluctuations globales du réseau électrique. Les données recueillies nous aideront à identifier tout déséquilibre potentiel et à mettre en place des mesures correctives adéquates.
+
+En somme, le développement du nouveau CBU ARTUS/MEGGIT représente une étape cruciale dans l'amélioration continue de notre système. Les performances améliorées du chargeur universel promettent une efficacité accrue et une gestion optimisée des batteries. Cependant, il est primordial de prendre en compte l'impact global sur le réseau électrique et de veiller à ce que les ajustements nécessaires soient apportés pour garantir une transition réussie vers ce nouveau composant.
+
+La définition du nouveau chargeur universel étant donc réalisés en 2022, la fabrication de prototypes et essais seront menés en 2023. Nous devons notamment étudié l’impact de ce nouvel équipements sur l’ensemble du réseau électrique su Serval.
+
+Etude des matériaux : Conformité aux normes REACH/RoHS
+
+Travaux 2022
+
+La directive RoHS (Restriction of Hazardous Substances) concerne principalement la restriction de l'utilisation de certaines substances dangereuses dans les équipements électriques et électroniques (EEE). La directive RoHS limite la présence des substances suivantes dans les EEE :
+
+Plomb (Pb)
+
+Mercure (Hg)
+
+Cadmium (Cd)
+
+Chrome hexavalent (Cr6+)
+
+Polybromobiphényles (PBB)
+
+Polybromodiphényléthers (PBDE)
+
+La directive REACH (Enregistrement, évaluation, autorisation et restriction des substances chimiques) est une réglementation de l'Union européenne également qui vise à protéger la santé humaine et l'environnement en contrôlant la production, l'utilisation et la commercialisation des substances chimiques.
+
+La directive REACH impose certaines obligations aux fabricants, importateurs et utilisateurs en aval de substances chimiques, y compris dans les harnais de véhicules.
+
+Les principaux termes de la directive REACH qui peuvent s'appliquer aux harnais de véhicules sont les suivants:
+
+Restrictions sur les substances chimiques : La directive REACH peut imposer des restrictions spécifiques sur l'utilisation de certaines substances chimiques dangereuses. Par exemple, certaines substances cancérigènes, mutagènes ou toxiques pour la reproduction (CMR) peuvent être soumises à des restrictions d'utilisation dans les harnais de véhicules.
+```
+
+### CHUNK_ID: projet_16__chunk_000007_sub25
+```
+l’objectif est ici de faire subir une équivalence de 5 années de vie type opérations extérieures au SERVAL, en configuration n°1 hybride PC/MMP. Les instruments d’essais sont les suivants :
+
+Pyromètre infrarouge pour contrôle périodique de la température des ESO.
+
+Manomètre de contrôle de la pression des pneumatiques.
+
+Le tableau suivant présentant les différentes configurations appliquée set testées
+
+Ce cycle est répété 5 fois afin de correspondre au vieillissement demandé, la fin d’un an OPEX nécessitant une Vérification de Bon Fonctionnement.
+
+Le prototype étudié est l’Elément de Fin de Définition 5 du Véhicule Blindé Multi-Rôles léger SERVAL – EFD5 du VBMR Léger SERVAL.
+
+Dans ces essais les pneumatiques sont pressurisés en configuration « route » pour les roulages de liaison et en configuration « tous chemins » pour les roulages d’essais. La pression des pneumatiques est systématiquement contrôlée à chaque passage d’une gamme de pression à une autre et la VPG est systématiquement active. La boite de transfert est positionnée en gamme courte sur piste spéciale avec pour conséquence le crabotage du différentiel central. Sur chemin de liaison, elle est positionnée en gamme longue.
+
+Lors du roulage de vieillissement, des faits de diverses occurrences sont apparus, ils sont listés ci-dessous :
+
+Les travaux entrepris ont inclus une campagne de vieillissement approfondie sur le véhicule en question, visant à évaluer sa durabilité et son comportement dans des conditions variées. Les principaux résultats de cette campagne de vieillissement sont résumés comme suit :
+
+Rupture du cardan après 1334 km de roulage : Le véhicule a connu une défaillance majeure avec la rupture du cardan après avoir parcouru une distance de 1334 km. Cette défaillance pourrait être attribuée à des problèmes de conception, de matériaux ou de qualité de fabrication.
+
+Perte d'un élément sur le capot : Une pièce du capot du véhicule s'est détachée, ce qui soulève des préoccupations concernant la fixation et la résistance des composants extérieurs du véhicule.
+```
+
+### CHUNK_ID: projet_16__chunk_000007_sub27
+```
+tendance à rouler excessivement rapidement dans les virages peut entraîner une instabilité. Ces caractéristiques compromettent la capacité du véhicule à offrir une conduite prévisible et stable dans diverses conditions routières.
+
+Ces résultats soulignent la nécessité d'une analyse plus approfondie et d'éventuelles améliorations dans la conception, la fabrication et les composants du véhicule. Les problèmes mécaniques, électriques et de stabilité détectés peuvent avoir un impact significatif sur la sécurité, la fiabilité et les performances du véhicule, et devraient être traités de manière adéquate pour garantir sa qualité globale.
+
+2-7) Etude du comportement du SERVAL soumis à de vent de sable
+
+Travaux réalisés en 2022
+
+Nous avons initié des essais climatiques pour évaluer la résistance du véhicule SERVAL et de ses équipements aux conditions de vent et de sable. L'objectif principal est de soumettre le véhicule et ses composants à des conditions de vent et de sable similaires à celles rencontrées lors de situations réelles, dans le but de :
+
+Mettre en évidence les éléments sensibles susceptibles d'être affectés par des vents de sable, simulant ainsi une exposition semblable à celle d'un convoi.
+
+Évaluer la capacité du véhicule à résister à un vent de sable typique, tel qu'il pourrait être rencontré lors d'une exposition à proximité d'un héliport ou d'une plateforme aéronautique.
+
+Les équipements les plus concerné s dans le spécimen SERVAL EFD1 sont :
+
+Suite à ces essais de nombreux problèmes ont été soulevé. Nous illustrons par la suite des exemples de faits techniques ayant nécessité de rédéfinir des solutions techniques afon de permettre une meilleure résistance au vent de sable du SERVAL.
+
+2-8) Etude de la compatibilité électromagnétique (CEM) sur prototypes
+
+2021 Cf dossier 2021
+
+L’année 2022, nous poursuivrons les essais de compatibilité électromagnétique afin de valider la réponse CEM et afin d’évaluer les performances du véhicule face au foudre.
+
+Travaux 2022
+
+Pendant l’année 2022, nous avons poursuivi l’étude de la compatibilité électromagnétique du véhicule en analysant le comportement du véhicule vis-àvis d’une agression de type foudre directe et de proximité.
+```
+
+### CHUNK_ID: projet_16__chunk_000007_sub37
+```
+caractérisation des portées de DRI (Détection, Reconnaissance, Identification) d’un tourelleau T2 et les caractéristiques d’une voie Télémétrie d’un tourelleau T2. Les essais ont été réalisés sur le prototype suivant :
+
+En fin d’essais, les problématiques suivantes ont été identifiés :
+
+- De façon aléatoire et à plusieurs reprises, l’image de la voie VIS sur l’écran de restitution est
+
+splittée horizontalement au milieu ne permettant pas une observation nominale de la scène et
+
+l’acquisition correcte d’une cible.
+
+- Lors d’une sursaturation par un élément chaud de la scène, l’image de la voie IR conserve une
+
+rémanence du point chaud. Une calibration manuelle ne permet pas de résoudre le phénomène
+
+impactant par la suite la qualité d’image. Le constat est équivalent sur T1
+
+2-13) Evaluation de la perméabilité à l’ypérite liquide d’un matériaux spécifique du SERVAL
+
+Nous avons du réaliser des essais de perméabilité à l’ypérite liquide à l’état initial et sous contrainte de pression sur un équipement amovible NRBC du SERVAL.
+
+L’exigence exprimé par le DGA est la suivante :
+
+Le VBMR léger dispose d'accessoires amovibles de protection NBC (housses, bâches par exemple) pour les parties intérieures pouvant entrer en contact avec des vêtements souillés par des produits chimiques. Les parties concernées sont :
+
+· les sièges conducteurs et passagers ;
+
+· les sièges du volume arrière ;
+
+· le sol du volume arrière et ses parois jusqu'à 40cm de hauteur par rapport au plancher.
+
+Les matériaux de ces dispositifs sont choisis de telle sorte qu'ils ne sont pas perméables aux toxiques de guerre (imperméable à la contamination chimique liquide pendant 8 h au taux de contamination de 5g/m², Ypérite, Soman, VX).
+
+Ces dispositifs sont regroupés sous le vocable KAO "Protection amovible NRBC". Nota : L'objectif est de limiter la contamination chimique par transfert vers les matériaux du VBMR léger s'il devait y avoir entrée dans le véhicule de personnels aux tenues contaminées (sains ou blessés).
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 76,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

@@ -1,0 +1,263 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 23/135, 8 chunks)
+
+### CHUNK_ID: projet_5__chunk_000014_sub01
+```
+un déplacement de l’intervalle de résonance vers des fréquences plus élevées. Toutefois, elle a peu d'impact sur la perte de transmission du son aux fréquences situées au-dessus de la résonance.
+
+B. Andro et al.2 ont travaillé quant à eux sur le développement d’un modèle numérique permettant de prédire la perte de transmission sonore à travers les joints élastomères. Deux étapes ont été nécessaires : une analyse statique pour calculer la forme du joint après compression (événement de fermeture de porte) et une analyse acoustique basée sur des paramètres dynamiques pour déterminer la transmission sonore. Pour cela, des méthodes par éléments finis ont été utilisées pour les deux étapes. Ces deux étapes ont été validées expérimentalement pour deux types de géométrie, différents taux de compression et cas de chargement. Ces travaux ont permis de déterminer un modèle non linéaire valide pour la partie statique et une bonne approximation du comportement dynamique du module de Young de l'élastomère. Enfin, une analyse de sensibilité a été réalisée afin d'évaluer l'influence des paramètres de conception du système de joint de porte tels que le taux de compression ou les paramètres dynamiques.
+
+En outre, un article3 publié en 2014 a porté sur la prédiction des pertes de transmission du son d’un joint avec bulbe en élastomère. Dans le cadre de ce travail de recherche, une première analyse statique a été réalisée pour déterminer la géométrie réelle du joint sous compression. Cela a nécessité une modélisation du matériau hyper-élastique et une analyse par éléments finis non linéaires, vu que les joints sont fabriqués en élastomères qui présentent un comportement mécanique non linéaire. Ensuite, une analyse acoustique a été réalisée sur la géométrie déformée pour calculer la transmission du son.
+```
+
+### CHUNK_ID: projet_5__chunk_000014_sub02
+```
+les joints sont fabriqués en élastomères qui présentent un comportement mécanique non linéaire. Ensuite, une analyse acoustique a été réalisée sur la géométrie déformée pour calculer la transmission du son.
+
+De surcroit, une thèse10 publiée en 2016 portant sur l’investigation du comportement vibro-acoustique des joints des portes et vitres dans un véhicule automobile a présenté une approche consistant à définir un modèle hybride capable de modéliser le joint et la cavité du véhicule séparément, avec l’approche la plus adaptée à chaque cas, et de les coupler dans un seul modèle. Les comportements hyper-élastique et viscoélastique des joints, avant et durant l’excitation acoustique ont été modélisés à l’aide de ABAQUS. De plus, pour étudier la propagation du son depuis les joints jusqu’au reste de la cavité, une méthode appelée « méthode énergétique simplifiée » a été utilisée. Ensuite, des campagnes expérimentales ont été mises en œuvre pour la validation des modèles.
+```
+
+### CHUNK_ID: projet_5__chunk_000015_sub00
+```
+[SECTION : Etude de l’influence de la géométrie et des propriétés viscoélastiques sur le comportement acoustique du joint]
+Un article scientifique5 a présenté une étude de la perte de transmission sonore d’un système d’étanchéité d’automobile, dans le but d’analyser la nécessité de la prise en compte dans l’analyse acoustique les propriétés viscoélastiques du matériau dépendant de la fréquence. Pour cela, un modèle EF de géométrie simple à deux joints a été défini et les pertes de transmission ont été mesurées suivant différents scénarios avec et sans caractérisation viscoélastique dépendante de la fréquence du matériau.
+
+L’ensemble des tests ont été réalisés à température ambiante. Les résultats ont alors montré que pour la gamme des basses fréquences, les effets dépendant de la fréquence sont négligeables. En revanche, autour de la résonance et des hautes fréquences, l’effet est beaucoup plus visible. L’article souligne également que la température affecte également le comportement des matériaux élastiques et que pour des températures basses, l’élastomère peut s’écarter de sa plage de fonctionnement prévue et les résultats structurels et acoustiques peuvent différer considérablement. Toutefois, ce paramètre n’a pas été investigué dans ce travail de recherche.
+```
+
+### CHUNK_ID: projet_5__chunk_000015_sub01
+```
+l’élastomère peut s’écarter de sa plage de fonctionnement prévue et les résultats structurels et acoustiques peuvent différer considérablement. Toutefois, ce paramètre n’a pas été investigué dans ce travail de recherche.
+
+En outre, une autre étude6 publiée en 2020 a investigué l’impact des paramètres géométriques des systèmes d’étanchéité d’un véhicule sur la perte de transmission du son, en considérant des géométries de base telles que des cercles annulaires, qui représentent la géométrie des joints de bulbe utilisés dans les véhicules. Les résultats de l’étude expérimentale et numérique menée dans ce travail de recherche ont montré que la pré-compression de la section d'étanchéité entre la porte et la carrosserie est l'un des paramètres importants à prendre en compte pour une conception initiale. En effet, lorsque le taux de compression augmente, la fréquence fondamentale et la perte de transmission du son augmentent également. Ce comportement est lié à l'augmentation de la rigidité en flexion des couches du joint. De plus, les résultats de l’étude ont montré que la longueur de contact entre la couche du joint et le cadre de la porte constituait également un paramètre très important. Par ailleurs, l’article a démontré que l'épaisseur du joint affectait également les performances acoustiques des pièces d'étanchéité. En effet, ce paramètre affecte les modes de vibration du système d'étanchéité et améliore l'isolation haute fréquence due à la loi de masse.
+```
+
+### CHUNK_ID: projet_5__chunk_000016_sub00
+```
+[SECTION : Travaux de recherche sur l’impact de la température sur les performances acoustiques des joints d’étanchéité]
+Les travaux de recherche ci-dessus fournissent plusieurs informations importantes sur les approches de caractérisation et de modélisation du comportement acoustique des systèmes d’étanchéité, et l’impact d’un ensemble de paramètres sur ce comportement. Cependant, ils n’analysent pas l’impact des conditions climatiques sur le comportement acoustique de ces systèmes.
+
+Des travaux de recherche ont investigué néanmoins l’impact de la température sur l’indice d’affaiblissement acoustique et/ou le coefficient d’absorption acoustique des mousses polymères et de matières plastiques.
+
+En effet, un article7 publié en 2013 a porté sur l’investigation de l’impact de la température sur le coefficient d’absorption acoustique d’une mousse de polyuréthane dans l’intervalle +10°C à 50°C. Pour cela, les auteurs ont proposé d'étendre l'utilisation du tube d'impédance de la température ambiante aux conditions thermorégulées. Ensuite, la méthode normalisée à deux microphones a été utilisée pour déterminer le coefficient d'absorption acoustique à incidence normale à partir de la fonction de transfert de pression entre les deux microphones. Dans cette configuration, l'échantillon insonorisant a été adossé à la terminaison rigide du tube à l'extrémité opposée de la source sonore. En outre, le tube a été équipé d’un système de régulation thermique. Les résultats de cette étude ont montré que la température affectait d’une manière significative le coefficient d’absorption acoustique de la mousse. En effet, plus la température augmente, plus le coefficient augmente avec une valeur maximale à 1500Hz.
+```
+
+### CHUNK_ID: projet_5__chunk_000016_sub01
+```
+que la température affectait d’une manière significative le coefficient d’absorption acoustique de la mousse. En effet, plus la température augmente, plus le coefficient augmente avec une valeur maximale à 1500Hz.
+
+En outre, un travail de recherche8 publié en 2014 a porté sur le développement d’un protocole expérimental pour caractériser la dépendance en température du coefficient d’absorption acoustique de matériaux isolants à base d’aérogel. Ce protocole repose sur l’utilisation d’un tube d’impédance en incidence normale et quatre microphones : deux microphones de part et d’autre de l’échantillon du matériau à caractériser. Cette méthode recommande l’utilisation d’une terminaison anéchoïque pour limiter les réflexions des ondes acoustiques sur le fond rigide du tube. Toutefois, les auteurs soulignent que l’utilisation d’un matériau absorbant pour réaliser cette terminaison ajouterait une incertitude de mesure liée à l’influence de la température sur l’efficacité de la terminaison anéchoïque. Ainsi, ils se sont orientés vers une méthode proposée par Salissou qui utilise trois microphones, sans traitement anéchoïque du tube. L’échantillon de matériau a été placé à une certaine distance du fond rigide, et le troisième microphone a été utilisé pour mesurer la pression acoustique au niveau du fond rigide, perpendiculairement aux ondes acoustiques planes incidentes. En outre, un système de régulation thermique du tube a été défini pour amener l’échantillon à la température souhaitée. Dans le cadre de cette étude, deux matériaux à base d’aérogel ont été caractérisés pour sept valeurs de température : 0°C, +10°C, +20°C, +30°C, +40°C, +50°C et +60°C. Les résultats obtenus ont révélé une influence significative de la température sur l’indice d’affaiblissement acoustique. En effet, plus la température est élevée, plus la valeur de l’indice d’affaiblissement acoustique est grande. De plus, les écarts entre les températures extrêmes (0°C et +60°C) sont compris entre 2 et 4 dB sur l’ensemble de la bande de fréquences, à l’exception de la chute d’isolation vers 1000 Hz. De plus, les résultats ont montré un décalage en fréquence du pic et de la chute d’isolation entre 2300 Hz et 2700 Hz. Plus la température est élevée, plus les fréquences du pic et de la chute d’isolation diminuent. Les auteurs indiquent que ce phénomène peut s’expliquer par un effet élastique de l’échantillon et un assouplissement de ce dernier lorsque la température augmente.
+```
+
+### CHUNK_ID: projet_5__chunk_000017_sub00
+```
+[SECTION : Description des travaux antérieurs]
+Nous avions en 2021 initié notre étude visant à investiguer les problématiques liées à la caractérisation expérimentale et la modélisation numérique du joint comprimé en acoustique en température ambiante.
+
+Pour cela, nous avions cherché dans un premier temps à réaliser un banc d’essai permettant de caractériser le comportement acoustique du joint comprimé. En effet, nos essais ont été réalisés dans la petite cabine équipée d’un banc de compression.
+
+Le banc de compression est composé d’un ensemble de systèmes en aluminium :
+
+Une plaque support ;
+
+Une mâchoire amovible ;
+
+Une barre ;
+
+Deux pièces latérales ;
+
+Un porte-échantillons.
+
+Figure  : Architecture du banc de compression
+
+Le banc de compression du joint est installé entre les deux chambres de la petite cabine. Ainsi, les deux configurations intervenant dans le calcul de l’IL sont les suivantes :
+
+Référence : cette configuration est composée du banc de compression sans mousse ou joint à l’intérieur. Ainsi, lors des essais, le son est émis depuis les haut-parleurs, passe au travers du banc de compression sans l’échantillon de mousse ou de joint et on vient récupérer la pression acoustique en sortie au niveau des microphones.
+
+Avec échantillon : lors des essais, le son est émis depuis les haut-parleurs, passe à travers le banc de compression et de l’échantillon de mousse ou de joint et on vient récupérer la pression acoustique en sortie au niveau des microphones.
+
+L’IL correspond à la valeur de pression mesurée à la référence, à laquelle on soustrait la valeur de pression mesurée avec échantillon. Cette valeur permet de comparer rapidement plusieurs échantillons en utilisant la même référence et ainsi de lever les incertitudes liées à la petite cabine elle-même.
+
+Le montage expérimental que nous avions développé pour réaliser nos essais comporte en addition du système à tester :
+
+Une plaque d’acier de 0,8mm d’épaisseur positionnée en partie haute des mors ;
+
+Deux couches de feutres de 20mm d’épaisseur ;
+
+Trois couches de masse lourde de densités surfaciques différentes (13 kg/m² au total) ;
+
+Un emporte-pièce ;
+
+Le banc de compression en aluminium.
+```
+
+### CHUNK_ID: projet_5__chunk_000017_sub01
+```
+couches de feutres de 20mm d’épaisseur ; Trois couches de masse lourde de densités surfaciques différentes (13 kg/m² au total) ; Un emporte-pièce ; Le banc de compression en aluminium.
+
+De plus, afin d’éviter les fuites acoustiques non souhaitées, nous avions appliqué du mastic sur tout le pourtour du banc et au niveau des différents assemblages.
+
+Les figures ci-dessous illustrent notre solution.
+
+Figure : Illustration du montage expérimental adopté (tôle + banc de compression uniquement)
+
+Figure : Photo du montage complet
+
+Nous avions ensuite cherché à valider les performances de notre banc d’essai en réalisant une étude comparative entre les résultats obtenus sur notre banc et les résultats d’essais réalisés précédemment par Stellantis avec le même banc de compression.
+
+A ce stade du projet, nous avions mené notre étude sur des mousses de référence et non sur des joints.
+
+Nous avions étudié plusieurs configurations dont les plus intéressantes étaient :
+
+Banc en configuration de référence avec une tôle d’acier et mastic ;
+
+Banc en configuration de référence avec fente ouverte ;
+
+Banc avec une mousse de 12mm.
+
+Les résultats que nous avions obtenus étaient relativement identiques, montrant une bonne corrélation sur toute la gamme de fréquences entre les deux approches de mesure.
+
+Notons que la petite cabine est un moyen d’essai avec d’importantes fuites acoustiques rendant complexe la reproductibilité des essais entre deux opérateurs ou deux petites cabines différentes. L’usage du mastic permet en partie de masquer ces différences sans pour autant éviter certaines différences inhérentes au moyen.
+
+Par ailleurs, afin d’étudier l’impact de l’épaisseur sur le comportement acoustique de la mousse, nous avions réalisé un ensemble d’essais sur une mousse de référence pour plusieurs épaisseurs variant de 12mm à 25mm. Nous avions alors obtenu des résultats proches pour des épaisseurs entre 12 et 25mm. Toutefois, à partir de 25mm, le comportement acoustique de la mousse s’améliorait.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 23,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

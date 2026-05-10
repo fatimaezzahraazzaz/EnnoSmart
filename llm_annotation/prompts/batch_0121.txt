@@ -1,0 +1,307 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 121/135, 8 chunks)
+
+### CHUNK_ID: projet_28__chunk_000028
+```
+[SECTION : Modèle basé sur la logique floue pour l'extraction d'opinions positives]
+La logique floue traite de l'ambiguïté et de l'incertitude dans le placement des textes dans des pertinents. Par conséquent, une approche non supervisée basée sur la logique floue pour l'analyse des sentiments des critiques textuelles peut être formulée. Techniquement, String Navigator pourrait mots-clés qui sont importants pour l'exploration des critiques, des opinions, etc. Techniquement, il s'agit d'un modèle qui transforme les documents en une forme vectorielle (numérique), où chaque mot du document se voit attribuer un score compris entre 0 et 1. une appartenance floue se rapportant aux ensembles flous Pos et Neg.
+```
+
+### CHUNK_ID: projet_28__chunk_000014_sub01
+```
+dans F qui implique Ai j∈ F Pour tout scalaire n {x1, x2, x3, . . . xn}, nous observons que : À partir de l'équation (1), nous observons :
+
+Puisque n > m et selon le théorème vectoriel, si A est une matrice de m×n et m < n alors le système homogène d'équation linéaire Ax = 0 où, x est un scalaire [x = x1, x2, . . .xn] et x1, x2, ..., xn ne sont pas tous nuls, de sorte que :
+
+La prémisse de règle a une base finie, et l'origine et la cible des règles dans l'espace vectoriel donnent la distribution de la valeur de probabilité des relations linéaires de différents rôles de la société d'intérêt. Par conséquent, plus la probabilité est large plus elle sera variable en dimension et incertaine. La distance entre les distributions multiples dans le noyau de la règle, qui est une distribution équilibrée jusqu'à certaine itération, échoue par la suite.
+
+Nous pouvons donc prouver que le sous-espace S est un hyper-espace de l'espace vectoriel V et nous pouvons également prouver, à partir de l'équation (2), que cela dépend de n. Maintenant, nous allons essayer de réduire la dimension du sous-espace S. En exploitant le modèle Multi Index avec m∗ indices:
+
+Pour trouver la kième dimension d'un sous-espace S optimal est H∗ k (s)
+
+Où, P est la puissance de la distance à un point donné. L'équation indique clairement que la valeur cos dénote la fiabilité optimale de l'espace de données par rapport à l'écosystème de l'entreprise. Plus la valeur de la fonction cos est élevée, plus la relation linéaire du modèle vectoriel de données est bonne (en supposant que l'espace de données complet est un espace vectoriel).
+
+Figure 10 : Confiance / Vecteur de croyance des règles
+
+L'ordre de la règle ainsi que sa prémisse par rapport à la proposition mathématique sera détaillé dans la section suivante.
+```
+
+### CHUNK_ID: projet_28__chunk_000021_sub01
+```
+l'ensemble de données en cinq sous-ensembles. La moyenne de validation croisée pour l'algorithme de régression logistique est de 0,9931701360969655 en exploitant l'imputation générale, et de 0,9942956735030553 en exploitant l'imputation MICE.
+
+Figure 17 : Courbes ROC de régression logistique utilisant l'imputation générale et l'imputation MICE
+
+Figure 18 : Matrice de confusion utilisant l'imputation générale et MICE pour la régression logistique
+```
+
+### CHUNK_ID: projet_28__chunk_000026_sub00
+```
+[SECTION : Analyse de sentiments par mots-clés et lexique sur les produits et les entreprises]
+Étant donné deux chaînes indéterminées de longueur égale p et t avec un ensemble de caractères par position dans les deux chaînes, nous obtenons une chaîne déterminée pw à partir de p et une chaîne déterminée tw à partir de t en choisissant un caractère par position. Ensuite, nous disons que p et t correspondent lorsque pw et tw correspondent pour un certain choix de caractères. Bien que la notion la plus standard de concordance pour les chaînes déterminées soit qu'elles sont simplement identiques, dans certaines applications, il est plus approprié d'utiliser d'autres définitions, les principaux exemples étant la concordance paramétrée, la concordance avec préservation de l'ordre, et le matching d'arbre cartésien récemment introduit. Dans DIDL string Navigator, nous nous basons sur la correspondance paramétrée hybride.
+
+Cas d'utilisation :
+
+Entrée : Deux chaînes indéterminées p et t de longueur n avec jusqu'à r caractères incertains par position ;
+
+Sortie : Existe-t-il des chaînes déterminées pw ∈ p~ et tw ∈ t telles que pw correspond à tw.
+
+DIDL String Navigator : une étude systématique de la complexité de matching de chaînes de longueur égale indéterminée, pour différentes notions de matching. Nous utilisons n pour désigner la longueur des deux chaînes, et r pour être une limite supérieure sur le nombre de caractères incertains par position.
+
+Ici, la proposition dans notre moteur B2B est la suivante : Les snaps représentent après quelques itérations des visiteurs/membres du portail B2B concernant les points suivants :
+
+Appel à la mise en réseau ;
+
+Produits et catégories depuis quelques semaines ;
+
+Ateliers et expositions ou salons organisés par les entreprises participantes ;
+
+Actions de suivi de l'entreprise sur certains des contenus ci-dessus.
+
+En considérant l'exemple, les étapes peuvent montrer le fonctionnement de haut niveau de l'analyse de texte basée sur le lexique :
+
+Phrase : Aucune entreprise dans ces catégories ne fournit une bonne recommandation de produits au cours du dernier trimestre.
+```
+
+### CHUNK_ID: projet_28__chunk_000026_sub01
+```
+haut niveau de l'analyse de texte basée sur le lexique : Phrase : Aucune entreprise dans ces catégories ne fournit une bonne recommandation de produits au cours du dernier trimestre.
+
+1ère étape : Sur la base de l'étiquetage des parties du discours, nous allons choisir certains mots importants (noms, combinaison nom+nom, etc.). Donc Non, entreprises, catégories, bon, produits.
+
+2ème étape : A partir de la liste des mots extraits, nous choisissons certains aspects de la phrase et des mots spécifiques au domaine. L'ensemble des mots est donc Non, bon
+
+3ème étape : Maintenant nous déterminons la dépendance des mots extraits, Non bon.
+
+Figure 22 : Propositions de Lexique enregistrées comme Réactions et commentaires des participants
+
+4ème étape : Sur la base des mots et de la dépendance finale extraits, disons que la polarité de la dépendance est de -0,5 0,3, donc globalement la polarité devient négative et le sentiment est également négatif.
+
+Figure 23 : Navigation et classifications des chaînes
+
+Signification analytique et explication mathématique
+
+Les effets de composition peuvent présenter des complexités telles que la négation par rapport à l'intensification (par exemple, pas très bon), le décalage (par exemple, pas formidable) par rapport à la négation par retournement (par exemple, pas acceptable), la négation par mot de contenu (par exemple, supprime mes doutes) et les dépendances non limitées (par exemple, Aucune entreprise ne donne de bonnes recommandations).
+
+Le modèle neuronal se compose de trois couches principales, à savoir la couche d'entrée, la couche de caractéristiques et la couche de sortie. La couche d'entrée transforme chaque mot de la phrase d'entrée en un vecteur dense de valeurs réelles. La couche des caractéristiques exploite une mémoire bidirectionnelle à long terme pour extraire les informations sémantiques non locales de la séquence. La couche de sortie calcule un score de poids pour chaque mot de sentiment, ainsi qu'un biais de sentiment global de la phrase.
+```
+
+### CHUNK_ID: projet_29__chunk_000000
+```
+JUSTIFICATIF DES TRAVAUX DE R&D DECLARES AU TITRE DU CREDIT IMPOT RECHERCHE (CIR) DE L’ANNEE
+
+Recherche et Développement d’une architecture numérique évolutive pour la supervision en temps réel et la commande d’un réseau à grande échelle de bornes de recharge pour véhicules électriques.
+
+Table des matières
+
+1. OPERATION DE R&D, ANNÉE 2025 : FICHE DESCRIPTIVE 4
+
+1.1. Intitulé de l’opération 4
+
+1.2. Objectifs de l’opération 4
+
+1.2.1. Contexte de l’opération 4
+
+1.2.2. Objectifs visés et performances à atteindre 5
+
+1.3. Etat de l’art et verrous 6
+
+1.3.1. Analyse de l’état de l’art 6
+
+1.3.2. Verrous et incertitudes scientifiques, techniques, technologiques 8
+
+1.4. Démarche expérimentale, travaux R&D réalisés 9
+
+1.4.1. Raisonnement scientifique et démarche expérimentale appliquée 9
+
+1.4.2. Description des travaux réalisés en 2025 9
+
+1.4.2.1. Développement et validation d’une architecture robuste et scalable 9
+
+1.4.2.1.1. Analyse approfondie de l’architecture actuelle 10
+
+1.4.2.1.2. Développement d’une architecture distribuée orientée événements pour la supervision temps réel à grande échelle 10
+
+1.4.2.1.2.1. Conception d’une chaîne de communication en temps réel tolérante aux pannes et sans point de défaillance unique 11
+
+1.4.2.1.2.2. Maîtrise de l’interopérabilité multi-constructeurs et normalisation des échanges protocolaires 12
+
+1.4.2.1.2.3. Gestion des flux massifs de données et supervision intelligente du système 12
+
+1.5. Conclusion et contribution scientifique, technique ou technologique 12
+
+1.6. Description des ressources humaines 13
+
+1.7. Annexes 14
+
+1.7.1. Annexe 1 : Détails de la fiche synthétique 14
+
+1.7.1.1. Etat de l’art et verrous 14
+
+1.7.1.1.1. Analyse de l’état de l’art 14
+```
+
+### CHUNK_ID: projet_29__chunk_000001
+```
+[SECTION : Intitulé de l’opération]
+[TABLEAU]
+| NOM DE L’OPERATION | Recherche et Développement d’une architecture numérique évolutive pour la supervision en temps réel et la commande d’un réseau à grande échelle de bornes de recharge pour véhicules électriques. | Recherche et Développement d’une architecture numérique évolutive pour la supervision en temps réel et la commande d’un réseau à grande échelle de bornes de recharge pour véhicules électriques. |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CHEF(S) DE PROJET | SYLLA Diaguily | SYLLA Diaguily |
+| Ce projet a-t-il fait l’objet d’un rescrit CIR ou JEI ou a-t-il servi à l’attribution d’un agrément. | NON | NON |
+| Préciser si le projet a-t-il fait l’objet d’une collaboration avec le ministère de la défense (DGA) ou de l’intérieur. | NON | NON |
+| Date de début : Janvier 2025 | Date de début : Janvier 2025 | Date de fin : Décembre 2025 |
+| Coût total : | Coût total : | Coût déclaré au CIR : |
+| THÉSAURUS | B2c6 : Smartgrid, contrôle hiérarchique, supervision, prédiction, réseau bâtiment, recharge des véhicules électriques ; | B2c6 : Smartgrid, contrôle hiérarchique, supervision, prédiction, réseau bâtiment, recharge des véhicules électriques ; |
+| MOT CLÉS | Interopérabilité du réseau ; Scalabilité ; Communication bidirectionnelle ; Architecture distribuée. | Interopérabilité du réseau ; Scalabilité ; Communication bidirectionnelle ; Architecture distribuée. |
+```
+
+### CHUNK_ID: projet_29__chunk_000002_sub00
+```
+[SECTION : Contexte de l’opération]
+La transition énergétique, guidée par les objectifs de décarbonation et de réduction des émissions de gaz à effet de serre, constitue un enjeu stratégique majeur pour les politiques nationales et européennes. En France, la loi énergie-climat fixe une réduction de 40 % des émissions de CO₂ d’ici 2030 par rapport aux niveaux de 1990, tandis qu’au niveau européen, le Green Deal vise une réduction de 55 % d’ici 2030 et la neutralité carbone à l’horizon 2050. Ces ambitions se traduisent par un développement soutenu des énergies renouvelables et par une transformation profonde des systèmes de transport, afin de limiter la dépendance aux énergies fossiles et de réduire l’impact environnemental de la mobilité.
+
+Dans ce contexte, la mobilité électrique constitue un levier stratégique pour la transition énergétique. Le déploiement étendu de véhicules électriques nécessite le développement de nouvelles architectures d’infrastructures de recharge, qui dépassent la simple distribution d’énergie et intègrent des systèmes numériques novateurs capables de gérer des volumes croissants de données et de transactions critiques. Ces infrastructures doivent garantir simultanément sécurité, disponibilité, résilience et interopérabilité, tout en permettant une supervision en temps réel et un pilotage intelligent des opérations de recharge. Ces enjeux impliquent la conception de solutions robustes pour la gestion de flux massifs de données, l’analyse prédictive, la cybersécurité industrielle et la maintenance avancée, constituant autant de défis scientifiques et technologiques à résoudre pour assurer la fiabilité et l’efficacité d’un réseau national de recharge,.
+
+Dans cette continuité, la mise en œuvre d’un réseau de bornes de recharge pour véhicules électriques soulève des défis scientifiques et technologiques majeurs. Le besoin crucial consiste à concevoir un système capable d’assurer une communication bidirectionnelle en temps réel entre les bornes et la plateforme centrale, ainsi que de gérer des volumes massifs de données et de transactions critiques, tout en garantissant la sécurité, l’intégrité et l’interopérabilité des échanges. Ces infrastructures doivent par ailleurs embarquer des dispositifs de maintenance prédictive et de pilotage intelligent de haut niveau, à même d’anticiper avec précision les défaillances et d’assurer une optimisation continue et robuste du fonctionnement du réseau à grande échelle.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 121,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

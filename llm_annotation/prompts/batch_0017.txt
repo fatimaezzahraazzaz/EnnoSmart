@@ -1,0 +1,394 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 17/135, 8 chunks)
+
+### CHUNK_ID: projet_4__chunk_000334
+```
+[SECTION : Définition du protocole expérimental]
+Pour pouvoir définir un protocole expérimental pertinent au regard des solutions techniques à tester, nous devons tout d’abord analyser et rechercher des sites de cultures capables de répondre à l’étude de ces nouvelles solutions techniques. Cette étape est cruciale pour l’étude et nous impose donc de lever un maximum d’incertitudes liées à la représentativité de la culture (homogénéité des facteurs agronomiques et de l’infestation), afin que nos résultats puissent être exploitables.
+
+Par conséquent, pour chaque solution technique testée, nous devons collecter tout type de données disponibles sur cette solution technique, afin de définir une méthode et un plan d’expérimentation les plus appropriés. En effet, les solutions techniques testées répondent à des spécificités régionales aussi bien agronomiques que culturales, si bien que de solides connaissances sur ces spécificités sont nécessaires.
+
+De plus, les solutions techniques ayant pour cible des organismes vivants (végétaux, micro-organismes, insectes), il nous est indispensable de disposer de solides connaissances sur ces organismes cibles afin d’assurer le bon déroulement et la validité des résultats de nos expérimentations.
+
+Enfin, nos expérimentations étant faites en champ ou sous abri, elles sont contraintes par des aléas qu’il nous est indispensable de prendre en compte au fur et à mesure de nos expérimentations et qui nous impose de redéfinir nos stratégies élaborées au départ.
+```
+
+### CHUNK_ID: projet_4__chunk_000405_sub00
+```
+[PAGE 22]
+Action 4 : Coordination du projet, diffusion, valorisation et transfert des résultats
+Responsable d’action : Est Horticole
+Partenaires impliqués : Tous partenaires
+Cette action permettra l’organisation et l’animation des comités techniques et des COPIL entre les différents
+partenaires du projet ainsi que l’animation de groupes de travail.
+L’action 4 vise également à transférer
+l’ensemble des connaissances acquises, que ce soit dans les actions 1 ou 2.
+Afin de valoriser les acquis,
+différents outils de communication seront réalisés (article, fiches techniques, vidéos, etc.) au niveau régional
+et national afin de toucher le plus grand nombre via le site Ecophytopic.
+Ces outils seront également mis à
+disposition des conseillers afin qu’ils puissent transférer directement aux producteurs les résultats obtenus.
+Des journées de sensibilisation, et de démonstration seront également réalisées.
+Tâche 4.1 : Coordination du projet
+Cette tâche a pour premier objectif de coordonner les différentes actions réalisées par les trois stations
+partenaires afin de veiller à la bonne réalisation des essais, d’établir et adapter ensemble les protocoles, les
+grilles de notation, de rassembler les résultats obtenus sur les différents sites d’expérimentation, etc.
+Cela
+sera réalisé via des comités de pilotage et de suivi dont le fonctionnement a déjà été décrit plus en détail dans
+la partie II.8.
+Les experts partenaires du projet seront également impliqués dans la validation des protocoles
+et des résultats obtenus ainsi que dans les discussions des groupes de travail.
+Des échanges téléphoniques
+seront également organisés avec les experts afin de réaliser une co-construction des itinéraires de culture
+optimisés.
+Les essais mis en place chez les producteurs seront également rigoureusement suivis et les
+partenaires du projet seront chargés de veiller au respect des itinéraires définis.
+Tâche 4.2 : Diffusion, valorisation et transfert des résultats
+Les résultats des expérimentations vont donner lieu à la rédaction de comptes rendus qui seront archivés dans
+la base de données nationale 'Expérimentations' rassemblant l’ensemble des expérimentations de l’Institut
+ASTREDHOR depuis 1998.
+Ces résultats seront également mis en ligne sur les sites internet des différents
+partenaires et seront de fait accessibles aux producteurs et éleveurs ainsi qu'à tous conseillers d’entreprise
+sur le territoire.
+```
+
+### CHUNK_ID: projet_4__chunk_000020_sub01
+```
+Description des ressources humaines
+Fonction
+dans
+l’opération Temps
+NOM (chef de Contribution directe à l’acquisition déclaré pour
+Diplôme le plus élevé
+Prénom projet, de nouvelles connaissances l’opération
+chercheur, (heures)
+technicien de
+R&D…)
+Ingénieur Agronome -L'institut Technicien de Mise en œuvre de programmes
+ALEX Ludovic 570
+Agro Montpellier 2022 R&D d'expérimentation
+Doctorat Géosciences - Technicien de Mise en œuvre de programmes
+BEDEL Léa 498
+Université de Lorraine R&D d'expérimentation
+BOULLARD Ingénieur - Institut Proposition et mise en œuvre de
+Chercheur 550
+Lilian Polytechnique Lasalle programmes expérimentaux
+CARBONEL Certificat de spécialité - Technicien de Mise en œuvre de programmes
+35
+Jim ENSSA Bordeaux Aquitaine R&D d'expérimentation
+Master Agrosciences - Mise en œuvre d'expérimentations en
+CLAUDEL
+Université d'Avignon et des Chercheur Alliacées et de différents programmes 1286
+Anaïs
+Pays de Vaucluse de recherche et d'expérimentation BPE
+Licence professionnelle
+Mise en œuvre de programme de
+DELATOUR agroressources et Technicien de
+recherches de références pour le 336
+Damien environnement - Université R&D
+territoire Champagne-Ardenne
+Reims Champagne-Ardennes
+DUPONT- Master Biologie végétale
+Technicien de Mise en œuvre de programmes
+GENDRON option filières de l'Horticulture 447
+R&D d'expérimentation
+Maxime et innovation
+FREUDENREI Montage et coordination de projets,
+Ingénieur agronomie - ENSAIA Chercheur 117
+CH Laura participation aux essais expérimentaux
+Proposition et mise en œuvre de
+FUCHS DUT Génie Biologique, Technicien de
+programmes de recherches de 932
+Sébastien Agronomie - IUT Colmar R&D
+référence
+JOUSSEMET Chercheur Montage et coordination de projets,
+Ingénieure Horticole - ENSH 80
+Marie-Anne chef de projet participation aux essais expérimentaux
+Proposition et mise en œuvre de
+Ingénieur agronome - ENSA programmes de recherches de
+JUNG Denis Chercheur 659
+Montpellier référence, expérimentateur sur pomme
+de terre et de cellule BPE
+LITZLER Master gestion de la qualité Technicien de Montage et coordination de projets,
+1180
+Marine des productions végétales R&D participation aux essais expérimentaux
+MOUGENOT DUT Génie Biologique, Technicien de
+Participation aux essais expérimentaux 874
+Jonas Agronomie - IUT Colmar R&D
+Master ST2AE Sciences
+NUSSBAUME agronomiques et Technicien de Proposition et mise en œuvre de
+1201
+R Marie environnementales - Université R&D programmes expérimentaux
+Colmar
+PLANETE Légumes Fleurs et Plantes - CONFIDENTIEL PAGE 21
+Ce document est la propriété de la société PLANETE Légumes Fleurs et Plantes
+Il ne peut être reproduit ou transmis à des tiers sans son autorisation expresse
+```
+
+### CHUNK_ID: projet_4__chunk_000037_sub00
+```
+[PAGE 38]
+CIR 2024
+ou non.
+Par ailleurs, en culture bio, les filets sont un peu utilisés sur les petites exploitations
+mais jamais sur de grandes parcelles, d’où l’intérêt d’identifier de nouveaux filets performants.
+Enfin, dans le cadre de l’essai contre les pucerons sur photinia, il s’agit de combiner plusieurs
+leviers entre produits phytopharmaceutiques de synthèse et auxiliaires (naturels ou lâchés).
+Par exemple, une pulvérisation à base d’huile paraffinique est à envisager à l’automne ou en
+tout début de printemps pour éliminer les formes hivernantes des pucerons puis au printemps,
+sur foyers résiduaires, une pulvérisation de savon avant l’installation des auxiliaires.
+Les
+plantes de services doivent alors être sélectionnées selon leur période de floraison, afin de
+couvrir l’ensemble de la période de végétation des photinias, par une succession des espèces
+et la multiplication des séries semées.
+II.8.2.2.
+Verrous et incertitudes scientifiques, techniques, technologiques
+Pour mener à bien nos travaux d’expérimentation agronomique, nous sommes confrontés à
+plusieurs problématiques, inhérentes à notre métier, mais également certaines plus
+spécifiques, selon les expérimentations menées.
+II.8.2.2.1.
+Définition d’un protocole expérimental pertinent
+Pendant la réalisation de nos études sur de nouveaux programmes ou produits
+phytosanitaires, nous sommes confrontés à des incertitudes liées à l’aspect novateur de
+chaque étude et de chaque matière active/molécule testée de classe chimique variée, qui sont
+testées.
+Par conséquent, il peut être complexe de déterminer un protocole d’étude avec un
+plan d’expérience pertinent.
+En effet, bien que nous puissions nous appuyer sur des recommandations générales pour
+l’étude des produits phytosanitaires sur les cultures (EPPO pour le mildiou et méthodes CEB
+de Végéphyl), il s’agit de lignes directrices très générales, ne donnant pas d’indications
+précises sur le protocole à mettre en œuvre pour obtenir une réponse de qualité aux
+problématiques rencontrées.
+De ce fait, au démarrage des travaux, aucun protocole existant
+ne permet d’aboutir à une information fiable, tenant compte de l’ensemble des facteurs
+pouvant influencer les résultats en condition naturelle de terrain, d’où une incertitude quant à
+la réalisation de protocoles pertinents.
+Par conséquent, une réflexion scientifique préalable est
+indispensable pour mener à bien nos expérimentations agronomiques.
+```
+
+### CHUNK_ID: projet_4__chunk_000128
+```
+[SECTION : Définition d’un protocole expérimental pertinent]
+Pendant la réalisation de nos études sur de nouveaux produits phytosanitaires, nous sommes confrontés à des incertitudes liées à l’aspect novateur de chaque étude et de chaque matière active/molécule testée de classe chimique variée, qui sont testées. Par conséquent, il peut être complexe de déterminer un protocole d’étude avec un plan d’expérience pertinent.
+
+En effet, bien que nous puissions nous appuyer sur des recommandations générales pour l’étude des produits phytosanitaires sur les cultures (par exemple la méthode européenne EPPO PP1/016 dans l’essai contre le botrytis sur la fraise), il s’agit de lignes directrices très générales, ne donnant pas d’indications précises sur le protocole à mettre en œuvre pour obtenir une réponse de qualité aux problématiques rencontrées. Par ailleurs, il n’existe pas de méthode pour toutes les problématiques, notamment aucune EPPO spécifique aux pucerons sur légumes n’existe. De plus, pour tester les engrais, il n’existe pas de méthodes officielles. De ce fait, au démarrage des travaux, aucun protocole existant ne permet d’aboutir à une information fiable, tenant compte de l’ensemble des facteurs pouvant influencer les résultats en condition naturelle de terrain, d’où une incertitude quant à la réalisation de protocoles pertinents. Par conséquent, une réflexion scientifique préalable est indispensable pour mener à bien nos expérimentations agronomiques.
+```
+
+### CHUNK_ID: projet_4__chunk_000137
+```
+[SECTION : Récoltes, mesures et analyses statistiques]
+Avant de pouvoir utiliser un nouveau traitement phytosanitaire, il est indispensable de s’assurer de son innocuité pour l’environnement, pour les personnes l’utilisant, et pour tout organisme (humain, animal…) susceptible d’être en contact avec cette formulation de façon directe ou indirecte. Par conséquent, deux types d’études peuvent concourir à l’évaluation complète d’une formulation phytosanitaire :
+
+Etude d’efficacité : Avec comme objectif de contrôler un ou plusieurs nuisibles (insectes, champignons, mauvaises herbes, rongeurs…) ou de redéfinir le cycle de croissance des plantes (ex : régulation de croissance), l’efficacité d’une formulation phytopharmaceutique peut être définie comme la mesure de son effet dans son ensemble sur un système agricole. Cette mesure d’efficacité repose donc sur un équilibre entre :
+
+Effets positifs du traitement en termes de protection des cultures pour une meilleure qualité et définir les quantités nécessaires à appliquer
+
+Effets négatifs tels que réduction de qualité, dommages sur des organismes bénéfiques ou sur les cultures suivantes/adjacentes, développement de résistances
+
+Effets sur les nuisibles non-ciblés, durée de protection liée à la formulation
+
+=> Le résultat net des effets positifs et négatifs doit être positif au regard des bénéfices attendus
+
+Etude de sélectivité : évaluation d’une possible phytotoxicité pour les cultures en l’absence de mauvaises herbes incluant :
+
+Dose spécifiée pour l’usage prévu
+
+Plus forte dose (généralement le double de la dose recommandée), pour simuler des chevauchements de traitement, phénomène pouvant arriver dans la pratique
+
+Pour évaluer ces paramètres, nous devons tout d’abord évaluer s’il y a des différences significatives entre les traitements. Pour cela, nous réalisons une analyse de la variance (ANOVA). Si les résultats sont concluants, nous caractérisons alors la différence entre les traitements en appliquant le test de Dunnett, permettant d’évaluer la moyenne des traitements vis-à-vis du témoin (dans notre cas, la parcelle non traitée).
+
+Le test de Newman-Keuls à 5% (comparaison de moyennes), nous permet quant à lui d’évaluer les performances des différents traitements entre eux, lorsqu’un effet significatif est observé. De même, le test de Tukey nous permet d’identifier les différences vraiment significatives.
+```
+
+### CHUNK_ID: projet_4__chunk_000187
+```
+[SECTION : Récoltes, mesures et analyses statistiques]
+Avant de pouvoir utiliser un nouveau programme de traitement, il est indispensable de s’assurer de son innocuité pour l’environnement, pour les personnes l’utilisant, et pour tout organisme (humain, animal…) susceptible d’être en contact avec cette formulation de façon directe ou indirecte. Par conséquent, deux types d’études peuvent concourir à l’évaluation complète d’une formulation phytosanitaire :
+
+Etude d’efficacité : Avec comme objectif de contrôler un ou plusieurs nuisibles (insectes, champignons, mauvaises herbes, rongeurs…) ou de redéfinir le cycle de croissance des plantes (ex : régulation de croissance), l’efficacité d’une formulation phytopharmaceutique peut être définie comme la mesure de son effet dans son ensemble sur un système agricole. Cette mesure d’efficacité repose donc sur un équilibre entre :
+
+Effets positifs du traitement en termes de protection des cultures pour une meilleure qualité et définir les quantités nécessaires à appliquer
+
+Effets négatifs tels que réduction de qualité, dommages sur des organismes bénéfiques ou sur les cultures suivantes/adjacentes, développement de résistances
+
+Effets sur les nuisibles non-ciblés, durée de protection liée à la formulation
+
+Le résultat net des effets positifs et négatifs doit être positif au regard des bénéfices attendus
+
+Etude de sélectivité : évaluation d’une possible phytotoxicité pour les cultures en l’absence de mauvaises herbes incluant :
+
+Dose spécifiée pour l’usage prévu
+
+Plus forte dose (généralement le double de la dose recommandée), pour simuler des chevauchements de traitement, phénomène pouvant arriver dans la pratique
+
+Pour évaluer ces paramètres, nous devons tout d’abord évaluer s’il y a des différences significatives entre les traitements. Pour cela, nous réalisons une analyse de la variance (ANOVA). Si les résultats sont concluants, nous caractérisons alors la différence entre les traitements en appliquant le test de Dunnett, permettant d’évaluer la moyenne des traitements vis-à-vis du témoin (dans notre cas, la parcelle non traitée).
+
+Le test de Newman-Keuls à 5% (comparaison de moyennes), nous permet quant à lui d’évaluer les performances des différents traitements entre eux, lorsqu’un effet significatif est observé. De même, le test de Tukey nous permet d’identifier les différences vraiment significatives.
+```
+
+### CHUNK_ID: projet_4__chunk_000258
+```
+[SECTION : Récoltes, mesures et analyses statistiques]
+Avant de pouvoir utiliser un nouveau programme de traitement, il est indispensable de s’assurer de son innocuité pour l’environnement, pour les personnes l’utilisant, et pour tout organisme (humain, animal…) susceptible d’être en contact avec cette formulation de façon directe ou indirecte. Par conséquent, deux types d’études peuvent concourir à l’évaluation complète d’une formulation phytosanitaire :
+
+Etude d’efficacité : Avec comme objectif de contrôler un ou plusieurs nuisibles (insectes, champignons, mauvaises herbes, rongeurs…) ou de redéfinir le cycle de croissance des plantes (ex : régulation de croissance), l’efficacité d’une formulation phytopharmaceutique peut être définie comme la mesure de son effet dans son ensemble sur un système agricole. Cette mesure d’efficacité repose donc sur un équilibre entre :
+
+Effets positifs du traitement en termes de protection des cultures pour une meilleure qualité et définir les quantités nécessaires à appliquer
+
+Effets négatifs tels que réduction de qualité, dommages sur des organismes bénéfiques ou sur les cultures suivantes/adjacentes, développement de résistances
+
+Effets sur les nuisibles non-ciblés, durée de protection liée à la formulation
+
+Le résultat net des effets positifs et négatifs doit être positif au regard des bénéfices attendus
+
+Etude de sélectivité : évaluation d’une possible phytotoxicité pour les cultures en l’absence de mauvaises herbes incluant :
+
+Dose spécifiée pour l’usage prévu
+
+Plus forte dose (généralement le double de la dose recommandée), pour simuler des chevauchements de traitement, phénomène pouvant arriver dans la pratique
+
+Pour évaluer ces paramètres, nous devons tout d’abord évaluer s’il y a des différences significatives entre les traitements. Pour cela, nous réalisons une analyse de la variance (ANOVA). Si les résultats sont concluants, nous caractérisons alors la différence entre les traitements en appliquant le test de Dunnett, permettant d’évaluer la moyenne des traitements vis-à-vis du témoin (dans notre cas, la parcelle non traitée).
+
+Le test de Newman-Keuls à 5% (comparaison de moyennes), nous permet quant à lui d’évaluer les performances des différents traitements entre eux, lorsqu’un effet significatif est observé. De même, le test de Tukey nous permet d’identifier les différences vraiment significatives.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 17,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

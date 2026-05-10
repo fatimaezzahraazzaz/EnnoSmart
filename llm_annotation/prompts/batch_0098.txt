@@ -1,0 +1,340 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 98/135, 8 chunks)
+
+### CHUNK_ID: projet_22__chunk_000041_sub02
+```
+de l’humidité dans le sol, mais les capteurs à 40 et 45 cm n’avaient pas réagi à cette pluie. Figure : Réaction des capteurs à une pluie de 10 mm
+
+Nous avons constaté qu’une pluie de 15 mm était captée à 5 et 15 cm de profondeur. En revanche l’humidité ne semblait pas avoir évolué aux autres profondeur. Dans un sol humide, le capteur à 25 cm régissait également légèrement à cette pluie.
+
+Figure  : Réaction des capteurs à une pluie de 15 mm sur sol sec (haut) et humide (bas)
+
+Avec une pluie de 20.2 mm, nous avons constaté l’infiltration dans l’ensemble des horizons du sol.
+
+Figure  : Réaction des capteurs à une pluie de 20 mm
+
+Une pluie de 25 mm a aussi été enregistré par l’ensemble des capteurs ente 5 cm et 45 cm de profondeur. Nous avons constaté que les premiers horizons avaient montré une réaction significative, indiquant une forte absorption. Etant donné la consommation des arbres, nous avons supposé que les couches du sol abritant les principales racines avaient été correctement alimentés en eau par cette précipitation.
+
+Figure  : Réaction des capteurs à une pluie de 25 mm
+
+Enfin, une pluie de 41.2 mm a été permis une infiltration jusqu’à la profondeur maximale.
+
+Figure  : Réaction des capteurs à une pluie de 40 mm
+
+Cette étude de l’infiltration des précipitations dans le sol nous a donc permis de mettre en avant que les pluies inférieurs à 15 mm ne suffisaient pas à atteindre l’ensemble du système racinaire des arbres. Pour garantir une irrigation efficace, il est nécessaire d’apporter au moins 20 mm d’eau. Toutefois, une irrigation excessive, comme une application de 40 mm, n’apporte pas de bénéfices supplémentaires, le système racinaire des pommiers ne s’étendant pas en profondeur au-delà de ce seuil.
+```
+
+### CHUNK_ID: projet_22__chunk_000083_sub00
+```
+[PAGE 9]
+Résultats de l’essai 2024
+Afin de mieux comprendre la consommation en eau d'un verger de
+pommiers et d'optimiser la gestion de l'irrigation, le Verexal s'est équipé de
+trois sondes capacitives.
+Ces sondes mesurent le niveau d'humidité du sol
+tous les 10 cm sur une profondeur de 60 cm, permettant ainsi de suivre
+précisément l'évolution de l'humidité dans le profil du sol et d'adapter les
+pratiques d'irrigation en conséquence.
+Les trois sondes capacitives de la
+société Agralis ont été installées en avril, au moment où la culture a
+commencé à exprimer ses premiers besoins en eau.
+Les pommiers possèdent un système racinaire relativement superficiel, qui se développe principalement dans les
+40 premiers centimètres du sol.
+Pour que l'irrigation soit efficace, il est essentiel que l'ensemble de ce réseau
+racinaire ait un accès optimal à l'eau.
+L'objectif de cet essai est donc de déterminer précisément la profondeur à
+laquelle s'étend le système racinaire des pommiers et de définir la quantité d'eau nécessaire pour maximiser
+l'efficacité de l'irrigation.
+Le système racinaire
+Le graphique ci-dessus présente les résultats des différents capteurs d'une sonde capacitive pour le mois
+de juin.
+Chaque capteur, présent à une profondeur spécifique, enregistre la quantité d'eau présente à ce
+niveau du sol à un moment donné.
+La consommation d'eau par les arbres se traduit par une diminution de
+l'humidité dans le sol, caractérisée par un phénomène en "escalier".
+Ce phénomène représente l'alternance
+entre les périodes de consommation d'eau diurne, où la plante absorbe activement l'eau, et les périodes
+nocturnes, durant lesquelles la consommation est nettement réduite (environ moins d'un millimètre),
+stabilisant ainsi le niveau d'humidité du sol.
+Les données montrent que les capteurs situés entre 5 cm et 45 cm de profondeur enregistrent une
+consommation d'eau continue tout au long du mois de juin.
+Cependant, la variation de l'humidité est plus
+marquée dans les premières horizons du sol (entre 5 cm et 25 cm), tandis que les niveaux d'humidité sont
+plus stables entre 35 cm et 45 cm.
+```
+
+### CHUNK_ID: projet_22__chunk_000008
+```
+[SECTION : Verrous et incertitudes scientifiques, techniques, technologiques]
+La mise en œuvre de nos travaux d’expérimentation en vergers de pommiers se heurte à plusieurs verrous liés à la complexité des systèmes arboricoles et à la temporalité des processus biologiques.
+
+Concernant la matière organique, il n’existe pas de corrélation claire à court terme entre les apports organiques et la réponse des arbres (vigueur, production). Par ailleurs, la dynamique de minéralisation et la disponibilité des nutriments restent difficiles à prévoir, et les effets climatiques compliquent l’interprétation des résultats.
+
+Le pilotage de la nutrition est quant à lui limité par des inadéquations entre les apports organiques et les besoins des arbres, ainsi que par des incertitudes sur les interactions entre éléments (antagonismes potassium/calcium, excès de phosphore ou potassium).
+
+Par ailleurs, la gestion de la fatigue des sols reste un verrou important, avec un manque de compréhension des mécanismes biologiques (microbiote, pathogènes) et une efficacité incertaine des solutions mises en œuvre (amendements, stratégies de jachère…).
+
+En outre, les performances des vergers sont fortement variables selon les combinaisons variété/porte-greffe et les systèmes de conduite, en l’absence de référentiels agronomiques robustes.
+
+Enfin, la gestion de l’eau est contrainte par une connaissance insuffisante du système racinaire et par l’absence de seuils opérationnels fiables pour piloter l’irrigation. L’efficacité des apports en eau et leur répartition dans le sol restent difficiles à maîtriser.
+
+L’ensemble de ces verrous limite donc notre capacité à optimiser les vergers de manière fiable et reproductible, et nous impose une démarche approche expérimentale rigoureuse, instrumentée et pluriannuelle pour mieux comprendre et modéliser les interactions sol-plante-climat.
+```
+
+### CHUNK_ID: projet_22__chunk_000035_sub01
+```
+plantations, afin de couvrir différents stades physiologiques et d’évaluer la robustesse des résultats dans des conditions pédoclimatiques réelles. Cette approche doit permettre de produire des connaissances transférables et directement opérationnelles
+
+Instrumentation et acquisition de données : nous devons installer des sondes capacitives pour mesurer en continu l’humidité du sol, tous les 10 cm jusqu’à 60 cm de profondeur. Ce dispositif permettra de caractériser la dynamique hydrique du sol, d’affiner la compréhension des interactions sol-plante et d’évaluer l’impact des pratiques culturales sur la disponibilité en eau
+
+Suivi agronomique : nous devons suivre de manière régulière plusieurs indicateurs, afin de quantifier les effets des modalités testées (vigueur végétative, rendement, calibre des fruits, analyses foliaires, analyses de sol). Ces données permettront d’alimenter une analyse multicritères pour établir des corrélations robustes
+
+Analyse des données : les données collectées feront l’objet de traitements statistiques pour identifier des tendances significatives et discriminer les effets des différents facteur étudiés
+```
+
+### CHUNK_ID: projet_22__chunk_000003_sub00
+```
+[SECTION : Organisation et coordonnées]
+En fonction des programmes, Verexal peut être porteur de projets mais aussi participant. Dans les deux cas, des collaborations peuvent être mises en place. Cela concerne le plus souvent d’autres stations de recherche ou organismes publics, en France ou à l’étranger, mais aussi éventuellement des firmes privées. La liste des partenaires est variable en fonction des projets en cours de réalisation.
+
+Le programme d’expérimentation est déterminé par les producteurs locaux membre du comité de pilotage, représentés par filières (fruits à pépins - fruits à noyaux – diversification). Les contacts extérieurs avec les différents partenaires participent à l’élaboration de ce programme. Une coordination des sujets de recherche et un éventuel montage de projets collectifs a également lieu dans le cadre de l’IRFEL (www.irfel.fr), association de stations expérimentales fruits, légumes et horticulture.
+
+L’équipe « expérimentation » gère les aspects stratégiques, opérationnels et pratiques dans le verger des essais.
+
+Une personne est dédiée à la gestion administrative et comptable de la vie du Verexal. Elle participe aussi pour partie à l’expérimentation.
+
+Une autre personne gère le magasin de vente qui permet d’écouler en direct un gros volume de fruits du verger, mais aussi d’avoir un retour immédiat des consommateurs sur les nouvelles espèces et variétés en expérimentation.
+
+Figure  : Organigramme société
+
+VEREXAL applique une démarche rigoureuse pour identifier et sélectionner les opérations éligibles au Crédit d’Impôt Recherche (CIR). Cette démarche repose sur les critères de définition de la recherche et développement (R&D) tels qu’établis par le Manuel de Frascati (OCDE, 2015).
+
+Les travaux de R&D menés par VEREXAL s’inscrivent pleinement dans cette logique, en tant que projet stratégique, répondant à des enjeux majeurs d’augmentation des performances des systèmes de production en vergers de pommier, notamment en matière de gestion durable des sols, de pilotage de la fertilisation organique, de maîtrise de la ressource en eau et d’adaptation des itinéraires techniques aux contraintes pédoclimatiques.
+
+Les travaux de R&D menés par VEREXAL s’inscrivent pleinement dans le cadre des cinq critères définis par le manuel de Frascati. En effet, ils se caractérisent par :
+```
+
+### CHUNK_ID: projet_22__chunk_000015_sub00
+```
+[SECTION : Définition d’un système d’irrigation et de gestion de l’eau]
+Enfin, nous avons réalisé un travail approfondi sur la gestion de l’eau, grâce à l’installation de sondes capacitives, permettant de mesurer le niveau d’humidité du sol en profondeur.
+
+Les pommiers possèdent un système racinaire se développant principalement dans les 40 premiers centimètres du sol or, pour que l’irrigation soit efficace, l’ensemble de ce réseau racinaire doit avoir un accès optimal à l’eau. Nous avons donc cherché à déterminer précisément la profondeur à laquelle s’étendait le système racinaire des pommiers, pour définir la quantité d’eau nécessaire pour maximiser l’efficacité de l’irrigation.
+
+Pour cela, nous avons positionné les capteurs à des profondeurs spécifiques (5, 15, 25, 35, 45, 55 cm) et nous avons enregistré la quantité d’eau présente à chaque niveau dans le sol.
+
+La consommation d’eau par les arbres se traduisait par une diminution progressive de l’humidité dans le sol, caractérisée par un phénomène en escalier, représentant ainsi l’alternance entre absorption active en journée, et consommation nettement réduite (≈ <1 mm) la nuit, stabilisant ainsi le niveau d’humidité du sol.
+
+Les mesures ont révélé que les capteurs situés entre 5 cm et 45 cm de profondeur enregistraient une consommation d’eau continue. Cependant, les variations étaient plus marquées dans les premiers horizons du sol (entre 5 cm et 25 cm), tandis qu’elles étaient plus stables ente 35 cm et 45 cm. Nous avons supposé que l’essentiel de l’activité racinaire se concentrait dans les premiers centimètres du sol, même si le système racinaire pouvait s’étendre jusqu’à environ 45 cm.
+
+Afin de déterminer la quantité nécessaire d’eau pour une irrigation efficace, nous avons analysé l’efficacité des pluies de différentes intensités.
+
+Une pluie de 5.6 mm, humidifiait principalement la couche superficielle (5 cm), dans une moindre mesure celle à 15 cm et était sans effet plus profondément. Avec une pluie de 11 mm, l’humidité augmentait jusqu’à 25 cm, avec un impact très limité. Une pluie de 15 mm restait cantonnée jusqu’à 15 cm de profondeur, sauf en condition de sol humide, où une légère réponse pouvait apparaitre à 25 cm.
+```
+
+### CHUNK_ID: projet_22__chunk_000041_sub00
+```
+[SECTION : Définition d’un système d’irrigation et de gestion de l’eau]
+En 2024, nous avons équipé la station de sondes capacitives, pour mesurer le niveau d’humidité du sol tous les 10 cm, et sur une profondeur de 60 cm, nous permettant ainsi de suivre précisément l’évolution de l’humidité dans le profil du sol et d’adapter les pratiques d’irrigation en conséquence.
+
+Les pommiers possèdent un système racinaire relativement superficiel, qui se développe principalement dans les 40 premiers centimètres du sol. Pour que l’irrigation soit efficace, il est essentiel que l’ensemble de ce réseau racinaire ait un accès optimal à l’eau. Nous avons donc cherché à déterminer précisément la profondeur à laquelle s’étendait le système racinaire des pommiers, pour définir la quantité d’eau nécessaire pour maximiser l’efficacité de l’irrigation.
+
+Pour cela, nous avons positionné les capteurs à des profondeurs spécifiques (5, 15, 25, 35, 45, 55 cm) et nous avons enregistré la quantité d’eau présente à chaque niveau dans le sol à un moment donné (par exemple en juin). La consommation d’eau par les arbres se traduisait par une diminution de l’humidité dans le sol, caractérisée par un phénomène en escalier, représentant ainsi l’alternance entre les périodes de consommation d’eau diurne, où la plante absorbait activement l’eau, et les périodes nocturnes, durant lesquelles la consommation était nettement réduite (≈ <1 mm), stabilisant ainsi le niveau d’humidité du sol.
+
+Nos analyses des résultats obtenus ont révélé que les capteurs situés entre 5 cm et 45 cm de profondeur enregistraient une consommation d’eau continue tout au long du mois de juin. Cependant, la variation de l’humidité était plus marquées dans les premiers horizons du sol (entre 5 cm et 25 cm), tandis que les niveaux d’humidité étaient plus stables ente 35 cm et 45 cm. Nous avons donc supposé que, dans les conditions pédologiques de l’essai, les racines des pommiers présentaient une activité d’absorption d’eau importante entre 5 cm et 25 cm, mais que le système racinaire pouvait atteindre une profondeur maximale d’environ 45 cm.
+```
+
+### CHUNK_ID: projet_22__chunk_000044
+```
+[PAGE 1]
+
+E C L A I R V A L E
+Évaluation d’une machine d’éclaircissage mécanique
+2024
+L’éclairvale
+Éclairvale permet l’éclaircissage des arbres
+fruitiers de la floraison au stade de jeunes fruits
+(35 mm). Attelée à un tracteur, elle comporte un
+rotor libre en rotation sur lequel sont fixées des
+tiges semi-rigides en fibre de verre. Sa rotation
+est assurée par la pénétration des tiges dans la
+végétation et l’avancement du tracteur.
+Résultats
+Variété: Tentation
+Vitesse Emplacement de
+Commentaires
+d’avancement l’éclairvale
+1,5 km Réglage fils centrale Pas d’effet de chute
+Réglage fils centrale +
+1,5 km Pas d’effet de chute
+20cm
+Réglage ouverture
+1,5 km Bon positionnement de la machine
+totale
+Évaluation de chute : -10% de fruits après un
+Réglage ouverture
+1,8 km passage face sud. Chute homogène face sud et face
+totale
+nord
+Évaluation de chute : -20% de fruits après un
+Réglage ouverture
+2,2 km passage face sud. Chute homogène face sud et face
+totale
+nord
+Conclusion: Dans les conditions de charge de 2024, Éclairvale peut être réglé à une vitesse de
+2,2 km/h avec une ouverture totale dans l’arbre. Un éclaircissage avec ces paramètres permet
+de réaliser un éclaircissage manuel qualitatif supplémentaire. Après quelques heures, le taux de
+mâchures est inférieur à 10 %. On n’observe pas de gradient de dégâts avec l’augmentation de la
+vitesse.
+19
+
+[TABLEAU 1]
+| Variété: Tentation | | |
+| -------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Vitesse d’avancement | Emplacement de l’éclairvale | Commentaires |
+| 1,5 km | Réglage fils centrale | Pas d’effet de chute |
+| 1,5 km | Réglage fils centrale + 20cm | Pas d’effet de chute |
+| 1,5 km | Réglage ouverture totale | Bon positionnement de la machine |
+| 1,8 km | Réglage ouverture totale | Évaluation de chute : -10% de fruits après un passage face sud. Chute homogène face sud et face nord |
+| 2,2 km | Réglage ouverture totale | Évaluation de chute : -20% de fruits après un passage face sud. Chute homogène face sud et face nord |
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 98,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

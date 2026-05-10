@@ -1,0 +1,89 @@
+{
+  "batch_id": 131,
+  "chunks": [
+    {
+      "chunk_id": "projet_31__chunk_000004_sub04",
+      "project_id": "projet_31_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_31_\\cir_final\\CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_name": "CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "Delay Control et le contrôle en couple privilégie des variables globales plus facilement mesurables et offre une meilleure robustesse face aux incertitudes, tout en renforçant la réactivité dynamique du système.\n\nEn outre, Rehman et al. proposent une stratégie de contrôle basée sur l’input shaping adaptatif pour la réduction des oscillations dans les grues à tour sous-actuées, en présence de variations de masse et de longueur de câble. L’approche repose sur un Zero Vibration Derivative (ZVD) shaper dont les paramètres sont ajustés en temps réel à l’aide d’un réseau de neurones, permettant de s’adapter aux variations dynamiques du système. Cette méthode, de type feedforward, vise à filtrer les entrées de commande afin de minimiser les oscillations induites, sans modifier directement la boucle de contrôle. Les résultats expérimentaux démontrent une évolution significative en termes de réduction des oscillations globales et résiduelles, ainsi qu’une robustesse face aux incertitudes paramétriques. Toutefois, cette approche présente plusieurs limites dans le cadre de notre étude. D’une part, elle repose fortement sur une connaissance préalable ou une estimation des caractéristiques dynamiques du système (fréquence naturelle, amortissement), même si celles-ci sont partiellement apprises via le réseau de neurones. D’autre part, l’input shaping agit uniquement en amont de la commande et ne permet pas de corriger dynamiquement les erreurs ou perturbations en temps réel via une boucle de rétroaction. Enfin, cette stratégie ne traite pas la problématique de transition entre différents modes de commande ni la coordination entre des objectifs contradictoires tels que la rapidité et la stabilité. En particulier, l’absence de mécanismes de compensation active des dynamiques transitoires, comme le Time Delay Control, limite son efficacité dans des contextes nécessitant une adaptation continue et une continuité de commande lors de changements de régime, ce qui constitue un point central de notre approche.",
+      "_parent_chunk_id": "projet_31__chunk_000004",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_31__chunk_000004_sub05",
+      "project_id": "projet_31_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_31_\\cir_final\\CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_name": "CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "Control, limite son efficacité dans des contextes nécessitant une adaptation continue et une continuité de commande lors de changements de régime, ce qui constitue un point central de notre approche.\n\nShao et al. proposent une approche de commande adaptative sans modèle (Model-Free Adaptive Control, MFAC) basée sur les données pour le positionnement et la réduction des oscillations dans les systèmes de grues. Cette méthode repose uniquement sur les données d’entrée/sortie du système afin de construire un modèle dynamique linéarisé virtuel, évitant ainsi la dépendance à une modélisation précise des dynamiques non linéaires. À partir de ce modèle, une loi de commande adaptative ainsi qu’un algorithme d’estimation en ligne de type pseudo-Jacobien sont développés, avec des garanties de stabilité et de convergence démontrées sous certaines hypothèses (conditions de Lipschitz, bornitude des paramètres). Les résultats expérimentaux montrent une évolution significative en termes de robustesse, de rejet de perturbations et de réduction des oscillations par rapport à des approches classiques telles que le PID. Toutefois, bien que cette stratégie permette une adaptation efficace aux incertitudes et aux dynamiques non modélisées, elle repose sur une logique de commande unifiée centrée sur un seul mode de contrôle. Elle ne traite pas explicitement la problématique de transition entre différents régimes de commande ni la coordination entre des objectifs potentiellement antagonistes tels que la rapidité de réponse (contrôle en couple) et la stabilité (contrôle en vitesse).\n\nDe surcroît, nous avons analysé des travaux portant sur la commande optimale non linéaire de systèmes de grue à double pendule, basés sur une linéarisation locale et la synthèse de contrôleurs . Bien que ces approches permettent d’obtenir de bonnes performances en termes de suivi de trajectoire, elles reposent sur une dépendance forte au modèle et nécessitent des recalculs fréquents ainsi qu’une estimation complète des états, ce qui introduit une complexité computationnelle élevée et limite leur applicabilité dans des contextes opérationnels contraints.",
+      "_parent_chunk_id": "projet_31__chunk_000004",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_31__chunk_000004_sub06",
+      "project_id": "projet_31_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_31_\\cir_final\\CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_name": "CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "forte au modèle et nécessitent des recalculs fréquents ainsi qu’une estimation complète des états, ce qui introduit une complexité computationnelle élevée et limite leur applicabilité dans des contextes opérationnels contraints.\n\nEn dernier lieu, Roman et al. proposent une approche hybride combinant une commande Active Disturbance Rejection Control (ADRC) de type data-driven avec une commande par modes glissants (SMC), visant à accroitre les performances globales du système tout en garantissant sa stabilité.",
+      "_parent_chunk_id": "projet_31__chunk_000004",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_31__chunk_000004_sub07",
+      "project_id": "projet_31_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_31_\\cir_final\\CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_name": "CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "une commande Active Disturbance Rejection Control (ADRC) de type data-driven avec une commande par modes glissants (SMC), visant à accroitre les performances globales du système tout en garantissant sa stabilité.\n\nLes travaux réalisés reposent sur la formulation d’un contrôleur ADRC-SMC continu d’ordre deux, dans lequel la dynamique du système est modélisée comme un double intégrateur perturbé. L’approche consiste à estimer les perturbations via un observateur d’état étendu (ELSO), puis à les compenser à travers une loi de commande intégrant un terme correctif basé sur le mode glissant. La stabilité du système est analysée à l’aide d’une fonction de Lyapunov, et les conditions d’existence du mode glissant sont établies. Par ailleurs, les paramètres du contrôleur (gains ADRC et paramètres SMC) sont optimisés via un algorithme métaheuristique (Slime Mould Algorithm), afin de réduire le recours aux réglages heuristiques. L’approche est validée expérimentalement sur un système de grue de laboratoire, démontrant une amélioration des performances par rapport à une commande ADRC seule. Cependant, plusieurs limitations apparaissent à la lecture de ces travaux. Tout d’abord, l’approche repose sur une modélisation simplifiée du système sous la forme d’un double intégrateur perturbé, ce qui ne permet pas de capturer explicitement les dynamiques complexes des systèmes de grue réels, notamment les effets de flexibilité, les couplages multi-degrés de liberté et les non-linéarités structurelles. Ensuite, la méthode nécessite l’estimation des dérivées des signaux de référence et de sortie via des filtres passe-bas, introduisant un compromis entre réduction du bruit et retard dynamique, susceptible de dégrader les performances en régime transitoire. Par ailleurs, bien que l’approche vise à réduire les heuristiques, elle introduit un nombre important de paramètres à optimiser (notamment liés au SMC et aux bornes d’incertitude), ce qui complexifie la phase de réglage et dépend fortement de la définition du domaine de recherche et du régime de fonctionnement considéré. En outre, la robustesse du contrôleur repose sur l’hypothèse d’une borne connue des perturbations, ce qui peut s’avérer difficile à garantir en conditions réelles. Enfin, la validation expérimentale est réalisée sur un banc de test en conditions contrôlées, ce qui limite la généralisation des résultats à des environnements industriels plus variés et soumis à des perturbations imprévisibles.",
+      "_parent_chunk_id": "projet_31__chunk_000004",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_31__chunk_000005",
+      "project_id": "projet_31_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_31_\\cir_final\\CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_name": "CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Verrous et incertitudes scientifiques, techniques, technologiques]\nL’analyse de l’état de l’art nous a permis d’identifier plusieurs axes d’investigation relatifs à la commande des systèmes oscillants, en particulier dans la gestion des phases transitoires. Les travaux existants montrent que les approches de type Time Delay Control (TDC), intégrées dans des boucles de contrôle en vitesse, permettent de limiter efficacement les oscillations en adaptant la consigne. Toutefois, ces stratégies présentent une limitation en termes de réactivité, notamment lors des transitions dynamiques. À l’inverse, les approches basées sur le contrôle en couple offrent une réponse plus rapide, mais au détriment de la maîtrise directe de la vitesse et du comportement oscillatoire.\n\nLe premier verrou scientifique que nous avons identifié réside ainsi dans la difficulté à concilier ces deux modes de commande antagonistes, en particulier lors des phases de transition. En effet, le passage d’un contrôle en couple à un contrôle en vitesse (ou inversement) constitue une phase critique susceptible d’introduire des discontinuités dans la commande, générant des oscillations supplémentaires et dégradant la stabilité globale du système. À ce jour, les approches existantes ne proposent pas de solution permettant d’assurer une transition continue, stable et sans excitation dynamique entre ces deux régimes de commande.\n\nNous avons identifié également un deuxième verrou lié à la capacité à compenser les oscillations existantes lors de cette transition. En pratique, les systèmes oscillants présentent souvent des dynamiques résiduelles au moment du changement de mode de commande. L’absence de mécanismes de compensation intégrés rend difficile l’absorption de ces oscillations, ce qui peut amplifier les phénomènes transitoires et impacter les performances globales.\n\nEnfin, une incertitude subsiste quant à la robustesse de la stratégie de transition vis-à-vis des variations des paramètres du système.\n\nDans ce contexte, notre projet vise à lever ces verrous en développant une méthode de transition hybride entre contrôle en couple et contrôle en vitesse intégrant une stratégie de Time Delay Control, permettant d’assurer une continuité de commande, de limiter l’excitation des oscillations et de compenser les dynamiques existantes, tout en garantissant la stabilité du système.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_31_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_31__chunk_000006",
+      "project_id": "projet_31_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_31_\\cir_final\\CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_name": "CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Raisonnement scientifique et démarche expérimentale appliquée]\nAu regard des verrous identifiés, nous avons structuré notre démarche selon une approche itérative combinant observation du système, développement de loi de commande et validation expérimentale.\n\nNous avons d’abord formulé l’hypothèse qu’une stratégie de commande hybride, associant contrôle en couple et contrôle en vitesse, pouvait permettre de concilier réactivité et limitation des oscillations. Nous avons également supposé que le développement d’une stratégie de Time Delay Control (TDC) dans la boucle de vitesse pouvait réduire l’excitation des modes oscillatoires et compenser les dynamiques résiduelles.\n\nNous avons ensuite analysé le comportement du système à partir d’essais réels afin d’identifier les phénomènes oscillatoires dominants, puis conçu une fonction de commande hybride intégrant un mécanisme de transition entre les deux modes. Cette phase a nécessité plusieurs itérations pour limiter les discontinuités et les instabilités lors des transitions.\n\nDes simulations ont été réalisées pour évaluer le comportement de la stratégie dans différents scénarios, notamment en phases transitoires. Compte tenu des limites de ces simulations, des essais en conditions réelles ont été menés afin d’observer les phénomènes non modélisables et d’affiner les paramètres de commande.\n\nEnfin, nous avons évalué la robustesse de la solution en introduisant des variations paramétriques et des perturbations externes, permettant d’analyser ses performances en conditions dégradées.\n\nCette démarche itérative nous a permis de progresser dans la compréhension du système et de lever progressivement les verrous identifiés, tout en mettant en évidence les limites restantes.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_31_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_31__chunk_000007",
+      "project_id": "projet_31_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_31_\\cir_final\\CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_name": "CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Description des travaux réalisés en 2025]\nDans le cadre de ce projet, nous avons développé une approche de commande novatrice, matérialisée par une fonction de commande dédiée aux systèmes mécaniques flexibles, en particulier aux grues de grande dimension, caractérisées par une forte élasticité structurelle et des phénomènes oscillatoires marqués. La problématique centrale réside dans la capacité à contrôler ces systèmes sans accès direct aux variables critiques, notamment la position ou la vitesse de la flèche, tout en garantissant des performances dynamiques élevées et une robustesse en conditions réelles (vent, variations de charge, absence de capteurs).",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_31_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_31__chunk_000008",
+      "project_id": "projet_31_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_31_\\cir_final\\CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_name": "CIR2025_ENERGEO_Schneider_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Développement d’une stratégie de commande hybride]\nPour ce faire, nous avons conçu une méthode de commande hybride combinant :\n\nUn contrôle en couple pour les phases de démarrage et de petits mouvements, permettant d’obtenir une réponse rapide ;\n\nUn contrôle en vitesse, nécessaire pour limiter et amortir les oscillations de la structure ;\n\nUne stratégie de Time Delay Control (TDC) intégrée dans la boucle de vitesse afin d’adapter dynamiquement la consigne et éviter l’excitation des modes propres.\n\nL’originalité des travaux réside dans la capacité à assurer une transition entre ces deux modes de commande sans générer d’oscillations supplémentaires, tout en compensant les oscillations déjà présentes. Cette transition constitue un point critique identifié lors des premières phases de développement.\n\nDans ce cadre, nous avons développé une fonction reposant sur un passage entre contrôle en couple et contrôle en vitesse, intégré dans une stratégie incluant le TDC. Cette approche permet de contrôler la référence de vitesse de manière à ne pas exciter les modes oscillatoires.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_31_\\extracted\\chunks.json"
+    }
+  ]
+}

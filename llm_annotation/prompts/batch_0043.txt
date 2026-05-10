@@ -1,0 +1,351 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 43/135, 8 chunks)
+
+### CHUNK_ID: projet_10__chunk_000091_sub00
+```
+[PAGE 8]
+selon la problématique à résoudre, le type de données et le modèle
+utilisé.
+● Modélisation : La phase de modélisation vise à sélectionner différents
+algorithmes et à les tester en choisissant les métriques et en modifiant
+les hyperparamètres.
+Enfin, une étude comparative sur les résultats
+obtenus est nécessaire pour choisir le modèle optimal.
+● Évaluation : Après avoir construit un modèle final performant, il est
+indispensable d’évaluer encore une fois ce modèle c’est-à-dire vérifier
+toutes les étapes réalisées pour la construction du modèle et vérifier la
+correspondance du résultat obtenu avec les objectifs fixés lors de la
+phase de compréhension du problème métier.
+● Déploiement : Cette dernière phase consiste à exploiter le résultat
+final pour mettre en place un produit final prêt à l’utilisation.
+5 Indiquer les incertitudes scientifiques et techniques, les verrous technologiques et
+les problèmes à résoudre
+Ce projet contient plusieurs défis scientifiques incertains à résoudre qui sont :
+1- Le Grattage WEB
+Pour collecter les avis des gens des réseaux sociaux d’une manière
+automatique, nous devons utiliser le grattage Web, également connu sous le
+nom d’extraction Web ou de récolte du Web.
+C’est une technique permettant
+d’extraire des données du World Wide Web (WWW) et de les sauvegarder dans
+un système de fichiers ou une base de données pour les récupérer ou les
+analyser ultérieurement.
+Certains défis de grattage Web rendent cette collecte de données difficile.
+Nous
+en citons principalement les défis suivants :
+- Accès aux robots : C’est le défi de grattage de données Internet le plus
+populaire.
+Les sites Web peuvent décider s’ils autorisent ou non les bots à
+accéder à des données propres.
+Certains sites interdisent la collecte
+automatique de données.
+- Blocage IP : Le blocage IP est l’une des rares méthodes de traitement des
+parseurs.
+Mais c’est aussi le moyen le plus simple.
+Le blocage est déclenché
+lorsque le serveur détecte un grand nombre de requêtes provenant d’une
+même adresse IP ou lorsqu’un robot de recherche effectue plusieurs requêtes
+parallèles.
+Il existe également un blocage IP via la géolocalisation.
+```
+
+### CHUNK_ID: projet_10__chunk_000038
+```
+[SECTION : Deuxième approche : mise en œuvre d’une méthodologie basée sur l’apprentissage supervisé]
+Dans cette deuxième itération, nous nous sommes basés sur l’apprentissage supervisé. Pour faire, nous nous sommes appuyés sur les algorithmes de classification connus du machine Learning :
+
+Arbre de décision (DT) ;
+
+Forêts aléatoires (RF) ;
+
+XGBoost ;
+
+K-Voisins les plus proches (KNN) ;
+
+Support Vector Machines (SVM) ;
+
+Classificateur Bayes naïf multinomial (NB).
+
+Les résultats de ces modèles ont été évalués en termes d'exactitude et de f-score, avec le classificateur Bayes naïf multinomial (NB) obtenant les meilleures performances avec une exactitude de 0.645 et un f-score de 0.631. Cela indique que ce modèle est le plus prometteur pour la tâche de classification parmi les six modèles mis en œuvre. Cependant, bien que performant, ses performances ne sont pas encore optimales, donc nous allons chercher à les augmenter davantage.
+
+Figure 3 : Performances des six modèles de machine learning.
+
+Premièrement, nous nous sommes basés sur deux techniques de réglage d’hyperparamètres : Optuna et GridSearchCV de Scikit-learn. Ces deux techniques donnent des valeurs différentes d’hyperparamètres mais ces valeurs fournissent pratiquement les mêmes mesures de performance. La seule différence est au niveau du temps d’exécution. Optuna etant plus rapide que GridSearchCV.
+
+Ensuite, nous mis en œuvre une méthode pour la transformation des données. Nous avons comparé TF-IDF, Tokenizer de Keras et Tokenizer pré-entraîné basé sur CamemBERT. TF-IDF a donné le meilleur résultat, suivi par le tokenizer de Keras, puis le tokenizer préentraîné.
+
+Enfin, nous avons effectué un test sur la longueur maximale des données à l’entrée avec des valeurs 10, 15 et 20. La longueur optimale s'est avérée être 15.
+
+Le résultat obtenu, présenté dans le tableau ci-dessous, affiche une exactitude de 0.71 et un f-score de 0.70, illustrant ainsi l'efficacité de notre approche.
+
+Figure 4 : Performance du modèle Bayes naïf multinomial (NB) après optimisation.
+```
+
+### CHUNK_ID: projet_10__chunk_000040
+```
+[SECTION : Conclusion et contribution scientifique, technique ou technologique]
+Dans le cadre de notre projet visant à lever les verrous liés à la mise en œuvre d'une nouvelle plateforme d'écoute sociale, nous avons suivi une approche systémique et itérative pour proposer des solutions adaptées à notre problématique.
+
+La première phase de notre démarche a consisté à évaluer trois modèles Transformers existants : DistilCamemBERT, mDeBERTa et bart-large. Parmi eux, le modèle mDeBERTa s'est distingué par ses performances satisfaisantes, avec une exactitude et un score F1 de 71%. Cependant, ses résultats n’étaient pas satisfaisants pour résoudre notre problématique.
+
+Ensuite, nous avons mis en œuvre une première approche axée sur l’apprentissage non supervisé en évaluant les représentations vectorielles des mots en français. Cependant, cette approche a mis en lumière des difficultés à distinguer les mots de sens similaires et non similaires, mettant en évidence les défis rencontrés avec ces représentations en français.
+
+En outre, nous avons mis en œuvre une deuxième approche basée sur l’apprentissage supervisé, en s’appuyant sur six algorithmes de classification. Le classificateur Bayesien naïf multinomial (NB) s'est avéré le plus performant, avec une exactitude de 0.645 et un f-score de 0.631, bien que ses performances n'aient pas été optimales.
+
+Dans le but d'augmenter davantage les performances du modèle NB, nous nous sommes basés sur des techniques de réglage d’hyperparamètres et des méthodes de transformation des données. Après optimisation, notre modèle final a atteint une exactitude de 0.71 et un f-score de 0.70, démontrant ainsi l'efficacité de cette approche. Cependant, les performances de ce modèle n’étaient pas suffisantes pour résoudre notre problématique.
+
+Enfin, nous avons entrepris une troisième approche en mettant en œuvre un nouveau modèle spécifique au traitement du langage naturel « ABiThemeModel ». Ce modèle a permis d'obtenir des résultats très performants, avec une exactitude de 0.91 et un f-score de 0.92, représentant une nette augmentation par rapport aux modèles précédents.
+```
+
+### CHUNK_ID: projet_10__chunk_000060
+```
+[SECTION : Deuxième approche : mise en œuvre d’une méthodologie basée sur l’apprentissage supervisé]
+Dans cette deuxième itération, nous nous sommes basés sur l’apprentissage supervisé. Pour ce faire, nous nous sommes appuyés sur les algorithmes de classification connus du machine Learning :
+
+Arbre de décision (DT) ;
+
+Forêts aléatoires (RF) ;
+
+XGBoost ;
+
+K-Voisins les plus proches (KNN) ;
+
+Support Vector Machines (SVM) ;
+
+Classificateur Bayes naïf multinomial (NB).
+
+Les résultats de ces modèles ont été évalués en termes d'exactitude et de f-score, avec le classificateur Bayes naïf multinomial (NB) obtenant les meilleures performances avec une exactitude de 64,50 % et un f-score de 63,10 %. Cela indique que ce modèle est le plus prometteur pour la tâche de classification parmi les six modèles mis en œuvre. Cependant, bien que performant, ses performances ne sont pas encore optimaux, donc nous allons chercher à les augmenter davantage.
+
+Figure 3 : Performances des six modèles de machine learning.
+
+Premièrement, nous nous sommes basés sur deux techniques de réglage d’hyperparamètres : Optuna et GridSearchCV de Scikit-learn. Ces deux techniques donnent des valeurs différentes d’hyperparamètres mais ces valeurs fournissent pratiquement les mêmes mesures de performance. La seule différence est au niveau du temps d’exécution. Optuna étant plus rapide que GridSearchCV.
+
+Ensuite, nous mis en œuvre une méthode pour la transformation des données. Nous avons comparé TF-IDF, Tokenizer de Keras et Tokenizer pré-entraîné basé sur CamemBERT. TF-IDF a donné le meilleur résultat, suivi par le tokenizer de Keras, puis le tokenizer préentraîné.
+
+Enfin, nous avons effectué un test sur la longueur maximale des données à l’entrée avec des valeurs 10, 15 et 20. La longueur optimale s'est avérée être 15.
+
+Le résultat obtenu, présenté dans le tableau ci-dessous, affiche une exactitude de 71 % et un f-score de 70 %, illustrant ainsi l'efficacité de notre approche. Cependant, comme cela a été le cas avec la première approche, ces performances sont inférieures à 90 %, ce qui nous a poussés à itérer vers une troisième approche.
+
+Figure 4 : Performance du modèle Bayes naïf multinomial (NB) après optimisation.
+```
+
+### CHUNK_ID: projet_10__chunk_000016_sub01
+```
+parmi les prédictions positives) et le rappel (proportion de vraies prédictions positives parmi les cas positifs réels), ce qui signifie que le modèle a une performance équilibrée mais pas optimale.
+
+En outre, le modèle mDeBERTa présente des résultats nettement meilleurs avec une exactitude de 71 % et un score F1 également de 71 %. Cela indique que ce modèle est plus performant que le modèle DistilCamemBERT pour la tâche de classification des textes. L'égalité entre l'exactitude et le score F1 montre une bonne balance entre la précision et le rappel.
+
+Enfin, le modèle bart-large a une exactitude de 70.66 % et un score F1 de 69.81 %. Ces résultats sont comparables à ceux du modèle mDeBERTa, avec une légère baisse du score F1 par rapport à l'exactitude, ce qui suggère une petite différence entre la précision et le rappel. Cependant, les performances globales restent assez élevées, proches de celles du modèle mDeBERTa.
+
+En analysant ces résultats, nous pouvons conclure que le modèle mDeBERTa est le plus performant des trois modèles mis en œuvre pour la classification automatique des thèmes définis, avec une exactitude et un score F1 de 71 %. Cependant, ces résultats sont bien inférieurs à nos performances visées de 90 %, ce qui reste insuffisant pour résoudre notre problématique.
+```
+
+### CHUNK_ID: projet_10__chunk_000058_sub01
+```
+parmi les prédictions positives) et le rappel (proportion de vraies prédictions positives parmi les cas positifs réels), ce qui signifie que le modèle a une performance équilibrée mais pas optimale.
+
+En outre, le modèle mDeBERTa présente des résultats nettement meilleurs avec une exactitude de 71 % et un score F1 également de 71 %. Cela indique que ce modèle est plus performant que le modèle DistilCamemBERT pour la tâche de classification des textes. L'égalité entre l'exactitude et le score F1 montre une bonne balance entre la précision et le rappel.
+
+Enfin, le modèle bart-large a une exactitude de 70.66 % et un score F1 de 69.81 %. Ces résultats sont comparables à ceux du modèle mDeBERTa, avec une légère baisse du score F1 par rapport à l'exactitude, ce qui suggère une petite différence entre la précision et le rappel. Cependant, les performances globales restent assez élevées, proches de celles du modèle mDeBERTa.
+
+En analysant ces résultats, nous pouvons conclure que le modèle mDeBERTa est le plus performant des trois modèles mis en œuvre pour la classification automatique des thèmes définis, avec une exactitude et un score F1 de 71 %. Cependant, ces résultats sont bien inférieurs à nos performances visées de 90 %, ce qui reste insuffisant pour résoudre notre problématique.
+```
+
+### CHUNK_ID: projet_10__chunk_000078_sub01
+```
+parmi les prédictions positives) et le rappel (proportion de vraies prédictions positives parmi les cas positifs réels), ce qui signifie que le modèle a une performance équilibrée mais pas optimale.
+
+En outre, le modèle mDeBERTa présente des résultats nettement meilleurs avec une exactitude de 71 % et un score F1 également de 71 %. Cela indique que ce modèle est plus performant que le modèle DistilCamemBERT pour la tâche de classification des textes. L'égalité entre l'exactitude et le score F1 montre une bonne balance entre la précision et le rappel.
+
+Enfin, le modèle bart-large a une exactitude de 70.66 % et un score F1 de 69.81 %. Ces résultats sont comparables à ceux du modèle mDeBERTa, avec une légère baisse du score F1 par rapport à l'exactitude, ce qui suggère une petite différence entre la précision et le rappel. Cependant, les performances globales restent assez élevées, proches de celles du modèle mDeBERTa.
+
+En analysant ces résultats, nous pouvons conclure que le modèle mDeBERTa est le plus performant des trois modèles mis en œuvre pour la classification automatique des thèmes définis, avec une exactitude et un score F1 de 71 %. Cependant, ces résultats sont bien inférieurs à nos performances visées de 90 %, ce qui reste insuffisant pour résoudre notre problématique.
+```
+
+### CHUNK_ID: projet_10__chunk_000093_sub00
+```
+[PAGE 10]
+concernant la qualité des résultats.
+Il faudrait à chaque fois tester et optimiser
+la méthode pour choisir finalement la méthode adéquate.
+6 Décrire les travaux effectués :
+- Présenter les développements réalisés, les modélisations, les simulations, les essais, les
+prototypes « Recherche » (à distinguer des prototypes « validation de conception » non
+éligibles), les méthodes et les moyens mis en œuvre
+Ce document présente les travaux qui seront effectués à partir de Juin 2023.
+Nous ne pouvons pas ainsi parler de développements réalisés.
+Cependant
+nous pouvons expliquer les méthodologies qu’on compte utilisées pour chaque
+défi technique expliqués dans le paragraphe précédent ainsi que les tâches
+qu’on doit effectuées.
+1- Le Grattage WEB
+code4 Sous-sections niv4
+Base de données [BD], gestion des données, entrepôts, progiciels, masse de données, science
+A3a1 des données, fouille de données
+Pour éviter le blocage lors du grattage Web, nous présentons quelques
+solutions :
+— Utiliser un navigateur sans tête : Un navigateur sans tête comprend toutes
+les fonctionnalités d’un affichage de site Web.
+En raison de l’absence
+d’interface graphique, un utilitaire de ligne de commande est utilisé pour
+interagir avec le navigateur sans tête.
+Ils sont plus flexibles, plus rapides que
+les vrais navigateurs.
+Lorsqu’on utilise un tel navigateur, nous n’avons pas
+besoin de charger l’intégralité du site.
+Il peut charger la partie HTML et
+collecter les données.
+— Utiliser des serveurs proxy : Un serveur proxy est un serveur intermédiaire
+entre un utilisateur et un site Web.
+Il a sa propre adresse IP.
+Lorsqu’un
+utilisateur demande l’accès à un site Web via un serveur proxy, le site Web
+envoie et reçoit des données à l’adresse IP du serveur proxy, qui les transmet
+à l’utilisateur.
+Les analyseurs Web utilisent des proxys pour que le trafic
+ressemble au trafic utilisateur normal.
+— Utiliser les services de résolution de captcha : Captcha existe sous de
+nombreuses formes, mais le point est le même : vous devez résoudre une tâche
+pour prouver que vous êtes humain.
+Il existe deux façons de résoudre de telles
+tâches.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 43,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

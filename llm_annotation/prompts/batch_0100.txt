@@ -1,0 +1,340 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 100/135, 8 chunks)
+
+### CHUNK_ID: projet_22__chunk_000020
+```
+[SECTION : Objectifs visés]
+L’objectif principal de notre programme de recherche est de maintenir la vigueur des vergers, condition indispensable pour la stabilité des rendements, l’obtention de calibres conformes aux exigences du marché et à la résilience des systèmes de production face aux aléas climatiques croissants.
+
+Pour cela, nous souhaitons :
+
+Renforcer la qualité des sols, en évaluant le rôle de la matière organique sur la vie biologique du sol et sur sa capacité à limiter les effets du stress hydrique
+
+Redéfinir les systèmes de conduite, en testant différentes hauteurs, formes, densités de plantation pour réduire le stress thermique (favoriser l’ombrage), tout en conservation un niveau de coloration optimum des fruits
+
+Sélectionner du matériel végétal adapté, en analyser les performances de différentes variétés, qui doivent être moins sensibles au parasitismes et conduire à des calibres moyen à gros, ainsi que les performances de différents porte-greffes (notamment de type Geneva), pour permettre un meilleur démarrage des jeunes arbres en replantation, renforcer la résistance au stress, limiter les maladies et obtenir des fruits de bon calibre
+
+Assurer une bonne irrigation, en définissant des stratégies adaptée aux conditions pédoclimatiques régionales, pour sécuriser la production, tout en économisant l’eau
+```
+
+### CHUNK_ID: projet_22__chunk_000039
+```
+[SECTION : Impact de paramètres sur la hauteur des arbres]
+En parallèle, nous avons mené une étude spécifique sur la hauteur des arbres (objectif 3.5 m), la comparaison entre arbres replantés et arbres surgreffés, et l’effet de la conduite en axe, biaxe, axe haut ou axe bas.
+
+Nos analyses des résultats obtenus nous ont permis de mettre en avant que les arbres surgreffés atteignaient plus facilement les objectifs de hauteur, les jeunes replantations peinaient à exprimer leur potentiel, indépendamment de l’apport de compost, certains variétés montraient une forte sensibilité au système de conduite.
+```
+
+### CHUNK_ID: projet_22__chunk_000054_sub00
+```
+[PAGE 6]
+Calibre des fruits
+L’analyse a été réalisée sur 30 fruits
+prélevés au hasard sur différentes faces
+des arbres et à diverses hauteurs le long
+de la ligne de plantation.
+Le calibre
+moyen des fruits pour le porte-greffe G11
+® était de 77,59 mm (valeur maximale :
+85,97 mm, valeur minimale : 59,83 mm),
+pour le porte-greffe G41, la moyenne
+était de 76,1 mm (valeur maximale : 83,59
+mm, valeur minimale : 69,9 mm), pour le
+porte-greffe Pajam 2, la moyenne était
+®
+de 76,44 mm (valeur maximale : 84,02
+mm, valeur minimale : 69,29 mm), et enfin
+pour le porte-greffe Ypsilon®, la
+moyenne des calibres était de 74,66 mm
+®
+(valeur maximale : 84,9 mm, valeur
+minimale : 67,18 mm).
+L’ANOVA n’a pas montré de différence
+significative (ANOVA, risque alpha de
+0,05, p-value : 0,0646).
+Toutefois, le test
+post hoc de Tuckey a montré une
+différence significative entre les calibres
+de Inogo/G11 et de Inogo/G41 Ypsilon®
+(Tuckey, risque alpha de 0,05, p-value:
+0,039)
+Diamètre des troncs
+L’analyse a été réalisée sur 15 troncs
+répartis de manière aléatoire dans
+l’ensemble des lignes.
+Le diamètre moyen
+des troncs pour le porte-greffe G11 était
+de 17,17 mm (valeur maximale : 20,7 mm,
+valeur minimale : 14,12 mm), pour le porte-
+greffe G41, la moyenne était de 17,77 mm
+(valeur maximale : 19,85 mm, valeur
+®
+minimale : 14,51 mm), pour le porte-greffe
+Pajam 2, la moyenne était de 18,57 mm
+(valeur maximale : 21,8 mm, valeur
+®
+minimale : 16,07 mm), et enfin pour le
+porte-greffe Ypsilon®, la moyenne des
+diamètres était de 12,83 mm (valeur
+maximale : 16,69 mm, valeur minimale :
+10,28 mm).
+®
+L'ANOVA réalisée avec le logiciel R a
+révélé des différences très significatives
+entre les porte-greffes (ANOVA, risque
+alpha de 0,05, p-value : 1,28 e-12).
+Le test
+post hoc de Tukey a montré que le porte-
+greffe G41 en Ypsilon® différait
+significativement de tous les autres
+porte-greffes.
+Cependant, aucune
+différence significative n'a été observée
+entre les diamètres des troncs des porte-
+greffes G11, G41 et Pajam 2.
+```
+
+### CHUNK_ID: projet_22__chunk_000057
+```
+[PAGE 9]
+
+Résultats de l’essai
+Plantation 2022
+Dans les conditions de l’année 2024,
+l'analyse comparative des fruits issus des
+porte-greffes Inogo/G41 et Inogo/Pajam
+2 n'a pas révélé de différences
+significatives en termes de qualité et de
+rendement. Bien que le coût de plantation
+de Inogo/Pajam 2 soit inférieur à celui de
+G41, le rendement observé cette année
+est plus élevé avec le porte-greffe Pajam
+2.
+Cependant, la plantation est encore
+jeune et les porte-greffes n'ont pas
+atteint leur plein potentiel. Les conditions
+de croissance, ainsi que d'autres facteurs
+environnementaux et agronomiques,
+peuvent influencer les performances à
+long terme de ces variétés.
+L'évaluation continue des résultats
+permettra d'identifier d'éventuelles
+différences significatives entre
+Inogo/G41 et Inogo/Pajam 2.
+Inogo/G41 Inogo/Pajam 2
+Inogo/G41 Inogo/Pajam 2
+```
+
+### CHUNK_ID: projet_22__chunk_000068_sub01
+```
+4.Plantes à feuillage persistant pour un brise-vent et une protection :
+Ligustrum ovalifolium Aureum est une espèce à feuillage persistant qui joue un rôle crucial en tant que
+brise-vent, protégeant le verger contre les vents forts qui pourraient endommager les fleurs ou les jeunes
+fruits.
+En diversifiant les espèces végétales dans la haie, ce système contribue non seulement à la protection biologique
+du verger mais aussi à l'amélioration de la biodiversité locale. Cette approche écologique renforce la résilience du
+verger face aux aléas climatiques et aux bioagresseurs.
+Conduite du verger
+Le verger biologique d'Innenheim a été conçu avec un itinéraire technique particulièrement simple. L’objectif
+principal est de tester si un verger peut se développer de manière autonome, avec une intervention humaine
+minimale. Cela signifie l’absence totale de traitements, qu’ils soient chimiques ou biologiques, et la limitation
+maximale des actions culturales.
+Aucune intervention phytosanitaire n’a été réalisée sur le verger. La seule action menée est la tonte de l’herbe,
+indispensable pour maintenir le verger dans un état relativement propre en l’absence d’herbicides.
+Les arbres de la parcelle, majoritairement de faible vigueur, nécessitent une taille rapide et peu contraignante.
+Cependant, l’enherbement élevé favorise la prolifération du campagnol des champs (Microtus arvalis), qui
+constitue le principal problème de cette parcelle. Ce rongeur, en se nourrissant des racines des jeunes pommiers,
+entraîne une limitation du développement racinaire, ce qui peut provoquer la mort des arbres.
+Au delà du campagnol, le carpocapse du pommier (Cydia pomonella) est un autre bioagresseur régulièrement
+observé sur la parcelle. Pour évaluer et limiter son impact, des bandes cartonnées ont été installées autour des
+troncs. Ces bandes agissent comme des pièges mécaniques pour les chenilles descendantes après leur premier
+cycle, empêchant leur nymphose dans le sol.
+Ces bandes offrent également un habitat pour les larves du carpocapse pendant leur transformation en papillons
+adultes. Cela favorise l’action des auxiliaires naturels, comme le parasitoïde Mastrus ridens, qui intervient à ce
+stade en parasitant les larves de C. pomonella. L’absence de traitements phytosanitaires dans le verger permet
+par ailleurs de préserver l’équilibre naturel et de favoriser la régulation biologique des ravageurs.
+80
+```
+
+### CHUNK_ID: projet_22__chunk_000003_sub01
+```
+contraintes pédoclimatiques. Les travaux de R&D menés par VEREXAL s’inscrivent pleinement dans le cadre des cinq critères définis par le manuel de Frascati. En effet, ils se caractérisent par :
+
+[TABLEAU]
+| Nouveauté | Etude des effets combinés du compost, des systèmes de conduite et du pilotage de l’irrigation en verger de pommiers |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Incertitude | Difficulté pour prévoir la minéralisation, la réponse des arbres et le fonctionnement hydrique du sol |
+| Créativité | Association de leviers avec apports organiques, couverts végétaux, capteurs d’humidité |
+| Systématicité | Démarche rigoureuse avec mise en place de dispositifs expérimentaux, suivi des sols, des arbres et de l’eau sur plusieurs années |
+| Transférabilité | Obtention de résultats réutilisables en termes de fertilisation, irrigation, conduite |
+
+La société n’a pas déposé de dossier de demande d’agrément CIR/CICo ou de rescrit CIR/CICo/JEI.
+
+Coordonnées de la personne référente dans l’entreprise pour le dossier justificatif des dépenses de R&D exposées au CIR en précisant :
+
+Nom de l’interlocuteur de la société : LHEUREUX Morgane
+
+Fonction : Directrice de station
+
+Numéro de téléphone : 06.66.54.18.73
+
+Adresse électronique : verexal.obernai@gmail.com
+```
+
+### CHUNK_ID: projet_22__chunk_000011
+```
+[SECTION : Analyse de la matière organique des sols]
+Nous avons poursuivi nos travaux d’analyse de l’impact de différents niveaux d’import de compost (0, 15 et 50 T/ha) sur le sol.
+
+Les résultats ont montré que l’apport modéré (15 T/ha) ne couvrait qu’une parie des besoins en azote et en potasse, nécessitant des compléments. En revanche, un apport élevé générait des excès en phosphore et en potasse, sans bénéfice agronomique démontré. L’évolution du taux de matière organique des sols était globalement positive dans tous les cas, y compris sans apport de compost, mettant ainsi en évidence l’efficacité de pratiques alternatives comme le dépôt d’herbe de tonte.
+
+Par ailleurs, nous n’avons observé aucune amélioration significative de la vigueur des arbres ou du rendement, en lien avec les apport de compost, même dans un contexte climatique humide supposé favorable à la minéralisation.
+
+Par conséquent, les apports de compost n’ont pas permis de corriger rapidement la fatigue des sols.
+```
+
+### CHUNK_ID: projet_22__chunk_000028
+```
+[SECTION : Verrous et incertitudes scientifiques, techniques, technologiques]
+La mise en œuvre de nos travaux d’expérimentation en vergers de pommiers se heurte à un ensemble de verrous scientifiques et techniques liés à la complexité des interactions entre sol, plante et climat, ainsi qu’à la temporalité des processus biologiques en systèmes pérennes.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 100,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

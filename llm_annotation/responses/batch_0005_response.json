@@ -1,0 +1,95 @@
+{
+  "batch_id": 5,
+  "annotations": [
+    {
+      "chunk_id": "projet_1__chunk_000034_sub00",
+      "entities": [
+        {"text": "cosmétique", "label": "DOMAINE_RD", "start": 364, "end": 374}
+      ]
+    },
+    {
+      "chunk_id": "projet_1__chunk_000038_sub00",
+      "entities": [
+        {"text": "mécanismes biologiques de la peau", "label": "DOMAINE_RD", "start": 175, "end": 208},
+        {"text": "développer de nouveaux produits cosmétiques aux formulations innovantes", "label": "OBJECTIF_RD", "start": 256, "end": 327},
+        {"text": "recherche de nouveaux actifs", "label": "OBJECTIF_RD", "start": 351, "end": 379},
+        {"text": "cosmétique", "label": "DOMAINE_RD", "start": 421, "end": 431}
+      ]
+    },
+    {
+      "chunk_id": "projet_1__chunk_000050_sub00",
+      "entities": [
+        {"text": "respiration cellulaire", "label": "DOMAINE_RD", "start": 99, "end": 121},
+        {"text": "complexe oxygénant", "label": "COMPOSANT_TECHNIQUE", "start": 1041, "end": 1059},
+        {"text": "stimuler la respiration cellulaire", "label": "OBJECTIF_RD", "start": 1086, "end": 1120},
+        {"text": "nano-émulsion", "label": "TECHNOLOGIE_RD", "start": 1148, "end": 1161},
+        {"text": "perfluorodécaline", "label": "MATERIAU_SPECIFIQUE", "start": 1175, "end": 1192},
+        {"text": "transporter l'oxygène", "label": "OBJECTIF_RD", "start": 1224, "end": 1245},
+        {"text": "VIPO2", "label": "RESULTAT_RD", "start": 1419, "end": 1424},
+        {"text": "perfluorodécaline", "label": "MATERIAU_SPECIFIQUE", "start": 1469, "end": 1486},
+        {"text": "perfluorodécaline sera bientôt interdite par différentes autorités réglementaires", "label": "VERROU_TECH", "start": 1614, "end": 1696},
+        {"text": "contamination des sols et des eaux", "label": "VERROU_TECH", "start": 1735, "end": 1769},
+        {"text": "identifier et de développer des alternatives innovantes", "label": "OBJECTIF_RD", "start": 1986, "end": 2041},
+        {"text": "remplacer la\nperfluorodécaline", "label": "OBJECTIF_RD", "start": 2095, "end": 2125}
+      ]
+    },
+    {
+      "chunk_id": "projet_1__chunk_000069_sub00",
+      "entities": [
+        {"text": "cosmétique", "label": "DOMAINE_RD", "start": 280, "end": 290}
+      ]
+    },
+    {
+      "chunk_id": "projet_1__chunk_000070_sub00",
+      "entities": [
+        {"text": "mécanismes biologiques de la peau", "label": "DOMAINE_RD", "start": 466, "end": 499},
+        {"text": "développer de nouveaux produits cosmétiques aux formulations innovantes", "label": "OBJECTIF_RD", "start": 547, "end": 618},
+        {"text": "recherche de nouveaux actifs", "label": "OBJECTIF_RD", "start": 642, "end": 670},
+        {"text": "cosmétique", "label": "DOMAINE_RD", "start": 712, "end": 722}
+      ]
+    },
+    {
+      "chunk_id": "projet_1__chunk_000085_sub01",
+      "entities": [
+        {"text": "viabilité cellulaire de l'épiderme et du derme", "label": "METHODE_RD", "start": 0, "end": 46},
+        {"text": "analyses de biochimie et d'enzymologie", "label": "METHODE_RD", "start": 580, "end": 618},
+        {"text": "activité de la citrate synthétase", "label": "METHODE_RD", "start": 649, "end": 682},
+        {"text": "citrate synthétase", "label": "COMPOSANT_TECHNIQUE", "start": 664, "end": 682},
+        {"text": "explants", "label": "METHODE_RD", "start": 745, "end": 753},
+        {"text": "coenzyme A", "label": "MATERIAU_SPECIFIQUE", "start": 800, "end": 810},
+        {"text": "acide dinitrothiobenzoïque", "label": "MATERIAU_SPECIFIQUE", "start": 871, "end": 897},
+        {"text": "P1 induisait une augmentation significative de 71%", "label": "RESULTAT_RD", "start": 1043, "end": 1093},
+        {"text": "P2 induisait une augmentation significative de 83%", "label": "RESULTAT_RD", "start": 1095, "end": 1145},
+        {"text": "P3 induisait une augmentation significative de 98%", "label": "RESULTAT_RD", "start": 1147, "end": 1197},
+        {"text": "P1 induisait une augmentation non significative de 11%", "label": "RESULTAT_RD", "start": 1224, "end": 1278},
+        {"text": "P2 induisait une augmentation significative de 28%", "label": "RESULTAT_RD", "start": 1280, "end": 1330},
+        {"text": "P3 induisait une augmentation significative de 21%", "label": "RESULTAT_RD", "start": 1332, "end": 1382},
+        {"text": "activité du complexe I", "label": "METHODE_RD", "start": 1408, "end": 1430},
+        {"text": "décroissance de la fluorescence du NADH déshydrogénase", "label": "METHODE_RD", "start": 1435, "end": 1489},
+        {"text": "NADH déshydrogénase", "label": "MATERIAU_SPECIFIQUE", "start": 1470, "end": 1489},
+        {"text": "complexe I", "label": "COMPOSANT_TECHNIQUE", "start": 1565, "end": 1575},
+        {"text": "P1 induisait une diminution significative de 38%", "label": "RESULTAT_RD", "start": 1602, "end": 1650},
+        {"text": "P2 induisait une diminution non significative de 1%", "label": "RESULTAT_RD", "start": 1652, "end": 1703},
+        {"text": "P3 induisait une augmentation non significative de 16%", "label": "RESULTAT_RD", "start": 1705, "end": 1759},
+        {"text": "P1 induisait une diminution non significative de 26%", "label": "RESULTAT_RD", "start": 1786, "end": 1838},
+        {"text": "P2 induisait une diminution significative de 32%", "label": "RESULTAT_RD", "start": 1840, "end": 1888},
+        {"text": "P3 induisait une diminution non significative de 39%", "label": "RESULTAT_RD", "start": 1890, "end": 1942}
+      ]
+    },
+    {
+      "chunk_id": "projet_1__chunk_000088_sub00",
+      "entities": [
+        {"text": "cosmétique", "label": "DOMAINE_RD", "start": 280, "end": 290}
+      ]
+    },
+    {
+      "chunk_id": "projet_1__chunk_000089_sub00",
+      "entities": [
+        {"text": "mécanismes biologiques de la peau", "label": "DOMAINE_RD", "start": 466, "end": 499},
+        {"text": "développer de nouveaux produits cosmétiques aux formulations innovantes", "label": "OBJECTIF_RD", "start": 547, "end": 618},
+        {"text": "recherche de nouveaux actifs", "label": "OBJECTIF_RD", "start": 642, "end": 670},
+        {"text": "cosmétique", "label": "DOMAINE_RD", "start": 712, "end": 722}
+      ]
+    }
+  ]
+}

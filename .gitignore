@@ -1,0 +1,13 @@
+.env
+.env.*
+
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+data/
+poppler-25.12.0/
+
+.ipynb_checkpoints/
+.DS_Store

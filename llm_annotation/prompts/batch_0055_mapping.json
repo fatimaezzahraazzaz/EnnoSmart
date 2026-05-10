@@ -1,0 +1,91 @@
+{
+  "batch_id": 55,
+  "chunks": [
+    {
+      "chunk_id": "projet_12__chunk_000047",
+      "project_id": "projet_12_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_12_\\raw\\docx\\DT_AI-GUIDANCE_2024-FR-v1.docx",
+      "file_name": "DT_AI-GUIDANCE_2024-FR-v1.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Objectifs visés]\nL’objectif des travaux de R&D actuels est le développement et la mise en œuvre d’une plateforme d’apprentissage permettent d’entrainer des intelligences artificielles à piloter des véhicules. L’enjeu dans le domaine des fusées avaient déjà été identifiés en 2023 où l’IA pouvait être utilisée pour calculer rapidement les trajectoires optimales et proposer une loi de commande type qui servira de modèle pour le développement du logiciel. L’autre objectif fixé pour l’année 2024 est de généraliser le principe de fonctionnement en adaptant le code pour fonctionner cette fois-ci avec un parachute.\n\nLe scénario pour le guidage des fusées est cadre du projet PERSEUS. L'objectif est d'effectuer une montée de quelques mètres, rester stable, puis atterrir en toute sécurité.\n\nFigure 1 : Schéma du MINI-APTERROS\n\nLes objectifs spécifiques du projet se déclinent en 3 points :\n\nPermettre l'entrainement de la fusée sur diverses phases de vols telle que l'atterrissage ou le décollage.\n\nPréparer l’intégration d’un réseau de neurone dans le hardware en ajoutant des contraintes physiques\n\nAugmenter les performances de l'algorithme d’apprentissage pour obtenir des résultats plus pertinents et concluants lors de la simulation.\n\nLes travaux réalisés en 2023 ont également ouvert la porte à la généralisation du logiciel SIGMA. En effet, à partir de brique logicielle issue de SIGMA nous avons réalisé en 2024 des travaux de R&D sur le développement d’une plateforme d’entrainement d’IA pour le guidage de véhicule.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_12_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_12__chunk_000085_sub01",
+      "project_id": "projet_12_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_12_\\raw\\docx\\SCALIAN-DS_DT-2023_SIGMA_VF.docx",
+      "file_name": "SCALIAN-DS_DT-2023_SIGMA_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "de la fusée, y compris les forces aérodynamiques, la propulsion, la gravité et d'autres variables environnementales. La qualité des prédictions de la simulation dépend de la précision de ces modèles.\n\nDe plus, le modèle doit être entraîné sur des simulations qui reflètent fidèlement les conditions réelles rencontrées lors de l'atterrissage d'une fusée, y compris les imprécisions et les incertitudes. Les simulations doivent reproduire de manière réaliste les défis tels que les variations de masse, les conditions météorologiques et les défaillances potentielles des systèmes.\n\nPar ailleurs, il doit être capable d'apprendre à partir des données générées par les simulations pour augmenter ses performances. Cela nécessite des algorithmes d'apprentissage automatique robustes capables de généraliser à partir des données de simulation pour prendre des décisions dans des situations réelles.\n\nL'objectif du modèle est d'atterrir la fusée de la manière la plus sûre et la plus précise possible. Cela nécessite une optimisation des performances pour minimiser les erreurs de trajectoire et maximiser la stabilité pendant la descente.\n\nNous avons plus spécifiquement identifié les verrous scientifiques et techniques suivants :",
+      "_parent_chunk_id": "projet_12__chunk_000085",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_12__chunk_000091_sub01",
+      "project_id": "projet_12_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_12_\\raw\\docx\\SCALIAN-DS_DT-2023_SIGMA_VF.docx",
+      "file_name": "SCALIAN-DS_DT-2023_SIGMA_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "donc une capacité à servir des missions autonomes. Ce travail de recherche utilise des capteurs intelligents et des techniques fédérées d’IA pour entraîner intelligemment le système à servir l’objectif ultime. Les trajectoires sont simulées dans un environnement de simulation automatisé afin d’effectuer des analyses exhaustives.\nLes résultats approximent avec précision les trajectoires analogues à leurs homologues numériques et convergent vers leurs estimations d’état final mesurées.\nLe taux de génération des trajectoires possibles mesure la précision de l’algorithme.\nLa précision de l’algorithme est proche de 0,87 pour un temps de vol de 100 secondes, ce qui est raisonnable.\n\nEnsuite, dans SCORSOGLIO et al., le méta-apprentissage par renforcement basé sur l'image est appliqué pour résoudre la tâche de descente et d'atterrissage motorisés précis sur la Lune avec des paramètres dynamiques incertains et une défaillance de l'actionneur. L'agent, un réseau neuronal profond, prend des images en temps réel et des observations de télémétrie acquises pendant la descente et les mappe directement sur la commande de poussée (c'est-à-dire la politique du capteur à l'action). L’entrainement et la validation de l'algorithme et des simulations de Monte Carlo montrent que la politique de guidage en boucle fermée qui en résulte atteint des erreurs de l'ordre du mètre dans différents scénarios, même lorsque l'environnement est partiellement observé et que l'état du vaisseau spatial n'est pas entièrement connu.",
+      "_parent_chunk_id": "projet_12__chunk_000091",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_12__chunk_000029",
+      "project_id": "projet_12_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_12_\\cir_final\\CIR2024_SCALIAN_SIGMA-VF.docx",
+      "file_name": "CIR2024_SCALIAN_SIGMA-VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Travaux réalisés pour la mise en œuvre d’une stratégie d’évaluation de la qualité d’un réseau de neurone]\nL’évaluation du réseau de neurones pour le guidage d’un parachute impose un défi majeur : garantir la reproductibilité et la robustesse des scénarios de test. L’apprentissage par renforcement, combiné à la génération aléatoire du vent, génère des trajectoires uniques à chaque simulation, rendant les comparaisons directes difficiles. Cette variabilité complique l’analyse des performances et empêche une évaluation cohérente du réseau. Pour surmonter ce verrou, nous avons développé une approche permettant de générer des profils de vent reproductibles. Nous avons défini six profils de vent distincts (trois vers la gauche, trois vers la droite) avec trois niveaux d’intensité, garantissant ainsi une évaluation comparative fiable des performances du réseau de neurones.\n\nL’analyse des performances du réseau montre une évolution significative du guidage après 200 epochs d’apprentissage (Figures 17 et 18). Toutefois, certaines situations extrêmes entraînent encore la sortie du parachute du domaine de simulation, indiquant des marges de progression pour renforcer la robustesse du système.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_12_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_12__chunk_000032_sub00",
+      "project_id": "projet_12_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_12_\\cir_final\\CIR2024_SCALIAN_SIGMA-VF.docx",
+      "file_name": "CIR2024_SCALIAN_SIGMA-VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Verrous technologiques levés]\nNous avons introduit une contrainte physique sur l’évolution de la poussée ou de la commande du parachute durant la phase d’entraînement de l’algorithme. Cette approche a contribué à réduire le Reality Gap, en limitant les écarts entre l’environnement simulé et la réalité. Bien que cette contrainte ne soit pas totalement levée, elle constitue une avancée significative vers un entraînement plus fiable et plus représentatif des conditions réelles.\n\nL’approche probabiliste du réseau de neurones a conduit à la mise en œuvre d’une méthode statistique permettant d’évaluer la précision et la robustesse de l’algorithme. Pour assurer la reproductibilité des tests, nous avons défini des profils de vent standardisés permettant d’évaluer différents réseaux de neurones dans des conditions identiques.\n\nAu-delà du Reality Gap et des enjeux de reproductibilité, la capacité de l’IA à s’adapter à des scénarios variés et à des perturbations environnementales constitue un verrou fondamental pour le déploiement en conditions réelles. Grâce à une approche incrémentale – débutant par un entrainement dans un environnement contrôlé (sans vent) suivi d’une montée en complexité (avec vent et variations de paramètres physiques) – nous avons démontré la capacité du modèle à généraliser et à maintenir des performances stables face aux incertitudes et aux dynamiques non modélisées. Ces efforts ouvrent la voie à une meilleure transférabilité des modèles vers des contextes réels.\n\nParmi les contributions majeures du présent projet, nous pouvons citer :\n\nL’IA a démontré sa capacité à s’adapter à des environnements physiques différents de ceux rencontrés durant la phase d’apprentissage. Cette capacité témoigne d’une flexibilité significative et renforce l’aspect prometteur de l’IA en tant que méthode de guidage.\n\nL’introduction d’une contrainte limitant la variation maximale de la commande a renforcé le réalisme du modèle, mais a également allongé le processus d’apprentissage. Des études supplémentaires sont nécessaires pour quantifier précisément cet allongement et renforcer l’efficacité du modèle.",
+      "_parent_chunk_id": "projet_12__chunk_000032",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_12__chunk_000091_sub00",
+      "project_id": "projet_12_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_12_\\raw\\docx\\SCALIAN-DS_DT-2023_SIGMA_VF.docx",
+      "file_name": "SCALIAN-DS_DT-2023_SIGMA_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Travaux autour de l’atterrissage de fusées basé sur des approches de l’IA]\nD’abord, l’article Janhavi H.\net al.\ntente d’étudier le rôle des capteurs, des instruments et des technologies intelligentes basées sur l’IA (intelligence artificielle) dans les missions lunaires lors de la navigation des trajectoires.\nLes missions d’atterrissage lunaire divisent généralement la phase de descente en trois ou quatre sous-phases.\nChaque sous-phase a son propre ensemble de contraintes initiales et finales pour l’état du système souhaité.\nLes systèmes d’atterrissage dépendent des compétences humaines pour prendre les décisions d’atterrissage les plus cruciales.\nLa planification et la conception de trajectoires sont très importantes dans les missions lunaires, et elles nécessitent des contributions précises.\nLes systèmes manuels peuvent être sujets à des erreurs.\nEn revanche, l’IA et les mesures basées sur des capteurs intelligents donnent une idée précise des trajectoires et prennent des décisions appropriées lorsque les systèmes manuels peuvent se transformer en catastrophes.\nLes systèmes manuels sont soit pré-alimentés, soit dotés de commandes manuelles pour guider la trajectoire.\nSelon les auteurs, et pour les problèmes d’atterrissage autonome, la conception de la trajectoire est une tâche très cruciale.\nLes trajectoires automatisées jouent un rôle essentiel dans la mesure et la prédiction des paramètres d’état d’atterrissage de la fusée spatiale.\nDe nos jours, les capteurs, les instruments intelligents et les dernières technologies vont de pair pour concevoir des méthodes de mesure permettant des calculs précis et de prendre les décisions appropriées lors de l’atterrissage des fusées spatiales à la destination désignée.\nLes missions spatiales sont très coûteuses et nécessitent d’énormes efforts pour concevoir des systèmes intelligents pour les trajectoires de navigation.\nCet article tente de concevoir tous les candidats possibles de trajectoires de navigation de référence pour la descente lunaire autonome en utilisant la dynamique de système non linéaire 3D avec des conditions d’état initial choisies au hasard.\nLes candidats générés ne dépendent pas de plusieurs sauts et démontrent donc une capacité à servir des missions autonomes.\nCe travail de recherche utilise des capteurs intelligents et des techniques fédérées d’IA pour entraîner intelligemment le système à servir l’objectif ultime.",
+      "_parent_chunk_id": "projet_12__chunk_000091",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_12__chunk_000038_sub03",
+      "project_id": "projet_12_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_12_\\cir_final\\CIR2024_SCALIAN_SIGMA-VF.docx",
+      "file_name": "CIR2024_SCALIAN_SIGMA-VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "de stabiliser efficacement l’attitude du lanceur tout en amortissant les oscillations du fluide, démontrant ainsi la viabilité des approches d’apprentissage par renforcement certifiées en stabilité pour des systèmes aérospatiaux complexes.\n\nCependant, bien que l’approche de Cocaul et al. apporte une avancée intéressante dans la sécurisation des algorithmes de renforcement par l’intégration de fonctions de Lyapunov, elle ne peut pas être directement appliquée dans le cadre de notre projet. Celui-ci nécessite d’aller plus loin en intégrant des contraintes physiques réalistes, afin de renforcer la fidélité des simulations, garantir une reproductibilité accrue, et préparer l’algorithme à une validation expérimentale en conditions réelles.Etat de l’art : état des connaissances scientifiques, techniques et/ou technologiques accessibles au début du projet de R&D. Attention, ne pas confondre analyse du marché et état de l’art : dans le premier cas, on parle de produits proposés par un marché apportant une solution toute faite à un problème plus ou moins similaire, dans l’autre, de connaissances scientifiques et techniques permettant de résoudre une difficulté.Expliquer la démarche de recherche des connaissances accessibles et analyser les éléments de bibliographie identifiés.Argumenter en quoi les connaissances accessibles et utilisables par l’homme du métier normalement compétent dans le domaine en cause ne permettaient pas de résoudre les verrous identifiés.Justifier la nécessité d’engager des travaux de R&D pour lever les verrous.\n\nAttention : Les descriptions concises des verrous et de l’état de l’art constituent des éléments déterminants dans l’appréciation du caractère R&D du projet.",
+      "_parent_chunk_id": "projet_12__chunk_000038",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_12__chunk_000041_sub04",
+      "project_id": "projet_12_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_12_\\cir_final\\CIR2024_SCALIAN_SIGMA-VF.docx",
+      "file_name": "CIR2024_SCALIAN_SIGMA-VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "résultats de cet entraînement, avec cette information en entrée, sont montrés dans la Figure 14. Figure Guidage d’un parachute avec incrément après 24 epoch lorsque la commande est en entrée\n\nNous observons une nette progression dans la qualité du guidage avec la mise en œuvre de l’incrément sur la commande, dès lors que le réseau de neurones dispose de la connaissance de la valeur précédente. Toutefois, il convient de noter que l’entraînement prend plus de temps que dans le cas sans incrément. En effet, sans cette contrainte, l’entraînement se complète en 24 epochs, tandis qu’avec l’incrément, il faut 50 epochs pour atteindre un niveau de performance comparable. Afin de quantifier précisément l’impact de cette contrainte sur le processus d’apprentissage, des essais supplémentaires seront nécessaires pour mesurer le surcoût en termes de durée d’entraînement induit par l’introduction de l’incrément sur la commande.\n\nRésultat de l’entrainement avec vent\n\nMaintenant que nous avons développé un algorithme de guidage de parachute capable de maintenir le parachute à une position donnée, nous avons inclus du vent à l’environnement. Pour aider l’IA à s’adapter à cette nouvelle variable, nous avons introduit la vitesse du vent en entrée. À chaque génération d’objet Simulation, un profil de vent aléatoire est établi. Par ailleurs, à chaque pas de temps, un tirage détermine la présence éventuelle du vent ; si le vent est activé, un tirage aléatoire définit alors sa direction, son intensité et sa durée. Nous avons testé deux scénarios distincts pour obtenir un algorithme de guidage par IA capable de résister aux perturbations du vent, en conservant les mêmes fonctions de récompense. Les résultats de ces expérimentations sont présentés ci-dessous.\n\nScénario 1 : Entraînement sans pré-entrainement",
+      "_parent_chunk_id": "projet_12__chunk_000041",
+      "_is_subchunk": true
+    }
+  ]
+}

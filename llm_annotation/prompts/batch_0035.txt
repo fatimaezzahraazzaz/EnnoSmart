@@ -1,0 +1,261 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 35/135, 8 chunks)
+
+### CHUNK_ID: projet_8__chunk_000003
+```
+[SECTION : Objectifs visés et performances à atteindre]
+Cette opération de R&D vise à développer un procédé de récupération et recyclage de l’hélium utilisé dans les processus de fabrication des fibres optiques, dans l’objectif d’augmenter leur efficacité et de réduire leur empreinte écologique.
+
+Le module de récupération d’hélium que nous cherchons à développer a pour objectif de récupérer plus de 50 % de l’hélium utilisé lors du traitement des fibres optiques, le traiter, le comprimer pour le stocker, puis le réutiliser dans le procédé de fabrication.
+
+En termes de performances, notre solution devra permettre de :
+
+Récupérer l’hélium consommé dans chaque fibreuse et le réintroduire dans la boucle avec une pureté minimale de 99,98%, tout en s’assurant de la non-pollution du réseau d’hélium pur ;
+
+Traiter un volume de gaz d’environ 18 m3/h constitué de 50 % d’air et de 50 % d’hélium ;
+
+Récupérer environ 7 m3/h d’hélium pur.
+```
+
+### CHUNK_ID: projet_8__chunk_000004_sub00
+```
+[SECTION : Analyse de l’état de l’art]
+L’hélium possède une capacité calorifique massique très élevée, ainsi qu’une conductivité thermique importante, ce qui en fait l’un des agents gazeux de transfert de chaleur les plus efficaces. Son inertie chimique lui confère un avantage par rapport à d’autres gaz de refroidissement efficaces, comme la vapeur d’eau. L’une des principales applications de cette propriété est le refroidissement rapide des fibres de verre lors de leur étirage à partir d’un préformé au cours de la production de fibres optiques.
+
+Au démarrage du présent projet, nous avons analysé les connaissances scientifiques existantes liées aux systèmes et procédés de récupération et recyclage de l’hélium, en nous focalisant sur les processus de fabrication des fibres optiques.
+
+En effet, notre recherche a ressorti d’abord un brevet publié en 1997 décrivant un procédé de recyclage de l’hélium avec pour objectif d’optimiser l’utilisation de ce gaz, notamment dans des applications industrielles telles que la fabrication de fibres optiques. La solution consiste à récupérer l’hélium à la sortie d’au moins deux étapes du procédé fibres optiques (tirage, consolidation et éventuellement dépôt), le purifier en deux niveaux (intermédiaire puis final) et le réinjecter aux étapes selon la pureté requise. Le procédé global comprend les étapes suivantes :
+
+Alimentation d’un premier flux d’hélium avec un premier niveau de pureté (au moins 99,995%) dans un premier procédé de fabrication de fibres optiques, appelé consolidation.
+
+Récupération de l’hélium usé contenant des impuretés (dont du chlore) provenant de ce premier procédé.
+
+Envoi de cet hélium usé vers un premier purificateur.
+
+Élimination des impuretés par ce purificateur pour produire un deuxième flux d’hélium avec un deuxième niveau de pureté.
+
+Alimentation de ce deuxième flux dans un second procédé de fabrication de fibres optiques, tel que purge du four de filage ou refroidissement de la fibre.
+
+Stockage et collecte possible de ce deuxième flux avant son utilisation.
+
+Contrôle de la pureté de l’hélium usé et du deuxième flux purifié. Le deuxième niveau de pureté est inférieur au premier, mais reste d’au moins 95%.
+
+Alimentation contrôlée en hélium neuf (de compensation) pour garantir un approvisionnement suffisant.
+```
+
+### CHUNK_ID: projet_8__chunk_000004_sub01
+```
+du deuxième flux purifié. Le deuxième niveau de pureté est inférieur au premier, mais reste d’au moins 95%. Alimentation contrôlée en hélium neuf (de compensation) pour garantir un approvisionnement suffisant.
+
+La récupération se fait à l’aide d’une ligne de récupération des gaz usés, un capteur permettant de mesurer la composition, la pression ou la température des gaz évacués, une vanne automatique qui régule le débit d’évacuation en fonction des paramètres du four, et un compresseur qui aspire les gaz pour les envoyer vers le système de purification.
+
+Figure : Système intégré pour recycler l’hélium provenant à la fois des étapes de consolidation, d’étirage et d’autres procédés utilisant de l’hélium lors de la fabrication de fibres optiques
+
+Le système décrit dans ce brevet est efficace pour la récupération et la purification de l’hélium. Toutefois, il présente plusieurs limites. En effet, la régulation qu’il met en œuvre agit sur le débit d’évacuation du four afin de maintenir sa pression interne, mais ne gère pas la variabilité des flux issus de plusieurs tours de tirage ni la composition fluctuante du gaz collecté. De plus, cette solution a une architecture distribuée complexe avec purification centralisée et gestion en cascade de multiples flux MFC nécessitant un contrôle distribué sur plusieurs points et un dimensionnement surdimensionné.
+
+Par ailleurs, ce brevet date de 1997 et ne prend pas en compte les contraintes d’intégration sur des installations existantes.
+
+En outre, plusieurs industriels ont développé des systèmes permettant de récupérer l’hélium, le gérer et le recycler. A titre d’exemple, CTS propose des systèmes sous pression composés de différents éléments permettant de récupérer, traiter et stocker le gaz. L’hélium vaporisé est utilisé dans un procédé, puis récupéré par des conduites d’échappement. Ces conduites mènent à un réservoir de récupération, où le gaz passe à travers un filtre, puis est analysé pour en vérifier la pureté. Si le niveau de pureté est conforme aux seuils requis pour les essais, l’hélium est alors compressé dans un réservoir de stockage.
+```
+
+### CHUNK_ID: projet_8__chunk_000004_sub02
+```
+puis est analysé pour en vérifier la pureté. Si le niveau de pureté est conforme aux seuils requis pour les essais, l’hélium est alors compressé dans un réservoir de stockage.
+
+Cependant, ce type de systèmes ne permet pas de traiter le gaz récupéré. La qualité de l’hélium ne répond donc pas aux exigences du processus de fibrage.
+
+Figure : Procédé standard de récupération d’hélium
+
+L’hélium est également utilisé dans d’autres domaines industriels, tels que la fabrication de semi-conducteurs, le refroidissement de certains types de réacteurs nucléaires, ou encore dans des procédés à haute précision comme le frappage à froid (cold spraying).
+
+En effet, PRAXAIR a publié un brevet présentant un procédé en trois étapes pour la récupération et la purification de l’hélium dans les procédés de projection à froid, combinant des techniques de filtration particulaire, compression, purification membranaire, et séparation des liquides.
+
+Le système fonctionne en circuit fermé, permettant de :
+
+Recycler directement une partie du gaz épuré vers la chambre,
+
+Purifier une autre portion via une membrane spécifique pour obtenir un hélium à haute pureté,
+
+Eliminer l’eau et stabiliser le flux via un séparateur de liquide et un amortisseur, assurant un retour stable du gaz vers la chambre.
+
+Ce procédé modulaire optimise l’utilisation de l’hélium et permet de réduire les pertes de gaz tout en assurant une qualité constante dans le processus de projection. Néanmoins, la purification par membrane proposée ne permet pas d’atteindre la pureté souhaitée. En effet, les procédés membranaires les plus performants ne permettent d’atteindre qu’une pureté maximale d’environ 90% en hélium, insuffisante pour notre application qui requiert une pureté minimale de 99,98%.
+
+Toujours dans le contexte de projection à froid, un article scientifique a présenté un système de récupération d’hélium, reposant sur un fonctionnement automatisé et adaptatif. Le cœur du procédé est la technologie PSA (Pressure Swing Adsorption), qui permet de séparer efficacement l’hélium des autres composants du gaz (chlore, azote, etc.) grâce à des adsorbants à base de zéolithes. Le système est configuré pour fournir un flux continu d’hélium purifié, malgré le caractère cyclique du PSA, en utilisant neuf colonnes d’adsorption fonctionnant en rotation.
+```
+
+### CHUNK_ID: projet_8__chunk_000004_sub03
+```
+adsorbants à base de zéolithes. Le système est configuré pour fournir un flux continu d’hélium purifié, malgré le caractère cyclique du PSA, en utilisant neuf colonnes d’adsorption fonctionnant en rotation.
+
+Cependant, cette étude n’aborde ni la problématique de la captation du gaz dans un environnement ouvert, ni la variabilité des débits caractéristiques des lignes de tirage de fibres optiques. Par ailleurs, son architecture multi-colonnes ne permet pas de respecter les contraintes d’intégration sur un site industriel de fibrage.
+```
+
+### CHUNK_ID: projet_8__chunk_000006
+```
+[SECTION : Verrou 1 : Captation dynamique en environnement ouvert avec débits variables]
+Le premier verrou concerne la captation du gaz dans un environnement industriel ouvert où l’hélium se mélange librement avec l’air ambiant. Nous devons :
+
+Gérer une variabilité importante des débits selon le nombre de tours de tirage actifs ;
+
+Maintenir une concentration minimale en hélium de 50% dans le flux capté malgré la dilution atmosphérique constante en sortie de zone de refroidissement ;
+
+Développer un système de captation capable de canaliser efficacement le gaz sans créer de perturbations aérodynamiques susceptibles d’affecter le refroidissement ou la stabilité dimensionnelle de la fibre en cours d’étirage.
+
+L’incertitude principale réside dans la définition d’une architecture de captation permettant d’atteindre simultanément ces trois objectifs : taux de récupération élevé, concentration suffisante en hélium et non-impact sur le procédé de fibrage.
+```
+
+### CHUNK_ID: projet_8__chunk_000007
+```
+[SECTION : Verrou 2 : Régulation adaptative pour des flux de gaz à composition fluctuante]
+Le second verrou technique concerne le développement d’un système de régulation capable de s’adapter en temps réel aux variations de composition et de débit du flux capté. Notre contexte impose de développer une stratégie de régulation asservie multi-paramètres capable d’ajuster l’aspiration en fonction de l’injection d’hélium en amont pour maintenir un taux de récupération optimal tout au long du cycle de production, ainsi que de gérer les transitoires (pics de pression, cycles d’électrovannes d’injection) sans déstabiliser le procédé de fibrage.
+```
+
+### CHUNK_ID: projet_8__chunk_000008
+```
+[SECTION : Verrou 3 : Adaptation du système VPSA aux conditions d’alimentation variables et intégration du flux de recyclage dans l’architecture globale]
+Nous avons dû lever un verrou technique important lié à l’adaptation du système de purification VPSA aux contraintes spécifiques de notre procédé de récupération d’hélium. Contrairement aux applications industrielles classiques où le VPSA est alimenté par un flux à composition et débit stables, notre système doit gérer :
+
+Les variations de débit : le flux d’alimentation varie selon le nombre de tours de fibrage actifs, nécessitant un dimensionnement capable de fonctionner efficacement sur une large plage opératoire.
+
+Les variations de composition : la concentration en hélium dans le flux capté peut fluctuer autour de la valeur nominale de 50% selon l’efficacité instantanée du système de captation.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 35,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

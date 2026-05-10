@@ -1,0 +1,87 @@
+{
+  "batch_id": 107,
+  "chunks": [
+    {
+      "chunk_id": "projet_23__chunk_000007",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\cir_final\\HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Verrous et incertitudes scientifiques, techniques, technologiques]\nLe développement du nouveau système de fabrication des détergents s’est heurté à plusieurs verrous techniques et scientifiques majeurs, qui ont nécessité une phase importante de R&D. Deux grandes problématiques se sont particulièrement distinguées pour garantir précision, reproductibilité et robustesse du procédé : le nettoyage des équipements et le nouveau mode de formulation des produits.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_23_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_23__chunk_000013_sub00",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\cir_final\\HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Essais sur la cuve de remplissage Stoppil de 60 L]\nCette cuve fait partie de la conditionneuse. Nous l’avons remplie avec de l’eau et l’agent fluorescent. Pour que cette solution passe par tous les tuyaux de la conditionneuse, nous devions conditionner des flacons pour nous assurer que l’agent fluorescent puisse aller dans tous les recoins de la tuyauterie. Nous avons ainsi conditionné une vingtaine de flacon. A la lampe UV, nous avons observé que la cuve était bien marquée, ainsi que les têtes de remplissage.\n\nNous avons ensuite effectué une NEP. Au test UV à l’issue de cette NEP, nous avons constaté qu’il restait des résidus au niveau du bourrelet de la cuve, de la boule de lavage et tous les fonds des sorties en bas de cuve vers les têtes de lavage étaient fluorescents. Concernant les têtes de lavage, l’intérieur était correctement nettoyé, mais l’extérieur n’était pas nettoyé.\n\nNous avons alors réalisé une seconde NEP, en augmentant la pression distribuée par la boule de lavage, afin d’atteindre des zones plus éloignées et d’avoir plus de pression pour décoller les résidus des parois. Nous avons constaté que l’augmentation des vitesses pompes pour augmenter la pression entraînait d’importants mouvements de la tuyauterie.\n\nNous avons donc conclu quant à la nécessité d’installer une pièce pour pouvoir augmenter la pression en impactant moins le mouvement de la tuyauterie.\n\nPar ailleurs, au test UV, nous avons constaté que les mêmes zones restaient fluorescentes.\n\n[TABLEAU]\n| | |\n| ------------------------------- | ------------------------------- |\n| Tige de la boule de rinçage (1) | Tige de la boule de rinçage (2) |\n\nFigure  : Tige de la boule de rinçage après les NEP, sous UV\n\nFinalement, nous avons réalisé des essais avec l’agent fluorescent pour évaluer la qualité du nettoyage. Après les NEP, des résidus étaient toujours visibles. Nous avons supposé que l’agent fluorescent était plus difficile à nettoyer qu’un produit détergent. Notre méthode devait donc être revue.",
+      "_parent_chunk_id": "projet_23__chunk_000013",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_25__chunk_000000",
+      "project_id": "projet_25_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_25_\\raw\\docx\\Developpements_demarche_environnementale(2).docx",
+      "file_name": "Developpements_demarche_environnementale(2).docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Analyse et calcul de l’impact carbone des acheminements]\nDans le cadre de notre démarche environnementale et de notre stratégie d’innovation continue, nous avons engagé un nouveau développement structurant visant à intégrer une analyse complète de l’impact carbone lié à l’acheminement des véhicules.\n\nNous avons développé un module permettant de mesurer et d’analyser l’impact carbone (émissions de CO₂) généré par l’acheminement d’un véhicule entre son point de départ et son point d’arrivée, selon le mode de transport choisi.\n\nDeux cas principaux sont pris en compte :\n- Transport par camion, lorsque le véhicule est chargé et transporté sur un porte-voitures ;\n- Convoyage par conducteur (convoyeur), lorsque le véhicule est acheminé par la route en roulant.\n\nCette fonctionnalité offre au client final une visibilité claire sur son impact carbone, quel que soit le type d’acheminement retenu, et constitue un véritable outil d’aide à la décision.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_25_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_25__chunk_000002",
+      "project_id": "projet_25_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_25_\\raw\\docx\\Developpements_demarche_environnementale(2).docx",
+      "file_name": "Developpements_demarche_environnementale(2).docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Positionnement stratégique et différenciation marché]\nCes développements renforcent notre positionnement technologique et environnemental sur le marché du convoyage et du transport automobile.\n\nContrairement aux acteurs concurrents tels que Hiflow et Driiveme, notre solution intégrera une analyse carbone détaillée ainsi qu’une interface mobile couvrant l’ensemble de la chaîne opérationnelle.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_25_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_25__chunk_000003",
+      "project_id": "projet_25_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_25_\\raw\\docx\\DT_ FRED_EZY_CII_2025_V1.1_AD.docx",
+      "file_name": "DT_ FRED_EZY_CII_2025_V1.1_AD.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "JUSTIFICATIF DES TRAVAUX DECLARES AU TITRE DU CREDIT D’IMPOT INNOVATION (CII) de l’année 2025\n\nFICHE DESCRIPTIVE DU PROJET EZY Retail/ EZY Parc\n\nMise en œuvre d’un système unifié de gestion des flux de convoyage et de parc automobile\n\nTable des matières\n\n1. Présentation de la société FRED 3\n\n2. Présentation du projet 3\n\n2.1. Contexte du projet 3\n\n2.2. Objectifs et performances recherchés 3\n\n2.3. Situation du produit sur le marché et description des innovations 4\n\n2.3.1. Situation du produit sur le marché 4\n\n2.3.2. Description des innovations 7\n\n2.4. Présentation de la démarche de conception et réalisation 8\n\n2.4.1. Conception des plateformes métier : Ezy Retail et Eyz Parc 9\n\n2.4.1.1. Plateforme Ezy Retail : gestion digitalisée du convoyage 9\n\n2.4.1.2. Plateforme Eyz Parc : gestion digitalisée des parcs automobiles 11\n\n2.4.2. Analyse et calcul de l’impact carbone des acheminements 13\n\n2.5. Synthèse des progrès et des innovations 13\n\n2.6. Indicateurs d’innovation 14\n\n2.7. Annexe 15",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_25_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_25__chunk_000004",
+      "project_id": "projet_25_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_25_\\raw\\docx\\DT_ FRED_EZY_CII_2025_V1.1_AD.docx",
+      "file_name": "DT_ FRED_EZY_CII_2025_V1.1_AD.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Contexte du projet]\nLe secteur de la logistique automobile connaît une transformation progressive portée par la digitalisation des processus et l’augmentation des exigences en matière de traçabilité, de performance opérationnelle et de conformité documentaire. Les activités de convoyage et de gestion de parcs de véhicules reposent encore largement sur des processus hétérogènes, souvent partiellement digitalisés, impliquant de multiples acteurs (transporteurs, convoyeurs, équipes logistiques, clients finaux) et générant des risques d’erreurs, de pertes d’information et de manque de visibilité en temps réel.\n\nDans ce contexte, les enjeux principaux concernent la capacité à centraliser les données, automatiser les flux opérationnels, sécuriser les échanges documentaires et améliorer la coordination entre les différentes parties prenantes. Par ailleurs, les nouvelles exigences environnementales et réglementaires introduisent des besoins émergents, notamment en matière de mesure et de pilotage de l’impact carbone des opérations de transport.\n\nC’est dans ce cadre que s’inscrit le développement de la plateforme qui regroupe les deux solutions Ezy Retail et Eyz Parc, visant à proposer une approche intégrée, digitalisée et évolutive de la gestion du convoyage et des parcs de véhicules, tout en adressant les limites des solutions existantes.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_25_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_25__chunk_000005",
+      "project_id": "projet_25_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_25_\\raw\\docx\\DT_ FRED_EZY_CII_2025_V1.1_AD.docx",
+      "file_name": "DT_ FRED_EZY_CII_2025_V1.1_AD.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Objectifs et performances recherchés]\nL’objectif du projet est de concevoir et développer une plateforme digitale intégrée dédiée à la gestion du convoyage et des parcs de véhicules, permettant d’améliorer l’efficacité opérationnelle, la traçabilité et la qualité des données tout au long du cycle logistique.\n\nAu niveau fonctionnel :\n\nAssurer la gestion complète et dématérialisée des demandes de transport et de convoyage de véhicules ;\n\nPermettre le suivi en temps réel des opérations et des statuts des véhicules ;\n\nCentraliser la gestion des stocks de véhicules et des opérations associées (entrées, sorties, préparation).\n\nAutomatiser la collecte, la validation et l’archivage des documents liés aux opérations ;\n\nAméliorer la coordination entre les différents acteurs (clients, prestataires, équipes internes).\n\nAu niveau technique :\n\nMettre en place une architecture permettant l’interopérabilité entre les différents modules (convoyage et gestion de parc) ;\n\nDévelopper des mécanismes d’automatisation des flux de données et des processus documentaires ;\n\nAssurer la fiabilité, la sécurisation et la traçabilité des informations échangées ;\n\nIntégrer des modules analytiques, notamment pour l’évaluation de l’impact carbone des acheminements.\n\nAu niveau éco-conception :\n\nRéduire l’utilisation du papier grâce à la dématérialisation complète des processus ;\n\nPermettre la mesure et l’analyse des émissions de CO₂ liées aux opérations de transport ;\n\nAu niveau ergonomique :\n\nOffrir une expérience utilisateur fluide, adaptée aux différents profils (opérateurs, convoyeurs, clients).",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_25_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_25__chunk_000006_sub00",
+      "project_id": "projet_25_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_25_\\raw\\docx\\DT_ FRED_EZY_CII_2025_V1.1_AD.docx",
+      "file_name": "DT_ FRED_EZY_CII_2025_V1.1_AD.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Situation du produit sur le marché]\nDans un marché en forte évolution, plusieurs solutions numériques ont été développées afin de répondre aux besoins de gestion des opérations de convoyage de véhicules et de pilotage des parcs automobiles. Ces solutions adressent principalement des problématiques de logistique automobile, de gestion de flotte et de digitalisation des opérations terrain.\n\nAfin de positionner précisément la solution développée dans le cadre du projet, une analyse comparative des solutions existantes a été menée, en se basant sur les usages cibles identifiés ainsi que sur les fonctionnalités attendues couvrant à la fois les activités de convoyage et de gestion de parc.\n\nL’évaluation s’est appuyée sur un ensemble de fonctionnalités clés couvrant les différents processus métiers, incluant notamment :\n\nGestion convoyages :\n\nCréation digitale des demandes de transport ;\n\nGestion digitale des missions convoyeur ;\n\nSuivi opérationnel en temps réel des opérations de convoyage ;\n\nMonitoring numérique de l’état du véhicule / état des lieux digitalisé ;\n\nDématérialisation des documents logistiques de livraison ;\n\nCommunication client SMS / email / notifications ;\n\nServices de ravitaillement / recharge / préparation énergétique.\n\nGestion Parc :\n\nSuivi digitalisé des véhicules en stock ;\n\nLocalisation précise du véhicule dans le parc ;\n\nGestion des statuts véhicule (sur parc, atelier, avarie, attente…) ;\n\nGestion des entrées / sorties véhicules sur site ;\n\nDemandes de préparation véhicule (nettoyage, contrôle, accessoires, petite réparation) ;\n\nSuivi documentaire complet du véhicule au-delà de la livraison.\n\nGestion parc + convoyage : Calcul de l’impact carbone des acheminements.\n\nÀ l’issue de cette analyse, les principales solutions concurrentes identifiées sont les suivantes :\n\nOTOQI : plateforme spécialisée dans le convoyage de véhicules, offrant une couverture complète des opérations de transport et de suivi en temps réel. La solution est fortement orientée exécution opérationnelle, avec une digitalisation avancée des missions convoyeurs, mais présente des limitations sur la gestion fine des parcs (localisation intra-site, statuts détaillés, gestion des flux internes).",
+      "_parent_chunk_id": "projet_25__chunk_000006",
+      "_is_subchunk": true
+    }
+  ]
+}

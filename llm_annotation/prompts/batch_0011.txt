@@ -1,0 +1,308 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 11/135, 8 chunks)
+
+### CHUNK_ID: projet_3__chunk_000145_sub00
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération (chef de projet, chercheur, technicien de R&D…) | Contribution directe à l’acquisition de nouvelles connaissances | Temps déclaré pour l’opération (heures) |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| BRACCONI Manon | Licence professionnelle Bioexpérimentation industrielle, ESTBA | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...), réalisation des expérimentations, analyse des résultats | 413 |
+| BRADESI/ OURAHMOUN Charline | Licence professionnelle Sciences, technologie, santé - CNAM | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 6 |
+| COMPAGNIE Sandrine | BTS Biotechnologie - Académie Lille | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...), réalisation des expérimentations, analyse des résultats | 128 |
+| GORNY Diane | DEA biologie et pharmacologie de l'hémostase et des vaisseaux - Université Paris VII | Chercheur | Evaluation et traitement des données | 343 |
+| GROS DAILLON Janice | Licence professionnelle Biologie Analytique et Expérimentale - CNAM | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 69 |
+| LAURIN Miguel | DUT chimie, IUT Besançon | Technicien de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 182 |
+| MORISSEAU Clara | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 368 |
+| PATRICIO Lucie | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Responsable de la plateforme Animalerie | Garant de l'état sanitaire des animaux, suivi des animaux en procédure sévère, contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations | 180 |
+| PFEND Charlaine | Baccalauréat professionnel technicien en expérimentation animale, Académie de Limoges | Zootechnicienne | Contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 111 |
+| RAZANAKOLO-NA Mahita | Doctorat Sciences Pharmacologiques, Université Paris-Saclay | Chercheur chef de projet | Conception et soumission de procédures expérimentales et saisines, suivi de projet, évaluation et traitement des données, interprétation des données, rédaction de rapport de synthèse, abstract et/ou publication | 711 |
+| ROUSSEL Delphine | Doctorat Sciences de la vie - Université Paris VI | Chercheur | Elaboration de la stratégie générale, direction scientifique et technique, conseil, présentations scientifiques et représentation en congrès | 495 |
+| VINCENT Paul | BEPA Technicien expérimentation animale - Ministère de l'agriculture et de l'alimentation | Zootechnicien | Contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 90 |
+| DI BISCEGLIE CABALLERO Sonia | Doctorat Neurosciences - Université Aix-Marseille | Chercheur | Suivi de projet, évaluation et traitement des données | 489 |
+| KHELOUFI Marouane | Doctorat Pathologie cardio-vasculaire - Université Sorbonne Paris Cité | Chercheur | Evaluation et traitement des données | 148 |
+```
+
+### CHUNK_ID: projet_3__chunk_000893_sub00
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération (chef de projet, chercheur, technicien de R&D…) | Contribution directe à l’acquisition de nouvelles connaissances | Temps déclaré pour l’opération (heures) |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| BRACCONI Manon | Licence professionnelle Bioexpérimentation industrielle, ESTBA | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...), réalisation des expérimentations, analyse des résultats | 413 |
+| BRADESI/ OURAHMOUN Charline | Licence professionnelle Sciences, technologie, santé - CNAM | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 6 |
+| COMPAGNIE Sandrine | BTS Biotechnologie - Académie Lille | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...), réalisation des expérimentations, analyse des résultats | 128 |
+| GORNY Diane | DEA biologie et pharmacologie de l'hémostase et des vaisseaux - Université Paris VII | Chercheur | Evaluation et traitement des données | 343 |
+| GROS DAILLON Janice | Licence professionnelle Biologie Analytique et Expérimentale - CNAM | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 69 |
+| LAURIN Miguel | DUT chimie, IUT Besançon | Technicien de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 182 |
+| MORISSEAU Clara | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 368 |
+| PATRICIO Lucie | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Responsable de la plateforme Animalerie | Garant de l'état sanitaire des animaux, suivi des animaux en procédure sévère, contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations | 180 |
+| PFEND Charlaine | Baccalauréat professionnel technicien en expérimentation animale, Académie de Limoges | Zootechnicienne | Contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 111 |
+| RAZANAKOLO-NA Mahita | Doctorat Sciences Pharmacologiques, Université Paris-Saclay | Chercheur chef de projet | Conception et soumission de procédures expérimentales et saisines, suivi de projet, évaluation et traitement des données, interprétation des données, rédaction de rapport de synthèse, abstract et/ou publication | 711 |
+| ROUSSEL Delphine | Doctorat Sciences de la vie - Université Paris VI | Chercheur | Elaboration de la stratégie générale, direction scientifique et technique, conseil, présentations scientifiques et représentation en congrès | 495 |
+| VINCENT Paul | BEPA Technicien expérimentation animale - Ministère de l'agriculture et de l'alimentation | Zootechnicien | Contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 90 |
+| DI BISCEGLIE CABALLERO Sonia | Doctorat Neurosciences - Université Aix-Marseille | Chercheur | Suivi de projet, évaluation et traitement des données | 489 |
+| KHELOUFI Marouane | Doctorat Pathologie cardio-vasculaire - Université Sorbonne Paris Cité | Chercheur | Evaluation et traitement des données | 148 |
+```
+
+### CHUNK_ID: projet_3__chunk_000994_sub00
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération (chef de projet, chercheur, technicien de R&D…) | Contribution directe à l’acquisition de nouvelles connaissances | Temps déclaré pour l’opération (heures) |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| BRACCONI Manon | Licence professionnelle Bioexpérimentation industrielle, ESTBA | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...), réalisation des expérimentations, analyse des résultats | 413 |
+| BRADESI/ OURAHMOUN Charline | Licence professionnelle Sciences, technologie, santé - CNAM | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 6 |
+| COMPAGNIE Sandrine | BTS Biotechnologie - Académie Lille | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...), réalisation des expérimentations, analyse des résultats | 128 |
+| GORNY Diane | DEA biologie et pharmacologie de l'hémostase et des vaisseaux - Université Paris VII | Chercheur | Evaluation et traitement des données | 343 |
+| GROS DAILLON Janice | Licence professionnelle Biologie Analytique et Expérimentale - CNAM | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 69 |
+| LAURIN Miguel | DUT chimie, IUT Besançon | Technicien de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 182 |
+| MORISSEAU Clara | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 368 |
+| PATRICIO Lucie | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Responsable de la plateforme Animalerie | Garant de l'état sanitaire des animaux, suivi des animaux en procédure sévère, contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations | 180 |
+| PFEND Charlaine | Baccalauréat professionnel technicien en expérimentation animale, Académie de Limoges | Zootechnicienne | Contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 111 |
+| RAZANAKOLO-NA Mahita | Doctorat Sciences Pharmacologiques, Université Paris-Saclay | Chercheur chef de projet | Conception et soumission de procédures expérimentales et saisines, suivi de projet, évaluation et traitement des données, interprétation des données, rédaction de rapport de synthèse, abstract et/ou publication | 711 |
+| ROUSSEL Delphine | Doctorat Sciences de la vie - Université Paris VI | Chercheur | Elaboration de la stratégie générale, direction scientifique et technique, conseil, présentations scientifiques et représentation en congrès | 495 |
+| VINCENT Paul | BEPA Technicien expérimentation animale - Ministère de l'agriculture et de l'alimentation | Zootechnicien | Contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 90 |
+| DI BISCEGLIE CABALLERO Sonia | Doctorat Neurosciences - Université Aix-Marseille | Chercheur | Suivi de projet, évaluation et traitement des données | 489 |
+| KHELOUFI Marouane | Doctorat Pathologie cardio-vasculaire - Université Sorbonne Paris Cité | Chercheur | Evaluation et traitement des données | 148 |
+```
+
+### CHUNK_ID: projet_3__chunk_001014_sub43
+```
+| | | | | | | | | | | | | | | | | | | | | | | | | | SHR-AVI-016 (60 mg/Kg) group [TABLEAU]
+| | | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | Raw data | | | | | | | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | GRUBBS TEST | |
+| ---------------------------- | ----------------------- | -------------- | -------------- | -------------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | ----- | ----- | ---- | ---- | --- | --- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | --- |
+| | Rat number | IV-1 | IV-2 | IV-3 | IV-3 | IV-4 | IV-4 | IV-5 | IV-5 | IV-6 | IV-6 | IV-7 | IV-7 | IV-8 | IV-8 | IV-9 | IV-9 | IV-10 | IV-10 | IV-11 | IV-11 | IV-12 | IV-12 | MEAN | MEAN | SD | SD | n | n | z | z | IV-1 | IV-1 | IV-2 | IV-2 | IV-3 | IV-3 | IV-4 | IV-4 | IV-5 | IV-5 | IV-6 | IV-6 | IV-7 | IV-7 | IV-8 | IV-8 | IV-9 | IV-9 | IV-10 | IV-10 | IV-11 | IV-11 | IV-12 | IV-12 | |
+| Whole micturition cycle | Volume threshold (%) | ND | 48,555 | 58,930 | 58,930 | ND | ND | ND | ND | ND | ND | 36,374 | 36,374 | 59,139 | 59,139 | 41,391 | 41,391 | ND | ND | ND | ND | 46,198 | 46,198 | 48,43 | 48,43 | 9,22 | 9,22 | 6 | 6 | 2,13 | 2,13 | ND | ND | 0,01 | 0,01 | 1,14 | 1,14 | ND | ND | ND | ND | ND | ND | 1,31 | 1,31 | 1,16 | 1,16 | 0,76 | 0,76 | ND | ND | ND | ND | 0,24 | 0,24 | |
+| Last third micturition cycle | Frequency of NVC (1/m) | 0,721 | 0,375 | 1,230 | 1,230 | 0,416 | 0,416 | 0,618 | 0,618 | 0,028 | 0,028 | 1,016 | 1,016 | 0,679 | 0,679 | 0,414 | 0,414 | ND | ND | 0,000 | 0,000 | 0,889 | 0,889 | 0,58 | 0,58 | 0,38 | 0,38 | 11 | 11 | 2,41 | 2,41 | 0,37 | 0,37 | 0,54 | 0,54 | 1,69 | 1,69 | 0,43 | 0,43 | 0,10 | 0,10 | 1,44 | 1,44 | 1,13 | 1,13 | 0,26 | 0,26 | 0,43 | 0,43 | ND | ND | 1,51 | 1,51 | 0,80 | 0,80 | |
+| Last third micturition cycle | Amplitude of NVC (mmHg) | 3,057 | 4,687 | 3,215 | 3,215 | 3,148 | 3,148 | 3,518 | 3,518 | 4,705 | 4,705 | 3,371 | 3,371 | 3,935 | 3,935 | 3,993 | 3,993 | ND | ND | ND | ND | 3,251 | 3,251 | 3,69 | 3,69 | 0,62 | 0,62 | 10 | 10 | 2,34 | 2,34 | 1,02 | 1,02 | 1,62 | 1,62 | 0,77 | 0,77 | 0,88 | 0,88 | 0,28 | 0,28 | 1,65 | 1,65 | 0,51 | 0,51 | 0,40 | 0,40 | 0,49 | 0,49 | ND | ND | ND | ND | 0,71 | 0,71 | |
+| | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
+| | | Non determined | Non determined | Non determined | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
+```
+
+### CHUNK_ID: projet_3__chunk_000079_sub00
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération (chef de projet, chercheur, technicien de R&D…) | Contribution directe à l’acquisition de nouvelles connaissances | Temps déclaré pour l’opération (heures) |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| BRACCONI Manon | Licence professionnelle Bioexpérimentation industrielle, ESTBA | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 549 |
+| BRADESI/ OURAHMOUN Charline | Licence professionnelle Sciences, technologie, santé - CNAM | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...), réalisation des expérimentations, analyse des résultats | 662 |
+| COMPAGNIE Sandrine | BTS Biotechnologie - Académie Lille | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 59 |
+| GORNY Diane | DEA biologie et pharmacologie de l'hémostase et des vaisseaux - Université Paris VII | Chercheur | Evaluation et traitement des données | 89 |
+| GROS DAILLON Janice | Licence professionnelle Biologie Analytique et Expérimentale - CNAM | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 17 |
+| LAURIN Miguel | DUT chimie, IUT Besançon | Technicien de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 36 |
+| MORISSEAU Clara | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 68 |
+| PATRICIO Lucie | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Responsable de la plateforme Animalerie | Garant de l'état sanitaire des animaux, suivi des animaux en procédure sévère, contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations | 406 |
+| PFEND Charlaine | Baccalauréat professionnel technicien en expérimentation animale, Académie de Limoges | Zootechnicienne | Contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 303 |
+| RAZANAKOLO-NA Mahita | Doctorat Sciences Pharmacologiques, Université Paris-Saclay | Chercheur | Evaluation et traitement des données, interprétation des données | 15 |
+| ROUSSEL Delphine | Doctorat Sciences de la vie - Université Paris VI | Chercheur | Elaboration de la stratégie générale, direction scientifique et technique, conseil, présentations scientifiques et représentation en congrès | 386 |
+| VINCENT Paul | BEPA Technicien expérimentation animale - Ministère de l'agriculture et de l'alimentation | Zootechnicien | Contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 314 |
+| DI BISCEGLIE CABALLERO Sonia | Doctorat Neurosciences - Université Aix-Marseille | Chercheur | Suivi de projet, évaluation et traitement des données | 42 |
+| KHELOUFI Marouane | Doctorat Pathologie cardio-vasculaire - Université Sorbonne Paris Cité | Chercheur chef de projet | Conception et soumission de procédures expérimentales et saisines, suivi de projet, évaluation et traitement des données, interprétation des données, rédaction de rapport de synthèse, abstract et/ou publication | 1021 |
+```
+
+### CHUNK_ID: projet_3__chunk_000827_sub00
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération (chef de projet, chercheur, technicien de R&D…) | Contribution directe à l’acquisition de nouvelles connaissances | Temps déclaré pour l’opération (heures) |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| BRACCONI Manon | Licence professionnelle Bioexpérimentation industrielle, ESTBA | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 549 |
+| BRADESI/ OURAHMOUN Charline | Licence professionnelle Sciences, technologie, santé - CNAM | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...), réalisation des expérimentations, analyse des résultats | 662 |
+| COMPAGNIE Sandrine | BTS Biotechnologie - Académie Lille | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 59 |
+| GORNY Diane | DEA biologie et pharmacologie de l'hémostase et des vaisseaux - Université Paris VII | Chercheur | Evaluation et traitement des données | 89 |
+| GROS DAILLON Janice | Licence professionnelle Biologie Analytique et Expérimentale - CNAM | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 17 |
+| LAURIN Miguel | DUT chimie, IUT Besançon | Technicien de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 36 |
+| MORISSEAU Clara | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 68 |
+| PATRICIO Lucie | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Responsable de la plateforme Animalerie | Garant de l'état sanitaire des animaux, suivi des animaux en procédure sévère, contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations | 406 |
+| PFEND Charlaine | Baccalauréat professionnel technicien en expérimentation animale, Académie de Limoges | Zootechnicienne | Contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 303 |
+| RAZANAKOLO-NA Mahita | Doctorat Sciences Pharmacologiques, Université Paris-Saclay | Chercheur | Evaluation et traitement des données, interprétation des données | 15 |
+| ROUSSEL Delphine | Doctorat Sciences de la vie - Université Paris VI | Chercheur | Elaboration de la stratégie générale, direction scientifique et technique, conseil, présentations scientifiques et représentation en congrès | 386 |
+| VINCENT Paul | BEPA Technicien expérimentation animale - Ministère de l'agriculture et de l'alimentation | Zootechnicien | Contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 314 |
+| DI BISCEGLIE CABALLERO Sonia | Doctorat Neurosciences - Université Aix-Marseille | Chercheur | Suivi de projet, évaluation et traitement des données | 42 |
+| KHELOUFI Marouane | Doctorat Pathologie cardio-vasculaire - Université Sorbonne Paris Cité | Chercheur chef de projet | Conception et soumission de procédures expérimentales et saisines, suivi de projet, évaluation et traitement des données, interprétation des données, rédaction de rapport de synthèse, abstract et/ou publication | 1021 |
+```
+
+### CHUNK_ID: projet_3__chunk_000928_sub00
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération (chef de projet, chercheur, technicien de R&D…) | Contribution directe à l’acquisition de nouvelles connaissances | Temps déclaré pour l’opération (heures) |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| BRACCONI Manon | Licence professionnelle Bioexpérimentation industrielle, ESTBA | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 549 |
+| BRADESI/ OURAHMOUN Charline | Licence professionnelle Sciences, technologie, santé - CNAM | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...), réalisation des expérimentations, analyse des résultats | 662 |
+| COMPAGNIE Sandrine | BTS Biotechnologie - Académie Lille | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 59 |
+| GORNY Diane | DEA biologie et pharmacologie de l'hémostase et des vaisseaux - Université Paris VII | Chercheur | Evaluation et traitement des données | 89 |
+| GROS DAILLON Janice | Licence professionnelle Biologie Analytique et Expérimentale - CNAM | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 17 |
+| LAURIN Miguel | DUT chimie, IUT Besançon | Technicien de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 36 |
+| MORISSEAU Clara | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 68 |
+| PATRICIO Lucie | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Responsable de la plateforme Animalerie | Garant de l'état sanitaire des animaux, suivi des animaux en procédure sévère, contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations | 406 |
+| PFEND Charlaine | Baccalauréat professionnel technicien en expérimentation animale, Académie de Limoges | Zootechnicienne | Contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 303 |
+| RAZANAKOLO-NA Mahita | Doctorat Sciences Pharmacologiques, Université Paris-Saclay | Chercheur | Evaluation et traitement des données, interprétation des données | 15 |
+| ROUSSEL Delphine | Doctorat Sciences de la vie - Université Paris VI | Chercheur | Elaboration de la stratégie générale, direction scientifique et technique, conseil, présentations scientifiques et représentation en congrès | 386 |
+| VINCENT Paul | BEPA Technicien expérimentation animale - Ministère de l'agriculture et de l'alimentation | Zootechnicien | Contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 314 |
+| DI BISCEGLIE CABALLERO Sonia | Doctorat Neurosciences - Université Aix-Marseille | Chercheur | Suivi de projet, évaluation et traitement des données | 42 |
+| KHELOUFI Marouane | Doctorat Pathologie cardio-vasculaire - Université Sorbonne Paris Cité | Chercheur chef de projet | Conception et soumission de procédures expérimentales et saisines, suivi de projet, évaluation et traitement des données, interprétation des données, rédaction de rapport de synthèse, abstract et/ou publication | 1021 |
+```
+
+### CHUNK_ID: projet_3__chunk_000113_sub00
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération (chef de projet, chercheur, technicien de R&D…) | Contribution directe à l’acquisition de nouvelles connaissances | Temps déclaré pour l’opération (heures) |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| BRACCONI Manon | Licence professionnelle Bioexpérimentation industrielle, ESTBA | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 5 |
+| COMPAGNIE Sandrine | BTS Biotechnologie - Académie Lille | Technicienne de R&D | Evaluation et traitement des données | 1 |
+| GORNY Diane | DEA biologie et pharmacologie de l'hémostase et des vaisseaux - Université Paris VII | Chercheur | Suivi de projet, évaluation et traitement des données | 479 |
+| GROS DAILLON Janice | Licence professionnelle Biologie Analytique et Expérimentale - CNAM | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...), réalisation des expérimentations, analyse des résultats | 1252 |
+| LAURIN Miguel | DUT chimie, IUT Besançon | Technicien de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 729 |
+| MORISSEAU Clara | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Technicienne de R&D | Mise en œuvre de protocoles in vivo sur animaux (préparation animaux, pesée, préparation solutions thérapeutiques, administration par différentes voies...) | 204 |
+| PATRICIO Lucie | Master Biologie intégrative et physiologie en Management de l'expérimentation Préclinique - Université Caen | Responsable de la plateforme Animalerie | Garant de l'état sanitaire des animaux, suivi des animaux en procédure sévère, contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations | 573 |
+| PFEND Charlaine | Baccalauréat professionnel technicien en expérimentation animale, Académie de Limoges | Zootechnicienne | Contrôle des conditions d'hébergement des animaux, surveillances du respect des réglementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 332 |
+| RAZANAKOLONA Mahita | Doctorat Sciences Pharmacologiques, Université Paris-Saclay | Chercheur chef de projet | Conception et soumission de procédures expérimentales et saisines, suivi de projet, évaluation et traitement des données, interprétation des données, rédaction de rapport de synthèse, abstract et/ou publication | 294 |
+| ROUSSEL Delphine | Doctorat Sciences de la vie - Université Paris VI | Chercheur | Elaboration de la stratégie générale, direction scientifique et technique, conseil, présentations scientifiques et représentation en congrès | 127 |
+| VINCENT Paul | BEPA Technicien expérimentation animale - Ministère de l'agriculture et de l'alimentation | Zootechnicien | Contrôle des conditions d'hébergement des animaux, surveillances du respect des règlementations liées aux expérimentations, Participation aux protocoles in vivo, pratiques de petites chirurgie et prélèvements | 273 |
+| DI BISCEGLIE CABALLERO Sonia | Doctorat Neurosciences - Université Aix-Marseille | Chercheur | Evaluation et traitement des données | 603 |
+| KHELOUFI Marouane | Doctorat Pathologie cardio-vasculaire - Université Sorbonne Paris Cité | Chercheur | Suivi de projet, évaluation et traitement des données | 25 |
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 11,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

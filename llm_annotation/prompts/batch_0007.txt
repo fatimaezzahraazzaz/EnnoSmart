@@ -1,0 +1,237 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 7/135, 8 chunks)
+
+### CHUNK_ID: projet_2__chunk_000016
+```
+[SECTION : Définition d’un test virucide adapté au SARS-CoV2]
+En 2021, notre équipe s’était concentrée sur le développement d'un test virucide en collaboration avec l'unité VIM de l'INRAE et l'Institut Pasteur. Nous avions acquis une compréhension approfondie de la culture du virus SARS-CoV2 et nous avions défini un protocole pour évaluer son efficacité virucide. Nos recherches avaient également porté sur les aspects critiques de la formulation du test, notamment la concentration de savon et le temps de contact minimal nécessaire. À la fin de l'année, nos résultats avaient montré qu'un traitement de 15 secondes avec une concentration de 5% de la formulation 20110901 n'était pas suffisant.
+
+En 2022, nous avions utilisé le test que nous avions développé l'année précédente, mais cette fois nous avions évalué l’efficacité du savon suivant les conditions imposées par la norme NF ISO 14476+A2, c’est-à-dire à une concentration de 50% (protocole pour les savons prêts à l’emploi), pendant 30 secondes (temps minimal, étant donné les contraintes techniques imposées par la méthode d’analyse). Nous avions confirmé que la formulation S5 était capable d'inactiver 100% de SARS-CoV2 en 30 secondes. Ce test devait servir à valider l'efficacité des futures formulations de savon liquide.
+```
+
+### CHUNK_ID: projet_2__chunk_000022
+```
+[SECTION : Description des travaux externalisés : sous-traitance et/ou partenariat scientifique]
+Dans le cadre de ce projet, certains travaux au laboratoire GREDECO (Groupe de Recherche et d’Évaluation en Dermatologie et Cosmétologie), organisme agréé au titre du Crédit d’Impôt Recherche (CIR) spécialisé dans l’évaluation clinique et instrumentale des produits dermatologiques et cosmétiques.
+
+GREDECO a mené des tests à l’usage et des mesures cornéométriques dans le but d’évaluer la tolérance cutanée, l’effet hydratant des et plus largement l’appréciation sensorielle des savons développés dans ce projet. Le protocole comprenait :
+
+Le recrutement de 20 volontaires adultes sains (16-18 femmes, 2-4 hommes), répondant à des critères stricts d’inclusion et d’exclusion, avec consentement éclairé signé
+
+Une période d’étude de 28 jours, avec utilisation du savon 3 fois par semaine sur mains et corps (10 fois par jour pendant 14 jours pour certains tests)
+
+Des évaluations dermatologiques réalisées à J0 et J28, incluant questionnaires cliniques et photographies avec l’appareil VECTRA H2
+
+Des mesures cornéométriques sur un sous-groupe d’au moins 10 volontaires, effectuées à J0 avant et immédiatement après la première application, pour quantifier l’hydratation cutanée
+
+Un questionnaire d’auto-évaluation complété par les volontaires à J28
+
+Ces travaux ont été réalisés dans le respect des bonnes pratiques cliniques et réglementaires, par un personnel qualifié disposant des équipements adaptés.
+
+Les données recueillies ont conforté les choix formulaires initiaux, en validant la sécurité cutanée, l’efficacité hydratante et les propriétés sensorielles attendues.
+
+FBroduct ne dispose pas des moyens internes nécessaires pour conduire ces essais
+
+Absence de dermatologue au sein de l’équipe, indispensable pour superviser les tests
+
+Absence d’équipements spécialisés, notamment de type Cornéométrique
+
+’équipe R&D ni les habilitations nécessaires à l’organisation de tests à l’usage sur panel de volontaires, tant sur le plan logistique que réglementaire
+```
+
+### CHUNK_ID: projet_2__chunk_000067
+```
+[SECTION : Définition d’un test virucide adapté au SARS-CoV2]
+En 2021, notre équipe s’était concentrée sur le développement d'un test virucide en collaboration avec l'unité VIM de l'INRAE et l'Institut Pasteur. Nous avions acquis une compréhension approfondie de la culture du virus SARS-CoV2 et nous avions défini un protocole pour évaluer son efficacité virucide. Nos recherches avaient également porté sur les aspects critiques de la formulation du test, notamment la concentration de savon et le temps de contact minimal nécessaire. À la fin de l'année, nos résultats avaient montré qu'un traitement de 15 secondes avec une concentration de 5% de la formulation 20110901 n'était pas suffisant.
+
+En 2022, nous avions utilisé le test que nous avions développé l'année précédente, mais cette fois nous avions évalué l’efficacité du savon suivant les conditions imposées par la norme NF ISO 14476+A2, c’est-à-dire à une concentration de 50% (protocole pour les savons prêts à l’emploi), pendant 30 secondes (temps minimal, étant donné les contraintes techniques imposées par la méthode d’analyse). Nous avions confirmé que la formulation S5 était capable d'inactiver 100% de SARS-CoV2 en 30 secondes. Ce test devait servir à valider l'efficacité des futures formulations de savon liquide.
+```
+
+### CHUNK_ID: projet_2__chunk_000117
+```
+[SECTION : Définition d’un test virucide adapté au SARS-CoV2]
+En 2021, notre équipe s’était concentrée sur le développement d'un test virucide en collaboration avec l'unité VIM de l'INRAE et l'Institut Pasteur. Nous avions acquis une compréhension approfondie de la culture du virus SARS-CoV2 et nous avions défini un protocole pour évaluer son efficacité virucide. Nos recherches avaient également porté sur les aspects critiques de la formulation du test, notamment la concentration de savon et le temps de contact minimal nécessaire. À la fin de l'année, nos résultats avaient montré qu'un traitement de 15 secondes avec une concentration de 5% de la formulation 20110901 n'était pas suffisant.
+
+En 2022, nous avions utilisé le test que nous avions développé l'année précédente, mais cette fois nous avions évalué l’efficacité du savon suivant les conditions imposées par la norme NF ISO 14476+A2, c’est-à-dire à une concentration de 50% (protocole pour les savons prêts à l’emploi), pendant 30 secondes (temps minimal, étant donné les contraintes techniques imposées par la méthode d’analyse). Nous avions confirmé que la formulation S5 était capable d'inactiver 100% de SARS-CoV2 en 30 secondes. Ce test devait servir à valider l'efficacité des futures formulations de savon liquide.
+```
+
+### CHUNK_ID: projet_2__chunk_000149
+```
+[SECTION : Définition d’un test virucide adapté au SARS-CoV2]
+En 2021, notre équipe s’était concentrée sur le développement d'un test virucide en collaboration avec l'unité VIM de l'INRAE et l'Institut Pasteur. Nous avions acquis une compréhension approfondie de la culture du virus SARS-CoV2 et nous avions défini un protocole pour évaluer son efficacité virucide. Nos recherches avaient également porté sur les aspects critiques de la formulation du test, notamment la concentration de savon et le temps de contact minimal nécessaire. À la fin de l'année, nos résultats avaient montré qu'un traitement de 15 secondes avec une concentration de 5% de la formulation 20110901 n'était pas suffisant.
+
+En 2022, nous avons utilisé le test que nous avions développé l'année précédente, mais cette fois nous avons évalué l’efficacité du savon suivant les conditions imposées par la norme NF ISO 14476+A2, c’est-à-dire à une concentration de 50% (protocole pour les savons prêts à l’emploi), pendant 30 secondes (temps minimal, étant donné les contraintes techniques imposées par la méthode d’analyse). Nous avons confirmé que la formulation S5 était capable d'inactiver 100% de SARS-CoV2 en 30 secondes. Ce test devait servir à valider l'efficacité des futures formulations de savon liquide.
+```
+
+### CHUNK_ID: projet_2__chunk_000019_sub01
+```
+« écologique ». La formulation S5 avait quant à elle démontré qu’elle était capable d'inactiver 100% de SARS-CoV2 en 30 secondes, selon le protocole de la norme NF ISO 14476+A2.
+
+Après un travail de développement conséquent, nous avions redéfini nos protocoles de fabrication et maitrisé les paramètres influençant la qualité de dos savons pour réussir avec succès la transposition à grande échelle. Les fabrication industrielles obtenues étaient toutes conformes à nos critères. De manière associée, nous avions pu appliquer à ses fabrications des contrôles microbiologiques, notamment par la méthode d’ATP-métrie développée en interne dans le cadre de ce projet en 2022-2023. Les résultats étaient cohérents et très satisfaisants.
+
+Bien que nos objectifs définis au début du projet n’étaient pas totalement atteints, nous avions décidé en 2023 de valider ces formulations S3, S4 et S5 (et ses déclinaisons S5-1 et S5-2) pour entamer les démarches commerciales. Nous avions jugé qu’il s’agissait d’un bon compris dans l’immédiat.
+
+En 2024, nous nous sommes rapprochés de l’organisme GREDECO à Paris. Nos savons (S3, S4, S5-2, et par héritage S5 et S5-1) ont fait l’objet de tests à l’usage et de tests cornéométriques sous l’expertise d’un dermatologue. Nos formulations se sont révélées très respectueuses de la peau des consommateurs et ont démontré un effet nourrissant, hydratant, ou adoucissant. Même après un usage intensif ou bien sur la peau d’enfants âgés de 1 à 7 ans, les résultats obtenus étaient excellents. Ces aboutissements ont conforté nos choix de matière première et des proportions de chacune d’elles dans nos formulations, nos objectifs étant de proposer un savon le plus respectueux, le plus sûr et le plus efficace possible.
+```
+
+### CHUNK_ID: projet_2__chunk_000070_sub01
+```
+mention « écologique ». La formulation S5 quant à elle démontré qu’elle était capable d'inactiver 100% de SARS-CoV2 en 30 secondes, selon le protocole de la norme NF ISO 14476+A2.
+
+Après un travail de développement conséquent, nous avons nos protocoles de fabrication et maitrisé les paramètres influençant la qualité de dos savons pour réussir avec succès la transposition à grande échelle. Les fabrication industrielles obtenues étaient toutes conformes à nos critères. De manière associée, nous avons pu appliquer à ses fabrications des contrôles microbiologiques, notamment par la méthode métrie développée en interne dans le cadre de ce projet en 2022-2023. Les résultats cohérents et très satisfaisants.
+
+Bien que nos objectifs définis au début du projet n’étaient pas totalement atteints, nous avons décidé en 2023 de valider ces formulations S3, S4 et S5 (et ses déclinaisons S5-1 et S5-2) pour entamer les démarches commerciales. Nous avions jugé qu’il s’agissait d’un bon compris dans l’immédiat.
+
+En 2024, nous nous sommes rapprochés de l’organisme GREDECO à Paris. Nos savons (S3, S4, S5-2, et par héritage S5 et S5-1) ont fait l’objet de tests à l’usage et de tests cornéométriques sous l’expertise d’un dermatologue. Nos formulations se sont révélées très respectueuses de la peau des consommateurs et ont démontré un effet nourrissant, hydratant, ou adoucissant. Même après un usage intensif ou bien sur la peau d’enfants âgés de 1 à 7 ans, les résultats obtenus excellents. Ces aboutissements ont conforté nos choix de matière première et des proportions de chacune d’elles dans nos formulations, nos objectifs étant de proposer un savon le plus respectueux, le plus sûr et le plus efficace possible.
+```
+
+### CHUNK_ID: projet_2__chunk_000120_sub01
+```
+« écologique ». La formulation S5 avait quant à elle démontré qu’elle était capable d'inactiver 100% de SARS-CoV2 en 30 secondes, selon le protocole de la norme NF ISO 14476+A2.
+
+Après un travail de développement conséquent, nous avions redéfini nos protocoles de fabrication et maitrisé les paramètres influençant la qualité de dos savons pour réussir avec succès la transposition à grande échelle. Les fabrication industrielles obtenues étaient toutes conformes à nos critères. De manière associée, nous avions pu appliquer à ses fabrications des contrôles microbiologiques, notamment par la méthode d’ATP-métrie développée en interne dans le cadre de ce projet en 2022-2023. Les résultats étaient cohérents et très satisfaisants.
+
+Bien que nos objectifs définis au début du projet n’étaient pas totalement atteints, nous avons décidé en 2023 de valider ces formulations S3, S4 et S5 (et ses déclinaisons S5-1 et S5-2) pour entamer les démarches commerciales. Nous avions jugé qu’il s’agissait d’un bon compris dans l’immédiat.
+
+En 2024, nous nous sommes rapprochés de l’organisme GREDECO à Paris. Nos savons (S3, S4, S5-2, et par héritage S5 et S5-1) ont fait l’objet de tests à l’usage et de tests cornéométriques sous l’expertise d’un dermatologue. Nos formulations se sont révélées très respectueuses de la peau des consommateurs et ont démontré un effet nourrissant, hydratant, ou adoucissant. Même après un usage intensif ou bien sur la peau d’enfants âgés de 1 à 7 ans, les résultats obtenus étaient excellents. Ces aboutissements ont conforté nos choix de matière première et des proportions de chacune d’elles dans nos formulations, nos objectifs étant de proposer un savon le plus respectueux, le plus sûr et le plus efficace possible.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 7,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

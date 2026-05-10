@@ -1,0 +1,358 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 48/135, 8 chunks)
+
+### CHUNK_ID: projet_11__chunk_000046_sub00
+```
+[SECTION : Analyse de 102 papers qu'utilisent LLMs pour test de logiciel depuis les perspectives de software testing et LLMs. Ils analysent aussi les LLMs les plus utilisés et les types de prompt engineering utilisé et les techniques accompagnées par ces LLMs. Ils décrivent les défis et les opportunités dans la recherche dans ce domaine.]
+Dans le domaine de « software testing » un des défis non résolus complétement est la génération automatique de cas de tests unitaires (unit test case generation). Malgré les différentes approches existantes, le « coverage » et le « meaninigfulness » des tests générés sont encore loin d’être satisfaisants.
+
+Dans le cas de la génération de cas de tests unitaires automatisées, les approches incluent des techniques search-based, constraint-based, ou random-based.
+
+Du point de vue des tests logiciels, l’analyse implique un examen des tâches spécifiques de tests logiciels pour lesquelles les LLM sont employés. Les résultats montrent que les LLM sont couramment utilisés pour la préparation des scénarios de tests (y compris la génération de scénarios de tests unitaires, la génération d'oracles de test et la génération d'entrées de tests système), le débogage de programmes et la réparation de bogues, alors qu’ils ne trouvent pas de pratiques pour appliquer les LLM dans les tâches de cycle de vie des tests précoces (tels que les exigences de test, le plan de test, etc.).
+
+L’étude prend en compte les modèles de langage implémentant l’architecture transformer « encoder-decoder » ou « decoder-only » et avec un nombre de paramètres supérieur à 10B (LLMs) ou certains modèles de base comme BART ou GPT2 (~117M – 1.5B paramètres).
+
+L’étude a inclus 20 articles liées à la génération de cas de tests unitaires avec des LLMs
+
+Génération de cas de tests unitaires
+
+Techniques traditionnelles de génération de tests unitaires : approches basées sur des recherches (search-based), basées sur des contraintes (constraint-based), ou basées sur des méthodes aléatoires (random-based). Ces approches cherchent comme objectif principal maximiser le coverage dans le logiciel testé. Malgré cela, le coverage et le meaningfulness des tests générés est loin d’être satisfaisante.
+```
+
+### CHUNK_ID: projet_11__chunk_000056_sub00
+```
+[SECTION : Analyse de 102 papers qu'utilisent LLMs pour test de logiciel depuis les perspectives de software testing et LLMs. Ils analysent aussi les LLMs les plus utilisés et les types de prompt engineering utilisé et les techniques accompagnées par ces LLMs. Ils décrivent les défis et les opportunités dans la recherche dans ce domaine.]
+Dans le domaine de « software testing » un des défis non résolus complétement est la génération automatique de cas de tests unitaires (unit test case generation). Malgré les différentes approches existantes, le « coverage » et le « meaninigfulness » des tests générés sont encore loin d’être satisfaisants.
+
+Dans le cas de la génération de cas de tests unitaires automatisées, les approches incluent des techniques search-based, constraint-based, ou random-based.
+
+Du point de vue des tests logiciels, l’analyse implique un examen des tâches spécifiques de tests logiciels pour lesquelles les LLM sont employés. Les résultats montrent que les LLM sont couramment utilisés pour la préparation des scénarios de tests (y compris la génération de scénarios de tests unitaires, la génération d'oracles de test et la génération d'entrées de tests système), le débogage de programmes et la réparation de bogues, alors qu’ils ne trouvent pas de pratiques pour appliquer les LLM dans les tâches de cycle de vie des tests précoces (tels que les exigences de test, le plan de test, etc.).
+
+L’étude prend en compte les modèles de langage implémentant l’architecture transformer « encoder-decoder » ou « decoder-only » et avec un nombre de paramètres supérieur à 10B (LLMs) ou certains modèles de base comme BART ou GPT2 (~117M – 1.5B paramètres).
+
+L’étude a inclus 20 articles liées à la génération de cas de tests unitaires avec des LLMs
+
+Génération de cas de tests unitaires
+
+Techniques traditionnelles de génération de tests unitaires : approches basées sur des recherches (search-based), basées sur des contraintes (constraint-based), ou basées sur des méthodes aléatoires (random-based). Ces approches cherchent comme objectif principal maximiser le coverage dans le logiciel testé. Malgré cela, le coverage et le meaningfulness des tests générés est loin d’être satisfaisante.
+```
+
+### CHUNK_ID: projet_11__chunk_000061_sub00
+```
+[SECTION : Analyse de 102 papers qu'utilisent LLMs pour test de logiciel depuis les perspectives de software testing et LLMs. Ils analysent aussi les LLMs les plus utilisés et les types de prompt engineering utilisé et les techniques accompagnées par ces LLMs. Ils décrivent les défis et les opportunités dans la recherche dans ce domaine.]
+Dans le domaine de « software testing » un des défis non résolus complétement est la génération automatique de cas de tests unitaires (unit test case generation). Malgré les différentes approches existantes, le « coverage » et le « meaninigfulness » des tests générés sont encore loin d’être satisfaisants.
+
+Dans le cas de la génération de cas de tests unitaires automatisées, les approches incluent des techniques search-based, constraint-based, ou random-based.
+
+Du point de vue des tests logiciels, l’analyse implique un examen des tâches spécifiques de tests logiciels pour lesquelles les LLM sont employés. Les résultats montrent que les LLM sont couramment utilisés pour la préparation des scénarios de tests (y compris la génération de scénarios de tests unitaires, la génération d'oracles de test et la génération d'entrées de tests système), le débogage de programmes et la réparation de bogues, alors qu’ils ne trouvent pas de pratiques pour appliquer les LLM dans les tâches de cycle de vie des tests précoces (tels que les exigences de test, le plan de test, etc.).
+
+L’étude prend en compte les modèles de langage implémentant l’architecture transformer « encoder-decoder » ou « decoder-only » et avec un nombre de paramètres supérieur à 10B (LLMs) ou certains modèles de base comme BART ou GPT2 (~117M – 1.5B paramètres).
+
+L’étude a inclus 20 articles liées à la génération de cas de tests unitaires avec des LLMs
+
+Génération de cas de tests unitaires
+
+Techniques traditionnelles de génération de tests unitaires : approches basées sur des recherches (search-based), basées sur des contraintes (constraint-based), ou basées sur des méthodes aléatoires (random-based). Ces approches cherchent comme objectif principal maximiser le coverage dans le logiciel testé. Malgré cela, le coverage et le meaningfulness des tests générés est loin d’être satisfaisante.
+```
+
+### CHUNK_ID: projet_11__chunk_000003
+```
+[SECTION : Objectifs visés]
+Cette opération de R&D vise à étudier et évaluer le potentiel des modèles de langage à grande échelle (LLMs) pour la génération automatisée de tests logiciels, en particulier des tests unitaires. Elle porte sur la génération automatique de code de test (JUnit), incluant la création de mocks pour isoler les composants, avec un impact attendu à la fois sur l’augmentation de la qualité du code et sur la productivité des équipes, notamment dans le cadre des activités de simulation (par exemple : CEN Simu).
+
+L’étude poursuit plusieurs objectifs spécifiques :
+
+Optimiser les performances des LLMs dans un contexte Java/JUnit ;
+
+Évaluer l’impact opérationnel dans un contexte réel : Mesurer les gains en productivité, en couverture de test, et en réduction du temps de développement dans des projets concrets. Ce point n’a pas été pleinement exploré en 2024 et reste à approfondir.
+
+Quantifier les apports concrets : Évaluer la qualité, la couverture et la fiabilité des tests générés, en les comparant aux tests existants selon des métriques rigoureuses.
+
+Mettre en œuvre une démarche d’évaluation structurée :
+
+Constitution d’un corpus homogène de spécifications, code source et jeux de tests existants ;
+
+Définition de critères de qualité et de couverture ;
+
+Élaboration d’un processus reproductible d’évaluation ;
+
+Développement d’un démonstrateur permettant la génération automatique de tests ;
+
+Estimation des gains de productivité associés à l’intégration de ces solutions.
+
+Concevoir et expérimenter de nouvelles méthodes inspirées des stratégies avancées de prompting issues de la génération de code pour la production de tests unitaires ;
+
+Mesurer expérimentalement l’impact de ces stratégies sur la compilabilité et la couverture de test, à travers un protocole de comparaison rigoureux avec les approches classiques.
+
+Ces objectifs s’inscrivent dans une démarche exploratoire visant à poser les bases méthodologiques d’une génération de tests unitaires assistée par LLMs, tout en identifiant précisément les verrous scientifiques et techniques.
+```
+
+### CHUNK_ID: projet_11__chunk_000020_sub00
+```
+[SECTION : Génération automatique de cas de tests unitaires : ATHENATEST et A3Test]
+Tufano et al. présentent ATHENATEST, une méthode de génération automatique de tests unitaires basée sur l’apprentissage profond. Le modèle repose sur un pré-entraînement réalisé à la fois sur de larges corpus de textes en anglais et de code Java, suivi d’un affinage supervisé pour produire des tests ciblant des méthodes spécifiques. L’intégration du contexte focal autour de la méthode augmente encore les performances du modèle. Par ailleurs, les auteurs ont constitué METHODS2TEST, un vaste corpus public comprenant 780 000 paires de méthodes focales et cas de tests extraits de projets open source sur GitHub.
+
+ATHENATEST a été évalué sur cinq projets issus du benchmark Defects4J. Le modèle a généré environ 25 000 cas de tests valides, couvrant 43,7 % des méthodes focales, avec des résultats supérieurs à ceux obtenus par GPT-3 et comparables à ceux d’EvoSuite. Une enquête auprès de développeurs professionnels a révélé une nette préférence pour les tests générés par ATHENATEST, notamment en raison de leur meilleure lisibilité et efficacité, ce qui souligne le potentiel de cette approche pour améliorer la productivité des développeurs.
+
+Cependant, ATHENATEST ne génère correctement qu’environ un cinquième des cas de test, principalement à cause d’un manque de connaissances en assertions et d’une absence de vérification de la cohérence des signatures de test. Pour pallier ces limites, Alagarsamy al. proposent A3Test, une approche basée sur l’apprentissage profond, enrichie par des connaissances spécifiques aux assertions et équipée d’un mécanisme de vérification de la cohérence des noms et signatures des tests.
+```
+
+### CHUNK_ID: projet_11__chunk_000013_sub00
+```
+[SECTION : Seconde partie : Configuration du prompt SCoT4UT]
+La seconde partie vise à appliquer SCoT4UT à la génération de tests unitaires pour les projets de la base EvoSuite SF110. Pour rapprocher les conditions de génération de celles mises en œuvre sur methods2test, nous avons reconstitué, pour les méthodes des projets SF110, un contexte comparable, comprenant :
+
+le code de la méthode à tester ;
+
+le nom de la classe ;
+
+les signatures des constructeurs de la classe ;
+
+les signatures des autres méthodes publiques de la classe ;
+
+les champs publics.
+
+La configuration de SCoT4UT s’effectue alors en deux temps :
+
+Génération des SCoT AAA pour les méthodes EvoSuite : Nous sélectionnons aléatoirement des paires « MaT, tests unitaires » issues de la base methods2test enrichie, et construisons un prompt few-shots demandant au LLM de produire, en langage naturel, des SCoT AAA décrivant les étapes Arrange-Act-Assert.
+
+Pour chaque MaT, le prompt contraint explicitement le modèle à couvrir :
+
+l’Arrange : instanciation de la classe testée, préparation des données d’entrée, simulation (mocks) des dépendances, définition des résultats attendus ;
+
+l’Act : appel de la méthode testée avec les entrées préparées ;
+
+l’Assert : vérification de la valeur de retour, des exceptions attendues, des appels effectués (mocks) et de l’éventuelle modification de l’état interne.
+
+Les SCoT AAA générés sont stockés dans une base organisée au format <MaT, SCoT AAA, tests unitaires>. Sur cette base, nous configurons un prompt few-shots avec deux exemples <MaT, SCoT AAA> issus de methods2test, puis nous soumettons au LLM une nouvelle méthode EvoSuite pour laquelle nous demandons la génération du SCoT AAA correspondant.
+
+Génération des tests unitaires pour les méthodes EvoSuite : Dans un second temps, nous configurons le prompt SCoT4UT pour la génération des tests unitaires. Le prompt few-shots contient deux exemples <MaT, SCoT AAA, tests unitaires> issus de methods2test. Il est ensuite complété par les informations de la méthode EvoSuite à tester ainsi que par le SCoT AAA généré lors de l’étape précédente. Le LLM est alors invité à produire les tests unitaires pour cette méthode en s’appuyant explicitement sur le SCoT AAA fourni.
+```
+
+### CHUNK_ID: projet_11__chunk_000028
+```
+[SECTION : Mise en oeuvre d’une approche basée sur le “Structured Chain of Thought (ScoT)” adapté à la génération de tests unitaires : SCoT4UT]
+Dans le modèle Arrange-Act-Assert (AAA), la création d’un test unitaire pour une méthode à tester (Method Under Test ou MUT) se décompose en trois étapes:
+
+Configurer les données de tests et l’environnement ;
+
+Appeler la méthode testée ;
+
+Vérifier que le résultat est celui attendu.
+
+En outre, ce modèle a l’avantage de pouvoir découper les tests unitaires dans des parties élémentaires, dépendantes entre elles et structurées. Ce modèle peut être considéré aussi pour écrire des tests unitaires indépendamment du langage de programmation.
+
+Arrage : Configurez tout ce qu’il faut
+
+Instancier la classe testée
+
+Préparer les données d’entrée
+
+Simuler (Mock) les dépendances
+
+Définir les résultats attendus
+
+Act : Appelez la méthode testée avec les entrées organisées (arranged)
+
+Assert : Vérifier le résultat
+
+La valeur de retour est-elle conforme aux attentes ?
+
+Une exception a-t-elle été levée ?
+
+Certaines méthodes ont-elles été appelées (en cas de simulations – mocks) ?
+
+L’état interne a-t-il été modifié ?
+
+L’objectif des tests unitaires est de tester les cas limites et les entrées non valides en tenant en compte des éléments comment :
+
+Valeurs Zéro ;
+
+Valeurs nulles (le cas échéant) ;
+
+Valeurs négatives (si autorisées) ;
+
+Gestion des exceptions.
+
+Pour avoir de tests sur des unités vraiment élémentaires (méthodes), il peut être nécessaire aussi de simuler (Mock) de dépendances externes (le cas échéant) i.e. la méthode interagit avec systèmes externes comme de BDD, REST API, etc.
+```
+
+### CHUNK_ID: projet_11__chunk_000030_sub00
+```
+[SECTION : Contexte]
+La génération automatique de code source pour développement logiciel (total ou partielle) est un sujet d’intérêt pour les académiques et les industriels. Cet intérêt est motivé par la promesse d’un gain en productivité, ou en qualité par rapport à l’exécution de projets de développement logiciel traditionnels.
+
+Les efforts pour générer du code source ont été orientés sur le type de tâches que l’on peut trouver dans un projet de développement logiciel. Nous pouvons constater des travaux ciblant par exemple des tâches d’auto-complétion, d’expliquer ou de commenter le code ou de générer des tests automatiques pour le code (unitaires, fonctionnels, d’intégration, etc.).
+
+Plus précisément, la génération automatique de tests attire beaucoup d’attention car les tests servent à assurer la qualité et la fiabilité des produits logiciels et même ils sont des points focaux pour certains paradigmes de développement logiciel comment le « test driven development ».
+
+Les méthodes et la technologie développé pour automatiser la génération de tests logiciel correspond aux innovations du moment. De cette façon, nous trouvons des approches différentes comment des techniques search-based, constraint-based ou random-based et plus récemment avec l’essor des modèles d’IA, des approches basés sur l’utilisation des « Large Language Models » ou LLMs.
+
+Sur l’utilisation de ces modèles pour la génération de tests logiciel les publications récentes pointent sur des verrous ou perspectives de recherche :
+
+Obtenir haut niveau de « coverage » pour les testsing,
+
+Problème de test oracle,
+
+Evaluations rigoureuse,
+
+Applications des LLMs dans des applications du monde réel.
+
+Le projet cherche à explorer l’utilisation de modèles de IA générative (ou LLM’s) pour :
+
+La génération de jeux de données pour des tests :
+
+Générer les données utilisées pour exécuter les tests et effectuer des tests de charges et corner cases.
+
+Gains de productivité envisagé, mais l’utilisation de LLM risque d’être superflue,
+
+La génération de tests unitaires :
+
+Conception des codes de tests unitaires, incluant en particulier les différents bouchons permettant d’isoler correctement les segments couverts.
+
+Gains principaux de productivité, et dans une certaine mesure en qualité,
+
+Aussi pertinent pour CEN Simu
+
+La génération de tests fonctionnels :
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 48,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

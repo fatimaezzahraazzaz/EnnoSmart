@@ -1,0 +1,113 @@
+{
+  "batch_id": 6,
+  "annotations": [
+    {
+      "chunk_id": "projet_2__chunk_000148_sub05",
+      "entities": [
+        {"text": "contamination de 340 000 UFC/mL", "label": "VERROU_TECH", "start": 55, "end": 86},
+        {"text": "norme cosmétique ISO EN 17516", "label": "METHODE_RD", "start": 134, "end": 163},
+        {"text": "développer un test bactériologique de viabilité rapide et fiable", "label": "OBJECTIF_RD", "start": 392, "end": 456},
+        {"text": "méthodes de microbiologie classiques en culture sur gélose", "label": "METHODE_RD", "start": 506, "end": 564},
+        {"text": "PCR", "label": "METHODE_RD", "start": 571, "end": 574},
+        {"text": "Ces méthodes sont chronophages et donnent des résultats en 48 à 72 heures", "label": "VERROU_TECH", "start": 576, "end": 649},
+        {"text": "ATPmétrie", "label": "METHODE_RD", "start": 666, "end": 675},
+        {"text": "son utilisation dans le cadre d'un suivi qualité de production de savon liquide n'a pas été décrite à ce jour", "label": "VERROU_TECH", "start": 859, "end": 967},
+        {"text": "cette technique est sensible à la présence d'inhibiteurs", "label": "VERROU_TECH", "start": 992, "end": 1048},
+        {"text": "SARS-CoV2", "label": "MATERIAU_SPECIFIQUE", "start": 1115, "end": 1124},
+        {"text": "aucun test virucide pour mesurer l'efficacité des produits biocides contre le SARS-CoV2 n'existait au démarrage de notre projet", "label": "VERROU_TECH", "start": 1170, "end": 1296},
+        {"text": "norme NF ISO 14476+A2", "label": "METHODE_RD", "start": 1411, "end": 1432},
+        {"text": "cellules VERO", "label": "MATERIAU_SPECIFIQUE", "start": 1494, "end": 1507},
+        {"text": "L'élaboration d'une nouvelle formulation de savon liquide", "label": "VERROU_TECH", "start": 1666, "end": 1723},
+        {"text": "La définition d'un test virucide adapté au SARS-CoV2", "label": "VERROU_TECH", "start": 1725, "end": 1777},
+        {"text": "La sécurisation du risque de contamination microbiologique", "label": "VERROU_TECH", "start": 1779, "end": 1837}
+      ]
+    },
+    {
+      "chunk_id": "projet_2__chunk_000017",
+      "entities": [
+        {"text": "ATPmétrie", "label": "METHODE_RD", "start": 522, "end": 531},
+        {"text": "méthode classique en boîte de pétrie", "label": "METHODE_RD", "start": 547, "end": 583},
+        {"text": "elle ne permettait pas de déterminer le type de contamination microbiologique", "label": "VERROU_TECH", "start": 838, "end": 915},
+        {"text": "méthode des boîtes de gélose mais après 48 h à 72 h d'incubation", "label": "VERROU_TECH", "start": 950, "end": 1014},
+        {"text": "signal de sortie par ATPmétrie était sous-estimé de seulement 15% pour nos savons par rapport à l'eau", "label": "RESULTAT_RD", "start": 1297, "end": 1398},
+        {"text": "contamination microbiologique inférieure à 3 log (soit < 1000 équivalents bactéries/L)", "label": "RESULTAT_RD", "start": 1547, "end": 1633},
+        {"text": "0 UFC/mL sur gélose", "label": "RESULTAT_RD", "start": 1654, "end": 1673},
+        {"text": "norme ISO 17516:2014", "label": "METHODE_RD", "start": 1764, "end": 1784}
+      ]
+    },
+    {
+      "chunk_id": "projet_2__chunk_000068",
+      "entities": [
+        {"text": "ATPmétrie", "label": "METHODE_RD", "start": 517, "end": 526},
+        {"text": "méthode classique en boîte de pétrie", "label": "METHODE_RD", "start": 542, "end": 578},
+        {"text": "elle ne permet pas de déterminer le type de contamination microbiologique", "label": "VERROU_TECH", "start": 814, "end": 887},
+        {"text": "méthode des boîtes de gélose mais après 48 h à 72 h d'incubation", "label": "VERROU_TECH", "start": 916, "end": 980},
+        {"text": "signal de sortie par ATPmétrie était sous-estimé de seulement 15% pour nos savons par rapport à l'eau", "label": "RESULTAT_RD", "start": 1252, "end": 1353},
+        {"text": "contamination microbiologique inférieure à 3 log (soit < 1000 équivalents bactéries/L)", "label": "RESULTAT_RD", "start": 1492, "end": 1578},
+        {"text": "0 UFC/mL sur gélose", "label": "RESULTAT_RD", "start": 1599, "end": 1618},
+        {"text": "norme ISO 17516:2014", "label": "METHODE_RD", "start": 1701, "end": 1721}
+      ]
+    },
+    {
+      "chunk_id": "projet_2__chunk_000118",
+      "entities": [
+        {"text": "ATPmétrie", "label": "METHODE_RD", "start": 522, "end": 531},
+        {"text": "méthode classique en boîte de pétrie", "label": "METHODE_RD", "start": 547, "end": 583},
+        {"text": "elle ne permettait pas de déterminer le type de contamination microbiologique", "label": "VERROU_TECH", "start": 838, "end": 915},
+        {"text": "méthode des boîtes de gélose mais après 48 h à 72 h d'incubation", "label": "VERROU_TECH", "start": 950, "end": 1014},
+        {"text": "signal de sortie par ATPmétrie était sous-estimé de seulement 15% pour nos savons par rapport à l'eau", "label": "RESULTAT_RD", "start": 1297, "end": 1398},
+        {"text": "contamination microbiologique inférieure à 3 log (soit < 1000 équivalents bactéries/L)", "label": "RESULTAT_RD", "start": 1547, "end": 1633},
+        {"text": "0 UFC/mL sur gélose", "label": "RESULTAT_RD", "start": 1654, "end": 1673},
+        {"text": "norme ISO 17516:2014", "label": "METHODE_RD", "start": 1764, "end": 1784}
+      ]
+    },
+    {
+      "chunk_id": "projet_2__chunk_000150_sub00",
+      "entities": [
+        {"text": "ATPmétrie", "label": "METHODE_RD", "start": 533, "end": 542},
+        {"text": "méthode classique en boîte de pétrie", "label": "METHODE_RD", "start": 558, "end": 594},
+        {"text": "elle ne permet pas de déterminer le type de contamination microbiologique", "label": "VERROU_TECH", "start": 884, "end": 957},
+        {"text": "méthode des boîtes de gélose mais après 48 h à 72 h d'incubation", "label": "VERROU_TECH", "start": 988, "end": 1052},
+        {"text": "signal de sortie par ATPmétrie était sous-estimé de seulement 15% pour nos savons par rapport à l'eau", "label": "RESULTAT_RD", "start": 1382, "end": 1483},
+        {"text": "contamination microbiologique inférieure à 3 log (soit < 1000 équivalents bactéries/L)", "label": "RESULTAT_RD", "start": 1625, "end": 1711},
+        {"text": "0 UFC/mL sur gélose", "label": "RESULTAT_RD", "start": 1732, "end": 1751},
+        {"text": "norme ISO 17516:2014", "label": "METHODE_RD", "start": 1834, "end": 1854}
+      ]
+    },
+    {
+      "chunk_id": "projet_2__chunk_000148_sub00",
+      "entities": [
+        {"text": "Développement d'une formulation de savon à main écologique et efficace\n\ncontre SARS-CoV2", "label": "OBJECTIF_RD", "start": 263, "end": 351},
+        {"text": "SARS-CoV2", "label": "MATERIAU_SPECIFIQUE", "start": 342, "end": 351},
+        {"text": "Développement d'une formulation de produit mousse de\n\nprétrempage avec fonction détergente", "label": "OBJECTIF_RD", "start": 1373, "end": 1463},
+        {"text": "Développement d'une formulation de produit lubrifiant pour outils\n\nchirurgicaux à haute résistance thermique", "label": "OBJECTIF_RD", "start": 1816, "end": 1924},
+        {"text": "Recherche de solutions capables d'inactiver les prions et les amyloïdes", "label": "OBJECTIF_RD", "start": 2451, "end": 2522},
+        {"text": "prions", "label": "MATERIAU_SPECIFIQUE", "start": 2499, "end": 2505},
+        {"text": "amyloïdes", "label": "MATERIAU_SPECIFIQUE", "start": 2513, "end": 2522}
+      ]
+    },
+    {
+      "chunk_id": "projet_2__chunk_000148_sub08",
+      "entities": [
+        {"text": "test de virucidie", "label": "METHODE_RD", "start": 280, "end": 297},
+        {"text": "présence de savon fausse les résultats des tests de virucidie", "label": "VERROU_TECH", "start": 391, "end": 452},
+        {"text": "détoxification du savon", "label": "METHODE_RD", "start": 487, "end": 510},
+        {"text": "sécurisation du risque de contamination microbiologique lors de la production et du stockage du produit", "label": "VERROU_TECH", "start": 605, "end": 708},
+        {"text": "bactéries nosocomiales", "label": "MATERIAU_SPECIFIQUE", "start": 754, "end": 776},
+        {"text": "nouveau conservateur", "label": "COMPOSANT_TECHNIQUE", "start": 1052, "end": 1072},
+        {"text": "tests bactériologiques de viabilité", "label": "METHODE_RD", "start": 1422, "end": 1457},
+        {"text": "ATPmétrie", "label": "METHODE_RD", "start": 2174, "end": 2183}
+      ]
+    },
+    {
+      "chunk_id": "projet_2__chunk_000148_sub09",
+      "entities": [
+        {"text": "ATPmétrie", "label": "METHODE_RD", "start": 51, "end": 60},
+        {"text": "viscosité insuffisante", "label": "VERROU_TECH", "start": 1340, "end": 1362},
+        {"text": "changement de couleur inapproprié", "label": "VERROU_TECH", "start": 1364, "end": 1397},
+        {"text": "très mauvaise homogénéisation lors de la fabrication à grande échelle", "label": "VERROU_TECH", "start": 1399, "end": 1468},
+        {"text": "SARS-CoV2", "label": "MATERIAU_SPECIFIQUE", "start": 1955, "end": 1964}
+      ]
+    }
+  ]
+}

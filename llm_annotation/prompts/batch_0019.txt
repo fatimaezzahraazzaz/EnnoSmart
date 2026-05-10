@@ -1,0 +1,410 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 19/135, 8 chunks)
+
+### CHUNK_ID: projet_4__chunk_000042_sub00
+```
+[PAGE 43]
+CIR 2024
+croissance des plantes (ex : régulation de croissance), l’efficacité d’une formulation
+phytopharmaceutique peut être définie comme la mesure de son effet dans son
+ensemble sur un système agricole.
+Cette mesure d’efficacité repose donc sur un
+équilibre entre :
+o Effets positifs du traitement en termes de protection des cultures pour une
+meilleure qualité et définir les quantités nécessaires à appliquer
+o Effets négatifs tels que réduction de qualité, dommages sur des organismes
+bénéfiques ou sur les cultures suivantes/adjacentes, développement de
+résistances
+o Effets sur les nuisibles non-ciblés, durée de protection liée à la formulation
+ Le résultat net des effets positifs et négatifs doit être positif au regard des
+bénéfices attendus
+ Etude de sélectivité : évaluation d’une possible phytotoxicité29 pour les cultures en
+l’absence de mauvaises herbes incluant :
+o Dose spécifiée pour l’usage prévu
+o Plus forte dose (généralement le double de la dose recommandée), pour
+simuler des chevauchements de traitement, phénomène pouvant arriver dans
+la pratique
+Pour évaluer ces paramètres, nous devons tout d’abord évaluer s’il y a des différences
+significatives entre les traitements.
+Pour cela, nous réalisons une analyse de la variance
+(ANOVA).
+Si les résultats sont concluants, nous caractérisons alors la différence entre les
+traitements en appliquant le test de Dunnett, permettant d’évaluer la moyenne des traitements
+vis-à-vis du témoin (dans notre cas, la parcelle non traitée).
+Le test de Newman-Keuls à 5% (comparaison de moyennes), nous permet quant à lui
+d’évaluer les performances des différents traitements entre eux, lorsqu’un effet significatif est
+observé.
+De même, le test de Tukey nous permet d’identifier les différences vraiment
+significatives.
+II.8.3.5.
+Etude d’efficacité de nouveaux traitements contre le mildiou sur
+oignon
+II.8.3.5.1.
+Définition du protocole expérimental
+II.8.3.5.1.a.
+```
+
+### CHUNK_ID: projet_4__chunk_000005_sub01
+```
+CIR 2024
+o Recherches et expérimentations de nouvelles techniques, espèces, variétés et
+types innovants ayant un attrait commercial
+o Recherche et développement de nouveaux concepts marketing et de mise en
+marché
+o Veille technique et technologique
+o Tests de matériel innovant (mise en culture, récolteuse…)
+o Techniques et moyens innovants pour lutter contre les maladies et les
+ravageurs des légumes
+ Axe V : Echanges nationaux et internationaux, avec développement des échanges sur
+la filière fruitière et légumière entre les stations française ou entre les pays frontaliers
+(Suisse, Belgique…) ou d’autres continents (Canada, Japon)
+o Favorisation des projets et des échanges techniques entre les centres de
+recherche, d’expérimentation et de conseil
+o Développement des échanges entre les professionnels
+ Axe VI : Accompagnement de jeunes producteurs de légumes, « les jeunes pousses »
+ Axe VII : Formations
+De nombreuses expérimentations ont ainsi été réalisées en 2024, dont par exemple :
+ La fertilisation de salade, de fraise, de carotte, de myrtille, grâce à des biostimulants
+ou bien l’incorporation d’engrais verts pour l’oignon ou le chou à choucroute,
+ L’évaluation du comportement, vis-à-vis des conditions climatiques locales de salade
+résistantes au mildiou, de chou à choucroute, de melon et pastèque, de tomate, de
+carotte
+ La protection contre les maladies pour le chou à choucroute (alternariose), l’ail (rouille),
+la laitue (mildiou), l’oignon (mildiou)
+ La protection contre les ravageurs pour le chou à choucroute (altise), la tomate
+(puceron), l’oignon (thrips), le navet (altise)
+ Le désherbage de l’oignon, de l’ail, de légumes secs (pois chiche, lentille), de la carotte
+Pour la branche Fleurs et Plantes, les activités étaient regroupées en quatre axes :
+ Axe I : Changement climatique avec adaptation des techniques de production
+ Axe II : Baisse de l’utilisation des produits phytopharmaceutiques de synthèse
+o Substitut aux herbicides
+o Substitut aux insecticides
+ Axe III : Changement climatique
+ Axe IV : Innovations
+La démarche R&D étant la même pour la réalisation de nos différentes expérimentations, nous
+présentons par la suite seulement trois exemples significatifs d’expérimentation visant soit à
+PLANETE Légumes Fleurs et Plantes - CONFIDENTIEL PAGE 6
+Ce document est la propriété de la société PLANETE Légumes Fleurs et Plantes
+Il ne peut être reproduit ou transmis à des tiers sans son autorisation expresse
+```
+
+### CHUNK_ID: projet_4__chunk_000015_sub00
+```
+[PAGE 16]
+CIR 2024
+durée d’efficacité.
+L’étude de sélectivité cherche quant à elle à détecter une éventuelle
+phytotoxicité.
+Pour cela, nous évaluons s’il y a des différences significatives entre les
+traitements au moyen d’analyse de la variance (ANOVA), nous caractérisons les différences
+entre les traitements par rapport au témoin grâce au test de Dunett.
+Le test de Newman-Keuls
+nous permet de comparer les résultats entre les traitements eux-mêmes.
+Enfin, le test de
+Tukey nous permet de valider les différences significatives observées.
+II.4.2.
+Etude d’efficacité de nouveaux traitements contre le mildiou sur
+oignon
+Nous avons cherché à évaluer l’efficacité de nouveaux fongicides contre le mildiou sur oignon
+de printemps.
+Nous avons tout d’abord déterminé le protocole expérimental comportant six modalités, dont
+un programme de référence, un témoin et quatre programmes combinant plusieurs traitements
+(M204, M500, M465, Ortica, Cantor).
+Nous avons défini six application espacées de sept jours
+à réaliser entre BBCH 12-14 et BBCH 41.
+Nous avons réalisé l’expérimentation sur une parcelle de sable argilo-limoneux, découpée
+selon un dispositif en blocs randomisés à trois répétitions, sur une surface unitaire de 10 m²
+comportant la variété De Rebouillon.
+Les conditions climatiques d’application des traitements
+étaient globalement favorables au développement du mildiou (humidité élevée et températures
+inférieures à 25°C entre mi-mai et début juin).
+Nos analyses des résultats obtenus nous ont permis de conclure que les conditions
+météorologiques de l’essai avaient été favorables à une forte pression de mildiou.
+Ainsi, dans
+le témoin non traité, 100% des plantes étaient atteintes dès le 31/05/2024 et le recouvrement
+foliaire moyen par le mildiou allait jusqu’à 89%.
+```
+
+### CHUNK_ID: projet_4__chunk_000039_sub00
+```
+[PAGE 40]
+CIR 2024
+II.8.2.2.5.
+Facteurs climatiques environnementaux
+Les contrastes climatiques, tels que sécheresse trop importante, excès de précipitation,
+printemps humide et chaud, températures inhabituelles (année très froide et humide),
+perturbent fortement les cultures et leurs caractéristiques.
+Il est donc indispensable de collecter les données météorologiques en parallèle de la
+réalisation de nos essais (pluviométrie, température, vent, ensoleillement, pH…), afin
+d’évaluer l’impact sur nos cultures, mais aussi de réaliser des expérimentations pluriannuelles
+pour avoir des résultats fiables quant à l’impact des produits phytosanitaires testés sur nos
+cultures.
+De plus, l’efficacité des traitements peut varier selon le type de sol, les souches de
+pathogène… Nous devons donc adapter les expérimentations à la région, au climat, au sol…,
+ce qui multiplie les paramètres d’études.
+De ce fait, nous n’avons aucune certitude de réussir
+à garantir une reproductibilité des résultats et nous sommes contraints de réaliser plusieurs
+essais, dans différents environnements et différentes conditions climatiques, pendant
+plusieurs années.
+II.8.2.2.6.
+Comportement des formulations au contact des cultures
+Nous pouvons parfois être confrontés à des comportements inattendus des nouvelles
+formulations testées, avec un impact sur les cultures, provoquant ainsi des variabilités entre
+les études réalisées au laboratoire et celle réalisées en grandeur nature en champ.
+En effet,
+le matériel végétal (variété, âge…), la conduite culturale des parcelles (fertilisation, irrigation,
+autres traitements phytosanitaires de l’année, traitements précédents…) ou les conditions
+climatiques font que nous sommes confrontés à de fortes incertitudes quant aux processus
+biologiques mis en jeu, leur interaction avec l’environnement et le grand nombre de facteurs
+génétiques et physiologiques potentiellement impliqués.
+Par conséquent, il nous est donc
+indispensable de redéfinir nos protocoles d’expérimentation en fonction de ces aléas.
+II.8.2.2.7.
+Conclusion
+En conclusion, les facteurs pouvant influencer l’efficacité d’une méthode de lutte contre des
+maladies, des ravageurs, des adventices… sont extrêmement nombreux, et par conséquent
+complexes à appréhender.
+Il est donc indispensable de passer par une phase expérimentale
+pour apprécier leur intérêt réel.
+Le développement de nouvelles solutions techniques repose
+ainsi en grande partie sur une démarche empirique, dont la réussite ne peut en aucun cas être
+garantie.
+```
+
+### CHUNK_ID: projet_4__chunk_000078_sub00
+```
+[PAGE 79]
+CIR 2024
+pucerons ou présentant un risque pour la culture d’intérêt, puisque porteuse de pucerons
+polyphage Aphis fabae.
+Par conséquent, les travaux menés au cours de cette étude ne nous ont pas permis de mettre
+en évidence l’efficacité de plantes de services dans la lutte contre le puceron.
+Au contraire,
+nous avons rencontré davantage de foyers de pucerons sur la parcelle avec plantes de service
+en début de saison.
+La mise en place d’un dispositif similaire au sein d’une exploitation pauvre
+en infrastructures agroécologiques permettrait une analyse plus pertinente des variables
+volontairement introduites.
+En 2025, nous envisageons néanmoins de tester ce protocole chez
+un pépiniériste et un horticulteur, afin d’évaluer l’impact sur les populations de pucerons et
+d’auxiliaires naturels.
+II.8.4.
+Conclusion et contribution scientifique, technique ou
+technologique
+A travers ces exemples d’expérimentations agronomiques menées en 2024, il apparait
+clairement que notre démarche ne se limite pas à l’application d’un protocole standard, mais
+qu’elle s’inscrit davantage dans une logique d’élaboration de réelles stratégies expérimentales.
+En effet, chaque nouvelle étude agronomique nécessite la réalisation d’approches spécifiques,
+adaptées au traitement ou à la combinaison de traitements ou à la molécule testée).
+Ces travaux sont d’autant plus complexes qu’ils dépendent de nombreux facteurs :
+organismes cibles et non cibles, faune et flore endogène, hétérogénéité des sols, conditions
+climatiques… Cette variabilité impose une redéfinition constante et une remise en question
+des méthodes.
+Par ailleurs, nous pouvons également mettre en avant que la définition de nouvelles stratégies
+efficaces exige des tests répétés sur plusieurs années, ce qui nous impose régulièrement de
+redéfinir ces stratégies selon les résultats obtenus chaque année.
+Ainsi, c’est l’accumulation
+de données pluriannuelles qui permet de construire de nouvelles stratégies robustes,
+innovantes, performantes et répétables, constituant ainsi une avancée significative par rapport
+à l’état de l’art du domaine.
+II.8.5.
+Indicateurs de R&D
+Nous percevons de nombreuses subventions dans le cadre de nos expérimentations,
+provenant de plusieurs financeurs.
+```
+
+### CHUNK_ID: projet_4__chunk_000178
+```
+[SECTION : Définition d’un protocole expérimental pertinent]
+Pendant la réalisation de nos études sur de nouveaux programmes ou produits phytosanitaires, nous sommes confrontés à des incertitudes liées à l’aspect novateur de chaque étude et de chaque matière active/molécule testée de classe chimique variée, qui sont testées. Par conséquent, il peut être complexe de déterminer un protocole d’étude avec un plan d’expérience pertinent.
+
+En effet, bien que nous puissions nous appuyer sur des recommandations générales pour l’étude des produits phytosanitaires sur les cultures, il s’agit de lignes directrices très générales, ne donnant pas d’indications précises sur le protocole à mettre en œuvre pour obtenir une réponse de qualité aux problématiques rencontrées. Par ailleurs, il n’existe pas de méthode pour toutes les problématiques, notamment aucune EPPO spécifique aux pucerons sur légumes ou plantes horticoles n’existe. De ce fait, au démarrage des travaux, aucun protocole existant ne permet d’aboutir à une information fiable, tenant compte de l’ensemble des facteurs pouvant influencer les résultats en condition naturelle de terrain, d’où une incertitude quant à la réalisation de protocoles pertinents. Par conséquent, une réflexion scientifique préalable est indispensable pour mener à bien nos expérimentations agronomiques.
+```
+
+### CHUNK_ID: projet_4__chunk_000249
+```
+[SECTION : Définition d’un protocole expérimental pertinent]
+Pendant la réalisation de nos études sur de nouveaux programmes ou produits phytosanitaires, nous sommes confrontés à des incertitudes liées à l’aspect novateur de chaque étude et de chaque matière active/molécule testée de classe chimique variée, qui sont testées. Par conséquent, il peut être complexe de déterminer un protocole d’étude avec un plan d’expérience pertinent.
+
+En effet, bien que nous puissions nous appuyer sur des recommandations générales pour l’étude des produits phytosanitaires sur les cultures, il s’agit de lignes directrices très générales, ne donnant pas d’indications précises sur le protocole à mettre en œuvre pour obtenir une réponse de qualité aux problématiques rencontrées. Par ailleurs, il n’existe pas de méthode pour toutes les problématiques, notamment aucune EPPO spécifique aux pucerons sur légumes ou plantes horticoles n’existe. De ce fait, au démarrage des travaux, aucun protocole existant ne permet d’aboutir à une information fiable, tenant compte de l’ensemble des facteurs pouvant influencer les résultats en condition naturelle de terrain, d’où une incertitude quant à la réalisation de protocoles pertinents. Par conséquent, une réflexion scientifique préalable est indispensable pour mener à bien nos expérimentations agronomiques.
+```
+
+### CHUNK_ID: projet_4__chunk_000393_sub00
+```
+[PAGE 10]
+Les partenaires du projet couvrent trois régions et solliciteront les horticulteurs et maraîchers de leur bassin
+respectif.
+Ces producteurs seront par ailleurs invités à prendre part aux rencontres interrégionales organisées
+tout au long du projet.
+Enfin, une diffusion des résultats sur l’ensemble du territoire sera possible grâce à la
+présence à l’échelle nationale des conseillers du réseau ASTREDHOR.
+I.5.
+Filières concernées par le projet : à quelles filières seront utiles les résultats qui seront obtenus
+par le projet ?
+Comment sont-elles impliquées dans le projet ?
+Montrer les problématiques communes
+des filières auxquels visent de répondre le projet, les solutions, outils ou méthodes communes qui seront
+élaborées, …
+Deux filières d’envergure nationale sont impliquées dans le projet MAPUCE : l’horticulture et le maraîchage.
+Ces deux filières ont comme dénominateurs communs les aromatiques et les jeunes plants de légumes : les
+maraichers peuvent en effet s’approvisionner en matériel végétal auprès des horticulteurs.
+Le maraîchage et l’horticulture font face à une problématique commune d’ampleur : la gestion du puceron.
+La
+méthodologie développée dans le projet sera appliquée aux deux filières.
+Les filières sont représentées dans le projet par des collectifs de producteurs, présents sur trois régions, qui
+prendront part à la co-construction des itinéraires de culture en Action 1 et à leur mise en place en Action 3.
+Les résultats du projet seront diffusés au sein des filières l'intermédiaire des conseillers directement présents
+dans les stations d'expérimentation membres d’ASTREDHOR ou les conseillers indépendants adhérents.
+Sur
+ces mêmes actions, Planète Légumes veut profiter de son réseau pour permettre une diffusion nationale de
+ses résultats.
+La participation des conseillers aux différents groupes de travaux nationaux et la présence de
+la station au sein du groupe IRFEL seront gages d’une bonne transmission des résultats aux autres structures
+d’expérimentation.
+La présence d’ingénieurs territoriaux et d’ingénieurs réseaux au sein des structures partenaires, ainsi que de
+l’expert filière Horticulture au sein de la structure porteuse, seront des vecteurs du transfert des résultats vers
+les professionnels en direct ou via la plateforme Ecophytopic.
+Ils interviendront également pour faire remonter
+les attentes et les besoins des producteurs.
+I.6.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 19,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

@@ -1,0 +1,89 @@
+{
+  "batch_id": 102,
+  "chunks": [
+    {
+      "chunk_id": "projet_22__chunk_000021",
+      "project_id": "projet_22_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_22_\\raw\\docx\\Verexal_dossier 2024.docx",
+      "file_name": "Verexal_dossier 2024.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Les vergers de pommiers]\nLe pommier (Malus pumila) est une espèce d’arbre fruitier appartenant à la famille des rosacées et au genre Malus. Il comprend 26-30 espèces et sa hauteur est de 2-15 m selon les variétés.\n\nEn verger de production, les pommiers sont composés d’une partie productive, greffé à un support porte-greffe. En Europe, le plus utilisé est le M9 (85%), et il favorise la formation de boutons floraux, permet une productivité rapide et régulière, donnant des fruits bien calibrés, et une compatibilité assez élevée avec les greffons.\n\nLe cycle de développement du pommier se déroule sur une année et comporte cinq stades :\n\nRepos hivernal\n\nDébourrement printanier (éclosion des bourgeons)\n\nInduction florale\n\nFloraison et pollinisation\n\nDéveloppement des fruits\n\nUne bonne conduite du verger est primordiale pour conserver la pérennité du pommier, notamment en fertilisant et en préparant le sol avant plantation, en réalisant des tailles et des éclaircissages, pour maintenir la production et la maitrise de la charge de l’arbre.\n\nPar ailleurs, le gel et la grêle constituent un réel problème d’un point de vue brûlure au niveau des fleurs, déformation et perte des fruits. Il est donc indispensable de protéger les arbres contre ces fléaux climatiques.\n\nDans ce contexte, le renfort des systèmes de production repose sur une meilleure compréhension des interactions entre sol, plante et climat.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_22_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_22__chunk_000025",
+      "project_id": "projet_22_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_22_\\raw\\docx\\Verexal_dossier 2024.docx",
+      "file_name": "Verexal_dossier 2024.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Variétés, porte-greffes et système de conduite]\nLes performances des vergers dépendent fortement du couple variété/porte-greffe et du système de conduite. Les recherches actuelles portent sur l’évaluation de nouveaux porte-greffes (alternatifs au M9), l’adaptation des variétés aux contraintes climatiques, la redéfinition des architectures (axe, biaxe…). Ainsi, il semble que les porte-greffes de type Geneva soient réputés plus performants en conditions de replantation et de stress.\n\nIl est établi que la vigueur et la productivité varient fortement selon les combinaisons et que la réponse aux systèmes de conduit est spécifique à chaque variété.\n\nToutefois, nous sommes face à une absence de modèles prédictifs intégrant l’ensemble des interactions variété/porte-greffe-conduite.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_22_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_23__chunk_000014_sub00",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\cir_final\\HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Tests microbiologiques sur l’eau de rinçage]\nEn parallèle, nous avons réalisé des tests microbiologiques sur l’eau servant à fabriquer et à rincer. Ne pouvant pas sous-traiter cette partie (temps d’analyses trop long), au sein de notre laboratoire, nous avons travaillé sur un protocole d’analyses de l’eau en faisant de la recherche bibliographique sur les techniques de contrôle de la propreté microbiologique de l’eau. Pour élaborer notre protocole, nous nous sommes basés sur un protocole interne existant sur l’évaluation de la propreté d’un produit désinfectant et sur la norme NF EN ISO 8199 : 2018 : Qualité de l'eau - Exigences et lignes directrices générales pour les examens microbiologiques sur milieu de culture et sur un mémoire :2019 : Contrôle qualité de l’eau purifiée produite par SAIDAL Constantine.\n\nPar la suite, nous avons mené des essais de ce protocole sur des prélèvements d’eau de l’installation : nous avons obtenu des résultats aléatoires, parfois conformes et parfois non conformes.\n\nFigure  : Exemple d’analyses microbiologiques d’un prélèvement du système d’eau purifiée\n\nDans l’exemple ci-dessus, les résultats étaient non conformes car ils devaient être inférieurs à 100 UFC/mL, alors que nous avons obtenu des valeurs de 350-980 UFC/mL. Nous avons émis l’hypothèse que le prélèvement avait été effectué dans de mauvaises conditions d’hygiène, ou bien que le volume d’écoulement n’avait pas été suffisant.\n\nNous avons également réalisé des prélèvements sur d’autres vannes.\n\nNos analyses de l’ensemble des résultats obtenus ont mis en évidence un mode de prélèvement non adapté. Nous avons donc été contraints de redéfinir le protocole de prélèvement, notamment en prélevant plusieurs fois au niveau de la même vanne, ou en augmentant le volume d’écoulement.\n\nAprès redéfinition du protocole d’analyse, nous avons pu obtenir des résultats corrects.",
+      "_parent_chunk_id": "projet_23__chunk_000014",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_23__chunk_000031_sub00",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\cir_final\\HCM_dossier 2024_2025-05-22_AG.pdf",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.pdf",
+      "file_category": "pdf_native",
+      "source_type": "text",
+      "text": "[PAGE 9]\nCIR 2024\n Des exigences économiques et de cadence industrielle spécifiques au secteur.\nDe plus, aucune méthodologie validée ne traite du nettoyage d’équipements ayant contenu\ndes produits détergents.\nLes guides et normes existants (ISO, Bonnes Pratiques de\nFabrication) proposent des protocoles de nettoyage basés sur l’utilisation de détergents, ce\nqui n’est pas applicable lorsque les produits eux-mêmes sont des agents nettoyants.\nCela justifie le besoin de développer une solution de nettoyage sur mesure, adaptée aux\nparticularités des lignes de fabrication de détergents\nII.3.2.\nVerrous et incertitudes scientifiques, techniques,\ntechnologiques\nLe développement du nouveau système de fabrication des détergents s’est heurté à plusieurs\nverrous techniques et scientifiques majeurs, qui ont nécessité une phase importante de R&D.\nDeux grandes problématiques se sont particulièrement distinguées pour garantir précision,\nreproductibilité et robustesse du procédé : le nettoyage des équipements et le nouveau mode\nde formulation des produits.\nII.3.2.1.\nVerrou 1 : Nettoyage des équipements de production de détergents\nIl n’existe pas à ce jour de protocole validé ou normé pour le nettoyage d’équipements ayant\ncontenu des produits détergents, en particulier dans un système automatisé de NEP.\nCette\nabsence de référentiel normatif constitue un véritable verrou technique, dans un contexte où\nles détergents présentent des caractéristiques particulières (forte viscosité, mousse\nabondante) qui rendent leur élimination difficile.\nCe verrou soulève plusieurs incertitudes\ncritiques :\n L’efficacité des cycles de NEP sur des résidus invisibles ou microbiologiques reste\nincertaine, notamment dans les zones difficiles d’accès des cuves inox ou de la\ntuyauterie, où des biofilms peuvent se former,\n Il existe une problématique spécifique au secteur : en tant que fabricant de détergents,\nl’utilisation d’un autre détergent pour nettoyer nos équipements est incohérente.\nLe\nnettoyage devient paradoxal : comment nettoyer des tuyaux de fabrication de\ndétergents avec un détergent ?\n En l’absence de méthode validée, la validation du nettoyage devient un enjeu\ncomplexe, où il est indispensable de développer des tests expérimentaux spécifiques,\nadaptés à la nature des produits manipulés et aux contraintes du procédé.\nCeci nous\nimpose de définir un protocole de traçabilité par fluorescence, ainsi que des tests\nmicrobiologiques spécifiques.",
+      "_parent_chunk_id": "projet_23__chunk_000031",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_23__chunk_000056_sub00",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\raw\\docx\\HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Tests microbiologiques sur l’eau de rinçage]\nEn parallèle, nous avons réalisé des tests microbiologiques sur l’eau servant à fabriquer et à rincer. Ne pouvant pas sous-traiter cette partie (temps d’analyses trop long), au sein de notre laboratoire, nous avons travaillé sur un protocole d’analyses de l’eau en faisant de la recherche bibliographique sur les techniques de contrôle de la propreté microbiologique de l’eau. Pour élaborer notre protocole, nous nous sommes basés sur un protocole interne existant sur l’évaluation de la propreté d’un produit désinfectant et sur la norme NF EN ISO 8199 : 2018 : Qualité de l'eau - Exigences et lignes directrices générales pour les examens microbiologiques sur milieu de culture et sur un mémoire :2019 : Contrôle qualité de l’eau purifiée produite par SAIDAL Constantine.\n\nPar la suite, nous avons mené des essais de ce protocole sur des prélèvements d’eau de l’installation : nous avons obtenu des résultats aléatoires, parfois conformes et parfois non conformes.\n\nFigure 4 : Exemple d’analyses microbiologiques d’un prélèvement du système d’eau purifiée\n\nDans l’exemple ci-dessus, les résultats étaient non conformes car ils devaient être inférieurs à 100 UFC/mL, alors que nous avons obtenu des valeurs de 350-980 UFC/mL. Nous avons émis l’hypothèse que le prélèvement avait été effectué dans de mauvaises conditions d’hygiène, ou bien que le volume d’écoulement n’avait pas été suffisant.\n\nNous avons également réalisé des prélèvements sur d’autres vannes.\n\nNos analyses de l’ensemble des résultats obtenus ont mis en évidence un mode de prélèvement non adapté. Nous avons donc été contraints de redéfinir le protocole de prélèvement, notamment en prélevant plusieurs fois au niveau de la même vanne, ou en augmentant le volume d’écoulement.\n\nAprès redéfinition du protocole d’analyse, nous avons pu obtenir des résultats corrects.",
+      "_parent_chunk_id": "projet_23__chunk_000056",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_23__chunk_000035",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\cir_final\\HCM_dossier 2024_2025-05-22_AG.pdf",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.pdf",
+      "file_category": "pdf_native",
+      "source_type": "text",
+      "text": "[PAGE 13]\n\nCIR 2024\nTige de la boule de rinçage (1) Tige de la boule de rinçage (2)\nFigure 2 : Tige de la boule de rinçage après les NEP, sous UV\nFinalement, nous avons réalisé des essais avec l’agent fluorescent pour évaluer la qualité du\nnettoyage. Après les NEP, des résidus étaient toujours visibles. Nous avons supposé que\nl’agent fluorescent était plus difficile à nettoyer qu’un produit détergent. Notre méthode devait\ndonc être revue.\nNous avons par exemple pensé à tester une autre nature d’agent fluorescent. Nous devons\ndonc faire des recherches dessus pour lister les molécules fluorescentes qui pourraient nous\nintéresser.\nII.4.2.1.3. Tests microbiologiques sur l’eau de rinçage\nEn parallèle, nous avons réalisé des tests microbiologiques sur l’eau servant à fabriquer et à\nrincer. Ne pouvant pas sous-traiter cette partie (temps d’analyses trop long), au sein de notre\nlaboratoire, nous avons travaillé sur un protocole d’analyses de l’eau en faisant de la recherche\nbibliographique sur les techniques de contrôle de la propreté microbiologique de l’eau. Pour\nélaborer notre protocole, nous nous sommes basés sur un protocole interne existant sur\nl’évaluation de la propreté d’un produit désinfectant et sur la norme NF EN ISO 8199 : 2018 :\nQualité de l'eau - Exigences et lignes directrices générales pour les examens microbiologiques\nsur milieu de culture et sur un mémoire :2019 : Contrôle qualité de l’eau purifiée produite par\nSAIDAL Constantine.\nPar la suite, nous avons mené des essais de ce protocole sur des prélèvements d’eau de\nl’installation : nous avons obtenu des résultats aléatoires, parfois conformes et parfois non\nconformes.\nHCM - CONFIDENTIEL PAGE 13\nCe document est la propriété de la société HCM\nIl ne peut être reproduit ou transmis à des tiers sans son autorisation expresse",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_23_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_23__chunk_000008",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\cir_final\\HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Verrou 1 : Nettoyage des équipements de production de détergents]\nIl n’existe pas à ce jour de protocole validé ou normé pour le nettoyage d’équipements ayant contenu des produits détergents, en particulier dans un système automatisé de NEP. Cette absence de référentiel normatif constitue un véritable verrou technique, dans un contexte où les détergents présentent des caractéristiques particulières (forte viscosité, mousse abondante) qui rendent leur élimination difficile. Ce verrou soulève plusieurs incertitudes critiques :\n\nL’efficacité des cycles de NEP sur des résidus invisibles ou microbiologiques reste incertaine, notamment dans les zones difficiles d’accès des cuves inox ou de la tuyauterie, où des biofilms peuvent se former,\n\nIl existe une problématique spécifique au secteur : en tant que fabricant de détergents, l’utilisation d’un autre détergent pour nettoyer nos équipements est incohérente. Le nettoyage devient paradoxal : comment nettoyer des tuyaux de fabrication de détergents avec un détergent ?\n\nEn l’absence de méthode validée, la validation du nettoyage devient un enjeu complexe, où il est indispensable de développer des tests expérimentaux spécifiques, adaptés à la nature des produits manipulés et aux contraintes du procédé. Ceci nous impose de définir un protocole de traçabilité par fluorescence, ainsi que des tests microbiologiques spécifiques.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_23_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_23__chunk_000026_sub00",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\cir_final\\HCM_dossier 2024_2025-05-22_AG.pdf",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.pdf",
+      "file_category": "pdf_native",
+      "source_type": "text",
+      "text": "[PAGE 4]\nCIR 2024\nLe projet satisfait les cinq critères d’éligibilité suivants :\nNouveauté Les travaux menés ont permis d'approfondir les connaissances sur :\n Le comportement des matières premières dans un nouveau mode\nd’introduction par aspiration,\n Les interactions entre formulation, agitation et distribution dans un\nsystème fermé et automatisé,\n Les méthodes d’évaluation de la propreté des équipements ayant\ncontenu des détergents, sujet non traité dans la littérature scientifique.\nCes travaux ont mené à des innovations techniques, notamment :\n La redéfinition de protocoles de nettoyage dans un contexte où les\nproduits à nettoyer sont eux-mêmes des détergents,\n La définition de nouvelles méthodes de formulation en l'absence de\nrepères visuels (QSV).\nCréativité Les travaux ont fait preuve de créativité sur plusieurs aspects :\n Conception d’essais expérimentaux pour recalibrer la quantité d’eau à\nintroduire dans chaque formule en l’absence de visuel sur les cuves,\n Mobilisation de plusieurs disciplines (formulation, microbiologie,\ningénierie des procédés) pour résoudre des problèmes complexes dans\nle secteur de la détergence.\nIncertitude L'incertitude technique principale concernait :\n L’efficacité des protocoles de NEP sur des équipements ayant contenu\ndes détergents concentrés, dont les propriétés rendent le nettoyage\ncontre-intuitif,\n L'impossibilité d'observer le mélange dans la cuve, soulevant des doutes\nsur l’homogénéisation des produits,\n La difficulté à identifier la cause des non-conformités observées sur\ncertaines fabrications pilotes.\nCes incertitudes ont nécessité une phase expérimentale approfondie et la\ndéfinition de nouveaux outils de validation.\nSystématicité Les travaux ont été menés de façon rigoureuse, suivant une démarche\nscientifique :\n Définition d’hypothèses (ex : lien entre défaut de mélange et non-\nconformité des produits),\n Mise en œuvre de protocoles d’essais reproductibles en laboratoire et en\nproduction,\n Réalisation d’essais itératifs (formulations, nettoyages, contrôles\nanalytiques),\n Suivi de l’avancement par des réunions regroupant les services R&D,\nproduction, qualité et réglementaire.\nCette approche systématique a structuré la progression du projet et permis une\ndocumentation précise des résultats.",
+      "_parent_chunk_id": "projet_23__chunk_000026",
+      "_is_subchunk": true
+    }
+  ]
+}

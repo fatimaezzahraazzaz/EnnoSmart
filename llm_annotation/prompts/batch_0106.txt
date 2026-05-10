@@ -1,0 +1,311 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 106/135, 8 chunks)
+
+### CHUNK_ID: projet_23__chunk_000017
+```
+[SECTION : Produit TFD 7 stelmi]
+Après fabrication, les analyses physico-chimiques que nous avons réalisées ont révélé que la densité et l’alcalinité totale n’étaient pas conformes.
+
+Un problème de densité pour ce type de produit laisse supposer l’introduction d’une mauvaise quantité d’eau ou d’éthanol.
+
+Par conséquent, pour vérifier si les bonnes quantités de ces solvants (eau et éthanol) avaient été introduites, nous avons réalisé des essais pour évaluer la quantité de solvant à incorporer pour atteindre la bonne densité. Les différents essais laboratoire que nous avons effectués ont révélé qu’il était nécessaire de mettre soit 2800 L d’eau, soit 1060 L d’éthanol, ce qui représentait de trop grandes quantités pour une fabrication de 5600 L. Finalement ces essais ne nous ont pas permis de conclure sur la cause de la non-conformité.
+
+Pour conclure, n’ayant pas encore défini de méthodologie fiable et reproductible pour confirmer le volume d’eau final à mettre en fabrication, les essais de détermination du volume d’eau final ont été remis en question. Nous devons donc envisager une réflexion sur une nouvelle méthodologie de tests au laboratoire.
+```
+
+### CHUNK_ID: projet_23__chunk_000037_sub00
+```
+[PAGE 15]
+CIR 2024
+chaque formule en introduisant les bonnes quantités de matières premières et en fin de
+fabrication, au lieu de compléter avec de l’eau jusqu’au trait, nous avons évalué la quantité
+d’eau introduite pour obtenir 5 L, à l’aide d’éprouvette.
+Nous avons donc évalué la quantité
+d’eau finale sur une fabrication de 5 L de produit.
+Nous avons ensuite rapporté cette quantité
+d’eau pour une quantité de 5600 L et nous avons pu enregistrer les recettes du TFD 4 et du
+TFD 7 Stelmi sur le logiciel,.
+Nous avons alors réalisé une fabrication de TFD 4 et une fabrication de TFD 7 Stelmi à échelle
+industrielle et pour les deux autres formules étudiées au laboratoire, nous testerons de
+nouvelles fabrication en 2025.
+Ainsi, nous avons appliqué des vitesses d’agitation de façon aléatoire, en discussion avec le
+fournisseur.
+Les temps d’agitation restaient identiques à ceux mis dans les anciennes cuves.
+Enfin, nous avons basé la quantité d’eau introduite en fin d’agitation sur l’essai laboratoire.
+Nous avons alors obtenu les résultats suivants.
+II.4.2.2.1.
+Produit TFD 4
+La densité que nous avons obtenue après fabrication était bien trop loin de la spécification.
+Ne
+pouvant pas vérifier l’homogénéité de la solution en cuve et n’ayant pas pu voir si un vortex
+se formait ou non, nous avons décidé de vider la cuve dans six cubis, pour pouvoir vérifier
+l’homogénéité de la solution.
+Nous avons alors refait toutes les analyses mais,
+malheureusement, la densité de tous les cubis (prélèvement haut et bas) était non conforme.
+1 2 3 4 5 6
+N° de cubi
+Haut Bas Haut Bas Haut Bas Haut Bas Haut Bas Haut Bas
+Spécification
+de la densité 1.074 1.075 1.074 1.074 1.074 1.074 1.075 1.074 1.074 1.074 1.072 1.074
+1,083±0,006
+Tableau 1 : Densité des cubis du produit TFD 4 fabriqué dans la nouvelle installation
+Nous avons alors réalisé des tests de mousse, pour voir s’il ne s’agissait pas d’un problème
+de dosage du tensioactif, celui-ci étant visqueux, que nous évalué vis-à-vis d’un témoin (lot
+8498 fabriqué dans l’ancien site de production).
+```
+
+### CHUNK_ID: projet_23__chunk_000043_sub00
+```
+[SECTION : Présentation globale de la société et de sa stratégie de R&D]
+La société HCM a été fondée en mars 2018 par Julien CHARRAT sur la base d’une solide expérience au niveau de la R&D (microbiologie, formulation) et des affaires réglementaires au sein de l’industrie du Dispositif médical. HCM est née pour répondre aux nouvelles problématiques rencontrées par les entreprises du secteur des dispositifs médicaux mettant en œuvre des procédés chimiques dans la prise en compte des nouvelles exigences du nouveau règlement 2017/745 (RDM) et de la directive Biocide dans leurs projets de R&D.
+
+L’activité principale de l’entreprise est la fourniture de prestations de conseil, d’expertise et d’accompagnement technique et scientifique en matière de recherche & développement dans l’industrie chimique, parapharmaceutique et cosmétique. Le domaine d’expertise principal est la recherche de solutions innovantes contribuant à l’amélioration des techniques de prophylaxie sanitaire utilisées dans le domaine hospitalier, médical, vétérinaire, industriel, collectif et grand public.
+
+Dans le cadre de son expansion, HCM a pris une participation minoritaire dans la société FRANKLAB située à Montigny le Bretonneux (78) et spécialisée dans l’hygiène hospitalière et l’ultra propreté. FRANKLAB conçoit, fabrique et commercialise ses produits détergents et désinfectants conformément aux normes européennes depuis plus de 40 ans, sur les marchés de la santé, de la recherche et l’enseignement et de l’industrie et a développé en adéquation dix gammes de produits par domaine d’application.
+
+Les travaux de recherche présentés dans ce dossier technique se sont effectués principalement dans les locaux (laboratoires, équipements…) mis à notre disposition par la société FRANKLAB et les missions d’HCM consistent à :
+
+Evaluer la faisabilité technique des projets de recherche
+
+Accompagner la rédaction des cahiers de charges et des dossiers de conception
+
+Aider la formulation de produits détergents et désinfectants
+
+Assister l’évaluation analytique, microbiologique et clinique des formulations
+
+Suivre et assister le pilotage des projets de recherche
+
+En 2024, HCM est notamment intervenue sur la résolution de problématiques au développement d’un nouveau système de fabrication de détergent, les projets suivants, et le temps passé sur cette activité représentait 52.9% du temps de travail annuel.
+```
+
+### CHUNK_ID: projet_23__chunk_000045
+```
+[SECTION : Contexte de l’opération]
+Le projet de refonte du procédé de fabrication des détergents s’inscrit dans un contexte industriel en forte évolution, marqué par des exigences croissantes en matière de sécurité du personnel, de performance industrielle et de maîtrise de la qualité. Historiquement, les fabrications de détergents étaient réalisées de manière semi-artisanale, avec une introduction manuelle des matières premières par le haut des cuves. Ce mode opératoire exposait les opérateurs à des risques d’inhalation de poussières, de manipulation de produits corrosifs et à des aléas de dosage et de traçabilité.
+
+Face à ces limites, la société a engagé une profonde transformation de son outil de production, avec pour objectif le développement d’un nouveau système de fabrication automatisé permettant l’introduction des matières premières par aspiration via la tuyauterie. Des procédés similaires sont présents en agroalimentaire, en pharmacie ou en cosmétique, mais ils ne sont pas directement transposables en raison de contraintes spécifiques du secteur : grande diversité des matières premières (liquides, solides, poudres, agents moussants), complexité des formules, besoins de flexibilité.
+
+Dans ce contexte, plusieurs difficultés majeures ont émergé, nécessitant la mise en œuvre de travaux de R&D :
+
+Reformuler les produits dans un environnement où l’on ne peut plus observer les mélanges ou ajuster en temps réel les volumes d’eau,
+
+Définir des protocoles de nettoyage internes, adaptés à la fabrication de détergents, sans recours à des détergents externes, ce qui serait incohérent ou inefficace,
+
+Évaluer la propreté microbiologique et physico-chimique des équipements en l’absence de normes ou méthodes spécifiques pour ce type de production.
+```
+
+### CHUNK_ID: projet_23__chunk_000052
+```
+[SECTION : Raisonnement scientifique et démarche expérimentale appliquée]
+Lors de l’élaboration de notre nouveau procédé de fabrication de détergents et désinfectants, intégrant un système d’aspiration automatisée des matières premières par le bas, nos hypothèses initiales étaient que :
+
+Les produits détergents ne présenteraient pas de difficultés de nettoyage particulières,
+
+Le transfert des recettes suffirait à garantir une reproductibilité immédiate,
+
+Les équipements, bien que neufs, ne modifieraient pas les caractéristiques des produits finis.
+
+Malheureusement, les premiers essais industriels que nous avons effectués ont mis en évidence plusieurs non-conformités, tant au niveau du nettoyage des équipements, que de la qualité des formulations obtenues. Ces constats nous ont conduit à engager une démarche de R&D approfondie afin d’identifier les causes de ces non-conformités et d’y apporter des solutions concrètes.
+
+Notre démarche R&D s’est donc articulée autour des axes suivants :
+
+Redéfinition du protocole de NEP, avec intégration de tests de détection de résidus par fluorescence,
+
+Analyses microbiologiques post-NEP, pour évaluer l’efficacité du nettoyage,
+
+Essais de reformulation en laboratoire.
+```
+
+### CHUNK_ID: projet_23__chunk_000058
+```
+[SECTION : Produit TFD 4]
+La densité que nous avons obtenue après fabrication était bien trop loin de la spécification. Ne pouvant pas vérifier l’homogénéité de la solution en cuve et n’ayant pas pu voir si un vortex se formait ou non, nous avons décidé de vider la cuve dans six cubis, pour pouvoir vérifier l’homogénéité de la solution. Nous avons alors refait toutes les analyses mais, malheureusement, la densité de tous les cubis (prélèvement haut et bas) était non conforme.
+
+[TABLEAU]
+| N° de cubi | 1 | 1 | 2 | 2 | 3 | 3 | 4 | 4 | 5 | 5 | 6 | 6 | 6 |
+| --------------------------------------- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | --- |
+| N° de cubi | Haut | Bas | Haut | Bas | Haut | Bas | Haut | Bas | Haut | Bas | Haut | Bas | |
+| Spécification de la densité 1,083±0,006 | 1.074 | 1.075 | 1.074 | 1.074 | 1.074 | 1.074 | 1.075 | 1.074 | 1.074 | 1.074 | 1.072 | 1.074 | |
+
+Tableau 1 : Densité des cubis du produit TFD 4 fabriqué dans la nouvelle installation
+
+Nous avons alors réalisé des tests de mousse, pour voir s’il ne s’agissait pas d’un problème de dosage du tensioactif, celui-ci étant visqueux, que nous évalué vis-à-vis d’un témoin (lot 8498 fabriqué dans l’ancien site de production).
+
+Figure 5 : Résultats des tests de mousse
+
+Nous avons constaté que les mousses à différentes concentrations (2% et 5%) du lot témoin fabriqué sur l’ancienne cuve étaient différentes. Malheureusement, tous ces éléments ne nous permettaient pas de conclure sur la cause de la non-conformité.
+```
+
+### CHUNK_ID: projet_23__chunk_000059
+```
+[SECTION : Produit TFD 7 stelmi]
+Après fabrication, les analyses physico-chimiques que nous avons réalisées ont révélé que la densité et l’alcalinité totale n’étaient pas conformes.
+
+Un problème de densité pour ce type de produit laisse supposer l’introduction d’une mauvaise quantité d’eau ou d’éthanol.
+
+Par conséquent, pour vérifier si les bonnes quantités de ces solvants (eau et éthanol) avaient été introduites, nous avons réalisé des essais pour évaluer la quantité de solvant à incorporer pour atteindre la bonne densité. Les différents essais laboratoire que nous avons effectués ont révélé qu’il était nécessaire de mettre soit 2800 L d’eau, soit 1060 L d’éthanol, ce qui représentait de trop grandes quantités pour une fabrication de 5600 L. Finalement ces essais ne nous ont pas permis de conclure sur la cause de la non-conformité.
+
+Pour conclure, n’ayant pas encore défini de méthodologie fiable et reproductible pour confirmer le volume d’eau final à mettre en fabrication, les essais de détermination du volume d’eau final ont été remis en question. Nous devons donc envisager une réflexion sur une nouvelle méthodologie de tests au laboratoire.
+```
+
+### CHUNK_ID: projet_23__chunk_000006_sub00
+```
+[SECTION : Systèmes de nettoyage en place]
+Le nettoyage en place (NEP) est une pratique couramment utilisée dans plusieurs secteurs industriels pour garantir la propreté des équipements de production. Il existe différentes méthodes éprouvées, notamment dans les secteurs pharmaceutique, agroalimentaire et cosmétique. Cependant, ces approches ne peuvent pas être transposées telles quelles au secteur de la détergence, pour plusieurs raisons techniques et économiques.
+
+Dans l'industrie pharmaceutique, les systèmes NEP sont hautement automatisés et très rigoureux. Ils utilisent des séquences de nettoyage prédéfinies avec des cycles alternant rinçages, détergents, désinfectants, et souvent de l’eau purifiée. Les équipements sont conçus pour éviter les zones non nettoyables (dead zones), avec des capteurs permettant de valider l'efficacité du nettoyage.
+
+Limites pour le secteur de la détergence :
+
+Ce type de système est conçu pour des installations manipulant des substances très précises, à forte valeur ajoutée. De plus, le coût d’investissement et de maintenance est très élevé, ce qui le rend inadapté pour des lignes de production de détergents où les marges sont plus faibles et les volumes plus importants.
+
+Enfin, les produits détergents laissent des résidus spécifiques (moussants, visqueux, parfois collants), qui ne réagissent pas de la même manière que des résidus pharmaceutiques.
+
+Les solutions NEP utilisées en agroalimentaire (nettoyage de circuits de lait, jus, bière, etc.) sont généralement basées sur des cycles de circulation de solutions alcalines, acides et de rinçage, dans des circuits en boucle fermée. Ces systèmes sont efficaces pour nettoyer des résidus alimentaires liquides ou pâteux dans des tuyauteries inox très lisses.
+
+Limites pour la détergence :
+
+Les résidus de détergents sont chimiquement différents, parfois corrosifs, très moussants ou très adhérents. Les géométries d’équipements dans la détergence sont souvent plus complexes, avec des pompes, des flexibles, des vannes, des rétentions difficiles d'accès. Enfin, les systèmes agroalimentaires ne sont pas adaptés aux contraintes de viscosité, de moussage et à la diversité des produits manipulés en détergence.
+
+Dans le domaine cosmétique, certaines unités utilisent des systèmes semi-automatisés de nettoyage avec validation visuelle, parfois assistés par des détecteurs de contamination. Le nettoyage est souvent plus manuel, notamment pour les cuves et agitateurs.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 106,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

@@ -1,0 +1,16 @@
+{
+  "total_projects": 32,
+  "total_chunks_kept": 1077,
+  "total_batches": 135,
+  "chunks_per_batch": 8,
+  "filtering": {
+    "min_tokens": 50,
+    "max_tokens": 350,
+    "split_overlap": 30
+  },
+  "rejection_summary": {
+    "table des matières": 50,
+    "pas de contenu R&D": 1239,
+    "trop court (<50 tokens)": 391
+  }
+}

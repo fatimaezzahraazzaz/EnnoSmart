@@ -1,0 +1,300 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 46/135, 8 chunks)
+
+### CHUNK_ID: projet_10__chunk_000021
+```
+ABINNOV
+
+JUSTIFICATIF DES TRAVAUX DE R&D DECLARES AU TITRE DU CREDIT IMPOT RECHERCHE (CIR) DE L’ANNEE 2023
+
+FICHE DESCRIPTIVE DU PROJET
+
+Mise en Œuvre d'une Nouvelle Plateforme d'Écoute Sociale
+
+BATREND
+
+Table des matières
+
+1. Fiche descriptive du projet BATREND 3
+
+1.1. Intitulé du projet 3
+
+1.2. Indicateurs de R&D 4
+
+Objectifs du projet 4
+
+1.2.1. Contexte du projet 4
+
+1.2.2. Objectifs visés 5
+
+1.2.3. Performances à atteindre 5
+
+1.3. Etat de l’art 5
+
+1.3.1. Insuffisances des solutions existantes 7
+
+1.4. Verrous et incertitudes scientifiques, techniques, technologiques 8
+
+1.4.1.1. Complexité liée à la surveillance en temps réel sur plusieurs millions de sources 8
+
+1.4.1.1.1. Surveillance des données en temps réel 8
+
+1.4.1.1.2. Surveillance des données sur des plateformes hétérogènes 9
+
+1.4.1.2. Analyse des réactions et des opinions des gens quels que soient les domaines visés 9
+
+1.4.1.3. Détermination des influenceurs en temps réel 10
+
+1.5. Démarche expérimentale, travaux R&D réalisés 10
+
+1.5.1. Raisonnement scientifique et démarche expérimentale appliquée 10
+
+1.5.2. Travaux antérieurs 11
+
+1.5.3. Description des travaux 11
+
+1.5.3.1. Phase exploratoire : Evaluation des modèles de traitement de langage existants 11
+
+1.5.3.2. Première approche : évaluation des représentations vectorielles de mots en français 12
+
+1.5.3.3. Deuxième approche : mise en œuvre d’une méthodologie basée sur l’apprentissage supervisé 13
+
+1.5.3.4. Troisième approche : mis en œuvre d’un nouveau modèle du traitement du langage naturel. 14
+
+1.6. Conclusion et contribution scientifique, technique ou technologique 14
+```
+
+### CHUNK_ID: projet_10__chunk_000062_sub01
+```
+une exactitude de 71 % et un f-score de 70 %, démontrant ainsi l'efficacité de cette approche. Cependant, les performances de ce modèle n’étaient pas suffisantes pour résoudre notre problématique.
+
+Enfin, nous avons entrepris une troisième approche en mettant en œuvre un nouveau modèle spécifique au traitement du langage naturel « ABiThemeModel ». Ce modèle a permis d'obtenir les performances visées, avec une exactitude de 91 % et un f-score de 92 %, représentant une nette augmentation par rapport aux modèles précédents.
+
+En résumé, les travaux de R&D de cette année ont contribué à l’état de l’art existant par la mise en œuvre d’un nouveau modèle de traitement du langage naturel (NLP) basé sur la langue française. Ce modèle permet de classifier automatiquement les textes collectés depuis le Web, notamment les réseaux sociaux, quelles que soient leurs tailles et origines, dans le domaine de la politique en six thèmes différents : économie, immigration, laïcité, environnement, sécurité et santé. Ce modèle a donné des résultats très performants avec une exactitude de 91 %.
+
+Cette contribution de cette année a permis de lever les verrous liés à la complexité de surveiller en temps réel plusieurs millions de sources, incluant les réseaux sociaux et le Web, ainsi qu'à la complexité de l’analyse des réactions et des opinions des gens dans un domaine spécifique, ici le domaine de la politique.
+```
+
+### CHUNK_ID: projet_10__chunk_000067
+```
+[SECTION : Objectifs visés]
+L'objectif principal du présent projet de R&D est la mise en œuvre d’une nouvelle solution d’écoute social, qui permet de surveiller, de mesurer et d’analyser en temps réel les réactions et les opinions des gens dans le domaine politique, en se basant sur la langue française.
+
+Les objectifs spécifiques de cette solution sont les suivants :
+
+Surveiller automatiquement les sources sociales spécifiques de chaque client : Cette surveillance exhaustive sur différentes plateformes sociales telles que Twitter, Facebook, YouTube, Instagram, forums, blogs, sites d’avis consommateurs et presse en ligne garantira une couverture complète et à jour des conversations et des opinions partagées en ligne. Notre objectif est de proposer une solution qui permette de spécifier les cibles souhaitées, puis de les traiter et de les surveiller automatiquement, sans intervention manuelle ;
+
+Analyser les sujets, les tendances et les réactions du public : L'analyse approfondie permettra d'identifier les principaux thèmes de discussion, de comprendre les tendances émergentes et de mesurer les réactions du public à divers événements ou initiatives ;
+
+Déterminer en temps réel les influenceurs des opinions partagés sur le Web et les réseaux sociaux : L’analyse approfondie des données permettra d’identifier les individus et les entités qui exercent le plus d'impact sur la formation des opinions.
+```
+
+### CHUNK_ID: projet_10__chunk_000081
+```
+[SECTION : Quatrième itération : mis en œuvre d’un nouveau modèle du traitement du langage naturel.]
+Dans cette quatrième itération, nous avons mis en œuvre un nouveau modèle spécifique que nous avons nommé ABiThemeModel. Nous avons créé ce nouveau modèle en combinant deux modèles linguistiques pré-entraînés :
+
+CamemBERT : un modèle linguistique de pointe pour la langue française, basé sur l’architecture RoBERTa pré-entraîné sur le sous-corpus français du nouveau corpus multilingue OSCAR ;
+
+LaBSE (language-agnostic BERT sentence embedding) : une version plus petite du BERT multilingue couvrant 109 langues.
+
+Le résultat final du modèle ABiThemeModel, présenté dans le tableau ci-dessous, affiche une exactitude de 91 % et un f-score de 92 %. Ces scores élevés indiquent une performance exceptionnelle du modèle dans la tâche de traitement du langage naturel pour laquelle il a été mis en œuvre. Par conséquent, notre nouveau modèle a permis d’atteindre nos performances visées pour le présent projet de R&D.
+
+Figure 5 : Performances de notre nouvelle modèle ABiThemeModel sur la tâche de classification automatique.
+```
+
+### CHUNK_ID: projet_10__chunk_000020_sub00
+```
+[SECTION : Conclusion et contribution scientifique, technique ou technologique]
+Dans le cadre de notre projet visant à résoudre la problématique liée à la mise en œuvre d'une nouvelle solution d'écoute sociale, qui permet de fournir une surveillance automatique en temps réel et à grande échelle des interactions sur les réseaux sociaux et le Web, spécifiquement dans le domaine politique et en se basant sur la langue française, nous avons suivi une démarche systémique, itérative et reproductible.
+
+La première phase de notre démarche a consisté à évaluer trois modèles Transformers existants : DistilCamemBERT, mDeBERTa et bart-large. Parmi eux, le modèle mDeBERTa s'est distingué par ses performances élevées, avec une exactitude et un score F1 de 71%. Cependant, ses résultats n’étaient pas satisfaisants pour résoudre notre problématique.
+
+Ensuite, nous avons mis en œuvre une approche axée sur l’apprentissage non supervisé pour évaluer les représentations vectorielles des mots en français. Cependant, cette approche a mis en lumière des difficultés à distinguer les mots de sens similaires et non similaires, mettant en évidence les défis rencontrés avec ces représentations en français.
+
+En outre, nous avons mis en œuvre une troisième approche basée sur l’apprentissage supervisé, en s’appuyant sur six algorithmes de classification. Le classificateur Bayesien naïf multinomial (NB) s'est avéré le plus performant, avec une exactitude de 64,50 % et un f-score de 63,10 %, bien que ses performances n'aient pas été optimales.
+
+Dans le but d'augmenter davantage les performances du modèle NB, nous nous sommes basés sur des techniques de réglage d’hyperparamètres et des méthodes de transformation des données. Après optimisation, notre modèle final a atteint une exactitude de 71 % et un f-score de 70 %, démontrant ainsi l'efficacité de cette approche. Cependant, les performances de ce modèle n’étaient pas suffisantes pour résoudre notre problématique.
+```
+
+### CHUNK_ID: projet_10__chunk_000045
+```
+[SECTION : Objectifs visés]
+L'objectif principal du présent projet de R&D est la mise en œuvre d’une nouvelle plateforme d’écoute social, qui permet de surveiller, de mesurer et d’analyser en temps réel les réactions et les opinions des gens dans le domaine politique, en se basant sur la langue française.
+
+Les objectifs spécifiques de cette solution sont les suivants :
+
+Surveiller plusieurs Millions de sources sociales : Cette surveillance exhaustive sur différentes sources sociales telles que Twitter, Facebook, YouTube, Instagram, Forums, Blogs, sites d’avis consommateurs et Presse en ligne, garantira une couverture complète et à jour des conversations et des opinions partagées en ligne.
+
+Analyser les sujets, les tendances et les réactions du public : L'analyse approfondie permettra d'identifier les principaux thèmes de discussion, de comprendre les tendances émergentes et de mesurer les réactions du public à divers événements ou initiatives.
+
+Déterminer en temps réel les influenceurs des opinions partagés sur le Web et les réseaux sociaux : L’analyse approfondie des données permettra d’identifier les individus et les entités qui exercent le plus d'impact sur la formation des opinions.
+```
+
+### CHUNK_ID: projet_10__chunk_000062_sub00
+```
+[SECTION : Conclusion et contribution scientifique, technique ou technologique]
+Dans le cadre de notre projet visant à résoudre la problématique liée à la mise en œuvre d'une nouvelle plateforme d'écoute sociale, qui permet de fournir une surveillance automatique en temps réel et à grande échelle des interactions sur les réseaux sociaux et le Web, spécifiquement dans le domaine politique et en se basant sur la langue française, nous avons suivi une approche systémique, itérative et reproductible pour proposer des solutions adaptées à notre problématique.
+
+La première phase de notre démarche a consisté à évaluer trois modèles Transformers existants : DistilCamemBERT, mDeBERTa et bart-large. Parmi eux, le modèle mDeBERTa s'est distingué par ses performances élevées, avec une exactitude et un score F1 de 71%. Cependant, ses résultats n’étaient pas satisfaisants pour résoudre notre problématique.
+
+Ensuite, nous avons mis en œuvre une première approche axée sur l’apprentissage non supervisé en évaluant les représentations vectorielles des mots en français. Cependant, cette approche a mis en lumière des difficultés à distinguer les mots de sens similaires et non similaires, mettant en évidence les défis rencontrés avec ces représentations en français.
+
+En outre, nous avons mis en œuvre une deuxième approche basée sur l’apprentissage supervisé, en s’appuyant sur six algorithmes de classification. Le classificateur Bayesien naïf multinomial (NB) s'est avéré le plus performant, avec une exactitude de 64,50 % et un f-score de 63,10 %, bien que ses performances n'aient pas été optimales.
+
+Dans le but d'augmenter davantage les performances du modèle NB, nous nous sommes basés sur des techniques de réglage d’hyperparamètres et des méthodes de transformation des données. Après optimisation, notre modèle final a atteint une exactitude de 71 % et un f-score de 70 %, démontrant ainsi l'efficacité de cette approche. Cependant, les performances de ce modèle n’étaient pas suffisantes pour résoudre notre problématique.
+```
+
+### CHUNK_ID: projet_10__chunk_000082_sub00
+```
+[SECTION : Conclusion et contribution scientifique, technique ou technologique]
+Dans le cadre de notre projet visant à résoudre la problématique liée à la mise en œuvre d'une nouvelle solution d'écoute sociale, qui permet de fournir une surveillance automatique en temps réel et à grande échelle des interactions sur les réseaux sociaux et le Web, spécifiquement dans le domaine politique et en se basant sur la langue française, nous avons suivi une démarche systémique, itérative et reproductible.
+
+La première phase de notre démarche a consisté à évaluer trois modèles Transformers existants : DistilCamemBERT, mDeBERTa et bart-large. Parmi eux, le modèle mDeBERTa s'est distingué par ses performances élevées, avec une exactitude et un score F1 de 71%. Cependant, ses résultats n’étaient pas satisfaisants pour résoudre notre problématique.
+
+Ensuite, nous avons mis en œuvre une approche axée sur l’apprentissage non supervisé pour évaluer les représentations vectorielles des mots en français. Cependant, cette approche a mis en lumière des difficultés à distinguer les mots de sens similaires et non similaires, mettant en évidence les défis rencontrés avec ces représentations en français.
+
+En outre, nous avons mis en œuvre une troisième approche basée sur l’apprentissage supervisé, en s’appuyant sur six algorithmes de classification. Le classificateur Bayesien naïf multinomial (NB) s'est avéré le plus performant, avec une exactitude de 64,50 % et un f-score de 63,10 %, bien que ses performances n'aient pas été optimales.
+
+Dans le but d'augmenter davantage les performances du modèle NB, nous nous sommes basés sur des techniques de réglage d’hyperparamètres et des méthodes de transformation des données. Après optimisation, notre modèle final a atteint une exactitude de 71 % et un f-score de 70 %, démontrant ainsi l'efficacité de cette approche. Cependant, les performances de ce modèle n’étaient pas suffisantes pour résoudre notre problématique.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 46,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

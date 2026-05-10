@@ -1,0 +1,91 @@
+{
+  "batch_id": 41,
+  "chunks": [
+    {
+      "chunk_id": "projet_9__chunk_000055_sub02",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\raw\\docx\\TCP R&I_CIR_2024_Ed1.1.docx",
+      "file_name": "TCP R&I_CIR_2024_Ed1.1.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "celle-ci sur le plan de travail s’avère dangereuse. En effet, lors de sa manipulation, la prothèse est tenue par l’intérieur et nous sommes obligés de la déposer côté sphère ;\n\nCube : Avec cette solution technologique, pour la réalisation des essais d’amortissement et d’abrasion, nous avons enroulé le DM dans la cavité prévu à cet effet. En effet, le DM est tenu dans le ¼ des cavités qui une fois enroulé le maintiennent parfaitement. Nous n’avons pas constaté de particules avec le DM que nous avons testé.\n\nEn revanche, le fait d’enrouler le DM ne permet pas de répondre à la sécurisation de celui-ci, qui peut facilement nous échapper et chuter hors champ opératoire ;\n\nCompound : Afin de réaliser les tests d’amortissement et d’abrasion, nous avons défini le DM en sandwich dans une coque thermoforme avec le TPU en contact avec celui-ci. Les résultats obtenus montrent l’absence de forme amortissante. Par conséquent, cette solution technique ne répond pas à une de nos problématiques.\n\nToutefois, la sécurisation du DM est assurée du fait de la forme de la coque (Cf. Figure ci-dessous).\n\nFigure : Sécurisation du dispositif médical – solution technique compound\n\nSuspendu : Pour effectuer les essais d’amortissement et d’abrasion, le film TPU thermoformé est tendu à la forme du DM dans une coque en laissant de l’espace entre la coque et le film TPU. Une fois la coque fermée, le DM ne peut plus bouger. Les résultats à la suite des tests de chocs sont positifs même avec des DM fragiles comme un simulateur cardiaque.\n\nDe plus, la mise en place du DM est facile car la coque est ouverte. Étant donnée la forme de la coque nous pouvons ouvrir facilement celle-ci pour mettre à disposition le DM au chirurgien.\n\nPar ailleurs, les matériaux définis dans ce système sont recyclables.\n\nÀ la suite des résultats obtenus dans le cadre de cette étude, la solution technique que nous avons retenue est celle qui s’appuie sur un système d’emballage suspendu.",
+      "_parent_chunk_id": "projet_9__chunk_000055",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_9__chunk_000063",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\raw\\docx\\TCP R&I_CIR__2024_Ed1.0.docx",
+      "file_name": "TCP R&I_CIR__2024_Ed1.0.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Raisonnement scientifique, démarche expérimentale appliquée et description des travaux réalisés en 2024]\nAfin de répondre aux objectifs ambitieux et résoudre notre problématique majeure, nous avons poursuivi une démarche expérimentale et itérative.\n\nEn effet, les travaux de R&D menés en 2024 ont porté sur quatre principaux axes :\n\nInvestigations et définition de solutions techniques d’emballage pour les dispositifs médicaux fragiles et agressifs ;\n\nRéalisation de prototypes par impression 3D, puis des prototypes thermoformés à partir de moules fabriqués en impression 3D pour les différentes solutions identifiées ;\n\nRéalisation des essais mécaniques afin d’évaluer les différentes solutions techniques développées ;\n\nDéveloppement d’une solution performante d’emballage pour les dispositifs médicaux agressifs et fragiles.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_9_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_9__chunk_000070_sub01",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\raw\\docx\\TCP R&I_CIR__2024_Ed1.0.docx",
+      "file_name": "TCP R&I_CIR__2024_Ed1.0.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "est obtenue par thermoformage d’un film PETG/TPU ; Figure : Système d’emballage compound 6ème solution technique : emballage suspendu effectué par thermoformage d’un film TPU. Figure : Système d’emballage suspendu\n\nPuis, nous avons réalisé des tests de chocs sur toutes les faces, toutes les arêtes et les quatre coins de notre système selon la norme ASTM4169 comme illustré dans la figure ci-dessous.\n\nFigure : Identification des faces, arêtes et coins\n\nEnsuite, nous avons mené des tests pour évaluer la sécurité du dispositif médical lors des opérations.\n\nLes résultats de ces essais pour chaque solution technique définie sont :\n\nFourreau : Après introduction du DM, nous avons remarqué que les formes obtenues après déformation ne suffisent pas pour un réel amortissement. Par conséquent, pour le simulateur cardiaque, nous avons considéré que les chocs peuvent endommager celui-ci malgré une absence totale de marque.\n\nEn outre, la mise en place du DM est assez difficile car nous devons étirer le film TPU rendu élastique par les fentes réalisées. De même, pour sortir le DM de son fourreau, le risque de chute du DM est important ;\n\nRosace : Lors des essais d’amortissement, nous avons constaté que les petites sphères permettent un bon amortissement aux chocs.\n\nNous avons ensuite mené des tests d’abrasion sur des prothèses de genoux. Les résultats obtenus ont été satisfaisants.\n\nCependant, lors de la dépose de la prothèse sur le plan de travail, celle-ci peut facilement nous échapper ;\n\nSphère : Les résultats des tests d’amortissement et d’abrasion réalisés sur les prothèses de genoux ont été satisfaisants. Toutefois, ce système ne permet pas la sécurisation de la prothèse car la dépose de celle-ci sur le plan de travail s’avère dangereuse. En effet, lors de sa manipulation, la prothèse est tenue par l’intérieur et nous sommes obligés de la déposer côté sphère ;",
+      "_parent_chunk_id": "projet_9__chunk_000070",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_9__chunk_000070_sub02",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\raw\\docx\\TCP R&I_CIR__2024_Ed1.0.docx",
+      "file_name": "TCP R&I_CIR__2024_Ed1.0.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "celle-ci sur le plan de travail s’avère dangereuse. En effet, lors de sa manipulation, la prothèse est tenue par l’intérieur et nous sommes obligés de la déposer côté sphère ;\n\nCube : Avec cette solution technologique, pour la réalisation des essais d’amortissement et d’abrasion, nous avons enroulé le DM dans la cavité prévu à cet effet. En effet, le DM est tenu dans le ¼ des cavités qui une fois enroulé le maintiennent parfaitement. Nous n’avons pas constaté de particules avec le DM que nous avons testé.\n\nEn revanche, le fait d’enrouler le DM ne permet pas de répondre à la sécurisation de celui-ci, qui peut facilement nous échapper et chuter hors champ opératoire ;\n\nCompound : Afin de réaliser les tests d’amortissement et d’abrasion, nous avons défini le DM en sandwich dans une coque thermoforme avec le TPU en contact avec celui-ci. Les résultats obtenus montrent l’absence de forme amortissante. Par conséquent, cette solution technique ne répond pas à une de nos problématiques.\n\nToutefois, la sécurisation du DM est assurée du fait de la forme de la coque (Cf. Figure ci-dessous).\n\nFigure : Sécurisation du dispositif médical – solution technique compound\n\nSuspendu : Pour effectuer les essais d’amortissement et d’abrasion, le film TPU thermoformé est tendu à la forme du DM dans une coque en laissant de l’espace entre la coque et le film TPU. Une fois la coque fermée, le DM ne peut plus bouger. Les résultats à la suite des tests de chocs sont positifs même avec des DM fragiles comme un simulateur cardiaque.\n\nDe plus, la mise en place du DM est facile car la coque est ouverte. Étant donnée la forme de la coque nous pouvons ouvrir facilement celle-ci pour mettre à disposition le DM au chirurgien.\n\nPar ailleurs, les matériaux définis dans ce système sont recyclables.\n\nÀ la suite des résultats obtenus dans le cadre de cette étude, la solution technique que nous avons retenue est celle qui s’appuie sur un système d’emballage suspendu.",
+      "_parent_chunk_id": "projet_9__chunk_000070",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_9__chunk_000078",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\raw\\docx\\TCP RI_CIR_2024_Ed.1.1 RD.docx",
+      "file_name": "TCP RI_CIR_2024_Ed.1.1 RD.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Raisonnement scientifique, démarche expérimentale appliquée et description des travaux réalisés en 2024]\nAfin de répondre aux objectifs ambitieux et résoudre notre problématique majeure, nous avons poursuivi une démarche expérimentale et itérative.\n\nEn effet, les travaux de R&D menés en 2024 ont porté sur quatre principaux axes :\n\nInvestigations et définition de solutions techniques d’emballage pour les dispositifs médicaux fragiles et agressifs ;\n\nRéalisation de prototypes par impression 3D, puis des prototypes thermoformés à partir de moules fabriqués en impression 3D pour les différentes solutions identifiées ;\n\nRéalisation des essais mécaniques afin d’évaluer les différentes solutions techniques développées ;\n\nDéveloppement d’une solution performante d’emballage pour les dispositifs médicaux agressifs et fragiles.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_9_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_9__chunk_000085_sub01",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\raw\\docx\\TCP RI_CIR_2024_Ed.1.1 RD.docx",
+      "file_name": "TCP RI_CIR_2024_Ed.1.1 RD.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "est obtenue par thermoformage d’un film PETG/TPU ; Figure : Système d’emballage compound 6ème solution technique : emballage suspendu effectué par thermoformage d’un film TPU. Figure : Système d’emballage suspendu\n\nPuis, nous avons réalisé des tests de chocs sur toutes les faces, toutes les arêtes et les quatre coins de notre système selon la norme ASTM4169 comme illustré dans la figure ci-dessous.\n\nFigure : Identification des faces, arêtes et coins\n\nEnsuite, nous avons mené des tests pour évaluer la sécurité du dispositif médical lors des opérations.\n\nLes résultats de ces essais pour chaque solution technique définie sont :\n\nFourreau : Après introduction du DM, nous avons remarqué que les formes obtenues après déformation ne suffisent pas pour un réel amortissement. Par conséquent, pour le simulateur cardiaque, nous avons considéré que les chocs peuvent endommager celui-ci malgré une absence totale de marque.\n\nEn outre, la mise en place du DM est assez difficile car nous devons étirer le film TPU rendu élastique par les fentes réalisées. De même, pour sortir le DM de son fourreau, le risque de chute du DM est important ;\n\nRosace : Lors des essais d’amortissement, nous avons constaté que les petites sphères permettent un bon amortissement aux chocs.\n\nNous avons ensuite mené des tests d’abrasion sur des prothèses de genoux. Les résultats obtenus ont été satisfaisants.\n\nCependant, lors de la dépose de la prothèse sur le plan de travail, celle-ci peut facilement nous échapper ;\n\nSphère : Les résultats des tests d’amortissement et d’abrasion réalisés sur les prothèses de genoux ont été satisfaisants. Toutefois, ce système ne permet pas la sécurisation de la prothèse car la dépose de celle-ci sur le plan de travail s’avère dangereuse. En effet, lors de sa manipulation, la prothèse est tenue par l’intérieur et nous sommes obligés de la déposer côté sphère ;",
+      "_parent_chunk_id": "projet_9__chunk_000085",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_9__chunk_000085_sub02",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\raw\\docx\\TCP RI_CIR_2024_Ed.1.1 RD.docx",
+      "file_name": "TCP RI_CIR_2024_Ed.1.1 RD.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "celle-ci sur le plan de travail s’avère dangereuse. En effet, lors de sa manipulation, la prothèse est tenue par l’intérieur et nous sommes obligés de la déposer côté sphère ;\n\nCube : Avec cette solution technologique, pour la réalisation des essais d’amortissement et d’abrasion, nous avons enroulé le DM dans la cavité prévu à cet effet. En effet, le DM est tenu dans le ¼ des cavités qui une fois enroulé le maintiennent parfaitement. Nous n’avons pas constaté de particules avec le DM que nous avons testé.\n\nEn revanche, le fait d’enrouler le DM ne permet pas de répondre à la sécurisation de celui-ci, qui peut facilement nous échapper et chuter hors champ opératoire ;\n\nCompound : Afin de réaliser les tests d’amortissement et d’abrasion, nous avons défini le DM en sandwich dans une coque thermoforme avec le TPU en contact avec celui-ci. Les résultats obtenus montrent l’absence de forme amortissante. Par conséquent, cette solution technique ne répond pas à une de nos problématiques.\n\nToutefois, la sécurisation du DM est assurée du fait de la forme de la coque (Cf. Figure ci-dessous).\n\nFigure : Sécurisation du dispositif médical – solution technique compound\n\nSuspendu : Pour effectuer les essais d’amortissement et d’abrasion, le film TPU thermoformé est tendu à la forme du DM dans une coque en laissant de l’espace entre la coque et le film TPU. Une fois la coque fermée, le DM ne peut plus bouger. Les résultats à la suite des tests de chocs sont positifs même avec des DM fragiles comme un simulateur cardiaque.\n\nDe plus, la mise en place du DM est facile car la coque est ouverte. Étant donnée la forme de la coque nous pouvons ouvrir facilement celle-ci pour mettre à disposition le DM au chirurgien.\n\nPar ailleurs, les matériaux définis dans ce système sont recyclables.\n\nÀ la suite des résultats obtenus dans le cadre de cette étude, la solution technique que nous avons retenue est celle qui s’appuie sur un système d’emballage suspendu.",
+      "_parent_chunk_id": "projet_9__chunk_000085",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_9__chunk_000008_sub00",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\cir_final\\TCP R&I_CIR_2024_VF_1.docx",
+      "file_name": "TCP R&I_CIR_2024_VF_1.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Recherche et définition de solutions techniques d’emballage pour les dispositifs médicaux fragiles et agressifs]\nAfin de mettre en œuvre une solution technique fiable, nous devons répondre aux exigences liées à la protection du dispositif médical des chocs extérieurs tout au long de son cycle, à la résistance du système d’emballage à l’abrasion et aux formes agressives du dispositif médical, à la prise et manipulation facile sans faire tomber le dispositif, au tri des différents matériaux employés ainsi qu’aux critères de stérilisation imposées par le domaine médical.\n\nÀ la suite des diverses recherches et investigations réalisées, nous avons défini des solutions techniques que nous avons évaluées selon les quatre critères suivants :\n\nAmortissement ;\n\nRésistance à l’abrasion ;\n\nSécurisation du dispositif médical pendant les opérations ;\n\nRecyclabilité des matériaux.\n\nLes travaux de R&D décrivant cette partie sont présentés en détails dans le chapitre ‎2.8.1.1.1.\n\nEn effet, nous avons réalisé, dans un premier temps, des prototypes pour chaque solution technique et réalisé des tests de chocs sur toutes les faces, toutes les arêtes et les quatre coins de notre système. Ensuite, nous avons mené des tests pour évaluer la sécurité du dispositif médical lors des opérations.\n\nLes résultats de ces essais pour chaque solution technique sont résumés dans le tableau suivant.",
+      "_parent_chunk_id": "projet_9__chunk_000008",
+      "_is_subchunk": true
+    }
+  ]
+}

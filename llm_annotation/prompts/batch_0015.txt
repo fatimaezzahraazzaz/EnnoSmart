@@ -1,0 +1,338 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 15/135, 8 chunks)
+
+### CHUNK_ID: projet_3__chunk_000179
+```
+[SECTION : Test de tolérance au glucose et insulino-résistance]
+Le test de tolérance au glucose permet d’évaluer la régulation du métabolisme du glucose et la résistance à l’insuline. Il mesure ainsi la capacité de l’organisme à contrôler la glycémie suite à l’administration d’une quantité définie de glucose.
+
+Deux techniques sont couramment utilisées dans la littérature pour tester la tolérance au glucose : l’OGTT (Oral Glucose Tolerance Test) et l’IPGTT (Intraperitoneal Glucose Tolerance Test). Ces deux méthodes diffèrent principalement par la voie d’administration du glucose. L’IPGTT entraîne une variabilité inter-individuelle moindre, tandis que l’OGTT prend en compte l’absorption intestinale, ce qui le rend donc plus physiologique. Nous avons donc opté pour cette méthode.
+
+Avant un test de tolérance au glucose, les animaux doivent être à jeun pendant 5-6 h ou toute la nuit. Forts de notre expérience avec cette technique chez la souris, et afin de respecter le bien-être animal, nous avons estimé qu’un jeûne de cinq heures était suffisant pour mettre en évidence une intolérance au glucose.
+
+Ensuite, au moyen d’un glucomètre, la glycémie est mesurée à 0, 15, 30, 60, 90 et 120 min après administration du glucose à 2 g/l. Afin d’affiner l’évaluation, un prélèvement sanguin est effectué uniquement au début du test (T0) pour la mesure de l’insulinémie. En effet, grâce aux mesures de la glycémie et de l’insulinémie à T0, nous pouvons ensuite appliquer la formule suivante pour mesurer l’insulino-résistance :
+```
+
+### CHUNK_ID: projet_3__chunk_000192_sub00
+```
+[SECTION : Activité]
+Fondée en 1999, Pelvipharm est une CRO (Contract Research Organization) regroupant des compétences multidisciplinaires (docteurs en Médecine, pharmaco-économiste, vétérinaire, pharmaciens et docteurs en sciences), permettant ainsi de proposer différents services :
+
+Etudes précliniques basées sur des modèles d’efficacité validés, comprenant le développement d’un protocole expérimental adapté, la conduite de l’étude, son rapport, la communication et la publication des résultats
+
+Conseil pour la sélection de nouvelles molécules basée sur des tests ciblés selon les mécanismes d’action
+
+Identification de nouvelles propriétés afin de révéler un aspect concurrentiel d’une molécule, d’indication dans de nouveaux champs thérapeutiques ou opportunités commerciales
+
+Pelvipharm possède une expertise et une expérience scientifique et médicale en physiopathologie, pharmacologie, recherche clinique et pratique médicale dans une large palette d’aires thérapeutiques pouvant se regrouper en trois thématiques :
+
+Urologie : obstruction de l’écoulement (hypertrophie bénigne de la prostate, troubles du bas appareil urinaire), hyperactivité vésicale d’origine neurologique ou idiopathique, incontinence urinaire de stress, vessie hypoactive (sténose du canal lombaire), cystite interstitielle…
+
+Dysfonctionnements sexuels masculin et santé féminine : dysfonction érectile, éjaculation précoce, atrophie vaginale et troubles liés à la ménopause, endométriose…
+
+Fonction cardiovasculaire et métabolique : hypertension, athérosclérose, infarctus du myocarde, syndrome métabolique, obésité, diabète…
+
+Santé féminine : troubles liés à la ménopause, à l’endométriose, au syndrome ovarien polykystique…
+
+Figure  : Thématiques de recherche de Pelvipharm
+
+En plus de son activité contractuelle pour divers clients (essentiellement étrangers), Pelvipharm porte une attention particulière à produire ses propres travaux de recherche et de développement. Ainsi, une partie de son activité est réservée au développement de nouvelles techniques et à l’innovation (ex : nouveaux traitements ou nouvelles aires de recherche, nouveaux modèles expérimentaux plus proches de la pathologie humaine…).
+
+De ce fait, avec les années, Pelvipharm a pu gagner une réelle crédibilité scientifique, notamment grâce à :
+
+La présentation de ses résultats de R&D lors de congrès internationaux (212 abstracts publiés en recherche expérimentale)
+
+La publication de ses travaux de R&D dans des revues internationales à comité de lecture (113 articles publiés en recherche expérimentale, 37 revues en recherche expérimentale)
+```
+
+### CHUNK_ID: projet_3__chunk_000287_sub00
+```
+[SECTION : Activité]
+Fondée en 1999, Pelvipharm est une CRO (Contract Research Organization) regroupant des compétences multidisciplinaires (docteurs en Médecine, pharmaco-économiste, vétérinaire, pharmaciens et docteurs en sciences), permettant ainsi de proposer différents services :
+
+Etudes précliniques basées sur des modèles d’efficacité validés, comprenant le développement d’un protocole expérimental adapté, la conduite de l’étude, son rapport, la communication et la publication des résultats
+
+Conseil pour la sélection de nouvelles molécules basée sur des tests ciblés selon les mécanismes d’action
+
+Identification de nouvelles propriétés afin de révéler un aspect concurrentiel d’une molécule, d’indication dans de nouveaux champs thérapeutiques ou opportunités commerciales
+
+Pelvipharm possède une expertise et une expérience scientifique et médicale en physiopathologie, pharmacologie, recherche clinique et pratique médicale dans une large palette d’aires thérapeutiques pouvant se regrouper en trois thématiques :
+
+Urologie : obstruction de l’écoulement (hypertrophie bénigne de la prostate, troubles du bas appareil urinaire), hyperactivité vésicale d’origine neurologique ou idiopathique, incontinence urinaire de stress, vessie hypoactive (sténose du canal lombaire), cystite interstitielle…
+
+Dysfonctionnements sexuels masculin et santé féminine : dysfonction érectile, éjaculation précoce, atrophie vaginale et troubles liés à la ménopause, endométriose…
+
+Fonction cardiovasculaire et métabolique : hypertension, athérosclérose, infarctus du myocarde, syndrome métabolique, obésité, diabète…
+
+Santé féminine : troubles liés à la ménopause, à l’endométriose, au syndrome ovarien polykystique…
+
+Figure 1 : Thématiques de recherche de Pelvipharm
+
+En plus de son activité contractuelle pour divers clients (essentiellement étrangers), Pelvipharm porte une attention particulière à produire ses propres travaux de recherche et de développement. Ainsi, une partie de son activité est réservée au développement de nouvelles techniques et à l’innovation (ex : nouveaux traitements ou nouvelles aires de recherche, nouveaux modèles expérimentaux plus proches de la pathologie humaine…).
+
+De ce fait, avec les années, Pelvipharm a pu gagner une réelle crédibilité scientifique, notamment grâce à :
+
+La présentation de ses résultats de R&D lors de congrès internationaux (212 abstracts publiés en recherche expérimentale)
+
+La publication de ses travaux de R&D dans des revues internationales à comité de lecture (113 articles publiés en recherche expérimentale, 37 revues en recherche expérimentale)
+```
+
+### CHUNK_ID: projet_3__chunk_000383_sub00
+```
+[SECTION : Activité]
+Fondée en 1999, Pelvipharm est une CRO (Contract Research Organization) regroupant des compétences multidisciplinaires (docteurs en Médecine, pharmaco-économiste, vétérinaire, pharmaciens et docteurs en sciences), permettant ainsi de proposer différents services :
+
+Etudes précliniques basées sur des modèles d’efficacité validés, comprenant le développement d’un protocole expérimental adapté, la conduite de l’étude, son rapport, la communication et la publication des résultats
+
+Conseil pour la sélection de nouvelles molécules basée sur des tests ciblés selon les mécanismes d’action
+
+Identification de nouvelles propriétés afin de révéler un aspect concurrentiel d’une molécule, d’indication dans de nouveaux champs thérapeutiques ou opportunités commerciales
+
+Pelvipharm possède une expertise et une expérience scientifique et médicale en physiopathologie, pharmacologie, recherche clinique et pratique médicale dans une large palette d’aires thérapeutiques pouvant se regrouper en trois thématiques :
+
+Urologie : obstruction de l’écoulement (hypertrophie bénigne de la prostate, troubles du bas appareil urinaire), hyperactivité vésicale d’origine neurologique ou idiopathique, incontinence urinaire de stress, vessie hypoactive (sténose du canal lombaire), cystite interstitielle…
+
+Dysfonctionnements sexuels masculin et santé féminine : dysfonction érectile, éjaculation précoce, atrophie vaginale et troubles liés à la ménopause, endométriose…
+
+Fonction cardiovasculaire et métabolique : hypertension, athérosclérose, infarctus du myocarde, syndrome métabolique, obésité, diabète…
+
+Santé féminine : troubles liés à la ménopause, à l’endométriose, au syndrome ovarien polykystique…
+
+Figure 1 : Thématiques de recherche de Pelvipharm
+
+En plus de son activité contractuelle pour divers clients (essentiellement étrangers), Pelvipharm porte une attention particulière à produire ses propres travaux de recherche et de développement. Ainsi, une partie de son activité est réservée au développement de nouvelles techniques et à l’innovation (ex : nouveaux traitements ou nouvelles aires de recherche, nouveaux modèles expérimentaux plus proches de la pathologie humaine…).
+
+De ce fait, avec les années, Pelvipharm a pu gagner une réelle crédibilité scientifique, notamment grâce à :
+
+La présentation de ses résultats de R&D lors de congrès internationaux (212 abstracts publiés en recherche expérimentale)
+
+La publication de ses travaux de R&D dans des revues internationales à comité de lecture (113 articles publiés en recherche expérimentale, 37 revues en recherche expérimentale)
+```
+
+### CHUNK_ID: projet_3__chunk_000715
+```
+[SECTION : Activité]
+Fondée en 1999, Pelvipharm est une CRO (Contract Research Organization) regroupant des compétences multidisciplinaires (docteurs en Médecine, pharmaco-économiste, vétérinaire, pharmaciens et docteurs en sciences), permettant ainsi de proposer différents services :
+
+Etudes précliniques basées sur des modèles d’efficacité validés, comprenant le développement d’un protocole expérimental adapté, la conduite de l’étude, son rapport, la communication et la publication des résultats
+
+Conseil pour la sélection de nouvelles molécules basée sur des tests ciblés selon les mécanismes d’action
+
+Identification de nouvelles propriétés afin de révéler un aspect concurrentiel d’une molécule, d’indication dans de nouveaux champs thérapeutiques ou opportunités commerciales
+
+Pelvipharm possède une expertise et une expérience scientifique et médicale en physiopathologie, pharmacologie, recherche clinique et pratique médicale dans une large palette d’aires thérapeutiques pouvant se regrouper en trois thématiques :
+
+Urologie : obstruction de l’écoulement (hypertrophie bénigne de la prostate, troubles du bas appareil urinaire), hyperactivité vésicale d’origine neurologique ou idiopathique, incontinence urinaire de stress, vessie hypoactive (sténose du canal lombaire), cystite interstitielle…
+
+Dysfonctionnements sexuels masculin et santé féminine : dysfonction érectile, éjaculation précoce, atrophie vaginale et troubles liés à la ménopause, à l’endométriose, au syndrome ovarien polykystique…
+
+Fonction cardiovasculaire et métabolique : hypertension, athérosclérose, infarctus du myocarde, syndrome métabolique, obésité, diabète…
+
+Figure  : Thématiques de recherche de Pelvipharm
+
+En plus de son activité contractuelle pour divers clients (essentiellement étrangers), Pelvipharm porte une attention particulière à produire ses propres travaux de recherche et de développement. Ainsi, une partie de son activité est réservée au développement de nouvelles techniques et à l’innovation (ex : nouveaux traitements ou nouvelles aires de recherche, nouveaux modèles expérimentaux plus proches de la pathologie humaine…).
+
+De ce fait, avec les années, Pelvipharm a pu gagner une réelle crédibilité scientifique, notamment grâce à :
+
+La présentation de ses résultats de R&D lors de congrès internationaux (212 abstracts publiés en recherche expérimentale)
+
+La publication de ses travaux de R&D dans des revues internationales à comité de lecture (113 articles publiés en recherche expérimentale, 37 revues en recherche expérimentale)
+
+Sa participation en tant qu’expert critique d’articles scientifiques pour des journaux internationaux ou modérateur/intervenant lors de congrès internationaux
+```
+
+### CHUNK_ID: projet_3__chunk_000802
+```
+[SECTION : Test de tolérance au glucose et insulino-résistance]
+Le test de tolérance au glucose permet d’évaluer la régulation du métabolisme du glucose et la résistance à l’insuline. Il mesure ainsi la capacité de l’organisme à contrôler la glycémie suite à l’administration d’une quantité définie de glucose.
+
+Deux techniques sont couramment utilisées dans la littérature pour tester la tolérance au glucose : l’OGTT (Oral Glucose Tolerance Test) et l’IPGTT (Intraperitoneal Glucose Tolerance Test). Ces deux méthodes diffèrent principalement par la voie d’administration du glucose. L’IPGTT entraîne une variabilité inter-individuelle moindre, tandis que l’OGTT prend en compte l’absorption intestinale, ce qui le rend donc plus physiologique. Nous avons donc opté pour cette méthode.
+
+Avant un test de tolérance au glucose, les animaux doivent être à jeun pendant 5-6 h ou toute la nuit. Forts de notre expérience avec cette technique chez la souris, et afin de respecter le bien-être animal, nous avons estimé qu’un jeûne de cinq heures était suffisant pour mettre en évidence une intolérance au glucose.
+
+Ensuite, au moyen d’un glucomètre, la glycémie est mesurée à 0, 15, 30, 60, 90 et 120 min après administration du glucose à 2 g/l. Afin d’affiner l’évaluation, un prélèvement sanguin est effectué uniquement au début du test (T0) pour la mesure de l’insulinémie. En effet, grâce aux mesures de la glycémie et de l’insulinémie à T0, nous pouvons ensuite appliquer la formule suivante pour mesurer l’insulino-résistance :
+```
+
+### CHUNK_ID: projet_3__chunk_000814
+```
+[SECTION : Activité]
+Fondée en 1999, Pelvipharm est une CRO (Contract Research Organization) regroupant des compétences multidisciplinaires (docteurs en Médecine, pharmaco-économiste, vétérinaire, pharmaciens et docteurs en sciences), permettant ainsi de proposer différents services :
+
+Etudes précliniques basées sur des modèles d’efficacité validés, comprenant le développement d’un protocole expérimental adapté, la conduite de l’étude, son rapport, la communication et la publication des résultats
+
+Conseil pour la sélection de nouvelles molécules basée sur des tests ciblés selon les mécanismes d’action
+
+Identification de nouvelles propriétés afin de révéler un aspect concurrentiel d’une molécule, d’indication dans de nouveaux champs thérapeutiques ou opportunités commerciales
+
+Pelvipharm possède une expertise et une expérience scientifique et médicale en physiopathologie, pharmacologie, recherche clinique et pratique médicale dans une large palette d’aires thérapeutiques pouvant se regrouper en trois thématiques :
+
+Urologie : obstruction de l’écoulement (hypertrophie bénigne de la prostate, troubles du bas appareil urinaire), hyperactivité vésicale d’origine neurologique ou idiopathique, incontinence urinaire de stress, vessie hypoactive (sténose du canal lombaire), cystite interstitielle…
+
+Dysfonctionnements sexuels masculin et santé féminine : dysfonction érectile, éjaculation précoce, atrophie vaginale et troubles liés à la ménopause, à l’endométriose, au syndrome ovarien polykystique…
+
+Fonction cardiovasculaire et métabolique : hypertension, athérosclérose, infarctus du myocarde, syndrome métabolique, obésité, diabète…
+
+Figure 1 : Thématiques de recherche de Pelvipharm
+
+En plus de son activité contractuelle pour divers clients (essentiellement étrangers), Pelvipharm porte une attention particulière à produire ses propres travaux de recherche et de développement. Ainsi, une partie de son activité est réservée au développement de nouvelles techniques et à l’innovation (ex : nouveaux traitements ou nouvelles aires de recherche, nouveaux modèles expérimentaux plus proches de la pathologie humaine…).
+
+De ce fait, avec les années, Pelvipharm a pu gagner une réelle crédibilité scientifique, notamment grâce à :
+
+La présentation de ses résultats de R&D lors de congrès internationaux (212 abstracts publiés en recherche expérimentale)
+
+La publication de ses travaux de R&D dans des revues internationales à comité de lecture (113 articles publiés en recherche expérimentale, 37 revues en recherche expérimentale)
+
+Sa participation en tant qu’expert critique d’articles scientifiques pour des journaux internationaux ou modérateur/intervenant lors de congrès internationaux
+```
+
+### CHUNK_ID: projet_3__chunk_000903
+```
+[SECTION : Test de tolérance au glucose et insulino-résistance]
+Le test de tolérance au glucose permet d’évaluer la régulation du métabolisme du glucose et la résistance à l’insuline. Il mesure ainsi la capacité de l’organisme à contrôler la glycémie suite à l’administration d’une quantité définie de glucose.
+
+Deux techniques sont couramment utilisées dans la littérature pour tester la tolérance au glucose : l’OGTT (Oral Glucose Tolerance Test) et l’IPGTT (Intraperitoneal Glucose Tolerance Test). Ces deux méthodes diffèrent principalement par la voie d’administration du glucose. L’IPGTT entraîne une variabilité inter-individuelle moindre, tandis que l’OGTT prend en compte l’absorption intestinale, ce qui le rend donc plus physiologique. Nous avons donc opté pour cette méthode.
+
+Avant un test de tolérance au glucose, les animaux doivent être à jeun pendant 5-6 h ou toute la nuit. Forts de notre expérience avec cette technique chez la souris, et afin de respecter le bien-être animal, nous avons estimé qu’un jeûne de cinq heures était suffisant pour mettre en évidence une intolérance au glucose.
+
+Ensuite, au moyen d’un glucomètre, la glycémie est mesurée à 0, 15, 30, 60, 90 et 120 min après administration du glucose à 2 g/l. Afin d’affiner l’évaluation, un prélèvement sanguin est effectué uniquement au début du test (T0) pour la mesure de l’insulinémie. En effet, grâce aux mesures de la glycémie et de l’insulinémie à T0, nous pouvons ensuite appliquer la formule suivante pour mesurer l’insulino-résistance :
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 15,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

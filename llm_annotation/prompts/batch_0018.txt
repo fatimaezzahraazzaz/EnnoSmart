@@ -1,0 +1,505 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 18/135, 8 chunks)
+
+### CHUNK_ID: projet_4__chunk_000336
+```
+[SECTION : Récoltes, mesures et analyses statistiques]
+Avant de pouvoir utiliser un nouveau programme de traitement, il est indispensable de s’assurer de son innocuité pour l’environnement, pour les personnes l’utilisant, et pour tout organisme (humain, animal…) susceptible d’être en contact avec cette formulation de façon directe ou indirecte. Par conséquent, deux types d’études peuvent concourir à l’évaluation complète d’une formulation phytosanitaire :
+
+Etude d’efficacité : Avec comme objectif de contrôler un ou plusieurs nuisibles (insectes, champignons, mauvaises herbes, rongeurs…) ou de redéfinir le cycle de croissance des plantes (ex : régulation de croissance), l’efficacité d’une formulation phytopharmaceutique peut être définie comme la mesure de son effet dans son ensemble sur un système agricole. Cette mesure d’efficacité repose donc sur un équilibre entre :
+
+Effets positifs du traitement en termes de protection des cultures pour une meilleure qualité et définir les quantités nécessaires à appliquer
+
+Effets négatifs tels que réduction de qualité, dommages sur des organismes bénéfiques ou sur les cultures suivantes/adjacentes, développement de résistances
+
+Effets sur les nuisibles non-ciblés, durée de protection liée à la formulation
+
+Le résultat net des effets positifs et négatifs doit être positif au regard des bénéfices attendus
+
+Etude de sélectivité : évaluation d’une possible phytotoxicité pour les cultures en l’absence de mauvaises herbes incluant :
+
+Dose spécifiée pour l’usage prévu
+
+Plus forte dose (généralement le double de la dose recommandée), pour simuler des chevauchements de traitement, phénomène pouvant arriver dans la pratique
+
+Pour évaluer ces paramètres, nous devons tout d’abord évaluer s’il y a des différences significatives entre les traitements. Pour cela, nous réalisons une analyse de la variance (ANOVA). Si les résultats sont concluants, nous caractérisons alors la différence entre les traitements en appliquant le test de Dunnett, permettant d’évaluer la moyenne des traitements vis-à-vis du témoin (dans notre cas, la parcelle non traitée).
+
+Le test de Newman-Keuls à 5% (comparaison de moyennes), nous permet quant à lui d’évaluer les performances des différents traitements entre eux, lorsqu’un effet significatif est observé. De même, le test de Tukey nous permet d’identifier les différences vraiment significatives.
+```
+
+### CHUNK_ID: projet_4__chunk_000107_sub01
+```
+alimentaire Adaptation des productions aux exigences qualitatives des consommateurs Compétitivité et performance des entreprises pour accroître le niveau de performance et la compétitivité des exploitations fruitières et légumières Formation/conseil technico-économique
+
+Main-d’œuvre et ergonomie au travail
+
+Axe II : Changement climatique
+
+Recherche de nouvelles variétés adaptées aux conditions climatiques locales
+
+Couverture des sols
+
+Amélioration de l’empreinte carbone des exploitations maraîchères
+
+Axe III : Baisse de l’utilisation d’intrants
+
+Préservation des ressources en eau avec développement et accompagnement expérimental de la production légumière biologique
+
+Protection des cultures avec expérimentation de techniques alternatives (biocontrôle et mécanisation)
+
+Optimisation des itinéraires de culture
+
+Animation des réseaux fermes DEPHY
+
+Formation Protection Biologique Intégrée (PBI)
+
+Axe IV : Innovation pour lancer de nouveaux segments de marché
+
+Recherches et expérimentations de nouvelles techniques, espèces, variétés et types innovants ayant un attrait commercial
+
+Recherche et développement de nouveaux concepts marketing et de mise en marché
+
+Veille technique et technologique
+
+Tests de matériel innovant (mise en culture, récolteuse…)
+
+Techniques et moyens innovants pour lutter contre les maladies et les ravageurs des légumes
+
+Axe V : Echanges nationaux et internationaux, avec développement des échanges sur la filière fruitière et légumière entre les stations française ou entre les pays frontaliers (Suisse, Belgique…) ou d’autres continents (Canada, Japon)
+
+Favorisation des projets et des échanges techniques entre les centres de recherche, d’expérimentation et de conseil
+
+Développement des échanges entre les professionnels
+
+Axe VI : Accompagnement de jeunes producteurs de légumes, « les jeunes pousses »
+
+Axe VII : Formations
+
+De nombreuses expérimentations ont ainsi été réalisées en 2024, dont par exemple :
+
+La fertilisation de salade, de fraise, de carotte, de myrtille, grâce à des biostimulants ou bien l’incorporation d’engrais verts pour l’oignon ou le chou à choucroute,
+
+L’évaluation du comportement, vis-à-vis des conditions climatiques locales de salade résistantes au mildiou, de chou à choucroute, de melon et pastèque, de tomate, de carotte
+
+La protection contre les maladies pour le chou à choucroute (alternariose), l’ail (rouille), la laitue (mildiou), l’oignon (mildiou)
+
+La protection contre les ravageurs pour le chou à choucroute (altise), la tomate (puceron), l’oignon (thrips), le navet (altise)
+```
+
+### CHUNK_ID: projet_4__chunk_000149_sub01
+```
+alimentaire Adaptation des productions aux exigences qualitatives des consommateurs Compétitivité et performance des entreprises pour accroître le niveau de performance et la compétitivité des exploitations fruitières et légumières Formation/conseil technico-économique
+
+Main-d’œuvre et ergonomie au travail
+
+Axe II : Changement climatique
+
+Recherche de nouvelles variétés adaptées aux conditions climatiques locales
+
+Couverture des sols
+
+Amélioration de l’empreinte carbone des exploitations maraîchères
+
+Axe III : Baisse de l’utilisation d’intrants
+
+Préservation des ressources en eau avec développement et accompagnement expérimental de la production légumière biologique
+
+Protection des cultures avec expérimentation de techniques alternatives (biocontrôle et mécanisation)
+
+Optimisation des itinéraires de culture
+
+Animation des réseaux fermes DEPHY
+
+Formation Protection Biologique Intégrée (PBI)
+
+Axe IV : Innovation pour lancer de nouveaux segments de marché
+
+Recherches et expérimentations de nouvelles techniques, espèces, variétés et types innovants ayant un attrait commercial
+
+Recherche et développement de nouveaux concepts marketing et de mise en marché
+
+Veille technique et technologique
+
+Tests de matériel innovant (mise en culture, récolteuse…)
+
+Techniques et moyens innovants pour lutter contre les maladies et les ravageurs des légumes
+
+Axe V : Echanges nationaux et internationaux, avec développement des échanges sur la filière fruitière et légumière entre les stations française ou entre les pays frontaliers (Suisse, Belgique…) ou d’autres continents (Canada, Japon)
+
+Favorisation des projets et des échanges techniques entre les centres de recherche, d’expérimentation et de conseil
+
+Développement des échanges entre les professionnels
+
+Axe VI : Accompagnement de jeunes producteurs de légumes, « les jeunes pousses »
+
+Axe VII : Formations
+
+De nombreuses expérimentations ont ainsi été réalisées en 2024, dont par exemple :
+
+La fertilisation de salade, de fraise, de carotte, de myrtille, grâce à des biostimulants ou bien l’incorporation d’engrais verts pour l’oignon ou le chou à choucroute,
+
+L’évaluation du comportement, vis-à-vis des conditions climatiques locales de salade résistantes au mildiou, de chou à choucroute, de melon et pastèque, de tomate, de carotte
+
+La protection contre les maladies pour le chou à choucroute (alternariose), l’ail (rouille), la laitue (mildiou), l’oignon (mildiou)
+
+La protection contre les ravageurs pour le chou à choucroute (altise), la tomate (puceron), l’oignon (thrips), le navet (altise)
+```
+
+### CHUNK_ID: projet_4__chunk_000219_sub01
+```
+alimentaire Adaptation des productions aux exigences qualitatives des consommateurs Compétitivité et performance des entreprises pour accroître le niveau de performance et la compétitivité des exploitations fruitières et légumières Formation/conseil technico-économique
+
+Main-d’œuvre et ergonomie au travail
+
+Axe II : Changement climatique
+
+Recherche de nouvelles variétés adaptées aux conditions climatiques locales
+
+Couverture des sols
+
+Amélioration de l’empreinte carbone des exploitations maraîchères
+
+Axe III : Baisse de l’utilisation d’intrants
+
+Préservation des ressources en eau avec développement et accompagnement expérimental de la production légumière biologique
+
+Protection des cultures avec expérimentation de techniques alternatives (biocontrôle et mécanisation)
+
+Optimisation des itinéraires de culture
+
+Animation des réseaux fermes DEPHY
+
+Formation Protection Biologique Intégrée (PBI)
+
+Axe IV : Innovation pour lancer de nouveaux segments de marché
+
+Recherches et expérimentations de nouvelles techniques, espèces, variétés et types innovants ayant un attrait commercial
+
+Recherche et développement de nouveaux concepts marketing et de mise en marché
+
+Veille technique et technologique
+
+Tests de matériel innovant (mise en culture, récolteuse…)
+
+Techniques et moyens innovants pour lutter contre les maladies et les ravageurs des légumes
+
+Axe V : Echanges nationaux et internationaux, avec développement des échanges sur la filière fruitière et légumière entre les stations française ou entre les pays frontaliers (Suisse, Belgique…) ou d’autres continents (Canada, Japon)
+
+Favorisation des projets et des échanges techniques entre les centres de recherche, d’expérimentation et de conseil
+
+Développement des échanges entre les professionnels
+
+Axe VI : Accompagnement de jeunes producteurs de légumes, « les jeunes pousses »
+
+Axe VII : Formations
+
+De nombreuses expérimentations ont ainsi été réalisées en 2024, dont par exemple :
+
+La fertilisation de salade, de fraise, de carotte, de myrtille, grâce à des biostimulants ou bien l’incorporation d’engrais verts pour l’oignon ou le chou à choucroute,
+
+L’évaluation du comportement, vis-à-vis des conditions climatiques locales de salade résistantes au mildiou, de chou à choucroute, de melon et pastèque, de tomate, de carotte
+
+La protection contre les maladies pour le chou à choucroute (alternariose), l’ail (rouille), la laitue (mildiou), l’oignon (mildiou)
+
+La protection contre les ravageurs pour le chou à choucroute (altise), la tomate (puceron), l’oignon (thrips), le navet (altise)
+```
+
+### CHUNK_ID: projet_4__chunk_000290_sub01
+```
+alimentaire Adaptation des productions aux exigences qualitatives des consommateurs Compétitivité et performance des entreprises pour accroître le niveau de performance et la compétitivité des exploitations fruitières et légumières Formation/conseil technico-économique
+
+Main-d’œuvre et ergonomie au travail
+
+Axe II : Changement climatique
+
+Recherche de nouvelles variétés adaptées aux conditions climatiques locales
+
+Couverture des sols
+
+Amélioration de l’empreinte carbone des exploitations maraîchères
+
+Axe III : Baisse de l’utilisation d’intrants
+
+Préservation des ressources en eau avec développement et accompagnement expérimental de la production légumière biologique
+
+Protection des cultures avec expérimentation de techniques alternatives (biocontrôle et mécanisation)
+
+Optimisation des itinéraires de culture
+
+Animation des réseaux fermes DEPHY
+
+Formation Protection Biologique Intégrée (PBI)
+
+Axe IV : Innovation pour lancer de nouveaux segments de marché
+
+Recherches et expérimentations de nouvelles techniques, espèces, variétés et types innovants ayant un attrait commercial
+
+Recherche et développement de nouveaux concepts marketing et de mise en marché
+
+Veille technique et technologique
+
+Tests de matériel innovant (mise en culture, récolteuse…)
+
+Techniques et moyens innovants pour lutter contre les maladies et les ravageurs des légumes
+
+Axe V : Echanges nationaux et internationaux, avec développement des échanges sur la filière fruitière et légumière entre les stations française ou entre les pays frontaliers (Suisse, Belgique…) ou d’autres continents (Canada, Japon)
+
+Favorisation des projets et des échanges techniques entre les centres de recherche, d’expérimentation et de conseil
+
+Développement des échanges entre les professionnels
+
+Axe VI : Accompagnement de jeunes producteurs de légumes, « les jeunes pousses »
+
+Axe VII : Formations
+
+De nombreuses expérimentations ont ainsi été réalisées en 2024, dont par exemple :
+
+La fertilisation de salade, de fraise, de carotte, de myrtille, grâce à des biostimulants ou bien l’incorporation d’engrais verts pour l’oignon ou le chou à choucroute,
+
+L’évaluation du comportement, vis-à-vis des conditions climatiques locales de salade résistantes au mildiou, de chou à choucroute, de melon et pastèque, de tomate, de carotte
+
+La protection contre les maladies pour le chou à choucroute (alternariose), l’ail (rouille), la laitue (mildiou), l’oignon (mildiou)
+
+La protection contre les ravageurs pour le chou à choucroute (altise), la tomate (puceron), l’oignon (thrips), le navet (altise)
+```
+
+### CHUNK_ID: projet_4__chunk_000326
+```
+[SECTION : Définition d’un protocole expérimental pertinent]
+Pendant la réalisation de nos études sur de nouveaux programmes ou produits phytosanitaires, nous sommes confrontés à des incertitudes liées à l’aspect novateur de chaque étude et de chaque matière active/molécule testée de classe chimique variée, qui sont testées. Par conséquent, il peut être complexe de déterminer un protocole d’étude avec un plan d’expérience pertinent.
+
+En effet, bien que nous puissions nous appuyer sur des recommandations générales pour l’étude des produits phytosanitaires sur les cultures (EPPO pour le mildiou et méthodes CEB de Végéphyl), il s’agit de lignes directrices très générales, ne donnant pas d’indications précises sur le protocole à mettre en œuvre pour obtenir une réponse de qualité aux problématiques rencontrées. De ce fait, au démarrage des travaux, aucun protocole existant ne permet d’aboutir à une information fiable, tenant compte de l’ensemble des facteurs pouvant influencer les résultats en condition naturelle de terrain, d’où une incertitude quant à la réalisation de protocoles pertinents. Par conséquent, une réflexion scientifique préalable est indispensable pour mener à bien nos expérimentations agronomiques.
+
+Par ailleurs, dans le cadre de la gestion de pucerons au sein de la culture de photinia, nous menons une approche système avec la combinaison de leviers. Cela ne suit donc pas un modèle expérimental BPE avec des règles de décision qu’il convient d’adapter selon les conditions climatiques, les systèmes de cultures et les modes de commercialisation.
+```
+
+### CHUNK_ID: projet_4__chunk_000519
+```
+[PAGE 6]
+
+Annexe 3 MO 11 V9
+8. Méthodes d’observation réalisées
+Description des Echelle Partie observée Modalités Dates
+Objectifs
+observations utilisée / Taille d’échantillon concernées d’observation
+13, 16, 20, 23, 28,
+Evaluation du % de Feuille
+31 mai 2024
+recouvrement par le 0 à 100 / 50 (2 feuilles sur 25 Toutes
+3, 6, 10, 13, 17,
+mildiou plantes)
+Efficacité
+20, 24 juin 2024
+(a, b, c)
+Dénombrement des Plante entière
+- 6 juin 2024
+feuilles sporulantes / 20
+Caractérisation et
+20, 28 mai 2024
+Sélectivité évaluation du niveau 0 à 10 Feuillage
+Toutes 3, 10, 17, 24 juin
+(d) de phytotoxicité (0 = témoin) / Parcelle
+2024
+générale
+9. Résultats, analyses statistiques et interprétation
+a. Validité de l’essai
+Critères évalués Conformité Commentaires
+Conformément à la méthode EPPO PP1/152(4), il est conseillé de
+mettre en place un dispositif avec 12 degrés de liberté résiduels. Or le
+Respect des
+Non dispositif de l’essai avec seulement 3 répétitions, ne comporte que 10
+méthodes EPPO
+degrés de liberté.
+Le donneur d’ordre a validé le protocole avec ce dispositif.
+Respect du
+Oui /
+protocole
+Développement de
+Oui /
+la culture
+Niveau d’infestation Le niveau d’infestation est élevé à compter du 31 mai 2024 où 100 %
+du témoin suffisant Oui des oignons sont atteints avec un recouvrement moyen par le mildiou
+en fin d’essai de presque 90 % sur les deux feuilles les plus touchées.
+Compte tenu du niveau d’infestation élevé dès le 31 mai, les feuilles les
+plus âgées des oignons ont été complètement nécrosées dans les
+modalités les plus touchées. Les observations du pourcentage de
+recouvrement ne pouvaient plus être réalisées sur les mêmes étages
+foliaires en fonction des modalités.
+Déviation Oui
+Afin de prendre en compte les feuilles totalement détruites par l’attaque,
+une observation supplémentaire, non prévue au protocole, du nombre
+de feuilles présentant des spores de mildiou a été réalisée le 6 juin. Cette
+observation permet d’obtenir des informations complémentaires par
+rapport à celles prévues initialement dans le protocole.
+Compte tenu des critères cités ci-dessus, l’essai est jugé valide.
+PLANETE Légumes Fleurs et Plantes 29/11/24 Page 6 sur 17
+```
+
+### CHUNK_ID: projet_4__chunk_000002
+```
+[PAGE 3]
+
+CIR 2024
+II.8.1.1. Contexte de l’opération ...................................................................... 22
+II.8.1.2. Objectifs visés .................................................................................... 24
+II.8.2. Etat de l’art et verrous .......................................................................... 25
+II.8.2.1. Analyse de l’état de l’art ..................................................................... 25
+II.8.2.2. Verrous et incertitudes scientifiques, techniques, technologiques .... 38
+II.8.3. Démarche expérimentale, travaux R&D réalisés................................... 41
+II.8.3.1. Raisonnement scientifique et démarche expérimentale appliquée pour
+la réalisation de nos expérimentations agronomiques ....................... 41
+II.8.3.2. Définition du protocole expérimental .................................................. 41
+II.8.3.3. Préparation des différents traitements à appliquer ............................ 41
+II.8.3.4. Récoltes, mesures et analyses statistiques ....................................... 42
+II.8.3.5. Etude d’efficacité de nouveaux traitements contre le mildiou sur oignon
+43
+II.8.3.6. Evaluation de solutions alternatives de lutte contre les insectes
+ravageurs du navet ............................................................................ 53
+II.8.3.7. Etudes de méthodes alternatives contre les pucerons en cultures
+horticoles 66
+II.8.4. Conclusion et contribution scientifique, technique ou technologique ..... 79
+II.8.5. Indicateurs de R&D .............................................................................. 79
+PLANETE Légumes Fleurs et Plantes - CONFIDENTIEL PAGE 3
+Ce document est la propriété de la société PLANETE Légumes Fleurs et Plantes
+Il ne peut être reproduit ou transmis à des tiers sans son autorisation expresse
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 18,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

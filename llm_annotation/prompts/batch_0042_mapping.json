@@ -1,0 +1,90 @@
+{
+  "batch_id": 42,
+  "chunks": [
+    {
+      "chunk_id": "projet_9__chunk_000009_sub02",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\cir_final\\TCP R&I_CIR_2024_VF_1.docx",
+      "file_name": "TCP R&I_CIR_2024_VF_1.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "des matériaux selon la technologie de mise en forme Les résultats obtenus montrent que nous avons des matériaux équivalents en élongation à la rupture quel que soit la technologie employée.\n\nAprès avoir répondu aux contraintes imposées dans le cadre de ce projet, nous avons mené des études afin d’augmenter les performances techniques de notre système d’emballage en termes de vibrations, de tenue aux chocs, et de sécurisation du dispositif médical. Pour ce faire, nous avons, d’une part, défini un couvercle de protection pour fixation sur la paroi interne, au-dessus de l’enveloppe et formant une cuve supérieure inversée.\n\nAfin d’avoir un maintien du couvercle par les plots de façon sûre, sans risque de détachement, et sans vibrations, nous avons défini une pluralité d’ouvertures agencées sur un rebord de couvercle et en alignement avec les ouvertures de l’enveloppe.\n\nEn outre, pour garantir la stérilisation du dispositif médical, nous avons réalisé un système d’acheminement de gaz stérilisant depuis l’extérieur du couvercle jusqu’au dispositif médical en définissant des canaux de distribution au niveau du couvercle de protection et de l’enveloppe amortissante.\n\nPour une rigidité supérieure à celle de l’opercule de fermeture, nous avons défini le couvercle de protection en petg.\n\nD’autre part, nous avons développé un suremballage pour loger le boîtier, l’enveloppe et un éventuel couvercle de protection. Celui-ci comporte une surface de fermeture contre laquelle un opercule de suremballage est susceptible d’être appliqué.",
+      "_parent_chunk_id": "projet_9__chunk_000009",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_9__chunk_000020",
+      "project_id": "projet_9_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_9_\\raw\\docx\\CIR 2024 emballage suspension.docx",
+      "file_name": "CIR 2024 emballage suspension.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Objectifs visés]\nAfin d’établir la preuve d’efficacité les normes NF EN ISO 11607-1 et NF EN ISO 11607-2 qui encadrent respectivement les propriétés des matériaux et la performance de l’emballage sont utilisées\n\nLa norme NF EN ISO 11607-1 spécifie les exigences et les méthodes d’essai pour les matériaux, les systèmes de barrière stérile préformés, les systèmes de barrière stérile et les systèmes d’emballage destinés a maintenir l’état de stérilité des dispositifs médicaux stérilisés au stade terminal jusqu’ au point d’utilisation.\n\nLes normes ISTA 3 et ASTM 4169 -23 spécifient les exigences et les méthodes d’essai pour les tests de transport :\n\nEssais climatiques\n\nEssais mécaniques\n\nGerbage en transport\n\nVibration en chargement libre\n\nPression haute altitude",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_9_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_10__chunk_000016_sub00",
+      "project_id": "projet_10_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_10_\\cir_final\\Dossier technique justificatif ABINNOV - CIR 2023.docx",
+      "file_name": "Dossier technique justificatif ABINNOV - CIR 2023.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Première itération : évaluation des modèles de traitement de langage existants]\nDans cette première partie de nos travaux, nous avons évalué les performances des modèles Transformers déjà existants en vue de résoudre notre problématique. Pour cela, nous avons décidé d’entrainer les trois modèles suivants :\n\nModèle n°1 : Le modèle DistilCamemBERT affiné pour la tâche d’inférence du langage naturel (NLI) pour la langue française ;\n\nModèle n°2 : Le modèle multilingue mDeBERTa qui peut effectuer une inférence de langage naturel (NLI) sur 100 langues et est donc également adapté à la classification multilingue Zero-Shot ;\n\nModèle n°3 : Le modèle basé sur bart-large entrainé sur le jeu de données MultiNLI (MNLI).\n\nNous avons mis en œuvre ces trois modèles afin de classifier automatiquement les six thèmes définis : économie, immigration, laïcité, environnement, sécurité et santé. Pour ce faire nous avons effectué un réglage (Fine Tuning) sur les trois modèles en s’appuyant sur des données personnalisées. Cependant, nous avons obtenu des performances non satisfaisantes.\n\nFigure 1 : Performances des modèles DistilCamemBERT, mDeBERTa et bart-large pour la tâche de classification automatique.\n\nLe tableau ci-dessus présente les résultats obtenus pour les trois modèles mis en œuvre en termes d'exactitude (accuracy) et de score F1. Ces métriques sont employées pour évaluer les performances des modèles dans la classification des thèmes définis.\n\nLe modèle DistilCamemBERT affiche une exactitude de 61 % et un score F1 de 60 %. Ces résultats montrent que ce modèle a des performances non satisfaisantes dans la classification des textes. L'exactitude indique qu'environ 61 % des prédictions du modèle sont correctes, tandis que le score F1, légèrement inférieur, indique un équilibre entre la précision (proportion de vraies prédictions parmi les prédictions positives) et le rappel (proportion de vraies prédictions positives parmi les cas positifs réels), ce qui signifie que le modèle a une performance équilibrée mais pas optimale.",
+      "_parent_chunk_id": "projet_10__chunk_000016",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_10__chunk_000058_sub00",
+      "project_id": "projet_10_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_10_\\raw\\docx\\ABINNOV_DT-2023_ BATREND_V1.2_AD.docx",
+      "file_name": "ABINNOV_DT-2023_ BATREND_V1.2_AD.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Phase exploratoire : évaluation des modèles de traitement de langage existants]\nDans cette partie de nos travaux, nous avons mené une phase exploratoire des modèles Transformers déjà existants en vue de résoudre notre problématique. Pour cela, nous avons décidé de s’appuyer sur les trois modèles suivants :\n\nModèle n°1 : Le modèle DistilCamemBERT affiné pour la tâche d’inférence du langage naturel (NLI) pour la langue française ;\n\nModèle n°2 : Le modèle multilingue mDeBERTa qui peut effectuer une inférence de langage naturel (NLI) sur 100 langues et est donc également adapté à la classification multilingue Zero-Shot ;\n\nModèle n°3 : Le modèle basé sur bart-large entrainé sur le jeu de données MultiNLI (MNLI).\n\nNous avons mis en œuvre les trois modèles ci-dessus afin de classifier automatiquement les six thèmes définis : économie, immigration, laïcité, environnement, sécurité et santé. Pour ce faire nous avons effectué un réglage (Fine Tuning) sur les trois modèles en s’appuyant sur des données personnalisées, cependant, nous avons obtenu des performances non satisfaisantes.\n\nFigure 1 : Performances des modèles DistilCamemBERT, mDeBERTa et bart-large.\n\nLe tableau ci-dessus présente les résultats obtenus pour les trois modèles mis en œuvre en termes d'exactitude (accuracy) et de score F1. Ces métriques sont utilisées pour évaluer les performances des modèles dans la classification des thèmes définis.\n\nLe modèle DistilCamemBERT affiche une exactitude de 61 % et un score F1 de 60 %. Ces résultats montrent que ce modèle a des performances non satisfaisantes dans la classification des textes. L'exactitude indique qu'environ 61 % des prédictions du modèle sont correctes, tandis que le score F1, légèrement inférieur, indique un équilibre entre la précision (proportion de vraies prédictions parmi les prédictions positives) et le rappel (proportion de vraies prédictions positives parmi les cas positifs réels), ce qui signifie que le modèle a une performance équilibrée mais pas optimale.",
+      "_parent_chunk_id": "projet_10__chunk_000058",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_10__chunk_000078_sub00",
+      "project_id": "projet_10_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_10_\\raw\\docx\\ABINNOV_DT-2023_ BATREND_VF_AD.docx",
+      "file_name": "ABINNOV_DT-2023_ BATREND_VF_AD.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Première itération : évaluation des modèles de traitement de langage existants]\nDans cette première partie de nos travaux, nous avons évalué les performances des modèles Transformers déjà existants en vue de résoudre notre problématique. Pour cela, nous avons décidé d’entrainer les trois modèles suivants :\n\nModèle n°1 : Le modèle DistilCamemBERT affiné pour la tâche d’inférence du langage naturel (NLI) pour la langue française ;\n\nModèle n°2 : Le modèle multilingue mDeBERTa qui peut effectuer une inférence de langage naturel (NLI) sur 100 langues et est donc également adapté à la classification multilingue Zero-Shot ;\n\nModèle n°3 : Le modèle basé sur bart-large entrainé sur le jeu de données MultiNLI (MNLI).\n\nNous avons mis en œuvre ces trois modèles afin de classifier automatiquement les six thèmes définis : économie, immigration, laïcité, environnement, sécurité et santé. Pour ce faire nous avons effectué un réglage (Fine Tuning) sur les trois modèles en s’appuyant sur des données personnalisées. Cependant, nous avons obtenu des performances non satisfaisantes.\n\nFigure 1 : Performances des modèles DistilCamemBERT, mDeBERTa et bart-large pour la tâche de classification automatique.\n\nLe tableau ci-dessus présente les résultats obtenus pour les trois modèles mis en œuvre en termes d'exactitude (accuracy) et de score F1. Ces métriques sont employées pour évaluer les performances des modèles dans la classification des thèmes définis.\n\nLe modèle DistilCamemBERT affiche une exactitude de 61 % et un score F1 de 60 %. Ces résultats montrent que ce modèle a des performances non satisfaisantes dans la classification des textes. L'exactitude indique qu'environ 61 % des prédictions du modèle sont correctes, tandis que le score F1, légèrement inférieur, indique un équilibre entre la précision (proportion de vraies prédictions parmi les prédictions positives) et le rappel (proportion de vraies prédictions positives parmi les cas positifs réels), ce qui signifie que le modèle a une performance équilibrée mais pas optimale.",
+      "_parent_chunk_id": "projet_10__chunk_000078",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_10__chunk_000036_sub00",
+      "project_id": "projet_10_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_10_\\raw\\docx\\ABINNOV_DT-2023_ BATREND_V1.1_AD.docx",
+      "file_name": "ABINNOV_DT-2023_ BATREND_V1.1_AD.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Phase exploratoire : Evaluation des modèles de traitement de langage existants]\nDans cette partie de nos travaux, nous avons mené une phase exploratoire des modèles Transformers déjà existants en vue de résoudre notre problématique. Pour cela, nous avons décidé de s’appuyer sur les trois modèles suivants :\n\nModèle n°1 : Le modèle DistilCamemBERT affiné pour la tâche d’inférence du langage naturel (NLI) pour la langue française ;\n\nModèle n°2 : Le modèle multilingue mDeBERTa qui peut effectuer une inférence de langage naturel (NLI) sur 100 langues et est donc également adapté à la classification multilingue Zero-Shot ;\n\nModèle n°3 : Le modèle basé sur bart-large entrainé sur le jeu de données MultiNLI (MNLI).\n\nNous avons mis en œuvre les trois modèles ci-dessus afin de classifier automatiquement les thèmes six thèmes définis : économie, immigration, laïcité, environnement, sécurité et santé. Pour ce faire nous avons effectué un réglage (Fine Tuning) sur les trois modèles en s’appuyant sur des données personnalisées, cependant, nous avons obtenu des performances non satisfaisantes.\n\nFigure 1 : Performances des modèles DistilCamemBERT, mDeBERTa et bart-large.\n\nLe tableau ci-dessus présente les résultats obtenus pour les trois modèles mis en œuvre en termes d'exactitude (accuracy) et de score F1. Ces métriques sont utilisées pour évaluer les performances des modèles dans la classification des thèmes définis.\n\nLe modèle DistilCamemBERT affiche une exactitude de 61 % et un score F1 de 60 %. Ces résultats montrent que ce modèle a des performances non satisfaisantes dans la classification des textes. L'exactitude indique qu'environ 61 % des prédictions du modèle sont correctes, tandis que le score F1, légèrement inférieur, indique un équilibre entre la précision (proportion de vraies prédictions parmi les prédictions positives) et le rappel (proportion de vraies prédictions positives parmi les cas positifs réels), ce qui signifie que le modèle a une performance équilibrée mais pas optimale.",
+      "_parent_chunk_id": "projet_10__chunk_000036",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_10__chunk_000106",
+      "project_id": "projet_10_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_10_\\raw\\pdf\\Nouveau Modele NLP.pdf",
+      "file_name": "Nouveau Modele NLP.pdf",
+      "file_category": "pdf_native",
+      "source_type": "text",
+      "text": "[PAGE 1]\n\nNouveau Modèle NLP\nObjectif et besoin fonctionnel\nLa plateforme, après avoir collecter beaucoup de texte depuis le Web notamment les réseaux\nsociaux, doit être capable de classifier ces textes en six thématiques différentes demandés par le\nclient : économie, immigration, laïcité, environnement, sécurité, santé.\nDans un premier temps nous avons essayé les modèles existants pour résoudre cette problématique.\nCes modèles s’avèrent non satisfaisantes. Nous avons alors grâce à nos travaux R&D,\nappliqué un nouveau modèle.\nEtat de l’art\nActuellement il existe essentiellement trois modèles qui peuvent être utilisé pour résoudre notre\nproblématique :\n— Modèle n°1 : C’est un modèle DistilCamemBERT affiné pour la tâche d’inférence du\nlangage naturel\n(NLI) pour la langue française.\n— Modèle n°2 : C’est un modèle multilingue mDeBERTa qui peut effectuer une\ninférence de langage\nnaturel (NLI) sur 100 langues et est donc également adapté à la classification multilingue Zero-Shot.\n— Modèle n°3 : C’est un modèle basé sur bart-large entrainé sur le jeu de données MultiNLI\n(MNLI). Ces modèles donnent des résultats insatisfaisants pour la classification des thèmes.\nNous avons essayé de réaliser un réglage fin (Fine Tuning) sur les modèles par des données\npersonnalisées mais la performance reste insatisfaisante. Voici les résultats obtenus :\nExactitude f1 score\nmodèle n°1 0.61 0.6\nmodèle n°2 0.71 0.71\nmodèle n°3 0.7066 0.6981",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_10_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_10__chunk_000109",
+      "project_id": "projet_10_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_10_\\raw\\pdf\\Nouveau Modele NLP.pdf",
+      "file_name": "Nouveau Modele NLP.pdf",
+      "file_category": "pdf_native",
+      "source_type": "text",
+      "text": "[PAGE 4]\n\n— GridSearchCV : est une technique permettant de rechercher les meilleures valeurs de paramètre à\npartir de l’ensemble donné de la grille de paramètres. Il s’agit essentiellement d’une\nméthode de validation croisée. le modèle et les paramètres doivent être introduits. Les meilleures\nvaleurs de paramètres sont extraites, puis les prédictions sont faites.[8]\nCes deux techniques donnent des valeurs différentes d’hyperparamètres mais ces\nvaleurs fournissent pratiquement les mêmes mesures de performance. La seule différence est au\nniveau du temps d’exécution. Optuna est plus rapide que GridSearchCV.\nLe deuxième test effectué est concernant la méthode utilisée pour la transformation des données.\nNous avons essayé TF-IDF, Tokenizer de Keras et Tokenizer pré-entraîné basé sur CamemBERT. TF-IDF\ndonne le meilleur résultat. En second lieu arrive le tokenizer de Keras et enfin le tokenizer\npréentraîné.\nLe dernier test effectué est concernant la longueur maximale des données à l’entrée.\nNous avons testé le modèle sur les valeurs 10, 15 et 20. La longueur 15 est la meilleure.\nLe résultat final était comme suit :\nExactitude f1 score\nNB 0.71 0.70\nPuisque le résultat des tests précédents ne satisfait pas notre besoin. Nous avons créé et appliqué un\nnouveau modèle spécifique que nous avons nommé ABiThemeModel. Ce nouveau modèle est\nbasée sur la combinaison de deux modèles linguistiques pré-entraîné :\n— CamemBERT : est un modèle linguistique de pointe pour le français basé sur l’architecture\nRoBERTa pré-entraîné sur le sous-corpus français du nouveau corpus multilingue OSCAR.\n— LaBSE(language-agnostic BERT sentence embedding) : est une version plus petite du BERT\nmultilingue compris 109 langues.\nLe tableau ci-dessous représente le résultat final de notre nouveau modèle ABiThemeModel :\nExactitude f1 score\nABiThemeModel 0.91 0.92",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_10_\\extracted\\chunks.json"
+    }
+  ]
+}

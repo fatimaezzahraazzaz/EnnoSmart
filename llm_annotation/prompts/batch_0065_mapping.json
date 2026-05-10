@@ -1,0 +1,89 @@
+{
+  "batch_id": 65,
+  "chunks": [
+    {
+      "chunk_id": "projet_14__chunk_000003_sub00",
+      "project_id": "projet_14_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_14_\\cir_final\\AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_name": "AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Objectifs visés et performances à atteindre]\nL’enjeu du présent projet est de développer un banc d’essais (BMO) permettant la mise en œuvre et l’étude des performances d’un ensemble de systèmes de guidage d’engins de type infrarouge (un autodirecteur de nouvelle génération), laser et bi-mode (IR et laser). Ce banc consiste en un ensemble d’éléments matériels équipés de logiciels et de firmwares spécifiques destinés au test d’équipements optroniques (EO).\n\nNotre nouvelle solution devra permettre d’évaluer et valider les interfaces de flux de données entre le missile (calculateur missile) et l’autodirecteur pour les trois technologies. La figure ci-dessous présente un synoptique de l’architecture générale du BMO.\n\nFigure 1 : Synoptique de l'architecture du banc\n\nLe synoptique fonctionnel de notre système est le suivant :\n\nUn bloc fonctionnel (BF) spécifique regroupant les fonctionnalités associées à la mise en œuvre (MEO) de l’AD IR ;\n\nUn bloc fonctionnel spécifique regroupant les fonctionnalités associées à la mise en œuvre de l’AD LASER ;\n\nUn bloc fonctionnel commun regroupant les fonctionnalités communes à la mise en œuvre des deux autodirecteurs.\n\nEn termes de performances, notre solution devra assurer :\n\nLa commande des systèmes de guidage à travers des messages de communication du fonctionnement des AD IR et LASER dans les différentes configurations et divers modes (opérationnel et test/ réglage) ;\n\nL’acquisition des données des AD IR et LASER (images/ résultats de calculs / statuts de fonctionnement) ;\n\nLa gestion de signaux logiques en entrées/ sorties du BMO pour les opérations de commande et la synchronisation avec des sous-ensembles extérieurs ;\n\nL’acquisition des données des liens d’instrumentation ;\n\nL’enregistrement de l’ensemble des données échangées entre le BMO (banc de mise en œuvre) et les AD (autodirecteurs), complétées par les données d’environnement du BMO sur plusieurs disques dans des fichiers standards avec redondance de la sauvegarde, ce qui implique des problématiques de rapidité d’écriture pour des raisons de temps réel ;\n\nLes alimentations nécessaires au fonctionnement des AD IR et LASER ainsi que leur pilotage via un réseau Ethernet et RS485 ;",
+      "_parent_chunk_id": "projet_14__chunk_000003",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_14__chunk_000004_sub02",
+      "project_id": "projet_14_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_14_\\cir_final\\AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_name": "AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "de résolution de code PRF et de densité de puissance laser. Cela permet ainsi de mener des tests dans des conditions dynamiques. Figure 2 : Architecture du système de test5\n\nEn outre, en 2016, un article scientifique a présenté un système de test des autodirecteurs laser en présence de contremesures. La solution consiste à utiliser des lasers ayant la même longueur d'onde, la même largeur d'impulsion et la même PRF (fréquence de répétition d'impulsions) que celles des désignateurs laser, et des lasers de contre-mesure simulant les mêmes densités de puissance vues par l’autodirecteur laser. Le matériel est configuré autour de deux diodes laser semi-conductrices ayant des longueurs d'onde de sortie de 1064 nm, et d'un système intégré basé sur un microcontrôleur PIC pour piloter ces lasers.\n\nFigure 3 : Architecture du système de test5",
+      "_parent_chunk_id": "projet_14__chunk_000004",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_14__chunk_000008_sub02",
+      "project_id": "projet_14_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_14_\\cir_final\\AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_name": "AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "que pour alimenter le FPGA en informations descendantes vers le système EO (FONCT et INSTRUM). La figure ci-dessous synthétise l’architecture générale du BMO destiné à l’autodirecteur IR de nouvelle génération.\n\nFigure 7 : Architecture générale du système de BMO de l’AD IR\n\nLe PC-BMO est équipé de l’OS Windows 10 64-bits et du co-OS RTX64 définis.\n\nLe principe général de l’architecture interne du BMO consiste à répliquer les liens Gb Ethernet externes FONCT et INSTRUM sur des liens internes Gb Ethernet spécialisés sur chacun des deux protocoles. Cette solution permet d’assurer un certain nombre d’objectifs techniques ainsi que l’organisation des développements BMO :\n\nLa réplication des liens FONC et INSTRUM garantit les débits puisque les deux protocoles sont calés sur les contraintes du protocole UDP sur lien Ethernet au niveau de la taille des paquets ;\n\nL’utilisation de liens Gb Ethernet est également cohérente avec la contrainte de manipulation de paquets PCAP (trames UDP Ethernet avec entête timestamp) ;\n\nLes liens Gb Ethernet sont des standards industriels très répandus et plusieurs composants avec des pilotes déterministes RTX64 existent ;\n\nLa mise en œuvre sur un lien GB Ethernet permet de facilement « bouchonner » n’importe quel élément de la chaine BMO avec du matériel PC standard. Grâce à ces « bouchons », chaque intervenant sur le chantier BMO disposera de moyens qui lui permettront d’avancer quel que soit l’avancement ou l’éventuel problème rencontré en dehors de son contexte.\n\nL’émission des messages par le BMO est réalisée par le FPGA. Celui-ci permet une maîtrise au coup d’horloge près des émissions des messages. Le calage des messages émis par rapport aux messages RI et à l’offset RET_EMIS_MESBMO est alors réalisé avec une précision T=8ns, la fréquence du FPGA étant de 125MHz.",
+      "_parent_chunk_id": "projet_14__chunk_000008",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_14__chunk_000029",
+      "project_id": "projet_14_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_14_\\cir_final\\AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_name": "AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Etude des performances du banc de mise en œuvre de l’autodirecteur laser]\nAprès développement des différents composants matériels et logiciels du banc de mise en œuvre et de test du système de guidage laser, nous avons cherché à étudier ses performances. Nous avons réalisé nos essais sur un BMO LASER comportant les éléments suivants assemblés dans une baie 16U :\n\n2 PC (PC d’exécution / PC IHM-Stockage) ;\n\n1 alimentation ajustable et programmable ;\n\n1 alimentation fixe ;\n\n1 écran ;\n\nUn clavier et une souris filaire ;\n\nUn logiciel pour le PC d’exécution et un logiciel pour le PC d’IHM.\n\nLes tests sont réalisés à température ambiante de 20°C 5°C.\n\nNous présentons ci-après principalement les résultats des essais d’étude et évaluation des performances de communication PC IHM – PC Exécution – Racklaser – BIE. Le « racklaser » est le rack qui contient le FPGA de traitement.\n\nRappelons que le BIE est un boitier d’interface électrique permettant l’isolation galvanique et la transformation de signaux électriques. Il fait partie de l’architecture matérielle du BMO Laser.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_14_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_14__chunk_000030",
+      "project_id": "projet_14_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_14_\\cir_final\\AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_name": "AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Evaluation de la fonction « alimenter LST »]\nLa procédure de test consiste à mettre dans le fichier BMO LASER.INI la valeur souhaitée dans le champs « tensionalim ». Depuis l’lHM du BMO LST sur Ie PC IHM, on appuie sur le bouton OFF/ON de la fonction « Alimenter LST ». Ensuite, des mesures sont réalisées au multimètre sur la prise éclatée J1 le 28V.\n\nLes résultats de nos mesures sont satisfaisants, comme montré dans le tableau suivant.\n\nTableau 4 : Résultats de l'évaluation de la fonction \"Alimenter LST\"",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_14_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_14__chunk_000034",
+      "project_id": "projet_14_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_14_\\cir_final\\AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_name": "AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Evaluation des discrets Config 1 et Config 2]\nNous avons ensuite testé les discrets Config 1 et Config 2. En effet, nous avons vérifié que les signaux correspondaient aux états des modes sélectionnés (n°config 1 et 2), d'après le tableau ci-dessous.\n\nTableau 9 : RELATION ENTRE \"ETAT DES DISCRETS CONFIG\" ET \"MODE DE TEST\"\n\nLes résultats du test sont résumés dans le tableau suivant.\n\nTableau 10 : Résultats des tests des discrets",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_14_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_14__chunk_000004_sub01",
+      "project_id": "projet_14_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_14_\\cir_final\\AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_name": "AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "en un dispositif programmable sur le terrain qui peut générer des signatures laser de la cible. Cependant, cette solution ne permet pas de tester l'autodirecteur sur toute sa plage dynamique5.\n\nAfin de résoudre ces limites, un travail de recherche5 a été mené en 2014 dans l’objectif de réaliser un système de test électro-optique portable destiné à l’étude des têtes des autodirecteurs d’armes à guidage laser. L’architecture de ce système est configurée autour d'un module de diode laser à semi-conducteur avec une large bande passante générant une puissance d'onde continue (CW) de 100 mW pilotée par un circuit de commande de diode laser programmable. La bande passante élevée du module de diode laser permet de générer des impulsions laser dont la largeur est d’une nanoseconde, nécessaires pour simuler le désignateur de cible laser du champ de bataille. Le pilote du module de la diode laser est à son tour piloté par un circuit intégré basé sur un microcontrôleur. Ce circuit intégré est interfacé avec un clavier matriciel approprié et un écran LCD. En outre, une optique est placée à la sortie du module de diode laser pour générer un faisceau laser de la forme et divergence souhaitées. De plus, une batterie lithium-ion rechargeable de 7,2 V/3,5 Ah alimente un module convertisseur DC-DC qui génère toutes les tensions DC régulées requises pour le fonctionnement de différents circuits. Par ailleurs, la conception proposée permet la génération de signatures laser programmables par l'utilisateur en termes de code de fréquence de répétition d'impulsions (PRF), de résolution de code PRF et de densité de puissance laser. Cela permet ainsi de mener des tests dans des conditions dynamiques.\n\nFigure 2 : Architecture du système de test5",
+      "_parent_chunk_id": "projet_14__chunk_000004",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_14__chunk_000011",
+      "project_id": "projet_14_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_14_\\cir_final\\AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_name": "AMETRA_SAFRAN-ED_CIR 2023_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Rappel des travaux réalisés en 2021]\nA l’issue des travaux de R&D présentés ci-dessus, nous avions poursuivi nos travaux en 2021 afin de rechercher et développer le reste des systèmes et architectures techniques et logicielles de notre solution de banc nécessaires à l’atteinte de l’ensemble des performances techniques recherchées dans ce projet. Nous avions travaillé principalement sur les axes R&D suivants :\n\nLe développement d’un système d’émulation des données STX afin de permettre au banc de rejouer l’imagerie que perçoit l’autodirecteur en mission sans devoir brancher un autodirecteur au banc ;\n\nLe développement d’une fonction plugin afin d’effectuer des traitements synchrones sur les flux des messages et images issus de l’ensemble optronique du banc, ainsi que d’avoir accès aux fonctions internes du banc et de réaliser des actions directement sur le banc ;\n\nLe développement d’une solution de contrôle à distance du banc ;\n\nLa définition de l’architecture logicielle du reste des composants de l’architecture logicielle du PC BMO de l’autodirecteur à guidage infrarouge.\n\nDe plus, nous avions défini l’architecture logicielle :\n\nD’un système de diffusion des données ;\n\nD’un mécanisme de gestion de la diversité des flux descendants dans les étages du PC-BMO ;\n\nD’un mécanisme de synchronisation des traitements de données ;\n\nD’un système de diagnostic ;\n\nD’un mécanisme de pilotage des alimentations ;\n\nD’un système de gestion de la fonction boucle sèche et de la fonction claquage bouteille.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_14_\\extracted\\chunks.json"
+    }
+  ]
+}

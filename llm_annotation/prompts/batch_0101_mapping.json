@@ -1,0 +1,91 @@
+{
+  "batch_id": 101,
+  "chunks": [
+    {
+      "chunk_id": "projet_22__chunk_000037_sub00",
+      "project_id": "projet_22_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_22_\\raw\\docx\\Verexal_dossier 2024.docx",
+      "file_name": "Verexal_dossier 2024.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Analyse de la matière organique des sols]\nNous avons poursuivi nos analyses du taux de matière organique du sol sur 30 cm de profondeur sur les parcelles ayant reçu :\n\n50 T/ha de compost incorporé avant plantation\n\n15 T/ha de compost épandu en surface\n\nAucun apport organique.\n\nPour cela, nous avons analysé l’évolution du taux de matière organique entre blocs, analysé l’effet cumulatif des apports organiques par rapport aux pratiques alternatives (dépôt d’herbe de tonte), évalué l’incidence sur la vigueur des arbres et la production.\n\nNous avons ainsi analysé la disponibilité des éléments nutritifs azote, phosphore et potasse.\n\nAvec 15 T/ha de compost, la part d’azote immédiatement disponible était de 15 unités. La matière organique minéralisée les années suivantes fournissait une dizaine d’unité, donc un complément en azote était utile. Avec 50 T/ha de compost, l’azote immédiatement disponible de 50 unités était presque excédentaire pour de jeunes plantations. Par la suite, il était nécessaire de couvrir la moitié des besoins d’une production à 40 T de pommes par Ha.\n\nAu niveau du phosphore, avec 15 T/ha de compost, la quantité d’unités disponibles était de 14 par an pour cinq ans, ce qui était suffisant en prenant en compte les apports naturels du sol. Avec 50 T/ha de compost, la situation devenait excédentaire par rapport aux besoins, et le phosphore apporté devait enrichir le stock du sol.\n\nPour la potasse, avec 15 T/ha de compost, la moitié des besoins annuels était couvert par les 30 unités disponible pour cinq ans. Avec 50 T/ha de compost, la situation était plus délicate. La centaine d’unités convenait pour une production d’arbres adultes, mais était largement excédentaire pour de jeunes arbres et un début de production. La concurrence avec le calcium risquait de générer de sérieux problèmes de conservation.\n\nPar ailleurs, l’analyse de l’évolution du taux de matière organique brut du sol a révélé une évolution positive au fil des ans.",
+      "_parent_chunk_id": "projet_22__chunk_000037",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_22__chunk_000037_sub01",
+      "project_id": "projet_22_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_22_\\raw\\docx\\Verexal_dossier 2024.docx",
+      "file_name": "Verexal_dossier 2024.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "risquait de générer de sérieux problèmes de conservation. Par ailleurs, l’analyse de l’évolution du taux de matière organique brut du sol a révélé une évolution positive au fil des ans.\n\nPour le bloc Gala, le taux de matière organique est passé de 1.7% en 2014 à 2.0% en 2025, hors apport de compost. L’apport superficiel de compost a enrichi le sol jusqu’à 2.3%.\n\nPour le bloc Inogo SC2-SC3, le taux de matières organiques était de 2.1% en 2012 et 2.4% en 2020. Nous devrons réaliser une analyse complémentaire du sol pour mesurer l’incidence de l’apport de 50 T/ha incorporés au sol.\n\nPour le bloc Natti, le taux de matière organique est passé de 2.7% en 2021 à 3.1% sans apport de compost, et à 3.4% avec un apport en surface de 15 T/ha. Nous avons donc conclu que le dépôt de l’herbe de tonte sur le rang semblait plutôt efficace.\n\nEn conclusion, nous avons mis en avant que ni l’apport massif de compost à 50 T/ha, ni l’apport de 15 T/ha, ne semblaient avoir d’incidence positive à court terme sur les problèmes de fatigue des sols. Le risque éventuel de blocage du calcium par une trop forte disponibilité de potasse, dans le cas de l’apport de 50 T/ha, ne semblait toujours pas se vérifier.\n\nPar ailleurs, nous n’avons observé aucune différence en terme de vigueur des arbres entre les deux niveaux d’apport de compost. Nous avions supposé que le temps globalement sec de 2023 n’avait peut-être pas permis la minéralisation de la matière organique. En 2024, la météo humide a bien fournis en eau les sols, ce qui auraient dû permettre une meilleure minéralisation de la matière organique, mais cela n’a pas eu d’incidence sur la pousse des arbres. En revanche, nous avons constaté que le niveau de production 2024 était nettement supérieure à celui de 2023, mais sans différence significative par rapport à l’apport ou non de compost.",
+      "_parent_chunk_id": "projet_22__chunk_000037",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_22__chunk_000055_sub00",
+      "project_id": "projet_22_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_22_\\raw\\pdf\\AE3 Compte-rendu Inogo 2024.pdf",
+      "file_name": "AE3 Compte-rendu Inogo 2024.pdf",
+      "file_category": "pdf_native",
+      "source_type": "text",
+      "text": "[PAGE 7]\n\nSuivi de la mortalité sur la plantation 2023\nIl est fréquent d'observer, après un an de plantation, que certains arbres n'ont pas survécu. Le taux de reprise\ndes arbres, et donc leur capacité d'adaptation aux conditions pédoclimatiques, revêt une importance particulière.\nEn effet, ce facteur influence directement le nombre d'arbres à replanter, ce qui entraîne des coûts\nsupplémentaires en main-d'œuvre.\nAu cours de la première année, nous avons observé les taux de mortalité suivants : 27 morts pour le porte-greffe\nInogo/G11, 9 pour Inogo/Pajam 2, 5 pour Inogo/G41 en Ypsilon®, et seulement 4 pour Inogo/G41. Ces données\nmontrent clairement que l'implantation du G11 a rencontré des difficultés beaucoup plus élevées comparé aux\nautres porte-greffes.\nAnnée de plantation : 2024\nDurant le mois de février 2024, deux nouvelles lignes d’Inogo ont été plantées sur deux porte-greffes différents:\nG11 et M200. Tous les arbres ont été plantés simultanément, sur des rangées adjacentes. Les mesures de calibre\ndes fruits et de diamètre des troncs ont été effectuées à l'aide d'un pied à coulisse Mitutoyo CD-15DC, doté d'une\ncapacité de mesure allant de 0 à 150 mm, d'une résolution de 0,01 mm, et d'une précision de ±0,02 mm.\nDistance de Prix unitaire Prix à l’hectare\nPorte-greffe Etat de la ligne\nplantation (€ HT) (€/ha)\nHomogène, bon\nInogo/G11 1m x 3,5m 11,24 32 112,68\nétat\nHomogène, bon\nInogo/M200 1m x 3,5m 10,74 30 684, 18\nétat\nAnalyses\nDiamètre Poids\nTaux\nPorte- Calibre des sur 10\nde Maturité Fermeté Acidité\ngreffe (mm) troncs arbres\nsucre\n(mm) (kg)\nInogo/\n75,91 14,96 4,4 14,4 8 9,05 6,12\nG11\nInogo/\n75,69 19,33 3,2 14,4 8 8,45 6,2\nM200\n\n[TABLEAU 1]\n| Porte-greffe | Etat de la ligne | Distance de plantation | Prix unitaire (€ HT) | Prix à l’hectare (€/ha) |\n| ------------ | ------------------ | ---------------------- | -------------------- | ----------------------- |\n| Inogo/G11 | Homogène, bon état | 1m x 3,5m | 11,24 | 32 112,68 |\n| Inogo/M200 | Homogène, bon état | 1m x 3,5m | 10,74 | 30 684, 18 |",
+      "_parent_chunk_id": "projet_22__chunk_000055",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_22__chunk_000073_sub01",
+      "project_id": "projet_22_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_22_\\raw\\pdf\\AE3 Compte-rendu Verger bio de Innenheim 2024.pdf",
+      "file_name": "AE3 Compte-rendu Verger bio de Innenheim 2024.pdf",
+      "file_category": "pdf_native",
+      "source_type": "text",
+      "text": "du verger : L'intégration de nouvelles espèces fruitières (abricotiers, pêchers, pruniers, noyers) en agroforesterie, comme dans le modèle du verger circulaire de Gotheron, pourrait augmenter la résilience globale du système. La diversification des espèces permettrait de réduire les risques liés à la monoculture et\nd'améliorer les interactions bénéfiques entre les arbres.\n4.Suivi écologique :\nUn suivi renforcé des populations de ravageurs et d'auxiliaires serait nécessaire pour évaluer l'efficacité\ndes pratiques agroécologiques mises en place.\nPar exemple, le suivi des populations de Mastrus ridens et\ndes ravageurs comme le carpocapse permettrait d'ajuster les stratégies de lutte biologique en temps réel.\n5.Intégration du verger bio dans des programmes futurs potentiel:\nProjet Mastrus : Lutte contre le carpocapse (Cydia pomonella)\nProjet PACTE : Lutte contre la punaise diabolique (Halyomorpha halys)\nProjet d’un verger en agroforesterie : Limitation des IFT grâce à un système d’agroforesterie.\nProjet haie: Mise en place d’une haie composite pour favoriser la présence de divers auxiliaires\nConclusion\nEn l'état actuel, le verger ne répond pas aux exigences de productivité pour une exploitation commerciale viable.\nToutefois, en ajustant les pratiques de gestion du sol, en améliorant la diversité variétale, et en intégrant des\nsolutions de lutte biologique innovantes, il est possible d'envisager une transition vers un modèle plus durable et\nproductif.\nLe projet pourrait bénéficier d'un soutien continu pour tester de nouvelles stratégies, notamment en\ns'inspirant des essais menés dans d'autres systèmes de vergers à faible intrant, comme ceux du FiBL et de\nl'INRAe.\n85",
+      "_parent_chunk_id": "projet_22__chunk_000073",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_22__chunk_000076_sub00",
+      "project_id": "projet_22_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_22_\\raw\\pdf\\Compte-rendu technique Résilience 2024.pdf",
+      "file_name": "Compte-rendu technique Résilience 2024.pdf",
+      "file_category": "pdf_native",
+      "source_type": "text",
+      "text": "[PAGE 2]\nPROGRAMME D’ACTION PLURIANNUEL :\n2022 : - Application de compost : * Incorporation au sol avant plantation : 50T/Ha sur 12 rangs\n* Epandage sur le rang : 15 T/Ha sur 8 rangs\n- Arrachage et replantation : * Comparaison porte-greffe M9 et Geneva 11 : 220 arbres INOGO\n* Système de verger – hauteur des arbres : 180 Early Crunch / M9\n- Surgreffage : * Système de verger – conduite et hauteur : biaxe haut et bas : 180\nEarly Crunch – Honey Crunch.\n- Test de débit du puit : * Test à 20 M3/H ; 40 M3/H ; 90 M3/H interprétation et calibrage\ndu projet irrigation en fonction du débit potentiel.\n- Etude matériel : pompes ; filtration ; conduites de distribution ; comparatif aspersion sur\nfrondaison et sous frondaison ; micro aspersion ; goutte à goutte aérien ou enterré ; aspersion antigel ;\nmatériel de pilotage/sondes.\n2023 : - Application de compost : * Incorporation au sol avant plantation\n* Epandage sur le rang\n- Arrachage et replantation : * Comparaison porte-greffe M9 et Geneva 11 ; Geneva 41\n* Système de verger – conduite et hauteur : axe bas et Ypsilon\n* Variété : WUR 29 Wurtwinning/Bloss\n- Surgreffage : * Variété Ladina\n- Etude matériel : pompes ; filtration ; conduites de distribution ; comparatif aspersion sur\nfrondaison et sous frondaison ; micro aspersion ; goutte à goutte aérien ou enterré ; aspersion antigel ;\nmatériel de pilotage/sondes.\n- Etude climatique : étude des besoins théoriques en eau pour des années climatiquement\ndifférentes\n- Irrigation : recherche et dégagement du réseau de distribution d’eau d’irrigation ; commande\nd’une partie des gaines d’irrigation ; démarrage de la mise en place du goutte à goutte.\n2024 et suivantes : - Application de compost : * Suivi du taux de matière organique du sol\n* Analyse foliaires des différentes modalités.\n- Irrigation : études : rôle physiologique de l’eau, eau et type de sol, rationnement de\nl’irrigation.\nMise en place des différents matériels.\nDébut de l’irrigation.",
+      "_parent_chunk_id": "projet_22__chunk_000076",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_22__chunk_000000_sub00",
+      "project_id": "projet_22_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_22_\\raw\\docx\\travaux antérieurs.docx",
+      "file_name": "travaux antérieurs.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "En 2022 et 2023, …\n\nConcernant l’apport en matières organiques, nous avions mis en avant que l’apport massif de 50 T/ha ne semblait pas, à court terme, avoir d’incidence positive sur les problèmes de fatigue des sols. Le risque de blocage du calcium par une trop forte disponibilité de potasse était à prendre en compte. L’apport de 15 T/ha tous les 4-5 ans semblait plus raisonnable, mais ne semblait pas non plus avoir d’impact.\n\nEnfin, l’observation des arbres avait donné l’impression que le compost n’avait eu aucun effet sur le développement des arbres. En 2022, le faible niveau de rendement de l’année, dû au gel, ne nous avait pas permis de mettre en évidence un impact positif à court terme des apports de compost. En 2023, le temps globalement sec n’avait peut-être pas permis la minéralisation de la matière organique.\n\nPar ailleurs, les nouvelles variétés avaient présenté des comportements contrastés. Certaines variétés induisaient une mise à fruit très rapide, pouvant affaiblir la vigueur, surtout sur jeunes arbres. A l’inverse, d’autres variétés restaient modérément vigoureuses et plus équilibrés (ex : Indigo), facilitant la conduite.\n\nAu niveau du surgreffage, nous avions mis en avant qu’il accentuait les contrastes, avec une forte production précoce, et un risque de baisse de vigueur si non maitrisé (nécessité d’éclaircissement strict). Ce levier était performant mais exigeant techniquement.\n\nEn outre, le porte-greffe Geneva 11 était attendu comme plus vigoureux que M9, mais nous n’avions pu confirmer cet avantage en conditions réelles, limitant ainsi son intérêt pour renforcer la vigueur en replantation.\n\nEn termes de production, les rendements étaient restés globalement faibles, hormis avec la variété Wellant.\n\nLes résultats de la variété Natti en replantation de troisième génération étaient toujours catastrophiques. L’apport de compost sur le rang n’avait entraîné aucune réaction des arbres.\n\nLa variété Gala Brookfield restait sur son potentiel de production très moyen. Ces arbres étaient les premiers à montrer des symptômes de faiblesse dus à la fatigue des sols, étant implantés en troisième génération à cet endroit. Là encore, Le compost s’était révélé sans effet.",
+      "_parent_chunk_id": "projet_22__chunk_000000",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_22__chunk_000006",
+      "project_id": "projet_22_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_22_\\raw\\docx\\Verexal_dossier 2024.docx",
+      "file_name": "Verexal_dossier 2024.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Objectifs visés]\nL’objectif principal de notre programme de recherche est de maintenir la vigueur des vergers, condition indispensable pour la stabilité des rendements, l’obtention de calibres conformes aux exigences du marché et à la résilience des systèmes de production face aux aléas climatiques croissants. Pour cela, nous devons renforcer la qualité des sols, redéfinir les systèmes de conduite, identifier des variétés et porte-greffes plus résistants, assurer une bonne irrigation et gestion de l’eau.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_22_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_22__chunk_000013",
+      "project_id": "projet_22_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_22_\\raw\\docx\\Verexal_dossier 2024.docx",
+      "file_name": "Verexal_dossier 2024.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Impact de paramètres sur la hauteur des arbres]\nEn parallèle, nos avons mené des travaux sur la hauteur des arbres (objectif 3.5 m), la comparaison entre arbres replantés et arbres surgreffés, et l’étude de différents systèmes (axe, biaxe, axe haut ou axe bas.\n\nLes arbres surgreffés atteignaient plus facilement les objectifs de hauteur que les jeunes replantations, qui exprimaient difficilement leur potentiel, indépendamment de l’apport de compost. Par ailleurs, certaines variétés montraient une forte sensibilité au système de conduite.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_22_\\extracted\\chunks.json"
+    }
+  ]
+}

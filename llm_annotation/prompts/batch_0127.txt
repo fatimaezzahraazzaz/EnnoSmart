@@ -1,0 +1,230 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 127/135, 8 chunks)
+
+### CHUNK_ID: projet_30__chunk_000034_sub00
+```
+[SECTION : Orchestration de l’exécution et portabilité des modèles sur architectures hétérogènes]
+Afin de garantir l’interopérabilité et de faciliter l’intégration de modèles issus de différents environnements, nous avons développé un mécanisme de prise en charge du format ONNX. Nous avons mis en œuvre des pipelines permettant d’importer des graphes externes, de les transformer en une représentation interne, puis de les compiler vers différents backends tels que CPU, CUDA ou TensorRT. Face à l’évolution du standard ONNX, nous avons introduit des mécanismes adaptatifs de parsing et de rétrocompatibilité afin d’assurer la robustesse des modèles et leur déploiement sur différentes architectures.
+
+En parallèle, nous avons structuré le Framework autour d’un noyau central modulaire manipulant les tenseurs, les kernels d’opérateurs, les graphes et l’ordonnanceur d’exécution. Nous avons rendu ce noyau extensible via des plugins spécialisés (datasets, opérateurs, backends, export), permettant d’adapter le Framework aux contraintes spécifiques des architectures cibles tout en garantissant sa cohérence fonctionnelle et son évolutivité.
+
+La Figure 4 illustre cette architecture modulaire et met en évidence l’articulation entre le noyau central et les différents modules d’extension. Elle met en lumière les mécanismes d’interopérabilité ONNX, ainsi que les capacités d’orchestration et de compilation vers des environnements d’exécution hétérogènes. L’organisation en plugins permet de dissocier les dépendances liées aux cibles matérielles et de faciliter l’intégration de nouvelles briques fonctionnelles, tout en maintenant une structure logicielle cohérente et évolutive.
+
+Cette architecture constitue un élément central dans la levée du verrou scientifique lié à la mise en œuvre et au déploiement de modèles neuronaux sur architectures hétérogènes contraintes. Elle permet en effet d’adresser les problématiques de portabilité, de reproductibilité et d’optimisation multi-cible, en introduisant des mécanismes d’abstraction et de spécialisation adaptés aux contraintes des systèmes embarqués.
+
+Figure : Architecture modulaire et interopérable du Framework AIDGE pour le déploiement de modèles d’IA sur architectures hétérogènes.
+```
+
+### CHUNK_ID: projet_30__chunk_000002
+```
+[SECTION : Contexte du projet]
+Au cours de la dernière décennie, les avancées en intelligence artificielle, et plus particulièrement en apprentissage profond, se sont traduites par une augmentation significative de la complexité des modèles de réseaux de neurones’, engendrant de nouveaux défis scientifiques et technologiques. Ces modèles reposent sur des enchaînements d’opérateurs apprenants permettant d’extraire et de transformer des représentations de plus en plus abstraites des données, comme illustré par les architectures convolutives et denses.
+
+Parallèlement, une transformation des paradigmes de déploiement est observée, marquée par un déplacement progressif des traitements vers des environnements embarqués. Cette évolution s’inscrit dans un contexte où les systèmes doivent interagir directement avec des environnements physiques et opérer sous contraintes fortes de latence, de disponibilité et d’autonomie. Toutefois, cette transition met en évidence une rupture technologique majeure : les architectures matérielles embarquées présentent des limitations intrinsèques en termes de capacité de calcul, de mémoire et de gestion énergétique, incompatibles avec les exigences des modèles de grande dimension.
+
+Les Frameworks de référence tels que PyTorch et TensorFlow ont été initialement conçus pour des environnements de calcul intensif et ne permettent pas, en l’état, de répondre de manière pleinement satisfaisante aux contraintes spécifiques des systèmes embarqués. En particulier, ils n’offrent pas un niveau de maîtrise suffisant des mécanismes internes d’exécution, nécessaire à une prise en compte rigoureuse des contraintes propres aux architectures matérielles fortement limitées.
+
+C’est dans ce contexte que s’inscrivent les travaux menés par GLR TECHNOLOGIES, dont l’objectif est de contribuer au développement du projet AIDGE. Ce projet, initiative open-source portée par l’Eclipse Foundation, vise la conception d’un Framework dédié à l’intelligence artificielle embarquée. L’ambition scientifique associée à ces travaux repose sur la conception d’une approche modulaire permettant de repenser la représentation, l’organisation et l’exécution des réseaux de neurones, en intégrant, dès les phases amont de conception, les contraintes structurelles des cibles matérielles.
+
+Dans ce cadre, nous avons identifié la problématique centrale suivante :
+
+Comment développer et formaliser un cadre méthodologique de conception des réseaux de neurones profonds visant à modéliser et articuler leur complexité algorithmique intrinsèque avec les contraintes structurelles propres aux architectures embarquées ?
+```
+
+### CHUNK_ID: projet_30__chunk_000007
+```
+[SECTION : Analyse des approches d’apprentissage fédéré distribué et contraintes des architectures embarquées]
+Concernant l’apprentissage fédéré, notre analyse a mis en évidence les travaux de McMahan et al. introduisant FedAvg, un algorithme permettant un entraînement distribué sans centralisation des données. Bien que cette approche réduise les coûts de communication et améliore la confidentialité, elle repose sur une agrégation centralisée et des hypothèses d’homogénéité peu réalistes, sans prise en compte des contraintes embarquées.
+
+Nous avons également identifié les travaux de Bonawitz et al. proposant des techniques de réduction de la communication via compression et quantification des mises à jour. Ces méthodes améliorent l’efficacité des échanges, mais introduisent des compromis complexes entre précision et communication, et restent peu adaptées aux dispositifs fortement contraints et hétérogènes.
+
+Par ailleurs, nous nous sommes appuyés sur l’étude de Kairouz et al. , qui offre une vision globale de l’apprentissage fédéré et met en évidence ses avantages ainsi que ses défis liés à l’hétérogénéité des données, aux contraintes système et aux problématiques de sécurité. Ces travaux soulignent l’absence de solutions généralisables adaptées aux environnements embarqués.
+
+Enfin, une étude a également considéré l’approche FedProx, qui propose une amélioration de FedAvg pour gérer l’hétérogénéité des systèmes et des données, avec des garanties de convergence améliorées. Toutefois, les expérimentations restent réalisées sur des infrastructures puissantes, limitant son applicabilité aux systèmes embarqués contraints.
+
+Dans l’ensemble, les travaux analysés mettent en évidence des avancées significatives, mais notre analyse révèle plusieurs insuffisances majeures constituant des verrous scientifiques : absence d’adaptation dynamique aux contraintes embarquées, prise en compte limitée des ressources (mémoire, calcul, énergie), manque d’intégration du déploiement sur architectures hétérogènes, et maîtrise incomplète du compromis précision-latence. Par ailleurs, les approches de quantification restent peu adaptatives et celles d’apprentissage fédéré insuffisamment compatibles avec l’hétérogénéité et les contraintes des systèmes embarqués.
+```
+
+### CHUNK_ID: projet_30__chunk_000028_sub02
+```
+étude ne peut pas être applicable dans le cadre de notre projet, qui vise à concevoir des approches génériques d’optimisation et de déploiement adaptées à une diversité d’architectures embarquées contraintes.
+
+Par ailleurs, nous avons surligné l’étude de Tan et al. portant sur la conception automatisée d’architectures de réseaux de neurones convolutifs adaptées aux environnements mobiles, à travers l’approche MnasNet basée sur le Neural Architecture Search (NAS). Les auteurs abordent la difficulté de concevoir des architectures capables de concilier des exigences contradictoires, notamment une haute précision et une faible latence, dans un espace de conception particulièrement vaste et difficile à explorer manuellement. Ils proposent ainsi une approche de recherche d’architecture multi-objectifs intégrant explicitement la latence réelle comme critère d’optimisation, mesurée directement sur des dispositifs mobiles, plutôt que via des approximations classiques telles que le nombre d’opérations (FLOPS). Cette approche repose sur un algorithme de recherche par renforcement, couplé à un espace de recherche hiérarchique factorisé, permettant d’introduire une diversité architecturale entre les différentes couches du réseau. Les résultats obtenus montrent que les architectures générées surpassent les modèles existants, tels que MobileNetV2 et NASNet, en termes de compromis précision/latence, avec des gains significatifs en vitesse d’inférence, tout en améliorant les performances sur des tâches de classification (ImageNet) et de détection.
+
+Cependant, cette approche présente plusieurs limitations. Elle repose sur un processus de recherche coûteux en ressources, nécessitant des infrastructures matérielles importantes (TPU, exécution sur terminaux réels), ce qui limite sa reproductibilité et son applicabilité dans des contextes industriels contraints. Par ailleurs, la méthode reste fortement dépendante de la définition de l’espace de recherche et des métriques choisies, sans proposer de cadre générique permettant une adaptation dynamique aux différentes architectures embarquées. Enfin, bien que la latence soit prise en compte, les problématiques de gestion mémoire, d’ordonnancement des calculs ou de génération de code optimisé ne sont pas explicitement adressées.
+```
+
+### CHUNK_ID: projet_30__chunk_000029_sub01
+```
+de la quantification entière pour rendre les modèles profonds plus adaptés aux environnements mobiles à ressources limitées, elle montre également un manque d’adaptation fine aux contraintes réelles des systèmes embarqués.
+
+Nous nous sommes également intéressés à l’approche HAWQ (Hessian AWare Quantization), proposée par Dong et al. Les auteurs y abordent la problématique centrale du déploiement des réseaux de neurones dans des environnements aux ressources limitées, où la taille des modèles et le coût computationnel constituent des contraintes majeures. La quantification uniforme des modèles à très faible précision entraîne souvent une dégradation importante de la performance. Pour y remédier, HAWQ introduit un mécanisme de quantification à précision mixte, permettant à différentes couches du réseau d’être traitées avec des niveaux de précision adaptés à leur sensibilité. Le point clé de cette méthode repose sur l’exploitation des informations du Hessien, qui permet de déterminer automatiquement la précision relative de chaque couche en analysant le spectre de ses valeurs propres et fournit ainsi un indicateur fiable de sensibilité à la quantification. Les expérimentations menées sur ResNet20 (CIFAR-10), ainsi que sur Inception-V3, ResNet50 et SqueezeNext (ImageNet), montrent que HAWQ permet de conserver une précision comparable, voire supérieure, aux méthodes existantes, tout en réduisant significativement la taille des modèles et la mémoire nécessaire pour les activations. Cependant, malgré ces gains pour l’inférence sur des dispositifs contraints, l’adaptation fine aux contraintes embarquées réelles, telles que la latence stricte et les limitations spécifiques de mémoire, reste un point à approfondir.
+```
+
+### CHUNK_ID: projet_30__chunk_000020
+```
+[SECTION : Évaluation expérimentale et analyse des performances en environnement hétérogène]
+Les kernels intégrés ont été testés dans des pipelines expérimentaux représentatifs, générant des indicateurs de performance tels que temps d’exécution, latence et taille binaire. Le Tableau 1 synthétise la couverture fonctionnelle des kernels sur différentes architectures, montrant une prise en charge significative des fonctionnalités essentielles, tout en révélant certaines limites pour des opérateurs spécifiques ou configurations particulières.
+
+Ces observations confirment que l’optimisation complète des primitives Deep Learning sur architectures hétérogènes reste un problème ouvert, nécessitant la poursuite de travaux de R&D pour accroître performance, portabilité et robustesse.
+```
+
+### CHUNK_ID: projet_30__chunk_000030_sub00
+```
+[SECTION : Analyse des approches d’apprentissage fédéré distribué et contraintes des architectures embarquées]
+Concernant les contributions scientifiques dans le domaine de l’apprentissage fédéré appliqué aux systèmes distribués, notre analyse a mis en évidence l’étude fondatrice de McMahan et al., introduisant l’algorithme Federated Averaging (FedAvg). Ces travaux visent à permettre l’entraînement collaboratif de modèles d’apprentissage automatique sans centralisation des données, en réponse aux enjeux de confidentialité et de distribution des données sur. L’approche proposée repose sur un apprentissage local réalisé par chaque nœud, suivi d’une agrégation centralisée des mises à jour du modèle, permettant de réduire significativement les coûts de communication tout en maintenant des performances proches de celles d’un apprentissage centralisé. Les résultats démontrent l’efficacité de cette stratégie en termes de confidentialité et de réduction des échanges de données. Toutefois, plusieurs limitations subsistent : l’architecture d’agrégation centralisée constitue un point de fragilité, les hypothèses d’homogénéité des ressources entre les nœuds restent peu réalistes, et les contraintes spécifiques aux environnements embarqués, notamment en mémoire, capacité de calcul et consommation énergétique, sont insuffisamment prises en compte. Par ailleurs, des problématiques majeures telles que l’hétérogénéité des données (non-IID), la variabilité des connexions réseau et la gestion dynamique des ressources demeurent partiellement adressées.
+
+Cependant, cette approche ne peut être directement transposée dans le cadre de notre projet, qui vise à concevoir des solutions d’apprentissage fédéré adaptées à des architectures embarquées fortement contraintes, nécessitant une prise en compte conjointe des limitations matérielles et des exigences de robustesse en conditions réelles.
+```
+
+### CHUNK_ID: projet_30__chunk_000033
+```
+[SECTION : Maîtrise de la complexité computationnelle des opérateurs de Deep Learning en contexte embarqué]
+Pour répondre aux défis liés à la complexité computationnelle et accroitre l’efficacité d’exécution dans un contexte embarqué contraint, nous avons étendu le socle fonctionnel du Framework en développant et en intégrant les kernels associés aux opérateurs manquants (SoftMax, MaxPool2D, Conv, ConvDepthWise, BatchNorm, etc.).
+
+Nous avons adapté ces kernels afin d’assurer leur exécution sur différents backends, notamment CPU et GPU, tout en prenant en compte les contraintes de gestion mémoire et d’efficacité algorithmique. Cette démarche nous a conduits à établir des compromis entre la précision numérique et la performance.
+
+Dans le cadre du déploiement embarqué et de l’apprentissage fédéré, nous avons développé un middleware dédié permettant la collecte et la centralisation des données issues de capteurs, ainsi que la gestion d’un parc informatique pour l’entraînement distribué des modèles. Cette approche nous a permis d’exploiter les données au plus près de leur source et de répartir la charge computationnelle entre les différentes machines, tout en maintenant la cohérence globale des traitements.
+
+Nous avons également optimisé les mécanismes d’exécution multi-backends en intégrant des environnements CPU et GPU (CUDA), ainsi que des capacités de génération de code exécutable via des modules d’export spécifiques (C++ et TensorRT). Ces travaux nous ont permis d’évaluer différentes stratégies d’implémentation et d’analyser leur impact sur les performances globales, tout en assurant la cohérence des résultats entre les environnements d’exécution.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 127,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

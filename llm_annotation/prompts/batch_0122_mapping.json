@@ -1,0 +1,91 @@
+{
+  "batch_id": 122,
+  "chunks": [
+    {
+      "chunk_id": "projet_29__chunk_000002_sub01",
+      "project_id": "projet_29_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_29_\\cir_final\\CIR2025_GLRT_ORIOS_VF.docx",
+      "file_name": "CIR2025_GLRT_ORIOS_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "maintenance prédictive et de pilotage intelligent de haut niveau, à même d’anticiper avec précision les défaillances et d’assurer une optimisation continue et robuste du fonctionnement du réseau à grande échelle.\n\nDans ce cadre, notre projet de recherche et développement vise à concevoir et déployer une plateforme de supervision, commande et maintenance des bornes de recharge, capable de répondre à ces exigences critiques et d’anticiper les évolutions futures du réseau.\n\nPour ce faire, nous avons identifié en 2025 la problématique scientifique principale suivante :\n\nComment concevoir et déployer un système de supervision, commande et maintenance des bornes de recharge pour véhicules électriques capable de garantir la disponibilité, la sécurité et l’interopérabilité du réseau, tout en assurant une communication en temps réel et une gestion d’un fort volume de transactions ?",
+      "_parent_chunk_id": "projet_29__chunk_000002",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_29__chunk_000003_sub00",
+      "project_id": "projet_29_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_29_\\cir_final\\CIR2025_GLRT_ORIOS_VF.docx",
+      "file_name": "CIR2025_GLRT_ORIOS_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Objectifs visés et performances à atteindre]\nL’objectif principal de ce projet est de concevoir et de développer un système de supervision et de commande dédié aux bornes de recharge pour véhicules électriques, capable de garantir un fonctionnement fiable, sécurisé et interopérable à grande échelle. Pour ce faire, nous visons à développer une architecture numérique avancée permettant la gestion en temps réel de flux massifs de données, la communication bidirectionnelle avec des sources hétérogènes et la mise en œuvre d’approches novatrices de détection, d’analyse et d’anticipation des défaillances.\n\nEn 2025, notre ambition consiste à définir et valider une plateforme technique centralisée intégrant l’ensemble des briques et des technologies nécessaires à la supervision de milliers de bornes. Cela inclut la mise en œuvre des protocoles d’échange sécurisés, l’optimisation des performances de communication, le renforcement de la résilience du système, ainsi que la capacité à maintenir la cohérence et la fiabilité des transactions critiques (commandes, événements, données techniques).\n\nNous cherchons également à développer des modules d’intelligence opérationnelle, fondés sur des algorithmes de détection d’anomalies et de maintenance prédictive, capables d’anticiper les pannes, de réduire les indisponibilités afin d’accroitre la performance globale du réseau.\n\nPar ailleurs, les performances que nous cherchons à atteindre dans le cadre de ce projet s’appuient sur des exigences strictes de robustesse, de disponibilité et d’efficacité, nécessaires pour opérer un réseau de grande échelle :\n\nDisponibilité opérationnelle des bornes : ≥ 99,5 %, grâce à des mécanismes avancés de supervision et de détection automatique d’incidents ;\n\nTemps de réponse des commandes critiques : < 1 seconde, garantissant une communication temps réel fiable entre la plateforme centrale et les bornes ;\n\nTaux d’interopérabilité maîtrisé : ≤ 1 - 2 % d’erreurs de transactions ;\n\nCapacité de supervision à grande échelle : 10 000 à 50 000 bornes connectées, avec maintien des performances nominales.\n\nTraitement intensif des flux : jusqu’à 100 000 sessions/mois ou 10 000 messages/s, selon les scénarios de charge.\n\nPrécision de la maintenance prédictive : 80 - 90 %, grâce à des modèles de détection d’anomalies basés sur les données de fonctionnement des équipements.",
+      "_parent_chunk_id": "projet_29__chunk_000003",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_29__chunk_000003_sub01",
+      "project_id": "projet_29_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_29_\\cir_final\\CIR2025_GLRT_ORIOS_VF.docx",
+      "file_name": "CIR2025_GLRT_ORIOS_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "selon les scénarios de charge. Précision de la maintenance prédictive : 80 - 90 %, grâce à des modèles de détection d’anomalies basés sur les données de fonctionnement des équipements.\n\nSupervision et alerte : latence des alarmes ;\n\n< 5 s pour les événements critiques,\n\n< 30 s pour les événements secondaires.\n\nCes objectifs techniques constituent les fondations indispensables pour garantir la fiabilité, la sécurité et la durabilité d’un réseau de recharge électrique à grande échelle, et orientent directement les efforts scientifiques et de développement engagés dans le cadre du projet ORIOS.",
+      "_parent_chunk_id": "projet_29__chunk_000003",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_29__chunk_000004_sub00",
+      "project_id": "projet_29_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_29_\\cir_final\\CIR2025_GLRT_ORIOS_VF.docx",
+      "file_name": "CIR2025_GLRT_ORIOS_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Analyse de l’état de l’art]\nL’ensemble des études examinées dans le cadre de cet état de l’art est détaillé en annexe 1.7.1.1.1.\n\nLa transition massive vers la mobilité électrique, portée par les objectifs européens de neutralité carbone et encadrée par le règlement AFIR, entraîne une expansion rapide des infrastructures de recharge pour véhicules électriques (IRVE). Cette évolution dépasse désormais le cadre industriel pour devenir un enjeu scientifique et méthodologiques sur la capacité de développement de plateformes numériques robustes capables d’assurer la supervision, la sûreté de fonctionnement et l’interopérabilité de réseaux denses et distribués. Dans ce cadre, notre analyse de l’état de l’art met en évidence plusieurs contributions scientifiques significatives, tout en révélant des limites majeures au regard des objectifs de notre projet ORIOS.\n\nL’étude de Dasi et al. propose un système intelligent de gestion énergétique basé sur l’IoT, contenant des sources renouvelables et des dispositifs de stockage afin d’optimiser l’alimentation locale d’une station de recharge. Les résultats démontrent une gestion efficace des flux énergétiques en temps réel. Toutefois, l’approche demeure centrée sur une station unique et ne traite ni la supervision centralisée d’un réseau étendu, ni les problématiques de résilience et de scalabilité à grande échelle.\n\nNous avons également surligné l’article de Wang et al. qui apporte une contribution structurante en matière de sécurité, fiabilité et résilience des infrastructures de recharge à grande échelle. Leur architecture cyber-physique multicouche et leur modèle quantitatif de gestion des risques, validés par simulation sur le réseau IEEE 13-node feeder, mettent en évidence le rôle crucial d’une communication fiable et d’un contrôle intelligent pour assurer la stabilité du système. Néanmoins, l’étude n’aborde pas l’interopérabilité CPO/EMSP (OCPP, OCPI), ni les enjeux de supervision centralisée et de scalabilité logicielle nécessaires à l’exploitation de dizaines de milliers de bornes.",
+      "_parent_chunk_id": "projet_29__chunk_000004",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_29__chunk_000004_sub01",
+      "project_id": "projet_29_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_29_\\cir_final\\CIR2025_GLRT_ORIOS_VF.docx",
+      "file_name": "CIR2025_GLRT_ORIOS_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "stabilité du système. Néanmoins, l’étude n’aborde pas l’interopérabilité CPO/EMSP (OCPP, OCPI), ni les enjeux de supervision centralisée et de scalabilité logicielle nécessaires à l’exploitation de dizaines de milliers de bornes.\n\nPar ailleurs, les travaux de Lobato et al., à travers l’architecture SIMA, proposent une solution intégrée de monitoring reposant sur OCPP, une plateforme IoT cloud et une infrastructure Kubernetes. L’étude démontre la faisabilité technique et la montée en charge jusqu’à 160 bornes simulées, avec une évaluation comparative des performances Docker-Compose et Kubernetes. Cependant, l’approche se limite principalement à la collecte et à la visualisation des données, sans traiter la supervision centralisée en temps quasi réel, la commande distante avancée ni la gestion d’événements critiques à grande échelle.\n\nDe surcroît, notre investigation a mis en évidence l’étude de Li et al., qui traite de la problématique liée à l’hétérogénéité des infrastructures et développe une plateforme cloud basée sur MQTT permettant l’acquisition, la configuration distante et le partage sécurisé de données issues de dispositifs variés. Les résultats expérimentaux confirment l’efficacité énergétique et la réactivité du protocole MQTT. Toutefois, la compatibilité multi-équipements à grande échelle et la validation en environnement fortement sollicité restent insuffisamment démontrées.\n\nDans la continuité des travaux portant sur la supervision des infrastructures de recharge, VijayaKumar et al. proposent un système de monitoring local d’une borne individuelle, fondé sur un microcontrôleur ESP32 et une transmission MQTT vers une plateforme IoT. Le prototype valide la surveillance en temps réel des paramètres électriques. Néanmoins, cette approche demeure strictement locale, sans gestion de réseau, sans interopérabilité OCPP/OCPI, et sans considération de scalabilité ou de cybersécurité avancée.\n\nEnfin, Ahmed et al. développent une architecture IoEV hiérarchisée reposant sur le modèle IEC 61850-90-8, avec validation expérimentale de différentes topologies de communication et analyse des latences. Les résultats confirment la faisabilité d’une chaîne de supervision temps réel. Toutefois, l’étude présente des limites notables en matière de cybersécurité, d’évaluation en situation de congestion et de démonstration de scalabilité sur des charges élevées et de longue durée.",
+      "_parent_chunk_id": "projet_29__chunk_000004",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_29__chunk_000004_sub02",
+      "project_id": "projet_29_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_29_\\cir_final\\CIR2025_GLRT_ORIOS_VF.docx",
+      "file_name": "CIR2025_GLRT_ORIOS_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "temps réel. Toutefois, l’étude présente des limites notables en matière de cybersécurité, d’évaluation en situation de congestion et de démonstration de scalabilité sur des charges élevées et de longue durée.\n\nAinsi, l’analyse de l’état de l’art met en évidence une progression significative des travaux relatifs à la gestion énergétique, au monitoring IoT, à la résilience réseau et à l’architecture cyber-physique des IRVE. Toutefois, aucune des approches étudiées ne répond de manière intégrée aux exigences combinées de supervision centralisée à grande échelle, de commande distante avancée, de gestion d’événements critiques en temps quasi réel et de scalabilité logicielle massive. Ces lacunes structurantes justifient pleinement le positionnement scientifique et technique de notre projet ORIOS.",
+      "_parent_chunk_id": "projet_29__chunk_000004",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_29__chunk_000005",
+      "project_id": "projet_29_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_29_\\cir_final\\CIR2025_GLRT_ORIOS_VF.docx",
+      "file_name": "CIR2025_GLRT_ORIOS_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Verrous et incertitudes scientifiques, techniques, technologiques]\nL’analyse de l’état de l’art nous a permis d’identifier plusieurs axes d’investigation liés aux divers aspects scientifiques et techniques de notre projet de R&D.\n\nLe premier verrou que nous avons identifié concerne la communication en temps réel entre les bornes et la plateforme centrale, avec pour défis majeurs le maintien d’une connexion stable sur des réseaux hétérogènes, la gestion de milliers de sessions simultanées, et la minimisation de la latence.\n\nNous avons également identifié une incertitude liée à la gestion des volumes massifs de données générés par les sessions de recharge, avec un risque de saturation des brokers, des bases de données et des systèmes de monitoring, pouvant impacter les temps de réponse et la fiabilité de la supervision.\n\nEnfin, nous avons identifié un autre verrou qui concerne la sécurité et la résilience de l’infrastructure, incluant la protection des données transitant sur des réseaux publics, la robustesse des mécanismes d’authentification, ainsi que la continuité du service en cas de défaillances réseau ou matérielles.\n\nPour cela, nous avons initié notre projet de recherche et développement afin de concevoir et de valider une architecture numérique robuste, évolutive et interopérable, capable de répondre aux exigences critiques de performance, de sécurité et de supervision en temps réel pour un réseau national de bornes de recharge pour véhicules électriques.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_29_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_29__chunk_000006",
+      "project_id": "projet_29_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_29_\\cir_final\\CIR2025_GLRT_ORIOS_VF.docx",
+      "file_name": "CIR2025_GLRT_ORIOS_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Raisonnement scientifique et démarche expérimentale appliquée]\nNotre projet de recherche et développement a été conduit selon une démarche itérative et progressive, visant à concevoir et valider une architecture numérique robuste, évolutive et interopérable pour la supervision, la commande et la maintenance d’un réseau de bornes de recharge à grande échelle.\n\nDans un premier temps, nous avons défini l’architecture cible en identifiant les composants critiques, les protocoles à supporter et les exigences de scalabilité, de sécurité et de supervision en temps réel. Cette étape a consisté à modéliser l’infrastructure distribuée et à planifier l’interconnexion des micro-services via RabbitMQ et WebSocket, tout en tenant compte des contraintes réseau et des volumes massifs de données à traiter.\n\nDans un second temps, nous avons entrepris la définition expérimentale des équipements hétérogènes, en connectant les bornes. Parallèlement, nous avons développé des mécanismes de continuité et de résilience pour la communication en temps réel, en simulant des conditions de réseau dégradé et des interruptions aléatoires. Cette étape nous a permis de définir des stratégies de reconnexion, de buffering et de basculement automatique entre réseaux pour assurer la stabilité des échanges.\n\nEnsuite, nous avons mis en œuvre une infrastructure de monitoring et de supervision expérimentale, intégrant la centralisation des logs et la collecte des métriques en temps réel. Des tests itératifs ont été menés pour calibrer les alertes et évaluer la capacité du système à absorber les volumes de données tout en maintenant des temps de réponse optimaux.\n\nEnfin, nous avons conduit des itérations d’évolutivité et d’adaptabilité, consistant à simuler l’introduction progressive de nouvelles fonctionnalités comme la recharge rapide. Ces itérations ont permis de valider la modularité de l’architecture et sa capacité à accueillir de nouveaux modules sans compromettre la performance globale.\n\nCette démarche expérimentale a constitué le fil conducteur de notre R&D, permettant d’identifier, de traiter et d’anticiper les principaux verrous scientifiques, techniques et technologiques du projet.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_29_\\extracted\\chunks.json"
+    }
+  ]
+}

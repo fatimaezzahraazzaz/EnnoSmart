@@ -1,0 +1,395 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 40/135, 8 chunks)
+
+### CHUNK_ID: projet_9__chunk_000084
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération | Contribution directe à l’acquisition de nouvelles connaissances | Temps déclaré pour l’opération (heures) |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Berry Alexis | BTS Conception de produits industriels- Lycée Godefroy-de-Bouillon | Technicien R&I | Réalisation des essais de tenue aux chocs et chutes sur machine pour prototypage ainsi que des essais de sécurisation du dispositif médical | 30 |
+| Jeannin Céline | BTS Assistante de Direction - Lycée Edgar Quinet | Définition et choix des matériaux | Contribution à la recherche des matériaux recyclables, résistants aux chocs et à l'abrasion à définir pour l'emballage des dispositifs médicaux | 13,34 |
+| Moigner Geoffrey | Ingénieur Filière Machines Mécanismes et systèmes - Institut Français de Mécanique Avancée | Chef de projet R&I | Participation aux réunions techniques et validation des définitions d'architecture des solutions techniques d'emballage pour les dispositifs médicaux fragiles et agressifs | 25 |
+| Vergne Hervé | Brevet de technicien spécialité "bureau d'étude" (construction mécanique) | Responsable R&I | Participation aux réunions techniques et validation des travaux liés à la résolution des problématiques de tenue aux chocs, à la résistance à l'abrasion et à la sécurisation du dispositif médical en vue de développement un système d'emballage performant et recyclable | 60 |
+| Ytournel Jérôme | BTS CPI - Conception de Produits Industriels - Lycée Jean Zay | Technicien qualité dvlpt | Analyse dimensionnelle | 1 |
+| Nathalie Techer | Brevet de technicien supérieur mécanique et automatisme industriels | Technicienne R&I | Recherche et définition d'architecture des solutions techniques d'emballage pour les dispositifs médicaux fragiles et agressifs | 138,5 |
+| Bodiment Vicky | Diplôme universitaire en technique d'automatisation des fabrications mécaniques - Institut universitaire de technologie de Montluçon | Technicien R&I | Recherche et définition d'architecture des solutions techniques d'emballage pour les dispositifs médicaux fragiles et agressifs + réalisation des prototypes | 135 |
+```
+
+### CHUNK_ID: projet_9__chunk_000122_sub00
+```
+[PAGE 8]
+8
+multiples dispositifs peut être déclinée avec ou sans couvercle 21 et/ou avec ou sans
+suremballage.
+MATERIAUX
+[0065] L’enveloppe 2 est réalisée en matériau souple, pour amortir les vibrations engendrées
+par un impact unique ou des secousses en série, mais suffisamment rigide pour assurer
+un maintien en suspension du dispositif dans le volume de suspension.
+[0066] On utilise de préférence un polyuréthane thermoplastique (TPU) ou un élastomère
+thermoplastique (TPE) ou un silicone (LSR).
+Le TPU présente l’avantage d’une
+résistance particulièrement élevée à l’abrasion, ce qui permet d’emballer des dispositifs
+avec des arêtes abrasives ou tranchantes sans risque de détérioration de l’enveloppe.
+Le
+tableau ci-dessous présente les tenues mécaniques en élasticité (tenue élongation à la
+rupture) pour les différents matériaux utilisables pour l’enveloppe.
+Matériau Technologie de mise en forme (élongation à la rupture)
+Thermoformage Injection
+TPU 350-500% 300-700%
+TPE 300-600% 300-800%
+LSR ------- 300-800%
+[0067] Le boîtier 10, le couvercle 21 ainsi que le suremballage 26 utilisent des
+caractéristiques de matériaux identiques ou similaires, avec un niveau de rigidité
+supérieur à celui de l’enveloppe 2, dans une perspective de protection contre les chocs.
+On utilise de préférence du polyéthylène téréphtalate amorphe (APET) ou polyéthylène
+téréphtalate modifié au glycol (PETG).
+L’APET et le PETG présentent une excellente
+résistance aux chocs et sont recyclables.
+Le PETG présente une flexibilité plus élevée
+que l’APET.
+Le polypropylène (PP) ou le polycarbonate (PC) peuvent également être
+utilisés.
+[0068] Les opercules 15 et 27 sont avantageusement réalisés à l’aide d’un matériau
+sélectivement étanche, par exemple une feuille textile non-tissée de fibres de
+polyéthylène haute densité (HDPE) commercialisée sous le nom de « Tyvek
+» (marque déposée).
+Ces feuilles ont une épaisseur comprise entre 0,5 et 10 μm.
+Par « sélectivement étanche », on entend un matériau dont les caractéristiques lui
+permettent de réguler les échanges de l’extérieur vers l’intérieur de l’emballage.
+En
+outre, le matériau crée une barrière stérile en ce sens qu’il empêche les contaminations
+susceptibles d’intervenir par l’entremise de microorganismes, bactéries ou matières
+biologiquement active qui pourraient venir en contact ou à proximité immédiate de
+l’emballage.
+```
+
+### CHUNK_ID: projet_9__chunk_000007
+```
+[SECTION : Raisonnement scientifique, démarche expérimentale appliquée et description des travaux réalisés en 2024]
+Afin de répondre aux objectifs ambitieux et résoudre notre problématique majeure, nous avons poursuivi une démarche expérimentale et itérative.
+
+En effet, les travaux de R&D menés en 2024 ont porté sur quatre principaux axes :
+
+Investigations et définition de solutions techniques d’emballage pour les dispositifs médicaux fragiles et agressifs ;
+
+Réalisation de prototypes par impression 3D, puis des prototypes thermoformés à partir de moules fabriqués en impression 3D pour les différentes solutions identifiées ;
+
+Réalisation des essais mécaniques afin d’évaluer les différentes solutions techniques développées ;
+
+Développement d’une solution performante d’emballage pour les dispositifs médicaux agressifs et fragiles.
+```
+
+### CHUNK_ID: projet_9__chunk_000014_sub01
+```
+par thermoformage d’un film PETG/TPU ; Figure 12 : Système d’emballage compound 6ème solution technique : emballage suspendu effectué par thermoformage d’un film TPU. Figure 13 : Système d’emballage suspendu
+
+Puis, nous avons réalisé des tests de chocs sur toutes les faces, toutes les arêtes et les quatre coins de notre système selon la norme ASTM4169 comme illustré dans la figure ci-dessous.
+
+Figure 14 : Identification des faces, arêtes et coins
+
+Ensuite, nous avons mené des tests pour évaluer la sécurité du dispositif médical lors des opérations.
+
+Les résultats de ces essais pour chaque solution technique définie sont :
+
+Fourreau : Après introduction du DM, nous avons remarqué que les formes obtenues après déformation ne suffisent pas pour un réel amortissement. Par conséquent, pour le simulateur cardiaque, nous avons considéré que les chocs peuvent endommager celui-ci malgré une absence totale de marque.
+
+En outre, la mise en place du DM est assez difficile car nous devons étirer le film TPU rendu élastique par les fentes réalisées. De même, pour sortir le DM de son fourreau, le risque de chute du DM est important ;
+
+Rosace : Lors des essais d’amortissement, nous avons constaté que les petites sphères permettent un bon amortissement aux chocs.
+
+Nous avons ensuite mené des tests d’abrasion sur des prothèses de genoux. Les résultats obtenus ont été satisfaisants.
+
+Cependant, lors de la dépose de la prothèse sur le plan de travail, celle-ci peut facilement nous échapper ;
+
+Sphère : Les résultats des tests d’amortissement et d’abrasion réalisés sur les prothèses de genoux ont été satisfaisants. Toutefois, ce système ne permet pas la sécurisation de la prothèse car la dépose de celle-ci sur le plan de travail s’avère dangereuse. En effet, lors de sa manipulation, la prothèse est tenue par l’intérieur et nous sommes obligés de la déposer côté sphère ;
+```
+
+### CHUNK_ID: projet_9__chunk_000014_sub02
+```
+celle-ci sur le plan de travail s’avère dangereuse. En effet, lors de sa manipulation, la prothèse est tenue par l’intérieur et nous sommes obligés de la déposer côté sphère ;
+
+Cube : Avec cette solution technologique, pour la réalisation des essais d’amortissement et d’abrasion, nous avons enroulé le DM dans la cavité prévu à cet effet. En effet, le DM est tenu dans le ¼ des cavités qui une fois enroulé le maintiennent parfaitement. Nous n’avons pas constaté de particules avec le DM que nous avons testé.
+
+En revanche, le fait d’enrouler le DM ne permet pas de répondre à la sécurisation de celui-ci, qui peut facilement nous échapper et chuter hors champ opératoire ;
+
+Compound : Afin de réaliser les tests d’amortissement et d’abrasion, nous avons défini le DM en sandwich dans une coque thermoforme avec le TPU en contact avec celui-ci. Les résultats obtenus montrent l’absence de forme amortissante. Par conséquent, cette solution technique ne répond pas à une de nos problématiques.
+
+Toutefois, la sécurisation du DM est assurée du fait de la forme de la coque (Cf. Figure ci-dessous).
+
+Figure 15 : Sécurisation du dispositif médical – solution technique compound
+
+Suspendu : Pour effectuer les essais d’amortissement et d’abrasion, le film TPU thermoformé est tendu à la forme du DM dans une coque en laissant de l’espace entre la coque et le film TPU. Une fois la coque fermée, le DM ne peut plus bouger. Les résultats à la suite des tests de chocs sont positifs même avec des DM fragiles comme un simulateur cardiaque.
+
+De plus, la mise en place du DM est facile car la coque est ouverte. Étant donnée la forme de la coque nous pouvons ouvrir facilement celle-ci pour mettre à disposition le DM au chirurgien.
+
+Par ailleurs, les matériaux définis dans ce système sont recyclables.
+
+À la suite des résultats obtenus dans le cadre de cette étude, la solution technique que nous avons retenue est celle qui s’appuie sur un système d’emballage suspendu.
+```
+
+### CHUNK_ID: projet_9__chunk_000015
+```
+ENTITE
+
+JUSTIFICATIF DES TRAVAUX DE R&D DECLARES AU TITRE DU CREDIT IMPOT RECHERCHE (CIR) DE L’ANNEE 2024
+
+FICHE DESCRIPTIVE
+
+EMBALLAGE POUR DEVICE MEDICAL EN SUSPENSION
+
+Sigle du projet
+
+Table des matières
+
+1. PROJET 1, ANNÉE 2023 : Fiche descriptive 3
+
+1.1. Intitulé du projet 3
+
+1.2. Indicateurs de R&D 3
+
+1.3. Objectifs du projet 4
+
+1.3.1. Contexte du projet 4
+
+1.3.2. Objectifs visés 4
+
+1.3.3. Performances à atteindre 4
+
+1.4. Etat de l’art 4
+
+1.4.1. Etat de l’art externe 4
+
+1.4.2. Etat de l’art interne 4
+
+1.4.3. Insuffisances des solutions existantes 5
+
+1.5. Verrous et incertitudes scientifiques, techniques, technologiques 5
+
+1.5.1. Verrous à lever 5
+
+1.5.2. Problèmes techniques à résoudre 5
+
+1.5.3. Aléas et incertitudes scientifiques et/ou technologiques 5
+
+1.6. Démarche expérimentale, travaux R&D réalisés 5
+
+1.6.1. Grands principes de la solution 5
+
+1.6.1.1. Caractère innovant du concept 5
+
+1.6.1.2. Description du concept 5
+
+1.6.1.3. Grands principes du concept 5
+
+1.6.2. Raisonnement scientifique et démarche expérimentale appliquée 5
+
+1.6.3. Partenariats & phasage des travaux 5
+
+1.6.3.1. Partenariats et projets collaboratifs 6
+
+1.6.3.2. Phasage des travaux 6
+
+1.6.4. Description des travaux réalisés 6
+
+1.6.4.1. Description des travaux antérieurs 6
+
+1.6.4.2. Description des travaux réalisés en 2023 6
+
+1.6.4.3. Résultats obtenus 6
+
+1.7. Acquisition des connaissances et contribution technique, scientifique ou technologique 6
+
+1.7.1. Résumé 6
+
+1.7.2. Contribution 6
+
+1.7.3. Accroissement des connaissances 7
+
+1.8. Annexes 7
+
+1.8.1. Annexe 1 : Contribution de la société [x], agréée au titre du Crédit d’impôt de recherche sur l’année 2023 7
+
+1.8.2. Annexe 2 : Rôle et contribution technique du personnel R&D 7
+```
+
+### CHUNK_ID: projet_9__chunk_000048
+```
+[SECTION : Raisonnement scientifique, démarche expérimentale appliquée et description des travaux réalisés en 2024]
+Afin de répondre aux objectifs ambitieux et résoudre notre problématique majeure, nous avons poursuivi une démarche expérimentale et itérative.
+
+En effet, les travaux de R&D menés en 2024 ont porté sur quatre principaux axes :
+
+Investigations et définition de solutions techniques d’emballage pour les dispositifs médicaux fragiles et agressifs ;
+
+Réalisation de prototypes par impression 3D, puis des prototypes thermoformés à partir de moules fabriqués en impression 3D pour les différentes solutions identifiées ;
+
+Réalisation des essais mécaniques afin d’évaluer les différentes solutions techniques développées ;
+
+Développement d’une solution performante d’emballage pour les dispositifs médicaux agressifs et fragiles.
+```
+
+### CHUNK_ID: projet_9__chunk_000055_sub01
+```
+est obtenue par thermoformage d’un film PETG/TPU ; Figure : Système d’emballage compound 6ème solution technique : emballage suspendu effectué par thermoformage d’un film TPU. Figure : Système d’emballage suspendu
+
+Puis, nous avons réalisé des tests de chocs sur toutes les faces, toutes les arêtes et les quatre coins de notre système selon la norme ASTM4169 comme illustré dans la figure ci-dessous.
+
+Figure : Identification des faces, arêtes et coins
+
+Ensuite, nous avons mené des tests pour évaluer la sécurité du dispositif médical lors des opérations.
+
+Les résultats de ces essais pour chaque solution technique définie sont :
+
+Fourreau : Après introduction du DM, nous avons remarqué que les formes obtenues après déformation ne suffisent pas pour un réel amortissement. Par conséquent, pour le simulateur cardiaque, nous avons considéré que les chocs peuvent endommager celui-ci malgré une absence totale de marque.
+
+En outre, la mise en place du DM est assez difficile car nous devons étirer le film TPU rendu élastique par les fentes réalisées. De même, pour sortir le DM de son fourreau, le risque de chute du DM est important ;
+
+Rosace : Lors des essais d’amortissement, nous avons constaté que les petites sphères permettent un bon amortissement aux chocs.
+
+Nous avons ensuite mené des tests d’abrasion sur des prothèses de genoux. Les résultats obtenus ont été satisfaisants.
+
+Cependant, lors de la dépose de la prothèse sur le plan de travail, celle-ci peut facilement nous échapper ;
+
+Sphère : Les résultats des tests d’amortissement et d’abrasion réalisés sur les prothèses de genoux ont été satisfaisants. Toutefois, ce système ne permet pas la sécurisation de la prothèse car la dépose de celle-ci sur le plan de travail s’avère dangereuse. En effet, lors de sa manipulation, la prothèse est tenue par l’intérieur et nous sommes obligés de la déposer côté sphère ;
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 40,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

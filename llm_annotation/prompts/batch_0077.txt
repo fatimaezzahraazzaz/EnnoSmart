@@ -1,0 +1,389 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 77/135, 8 chunks)
+
+### CHUNK_ID: projet_16__chunk_000007_sub40
+```
+gêne dans l’axe pilote Problème connu sur roue avd (Fatigue ou fatiguant) Eye tracker : analyse ergo STAT Coupe batterie : Blessure mais FT en cours de traitement BAE :
+
+Axe gauche difficile à extraire
+
+Capuchon sont tombés
+
+Rétroviseur :
+
+Souhait d’avoir la même chose que sur GRIFFON
+
+Clé alène de 6 non présente dans le lot de bord (mais communiqué en RAE)
+
+Rétroviseur d’accostage : visibilité limitée
+
+Pédale d’accélérateur :
+
+Douleur en utilisation du fait du décalage de la différence de hauteur Evolution possible à faire
+
+Ralentisseur :
+
+Amélioration TX à expliquer pas compris
+
+Antenne RX/ TX :
+
+Casse de l’antenne RX Contact
+
+En tout-terrain mais antenne non dépliée
+
+Antibrouillard arrière reste en plein phare mais c’est normal On ne fera rien
+
+Mise à zéro du véhicule et 3 min les lumières après extinction (Phase d’endormissement) :
+
+45 s (AFP)
+
+1 m mobilité (VMOB)
+
+3 min sur le véhicule complet (Lumière) Explication à donner par NS
+
+Bruit à roue ARD :
+
+Boitier EMC
+
+Prise de parc à retourner mais FT connu et traité sur la série
+
+Réglage des rétros pas dans le bon sens mais précisé en RAE
+
+Proximale AVD :
+
+Perte d’image ? FT connu chez NS
+
+Occurrence 1 seule fois
+
+Passage de couleur différente (Rose, Orange, Blanc, vert (de jour), …) de nuit A analyser
+
+Retro-éclairage :
+
+Attente retour STAT car pas compris
+
+Clavier CAN en Retrovision
+
+Bruit Chez TX
+
+80 dB mesure direct
+
+110 dB mesure direct
+
+47 km/h 3, 4 et 5 sur tous les types de terrain mais un bruit fort à l’intérieur
+
+Accoudoir :
+
+Position repos : On ne fera rien
+
+Transmission vidéo dégradé entre AFP/ MFD
+
+Vaguelette sur APF sur VHP
+
+Essuie-glace :
+
+Il s’arrête quand ils veulent : ¾ du temps s’arrête au milieu
+
+Demande de décaler les 3 et 4 On ne fera rien
+
+Gêne du carter essuie-glace de nuit
+
+BJF :
+
+BJF Gerbe de câble A analyser
+
+DAGR :
+
+Position non représentative
+
+Câble OK (
+
+Bip-Bip marche arrière non fonctionnel mais fonctionnel après
+
+Etat technique :
+
+Affichage sur AFP/ MFD A analyser
+
+Trappe ARD dure à fermer
+```
+
+### CHUNK_ID: projet_16__chunk_000004
+```
+[SECTION : Description des travaux de Recherche & Développement]
+Ce document présente les principaux travaux de recherches et de développement menés dans le cadre du projet « SERVAL-Architecture électrique » en 2022.
+
+Seuls les travaux ayant eu pour but de résoudre des problématiques intrinsèques à ce projet R&D et permettant de réaliser des progrès techniques et des nouveautés dans le domaine des nouvelles techniques de développements des véhicules militaires compacts et blindés, au niveau de l’architecture électrique et électronique, sont présentés.
+
+Ce projet étant classé secret défenses l’ensemble des documents relatifs au développement et à l’expérimentation peut être consulté sur place chez AMETRA Engineering en cas de besoin.
+```
+
+### CHUNK_ID: projet_17__chunk_000021_sub00
+```
+[SECTION : Tests et retour d’expérience sur la co-simulation Nissan]
+L’intégration de xMOD avec Matlab/Simulink a été validé dans le cadre du projet Nissan, qui visait à démontrer l’efficacité et la robustesse de l’implémentation de la XIL API pour le contrôle d’une plateforme de co-simulation en Model-In-the-Loop (MiL) et Hardware-In-the-Loop (HiL). Cette étude a permis d’évaluer les performances du système et d’identifier les éventuelles limitations liées à son utilisation dans un environnement industriel.
+
+L’expérimentation a porté sur un banc de test où différents modèles de simulation, développés sous Simulink et xMOD, interagissent via la XIL API. L’objectif principal était de valider la capacité de xMOD à exécuter et synchroniser des modèles complexes, tout en étant contrôlé depuis Matlab via des commandes standards du XIL API. Les tests ont permis de mesurer la latence des échanges de données, la stabilité du système en temps réel, ainsi que l’efficacité de la communication entre les outils.
+
+Les principaux enseignements de ces tests sont les suivants :
+
+Validation de la compatibilité XIL API : l’intégration a permi un contrôle fluide de la simulation depuis Matlab, avec une gestion efficace des paramètres et des signaux échangés entre les modèles.
+
+Évaluation des performances temps réel : les temps de réponse du système ont été mesurés pour garantir que la plateforme reste conforme aux exigences de simulation en temps contraint.
+
+Synchronisation des modèles : les scénarios de co-simulation ont confirmé que l’approche adoptée assure une exécution cohérente et déterministe des modèles, évitant les dérives temporelles entre xMOD et Simulink.
+
+Limites et pistes d’amélioration : certains cas ont révélé des latences non-négligeables lorsque plusieurs modèles interagissent concurremment, nécessitant des optimisations dans la gestion des flux de données.
+
+La figure « Structure du contrôle de la plateforme MiL », illustre l’architecture mise en place, où xMOD exécute différents modèles (Engine GT, ECM, Emission DoE, etc.), tandis que Simulink assure la génération des entrées et le suivi des résultats. La connexion XCP avec INCA permet, quant à elle, d’ajuster dynamiquement les paramètres ECU, améliorant ainsi la flexibilité des essais.
+
+Figure : Interface graphique permettant le contrôle de la plateforme MiL
+```
+
+### CHUNK_ID: projet_17__chunk_000043_sub00
+```
+[SECTION : Le développement de la simulation de véhicule]
+La simulation de véhicule permet de tester le spécimen ainsi que de simuler les composants manquants du véhicule. Le plus grand avantage de l’utilisation de la simulation de véhicule est la répétabilité. Les conditions environnementales peuvent être répétées avec exactitude, ce qui ne peut pas être garanti pour des trajets réels. Par exemple, les routes mouillées ou certaines températures sont simplement définies en simulation. Les tests deviennent ainsi plus reproductibles. Ceci est particulièrement avantageux pour les véhicules électriques et hybrides en raison des systèmes de distribution de puissance variables.
+
+La fonction de simulation de véhicule a été développée sur le principe suivant : Les mesures sont envoyées à la simulation, où le comportement des pièces inexistantes (véhicule et roues) est calculé sur la base d’un modèle mathématique. La simulation transmet des signaux au matériel qui, selon le cas de test spécifique, sont soit directement transmis au matériel par l’intermédiaire d’actionneurs, soit doivent être suivis par un contrôleur. Les modules de simulation développés pour la simulation de véhicules sont les suivants :
+
+[TABLEAU]
+| Modèle | Description |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Véhicule | Modèle de roue pouvant être paramétré avec l'inertie, le rayon, les rendements directs et inverses. Modèle de véhicule longitudinal qui peut être paramétré avec des coefficients théoriques ou réels, y compris la masse du véhicule et la pente de la route. |
+| Conducteur | Gestion de la pédale d'accélérateur, du frein en fonction de la force réelle calculée nécessaire pour suivre le cycle de conduite Accès en ligne aux paramètres PID de l'algorithme de contrôle pour ajuster le comportement du conducteur en temps réel. L'utilisateur peut choisir parmi trois modes de conduite préconfigurés (normal, lent et agressif) ou effectuer ses propres réglages. |
+
+Une fois développé, le module de simulation a été testé sur un banc d’essai. Le banc d’essai utilisé pour cette étude avait la configuration suivante :
+
+Spécimen : Boite de Vitesse
+
+1 machine de charge en entrée de boite de vitesse
+```
+
+### CHUNK_ID: projet_17__chunk_000064_sub00
+```
+[SECTION : Le développement de la simulation de véhicule]
+La simulation de véhicule permet de tester le spécimen ainsi que de simuler les composants manquants du véhicule. Le plus grand avantage de l’utilisation de la simulation de véhicule est la répétabilité. Les conditions environnementales peuvent être répétées avec exactitude, ce qui ne peut pas être garanti pour des trajets réels. Par exemple, les routes mouillées ou certaines températures sont simplement définies en simulation. Les tests deviennent ainsi plus reproductibles. Ceci est particulièrement avantageux pour les véhicules électriques et hybrides en raison des systèmes de distribution de puissance variables.
+
+La fonction de simulation de véhicule a été développée sur le principe suivant : Les mesures sont envoyées à la simulation, où le comportement des pièces inexistantes (véhicule et roues) est calculé sur la base d’un modèle mathématique. La simulation transmet des signaux au matériel qui, selon le cas de test spécifique, sont soit directement transmis au matériel par l’intermédiaire d’actionneurs, soit doivent être suivis par un contrôleur. Les modules de simulation développés pour la simulation de véhicules sont les suivants :
+
+[TABLEAU]
+| Modèle | Description |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Véhicule | Modèle de roue pouvant être paramétré avec l'inertie, le rayon, les rendements directs et inverses. Modèle de véhicule longitudinal qui peut être paramétré avec des coefficients théoriques ou réels, y compris la masse du véhicule et la pente de la route. |
+| Conducteur | Gestion de la pédale d'accélérateur, du frein en fonction de la force réelle calculée nécessaire pour suivre le cycle de conduite Accès en ligne aux paramètres PID de l'algorithme de contrôle pour ajuster le comportement du conducteur en temps réel. L'utilisateur peut choisir parmi trois modes de conduite préconfigurés (normal, lent et agressif) ou effectuer ses propres réglages. |
+
+Une fois développé, le module de simulation a été testé sur un banc d’essai. Le banc d’essai utilisé pour cette étude avait la configuration suivante :
+
+Spécimen : Boite de Vitesse
+
+1 machine de charge en entrée de boite de vitesse
+```
+
+### CHUNK_ID: projet_17__chunk_000043_sub02
+```
+mentionné plus haut, nous avons développé une fonction de simulation de véhicule afin de permettre le test du spécimen, tout en reproduisant le comportement des composants absents du véhicule réel. Les mesures issues du banc d’essai sont transmises à la simulation, où le comportement dynamique du véhicule et des roues est calculé sur la base d’un modèle mathématique.
+Les signaux résultants sont ensuite renvoyés vers le matériel, soit directement vers les actionneurs, soit vers le contrôleur selon le cas de test.
+Cette interaction bidirectionnelle entre le système physique et la simulation permet de reproduire de manière répétable les conditions réelles de conduite et d’assurer la cohérence entre la charge simulée et la charge appliquée.
+Analyse et résolution des problématiques liées au développement d’un contrôleur universel pour les bancs d’essai multi-machines Définition d’une nouvelle approche de fusion des algorithmes de contrôle La démarche que nous avons définie consiste à fusionner plusieurs algorithmes de contrôle spécifiques existants dans une architecture logicielle unifiée, développée sous MATLAB/Simulink.
+Ces algorithmes, auparavant dédiés à des bancs d’essai distincts (boîtes de vitesses, e-axles, transmissions…), ont été intégrés dans un modèle commun afin d’obtenir un contrôleur unique capable de gérer différentes topologies de test.
+L’une des principales problématiques que nous avons rencontrées a été de garantir que le modèle combiné reste suffisamment léger pour une exécution en temps réel.
+Dans un environnement tel que MORPHEE, les modèles doivent respecter des contraintes de temps strictes pour être considérés comme exploitables en temps réel.
+Or, plus un modèle est complexe, plus son temps d’exécution augmente, ce qui peut compromettre cette exigence.
+Ainsi, il n’est pas envisageable de combiner l’ensemble des algorithmes directement dans un seul modèle.
+En effet, nous avons structuré les algorithmes de chaque dynamomètre en fonction de deux types de consignes : la consigne utilisateur et la consigne transmise à l’actionneur.
+```
+
+### CHUNK_ID: projet_17__chunk_000023
+```
+[SECTION : Perspectives]
+Les avancées réalisées au cours de ce projet ouvrent la voie à plusieurs axes d’amélioration et d’extension de xMOD, visant à renforcer encore davantage son intégration avec les standards industriels et à étendre ses capacitès de simulation.
+
+Un premier axe de développement concerne l’optimisation du support du DCP, afin d’améliorer encore la performance des échanges de données en co-simulation distribuée. Les tests réalisés avec CARLA et d’autres environnements ADAS ont prouvé l’intérêt du standard, mais également des pistes d’amélioration, notamment sur la gestion des délais de communication et la synchronisation des modèles. Une collaboration plus approfondie avec des partenaires académiques et industriels pourrait permettre d’optimiser ces aspects et d’assurer une utilisation plus large de cette technologie.
+
+Concernant l’évolution de la XIL API dans xMOD, l’intégration du multi-instance du SignalGenerator et de la fonctionnalité Capture a été une avancée majeure, mais des optimisations restent nécessaires. L’un des prochains défis consiste à renforcer la gestion des accès concurrents entre plusieurs modules d’acquisition et d’injection de signaux, notamment lorsque des modèles exécutent des boucles à des fréquences différentes. Une amélioration des mécanismes de verrouillage et de gestion des buffers permettrait d’accroître la stabilité et la cohérence des simulations dans des environnements complexes.
+
+Sur le plan applicatif, l’expérience acquise avec Nissan pourrait être étendue à d’autres projets industriels nécessitant une co-simulation avancée entre xMOD, Matlab/Simulink et d’autres outils de test en temps réel. L’objectif serait de proposer un environnement encore plus flexible pour l'intégration et l’exécution de simulations Model-In-the-Loop (MiL) et Hardware-In-the-Loop (HiL).
+
+Enfin, une perspective intéressante serait l’extension de xMOD vers des architectures cloud pour permettre des simulations distribuées à grande échelle (simulation massive), en exploitant les infrastructures haute performance et les plateformes de calcul sur le réseau. Cela ouvrirait la possibilité d’exécuter des simulations massivement parallèles, améliorant ainsi les capacités de test et de validation des systèmes complexes.
+
+Ces perspectives s’inscrivent dans une démarche d’évolution continue de xMOD, visant à consolider son rôle en tant qu’outil de référence pour la simulation en temps réel et la co-simulations distribuée.
+```
+
+### CHUNK_ID: projet_17__chunk_000016_sub00
+```
+[SECTION : Scénario de test]
+Objectif : Piloter un véhicule autonome dans CARLA en temps réel depuis un modèle de contrôle exécuté sous xMOD.
+
+Architecture : xMOD (DCP Master) envoie des consignes de vitesse et de position au simulateur CARLA (DCP Slave).
+
+Contraintes : Garantir une faible latence et une bonne précision des échanges.
+
+La figure ci-dessous illustre l’architecture de communication et les échanges de données entre plusieurs modèles de véhicules dans un scénario de co-simulation distribuée utilisant le DCP. L’objectif de cette expérimentation est de valider l’intégration du DCP dans un environnement de simulation avancé, en particulier pour des applications liées aux systèmes avancés d’aide à la conduite (ADAS) et aux véhicules autonomes.
+
+Interface de communication DCP
+
+L’interface de communication DCP joue un rôle central en assurant l’échange de données entre les différentes entités du système. Elle facilite le transfert des informations issues des capteurs et des modèles de contrôle des véhicules, permettant ainsi la synchronisation et l’interopérabilité des différents composants de la simulation.
+
+Cette interface gère plusieurs variables d’entrée et de sortie, incluant :
+
+La position des véhicules A, B et C
+
+La vitesse des véhicules A, B et C
+
+La longueur des véhicules A, B et C
+
+La direction des véhicules A, B et C
+
+L’accélération des véhicules A, B et C
+
+Ces données sont utilisées pour modéliser le comportement dynamique des véhicules et leur interaction dans l’environnement simulé.
+
+Modèles impliqués dans la simulation
+
+Chaque véhicule représenté dans l’architecture (véhicule B et véhicule C) est doté de deux modèles distincts encapsulés sous forme de FMU (Functional Mock-up Unit), qui interagissent via le protocole DCP.
+
+Modèle de capteur (Sensor Model - FMU)
+
+Ce modèle reçoit les données transmises via le protocole DCP, telles que la position, la vitesse et la direction des véhicules environnants. Il calcule ensuite des grandeurs spécifiques utilisées par le contrôleur du véhicule, notamment : la distance au véhicule cible et la vitesse relative par rapport au véhicule précédent
+
+Modèle de contrôle CACC (Cooperative Adaptive Cruise Control - FMU)
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 77,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

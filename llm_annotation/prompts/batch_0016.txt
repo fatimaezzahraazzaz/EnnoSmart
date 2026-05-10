@@ -1,0 +1,320 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 16/135, 8 chunks)
+
+### CHUNK_ID: projet_4__chunk_000040_sub00
+```
+[PAGE 41]
+CIR 2024
+II.8.3.
+Démarche expérimentale, travaux R&D réalisés
+II.8.3.1.
+Raisonnement scientifique et démarche expérimentale appliquée
+pour la réalisation de nos expérimentations agronomiques
+Pour chacune de nos expérimentations agronomiques, que ce soit pour lutter contre des
+maladies, des ravageurs ou des adventices, ou bien pour évaluer l’impact de nouvelles
+techniques sur les rendements, nous appliquons toujours la même démarche R&D, à savoir
+que nous devons d’abord définir le protocole expérimental, puis préparer les différents
+traitements à appliquer et enfin réaliser des analyses statistiques des différents résultats
+obtenus.
+II.8.3.2.
+Définition du protocole expérimental
+Pour pouvoir définir un protocole expérimental pertinent au regard des solutions techniques à
+tester, nous devons tout d’abord analyser et rechercher des sites de cultures capables de
+répondre à l’étude de ces nouvelles solutions techniques.
+Cette étape est cruciale pour l’étude
+et nous impose donc de lever un maximum d’incertitudes liées à la représentativité de la
+culture (homogénéité des facteurs agronomiques et de l’infestation), afin que nos résultats
+puissent être exploitables.
+Par conséquent, pour chaque solution technique testée, nous devons collecter tout type de
+données disponibles sur cette solution technique, afin de définir une méthode et un plan
+d’expérimentation les plus appropriés.
+En effet, les solutions techniques testées répondent à
+des spécificités régionales aussi bien agronomiques que culturales, si bien que de solides
+connaissances sur ces spécificités sont nécessaires.
+De plus, les solutions techniques ayant pour cible des organismes vivants (végétaux, micro-
+organismes, insectes), il nous est indispensable de disposer de solides connaissances sur ces
+organismes cibles afin d’assurer le bon déroulement et la validité des résultats de nos
+expérimentations.
+Enfin, nos expérimentations étant faites en champ ou sous abri, elles sont contraintes par des
+aléas qu’il nous est indispensable de prendre en compte au fur et à mesure de nos
+expérimentations et qui nous impose de redéfinir nos stratégies élaborées au départ.
+II.8.3.3.
+```
+
+### CHUNK_ID: projet_4__chunk_000014_sub00
+```
+[PAGE 15]
+CIR 2024
+ L’identification de la parcelle expérimentale, qui nécessite un historique favorable à
+l’apparition de la maladie ou du ravageur et l’environnement qui peut influencer la
+pression parasitaire et les conditions culturales.
+Un mauvais choix de parcelle risque
+donc de conduire à des résultats non représentatifs
+ Les facteurs climatiques et environnementaux, qui peuvent perturber les cultures, donc
+les données météorologiques durant l’essai sont indispensables pour interpréter les
+résultats.
+Par conséquent, des essais sur plusieurs années et plusieurs sites sont
+nécessaires pour garantir la fiabilité et la reproductibilité des résultats
+ Le comportement des formulations en conditions réelles peut être différent de celui des
+essais en laboratoire car il est influencé par les conditions de sol et de climat, les
+traitements antérieurs… La forte variabilité biologique est donc difficile à anticiper et
+impose de redéfinir les protocoles initialement prévus
+En conclusion, de nombreux facteurs complexes influencent l’efficacité des méthodes testées
+et imposent une phase expérimentale indispensable.
+Le développement des essais repose
+ainsi sur une démarche empirique, sans garantie de succès immédiat.
+II.4.
+Démarche expérimentale, travaux R&D réalisés
+II.4.1.
+Raisonnement scientifique et démarche expérimentale appliquée
+Chaque expérimentation que nous menons suit une logique R&D rigoureuse et structurée en
+trois étapes.
+La définition du protocole expérimental nécessite d’identifier un site d’essai capable de
+garantir une représentativité de la culture et une infestation homogène, afin d’obtenir des
+résultats exploitables.
+Nous devons donc collecter des informations techniques sur les
+différents traitements testés, adapter le protocole aux conditions climatiques (région, espèces
+cibles) et prendre en compte les aléas naturels (météo, sols, infestation) qui peuvent
+nécessiter de redéfinir le protocole.
+Nous devons ensuite préparer les différents traitements à appliquer dans les
+expérimentations, en calculant le volume précis de bouillie pour chacune des modalités, en
+intégrant le volume d’application théorique, la surface de la modalité et le volume mort (amorce
+de rampe, marge de sécurité).
+Ceci nécessite une préparation rigoureuse en prenant en
+compte le calcul de la surface à traiter, la quantité de produit à peser selon la dose/hectare et
+la masse volumique.
+```
+
+### CHUNK_ID: projet_4__chunk_000306
+```
+[SECTION : Raisonnement scientifique et démarche expérimentale appliquée]
+Chaque expérimentation que nous menons suit une logique R&D rigoureuse et structurée en trois étapes.
+
+La définition du protocole expérimental nécessite d’identifier un site d’essai capable de garantir une représentativité de la culture et une infestation homogène, afin d’obtenir des résultats exploitables. Nous devons donc collecter des informations techniques sur les différents traitements testés, adapter le protocole aux conditions climatiques (région, espèces cibles) et prendre en compte les aléas naturels (météo, sols, infestation) qui peuvent nécessiter de redéfinir le protocole.
+
+Nous devons ensuite préparer les différents traitements à appliquer dans les expérimentations, en calculant le volume précis de bouillie pour chacune des modalités, en intégrant le volume d’application théorique, la surface de la modalité et le volume mort (amorce de rampe, marge de sécurité). Ceci nécessite une préparation rigoureuse en prenant en compte le calcul de la surface à traiter, la quantité de produit à peser selon la dose/hectare et la masse volumique.
+
+La dernière phase consiste ensuite à récolter, mesurer et effectuer les analyses statistiques. Nous menons ainsi deux types d’étude. L’étude d’efficacité sert à mesurer l’impact global d’un traitement sur la culture. Elle prend en compte les effets positifs (rendement, protection), négatifs, (phytotoxicité, organismes non ciblés, résistances…) et la durée d’efficacité. L’étude de sélectivité cherche quant à elle à détecter une éventuelle phytotoxicité. Pour cela, nous évaluons s’il y a des différences significatives entre les traitements au moyen d’analyse de la variance (ANOVA), nous caractérisons les différences entre les traitements par rapport au témoin grâce au test de Dunett. Le test de Newman-Keuls nous permet de comparer les résultats entre les traitements eux-mêmes. Enfin, le test de Tukey nous permet de valider les différences significatives observées.
+```
+
+### CHUNK_ID: projet_4__chunk_000312_sub00
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération (chef de projet, chercheur, technicien de R&D…) | Contribution directe à l’acquisition de nouvelles connaissances | Temps déclaré pour l’opération (heures) |
+| --------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| ALEX Ludovic | Ingénieur Agronome -L'institut Agro Montpellier 2022 | Technicien de R&D | Mise en œuvre de programmes d'expérimentation | 570 |
+| BEDEL Léa | Doctorat Géosciences - Université de Lorraine | Technicien de R&D | Mise en œuvre de programmes d'expérimentation | 498 |
+| BOULLARD Lilian | Ingénieur - Institut Polytechnique Lasalle | Chercheur | Proposition et mise en œuvre de programmes expérimentaux | 550 |
+| CARBONEL Jim | Certificat de spécialité - ENSSA Bordeaux Aquitaine | Technicien de R&D | Mise en œuvre de programmes d'expérimentation | 35 |
+| CLAUDEL Anaïs | Master Agrosciences - Université d'Avignon et des Pays de Vaucluse | Chercheur | Mise en œuvre d'expérimentations en Alliacées et de différents programmes de recherche et d'expérimentation BPE | 1286 |
+| DELATOUR Damien | Licence professionnelle agroressources et environnement - Université Reims Champagne-Ardennes | Technicien de R&D | Mise en œuvre de programme de recherches de références pour le territoire Champagne-Ardenne | 336 |
+| DUPONT-GENDRON Maxime | Master Biologie végétale option filières de l'Horticulture et innovation | Technicien de R&D | Mise en œuvre de programmes d'expérimentation | 447 |
+| FREUDENREICH Laura | Ingénieur agronomie - ENSAIA | Chercheur | Montage et coordination de projets, participation aux essais expérimentaux | 117 |
+| FUCHS Sébastien | DUT Génie Biologique, Agronomie - IUT Colmar | Technicien de R&D | Proposition et mise en œuvre de programmes de recherches de référence | 932 |
+| JOUSSEMET Marie-Anne | Ingénieure Horticole - ENSH | Chercheur chef de projet | Montage et coordination de projets, participation aux essais expérimentaux | 80 |
+| JUNG Denis | Ingénieur agronome - ENSA Montpellier | Chercheur | Proposition et mise en œuvre de programmes de recherches de référence, expérimentateur sur pomme de terre et de cellule BPE | 659 |
+| LITZLER Marine | Master gestion de la qualité des productions végétales | Technicien de R&D | Montage et coordination de projets, participation aux essais expérimentaux | 1180 |
+| MOUGENOT Jonas | DUT Génie Biologique, Agronomie - IUT Colmar | Technicien de R&D | Participation aux essais expérimentaux | 874 |
+| NUSSBAUMER Marie | Master ST2AE Sciences agronomiques et environnementales - Université Colmar | Technicien de R&D | Proposition et mise en œuvre de programmes expérimentaux | 1201 |
+| OHREL Maylis | Ingénieur agriculture - INSSAAE | Chercheur chef de projet | Mise en place d'essais sur site, réalisation d'applications, suivi cultural et entretien des essais, réalisation d'observations et traitement des données | 1431 |
+| PAOLUCCI Maxime | Diplôme Universitaire Conseiller/Analyste en stratégie des systèmes polyculture et élevage - ENSAIA | Technicien de R&D | Mise en œuvre de programmes d'expérimentation | 257 |
+| SESMAT Robin | Ingénieur - Institut Supérieure d'Agriculture Yncrea Hauts de France | Chercheur | Mise en œuvre d'expérimentations | 865 |
+| VARAILLAS Carla | Master agrosciences, environnement, territoires, paysages, foret - Université Amiens Picardie Jules Verne | Technicien de R&D | Mise en œuvre de programmes d'expérimentation | 103 |
+```
+
+### CHUNK_ID: projet_4__chunk_000135
+```
+[SECTION : Définition du protocole expérimental]
+Pour pouvoir définir un protocole expérimental pertinent au regard des solutions techniques à tester, nous devons tout d’abord analyser et rechercher des sites de cultures capables de répondre à l’étude de ces nouvelles solutions techniques. Cette étape est cruciale pour l’étude et nous impose donc de lever un maximum d’incertitudes liées à la représentativité de la culture (homogénéité des facteurs agronomiques et de l’infestation), afin que nos résultats puissent être exploitables.
+
+Par conséquent, pour chaque solution technique testée, nous devons collecter tout type de données disponibles sur cette solution technique, afin de définir une méthode et un plan d’expérimentation les plus appropriés. En effet, les solutions techniques testées répondent à des spécificités régionales aussi bien agronomiques que culturales, si bien que de solides connaissances sur ces spécificités sont nécessaires.
+
+De plus, les solutions techniques ayant pour cible des organismes vivants (végétaux, micro-organismes, insectes), il nous est indispensable de disposer de solides connaissances sur ces organismes cibles afin d’assurer le bon déroulement et la validité des résultats de nos expérimentations.
+
+Enfin, nos expérimentations étant faites en champ ou sous abri, elles sont contraintes par des aléas qu’il nous est indispensable de prendre en compte au fur et à mesure de nos expérimentations et qui nous impose de redéfinir nos stratégies élaborées au départ.
+```
+
+### CHUNK_ID: projet_4__chunk_000185
+```
+[SECTION : Définition du protocole expérimental]
+Pour pouvoir définir un protocole expérimental pertinent au regard des solutions techniques à tester, nous devons tout d’abord analyser et rechercher des sites de cultures capables de répondre à l’étude de ces nouvelles solutions techniques. Cette étape est cruciale pour l’étude et nous impose donc de lever un maximum d’incertitudes liées à la représentativité de la culture (homogénéité des facteurs agronomiques et de l’infestation), afin que nos résultats puissent être exploitables.
+
+Par conséquent, pour chaque solution technique testée, nous devons collecter tout type de données disponibles sur cette solution technique, afin de définir une méthode et un plan d’expérimentation les plus appropriés. En effet, les solutions techniques testées répondent à des spécificités régionales aussi bien agronomiques que culturales, si bien que de solides connaissances sur ces spécificités sont nécessaires.
+
+De plus, les solutions techniques ayant pour cible des organismes vivants (végétaux, micro-organismes, insectes), il nous est indispensable de disposer de solides connaissances sur ces organismes cibles afin d’assurer le bon déroulement et la validité des résultats de nos expérimentations.
+
+Enfin, nos expérimentations étant faites en champ ou sous abri, elles sont contraintes par des aléas qu’il nous est indispensable de prendre en compte au fur et à mesure de nos expérimentations et qui nous impose de redéfinir nos stratégies élaborées au départ.
+```
+
+### CHUNK_ID: projet_4__chunk_000256
+```
+[SECTION : Définition du protocole expérimental]
+Pour pouvoir définir un protocole expérimental pertinent au regard des solutions techniques à tester, nous devons tout d’abord analyser et rechercher des sites de cultures capables de répondre à l’étude de ces nouvelles solutions techniques. Cette étape est cruciale pour l’étude et nous impose donc de lever un maximum d’incertitudes liées à la représentativité de la culture (homogénéité des facteurs agronomiques et de l’infestation), afin que nos résultats puissent être exploitables.
+
+Par conséquent, pour chaque solution technique testée, nous devons collecter tout type de données disponibles sur cette solution technique, afin de définir une méthode et un plan d’expérimentation les plus appropriés. En effet, les solutions techniques testées répondent à des spécificités régionales aussi bien agronomiques que culturales, si bien que de solides connaissances sur ces spécificités sont nécessaires.
+
+De plus, les solutions techniques ayant pour cible des organismes vivants (végétaux, micro-organismes, insectes), il nous est indispensable de disposer de solides connaissances sur ces organismes cibles afin d’assurer le bon déroulement et la validité des résultats de nos expérimentations.
+
+Enfin, nos expérimentations étant faites en champ ou sous abri, elles sont contraintes par des aléas qu’il nous est indispensable de prendre en compte au fur et à mesure de nos expérimentations et qui nous impose de redéfinir nos stratégies élaborées au départ.
+```
+
+### CHUNK_ID: projet_4__chunk_000305
+```
+[SECTION : Verrous et incertitudes scientifiques, techniques, technologiques]
+Dans le cadre de nos travaux, nous sommes confrontés à différentes sortes de verrous liés à :
+
+La définition du protocole expérimental : il est difficile d’établir des protocoles fiables pour des produits ou des méthodes innovantes, car les guides EPPO ou CEB restent très généraux. Une réflexion scientifique amont est donc nécessaire, surtout dans les approches systémiques combinant plusieurs leviers
+
+La mise en place des essais : certains essais posent des contraintes de logistique importante (ex : pose manuelle des filets anti-insectes) ou nécessitent de travailler avec des variétés spécifiques. Par ailleurs, certains essais peuvent se révéler complexes à transposer à grande échelle
+
+La présence et la variabilité des bioagresseurs, qui est imprévisible (trop forte, trop faible…) et nuit à la fiabilité statistique des résultats
+
+L’identification de la parcelle expérimentale, qui nécessite un historique favorable à l’apparition de la maladie ou du ravageur et l’environnement qui peut influencer la pression parasitaire et les conditions culturales. Un mauvais choix de parcelle risque donc de conduire à des résultats non représentatifs
+
+Les facteurs climatiques et environnementaux, qui peuvent perturber les cultures, donc les données météorologiques durant l’essai sont indispensables pour interpréter les résultats. Par conséquent, des essais sur plusieurs années et plusieurs sites sont nécessaires pour garantir la fiabilité et la reproductibilité des résultats
+
+Le comportement des formulations en conditions réelles peut être différent de celui des essais en laboratoire car il est influencé par les conditions de sol et de climat, les traitements antérieurs… La forte variabilité biologique est donc difficile à anticiper et impose de redéfinir les protocoles initialement prévus
+
+En conclusion, de nombreux facteurs complexes influencent l’efficacité des méthodes testées et imposent une phase expérimentale indispensable. Le développement des essais repose ainsi sur une démarche empirique, sans garantie de succès immédiat.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 16,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

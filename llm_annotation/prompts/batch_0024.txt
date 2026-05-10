@@ -1,0 +1,281 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 24/135, 8 chunks)
+
+### CHUNK_ID: projet_5__chunk_000017_sub02
+```
+de 12mm à 25mm. Nous avions alors obtenu des résultats proches pour des épaisseurs entre 12 et 25mm. Toutefois, à partir de 25mm, le comportement acoustique de la mousse s’améliorait.
+
+A l’issue de l’étude expérimentale que nous avions menée en 2021 et après validation des performances du banc d’essai, nous avions poursuivi nos travaux en 2022 afin de définir un modèle numérique du montage expérimental développé et du joint comprimé. L’objectif final de cette étude était de définir un modèle présentant une bonne corrélation numérique avec les résultats expérimentaux.
+
+En effet, nous avions dans un premier temps cherché à modéliser le joint testé initialement avec le banc de compression dans la petite cabine. Nous avions pour cela découpé et scanné une section du joint. Puis, nous avions à l’aide du programme Marc, défini un modèle EF du joint, en nous appuyant sur un modèle d’Ogden à trois termes.
+
+Nous avions ensuite réalisé nos calculs suivant deux grandes étapes :
+
+Définition du joint dans la partie verticale ;
+
+Application de la compression horizontale du joint avec un déplacement de 6,5mm.
+
+En parallèle à cette étude numérique, nous avions mené des essais sur le joint sur le banc d’essais que nous avions développé. Les résultats que nous avions obtenus avaient alors montré une grande sensibilité au montage avec des résultats très différents sur une même configuration. C’est pourquoi, dans la suite de cette étude numérique, nous avions décidé de travailler sur une mousse de référence pour réaliser la corrélation numérique du modèle avant de poursuivre nos calculs avec le joint de référence étudié.
+
+Pour modéliser la petite cabine, nous nous étions appuyés sur les travaux de recherche réalisés au CEVAA précédemment dans le contexte de modélisation de la petite cabine à partir d’essais sur des bagues de traversées de tablier.
+
+Au vu de la géométrie de la petite cabine et afin de minimiser les temps de calcul, nous avions réalisé des calculs éléments finis en 2D dans le plan transverse de la petite cabine.
+
+Puis, nous avions défini un modèle EF du banc de compression.
+```
+
+### CHUNK_ID: projet_5__chunk_000017_sub03
+```
+de calcul, nous avions réalisé des calculs éléments finis en 2D dans le plan transverse de la petite cabine. Puis, nous avions défini un modèle EF du banc de compression.
+
+Nous avions ensuite étudié la pression acoustique aux microphones dans la chambre d’émission et de réception, ainsi que les cartographies de pression (dans les fluides) et de déplacement (dans les solides). Cette étude avait été réalisée pour la configuration avec fente ouverte.
+
+Les résultats obtenus avaient montré que les niveaux de pression obtenus par calcul numérique étaient supérieurs aux résultats expérimentaux que nous avions obtenus précédemment. Il était donc nécessaire de réaliser des redéfinitions sur le modèle.
+
+Vus ces résultats insatisfaisants, nous avions poursuivi nos travaux en 2023 dans l’objectif de réaliser des modélisations plus précises et de nouveaux essais.
+
+Pour cela, nous avions dans un premier temps, mené une étude préliminaire visant à définir un modèle numérique du banc de compression de la mousse dans la petite cabine présentant une bonne corrélation entre les essais et les simulations, avant de travailler sur les joints.
+
+En effet, nous avions modélisé le banc de compression de la mousse à l’aide de MSC APEX et MSC ACTRAN, en partant du modèle 2D que nous avions développé en 2022, représentant le banc de compression de mousse.
+
+Notre objectif était de redéfinir ce modèle pour assurer une bonne corrélation avec les résultats expérimentaux issus d’une campagne d’essais effectuée précédemment.
+
+Afin de réaliser nos calculs acoustiques, nous devions définir les propriétés des matériaux constituant notre modèle : air, masses lourdes, feutres, tôles en acier, support en aluminium et échantillon de mousse analysé. Notre objectif était de caler un modèle numérique de la petite cabine dans des conditions simplifiées afin de définir un modèle fiable pour la suite du projet. Les caractéristiques de l’acier et de l’aluminium étaient issues de la littérature et sont connues. De plus, le CEVAA possède les caractéristiques du feutre et de la masse lourde. Seules les caractéristiques de la mousse étudiée étaient inconnues.
+```
+
+### CHUNK_ID: projet_5__chunk_000017_sub04
+```
+issues de la littérature et sont connues. De plus, le CEVAA possède les caractéristiques du feutre et de la masse lourde. Seules les caractéristiques de la mousse étudiée étaient inconnues.
+
+Pour modéliser la mousse, nous avions défini un modèle de Biot dont les paramètres ont été déterminés à partir de la littérature. Puis, nous avions modélisé la mise en compression de la mousse dans le banc par modification des paramètres du matériau, notamment la porosité et la tortuosité.
+
+Nous avions ensuite réalisé des simulations numériques de la pression acoustique sur ACTRAN en définissant dans le modèle les caractéristiques de la mousse. Les résultats avaient alors montré un ordre de grandeur similaire entre la simulation et la mesure expérimentale. La principale différence se situait en basses fréquences. Cette différence était certainement due à la condition d’application d’onde plane. En revanche, nous pouvions remarquer qu’à l’image de l’expérimental, les courbes de pression pour la configuration avec fente ouverte et avec la mousse avaient la même allure.
+
+Nous avions ensuite analysé les pertes d’insertion, ce qui avait montré des ordres de grandeurs très proches, mais une différence assez importante en basses fréquences. Sachant que les caractéristiques réelles de la mousse ne sont pas connues et que la petite cabine est un moyen avec une reproductibilité et une répétabilité très compliquée du fait de fuites acoustiques importantes, nous avions considéré ces résultats satisfaisants.
+
+A l’issue de cette étude, nous avions cherché à déterminer les propriétés des mousses pour valider notre modèle. Pour cela, nous avions d’abord réalisé des essais sur un tube d’impédance afin de déterminer les propriétés poreuses des trois mousses. Puis, nous avions défini l’ensemble des caractéristiques que nous avions déterminées dans les modèles ACTRAN pour la suite des simulations.
+
+Dans un deuxième temps, nous avions réalisé nos essais sur des échantillons de 10, 14, 20 et 24mm de largeur afin d’observer l’influence de la compression, l’ouverture de la fente étant de 10mm. Pour chaque épaisseur et chaque mousse trois échantillons ont été analysés.
+```
+
+### CHUNK_ID: projet_5__chunk_000017_sub05
+```
+14, 20 et 24mm de largeur afin d’observer l’influence de la compression, l’ouverture de la fente étant de 10mm. Pour chaque épaisseur et chaque mousse trois échantillons ont été analysés.
+
+Les résultats avaient alors montré que plus la mousse était épaisse, plus elle était compressée et plus l’IL s’améliorait.
+
+Un autre phénomène présent sur toutes les mesures et également sur les mesures faites lors de précédents projets était la chute de l’IL entre 1600 et 2000 Hz.
+
+Après avoir enrichi notre base de données par de nouveaux résultats expérimentaux (propriétés des mousses), nous avions réalisé de nouveaux calculs pour vérifier la corrélation essais/simulations numériques. Les résultats de la simulation étaient très proches des résultats des essais. Le pic à 2000 Hz n’étant pas pris en compte. Néanmoins, nous avions toujours un léger défaut sur les fréquences inférieures à 500 Hz pour lesquelles nous avions un niveau très élevé et très bruité. Malgré ce défaut nous pouvions considérer que le modèle 2D de la petite cabine était performant.
+
+Cette première étude nous avait permis de préparer une base solide à nos travaux sur le joint qui avaient suivi la même démarche, mais en tenant compte de la non-linéarité et de l’hyperélasticité du matériau.
+
+Le banc de compression du joint est présenté dans la figure suivante se compose d’une structure en aluminium dans laquelle le joint est installé (Figure 1). Cette structure se déplace grâce à une vis de réglage permettant de régler manuellement le niveau de compression du joint voulu.
+
+Nous avions dans un premier temps cherché à modéliser le banc de compression de joint. Nous avions pour cela d’abord défini un modèle non-linéaire du joint à l’aide de la loi de Johnson Cook pour prendre en compte l’hyperélasticité du matériau.
+
+En outre, nous avions modélisé le caoutchouc EPDM comme un solide viscoélastique non linéaire sous l’hypothèse d’une déformation plane (modélisation 2D) à l’aide du programme Marc Mentat, et la partie bulbe avec Actran en définissant un modèle éléments finis de poreux (modèle de Biot).
+```
+
+### CHUNK_ID: projet_5__chunk_000017_sub06
+```
+sous l’hypothèse d’une déformation plane (modélisation 2D) à l’aide du programme Marc Mentat, et la partie bulbe avec Actran en définissant un modèle éléments finis de poreux (modèle de Biot).
+
+Puis, pour modéliser le banc de compression, nous avions pris des mesures qui nous avaient permis de définir sa géométrie et son maillage à l’aide d’APEX. Ensuite, nous les avions exportés dans ACTRAN afin de définir le modèle du banc.
+
+Nous avions modélisé la mise en compression du joint à l’aide de Marc Mentat.
+
+Afin de valider le modèle, nous avions utilisé les résultats obtenus lors d’essais précédents. Les caractéristiques du joint ne sont pas connues. Ainsi, nous avions exploité des caractéristiques issues de la littérature en tant que référence pour le calcul. Nous avions réalisé des itérations sur les valeurs de densité et d’amortissement pour atteindre une bonne corrélation essais/simulations, puisque nous considérions que le module de Young et le coefficient de poisson étaient inhérents au caoutchouc EPDM qui compose le joint.
+
+Nous avions ensuite calculé les pressions acoustiques, ce qui avait révélé des différences assez importantes entre les simulations et les résultats expérimentaux pour la configuration avec joint.
+
+Nous avions également analysé les pertes par insertion, ce qui avait montré la présence d’un bruit important en simulation numérique qui n’existait pas en expérimental. Cela pouvait s’expliquer d’abord par le fait que la corrélation était faite sur un seul type de joint. De plus, il était possible que des fuites avaient lieu lors des essais vu le montage complexe dû à l’assemblage de plaques vissées. Ainsi, il y avait peu de répétabilité sur les essais.
+
+Par conséquent, il était nécessaire de réaliser de nouveaux essais en petite cabine pour collecter plus de données expérimentales. En effet, nous avions réalisé des essais sur cinq types de joints différents. La plupart des joints automobile sont fabriqués à partir de caoutchouc EPDM, mais diffèrent en termes de forme.
+```
+
+### CHUNK_ID: projet_5__chunk_000017_sub07
+```
+effet, nous avions réalisé des essais sur cinq types de joints différents. La plupart des joints automobile sont fabriqués à partir de caoutchouc EPDM, mais diffèrent en termes de forme.
+
+Ces joints n’étant pas composés de matériaux poreux, il n’était pas utile de faire un essai de tube d’impédance. Les caractéristiques du caoutchouc EPDM dont ils sont constitués sont trouvables dans la littérature. Toutefois, il fallait déterminer la densité des échantillons.
+
+Pour certains types de joints, à l’aide de formules de géométrie simple et d’une balance, il était possible de déterminer la densité des échantillons. En revanche, pour d’autres échantillons avec des formes plus complexes, nous nous étions basés sur la modélisation numérique pour calculer le volume de l’échantillon et retrouver sa densité.
+
+Ensuite, nous avions réalisé les essais en petite cabine suivant le même protocole expérimental suivi pour les mousses. Nos mesures des pertes par insertion avaient alors montré des différences allant jusqu’à la dizaine de décibels entre les échantillons.
+
+Après avoir réalisé nos essais sur les différents joints analysés, nous avions réalisé de nouvelles simulations. Vu que chaque joint avait sa propre forme, il fallait définir un maillage différent pour chaque joint afin de le modéliser correctement.
+
+Nous avions réalisé nos calculs sous l’hypothèse d’un contact parfait entre le joint et le banc de compression.
+
+Les résultats avaient montré qu’un problème à basses fréquences était toujours présent, ce qui rendait la simulation bruitée, avec des valeurs très élevées. Outre ce défaut, nous avions constaté que les allures des courbes issues de la simulation étaient similaires aux courbes issues des essais, ce qui était positif. En revanche, l’IL pour les 5 joints était globalement élevé.
+
+Ces différences de niveau pourraient être dues au banc de compression et aux essais qui fournissaient des résultats peu répétables, ainsi qu’à la géométrie du joint en simulation. En effet, dans la réalité, le contact entre le joint et le module permettant la compression n’est pas parfait. Les deux surfaces ne sont pas parfaitement collées. Cependant, sur la simulation afin d’obtenir un maillage correct nous devions créer un contact parfait entre les deux pièces.
+```
+
+### CHUNK_ID: projet_5__chunk_000017_sub08
+```
+n’est pas parfait. Les deux surfaces ne sont pas parfaitement collées. Cependant, sur la simulation afin d’obtenir un maillage correct nous devions créer un contact parfait entre les deux pièces.
+
+Il est donc nécessaire d’affiner le modèle du banc de compression de joint afin d’avoir un contact plus proche de la réalité. Nous devons également étudier les caractéristiques du caoutchouc en fonction de la fréquence de sollicitation.
+
+Notons également que le banc de compression de joint avec lequel les essais ont été effectués fournit des résultats avec une variance assez importante et est donc complexe à modéliser. Nous devons donc définir une architecture plus robuste du banc de compression.
+```
+
+### CHUNK_ID: projet_6__chunk_000016
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération | Contribution directe à l’acquisition de nouvelles connaissances |
+| ------------------ | ----------------------------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AIT YOUNES TARIK | Diplôme d’études supérieures spécialisées | Directeur R&D | -Gestion de l’opération R&D et définition des objectifs et performances à atteindre -Analyse des résultats des travaux et orientation des actions R&D |
+| CATTEAU ANTONIN | Bachelor Universitaire de Technologie | Technicien d’essais | Réalisation d’essais vibratoires dans le cadre du développement du nouveau banc |
+| CHEVALLIER NICOLAS | Ingénieur, vibrations, acoustique, capteurs | Ingénieur essais et simulation | -Réalisation d’essais vibratoires sur les échantillons auxétiques et conventionnels -Analyse des résultats des essais |
+| GUILHEM ROMAIN | Master de Sciences, technologies, Santé, mention acoustique | Ingénieur R&D | -Réalisation d’échantillons auxétiques -Réalisation d’essais vibratoires -Post-traitement des résultats -Définition des redéfinitions à réaliser sur le pot vibrant |
+| HAVARD Alexandre | Licence professionnelle de Sciences, technologie, santé | Technicien d'essais | Essais vibratoires et post-traitements |
+| POWOLNY TOM | Ingénieur, vibrations, acoustique, capteurs | Chef de projet | -Suivi et orientation de l’opération R&D -Définition du protocole expérimental -Analyse des résultats -Définition des solutions techniques permettant de résoudre les problématiques de caractérisation expérimentale des échantillons |
+| PRESOTTO CLEMENT | Diplôme d’ingénieur | Ingénieur R&D | Développement du banc expérimental et réalisation d’essais vibratoires et post-traitements |
+| BEAUR BENOIT | Diplôme universitaire de technologie, mesures physiques | Technicien R&D | -Réalisation des essais vibratoires -Réalisation des redéfinitions nécessaires sur les consignes de pilotage des essais |
+| BOUVRY FRANCOIS | Diplôme d’ingénieur | Ingénieur étude | -Mise en œuvre du banc expérimental et réalisation d’essais vibratoires -Etude comparative des résultats des essais sur les deux bancs |
+| PELLOIE QUENTIN | Ingénieur mécanique | Ingénieur R&D | -Réalisation des essais dynamiques mécaniques -Post-traitement des résultats |
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 24,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

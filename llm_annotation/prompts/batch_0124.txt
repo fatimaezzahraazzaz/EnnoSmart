@@ -1,0 +1,221 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 124/135, 8 chunks)
+
+### CHUNK_ID: projet_29__chunk_000014
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération | Contribution directe à l’acquisition de nouvelles connaissances |
+| -------------- | -------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Diaguily Sylla | Master informatique électronique | Ingénieur R&D | Recherche et au développement d’une architecture distribuée pour la supervision en temps réel des bornes de recharge |
+```
+
+### CHUNK_ID: projet_29__chunk_000015_sub00
+```
+[SECTION : Analyse de l’état de l’art]
+La transition massive vers la mobilité électrique, portée par les objectifs européens de neutralité carbone et encadrée par le règlement AFIR, conduit à une expansion rapide et sans précédent des infrastructures de recharge pour véhicules électriques (IRVE). Cette mutation ne relève plus uniquement d’un enjeu industriel : elle repose désormais sur la capacité des opérateurs à concevoir des systèmes numériques robustes et avancés, capables d’assurer la supervision, la sûreté de fonctionnement et l’interopérabilité de réseaux denses et largement distribués.
+
+Dans ce cadre, la mise en œuvre d’une plateforme centralisée de supervision, capable de dialoguer en temps réel avec un écosystème de bornes hétérogènes et de traiter des flux de données continus et critiques, ne peut s’appuyer sur des solutions conventionnelles ou simplistes. À cet égard, nous avons procédé à une analyse des connaissances existantes, qui a mis en évidence l’étude de Dasi et al. Ces auteurs ont proposé un système intelligent de gestion énergétique basé sur l’IoT, intégrant des panneaux solaires, des batteries Vanadium Redox Flow et des vitrages dynamiques afin d’optimiser l’alimentation des bornes et des installations auxiliaires (HVAC) dans les stations de recharge. Ils ont démontré la capacité du système à gérer les flux énergétiques en temps réel, en simulant différentes conditions climatiques et interruptions réseau, et en validant les performances sur une station pilote.
+
+Cependant, cette étude reste centrée sur la gestion énergétique locale d’une station unique, priorisant l’EV et l’HVAC. Elle ne traite ni la supervision centralisée d’un réseau national de bornes hétérogènes, ni la résilience et la scalabilité à grande échelle.
+```
+
+### CHUNK_ID: projet_29__chunk_000015_sub01
+```
+locale d’une station unique, priorisant l’EV et l’HVAC. Elle ne traite ni la supervision centralisée d’un réseau national de bornes hétérogènes, ni la résilience et la scalabilité à grande échelle.
+
+Nous avons également surligné l’article de Wang et al., qui constitue une contribution scientifique importante concernant la sécurité, la fiabilité et la résilience systémique des infrastructures de recharge pour véhicules électriques à grande échelle. Les auteurs ont développé une analyse complète des risques électriques et cyber-physiques associés aux stations de recharge, en examinant notamment les défaillances matérielles liées au vieillissement des composants, les instabilités du réseau électrique, ainsi que les vulnérabilités induites par les réseaux de communication publics et les pertes de paquets. Wang et al. ont mis en évidence la dépendance structurelle des EVCS aux couches de communication et de supervision, et ont souligné les risques d’interruption de service ou de pertes énergétiques dans des contextes où la forte pénétration des énergies renouvelables a introduit une variabilité significative de la production et de la demande.
+
+Ainsi, les auteurs ont présenté une architecture cyber-physique complète, organisée en couches physiques, de communication, de contrôle et de cybersécurité, permettant de structurer l’interaction entre les équipements de recharge, les convertisseurs AC/DC, les mécanismes de protection, les réseaux AMI et la supervision centrale. Ils ont développé un modèle quantitatif de gestion des risques reposant sur l’évaluation croisée de la probabilité d’occurrence, de la sévérité et de l’impact énergétique, notamment via les indicateurs EENS (Expected Energy Not Supplied) et ENSF (Energy Not Supplied Fraction). Leur approche est renforcée par des simulations réalisées sur le réseau standard IEEE 13-node feeder, permettant d’étudier la tenue de tension, la dynamique fréquentielle, la capacité de ride-through des stations et l’influence du pilotage intelligent sur la stabilité globale du réseau. Les résultats obtenus ont montré qu’une communication fiable, une coordination distribuée et un contrôle intelligent des stations sont des leviers essentiels pour renforcer la résilience du système, en particulier dans des environnements fortement sollicités ou intégrant des bornes de recharge rapide.
+```
+
+### CHUNK_ID: projet_29__chunk_000015_sub02
+```
+et un contrôle intelligent des stations sont des leviers essentiels pour renforcer la résilience du système, en particulier dans des environnements fortement sollicités ou intégrant des bornes de recharge rapide.
+
+Toutefois, l’étude ne traite pas l’interopérabilité CPO/EMSP (OCPP, OCPI), n’aborde pas les enjeux de supervision centralisée à grande échelle, ni les problématiques de la scalabilité logicielle nécessaire pour superviser des dizaines de milliers de bornes.
+
+En outre, dans le cadre de la supervision des infrastructures de recharge pour véhicules électriques, Lobato et al. ont publié une étude approfondie présentant SIMA, une architecture de monitoring et de gestion dédiée aux stations de recharge, fondée sur une intégration étroite entre OCPP, une plateforme IoT cloud et un système de visualisation en temps réel.
+
+Figure : Architecture générale de SIMA
+
+L’étude aborde une problématique essentielle : la nécessité de collecter, structurer et exploiter les données issues d’un parc de bornes pour permettre le suivi opérationnel, la maintenance et l’analyse énergétique. L’architecture SIMA repose sur deux couches complémentaires : une couche matérielle regroupant les bornes (ABB Terra 54, BYD EVA040, etc.) et les véhicules (bus, bateaux, VE légers) et une couche logicielle cloud intégrant un back-end OCPP sur WebSocket, une plateforme IoT (Dojot) exploitant MQTT et Kafka, et un front-end scalable pour la visualisation et l’analyse des données. Le schéma d’architecture présenté par les auteurs illustre ce pipeline complet : les bornes transmettent les données via OCPP 1.6/JSON, le back-end OCPP les publie en MQTT vers Dojot, puis les micro-services de Dojot orchestrés par Kubernetes stockent les données (MongoDB) et les exposent via WebSocket et API HTTP pour le tableau de bord utilisateur.
+```
+
+### CHUNK_ID: projet_29__chunk_000015_sub03
+```
+en MQTT vers Dojot, puis les micro-services de Dojot orchestrés par Kubernetes stockent les données (MongoDB) et les exposent via WebSocket et API HTTP pour le tableau de bord utilisateur.
+
+Les travaux incluent également la conception d’un prototype réel déployé sur plusieurs sites, intégrant jusqu’à 5 stations (22 - 50 kW), des bus électriques et une infrastructure cloud composée d’un cluster Kubernetes avec deux workers et un load balancer Nginx. Une évaluation de scalabilité a été menée en faisant varier le nombre de bornes simulées de 10 à 160, permettant d’observer l’évolution de la charge CPU et mémoire sous deux environnements (Docker-Compose vs Kubernetes). Les résultats montrent que la plateforme Dojot demeure opérationnelle jusqu’à 160 bornes simultanées, avec montée modérée de la charge CPU et saturation mémoire proche de 96 %, tandis que Kubernetes permet une répartition plus efficace des ressources.
+
+Toutefois, malgré sa richesse expérimentale, cette étude ne peut pas être applicable à notre projet ORIOS. SIMA se concentre essentiellement sur la collecte télémétrique et l’archivage des données à des fins de visualisation, sans traiter la supervision centralisée d’un réseau à grande échelle, la commande distante avancée et la gestion des événements critiques en temps quasi réel.
+```
+
+### CHUNK_ID: projet_29__chunk_000015_sub04
+```
+données à des fins de visualisation, sans traiter la supervision centralisée d’un réseau à grande échelle, la commande distante avancée et la gestion des événements critiques en temps quasi réel.
+
+De surcroît, notre investigation a mis en évidence l’étude de Li et al., qui traite de la problématique de l’hétérogénéité des infrastructures de recharge pour véhicules électriques (VE) ainsi que des difficultés de communication et de partage d’information entre les différents dispositifs. L’objectif principal est de concevoir une plateforme cloud de supervision des bornes de recharge capable de collecter, traiter et partager en temps réel les données issues de multiples équipements hétérogènes, tout en garantissant la sécurité des échanges et la compatibilité avec divers protocoles réseau (WiFi, NB-IoT, LoRa, 3G/4G/5G). Pour ce faire, les auteurs ont développé une architecture logicielle basée sur MQTT, un protocole léger de messagerie IoT, qui permet l’acquisition d’informations, la configuration à distance des paramètres des bornes, et l’intégration multi-source des données provenant de dispositifs disparates. La plateforme comprend plusieurs couches : la couche capteurs (courant, tension, température, état des équipements), la couche réseau, la couche cloud pour traitement et stockage, la couche middleware MQTT pour l’interaction entre capteurs et applications, ainsi que la couche de sécurité utilisant MD5 et SHA pour garantir l’intégrité des messages. Comme illustré sur la figure ci-après, la topologie réseau de la plateforme cloud pour la supervision des bornes de recharge montre efficacement le flux de données entre les capteurs, la passerelle IoT, le serveur MQTT et les clients finaux.
+
+Figure : La topologie réseau de la plateforme cloud pour la supervision des infrastructures de recharge
+```
+
+### CHUNK_ID: projet_29__chunk_000015_sub05
+```
+données entre les capteurs, la passerelle IoT, le serveur MQTT et les clients finaux. Figure : La topologie réseau de la plateforme cloud pour la supervision des infrastructures de recharge
+
+Les travaux réalisés incluent la mise en œuvre d’un prototype mettant en œuvre Raspberry Pi comme passerelle IoT, un serveur MQTT simulé sur MacBook Pro et des applications mobiles (iOS) pour consultation et abonnement aux informations. Les tests de performance montrent que la mise en œuvre de MQTT réduit la consommation CPU et l’énergie par rapport à HTTP, avec un délai moyen de réponse inférieur à 1,5 seconde même avec chiffrement, et un taux de réponse supérieur à 95%. Toutefois, l’étude présente certaines insuffisances : la compatibilité avec des équipements très variés n’est pas entièrement validée à grande échelle.
+
+Dans la continuité des travaux portant sur la supervision des infrastructures de recharge, VijayaKumar et al. ont proposé un système de monitoring local centré sur la sécurité et la performance d’une borne individuelle. Leur travail s’est appuyé sur la mise en œuvre d’un microcontrôleur ESP32, associé à des capteurs de température, tension et courant, dont les mesures sont transmises via le protocole MQTT vers la plateforme IoT Blynk. Les auteurs ont développé également une application mobile permettant à l’utilisateur de visualiser en temps réel les paramètres de charge et d’obtenir des notifications. L’architecture présentée repose sur une chaîne fonctionnelle composée de capteurs connectés à un microcontrôleur ESP32, lequel transmet les données via le protocole MQTT vers la plateforme cloud Blynk, avant leur mise à disposition dans une application mobile dédiée. Ce dispositif vise principalement à assurer un fonctionnement sûr de la borne. Les résultats expérimentaux confirment la faisabilité d’un système local de surveillance des paramètres électriques et d’affichage en temps réel, validé à travers un prototype intégrant notamment un module GPS, un capteur de température et d’humidité DHT22, un capteur de courant ACS712 et un capteur de tension ZMPT101B.
+```
+
+### CHUNK_ID: projet_29__chunk_000015_sub06
+```
+temps réel, validé à travers un prototype intégrant notamment un module GPS, un capteur de température et d’humidité DHT22, un capteur de courant ACS712 et un capteur de tension ZMPT101B.
+
+Cependant, cette approche reste strictement limitée à la supervision d’une borne isolée, sans gestion de réseau, sans communication de type OCPP ou OCPI, et sans considérations de scalabilité, cybersécurité, résilience réseau ou interopérabilité multi-constructeurs. Elle ne traite ni la gestion de transactions, ni l’intégration à un système centralisé de supervision. De ce fait, malgré l’intérêt du prototype pour des scénarios locaux, cette solution ne répond à la problématique adressée par ORIOS, dont l’objectif est la supervision en temps réel, la sécurisée et l’interopérable de bornes hétérogènes.
+
+Dans un dernier lieu, Ahmed et al. ont publié une étude portant sur la problématique du manque d’infrastructures de communication fiables et scalables pour la supervision en temps réel des bornes de recharge, élément indispensable pour activer des services avancés tels que le V2G, le V2H ou la gestion dynamique de la charge. Pour répondre à cette problématique, les auteurs ont conçu une architecture IoEV hiérarchisée en trois couches, comprenant la couche physique, la couche de communication et la couche virtuelle, comme illustré dans la figure ci-après. Cette structure organise le flux d’information entre les véhicules électriques, les bornes de recharge (EVSE) et la plateforme cloud. L’architecture s’appuie sur le modèle d’information IEC 61850-90-8, qui permet d’unifier les échanges entre les entités EV et EVSE à travers les logiques EVCC et SECC, assurant ainsi l’interopérabilité du système.
+
+Figure : Modèle d’architecture IoEV développé pour le système de véhicule électrique
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 124,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

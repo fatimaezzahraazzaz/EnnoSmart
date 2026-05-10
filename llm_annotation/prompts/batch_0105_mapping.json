@@ -1,0 +1,87 @@
+{
+  "batch_id": 105,
+  "chunks": [
+    {
+      "chunk_id": "projet_23__chunk_000027",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\cir_final\\HCM_dossier 2024_2025-05-22_AG.pdf",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.pdf",
+      "file_category": "pdf_native",
+      "source_type": "text",
+      "text": "[PAGE 5]\n\nCIR 2024\nAucun dossier de rescrit ou d’agrément n’a été déposé pour l’année 2024.\nCoordonnées de la personne référente dans l’entreprise pour le dossier justificatif des\ndépenses de R&D exposées au CIR :\n Nom de l’interlocuteur de la société : CHARRAT Julien\n Fonction : Gérant\n Numéro de téléphone : 06 14 62 97 31\n Adresse électronique : julien.charrat@gmail.com\nII. Résolution de problématiques au développement d’un nouveau\nsystème de fabrication de détergent\nII.1. Intitulé de l’opération\nNom de l’opération : Résolution de problématiques au développement d’un nouveau système de\nfabrication de détergent\nChef(s) de projet : Nadia CHAKCHOUK (Franklab)\nCe projet n’a pas fait l’objet d’un rescrit CIR ou JEI et n’a pas fait l’objet d’une collaboration avec le\nministère de la défense (DGA) ou de l’intérieur\nDate de début : 2024 Date de fin : en cours\nCoût total : 65k€ Coût déclaré au CIR : 11k€\nThésaurus : B5b1 - Synthèse organique, chimie verte, synthèse aromatique\nMots-clés : Formulation, nettoyage, procédé, détergence\nII.2. Objectifs de l’opération\nII.2.1. Contexte de l’opération\nLe projet de refonte du procédé de fabrication des détergents s’inscrit dans un contexte\nindustriel en forte évolution, marqué par des exigences croissantes en matière de sécurité du\npersonnel, de performance industrielle et de maîtrise de la qualité. Historiquement, les\nfabrications de détergents étaient réalisées de manière semi-artisanale, avec une introduction\nmanuelle des matières premières par le haut des cuves. Ce mode opératoire exposait les\nopérateurs à des risques d’inhalation de poussières, de manipulation de produits corrosifs et\nà des aléas de dosage et de traçabilité.\nFace à ces limites, la société a engagé une profonde transformation de son outil de production,\navec pour objectif le développement d’un nouveau système de fabrication automatisé\npermettant l’introduction des matières premières par aspiration via la tuyauterie. Des procédés\nsimilaires sont présents en agroalimentaire, en pharmacie ou en cosmétique, mais ils ne sont\nHCM - CONFIDENTIEL PAGE 5\nCe document est la propriété de la société HCM\nIl ne peut être reproduit ou transmis à des tiers sans son autorisation expresse",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_23_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_23__chunk_000046",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\raw\\docx\\HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Objectifs visés et performances à atteindre]\nL’objectif est de définir un nouveau procédé de fabrication de détergents et désinfectants, intégrant un système d’aspiration automatisée des matières premières par le bas, permettant une fabrication plus sécurisée, précise et compatible avec les exigences de propreté du secteur des dispositifs médicaux.\n\nPlus précisément, nous souhaitons :\n\nAugmenter la précision de fabrication, notamment en supprimant le recours au remplissage « au trait » (QSV) pour une gestion rigoureuse de l’eau et des matières premières. Ce système de formulation sans repère visuel nécessite un recalibrage de chaque formule et donc des quantités d’eau à introduire, via des essais laboratoires,\n\nAssurer la reproductibilité et la robustesse du procédé, avec des matières premières difficiles à mélanger, tout en garantissant la conformité physico-chimique des produits. Ceci impose des développement spécifiques et des réflexions sur le procédé, ainsi que des essais de validation. Ainsi, nous devons par exemple, élaborer une stratégie de nettoyage efficace entre chaque production, grâce à la NEP (nettoyage en place), sans usage de produits commerciaux, et garantissant la propreté microbiologique et l’absence de résidus de fabrication (traçabilité par fluorescence et tests microbiologiques), notamment sur des zones critiques telles que tuyauterie ou fonds de cuve.\n\nAvec ce nouveau système de fabrication, nous pourrons ainsi augmenter l’efficacité industrielle, en réduisant les temps de fabrication, de nettoyage et les pertes de matières.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_23_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_23__chunk_000048_sub01",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\raw\\docx\\HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "certaines unités utilisent des systèmes semi-automatisés de nettoyage avec validation visuelle, parfois assistés par des détecteurs de contamination. Le nettoyage est souvent plus manuel, notamment pour les cuves et agitateurs.\n\nLimites pour la détergence :\n\nComme en pharmacie, les cosmétiques utilisent un nombre limité d’ingrédients très contrôlés, dans des volumes plus petits. Les produits cosmétiques sont souvent peu moussants, contrairement aux détergents, ce qui rend leur nettoyage plus simple et les procédures sont longues et peu adaptées à une production à grande cadence.\n\nPour conclure, les systèmes de nettoyage existants ne sont pas transposables directement au secteur de la détergence en raison de :\n\nLa diversité des matières premières utilisées (états, viscosités, propriétés chimiques),\n\nLa forte tendance au moussage et à l’adhérence des résidus,\n\nDes exigences économiques et de cadence industrielle spécifiques au secteur.\n\nDe plus, aucune méthodologie validée ne traite du nettoyage d’équipements ayant contenu des produits détergents. Les guides et normes existants (ISO, Bonnes Pratiques de Fabrication) proposent des protocoles de nettoyage basés sur l’utilisation de détergents, ce qui n’est pas applicable lorsque les produits eux-mêmes sont des agents nettoyants.\n\nCela justifie le besoin de développer une solution de nettoyage sur mesure, adaptée aux particularités des lignes de fabrication de détergents",
+      "_parent_chunk_id": "projet_23__chunk_000048",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_23__chunk_000062",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\raw\\docx\\HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Contribution]\nGrâce aux essais, nous avons pu apporter différentes contributions :\n\nDéveloppement en cours d’un protocole d’évaluation par fluorescence adapté à la NEP de cuves de détergents,\n\nAnalyse des limites des équipements existants et collaboration avec le fournisseur pour les redéfinir,\n\nDéveloppement en cours d’une nouvelle approche de formulation sans repère visuel, validée par des essais au laboratoire,\n\nMise en évidence de l’impact des changements de processus sur la conformité des produits finis.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_23_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_23__chunk_000001_sub00",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\cir_final\\HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Présentation globale de la société et de sa stratégie de R&D]\nLa société HCM a été fondée en mars 2018 par Julien CHARRAT sur la base d’une solide expérience au niveau de la R&D (microbiologie, formulation) et des affaires réglementaires au sein de l’industrie du Dispositif médical. HCM est née pour répondre aux nouvelles problématiques rencontrées par les entreprises du secteur des dispositifs médicaux mettant en œuvre des procédés chimiques dans la prise en compte des nouvelles exigences du nouveau règlement 2017/745 (RDM) et de la directive Biocide dans leurs projets de R&D.\n\nL’activité principale de l’entreprise est la fourniture de prestations de conseil, d’expertise et d’accompagnement technique et scientifique en matière de recherche & développement dans l’industrie chimique, parapharmaceutique et cosmétique. Le domaine d’expertise principal est la recherche de solutions innovantes contribuant à l’amélioration des techniques de prophylaxie sanitaire utilisées dans le domaine hospitalier, médical, vétérinaire, industriel, collectif et grand public.\n\nDans le cadre de son expansion, HCM a pris une participation minoritaire dans la société FRANKLAB située à Montigny le Bretonneux (78) et spécialisée dans l’hygiène hospitalière et l’ultra propreté. FRANKLAB conçoit, fabrique et commercialise ses produits détergents et désinfectants conformément aux normes européennes depuis plus de 40 ans, sur les marchés de la santé, de la recherche et l’enseignement et de l’industrie et a développé en adéquation dix gammes de produits par domaine d’application.\n\nLes travaux de recherche présentés dans ce dossier technique se sont effectués principalement dans les locaux (laboratoires, équipements…) mis à notre disposition par la société FRANKLAB et les missions d’HCM consistent à :\n\nEvaluer la faisabilité technique des projets de recherche\n\nAccompagner la rédaction des cahiers de charges et des dossiers de conception\n\nAider la formulation de produits détergents et désinfectants\n\nAssister l’évaluation analytique, microbiologique et clinique des formulations\n\nSuivre et assister le pilotage des projets de recherche\n\nEn 2024, HCM est notamment intervenue sur la résolution de problématiques au développement d’un nouveau système de fabrication de détergent, les projets suivants, et le temps passé sur cette activité représentait 52.9% du temps de travail annuel.",
+      "_parent_chunk_id": "projet_23__chunk_000001",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_23__chunk_000003",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\cir_final\\HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Contexte de l’opération]\nLe projet de refonte du procédé de fabrication des détergents s’inscrit dans un contexte industriel en forte évolution, marqué par des exigences croissantes en matière de sécurité du personnel, de performance industrielle et de maîtrise de la qualité. Historiquement, les fabrications de détergents étaient réalisées de manière semi-artisanale, avec une introduction manuelle des matières premières par le haut des cuves. Ce mode opératoire exposait les opérateurs à des risques d’inhalation de poussières, de manipulation de produits corrosifs et à des aléas de dosage et de traçabilité.\n\nFace à ces limites, la société a engagé une profonde transformation de son outil de production, avec pour objectif le développement d’un nouveau système de fabrication automatisé permettant l’introduction des matières premières par aspiration via la tuyauterie. Des procédés similaires sont présents en agroalimentaire, en pharmacie ou en cosmétique, mais ils ne sont pas directement transposables en raison de contraintes spécifiques du secteur : grande diversité des matières premières (liquides, solides, poudres, agents moussants), complexité des formules, besoins de flexibilité.\n\nDans ce contexte, plusieurs difficultés majeures ont émergé, nécessitant la mise en œuvre de travaux de R&D :\n\nReformuler les produits dans un environnement où l’on ne peut plus observer les mélanges ou ajuster en temps réel les volumes d’eau,\n\nDéfinir des protocoles de nettoyage internes, adaptés à la fabrication de détergents, sans recours à des détergents externes, ce qui serait incohérent ou inefficace,\n\nÉvaluer la propreté microbiologique et physico-chimique des équipements en l’absence de normes ou méthodes spécifiques pour ce type de production.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_23_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_23__chunk_000010",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\cir_final\\HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Raisonnement scientifique et démarche expérimentale appliquée]\nLors de l’élaboration de notre nouveau procédé de fabrication de détergents et désinfectants, intégrant un système d’aspiration automatisée des matières premières par le bas, nos hypothèses initiales étaient que :\n\nLes produits détergents ne présenteraient pas de difficultés de nettoyage particulières,\n\nLe transfert des recettes suffirait à garantir une reproductibilité immédiate,\n\nLes équipements, bien que neufs, ne modifieraient pas les caractéristiques des produits finis.\n\nMalheureusement, les premiers essais industriels que nous avons effectués ont mis en évidence plusieurs non-conformités, tant au niveau du nettoyage des équipements, que de la qualité des formulations obtenues. Ces constats nous ont conduit à engager une démarche de R&D approfondie afin d’identifier les causes de ces non-conformités et d’y apporter des solutions concrètes.\n\nNotre démarche R&D s’est donc articulée autour des axes suivants :\n\nRedéfinition du protocole de NEP, avec intégration de tests de détection de résidus par fluorescence,\n\nAnalyses microbiologiques post-NEP, pour évaluer l’efficacité du nettoyage,\n\nEssais de reformulation en laboratoire.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_23_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_23__chunk_000016",
+      "project_id": "projet_23_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_23_\\cir_final\\HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_name": "HCM_dossier 2024_2025-05-22_AG.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Produit TFD 4]\nLa densité que nous avons obtenue après fabrication était bien trop loin de la spécification. Ne pouvant pas vérifier l’homogénéité de la solution en cuve et n’ayant pas pu voir si un vortex se formait ou non, nous avons décidé de vider la cuve dans six cubis, pour pouvoir vérifier l’homogénéité de la solution. Nous avons alors refait toutes les analyses mais, malheureusement, la densité de tous les cubis (prélèvement haut et bas) était non conforme.\n\n[TABLEAU]\n| N° de cubi | 1 | 1 | 2 | 2 | 3 | 3 | 4 | 4 | 5 | 5 | 6 | 6 | 6 |\n| --------------------------------------- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | --- |\n| N° de cubi | Haut | Bas | Haut | Bas | Haut | Bas | Haut | Bas | Haut | Bas | Haut | Bas | |\n| Spécification de la densité 1,083±0,006 | 1.074 | 1.075 | 1.074 | 1.074 | 1.074 | 1.074 | 1.075 | 1.074 | 1.074 | 1.074 | 1.072 | 1.074 | |\n\nTableau 1 : Densité des cubis du produit TFD 4 fabriqué dans la nouvelle installation\n\nNous avons alors réalisé des tests de mousse, pour voir s’il ne s’agissait pas d’un problème de dosage du tensioactif, celui-ci étant visqueux, que nous évalué vis-à-vis d’un témoin (lot 8498 fabriqué dans l’ancien site de production).\n\nFigure 5 : Résultats des tests de mousse\n\nNous avons constaté que les mousses à différentes concentrations (2% et 5%) du lot témoin fabriqué sur l’ancienne cuve étaient différentes. Malheureusement, tous ces éléments ne nous permettaient pas de conclure sur la cause de la non-conformité.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_23_\\extracted\\chunks.json"
+    }
+  ]
+}

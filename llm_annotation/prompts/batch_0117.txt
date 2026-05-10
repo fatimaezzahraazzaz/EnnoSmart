@@ -1,0 +1,270 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 117/135, 8 chunks)
+
+### CHUNK_ID: projet_28__chunk_000022
+```
+[SECTION : Classification par arbre de décision]
+Dans cette sous-section, nous présentons les résultats des tests de l'algorithme de l'arbre de décision sur le même ensemble de tests.
+
+La courbe de gauche de la figure 19 ci-dessous est la courbe d'apprentissage de l'algorithme Arbre de décision avec imputation générale. La courbe de droite est la courbe d'apprentissage pour le même algorithme avec imputation MICE. Nous pouvons observer un sous-ajustement dans les deux courbes d'apprentissage.
+
+La courbe de la figure 20 ci-dessous est la courbe ROC de l'Arbre de Décision avec l'imputation générale et MICE imputation. L'aire sous la courbe (AUC) est la même dans les deux cas d'imputation de données.
+
+Figure 19 : Courbes d'apprentissage des arbres de décision exploitant l'imputation générale et l'imputation MICE
+
+Figure 20 : Courbes ROC de décision utilisant l'imputation générale et l'imputation MICE
+
+La matrice de la figure 21 ci-dessous concerne les résultats de l'algorithme de l'arbre de décision avec imputation générale et MICE. Nous pouvons observer l'existence de 15 faux négatifs et 0 faux positif. Cela montre que l'imputation MICE n'a pas eu d'effet sur les performances de l'algorithme de l'arbre de décision de cet ensemble de données.
+
+La précision du modèle a été testée à l'aide de la méthode de validation croisée en segmentant l'ensemble de données en cinq sous-ensembles. La moyenne de validation croisée pour l'algorithme de l'arbre décisionnel est de 0,9969574513499726 avec l'imputation générale et de 0,9961969950762086 avec l'imputation MICE.
+
+Figure 21 : Matrice de confusion exploitant l'imputation générale et MICE pour l'arbre de décision
+```
+
+### CHUNK_ID: projet_28__chunk_000023_sub00
+```
+[SECTION : Conclusion des essais]
+Les tests effectués sur les modèles d'apprentissage automatique obtenus montrent que les modèles sont suffisamment efficaces pour classifier les données. Cependant, il convient de rappeler que presque la majorité des données utilisées appartiennent à un seul segment du marché. Ceci est certainement utile dans le cas où la recommandation est faite aux organisations appartenant au segment en question. Mais la recommandation peut ne pas être exacte lorsqu'il s'agit avec des organisations appartenant à d'autres segments de marché.
+
+En outre, le nombre d'étiquettes vraies est deux fois plus élevé que celui des étiquettes fausses. Puisque nous exploitons les modèles pour faire la recommandation, nous sommes beaucoup plus intéressés par les cas où l'étiquette est vraie, ce qui permettra au modèle, dans ce cas d'utilisation par exemple, de renvoyer des clients potentiels.
+
+Les résultats des tests des modèles de classification, quelle que soit leur qualité, ne permettent pas de conclure à la performance du système de recommandation. Le test de précision sur la seule technique de classification sera une mesure de soutien. Nous exploiterons les méthodes suivantes pour tester la performance du système de recommandation MUST :
+
+Rappel moyen « Mean Average Recall » à K (MAR@K) ;
+
+Couverture ;
+
+Personnalisation des différents acteurs régionaux tels que fournisseur, client, distributeur, etc ;
+
+Similitude intra-liste.
+
+Parmi les quatre métriques mentionnées, les métriques les plus justifiées pour nous pourraient être le rappel moyen « Mean Average Recall » à K (MAR@K) et la similarité intra-liste. La précision moyenne calcule la moyenne de la précision moyenne (AP) sur tous les utilisateurs d'un système de recommandation. L’AP est une mesure qui prend en compte une liste classée des k recommandations et le compare à une liste de recommandations pertinentes pour l'utilisateur.
+```
+
+### CHUNK_ID: projet_28__chunk_000018_sub00
+```
+[SECTION : Analyse de la complexité avec d'autres méthodes similaires]
+Dans le système analytique développé, il y a deux parties :
+
+Système basé sur des règles de linguistique floue ;
+
+Modèle de régression logistique.
+
+La performance des algorithmes pour les problèmes combinatoires difficiles dépend de la façon dont la complexité finale de l'algorithme hybride a été traitée. Nous disons qu'un problème de décision P est difficile pour une classe de complexité C (appelée C-hard) si tout problème de décision P' dans C est réductible à P. Par conséquent, par convention, la complexité de la linguistique floue pourrait être = θ(njp), où n est le nombre de modèles de règles, j est le nombre de chevauchements et p est la dimension du point de données associé à l'espace de données vectoriel mentionné précédemment.
+
+Toutefois, dans le cas donné d'un système à deux étapes d'un algorithme hybride (par exemple, Règle et Régression logistique), nous visualisons le système de manière à déterminer la complexité d'un algorithme qui nécessite une taille d'entrée (n) et un temps d'exécution. La longueur du temps d'exécution augmente généralement avec l'augmentation de l'entrée (n). Le temps d'exécution d'un algorithme dans un certain n est une opération ou une étape exécutée.
+
+Pour une valeur (n) assez grande, voire illimitée, l'analyse de l'efficacité temporelle asymptotique d'un algorithme est appelée complexité temporelle asymptotique, en trois types : le meilleur cas noté par Ω (g(n)) (Big-Omega), la moyenne d'état (cas moyen) notée par Θ (g (n)) (Big-Theta) et les circonstances les plus défavorables (cas le plus défavorable) désignées par Ο (g (n)) (Big-O) .
+
+Dans notre spécification de la couche 2, le processus de flou a été mené dans la couche 2 elle-même en effectuant les différents éléments linguistiques et identifiants avec l'antécédent donné à partir des règles floues.
+```
+
+### CHUNK_ID: projet_28__chunk_000029_sub00
+```
+[SECTION : Contribution scientifique, technique ou technologique]
+L’objectif de ce projet de R&D est de mettre en œuvre un nouveau système de recommandation intelligente et contextuelle pour fournir à l'utilisateur des entreprises potentiellement adaptées et intéressantes par rapport aux contraintes ou besoins des utilisateurs.
+
+La contribution principale de Must est de définir ce système de matchmaking sur une base de données de connaissance de métiers et d’informations sur des entreprises de différents secteurs d’activités et segments de marché. D’abord, ces données sont axées sur les relations de métier qui existent entre des acteurs économiques et qui permettent de connaitre les profiles des organisations qui peuvent se mettre en relation.
+
+De plus, ce système de matchmaking est fondé sur une approche hybride d’algorithmes statiques et d’apprentissage automatique, afin de bénéficier des avantages des deux méthodes. Les connaissances du métier étant implémentées pour apparier des organisations, les modèles intelligents viennent optimiser leurs résultats après avoir été entrainées sur des données plus détaillées sur les organisations.
+
+Enfin, l’objectif d’un tel système de matchmaking est de définir un système de recommandation professionnel qui permet, pour un utilisateur, de trouver les partenaires les plus adaptés à son profil et ses attentes professionnelles.
+
+Nous considérons que les résultats de notre approche expérimentale présentent une grande avancée devant l’absence quasi-totale des solutions alternatives dans la littérature. En effet, l’opération de R&D qui a été menée dans ce projet repose en partie sur un algorithme faisant l’objet d’un brevet en cours de dépôt en France. L’algorithme décrit dans le brevet gère en plus les données manquantes.
+
+Perspectives
+
+Nous avons commencé à investiguer et exploiter l’algorithme EM (Expectation Maximization). En effet, nous visons en perspective l’exploitation de l'EM pour le traitement des données manquantes afin d'augmenter les performances en matière de précision des prédictions. La dimension exacte du mélange gaussien de données est également la première étape du déploiement de l'EM. Bien que les données commerciales ne soient pas exactement gaussiennes, l'EM défini doit donc être un autre modèle hybride profond adapté.
+```
+
+### CHUNK_ID: projet_28__chunk_000008
+```
+[SECTION : Verrou 3 : Problème de la mise à l’échelle (Scalability) du modèle]
+En voulant mesurer la capacité de notre modèle à augmenter ses performances et son coût en réponse à des changements dans les demandes de traitement, nous avons été confrontés à différents blocages. Certains sont décrits ici :
+
+Au cours de la première phase de développement, nous n'avons pas mis l'accent sur le processus de sélection des caractéristiques de l'ensemble des données avec différents attributs. Ceci était principalement dû à la non-disponibilité de données ou d'attributs pertinents. Au lieu de cela, nous avons décidé d’opter pour un nombre similaire de caractéristiques telles que choisies et exploitée par la littérature pour une comparaison directe. Cependant, l'expérimentation de différentes caractéristiques, algorithmes ML, et approches de mise à l'échelle peut produire des résultats différents (ce qui était visible en référence aux meilleurs et pires résultats présentés) ;
+
+Étant donné que l'expérience a été menée en exploitant un seul ensemble de données sur le semi-conducteurs, il reste difficile de conclure que les performances de l'algorithme resteront les mêmes si elles sont expérimentées avec un autre ensemble de données sur le secteur des affaires ;
+```
+
+### CHUNK_ID: projet_28__chunk_000012_sub00
+```
+[SECTION : Raisonnement scientifique et démarche expérimentale appliquée]
+Suite aux différentes limites de la littérature, nous avons cherché à définir une nouvelle solution capable de fournir un Matchmaking intelligent et définir des recommandations appropriées et bien adaptées aux organisations. Pour l’atteinte de cet objectif, nous avons mis en œuvre un développement expérimental sous forme d’un ensemble d’itérations. Chaque itération a fait l’objet d’une architecture. L'ensemble des données disponibles est aléatoire, distribué et bruyant. Par conséquent, notre algorithme de matchmaking doit être nouveau et multifocal tout en respectant la précession, la latence et la scalabilité. Nous décrivons dans les parties qui suivent, ces différentes itérations ainsi que les résultats obtenus.
+
+Au départ, le conteneur ou l'algorithme de base est appelé algorithme de décision binaire. Il est également nécessaire de procéder à une classification appropriée afin d'obtenir un système de recommandation intelligent, capable de répondre aux demandes spécifiques des utilisateurs finaux.
+
+Dans un premier temps, la régression logistique (LR) a été adoptée car nous pensions que l'ensemble de données primaires pouvait être pris en charge par ce modèle.
+
+Le champ d'application a été limité à l'utilisation d'un modèle d'apprentissage supervisé classique pour les recommandations ou les décisions nécessaires. La restriction de l'utilisation de la régression logistique est due à l'exigence spécifique du domaine, où les caractéristiques des données ou le contexte de l'exigence deviennent dynamiques et incertains. Le domaine choisi est catégoriquement celui des semi-conducteurs et un ensemble de règles de marché différentes sont prises en compte. Les règles sont extrêmement aléatoires et présentent une incertitude et une relation de Pareto dans les données. Par conséquent, il devient difficile d'exploiter la régression logistique LR avec la non-linéarité existante dans les données causée par la relation de Pareto.
+
+Cependant, en raison de l'incertitude et du chevauchement, la relation de convergence des données devient faible et n'est pas adéquate pour définir une recommandation intelligente tout en satisfaisant les contraintes. Par conséquent, la nature hybride de l'algorithme est prévue.
+```
+
+### CHUNK_ID: projet_28__chunk_000013
+```
+[SECTION : Développement et mise en œuvre d’un algorithme hybride de matchmaking]
+La nature de l'algorithme hybride défini à cet effet doit suivre le principe selon lequel un algorithme hybride comprendra au moins deux ou plusieurs algorithmes intelligents et dynamiques. Par exemple, les réseaux neuronaux de base et le calcul approximatif ou flou qui constitue le cœur du calcul souple « Soft computing ». Ici, l'objectif est de développer une approche émergente pour la recommandation précise à travers des données distribuées, aléatoires et mal étiquetées. Le système proposé devrait être capable de démontrer la mesure appropriée avec un raisonnement et un apprentissage approximatifs dans un environnement incertain et imprécis. La mise en œuvre du système comprend donc principalement les étapes suivantes :
+
+Prétraitement des règles métier avec un traitement mathématique pour quantifier l'incertitude spécifique au domaine dans les données et les relations ;
+
+Assurer une optimisation multi-objectifs sur les données et les relations avec une précession optimale ;
+
+Entraîner les données étiquetées pour le modèle de régression logistique en se concentrant sur les recommandations classifiées et proximales pour les utilisateurs.
+```
+
+### CHUNK_ID: projet_28__chunk_000025_sub00
+```
+[SECTION : Problème de la mise à l’échelle (scalabilité)]
+Nous étudions la méthode d’apprentissage distribué sur nos données. Nous initions également la plate-forme portable en tant que GPU. Les tenseurs de traitement qui sont avec les mêmes données sont courants dans l’apprentissage distribué, en supposant le traitement parallèle comme unité GPU. En général, après l’agrégation du gradient, tous les GPU ont les mêmes gradients et paramètres de modèle qui doivent être traités avant de mettre à jour le modèle en fonction de l’optimiseur. Par exemple, l’algorithme LARS (You et al., 2018) doit calculer les taux d’apprentissage par couche en :
+
+Où γ est un hyperparamètre et ε est la perte de poids. Les données massives sur lesquelles nous effectuons des calculs sont récupérées et stockées par des périphériques d’E/S. Avec les accélérateurs matériels, le pipeline d’entrée peut rapidement devenir un goulot d’étranglement s’il n’est pas optimisé. Il peut être considéré comme composé de trois étapes:
+
+Extraction : La première tâche consiste à lire la source. La source peut être un disque, un flux de données, un réseau de peers, etc.
+
+Transformation : nous devrons exploiter certaines transformations aux données. Par exemple, dans le cas de l’apprentissage du classificateur d’entités des données, des transformations telles que le réglage fin avec les contraintes, qui sont appliquées à l’image d’entrée avant de les injecter dans le modèle.
+
+Chargement : La dernière étape fait le pont entre la mémoire du modèle d’apprentissage et les données transformées. Ces deux emplacements peuvent être identiques ou différents selon le type d’appareils que nous utilisons pour l’apprentissage et la transformation.
+
+Une autre méthode que nous expérimentons également est l’optimisation des hyperparamètres. L’espace de recherche des hyperparamètres peut être grand et il peut ne pas être pratiquement possible d’essayer toutes les combinaisons. Cela peut rendre le processus de réglage fin vraiment difficile, en particulier pour des recommandations spécifiques aux utilisateurs. La solution à ce problème réside dans l’exploitation d’une stratégie d’optimisation des hyperparamètres pour sélectionner les meilleurs (ou approximativement les meilleurs) hyperparamètres pour le modèle.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 117,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

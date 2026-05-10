@@ -1,0 +1,384 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 6/135, 8 chunks)
+
+### CHUNK_ID: projet_2__chunk_000148_sub05
+```
+en Allemagne, lot 158/IJ/U3, a été rappelé suite à une contamination de 340 000 UFC/mL, pour un seuil à ne pas dépasser de 200 UFC/mL (norme cosmétique ISO EN 17516).
+
+Par conséquent, à travers ce projet, nous souhaitons explorer l’efficacité de nouveaux composés pouvant avoir une action conservatrice et biocide, tout en respectant le label écologique. Pour atteindre cet objectif, il est nécessaire de développer un test bactériologique de viabilité rapide et fiable. Or, les tests actuels reposent sur l’utilisation de méthodes de microbiologie classiques en culture sur gélose ou par PCR. Ces méthodes sont chronophages et donnent des résultats en 48 à 72 heures. La technique d’ATPmétrie semble quant à elle prometteuse, car elle est décrite comme particulièrement efficace pour quantifier très rapidement une contamination microbiologique des eaux,,. Cependant, son utilisation dans le cadre d’un suivi qualité de production de savon liquide n’a pas été décrite à ce jour. En revanche, nous savons que cette technique est sensible à la présence d’inhibiteurs , ce qui pourrait altérer son efficacité dans le cadre de notre application.
+
+En complément, le virus du SARS-CoV2 étant un nouveau virus ayant émergé en 2020, aucun test virucide pour mesurer l’efficacité des produits biocides contre le SARS-CoV2 n’existait au démarrage de notre projet. Nous avons donc pris la décision de développer notre propre test de virucidie en nous basant sur le protocole de la norme NF ISO 14476+A2 et la capacité du virus SARS-CoV2 d’infecter les cellules VERO.
+
+II.5. Verrous et incertitudes scientifiques, techniques, technologiques
+
+En 2021, au démarrage de ce projet, trois verrous majeurs étaient à lever :
+
+L’élaboration d’une nouvelle formulation de savon liquide
+
+La définition d’un test virucide adapté au SARS-CoV2
+
+La sécurisation du risque de contamination microbiologique
+
+II.5.1. Élaboration d’une nouvelle formulation
+
+Le premier verrou est lié à l’élaboration d’une nouvelle formulation de savon liquide capable de répondre aux exigences internes, des consommateurs et de la réglementation, c’est-à-dire :
+
+Porter la mention « écologique »
+
+Proposer une action biocide et conservatrice conforme
+
+Offrir une fonction virucide, notamment contre le SARS-CoV2
+```
+
+### CHUNK_ID: projet_2__chunk_000017
+```
+[SECTION : Sécurisation du risque de contamination microbiologique]
+Pour l’élaboration de la nouvelle formulation, nous avions besoin de définir des tests bactériologiques afin :
+
+D’identifier le meilleur conservateur et déterminer sa concentration optimale d’utilisation
+
+De déterminer les conditions de conservation limite de nos produits
+
+De contrôler le niveau de contamination microbiologique des formulations de savons
+
+Pour cela, nous avions analysé les performances de deux méthodes d’analyse microbiologique : la méthode d’ATPmétrie et la méthode classique en boîte de pétrie. Les premiers tests menés avaient révélé que ces deux méthodes étaient complémentaires mais ne pouvaient être utilisées séparément. En effet, la méthode d’ATPmétrie donnait une indication quasi en temps réel sur le niveau de contamination globale. En revanche, elle ne permettait pas de déterminer le type de contamination microbiologique. Cette information était obtenue par la méthode des boîtes de gélose mais après 48 h à 72 h d’incubation.
+
+En 2023, nous avions approfondi l’analyse microbiologique de nos savons par la méthode d’ATPmétrie. Nous avions apporté des éléments de réponses concernant l’identité des composants des savons qui interféraient sur la précision de la mesure. Nous avions également déterminé que le signal de sortie par ATPmétrie était sous-estimé de seulement 15% pour nos savons par rapport à l’eau. Nous avions pu appliquer cette méthode aux fabrications industrielles de nos savons et les résultats étaient cohérents et satisfaisants. Les savons fabriqués avaient révélé une contamination microbiologique inférieure à 3 log (soit < 1000 équivalents bactéries/L), ce qui correspondait à 0 UFC/mL sur gélose. Ces valeurs étaient nettement inférieures au seuil toléré pour un produit cosmétique (200 UFC/mL, norme ISO 17516:2014). Grâce à ces études, nous avions appris à maîtriser la contamination microbiologique avant, pendant et après la fabrication de nos savons.
+```
+
+### CHUNK_ID: projet_2__chunk_000068
+```
+[SECTION : Sécurisation du risque de contamination microbiologique]
+Pour l’élaboration de la nouvelle formulation, nous avions besoin de définir des tests bactériologiques afin :
+
+D’identifier le meilleur conservateur et déterminer sa concentration optimale d’utilisation
+
+De déterminer les conditions de conservation limite de nos produits
+
+De contrôler le niveau de contamination microbiologique des formulations de savons
+
+Pour cela, nous avons les performances de deux méthodes d’analyse microbiologique : la méthode d’ATPmétrie et la méthode classique en boîte de pétrie. Les premiers tests menés révélé que ces deux méthodes étaient complémentaires mais ne pouvaient être utilisées séparément. a méthode d’ATPmétrie donn une indication quasi en temps réel sur le niveau de contamination globale. En revanche, elle ne permet pas de déterminer le type de contamination microbiologique. Cette information obtenue par la méthode des boîtes de gélose mais après 48 h à 72 h d’incubation.
+
+En 2023, nous avons approfondi l’analyse microbiologique de nos savons par la méthode d’ATPmétrie. Nous avons apporté des éléments de réponses concernant l’identité des composants des savons qui interfrent sur la précision de la mesure. Nous détermin que le signal de sortie par ATPmétrie était sous-estimé de seulement 15% pour nos savons par rapport à l’eau. Nous avons pu appliquer cette méthode aux fabrications industrielles de nos savonses résultats cohérents et satisfaisants. Les savons fabriqués révélé une contamination microbiologique inférieure à 3 log (soit < 1000 équivalents bactéries/L), ce qui correspondait à 0 UFC/mL sur gélose. Ces valeurs nettement inférieures au seuil toléré pour un produit cosmétique (200 UFC/mL, norme ISO 17516:2014). Grâce à ces études, nous avons appris à maîtriser la contamination microbiologique avant, pendant et après la fabrication de nos savons.
+```
+
+### CHUNK_ID: projet_2__chunk_000118
+```
+[SECTION : Sécurisation du risque de contamination microbiologique]
+Pour l’élaboration de la nouvelle formulation, nous avions besoin de définir des tests bactériologiques afin :
+
+D’identifier le meilleur conservateur et déterminer sa concentration optimale d’utilisation
+
+De déterminer les conditions de conservation limite de nos produits
+
+De contrôler le niveau de contamination microbiologique des formulations de savons
+
+Pour cela, nous avions analysé les performances de deux méthodes d’analyse microbiologique : la méthode d’ATPmétrie et la méthode classique en boîte de pétrie. Les premiers tests menés avaient révélé que ces deux méthodes étaient complémentaires mais ne pouvaient être utilisées séparément. En effet, la méthode d’ATPmétrie donnait une indication quasi en temps réel sur le niveau de contamination globale. En revanche, elle ne permettait pas de déterminer le type de contamination microbiologique. Cette information était obtenue par la méthode des boîtes de gélose mais après 48 h à 72 h d’incubation.
+
+En 2023, nous avions approfondi l’analyse microbiologique de nos savons par la méthode d’ATPmétrie. Nous avions apporté des éléments de réponses concernant l’identité des composants des savons qui interféraient sur la précision de la mesure. Nous avions également déterminé que le signal de sortie par ATPmétrie était sous-estimé de seulement 15% pour nos savons par rapport à l’eau. Nous avions pu appliquer cette méthode aux fabrications industrielles de nos savons et les résultats étaient cohérents et satisfaisants. Les savons fabriqués avaient révélé une contamination microbiologique inférieure à 3 log (soit < 1000 équivalents bactéries/L), ce qui correspondait à 0 UFC/mL sur gélose. Ces valeurs étaient nettement inférieures au seuil toléré pour un produit cosmétique (200 UFC/mL, norme ISO 17516:2014). Grâce à ces études, nous avions appris à maîtriser la contamination microbiologique avant, pendant et après la fabrication de nos savons.
+```
+
+### CHUNK_ID: projet_2__chunk_000150_sub00
+```
+[SECTION : Sécurisation du risque de contamination microbiologique]
+Pour l’élaboration de la nouvelle formulation, nous avions besoin de définir des tests bactériologiques afin :
+
+D’identifier le meilleur conservateur et déterminer sa concentration optimale d’utilisation
+
+De déterminer les conditions de conservation limite de nos produits
+
+De contrôler le niveau de contamination microbiologique des formulations de savons
+
+Pour cela, nous avons comparé les performances de deux méthodes d’analyse microbiologique : la méthode d’ATPmétrie et la méthode classique en boîte de pétrie. Les premiers tests menés sur la période Juillet-Décembre 2022 ont révélé que ces deux méthodes étaient complémentaires mais ne pouvaient être utilisées séparément. La méthode d’ATPmétrie donne une indication quasi en temps réel sur le niveau de contamination globale. En revanche, elle ne permet pas de déterminer le type de contamination microbiologique. Cette information est obtenue par la méthode des boîtes de gélose mais après 48 h à 72 h d’incubation.
+
+En 2023, nous avons approfondi en interne l’analyse microbiologique de nos savons par la méthode d’ATPmétrie que nous avions initiée en 2022. Nous avons apporté des éléments de réponses concernant l’identité des composants des savons qui interfèrent sur la précision de la mesure. Nous sommes allés encore plus loin en déterminant que le signal de sortie par ATPmétrie était sous-estimé de seulement 15% pour nos savons par rapport à l’eau. Nous avons pu appliquer cette méthode aux fabrications industrielles de nos savons. Les résultats furent cohérents et satisfaisants. Les savons fabriqués ont révélé une contamination microbiologique inférieure à 3 log (soit < 1000 équivalents bactéries/L), ce qui correspondait à 0 UFC/mL sur gélose. Ces valeurs sont nettement inférieures au seuil toléré pour un produit cosmétique (200 UFC/mL, norme ISO 17516:2014). Grâce à ces études, nous avons appris à maîtriser la contamination microbiologique avant, pendant et après la fabrication de nos savons.
+
+Pour davantage de détails sur les travaux menés sur la période 2023, se référer au document ci-dessous.
+
+Document fourni : FB Product_DT 2023_VF
+
+II.6.3. Travaux réalisés en 2024
+```
+
+### CHUNK_ID: projet_2__chunk_000148_sub00
+```
+Dossier Technique
+
+Crédit d’Impôt Recherche
+
+SOMMAIRE
+
+I. Présentation de la société………………………………………………………………………...………………………....p03
+
+I.1. Activité………………………………………………………………………………………….…………………..p03
+
+I.2. Organisation……………………………………………………………………………………………………p04
+
+II. Développement d’une formulation de savon à main écologique et efficace
+
+contre SARS-CoV2…………………………………………………………………………………………………………………p05
+
+II.1. Indicateurs de R&D…………………………………………………………….…………………………p05
+
+II.2. Contexte du projet………………….………………………………………………………………………p05
+
+II.3. Objectifs du projet………………….……………………………………………………………….………p06
+
+II.4. Etat de l’art………………….……………………………………………………………………………...……p06
+
+II.5. Verrous et incertitudes scientifiques, techniques, technologiques….....p08
+
+II.5.1. Élaboration d’une nouvelle formulation……………………….....p08
+
+II.5.2. Définition d’un test virucide et adapté au
+
+SARS-CoV2………………………………………………………………………....p08
+
+II.5.3. Sécurisation du risque de contamination
+
+microbiologique……………………………………..…………………………....p09
+
+II.6. Démarche expérimentale, travaux R&D réalisés……………………………..…....p10
+
+II.6.1. Partenariats & phasage des travaux……………………………....p10
+
+II.6.2. Travaux antérieurs à 2024…………………………………………..…....p10
+
+II.6.3. Travaux réalisés en 2024……..………………………………………......p13
+
+II.7. Conclusion et contribution scientifique, technique ou
+
+technologique……..……………………………………………………………………………………….....p15
+
+III. Développement d’une formulation de produit mousse de
+
+prétrempage avec fonction détergente………………………………………………………………..………....p17
+
+III.1. Contexte du projet……..…………………………………………………………….………………….....p17
+
+III.2. Objectifs du projet……..………………………………………………………………..……………….....p18
+
+III.3. État de l’art……..…………………………………………………….……………………………………….....p19
+
+III.4. Verrous et incertitudes scientifiques, techniques, technologiques….....p20
+
+III.5. Démarche expérimentale, travaux R&D réalisés…………………………………....p21
+
+III.6. Conclusion et contribution scientifique, technique, technologique…......p23
+
+IV. Développement d’une formulation de produit lubrifiant pour outils
+
+chirurgicaux à haute résistance thermique………………………………………………………..………....p25
+
+IV.1. Contexte du projet……..…………………………………………………………….………………….....p25
+
+IV.2. Objectifs du projet……..………………………………………………………………..……………….....p26
+
+IV.3. État de l’art……..…………………………………………………….……………………………………….....p27
+
+IV.4. Verrous et incertitudes scientifiques, techniques, technologiques….....p28
+
+IV.5. Démarche expérimentale, travaux R&D réalisés…………………………………....p29
+
+IV.6. Conclusion et contribution scientifique, technique, technologique…......p32
+
+V. Annexes……………………………………………………………………………………..……………………………… …....p33 à 49
+
+I. Présentation de la société
+
+I.1. Activité
+
+A la suite du rachat de la société Steriscience par Franklab le 30/03/2018, les projets de recherche menés au sein du groupe de sociétés suivant ont été réorganisés.
+
+Figure 1 : Organisation du groupe
+
+Ainsi, le projet « Recherche de solutions capables d’inactiver les prions et les amyloïdes », issu d’une collaboration avec l’INRA et valorisé précédemment au sein de la société Franklab, a été repris, à compter du 01/04/2018, par la société FB.INT’L, holding majoritaire du groupe. Cette réorganisation avait pour objectif de poursuivre les investissements financiers alloués sur ce projet et en faciliter l’essor à l’international.
+
+Fin 2020, Monsieur Bonnet, PDG du groupe, a cédé ses parts Franklab et FB.INT’L a quitté le groupe pour devenir une entreprise autonome.
+
+En mai 2021, la société a changé de nom pour devenir FB Product et son siège a été transféré à Torcé-Viviers-en-Charnie (53).
+```
+
+### CHUNK_ID: projet_2__chunk_000148_sub08
+```
+pourrons ensuite étudier les caractères intrinsèques du virus et déterminer quelles sont les conditions minimales de temps et de concentration pour éliminer au moins 99.9% de la surface des mains.
+
+Détoxification du savon
+
+Le test de virucidie consiste à mesurer le titre viral rémanent après une contamination artificielle d’une solution de savon à une concentration donnée. Or, la présence de savon fausse les résultats des tests de virucidie, ce qui nous impose de d’abord passer une étape de détoxification du savon, étape à définir.
+
+II.5.3. Sécurisation du risque de contamination microbiologique
+
+Le dernier verrou concerne la sécurisation du risque de contamination microbiologique lors de la production et du stockage du produit. La prévention du risque de transmission de bactéries nosocomiales s’effectue à deux niveaux :
+
+Le premier concerne le produit en lui-même. La formulation ne doit pas permettre l’introduction de germes pathogènes, que ce soit au moment de la fabrication, ou de l’utilisation du produit. Pour cela, nous allons miser sur l’utilisation d’un nouveau conservateur
+
+Le deuxième aspect concerne l’utilisation du produit. Pour ce faire, nous devons déterminer quels sont les points critiques de l’utilisation du produit (sa concentration minimale, son temps de friction…), afin que celui-ci puisse éliminer le maximum de pathogène en un minimum de temps
+
+Afin d’étudier ces deux aspects, il est indispensable de définir en laboratoire des tests bactériologiques de viabilité. Ces tests doivent être adaptés à notre utilisation, c’est-à-dire que nous devons sélectionner les souches bactériennes d’intérêt en termes de probabilité de contamination et de résistance et de rapidité du test. La rapidité du test joue un rôle crucial, car cela permettra de comparer beaucoup de formulations en un minimum de temps, et permettra également un contrôle quasi en temps réel de la production et du stockage de la formulation, contrairement aux tests microbiologiques « classiques », qui demandent 48 à 72 heures. Par conséquent, il est nécessaire de valider de nouvelles méthodes d’analyses, comme la mesure de l’ATPmétrie, et garantir sa robustesse et sa sensibilité.
+
+II.6. Démarche expérimentale, travaux R&D réalisés
+
+II.6.1. Partenariats & phasage des travaux
+```
+
+### CHUNK_ID: projet_2__chunk_000148_sub09
+```
+de valider de nouvelles méthodes d’analyses, comme la mesure de l’ATPmétrie, et garantir sa robustesse et sa sensibilité. II.6. Démarche expérimentale, travaux R&D réalisés II.6.1. Partenariats & phasage des travaux
+
+Le projet doit se dérouler en quatre phases :
+
+Phase 1 : Elaboration de formulations candidates en partenariat avec le consultant chimiste Jean-Loïc BARATOUX.
+
+Phase 2 : Définition d’outils de microbiologie et de virucidie pour tester l’efficacité des formulations. Ces travaux sont réalisés en collaboration avec l’unit VIM de l’INRAE, qui accueille Madame IGEL, chercheuse au sein de la société FB Product, dont l’objectif est de développer un nouveau test virucide à l’encontre du SARS-CoV2.
+
+Phase 3 : Maitrise de la transposition à grande échelle du protocole de développement de la formulation candidate.
+
+Phase 4 : Test de l’efficacité virucide de la formulation.
+
+II.6.2. Travaux antérieurs à 2024
+
+Elaboration d’une nouvelle formulation de savon liquide
+
+Au cours de la période 2021-2022, nous nous étions rapprochés du consultant formulateur Jean-Loïc BARATOUX et ce dernier nous avait proposé six formulations de savon liquide comme base de travail . Nous avions par la suite rencontré de nombreux problèmes avec ces formulations : viscosité insuffisante, changement de couleur inapproprié, très mauvaise homogénéisation lors de la fabrication à grande échelle… Cela nous avait conduits à éliminer certaines formulations et à redéfinir les autres par nous-mêmes. Les essais menés dans notre laboratoire avaient permis ensuite de définir trois formulations de savons (S3, S4 et S5). Ces formulations présentaient encore des défauts et nécessitaient davantage de temps de recherche pour atteindre pleinement nos objectifs, mais nous avions néanmoins pu évaluer l’impact de certains composants sur les paramètres tels que la viscosité, la tenue de la coloration et la contamination microbiologique. Nous avions également pu évaluer l’action virucide à l’encontre du SARS-CoV2 de l’une de ces formulations (S5).
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 6,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

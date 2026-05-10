@@ -1,0 +1,279 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 22/135, 8 chunks)
+
+### CHUNK_ID: projet_5__chunk_000007_sub00
+```
+[SECTION : Description des travaux réalisés l’année 2024]
+A l’issue de nos travaux antérieurs menés à température ambiante, nous avons poursuivi notre étude en 2024 dans l’objectif de réaliser une caractérisation expérimentale du comportement acoustique du joint à -24°C.
+
+Vue la masse importante de la petite cabine, notamment en raison du bloc béton dans sa partie inférieure, nous n’avons pas pu la transporter puis la placer dans une grande enceinte thermique de 36 m³.
+
+Nous avons pour cela adopté une première approche expérimentale consistant à placer les joints dans le banc de compression, présenté sur la figure ci-dessous, situé dans la petite cabine, afin de réaliser des essais de caractérisation acoustique. Avant ces essais, les joints sont préalablement refroidis dans un congélateur pour simuler les conditions nécessaires à l'expérience (-24°C).
+
+Figure : Banc de compression
+
+La démarche expérimentale que nous avons définie consiste à réaliser dans la petite cabine une mesure dans une configuration de référence et une mesure dans une configuration avec l’échantillon.
+
+Pour la configuration de référence, le banc de compression est positionné sans joint dans la petite cabine. Une distance de 2 cm est réglée entre le coulisseau horizontal et le coulisseau vertical. Cette distance correspond à la plus grande épaisseur des joints qui seront soumis à l’essai.
+
+Pour la configuration avec l’échantillon, le banc de compression est positionné avec l’échantillon de joint dans la petite cabine. Nous avons réalisé dans cette configuration une mesure sans compression et une mesure en comprimant le joint de 20%.
+
+Afin d’éviter tout fuite du bruit par un autre endroit que l’ouverture sur le panneau supérieur, nous avons mis en place du feutre au niveau de la vis de réglage. En outre, nous avons positionné un capot métallique, ainsi qu’une capote métallique par dessus le banc de compression.
+
+Nous avons réalisé nos essais sur cinq échantillons illustrés sur la figure suivante.
+
+Figure : Echantillons de joints, de gauche à droite : le joint oméga, le joint de glace, le joint demi-lune, le joint cellulaire et le joint de profil B
+```
+
+### CHUNK_ID: projet_5__chunk_000007_sub01
+```
+suivante. Figure : Echantillons de joints, de gauche à droite : le joint oméga, le joint de glace, le joint demi-lune, le joint cellulaire et le joint de profil B
+
+Nous avons réalisé l’acquisition avec le module « Spectral Testing » de TestLab, permettant de réaliser des mesures acoustiques. Ce programme permet d'injecter une tension uniforme au niveau des haut-parleurs et de mesurer le niveau acoustique au niveau des microphones (quatre en zone de réception). Suite à cette acquisition, TestLab réalise une transformée de Fourier pour convertir les signaux temporels en signaux fréquentiels afin d'obtenir des spectres.
+
+Les quatre microphones sont calibrés au début de chaque journée de mesures.
+
+Nous avons disposé chaque joint sur le coulisseau horizontal du banc de compression et l’avons maintenu par un adhésif industriel double-face. Le joint de glace a été quant à lui directement fixé sur le banc. La mise en place du joint a nécessité de démonter entièrement le banc de compression.
+
+Figure : Disposition du joint de glace
+
+Figure : Joint de profil B non comprimé (figure gauche) / Joint de profil B en compression (figure droite)
+
+Pour les essais menés sans compression du joint, nous nous sommes assurés du maintien de toute la longueur du joint en contact avec le coulisseau vertical.
+
+Pour les essais en compression, nous avons positionné les joints selon les réglages présentés dans le tableau suivant.
+
+[TABLEAU]
+| Echantillon | Epaisseur (mm) | 20% épaisseur (mm) | Nombre de tour de la vis de réglage |
+| ----------------- | -------------- | ------------------ | ----------------------------------- |
+| Joint Omega | 2 | 0,4 | 1 |
+| Joint de Glace | 1,6 | 0,32 | 3/4 + une demi-division |
+| Joint Demi-lune | 1 | 0,2 | 1/2 |
+| Joint Cellulaire | 1,5 | 0,3 | 3/4 |
+| Joint de profil B | 1 | 0,2 | 1/2 |
+
+Tableau : Réglages du banc de compression
+```
+
+### CHUNK_ID: projet_5__chunk_000007_sub02
+```
+| | Joint Cellulaire | 1,5 | 0,3 | 3/4 | | Joint de profil B | 1 | 0,2 | 1/2 | Tableau : Réglages du banc de compression
+
+Afin de préparer les échantillons à température contrôlée, nous les avons refroidis à l’aide d’un congélateur de laboratoire permettant d’obtenir une température théorique de -24°C. Les échantillons de joint ont été placés dans le congélateur pendant au moins 24h. Nous avons remis les joints dans le congélateur entre la mesure sans compression et la mesure en compression.
+```
+
+### CHUNK_ID: projet_5__chunk_000008
+```
+[SECTION : Résultats obtenus]
+Nous avons calculé pour chaque échantillon les pertes d’insertion (IL) à l’aide de TestLab. Les figures suivantes présentent les résultats de nos essais, ainsi que ceux obtenus précédemment à température ambiante, avec et sans compression du joint.
+
+Figure : IL du joint cellulaire pour les deux températures sans compression (figure gauche) et en compression (figure droite)
+
+Figure : IL du joint demi-lune pour les deux températures sans compression (figure gauche) et en compression (figure droite)
+
+Figure : IL du joint de glace pour les deux températures sans compression (figure gauche) et en compression (figure droite)
+
+Figure : IL du joint Omega pour les deux températures sans compression (figure gauche) et en compression (figure droite)
+
+Figure : IL du joint de profil B pour les deux températures sans compression (figure gauche) et en compression (figure droite)
+
+Nous constatons pour l’ensemble des joints étudiés des profils de courbe similaires entre l’essai à température ambiante et l’essai avec le joint refroidi. Toutefois, pour l’essai réalisé sur le joint Omega sans compression, les écarts sont très importants.
+
+Ces résultats restent néanmoins peu concluants. En effet, la configuration expérimentale que nous avons mise en œuvre est complexe, en raison notamment de la procédure d’assemblage des plaques vissées du banc de compression.
+
+De plus, les essais à température basse comportent plusieurs sources d'incertitude. La température du congélateur, bien qu'indiquée, reste théorique et peut fluctuer. Par ailleurs, le processus de mise en place du joint sur le banc de compression, ainsi que le montage de ce dernier, nécessite environ 15 minutes, ce qui permet au joint de se réchauffer légèrement avant la mesure.
+
+Une autre source d'écart réside dans le fait que, lorsque l'échantillon est refroidi à -24°C, son adhésion au banc de compression est fortement réduite. Cela peut entraîner une dégradation de l'interaction entre la surface du joint et l'adhésif lors de l'essai sans compression, par rapport à l'essai effectué à température ambiante.
+```
+
+### CHUNK_ID: projet_5__chunk_000009_sub00
+```
+[SECTION : Conclusion et contribution scientifique, technique ou technologique]
+Les travaux de R&D que nous avons réalisés en 2024 nous ont permis d’avancer dans notre objectif de caractérisation acoustique des systèmes d’étanchéité des véhicules en froid.
+
+Nous avons pour cela adopté une première approche expérimentale consistant à réaliser des mesures acoustiques sur des joints de géométries différentes montés dans le banc de compression que nous avons développé et positionné dans la petite cabine. Nous avons refroidi les échantillons de joints dans un congélateur pour étudier l’impact d’une température de -24°C sur ses performances de transmission du son.
+
+Les résultats des essais réalisés à température ambiante et après refroidissement des échantillons a révélé des écarts significatifs, notamment pour l’essai sur le joint Omega sans compression. Cette différence s’explique par plusieurs facteurs expérimentaux qui influencent la précision et la reproductibilité des mesures.
+
+Dans un premier temps, la complexité de l’assemblage du banc de compression a limité la fiabilité des résultats. La procédure de montage des plaques vissées a introduit des contraintes mécaniques susceptibles d'affecter l’uniformité du contact entre le joint et le support, influençant ainsi la transmission des ondes acoustiques.
+
+En outre, les essais à basse température ont mis en évidence plusieurs sources d’incertitude. La température indiquée par le congélateur reste théorique et sujette à des fluctuations locales. De plus, la durée du processus de manipulation des échantillons, estimée à environ 15 minutes, engendre un réchauffement partiel du joint avant la mesure.
+
+Par ailleurs, une autre source d’incertitude réside dans l’adhésion du joint au banc de compression après refroidissement à -24°C, ce qui altère la qualité du contact entre le joint et la surface de test, affectant ainsi les performances mesurées en termes de transmission acoustique.
+
+Ces différents constats montrent la nécessité du développement d’un nouveau protocole expérimental et de la prise en compte des variations d’adhésion des matériaux à basse température dans l’interprétation des résultats.
+```
+
+### CHUNK_ID: projet_5__chunk_000009_sub01
+```
+Ces différents constats montrent la nécessité du développement d’un nouveau protocole expérimental et de la prise en compte des variations d’adhésion des matériaux à basse température dans l’interprétation des résultats.
+
+Néanmoins, ce projet a apporté une contribution scientifique et technique à la caractérisation des performances acoustiques des systèmes d’étanchéité d’un véhicule automobile à température basse, et ont permis d’analyser les problématiques inhérentes à cette thématique. Les résultats obtenus constituent une première étape dans la compréhension des interactions entre les propriétés thermiques et acoustiques des élastomères, et a ouvert la voie à des pistes d’amélioration en termes de protocole expérimental.
+```
+
+### CHUNK_ID: projet_5__chunk_000011
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération | Contribution directe à l’acquisition de nouvelles connaissances | Temps déclaré pour l’opération en heures |
+| ------------------ | ------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| AYED MARYEM | Master | Ingénieure étude | -Définition d’une démarche expérimentale pour la caractérisation acoustique des joints à température basse -Acquisition et analyse des résultats acoustiques | 210 |
+| CATTEAU ANTONIN | Bachelor Universitaire de Technologie | Technicien d’essais | Réalisation d'essais en petite cabine sur les joints à basse température | 230 |
+| CHEVALLIER NICOLAS | Ingénieur, vibrations, acoustique, capteurs | Ingénieur essais et simulation | -Support technique modélisation et essais. -Analyse des résultats intermédiaires et orientation des travaux en fonction de ces résultats. | 245 |
+| GAROT MARTIN | Master de Sciences et technologies | Ingénieur étude | Analyse des problématiques liées au comportement du joint en compression | 175 |
+| HAVARD ALEXANDRE | Licence professionnelle de Sciences, technologie, santé | Technicien d'essai | Réalisation d'essais en petite cabine sur des échantillons de forme simple | 175 |
+| ROUSSEL LISA | Ingénieur, vibrations, acoustique, Capteurs | Ingénieure d'essais | -Etude bibliographie du comportement mécanique des élastomères de joints. -Réalisation d'essais en petite cabine sur des échantillons de joints à température ambiante. -Analyse de l'influence de la température sur la réponse acoustique et recherche de lois reliant raideur et température | 350 |
+| AIT YOUNES TARIK | Diplôme d’études supérieures spécialisées | Chef de projet | Gestion de l’opération R&D et définition des objectifs et performances à atteindre | 12 |
+```
+
+### CHUNK_ID: projet_5__chunk_000014_sub00
+```
+[SECTION : Travaux de recherche sur la caractérisation acoustique des joints : approches numériques et expérimentales]
+Un ensemble de travaux de recherche ont été menés dans le cadre de la caractérisation des joints en termes de comportement acoustique. Nous en citons les plus intéressants.
+
+En effet, dans leur travail de recherche, Park et al.1 ont étudié la transmission du son à travers un joint bulbe en élastomère. Les auteurs ont conduit un ensemble d’essais sur un spécimen de joint à bulbe en utilisant la méthode de salle réverbérante. La vitesse vibratoire de la paroi du joint a été mesurée à l'aide d'un vibromètre laser Doppler, et la pression sonore à proximité de l'emplacement de mesure de la vitesse a été mesurée simultanément. Ensuite, la réponse aux vibrations et la perte de transmission du son du joint à bulbe ont été calculées à l'aide d'une analyse par éléments finis.
+
+Les données expérimentales obtenues ont permis la validation des modèles numériques. Ensuite, le modèle a été utilisé pour étudier numériquement l'influence de divers paramètres de conception. Les résultats ont alors montré que le module d'élasticité affectait de manière significative la fréquence de résonance du joint du bulbe et que le facteur de perte du matériau avait des effets majeurs sur la perte de transmission du son autour de la résonance.
+
+L’analyse numérique réalisée dans cet article a permis également d’étudier l’effet du ratio de compression sur les pertes de transmission du son prévues. En effet, l'augmentation du taux de compression entraîne une augmentation de la perte de transmission du son dans la région des basses fréquences en dessous de la résonance et un déplacement de l’intervalle de résonance vers des fréquences plus élevées. Toutefois, elle a peu d'impact sur la perte de transmission du son aux fréquences situées au-dessus de la résonance.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 22,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

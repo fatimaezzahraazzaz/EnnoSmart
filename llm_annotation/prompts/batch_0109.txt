@@ -1,0 +1,283 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 109/135, 8 chunks)
+
+### CHUNK_ID: projet_25__chunk_000012_sub00
+```
+[SECTION : Synthèse des progrès et des innovations]
+Les travaux réalisés en 2025 ont permis de franchir un palier significatif dans la structuration et la mise en cohérence des processus liés au convoyage de véhicules et à la gestion des parcs automobiles. Les avancées obtenues ne se limitent pas à l’ajout de fonctionnalités, mais traduisent une évolution du système vers une meilleure maîtrise des flux opérationnels, une fiabilisation des données et une amélioration du pilotage global des activités.
+
+Un premier progrès majeur concerne la capacité du système à assurer une continuité opérationnelle entre des processus historiquement dissociés. Les développements réalisés ont permis de réduire les ruptures d’information entre les différentes étapes (gestion de parc, préparation, convoyage, livraison), en structurant les échanges de données et en harmonisant les référentiels utilisés. Cette évolution améliore la cohérence globale du système et limite les pertes d’information.
+
+Par ailleurs, des avancées significatives ont été obtenues en matière de structuration des flux opérationnels. La formalisation des statuts véhicules, la gestion des transitions entre états, ainsi que l’encadrement des opérations d’entrées et de sorties ont permis de mieux représenter la réalité terrain et d’améliorer la lisibilité des opérations. Ces travaux contribuent à renforcer la capacité de suivi et de contrôle des activités.
+
+Sur le plan technique, des progrès ont également été réalisés dans l’automatisation des processus et la gestion des flux documentaires. La dématérialisation des échanges, la centralisation des documents et l’intégration de mécanismes de validation ont permis de fiabiliser les données collectées, tout en réduisant les risques d’erreurs et les tâches manuelles. Cette évolution améliore la qualité des informations disponibles pour le pilotage.
+
+L’année 2025 a également été marquée par l’intégration de nouvelles dimensions fonctionnelles, notamment en lien avec les enjeux environnementaux. Le développement d’un module d’estimation de l’impact carbone des acheminements constitue une avancée notable, en permettant d’introduire des indicateurs environnementaux dans les processus de décision opérationnelle. Cette capacité ouvre la voie à une meilleure prise en compte des critères de durabilité dans l’organisation des transports.
+```
+
+### CHUNK_ID: projet_25__chunk_000012_sub01
+```
+permettant d’introduire des indicateurs environnementaux dans les processus de décision opérationnelle. Cette capacité ouvre la voie à une meilleure prise en compte des critères de durabilité dans l’organisation des transports.
+
+Enfin, les travaux ont permis de consolider l’architecture globale du système, en assurant une meilleure interconnexion entre les différents modules et une synchronisation plus fiable des données. Cette structuration contribue à améliorer la robustesse du système et à préparer son évolution vers des usages plus avancés.
+
+En synthèse, les progrès réalisés en 2025 portent principalement sur la structuration des processus, la fiabilisation des données, l’automatisation des opérations, l’intégration de nouvelles dimensions analytiques (notamment environnementales) et l’amélioration de l’interaction avec les utilisateurs terrain. Ces avancées renforcent la capacité du système à répondre aux contraintes opérationnelles du secteur et constituent une base solide pour les évolutions futures.
+```
+
+### CHUNK_ID: projet_25__chunk_000014
+```
+FRANCE REAL ESTATE DEVELOPPEMENT (FRED)
+15 Boulevard Voltaire, 75011 Paris
+
+1. Ezy Retail – Plateforme de gestion du convoyage et du transport de véhicules
+
+L’application Ezy Retail est une solution web permettant de gérer l’ensemble du processus de convoyage de véhicules de manière dématérialisée. Elle offre les fonctionnalités suivantes :
+
+Création et demande de transport/convoyage de véhicules
+
+Sélection de prestataires parmi différents acteurs du transport automobile
+
+Choix de types de prestations, selon les besoins spécifiques (convoyage en propre, transport par camion, etc.)
+
+Suivi de la réalisation de la prestation
+
+Remontée documentaire automatisée, avec archivage des preuves de livraison et validation de chaque étape
+
+Digitalisation complète du parcours, de la demande initiale à la réception du véhicule livré
+
+Cette plateforme vise à améliorer l'efficacité logistique, réduire les erreurs humaines, automatiser les interactions avec les prestataires et assurer une traçabilité complète et sécurisée des opérations.
+
+2. Eyz Parc – Gestion digitalisée des stocks de véhicules
+
+L’application Eyz Parc est une plateforme web dédiée à la gestion des parcs de véhicules. Elle permet :
+
+Le suivi en temps réel des véhicules en stock
+
+La gestion des entrées et sorties de véhicules sur les différents sites
+
+La prise en charge des demandes de préparation des véhicules (nettoyage, contrôle, accessoires, etc.)
+
+L'automatisation de la remontée documentaire, liée à chaque action réalisée sur un véhicule
+
+Une digitalisation complète des opérations, permettant la centralisation des données, la réduction du papier et l’optimisation de la gestion interne des parcs
+
+Eyz Parc apporte une vision unifiée, fiable et actualisée du stock et des opérations, tout en améliorant la coordination entre les équipes commerciales, logistiques et administratives.
+
+Conclusion
+
+Les deux solutions, Ezy Retail et Eyz Parc, ont été conçues pour répondre à des enjeux métiers complexes en matière de logistique automobile, à travers une approche digitale innovante. Le développement de ces outils s’inscrit dans une démarche R&D continue, portant notamment sur :
+
+L’optimisation algorithmique des processus
+
+L’interopérabilité entre systèmes
+
+L’automatisation intelligente de la collecte et du traitement documentaire
+
+L’analyse de données pour la prise de décision opérationnelle
+```
+
+### CHUNK_ID: projet_26__chunk_000096_sub10
+```
+de la littérature et des outils open source, et formulation de recommandations d’architectures combinant OCR, vision par ordinateur et raisonnement via LLM pour une exploitation efficace dans un système KM. |
+| ARNAUD Jolan | Ingénieur spécialité Mécanique | Analyste R&D | Identification, choix et validation de technologies |
+| NIGLIO Olivier | BADGE accrédité par la Conférence des Grandes Ecoles «Optimiser les performances managériales et financières » BTS OPTICIEN LUNETIER MENTION LEGISLATION, SCIENCES PHYSIQUES CHIMIE | Analyste R&D | Identification, choix et validation de technologies |
+| ROUSSEL Romain | Formation avancée en programmation au sein de l'école 42 Formation d'ingénieur en informatique à l'institut Galilée, rattaché à l'université Paris 13 | Analyste R&D | Identification, choix et validation de technologies |
+| HELL Jean-Philippe | CNAM – École d'Ingénieur Informatique et Systèmes d'Informations BTS MAINTENANCE INDUSTRIELLE | Analyste R&D | Identification, choix et validation de technologies |
+| NOUH-MEFNOUNE Samir | PROFESSIONAL SCRUM MASTER 1 LICENCE PROFESSIONNELLE ASSURANCE, BANQUE, FINANCE, option CONSEILLER GESTIONNAIRE DE CLIENTELE-MARCHE DES PARTICULIERS | Analyste R&D | Identification, choix et validation de technologies |
+| LEROUX Jeremy | Master Sciences, Technologies, Santé, à finalité Professionnelle, mention Statistiques Appliquées, spécialité Statistiques pour l'Entreprise | Analyste R&D | Identification, choix et validation de technologies |
+| Nguyen Thi Teu | Diplôme de Premier cycle Technique Geni informatique | Analyste R&D | Identification, choix et validation de technologies |
+| Rivoire Romain | Lead développeur java / scrum master / CP | Analyste R&D | Identification, choix et validation de technologies |
+| VIDAL Romain | Licence en Informatique DUT Informatique | Analyste R&D | Identification, choix et validation de technologies |
+| Kerloch Joeffrey | MASTER OF SCIENCE IN ENTREPRENEURSHIP & INNOVATION | Analyste R&D | Identification, choix et validation de technologies |
+| BOUALIT Sabrina | Master de Sciences Technologies Santé, Mention Informatique | Lead et coordination technique | Structuration des objectifs scientifiques, identification des verrous technologiques et planification des travaux de R&D, incluant la coordination des équipes techniques, le suivi des expérimentations et l’analyse des résultats au regard des hypothèses formulées.
+```
+
+### CHUNK_ID: projet_26__chunk_000096_sub05
+```
+objectifs scientifiques, identifier les verrous technologiques et planifier les travaux de R&D, La coordination des équipes techniques, le suivi des expérimentations et l’analyse des résultats au regard des hypothèses formulées. |
+| EL FAIZ Fahd | Diplôme d'ingénieur, spécialité Architecture Logicielle Diplôme d'ingénieur, spécialité Informatique | Ingénieur en développement logiciel | Création d’un outil de visualisions d’arbre de messages afin de pouvoir facilement visualiser et étudier des discussions structurées et identification des limites des algorithmes d’identification de structure de discussions du projet KM développement d'un outil pour créer les arbres de discussions à partir de discussions non-structurées (ou partiellement structurée) afin de servir de donnée de validation pour les modèles développés pour le projet KM.
+|
+| BOUREZZOUG Othman | Ingénieur d'état en Génie Electrique, Systèmes Embarqués et Télécommunications | Analyste R&D | Identification, choix et validation de technologies |
+| DRAY Samantha | Master DROIT, ECONOMIE, GESTION mention SCIENCE POLITIQUE spécialité RELATIONS INTERNATIONALES ET POLITIQUES DE SECURITE | Lead et coordination technique | Structurer les objectifs scientifiques, identifier les verrous technologiques et planifier les travaux de R&D, La coordination des équipes techniques, le suivi des expérimentations et l’analyse des résultats au regard des hypothèses formulées.
+|
+| FAIDHERBE Olivier | Ingénieur diplômé de l'INSTITUT SUPERIEUR DE L'ELECTRONIQUE ET DU NUMERIQUE YNCRA HAUTS-DE-FRANCE | Analyste R&D | Identification, choix et validation de technologies |
+| BRAMI Cyril | Ingénieur diplômé de l'École Nationale Supérieure de l'Électronique et de ses Applications | Data Prompt Engineer | Conception et optimisation de stratégies de prompt engineering pour la génération de discussions synthétiques réalistes et structurées, incluant la modélisation des personnages, des contextes et des dynamiques conversationnelles ; définition de formats normalisés (JSON, métadonnées), automatisation via des référentiels (Excel), et évaluation qualitative des données produites afin d’améliorer leur exploitabilité pour l’entraînement de modèles d’IA.
+|
+| CALCOEN Johanne | Ingénieur de l'École nationale supérieure Mines-Télécom | Ingénieur en développement logiciel | Développement d’un outil de visualisation d’arbres de messages permettant d’analyser des discussions structurées afin d’identifier les limites des algorithmes de détection de structures conversationnelles dans un système de Knowledge Management.
+```
+
+### CHUNK_ID: projet_26__chunk_000096_sub02
+```
+PDF. Formalisation d’un cadre de templating adaptable aux LLM, validation de sa compatibilité avec un système de génération automatisée et production de livrables documentés pour le déploiement dans le KBA. |
+| PHUTTHAVONG Maurice | MASTER SCIENCES, TECHNOLOGIES, SANTE, mention MATHEMATIQUES, INFORMATIQUE, spécialité METHODES INFORMATIQUES APPLIQUEES ALA GESTION DES ENTREPRISES, à finalité professionnelle MAÎTRISE SCIENCES, TECHNOLOGIES, SANTE, mention MATHEMATIQUES, INFORMATIQUE LICENCE SCIENCES TECHNOLOGIES SANTÉ mention informatique générale RESPONSABLE DE PROJETS INFORMATIQUES DIPLÔME UNIVERSITAIRE DE TECHNOLOGIE, spécialité SERVICES ET RÉSEAUX DE COMMUNICATION | Lead et coordination technique | Structuration des objectifs scientifiques et identification des verrous technologiques et planification des travaux de R&D, La coordination des équipes techniques, le suivi des expérimentations et l’analyse des résultats au regard des hypothèses formulées.
+|
+| TROTZIER Jean-Luc | Titre professionnel RNCP – Technicien supérieur de support en informatique Titre professionnel RNCP – Technicien d’assistance en informatique Certificat Cisco CCNA1-NetworkingBasics Certificat Cisco CCNA2 | Analyste R&D | Identification, choix et validation de technologies |
+| CHASSIGNOLLE Christian | Ingénieur généraliste, Organisation et Gestion Industrielle | Data Prompt Engineer et Analyste R&I | Conception et optimisation de stratégies de prompt engineering pour la génération de données conversationnelles synthétiques structurées, incluant la modélisation de contextes et de dynamiques d’échange ; définition de formats normalisés (JSON, métadonnées), automatisation via référentiels (Excel) et évaluation qualitative des données produites afin d’améliorer leur qualité et leur exploitabilité pour l’entraînement de modèles d’IA.
+Étude et conception d’une architecture de détection de données sensibles intégrant une approche Human-in-the-Loop dans un système de Knowledge Management ; exploration de plusieurs approches (CNN, modèles hybrides type BERT-CNN, méthodes hiérarchiques et explicables) et analyse de leurs performances, de leur traçabilité et de leur capacité d’intégration dans un système de détection robuste.
+Structuration des objectifs scientifiques, identification des verrous technologiques et planification des travaux de R&D, incluant la coordination des équipes techniques, le suivi des expérimentations et l’analyse des résultats au regard des hypothèses formulées.
+```
+
+### CHUNK_ID: projet_26__chunk_000096_sub06
+```
+Développement d’un outil de visualisation d’arbres de messages permettant d’analyser des discussions structurées afin d’identifier les limites des algorithmes de détection de structures conversationnelles dans un système de Knowledge Management. Conception d’un second outil de transformation de discussions non structurées ou partiellement structurées en arbres de conversation, destiné à constituer des données de validation pour l’évaluation et l’amélioration des modèles développés dans le projet KM.
+|
+| BOUCETTA Reda | Expert en Informatique et Systèmes d'Information | Data Validation Engineer | Analyse de tableaux d’associations <besoin ; connaissance> issus d’interviews de consultants afin d’identifier les thématiques récurrentes de besoins et de connaissances ; exploitation de ces analyses pour mettre en évidence des tendances et proposer des solutions de transfert de connaissances, notamment sous forme de sujets potentiels de Smart League.
+|
+| RANDRIANASOLO Charlian | MASTER de SCIENCES, TECHNOLOGIES, SANTE, Mention MECANIQUE LICENCE SCIENCES, TECHNOLOGIES, SANTE, Mention MECANIQUE DIPLÔME UNIVERSITAIRE DE TECHNOLOGIE GENIE MECANIQUE ET PRODUCTIQUE | Analyste R&I | Conception d’une solution d’analyse d’arborescences de fichiers visant à extraire et structurer les connaissances sous forme de mindmap intelligente, incluant l’identification des thématiques clés, la structuration des relations entre contenus et la définition de mécanismes d’enrichissement et de navigation pour améliorer l’exploration et la valorisation des données.
+Identification, choix et validation de technologies liées aux LLMs, incluant la compréhension de leur fonctionnement, l’étude des principes de prompt engineering et l’évaluation de leurs capacités de compréhension.
+|
+| FAUDE Sophie | Master 2 (M2), Management des administrations et entreprises Master Biochimie Biotechnologies mention Bio ingénierie Biotechnologies Végétales, Biologie et Biotechnologies végétales | Data Validation Engineer | Analyse de tableaux d’associations <besoin ; connaissance> issus d’entretiens avec des consultants afin d’identifier les thématiques récurrentes de besoins et de connaissances.
+Exploitation de ces analyses pour mettre en évidence les sujets dominants et proposer des solutions de transfert de connaissances, notamment sous forme de thématiques potentielles de Smart League.
+```
+
+### CHUNK_ID: projet_26__chunk_000096_sub04
+```
+des dynamiques conversationnelles ; définition de formats normalisés (JSON, métadonnées), automatisation via des référentiels (Excel), et évaluation qualitative des données produites afin d’améliorer leur exploitabilité pour l’entraînement des modèles d’IA. |
+| TIBOURTINE Badri | Master Sciences, technologie, santé mention INFORMATIQUE Parcours type Big Data | Ingénieur R&D | Identification des verrous technologiques et planification des travaux de R&D à travers l’analyse des pratiques existantes de capture et de formalisation des connaissances dans la littérature, ainsi que du rôle potentiel de l’IA dans leur automatisation.
+Mise en évidence des limites des approches actuelles, principalement manuelles (interviews, knowledge brokers), coûteuses et peu exhaustives, et du faible niveau d’industrialisation des solutions de type Knowledge Broker Agent, malgré l’émergence de méthodes basées sur l’IA générative pour assister la transcription, la structuration et la capture continue des connaissances.
+|
+| SYLLA Diaguily | MASTER de SCIENCES, TECHNOLOGIES, SANTÉ, Mention SCIENCES ET TECHNOLOGIES DE L'INFORMATION ET DE LACOMMUNICATION : INFORMATIQUE-ELECTRONIQUE, Spécialité BASES DE DONNÉES ET INTELLIGENCE ARTIFICIELLE | Ingénieur R&D, Prompt Engineer | Analyse, test et caractérisation d’une solution d’extraction automatique d’informations textuelles à partir de documents hétérogènes en vue de son intégration dans un système de gestion des connaissances ; étude des capacités, limites et conditions d’intégration d’une solution de type Recognizer, mise en place d’un environnement expérimental et identification des verrous liés à la structuration automatique des connaissances.
+Conception d’une architecture logicielle et développement en Python d’un système utilisant plusieurs instances de modèles d’IA en interaction afin de générer des discussions synthétiques entre agents, avec exploration des dynamiques de dialogue multi-modèles et production de données structurées exploitables pour des cas d’usage en génération de contenu.
+|
+| GRALL Sebastien | Diplôme de « MANAGER DES OPERATIONS ET DE PROJETS INDUSTRIELS » (Certification professionnelle de niveau 7) | Lead et coordination technique | Structurer les objectifs scientifiques, identifier les verrous technologiques et planifier les travaux de R&D, La coordination des équipes techniques, le suivi des expérimentations et l’analyse des résultats au regard des hypothèses formulées.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 109,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

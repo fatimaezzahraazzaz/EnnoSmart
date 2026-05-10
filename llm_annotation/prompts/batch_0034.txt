@@ -1,0 +1,309 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 34/135, 8 chunks)
+
+### CHUNK_ID: projet_7__chunk_000003
+```
+[SECTION : Objectifs visés et performances à atteindre]
+Le présent projet de R&D vise à investiguer et résoudre les problématiques liées au développement d’un compresseur à pistons en barillet multi-étages capable d’atteindre en position verticale ainsi qu’en position horizontale les caractéristiques suivantes :
+
+Un débit variant entre 90 et 100 m3/h à une pression de refoulement de 300 bars ;
+
+Une discrétion acoustique et vibratoire ;
+
+Un encombrement réduit afin d’être conforme aux exigences d’une utilisation sur un sous-marin ;
+
+Un air sec à la sortie du compresseur avec un point de rosée autour entre -40°C et -20°C pour éviter d’abimer les circuits ou tuyauteries utilisant cet air.
+
+Nous avons en 2023 porté nos efforts sur :
+
+La réduction des vibrations générées par le fonctionnement du compresseur ;
+
+L’analyse et résolution de la problématique d’échauffement de l’air en sortie du compresseur ;
+
+Le développement d’une nouvelle solution pour réduire l’humidité de l’air en sortie du compresseur ;
+
+L’étude de l’impact du débit de l’eau de refroidissement sur la température de l’air dans les étages du compresseur et à sa sortie ;
+
+L’étude de l’écoulement de l’eau dans le circuit de refroidissement du compresseur.
+```
+
+### CHUNK_ID: projet_7__chunk_000006
+```
+[SECTION : Insuffisances des solutions existantes]
+Notre analyse des connaissances liées aux compresseurs à pistons oscillants axiaux a mis en avant un manque de connaissances sur les compresseurs à pistons à barillet. En effet, la majorité des brevets publiés et des études menées dans ce contexte portent sur des compresseurs à plateau oscillant destinés aux systèmes de circulation d’agent frigorigène, en particulier des systèmes de climatisation de véhicules automobiles. Ceux-ci fournissent des pressions de refoulement de l’ordre de 20 ou 40 bars, bien inférieures aux performances recherchées dans ce projet et non conformes à l’application sur un sous-marin.
+
+Des solutions ont été proposées pour augmenter la fiabilité de ces compresseurs ou réduire la quantité d’huile enfermée. Toutefois, nous n’avons pas identifié des travaux portant sur la résolution des problématiques liées à l’atteinte des performances accrues escomptées dans ce projet.
+
+En outre, notre recherche bibliographique a ressorti des travaux de recherche portant sur la caractérisation vibro-acoustique et la réduction des vibrations et nuisances sonores dans les compresseurs à pistons. Cependant, vue la technologie particulière du compresseur étudié dans ce projet (système à barillet) et les contraintes imposées par les niveaux de fonctionnement recherchés sur le compresseur, les solutions présentées dans ces travaux ne sont pas transférables en l’état au contexte de notre projet.
+
+Nous devons donc mener de nouvelles études pour rechercher des solutions permettant de lever les verrous et résoudre les problématiques inhérentes à notre solution, notamment en termes de vibrations, de niveau sonore, d’échauffement, et d’humidité de l’air.
+```
+
+### CHUNK_ID: projet_7__chunk_000021_sub00
+```
+[SECTION : Etude de l’écoulement de l’eau dans le circuit de refroidissement du compresseur]
+La pression d’air étant amenée de la pression ambiante à 250 bars en sortie du dernier étage, nous constatons un fort dégagement de chaleur qui nécessite la mise en œuvre d’un circuit de refroidissement pour lequel le fluide utilisé est de l’eau. Elle circule autour des têtes des cylindres puis dans des tubes de refroidissement au nombre de deux par étage de compression, permettant d’abaisser la température d’air avant l’étage suivant ou la sortie du compresseur. L’objectif de cette étude du circuit de refroidissement, menée en partenariat avec Andhéo, est d’identifier la répartition du débit entre les différentes portions du circuit ainsi que les éventuelles zones où la circulation n’est pas suffisante pour assurer un refroidissement optimal.
+
+Cette étude s’inscrit dans la continuité de nos études antérieures. Nous avons ainsi conservé le même modèle défini précédemment.
+
+Les figures suivantes présentent une vue globale et des vues en coupe de la géométrie étudiée.
+
+Figure : Modèle du compresseur étudié
+
+Seuls les éléments composant le circuit de refroidissement sont représentés. Les tubes de refroidissement sont au nombre de huit, soit deux par étage de compression. L’eau circule dans ces derniers autour d’une multitude de tubes dans lesquels transite l’air à refroidir.
+
+Le corps supérieur, situé au niveau de la tête des cylindres de compression, contient quatre cavités pour le circuit de refroidissement. Ces cavités communiquent chacune avec les tubes de refroidissement de deux étages, ainsi qu’avec une autre cavité directement. En numérotant les cavités par le numéro de l’étage du compresseur, on obtient le circuit suivant :
+
+La cavité 1 communique avec la cavité 3 ainsi qu’avec les tubes de refroidissement situés entre les étages 1 et 2, et entre l’étage 4 et l’extérieur.
+
+La cavité 2 communique avec la cavité 4 ainsi qu’avec les tubes de refroidissement situés entre les étages 1 et 2, et entre les étages 2 et 3.
+```
+
+### CHUNK_ID: projet_7__chunk_000022_sub00
+```
+[SECTION : Résultats des simulations réalisées dans le cas d’une entré au cylindre 3 et d’une sortie au cylindre 4 à 5 m3/h]
+Pour cette simulation, l’entrée et la sortie ont été inversées par rapport à l’étude précédente. L’entrée se situe donc au niveau du cylindre 3, et la sortie au niveau du cylindre 4. Le débit appliqué est de 5 m3/h (imposé sur l’entrée), et la pression est de 2.8 bars (imposée sur la sortie).
+
+Les résultats ont montré que le débit était réparti comme suit entre les différentes paires de tubes de refroidissement et au travers des canaux entre les cylindres :
+
+1.17 m3/h entre les cavités 1 et 2 ;
+
+1.18 m3/h entre les cavités 3 et 2 ;
+
+1.35 m3/h entre les cavités 3 et 4 ;
+
+1.29 m3/h entre les cavités 1 et 4 ;
+
+2.46 m3/h entre les cavités 3 et 1 ;
+
+2.35 m3/h entre les cavités 2 et 4.
+
+Le sens de circulation correspond à l’inverse de celui de notre étude précédente.
+
+Les pertes de charges mesurées pour chaque paire de tubes sont les suivantes, pour une perte de charge globale de 38.5 mbar :
+
+18.0 mbar dans les tubes entre les cavités 1 et 2 ;
+
+19.4 mbar dans les tubes entre les cavités 3 et 2 ;
+
+25.6 mbar dans les tubes entre les cavités 3 et 4 ;
+
+25.4 mbar dans les tubes entre les cavités 1 et 4.
+
+La figure suivante montre les lignes de courant, colorées par la vitesse, dans la partie supérieure du système de refroidissement. La vitesse maximale atteinte est localement de 2.9 m/s, pour une vitesse moyenne globale de 0.39 m/s.
+
+Figure : Lignes de courant colorées par la vitesse de 0 m/s à 1.5 m/s dans une vue de dessus en coupe de la partie supérieure du compresseur. Annotations précisant les zones de recirculation identifiées et le sens de l’écoulement.
+```
+
+### CHUNK_ID: projet_7__chunk_000033
+```
+[SECTION : Développement d’un nouveau séparateur de condensats]
+Dans l’objectif de produire de l’air sec en sortie du compresseur, nous avions développé précédemment un séparateur de condensats positionné en amont de la filtration protégeant la membrane de séchage. Selon cette solution, l’air et l’eau entrent dans le séparateur et passent au travers de l’éclateur. L’eau est alors projetée (en partie) sur les parois du bol par un effet centrifuge. L’eau coule entre le disque et les parois pour ainsi finir au fond du bol. Le disque permet ainsi de limiter la remontée de liquide vers la sortie. Ensuite, le liquide est purgé cycliquement via l’ouverture en bas du bol afin d’être évacué.
+
+En 2023, afin de maximiser l’éclatement de l’eau contre les parois du séparateur et donc mieux séparer l’air de l’eau, nous avons développé un nouvel éclateur avec plus d’ailettes, dont l’architecture est présentée sur la figure suivante.
+
+Figure : Ancien éclateur (à gauche) / Nouvel éclateur (à droite)
+
+La figure ci-dessous illustre la nouvelle architecture du mécanisme séparateur de condensants.
+
+Figure : Nouvelle architecture du séparateur
+```
+
+### CHUNK_ID: projet_7__chunk_000049_sub01
+```
+cela est nécessaire. Mesures : Le débitmètre est installé en sortie de reniflard, lui-même connecté au carter, afin de quantifier les remontées d’air depuis celui-ci. - TGM15-30 (30m3/h @ 250bar)
+
+Valeur du soufflage carter maximum en utilisation normale : 60l/min = 3.6m3/h @250bar
+
+- TGM60/100 Agosta (60m3/h @ 250bar)
+
+Valeur du soufflage carter maximum en utilisation normale : 120 l/min = 7.2m3/h @250bar
+
+- TGM100 (100m3/h @250bar)
+
+Valeur du soufflage carter maximum en utilisation normale : 120 l/min = 7.2m3/h @250bar
+
+AVERTISSEMENT
+
+Le débitmètre étant proche d’émanations d’air humide et de vapeur d’huile, il se peut que la mesure soit parfois faussée suite à des gouttelettes qui viendraient polluer le capteur.
+
+Si le soufflage carter est important lorsque le compresseur n’est toujours pas à sa pression maximum, il faut absolument intervenir et changer au moins la segmentation du 4ème étage.
+
+Synthèse :
+
+Tous ces relevés ont été effectués après rodage des compresseurs et donc après rodage des segments. On peut donc parler de relevés en configuration standard.
+
+On notera que la technologie et le dimensionnement du TGM60/100 et du TGM100 étant très similaire, il est logique de retrouver les mêmes valeurs de soufflage maximum.
+
+Reste à étoffer ces relevés avec d’autres pressions et d’autres configuration afin d’accroitre notre éventail de données sur ce phénomène.
+```
+
+### CHUNK_ID: projet_7__chunk_000067_sub00
+```
+[FEUILLE : 13-07-2023]
+[TABLEAU 1 | B21:P51]
+| Données du test | | | | Données du test | | | | Données du test | | | | Données du test | | |
+| ------------------------- | --------------------------------------------------------- | ------------------- | --- | ------------------------- | --------------------------------------------------------- | ------------------- | --- | ------------------------- | --------------------------------------------------------- | ------------------- | --- | ------------------------- | --------------------------------------------------------- | --------------- |
+| Temperature ambiante °C | 25.90 | | | Temperature ambiante °C | 25.90 | | | Temperature ambiante °C | 25.90 | | | Temperature ambiante °C | 25.90 | |
+| Hygrometrie % | 44.50 | | | Hygrometrie % | 44.50 | | | Hygrometrie % | 44.50 | | | Hygrometrie % | 44.50 | |
+| Vitesse en tr/min | 905 | | | Vitesse en tr/min | 905 | | | Vitesse en tr/min | 905 | | | Vitesse en tr/min | 905 | |
+| Poids sur la poulie en kg | 2.25 | | | Poids sur la poulie en kg | 1 | | | Poids sur la poulie en kg | 1.25 | | | Poids sur la poulie en kg | 2.50 | |
+| Relevé par: | G.
+BONILLA | | | Relevé par: | G.
+BONILLA | | | Relevé par: | G.
+BONILLA | | | Relevé par: | G.
+```
+
+### CHUNK_ID: projet_8__chunk_000002
+```
+[SECTION : Contexte de l’opération]
+Devant la demande croissante en services Internet, en informatique en nuage (Cloud Computing) et en analyse de Big Data dans divers secteurs industriels, le marché de la fibre optique a connu une croissance très importante, avec une valeur estimée à 8,76 milliards de dollars en 2022.
+
+L’hélium intervient à deux étapes clés de la fabrication des fibres optiques : d’une part lors de la production de la préforme, le précurseur de la fibre, où il est utilisé notamment pour renforcer celle-ci, et d’autre part durant l’étirage de la préforme en fibre, où il sert à un refroidissement efficace. À ce jour, les industriels ne disposent d’aucune alternative viable à l’hélium pour la fabrication de la préforme.
+
+L’hélium, une fois utilisé, est rejeté dans l’atmosphère, où il s’échappe facilement en raison de sa légèreté. Toutefois, ce gaz est parmi les plus rares et les plus précieux, et les réserves présentes sous la croûte terrestre sont limitées et difficiles à exploiter. Ainsi, le recycler et en préserver l’usage représente un enjeu important pour les générations à venir.
+
+La récupération de l’hélium diminue aussi la quantité de gaz gaspillé, ce qui améliore l’efficacité du processus industriel. En assurant un approvisionnement constant en hélium, les systèmes de recyclage de l’hélium garantissent un refroidissement contrôlé des fibres, assurant leur qualité et leur performance. De plus, la réutilisation de l’hélium contribue à diminuer les dépenses énergétiques associées à la production et au transport du gaz neuf. Enfin, en limitant le gaspillage et la consommation d’énergie, ces systèmes réduisent l’impact environnemental de la fabrication des fibres optiques, participant à une industrie plus durable.
+
+C’est dans ce contexte que nous avons démarré en 2023 une nouvelle opération de R&D visant à analyser et résoudre les problématiques liées au développement d’un procédé complet novateur de récupération, compression et filtration de l’hélium, tenant compte des contraintes particulières de cette industrie. En 2024, nous nous sommes focalisés sur la phase de filtration du gaz récupéré, pour obtenir l’hélium à la pureté souhaitée.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 34,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

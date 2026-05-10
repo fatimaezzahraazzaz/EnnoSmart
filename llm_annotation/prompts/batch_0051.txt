@@ -1,0 +1,307 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 51/135, 8 chunks)
+
+### CHUNK_ID: projet_11__chunk_000011_sub00
+```
+[SECTION : Mise en oeuvre d’une approche basée sur le “Structured Chain of Thought (ScoT)” adapté à la génération de tests unitaires : SCoT4UT]
+Pour mettre en œuvre une stratégie de prompting inspirée de SCoT dans le cadre spécifique de la génération de tests unitaires, nous avons été confrontés à une première difficulté majeure : la méthode SCoT classique repose sur l’identification de blocs élémentaires de raisonnement (boucles, conditions, séquences) adaptés à la génération algorithmique, alors que la rédaction de tests unitaires obéit à une logique différente, centrée sur la validation du comportement attendu d’une méthode.
+
+Afin de dépasser cette limite, nous avons proposé de définir des blocs séquentiels spécifiques à la tâche de test, fondés sur la méthode Arrange-Act-Assert (AAA). Cette formalisation permet de décrire la rédaction d’un test unitaire comme une suite structurée d’étapes de raisonnement en langage naturel, directement interprétables par un modèle de langage. L’approche repose ainsi sur la formalisation d’une chaîne de raisonnement structurée selon le modèle AAA (les détails sont présentés enAnnexe 1.6.2.1.2.1. ).
+
+La mise en œuvre d’une stratégie de prompting inspirée de SCoT pour la génération de tests unitaires implique de disposer de trois types d’informations :
+
+des méthodes à tester accompagnées du contexte approprié ;
+
+des tests unitaires rédigés pour ces méthodes ;
+
+des explications en langage naturel, étape par étape, décrivant la manière dont ces tests ont été construits, rédigées selon le modèle AAA (ce que nous appelons des SCoT AAA).
+```
+
+### CHUNK_ID: projet_11__chunk_000038_sub00
+```
+[SECTION : Analyse de 102 papers qu'utilisent LLMs pour test de logiciel depuis les perspectives de software testing et LLMs. Ils analysent aussi les LLMs les plus utilisés et les types de prompt engineering utilisé et les techniques accompagnées par ces LLMs. Ils decrivent les défis et les opportunités dans la recherche dans ce domaine.]
+Dans le cas de la génération de cas de tests unitaires automatisées, les approches incluent des techniques search-based, constraint-based, ou random-based.
+
+Du point de vue des tests logiciels, l’analyse implique un examen des tâches spécifiques de tests logiciels pour lesquelles les LLM sont employés. Les résultats montrent que les LLM sont couramment utilisés pour la préparation des scénarios de tests (y compris la génération de scénarios de tests unitaires, la génération d'oracles de test et la génération d'entrées de tests système), le débogage de programmes et la réparation de bogues, alors qu’ils ne trouvent pas de pratiques pour appliquer les LLM dans les tâches de cycle de vie des tests précoces (tels que les exigences de test, le plan de test, etc.).
+
+Fig. Comparaison des performances des LLMs pour la génération de tests unitaires sur langage Java - JUnit
+
+L’utilisation de modèles LLM pour la génération de code source est une
+
+LLM for code generation
+```
+
+### CHUNK_ID: projet_11__chunk_000044_sub00
+```
+[SECTION : Modèle : AthenaTest]
+Architecture
+
+Modèle basé sur l’architecture du modèle BART. BART est un « denoising autoencoder » qu’utilise le standard architecture Transformers « sequence-to-sequence » en substituant des fonctions d’activation ReLU par des GeLU. Le pré entrainement s’effectué sur l’architecture large du modèle composé de 12 couches encoder et 12 couches decoder. Le modèle a été entrainé en précision mixte, en utilisant la procédure d’optimisation stochastique Adam avec paramètres d’optimisation et , . Ils ont utilisé un « scheduler inverse root learning rate » avec un learning rate de base de 0.0001 et une période de « warmup » de 5000 « update steps » et accumulation local du gradient avec une fréquence de 4 « update steps ».
+
+Pré entrainement
+
+Le modèle a été entrainé sur la BDD METHOD2TEST. Le pré entrainement du modèle s’est fait en corrompant des documents (token masking, token deletion, remplissage et permutation d’instructions) et en optimisant la fonction de perte entropie croisée entre la sortie du decoder et la séquence d’entrée originale.
+
+Le pré entrainement s’est fait dans deux étapes : pré entrainement en anglais où le modèle est pré entrainé sur un large corpus de texte en anglais et Code pré entrainement où le modèle est pré entrainé sur du code source en Java. Le pré entrainement c’est fait de façon semi-supervisé.
+
+RQ1 : Est-ce que le pré entrainement du modèle a un impact sur les performances de la génération de tests unitaires ?
+
+Les auteurs ont testé cinq niveaux de pré entrainement avec la même architecture e, changeant les données de pré entrainement :
+
+Scratch model : pois initialisés de façon aléatoire ;
+
+Anglais : Pré entrainement avec un corpus volumineux de texte en anglais ;
+
+Java code : Pré entrainement avec un corpus volumineux de code en Java ;
+
+Anglais + Java : Pré entrainement avec les deux jeux de données (anglais et code Java)
+
+Le finetuning a été fait avec seulement avecle minimum de focal context (le focal method et le test case) car l’objectif a été d’évaluer l’impact du pré entrainement
+```
+
+### CHUNK_ID: projet_11__chunk_000046_sub01
+```
+méthodes aléatoires (random-based). Ces approches cherchent comme objectif principal maximiser le coverage dans le logiciel testé. Malgré cela, le coverage et le meaningfulness des tests générés est loin d’être satisfaisante.
+
+Les LLMs ont montré des résultats prometteurs dans la génération de code source et la génération de cas de tests unitaires a été aussi considéré. Malgré ses succès initiaux, ils existent encore des nuances qui rendent plus difficile la génération de tests unitaires et donc signalant la nécessité d’approches plus adaptées.
+
+Pré-entrainer ou fine-tuner un LLM pour la génération de cas de tests unitaires : les premiers approches pour générer de tests unitaires à partir des LLMs utilisait le pré-entrainement sur des focal method pour donner une plus forte connaissance du domaine et fine-tunait après le modèle sur la tâche de génération de tests unitaires. D’autres approches ont utilisé pré-entrainement non supervisé ou apprentissage par renforcement.
+
+Concevoir des prompts efficaces pour la génération de cas de tests unitaires : les études plus récentes se focalisent sur les stratégies de conception du prompt pour faire mieux comprendre le contexte et les nuances de la tâche au modèle LLM. Parmi les stratégies nous avons :
+
+Analyser le projet pour extraire des informations essentielles et en créant un contexte focale adaptative lequel inclus une méthode focale et ses dépendances dans la limite de token maximum du LLM et en incorporant ce contexte dans le prompt pour interroger le LLM.
+
+Approche pour augmenter l’efficacité des tests unitaires générés pour révéler des bogues en tirant parti des tests de mutation. L’approche augmente le prompt avec les mutants survivants et ces mutants montrent les limitations des cas de test pour détecter des bogues.
+```
+
+### CHUNK_ID: projet_11__chunk_000047_sub05
+```
+été compilé avec son code de production respectif. Une analyse de ces premiers tests générés montrait que des tests qui ne compilent pas peuvent être corrigés par des heuristiques :
+
+Métriques : Ils ont utilisé JaCoCo pour calculer :
+
+Line coverage : Combien de lignes ont été exécutées par un test unitaire par rapport au nombre total de branches .
+
+Branch coverage : Combien de branches sont couvertes pas un test par rapport au nombre total de branches .
+
+Test correctness : Nombre de tests unitaires qui n’ont pas échoué.
+
+Pour calculer les « tests smells » ils ont utilisé TsDetect qui permet de calculer 20 types de « tests smells ».
+
+Les métriques de correctness sont calculées sur l’hypothèse de que la méthode à tester est correctement codé et compile sans erreur.
+
+Eléments de code dans le contexte : Les auteurs ont créé 3 scénarios pour le dataset HumanEval et 4 pour EvoSuite :
+
+HumanEval : (S1) ne pas inclure le JavaDoc (description du comportement attendu et exemples de valeurs d’entrée et sortie) de la méthode à tester, (S2) inclure le JavaDoc sans inclure les exemples entrée / sortie et (S3) ne pas inclure l’implémentation de la méthode à tester mais seulement la signature. Les scénarios S1 et S2 illustrent l'effet de la modification des éléments JavaDoc. Le développement piloté par les tests (TDD) inspire le scénario S3, dans lequel les cas de test sont écrits avant l'implémentation du code.
+```
+
+### CHUNK_ID: projet_11__chunk_000054_sub00
+```
+[SECTION : Modèle : AthenaTest]
+Architecture
+
+Modèle basé sur l’architecture du modèle BART. BART est un « denoising autoencoder » qu’utilise le standard architecture Transformers « sequence-to-sequence » en substituant des fonctions d’activation ReLU par des GeLU. Le pré entrainement s’effectué sur l’architecture large du modèle composé de 12 couches encoder et 12 couches decoder. Le modèle a été entrainé en précision mixte, en utilisant la procédure d’optimisation stochastique Adam avec paramètres d’optimisation et , . Ils ont utilisé un « scheduler inverse root learning rate » avec un learning rate de base de 0.0001 et une période de « warmup » de 5000 « update steps » et accumulation local du gradient avec une fréquence de 4 « update steps ».
+
+Pré entrainement
+
+Le modèle a été entrainé sur la BDD METHOD2TEST. Le pré entrainement du modèle s’est fait en corrompant des documents (token masking, token deletion, remplissage et permutation d’instructions) et en optimisant la fonction de perte entropie croisée entre la sortie du decoder et la séquence d’entrée originale.
+
+Le pré entrainement s’est fait dans deux étapes : pré entrainement en anglais où le modèle est pré entrainé sur un large corpus de texte en anglais et Code pré entrainement où le modèle est pré entrainé sur du code source en Java. Le pré entrainement c’est fait de façon semi-supervisé.
+
+RQ1 : Est-ce que le pré entrainement du modèle a un impact sur les performances de la génération de tests unitaires ?
+
+Les auteurs ont testé cinq niveaux de pré entrainement avec la même architecture e, changeant les données de pré entrainement :
+
+Scratch model : pois initialisés de façon aléatoire ;
+
+Anglais : Pré entrainement avec un corpus volumineux de texte en anglais ;
+
+Java code : Pré entrainement avec un corpus volumineux de code en Java ;
+
+Anglais + Java : Pré entrainement avec les deux jeux de données (anglais et code Java)
+
+Le finetuning a été fait avec seulement avecle minimum de focal context (le focal method et le test case) car l’objectif a été d’évaluer l’impact du pré entrainement
+```
+
+### CHUNK_ID: projet_11__chunk_000056_sub01
+```
+méthodes aléatoires (random-based). Ces approches cherchent comme objectif principal maximiser le coverage dans le logiciel testé. Malgré cela, le coverage et le meaningfulness des tests générés est loin d’être satisfaisante.
+
+Les LLMs ont montré des résultats prometteurs dans la génération de code source et la génération de cas de tests unitaires a été aussi considéré. Malgré ses succès initiaux, ils existent encore des nuances qui rendent plus difficile la génération de tests unitaires et donc signalant la nécessité d’approches plus adaptées.
+
+Pré-entrainer ou fine-tuner un LLM pour la génération de cas de tests unitaires : les premiers approches pour générer de tests unitaires à partir des LLMs utilisait le pré-entrainement sur des focal method pour donner une plus forte connaissance du domaine et fine-tunait après le modèle sur la tâche de génération de tests unitaires. D’autres approches ont utilisé pré-entrainement non supervisé ou apprentissage par renforcement.
+
+Concevoir des prompts efficaces pour la génération de cas de tests unitaires : les études plus récentes se focalisent sur les stratégies de conception du prompt pour faire mieux comprendre le contexte et les nuances de la tâche au modèle LLM. Parmi les stratégies nous avons :
+
+Analyser le projet pour extraire des informations essentielles et en créant un contexte focale adaptative lequel inclus une méthode focale et ses dépendances dans la limite de token maximum du LLM et en incorporant ce contexte dans le prompt pour interroger le LLM.
+
+Approche pour augmenter l’efficacité des tests unitaires générés pour révéler des bogues en tirant parti des tests de mutation. L’approche augmente le prompt avec les mutants survivants et ces mutants montrent les limitations des cas de test pour détecter des bogues.
+```
+
+### CHUNK_ID: projet_11__chunk_000059_sub00
+```
+[SECTION : Modèle : AthenaTest]
+Architecture
+
+Modèle basé sur l’architecture du modèle BART. BART est un « denoising autoencoder » qu’utilise le standard architecture Transformers « sequence-to-sequence » en substituant des fonctions d’activation ReLU par des GeLU. Le pré entrainement s’effectué sur l’architecture large du modèle composé de 12 couches encoder et 12 couches decoder. Le modèle a été entrainé en précision mixte, en utilisant la procédure d’optimisation stochastique Adam avec paramètres d’optimisation et , . Ils ont utilisé un « scheduler inverse root learning rate » avec un learning rate de base de 0.0001 et une période de « warmup » de 5000 « update steps » et accumulation local du gradient avec une fréquence de 4 « update steps ».
+
+Pré entrainement
+
+Le modèle a été entrainé sur la BDD METHOD2TEST. Le pré entrainement du modèle s’est fait en corrompant des documents (token masking, token deletion, remplissage et permutation d’instructions) et en optimisant la fonction de perte entropie croisée entre la sortie du decoder et la séquence d’entrée originale.
+
+Le pré entrainement s’est fait dans deux étapes : pré entrainement en anglais où le modèle est pré entrainé sur un large corpus de texte en anglais et Code pré entrainement où le modèle est pré entrainé sur du code source en Java. Le pré entrainement c’est fait de façon semi-supervisé.
+
+RQ1 : Est-ce que le pré entrainement du modèle a un impact sur les performances de la génération de tests unitaires ?
+
+Les auteurs ont testé cinq niveaux de pré entrainement avec la même architecture e, changeant les données de pré entrainement :
+
+Scratch model : pois initialisés de façon aléatoire ;
+
+Anglais : Pré entrainement avec un corpus volumineux de texte en anglais ;
+
+Java code : Pré entrainement avec un corpus volumineux de code en Java ;
+
+Anglais + Java : Pré entrainement avec les deux jeux de données (anglais et code Java)
+
+Le finetuning a été fait avec seulement avecle minimum de focal context (le focal method et le test case) car l’objectif a été d’évaluer l’impact du pré entrainement
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 51,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

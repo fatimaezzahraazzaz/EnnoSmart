@@ -1,0 +1,251 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 28/135, 8 chunks)
+
+### CHUNK_ID: projet_6__chunk_000004_sub02
+```
+la séquence d’empilement des lamelles dans un stratifié composite, à condition que le matériau soit fortement anisotrope. De nombreux travaux démontrent l’intérêt des structures auxétiques pour l’isolation vibratoire, notamment :
+
+Les structures trichirales permettent l’apparition de bandes interdites (bandgaps) dans une large plage de fréquences (1 Hz–2000 Hz), dépassant les performances des structures tétrachirales ou hexachirales.
+
+D’autres travaux ont permis de réduire et d’optimiser la réponse dynamique de pales de ventilateur pour les trois premières fréquences fondamentales, à l’aide d’une structure cellulaire auxétique à géométrie rentrante comme matériau de noyau.
+
+Ranjbar et al. ont étudié des panneaux sandwich à noyaux anti-tétrachiraux ou hexagonaux, révélant une atténuation vibroacoustique significative via l’optimisation géométrique.
+
+Plusieurs travaux menés par LEM3 depuis une dizaine d’années concernent l’étude du comportement de matériaux architecturés de nature auxétique en petites et grandes transformations,, et les méthodes d’homogénéisation développées permettent d’en prédire les réponses tant statiques que dynamiques.
+
+Une étude a mis en évidence jusqu’à +400 % de gain d’isolation en utilisant une structure en nid d’abeille réentrante, optimisée en densité et en angle de cellule (Poisson < -3), dans la bande [0–500 Hz].
+
+Toutefois ces travaux académiques ne portent pas sur des intervalles de fréquences allant jusqu’à 5kHz. En revanche, la thèse de K. Essassi concernant une structure réentrante imprimée en 3D à base de PLA biosourcé renforcé par fibres de lin, a validé expérimentalement et numériquement un coefficient de Poisson négatif et montré une forte capacité de dissipation d’énergie entre 0 et 5 kHz. Les résultats de cette étude sont intéressants. Cependant, les structures analysées ne disposent pas d’un amortissement visqueux intrinsèque suffisant, limitant ainsi leur efficacité en tant que plots de filtration vibratoire.
+```
+
+### CHUNK_ID: projet_6__chunk_000004_sub03
+```
+Les résultats de cette étude sont intéressants. Cependant, les structures analysées ne disposent pas d’un amortissement visqueux intrinsèque suffisant, limitant ainsi leur efficacité en tant que plots de filtration vibratoire.
+
+Les études sur les composites auxétiques sont moins nombreuses que celles sur les structures architecturées. Le caractère auxétique des renforts de composites est susceptible d’induire un comportement auxétique du composite, malgré la présence de la matrice (non auxétique). Le concept d’inclusions de renfort auxétique de composites a déjà été éprouvé numériquement par le biais d’approches numériques et le développement de schémas d’homogénéisation à double échelle,, ,,,,: la microstructure constituant l’élément de renfort est remplacée par un milieu continu de substitution dont les propriétés effectives alimentent des calculs menés sur composites à l’échelle macroscopique. Bien que ces premiers travaux n’aient permis d’explorer que des géométries 2D avec des renforts auxétiques de type réentrant et hexachiral plan au sein d’une matrice époxy, ils montrent que le coefficient de Poisson de composites comportant des inclusions de nature auxétique peut atteindre des valeurs très négatives (proches de -2.5). Les composites ainsi conçus par cette démarche d’ingénierie virtuelle héritent de l’effet auxétique des inclusions, ce pour des taux de renfort supérieur
+
+Afin d’explorer d’une façon plus systématique des topologies de renforts auxétiques, le LEM3 développe depuis quelques années des méthodes d’optimisation topologique multi-échelles, ce qui a permis de concevoir des métamatériaux auxétiques, d’en formuler une loi de comportement appuyée par une compréhension des mécanismes de déformation microscopiques responsables de leur caractère auxétique, et de mesurer leurs propriétés mécaniques.
+
+Cependant, les publications académiques liées aux composites auxétiques, bien qu’intéressantes, restent limitées au stade de preuve de concept en laboratoire. Elles ne permettent pas encore une application concrète dans des dispositifs de filtration vibratoire intégrés en environnement réel, ni la réalisation de tests vibratoires représentatifs des conditions opérationnelles.
+```
+
+### CHUNK_ID: projet_6__chunk_000012
+```
+[SECTION : Caractérisation des résonances de structures auxétiques]
+Pour dépasser les limites de la DMA, nous avons effectué de nouveaux essais de caractérisation des résonances sur des échantillons imprimés en 3D, à l’aide de marteaux d'impact avec différentes bandes passantes (jusqu'à 10 000 Hz). Les résultats que nous avons obtenus avec l'embout en nylon (Figure 10, Figure 11, Figure 12, Figure 13 et Figure 14) ont montré un décalage des fréquences de résonance vers les hautes fréquences pour les échantillons auxétiques, confirmant les hypothèses théoriques : le passage à un comportement auxétique induit un décalage des fréquences de résonance vers les hautes fréquences. Il est important de noter néanmoins que les forces des frappes sont très élevées, ce qui a pu entraîner une sortie du domaine de comportement linéaire du matériau.
+
+Les configurations avec des embouts en métal et caoutchouc ont montré des résultats plus complexes (Figure 15, Figure 16 et Figure 17) avec des décalages de fréquence moins cohérents et des difficultés d'acquisition de données fiables, notamment pour le TPU en raison de doubles impacts. Ces constats soulignent la nécessité d'un protocole expérimental plus rigoureux et d'une mesure du domaine de linéarité.
+```
+
+### CHUNK_ID: projet_6__chunk_000032
+```
+[SECTION : Mesure des résonnances]
+Sur l’ensemble des résultats de raideur dynamique, aucune résonance n’a été mesurée. Nous supposons alors que les mesures sont trop basses en fréquences. Le visconanalyseur ne pouvant exciter à plus de 200Hz, nous avons exploité la loi WLF pour recomposer une courbe de raideur à des fréquences plus élevées que celle d’excitation avec une corrélation fréquence/température.
+
+Nous avons effectué des mesures de 10 à 200 Hz par palier de 1 Hz, à 5 paliers de température. Ensuite, une courbe maîtresse est recomposée à l’aide de la loi WLF, ce qui permet de calculer les caractéristiques mécaniques au-delà de 200 Hz.
+
+Nous illustrons ci-dessous le résultat obtenu pour les échantillons TPU Aux 5x3 en traction.
+
+Figure : Courbe maitresse de raideur TPU Aux 5x3 en traction
+
+Comme sur l’intervalle [1-200Hz], aucune résonance n’est visible. Le banc DMA ne permet donc pas de mesurer de résonance matériaux.
+```
+
+### CHUNK_ID: projet_6__chunk_000014_sub01
+```
+les bases de nos travaux futurs et d’apporter une contribution scientifique et technique au domaine d’isolation vibratoire basée sur les matériaux auxétiques. En 2025, nos travaux seront poursuivis pour :
+
+Réaliser des simulations numériques et corréler leurs résultats avec ceux de l’étude expérimentale menée sur les échantillons auxétiques analysés ;
+
+Caractériser le comportement vibratoire des échantillons composites fibreux développés par GEMTEX ;
+
+Développer un moyen expérimental sans résonances parasites.
+```
+
+### CHUNK_ID: projet_6__chunk_000023_sub01
+```
+solutions traditionnelles, telles que les plots en caoutchouc ou en câbles métalliques, sont aujourd’hui bien maîtrisées. Cependant, elle présentent un compromis difficile entre efficacité à basse fréquence et stabilité mécanique30.
+
+Coja et Kari ont travaillé sur la modélisation de la raideur dynamique d’isolateurs vibratoires en caoutchouc naturel pré-comprimé par un modèle de guide d’ondes homogénéisé et isotrope. Ce modèle a permis d’obtenir des résultats précis dès 64 modes considérés dans une plage de fréquences allant de 20 à 2000 Hz. L’étude a révélé une forte dépendance de la raideur dynamique à la fréquence (résonances) ainsi qu’au taux de pré-compression (modification de l’amplitude et du positionnement des pics de raideur).
+
+Somanath et al. ont travaillé sur la prédiction de la réponse dynamique (harmonique et aléatoire) d’isolateurs de vibrations en élastomère précontraints. Les résultats de l’étude ont montré que les isolateurs en élastomère étaient efficaces principalement dans la bande 10–60Hz, avec des comportements dépendant fortement de la précontrainte et de la fréquence d’excitation.
+
+Approche hybride
+
+Une approche de plus en plus étudiée consiste à combiner les avantages des deux solutions précédentes : les systèmes hybrides d’isolation vibratoire active/passive. Ces systèmes reposent sur une structure passive (souvent un plot ou un flotteur classique) à laquelle on ajoute un module actif léger, qui ne porte pas la charge statique mais agit uniquement sur la correction dynamique. Cette architecture permet de maintenir les bonnes performances d’isolation en haute fréquence grâce à la base passive, tout en améliorant les performances en basses fréquences grâce à l’action du module actif30.
+
+En addition à ces technologies, divers isolateurs vibratoires bio-inspirés ont émergé au cours des dernières décennies et ont été appliqués avec succès à la protection de composants sensibles, à l'amélioration du confort d'utilisation, à l'augmentation de la précision de contrôle, etc. Ces isolateurs sont généralement développés en exploitant les non-linéarités favorables présentes dans les structures biologiques.
+```
+
+### CHUNK_ID: projet_6__chunk_000023_sub02
+```
+composants sensibles, à l'amélioration du confort d'utilisation, à l'augmentation de la précision de contrôle, etc. Ces isolateurs sont généralement développés en exploitant les non-linéarités favorables présentes dans les structures biologiques.
+
+De plus, plusieurs avancées ont été réalisées sur les sur les métamatériaux mécaniques conçus pour l’isolation vibratoire. Contrairement aux matériaux poreux classiques, ces structures architecturées permettent de contrôler finement la raideur, la fréquence propre et l’amortissement grâce à leur géométrie périodique. Leur fabrication par impression 3D permet d’optimiser la réponse vibratoire et d’intégrer des matériaux viscoélastiques pour améliorer la dissipation. Ces métamatériaux ouvrent la voie à de nouveaux dispositifs isolants légers, performants et adaptables, notamment pour les plots de découplage vibratoire.
+
+Finalement, une autre solution consiste en les dispositifs d’isolation vibratoire à raideur négative (NSVID) qui ont le potentiel de réduire significativement la fréquence fondamentale de la structure protégée, afin de minimiser la transmission des forces ou des déplacements, même en cas d’excitations à basse ou ultra-basse fréquence, là où les méthodes traditionnelles d’isolation vibratoire sont inefficaces. La popularité du NSVID repose sur ses caractéristiques non linéaires uniques, qui lui permettent de réduire la transmissibilité des vibrations provenant des sources vibratoires, tout en maintenant la stabilité du système grâce à une capacité de charge suffisante.
+```
+
+### CHUNK_ID: projet_6__chunk_000035_sub00
+```
+[SECTION : Résultats des essais Nylon M]
+Dans la configuration Nylon M, une excitation de 15 N est appliquée aux échantillons de base 5x3 en TPU. Cette sollicitation induit un décalage vers les hautes fréquences (HF) des trois premières résonances. La première résonance, en particulier, présente un décalage de 64 Hz, soit une augmentation de 21 %.
+
+Figure : Résultats des essais suivant la configuration Nylon M 15N sur les échantillons de base 5x3 en TPU
+
+Dans la configuration Nylon M, une excitation de 10 N est appliquée aux échantillons 4x3 en TPU. Cette sollicitation induit un décalage vers les hautes fréquences des premières résonances. La première résonance montre un déplacement de 144 Hz, correspondant à une augmentation de 68 %.
+
+Figure  : Résultats des essais suivant la configuration Nylon M 10N sur les échantillons 4x3 en TPU
+
+Dans la configuration Nylon M, une excitation de 15 N est appliquée aux échantillons 5x3 – 35a en TPU. Cette sollicitation entraîne un décalage vers les hautes fréquences des premières résonances. La première résonance présente un déplacement de 59 Hz, soit une augmentation de 44 %.
+
+Figure : Résultats des essais suivant la configuration Nylon M 15N sur les échantillons 5x3 35a en TPU
+
+Dans la configuration Nylon M, une excitation de 20 N est appliquée aux échantillons 5x3 – 0.5 en TPU. Cependant, les pics de résonance ne sont pas suffisamment définis pour permettre une caractérisation fiable d’un décalage en fréquence.
+
+Figure : Résultats des essais suivant la configuration Nylon M 20N sur les échantillons 5x3 – 0.5 en TPU
+
+Enfin, dans la configuration Nylon M, une excitation de 20 N est appliquée aux échantillons 5x3 – 0.75 en TPU. Cette sollicitation induit un décalage vers les hautes fréquences des premières résonances. La première résonance présente un déplacement de 98 Hz, correspondant à une augmentation de 26 %.
+
+Figure : Résultats des essais suivant la configuration Nylon M 20N sur les échantillons 5x3 – 0.75 en TPU
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 28,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

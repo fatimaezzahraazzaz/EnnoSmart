@@ -1,0 +1,269 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 8/135, 8 chunks)
+
+### CHUNK_ID: projet_2__chunk_000148_sub07
+```
+premiers mois qui ont suivi son émergence et les laboratoires de recherche ont été confrontés très tôt aux problèmes de son amplification in vitro. Maitrise de la souche virale SARS-CoV2
+
+Le virus SARS-CoV2 étant une nouvelle souche émergente, il est indispensable, dans un premier temps, de déterminer les conditions optimales de culture, à savoir l’identification du modèle cellulaire pour la reproduction du virus, l’augmentation du taux de reproduction du virus, la mesure de son activité virale. Ces points nous permettront ensuite de définir les conditions de culture du virus SARS-CoV2 (temps d’infection, temps d’incubation, taux d’amplification, sensibilité des cellules rapporteuses…) nécessaires pour l’élaboration d’un test virucide. Par ailleurs, nous sommes confrontés à des problématiques dans le protocole de purification du virus puisque, durant nos essais préliminaires, nous n’avons pas réussi à dépasser la concentration de 106 pfu. Or, cette concentration est 100 fois moins concentrée que la dose minimale requise pour effectuer des tests virucides conformes à la norme NF ISO 14476+A2. Pour cela, il est impératif de tester les méthodes de tamis moléculaires ou les méthodes de précipitation pour essayer de concentrer d’avantage les particules virales.
+
+Définition d’un test virucide spécifique du virus SARS-CoV2 suffisamment sensible pour réponde à la norme NF ISO 14476+A2
+
+Après maîtrise des conditions de mise en culture, il convient d’élaborer un test virucide, répondant aux critères de la norme NF ISO 14476+A2, c’est-à-dire ayant un niveau de sensibilité suffisant pour montrer au moins 4 log10 de réduction de la charge virale. Toutefois, étant donné que nous ne connaissons pas les niveaux de sensibilité des cellules rapporteuses, ni la concentration virale des solutions stock que nous pourrons produire à partir de nos cultures cellulaires, nous ne pouvons prédire que notre test virucide pourra atteindre le point critique de « 4 log10 de réduction de la charge virale » comme exigé dans la norme NF ISO 14476+A2. Si nous parvenons à ce niveau de sensibilité, nous pourrons ensuite étudier les caractères intrinsèques du virus et déterminer quelles sont les conditions minimales de temps et de concentration pour éliminer au moins 99.9% de la surface des mains.
+```
+
+### CHUNK_ID: projet_2__chunk_000018_sub00
+```
+[SECTION : Description des travaux réalisés en 2024]
+A l’issu des travaux menés de 2021 à 2023, les formulations de savons S3 et S4 répondaient à plusieurs des objectifs fixés, alliant une très bonne tolérance cutanée, une protection antimicrobienne performante et une excellente évaluation INCI, notamment grâce au duo de conservateur « écocompatible » utilisés dans ces formules. Malgré le jaunissement progressif des savons S3 et S4 provoqué par ce duo de conservateur, nous avions pris la décision de valider ces formulations pour démarrer les démarches commerciales.
+
+En complément, nous avons réalisé plusieurs tests à l’usage et des tests cornéométriques, sous contrôle d’un dermatologue, en nous rapprochant de l’organisme GREDECO à Paris. L’objectif était d’aller au-delà de l’évaluation INCI et du test épicutané (Patch test). Nous voulions nous rapprocher de la mention « écologique » en déterminant si nos savons S3 et S4 présentaient des propriétés hydratantes, nourrissantes, adoucissantes, s’ils étaient adaptés aux peaux d’enfants (1 à 7 ans), si un usage intensif (plus de 10 utilisations par jour pendant 14 jours) pouvait représenter un risque, ou s’ils pouvaient être utilisés sur tout le corps lors d’une douche. Nous avons été agréablement surpris des conclusions du dermatologue : S3 est compatible pour un usage intensif (« haute fréquence »), pour une douche « adulte », pour les peaux d’enfants et présente un effet adoucissant. Quant à S4, il est adoucissant, nourrissant, hydratant et peut être utilisé sur tout le corps (douche adulte).
+
+Tout comme S3 et S4, la formulation S5 (déclinable en colorée S5-1 ou colorée et parfumée S5-2) répondait à plusieurs de nos objectifs fixés. Le savon S5 présentait une très bonne tolérance cutanée, une protection antimicrobienne performante et une efficacité démontrée contre le virus du Covid19. Bien que l’unique conservateur utilisé dans S5 nous ait éloigné de l’objectif « écologique », nous avions pris la décision en 2023 de valider la formule pour démarrer les démarche commerciales.
+```
+
+### CHUNK_ID: projet_2__chunk_000025_sub00
+```
+[SECTION : Objectifs visés]
+Au démarrage du projet en mars 2024, notre ambition était de développer un produit répondant aux contraintes pratiques rencontrées par le personnel hospitalier, tout en assurant efficacement les fonctions de prétrempage et de détergence des instruments chirurgicaux souillés. Nous avons ainsi engagé le développement d’un nouveau dispositif avec les objectifs suivants :
+
+Objectif 1 : proposer un produit prêt à l’emploi
+
+Le principal avantage d’un produit prêt à l’emploi est de faire gagner un temps précieux au personnel soignant, en supprimant l’étape de dilution, laquelle est potentiellement source d’erreurs ou de mauvaises manipulations. De plus, un produit prêt à l’emploi permet de s’affranchir de la contrainte d’un point d’eau à proximité, offrant ainsi davantage de flexibilité dans l’organisation des circuits et des équipements hospitaliers.
+
+Objectif 2 : proposer un produit formant une mousse épaisse stable 8 h
+
+A travers cet objectif nous visons directement le côté léger, rapide et très pratique. En effet, remplacer le produit détergent liquide par un produit sous forme de mousse permettrait d’alléger considérablement le poids des bacs de prétrempage, facilitant ainsi leur manipulation et leur transport au sein des services hospitaliers. Cette solution permettrait de diminuer l’effort physique requis, d’accélérer la mise en œuvre du traitement initial des dispositifs, et d’améliorer le confort de travail du personnel.
+
+Objectif 3 : proposer un produit détergent enzymatique
+
+Ce nouveau produit devra posséder des enzymes, mais aussi des agents chélatants et des tensioactifs, afin de proposer une efficacité détergente efficace contre les souillures organiques telles que le sang et les protéines.
+
+Objectif 4 : proposer un produit compatible avec un pulvérisateur portatif rechargeable
+
+Ce dernier objectif est plutôt ergonomique : nous souhaitons que le produit prêt à l’emploi soit compatible avec une utilisation dans un pulvérisateur compact et pratique. En effet, pour générer la mousse, il est indispensable d’utiliser un pulvérisateur, mais nous souhaitons que celui-ci réponde à plusieurs critères, afin de faciliter le travail du personnel hospitalier :
+
+La capacité du pulvérisateur devra être limitée à 2 L, quantité suffisante pour générer une mousse pour l’ensemble du bain de prétrempage
+```
+
+### CHUNK_ID: projet_2__chunk_000119_sub00
+```
+[SECTION : Description des travaux réalisés en 2024]
+A l’issu des travaux menés de 2021 à 2023, les formulations de savons S3 et S4 répondaient à plusieurs des objectifs fixés, alliant une très bonne tolérance cutanée, une protection antimicrobienne performante et une excellente évaluation INCI, notamment grâce au duo de conservateur « écocompatible » utilisés dans ces formules. Malgré le jaunissement progressif des savons S3 et S4 provoqué par ce duo de conservateur, nous avions pris la décision de valider ces formulations pour démarrer les démarches commerciales.
+
+En , nous avons réalisé plusieurs tests à l’usage et des tests cornéométriques, sous contrôle d’un dermatologue, en nous rapprochant de l’organisme GREDECO à Paris. L’objectif était d’aller au-delà de l’évaluation INCI et du test épicutané (Patch test). Nous voulions nous rapprocher de la mention « écologique » en déterminant si nos savons S3 et S4 présentaient des propriétés hydratantes, nourrissantes, adoucissantes, s’ils étaient adaptés aux peaux d’enfants (1 à 7 ans), si un usage intensif (plus de 10 utilisations par jour pendant 14 jours) pouvait représenter un risque, ou s’ils pouvaient être utilisés sur tout le corps lors d’une douche. Nous avons été agréablement surpris des conclusions du dermatologue : S3 est compatible pour un usage intensif (« haute fréquence »), pour une douche « adulte », pour les peaux d’enfants et présente un effet adoucissant. Quant à S4, il est adoucissant, nourrissant, hydratant et peut être utilisé sur tout le corps (douche adulte)..
+
+Tout comme S3 et S4, la formulation S5 (déclinable en colorée S5-1 ou colorée et parfumée S5-2) répondait à plusieurs de nos objectifs fixés. Le savon S5 présentait une très bonne tolérance cutanée, une protection antimicrobienne performante et une efficacité démontrée contre le virus du Covid19. Bien que l’unique conservateur utilisé dans S5 nous ait éloigné de l’objectif « écologique », nous avions pris la décision en 2023 de valider la formule pour démarrer les démarche commerciales.
+```
+
+### CHUNK_ID: projet_2__chunk_000125_sub00
+```
+[SECTION : Objectifs visés]
+Au démarrage du projet en mars 2024, notre ambition était de développer un produit répondant aux contraintes pratiques rencontrées par le personnel hospitalier, tout en assurant efficacement les fonctions de prétrempage et de détergence des instruments chirurgicaux souillés. Nous avons ainsi engagé le développement d’un nouveau dispositif avec les objectifs suivants :
+
+Objectif 1 : proposer un produit prêt à l’emploi
+
+Le principal avantage d’un produit prêt à l’emploi est de faire gagner un temps précieux au personnel soignant, en supprimant l’étape de dilution, laquelle est potentiellement source d’erreurs ou de mauvaises manipulations. De plus, un produit prêt à l’emploi permet de s’affranchir de la contrainte d’un point d’eau à proximité, offrant ainsi davantage de flexibilité dans l’organisation des circuits et des équipements hospitaliers.
+
+Objectif 2 : proposer un produit formant une mousse épaisse stable 8 h
+
+A travers cet objectif nous visons directement le côté léger, rapide et très pratique. En effet, remplacer le produit détergent liquide par un produit sous forme de mousse permettrait d’alléger considérablement le poids des bacs de prétrempage, facilitant ainsi leur manipulation et leur transport au sein des services hospitaliers. Cette solution permettrait de diminuer l’effort physique requis, d’accélérer la mise en œuvre du traitement initial des dispositifs, et d’améliorer le confort de travail du personnel.
+
+Objectif 3 : proposer un produit détergent enzymatique
+
+Ce nouveau produit devra posséder des enzymes, mais aussi des agents chélatants et des tensioactifs, afin de proposer une efficacité détergente efficace contre les souillures organiques telles que le sang et les protéines.
+
+Objectif 4 : proposer un produit compatible avec un pulvérisateur portatif rechargeable
+
+Ce dernier objectif est plutôt ergonomique : nous souhaitons que le produit prêt à l’emploi soit compatible avec une utilisation dans un pulvérisateur compact et pratique. En effet, pour générer la mousse, il est indispensable d’utiliser un pulvérisateur, mais nous souhaitons que celui-ci réponde à plusieurs critères, afin de faciliter le travail du personnel hospitalier :
+
+La capacité du pulvérisateur devra être limitée à 2 L, quantité suffisante pour générer une mousse pour l’ensemble du bain de prétrempage
+```
+
+### CHUNK_ID: projet_2__chunk_000013
+```
+[SECTION : Sécurisation du risque de contamination microbiologique]
+Le dernier verrou concerne la sécurisation du risque de contamination microbiologique lors de la production et du stockage du produit. La prévention du risque de transmission de bactéries nosocomiales s’effectue à deux niveaux :
+
+Le premier concerne le produit en lui-même. La formulation ne doit pas permettre l’introduction de germes pathogènes, que ce soit au moment de la fabrication, ou de l’utilisation du produit. Pour cela, nous allons miser sur l’utilisation d’un nouveau conservateur
+
+Le deuxième aspect concerne l’utilisation du produit. Pour ce faire, nous devons déterminer quels sont les points critiques de l’utilisation du produit (sa concentration minimale, son temps de friction…), afin que celui-ci puisse éliminer le maximum de pathogène en un minimum de temps
+
+Afin d’étudier ces deux aspects, il est indispensable de définir en laboratoire des tests bactériologiques de viabilité. Ces tests doivent être adaptés à notre utilisation, c’est-à-dire que nous devons sélectionner les souches bactériennes d’intérêt en termes de probabilité de contamination et de résistance et de rapidité du test. La rapidité du test joue un rôle crucial, car cela permettra de comparer beaucoup de formulations en un minimum de temps, et permettra également un contrôle quasi en temps réel de la production et du stockage de la formulation, contrairement aux tests microbiologiques « classiques », qui demandent 48 à 72 h. Par conséquent, il est nécessaire de valider de nouvelles méthodes d’analyses, comme la mesure de l’ATPmétrie, et garantir sa robustesse et sa sensibilité.
+```
+
+### CHUNK_ID: projet_2__chunk_000064
+```
+[SECTION : Sécurisation du risque de contamination microbiologique]
+Le dernier verrou concerne la sécurisation du risque de contamination microbiologique lors de la production et du stockage du produit. La prévention du risque de transmission de bactéries nosocomiales s’effectue à deux niveaux :
+
+Le premier concerne le produit en lui-même. La formulation ne doit pas permettre l’introduction de germes pathogènes, que ce soit au moment de la fabrication, ou de l’utilisation du produit. Pour cela, nous allons miser sur l’utilisation d’un nouveau conservateur
+
+Le deuxième aspect concerne l’utilisation du produit. Pour ce faire, nous devons déterminer quels sont les points critiques de l’utilisation du produit (sa concentration minimale, son temps de friction…), afin que celui-ci puisse éliminer le maximum de pathogène en un minimum de temps
+
+Afin d’étudier ces deux aspects, il est indispensable de définir en laboratoire des tests bactériologiques de viabilité. Ces tests doivent être adaptés à notre utilisation, c’est-à-dire que nous devons sélectionner les souches bactériennes d’intérêt en termes de probabilité de contamination et de résistance et de rapidité du test. La rapidité du test joue un rôle crucial, car cela permettra de comparer beaucoup de formulations en un minimum de temps, et permettra également un contrôle quasi en temps réel de la production et du stockage de la formulation, contrairement aux tests microbiologiques « classiques », qui demandent 48 à 72 h. Par conséquent, il est nécessaire de valider de nouvelles méthodes d’analyses, comme la mesure de l’ATPmétrie, et garantir sa robustesse et sa sensibilité.
+```
+
+### CHUNK_ID: projet_2__chunk_000076_sub00
+```
+[SECTION : Objectifs visés]
+Au du projet en mars 2024, notre ambition était de un produit répondant aux contraintes pratiques rencontrées par le personnel hospitalier, tout en assurant efficacement les fonctions de prétrempage et de détergence des instruments chirurgicaux souillés. Nous avons ainsi engagé le développement d’un nouveau dispositif avec les objectifs suivants :
+
+Objectif 1 : proposer un produit prêt à l’emploi
+
+Le principal avantage d’un produit prêt à l’emploi est de faire gagner un temps précieux au personnel soignant, en supprimant l’étape de dilution, laquelle est potentiellement source d’erreurs ou de mauvaises manipulations. De plus, un produit prêt à l’emploi permet de s’affranchir de la contrainte d’un point d’eau à proximité, offrant ainsi davantage de flexibilité dans l’organisation des circuits et des équipements hospitaliers.
+
+Objectif 2 : proposer un produit formant une mousse épaisse stable 8 h
+
+A travers cet objectif nous visons directement le côté léger, rapide et très pratique. En effet, remplacer le produit détergent liquide par un produit sous forme de mousse permettrait d’alléger considérablement le poids des bacs de prétrempage, facilitant ainsi leur manipulation et leur transport au sein des services hospitaliers. Cette solution permettrait de diminuer l’effort physique requis, d’accélérer la mise en œuvre du traitement initial des dispositifs, et d’améliorer le confort de travail du personnel.
+
+Objectif 3 : proposer un produit détergent enzymatique
+
+Ce nouveau produit devra posséder des enzymes, mais aussi des agents chélatants et des tensioactifs afin de proposer une efficacité détergente efficace contre les souillures organiques telles que le sang et les protéines.
+
+Objectif 4 : proposer un produit compatible avec un pulvérisateur portatif rechargeable
+
+Ce dernier objectif est plutôt ergonomique : nous souhaitons que le produit prêt à l’emploi soit compatible avec une utilisation dans un pulvérisateur compact et pratique. En effet, pour générer la mousse il est indispensable d’utiliser un pulvérisateur, mais nous souhaitons que ce réponde à plusieurs critères afin de faciliter le travail du personnel hospitalier :
+
+La capacité du pulvérisateur devra être limitée à 2 L, quantité suffisante pour générer une mousse pour l’ensemble du bain de prétrempage
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 8,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

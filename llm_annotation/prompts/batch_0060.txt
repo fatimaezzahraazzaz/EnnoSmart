@@ -1,0 +1,241 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 60/135, 8 chunks)
+
+### CHUNK_ID: projet_13__chunk_000017_sub03
+```
+aux articles présents dans la littérature, nous n’utilisons pas la concentration en chlorophylle-a comme proxy pour estimer la présence ou non d’efflorescence de cyanobactéries, mais comme feature de nos modèles.
+
+Comme indiqué précédemment, cet important travail de pré-traitement, extraction et sélection des données permet de considérablement réduire la dimension du problème. Nous pouvons par conséquent expérimenter des modèles de machine learning plus « traditionnels », contrairement aux travaux menés en 2021 et 2022 qui utilisaient des réseaux neuronaux convolutifs ou des auto-encodeurs. Ces modèles plus conventionnels (comme les Forêts Aléatoires ou XGBoost) ont l’avantage d’être moins coûteux en temps de calcul que les réseaux de neurones artificiels. De plus, ils bénéficient d’une explicabilité et d’une interprétabilité beaucoup plus élevées que les modèles de Deep Learning . Ceci est permis notamment grâce au framework SHAP (SHapley Additive exPlanations) basé sur la théorie des jeux et permettant d'expliquer la contribution de chaque caractéristique (feature) au modèle utilisé43. Une variante, TreeSHAP a été développée et optimisée pour les modèles basés sur des arbres de décision dont les auteurs indiquent une « amélioration exponentielle du temps d'exécution, une amélioration des performances du clustering et une meilleure identification des caractéristiques influentes ».
+```
+
+### CHUNK_ID: projet_13__chunk_000036
+```
+[SECTION : Objectifs visés et performances à atteindre]
+Dans le cadre du projet « Nerthus » (ESA et WaterShed Monitoring Europe), l’objectif final est la mise en œuvre d’un service en ligne permettant de fournir des prévisions sur les risques d’apparition d’efflorescences de cyanobactéries dans les lacs. Cela nécessite le développement d’un système capable de prédire, jusqu’à trois jours à l’avance, les conditions favorables à ces efflorescences. Par ailleurs, le modèle prédictif doit être suffisamment généralisable pour pouvoir être transposé à différents lacs, afin de permettre l’intégration de nouveaux clients à la solution.
+
+Les objectifs de performance pour la solution de prédiction des risques d’efflorescences de cyanobactéries sont définis comme suit :
+
+Prédictions sur une fenêtre temporelle élargie : La solution doit fournir des prédictions pour le jour même, le lendemain et le surlendemain ;
+
+Classification en niveaux de risque précis : Les risques doivent être catégorisés en quatre niveaux : faible, moyen, élevé et très élevé ;
+
+Temps de réponse optimisé dans le cadre du traitement différé actuellement en place (exécution nocturne des prédictions), l’objectif est de réduire le délai global requis pour le téléchargement des données, leur prétraitement, l’inférence des modèles et la restitution des résultats, en visant un temps total de traitement de l’ordre de quelques minutes ;
+```
+
+### CHUNK_ID: projet_13__chunk_000084_sub01
+```
+surface_pressure. Variables liées à l’ensoleillement : direct_radiation, direct_normal_irradiance, global_tilted_irradiance, diffuse_radiation, shortwave_radiation. Variables “optionnelles” : il s’agit de variables ne rentrant pas dans les classes précédentes, soit dew_point_2m, cloud_cover et relative_humidity_2m.
+
+Nous avons ensuite lancé des expérimentations en testant toutes les combinaisons suivantes : nous prenons l’intégration des variables obligatoires, une variable liée à la pression parmi les deux, une variable liée à l’ensoleillement parmi les cinq et un sous-ensemble de variables optionnelles parmi les 8 () combinaisons possibles. Cela donne au total 80 combinaisons () d’expériences. Tous les autres paramètres ou variables restent inchangés sur les 80 expériences. Nous avons ensuite analysé les score d’accuracy, risk_accuracy et certainty pour les jeux de données d’entraînement et de validation. Nous avons ensuite sélectionné les expériences ayant donné les meilleures performances pour ces métriques et analysé quelles variables étaient présentes ou non. Nous avons également fait l’analyse inverse en analysant les pires expériences. Cette première approche très expérimentale nous a permis d’écarter les variables surface_pressure, direct_normal_irradiance, shortwave_radiation, direct_radiation et cloud_cover.
+
+Cela nous ramène donc à 9 variables météorologiques pour lesquelles nous avons testé toutes les combinaisons possibles, soit . Puis, pour chaque variable météo , nous avons calculé l'apport de cette variable selon la méthode suivante. Nous prenons l’ensembledes expériences contenant . Pour chaque expérience , cela nous donne une combinaison de variables météo. Nous calculons alors la différence de performance (selon la métrique val_accuracy) entre l'expérience et l'expérience dont la combinaison des variables météo est . Nous calculons enfin la moyenne de toutes ces différences, ce qui donne un score de performance pour la variable .
+
+Figure 17 : « apport moyen » de chaque variable météorologique.
+
+Cette analyse montre un apport de la variable dew_point_2m mais également des variables temperature_2m, pressure_msl et precipitation comme nous pouvons le voir sur la figure ci-dessus. Nous avons également analysé les 20 meilleures expériences selon la métrique de val_accuracy puis calculé le pourcentage de présence de chaque variable sur ces 20 meilleures expériences :
+
+Figure 18 : pourcentage de présence de chaque variable sur les 20 meilleures expériences.
+```
+
+### CHUNK_ID: projet_13__chunk_000084_sub06
+```
+les combinaisons des variables temperature_2m, dew_point_2m et pressure_msl ; Données limnologiques : toutes les combinaisons parmi elevation_m_msl et volume_m3. Profondeur maximale du modèle (xgboost) : 3, 4 ou 5 ;
+
+Le jour central pour la variable fetch_wind est tiré aléatoirement afin que cela tombe dans la fenêtre temporelle choisie. Là encore, nous sélectionnons aléatoirement uniquement 500 combinaisons. Les résultats des trente meilleures expériences sont visibles sur la figure ci-dessous. Les deux premières expérimentations de la liste offrent des performances intéressantes pour l’accuracy et la certainty en validation. Concernant la fenêtre temporelle associée à la fetch_wind, globalement celle-ci englobe les 4 jours précédant le jour cible. Il est en revanche compliqué d’être plus précis sur la valeur optimale. Il en est de même pour le jour central pour lequel nous observons une grande variabilité. En revanche, pour alternating_windows, cela semble converger vers 3 ou 4. De même, les cinq meilleures expériences s’appuient sur toute une profondeur maximale de 3 pour l’arbre. Les variables elevation_m_msl et temperature_2m semblent les plus pertinentes en données limnologiques et météorologique, respectivement. Enfin, le niveau de bruit optimal reste pour le moment indéterminé.
+
+Figure 23 : Trente meilleures expériences pour la variable fetch_wind (deuxième série d’expériences).
+
+Développement de la variable « alternance_windows »
+
+Après des discussions avec les experts métiers de WaterShed Monitoring Europe, nous avons décidé de développer une feature appelée alternance_windows dont l’objectif est de combiner plusieurs variables météorologiques en une seule. Typiquement, un scénario pouvant favoriser une efflorescence de cyanobactéries serait la suivante : des précipitations mêlées à un vent assez fort qui engendreraient un ruissellement suivi d’une période d’ensoleillement sans turbulences. Pour cela, nous avons besoin de trois variables météorologiques : precipation, wind_speed_10m, cloud_cover. Les nouvelles variables sont ensuite créées via l’algorithme suivant prenant en entrée la fenêtre temporelle désirée.
+
+fonction générer_alternance_meteo(nb_jours : entier):
+
+pour chaque jour j allant de 0 à nb_jours - 1:
+
+feature_precipitation_vent_jour_<j> precipitation_jour_<j> vent_jour_<j>
+
+feature_soleil_pas_de_pluie_jour_<j> cloud_cover_jour_<j> vent_jour_<j>
+```
+
+### CHUNK_ID: projet_13__chunk_000005
+```
+[SECTION : Verrou 1 : la généricité de la solution de prédiction]
+La littérature autour des cyanobactéries propose de nombreuses études spécifiques à la morphologie et à la dynamique des étendues d’eau étudiées mais pas de solution généralisée. De ce fait, nous voulons définir une approche se voulant généralisable à de nombreux lacs, et pas seulement aux grands lacs ou à des lacs situés à des endroits spécifiques du globe. L’idée est de se baser sur des images satellite, des données météorologiques et des données limnologiques afin de détecter un risque d’efflorescence des cyanobactéries du lac étudié.
+
+Il existe deux types de problèmes d’apprentissage supervisé : la classification ou la régression. Dans le cas de la prédiction d’efflorescence de cyanobactéries, un problème de régression consiste à prédire les concentrations en cyanobactéries, tandis qu’un problème de classification revient à émettre un niveau de risque. Prédire les concentrations présente un grand verrou scientifique. En effet, les concentrations représentent une variable mixte avec un aspect qualitatif représenté par tous les jours sans concentration de cyanobactéries et un autre aspect continue avec les jours où les cyanobactéries se développent, voire forment des efflorescences. Ce genre d’objectif de prédiction est très compliqué d’un point de vue technique et scientifique et se rapproche très fortement de l’objectif de prédiction de variable de précipitation étudié en météorologie.
+
+En revanche, même dans le cadre d’un problème de classification, le manque de données pertinentes peut facilement engendrer une insuffisance des représentations d’efflorescence de cyanobactéries si l’on souhaite un modèle généraliste. Ce point est détaillé dans les verrous qui suivent.
+```
+
+### CHUNK_ID: projet_13__chunk_000014_sub04
+```
+l’oxygène dissous, le pH, le phosphore total. Les meilleures performances ont été obtenues via une Forêt Aléatoire (R2=0.69) pour la tâche 1, et un ExtraTree (R2=0.92) pour la tâche 2.
+
+Figure 6 : résumé de la méthode utilisée par Yan et al. (© Yan et al., 2024)
+
+Les auteurs ont identifié (grâce à la technique SHAP, voir en section 1.4.3) la chlorophylle-a du mois en cours, l'utilisation des terres, le phosphore total et les oxydes d'azote (NOx) comme des caractéristiques cruciales pour obtenir des prédictions précises. Les facteurs contribuant le plus souvent aux efflorescences de cyanobactéries sont les concentrations en azote total, phosphore total, la température de l’eau selon Jeon et al. ou encore l’irradiation solaire et le niveau de l’eau selon les résultats de Ai et al.
+
+Jeong et al.34 expérimentent deux modèles de machine learning (Forêt Aléatoires et Extreme Gradient Boosting) afin de prédire les risques d’efflorescence de cyanobactéries sur huit réservoirs d’approvisionnement en eau situés en Corée du Sud. Ils utilisent la technique SMOTE pour rééquilibrer leur jeu de données et donc d’améliorer les performances de leurs modèles. Les différences de performances obtenues entre RF et XGB sont marginales, cependant XGB donnent des résultats plus stables en présence d'un déséquilibre des données. Ils utilisent également le technique SHAP pour extraire les caractéristiques les plus importantes pour le modèle et citent également la température de l’eau et les concentrations d’azote total et de phosphore total, tout comme Yan et al.33.
+```
+
+### CHUNK_ID: projet_13__chunk_000027_sub02
+```
+Toutefois, nos expérimentions ont montré que certaines images pouvaient avoir des valeurs de pixel supérieures à 0.1 et qu’augmenter cette borne supérieure n’avait pas d’impact sur les valeurs des pixels.
+
+Pour les images Landsat 7 (bande 4) et Landsat 8/9 (bande 5), nous considérons les pixels dont la valeur pour cette bande est comprise dans l’intervalle ]0, 100[. Là encore, la documentation indiquait ]0, 25[ mais nous avons augmenté la borne supérieure pour la même raison que pour les images Sentinel-2.
+
+Données météorologiques : nous fournissons à C2RCC la température ainsi que la pression atmosphérique au niveau de la mer. La température à indiquer correspond normalement à celle de l’eau. Malheureusement, nous ne disposons pas de cette information. Nous indiquons donc la température de l’air en surface. Notons qu’il existe des modèles d’estimation de la température de l’eau en surface à partir de la température de l’air. Nous n’avons pas eu le temps d’expérimenter cette méthode qui pourra faire l’objet de travaux supplémentaires lors d’une prochaine itération. Ces deux informations sont extraites au niveau des coordonnées du lac avec une résolution horaire via l’API open-meteo. Pour estimer les valeurs, nous réalisons une interpolation linéaire entre les données horaires encadrant l’heure d’acquisition de l’image (e.g., si l’image a été acquise à 14h39, nous réalisons l’interpolation linéaire à partir des données de 14h et de 15h).
+
+La quantité d’ozone en unité Dobson. Celle-ci est extraite de jeu de données ERA5 mis à disposition gratuitement par l’ESA via l’API du Climate Data Store avec une résolution horaire. Nous réalisons une interpolation linéaire en suivant la même méthodologie que celle décrite ci-dessus pour les données météorologiques.
+
+L’élévation du lac.
+
+Le réseau neuronal à appliquer. Le choix de celui-ci dépend de deux paramètres : le satellite utilisé (Sentinel-2 ou Landsat 7/8/9) et le type de plan d’eau. Cependant, tous les modèles ne sont pas disponibles pour tous les types de satellite. Par conséquent, nous choisissons d’utiliser le modèle C2RCC « général » pour tous les satellites afin de ne pas rajouter un biais supplémentaire.
+```
+
+### CHUNK_ID: projet_13__chunk_000028
+```
+[SECTION : Métriques considérées]
+Pour évaluer les performances de nos modèles, nous devons définir deux nouvelles métriques que l’on appelle risk_accuracy et certainty. En effet, comme évoqué précédemment, notre modèle doit prédire les risques d’efflorescence de cyanobactéries parmi quatre niveaux possibles (allant de faible à très élevé). Cette évaluation est donc un peu plus complexe que pour un problème de classification binaire où il est possible de comparer directement la sortie du modèle avec la réalité. L’objectif est donc de pouvoir mesurer la pertinence des niveaux de risques proposés et ainsi obtenir un modèle qui soit le plus utile que possible pour le métier.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 60,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

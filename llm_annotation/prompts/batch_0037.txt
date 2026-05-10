@@ -1,0 +1,287 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 37/135, 8 chunks)
+
+### CHUNK_ID: projet_8__chunk_000013_sub01
+```
+a permis de découpler les fluctuations du procédé de captation du fonctionnement du module de purification, assurant ainsi une alimentation plus stable du système VPSA et améliorant ses performances globales.
+
+Par ailleurs, nous avons traité le verrou lié à la variabilité de la composition du mélange gazeux par la définition d’un système de mesure en temps réel et par l’ajustement des paramètres de captation. Les résultats expérimentaux ont permis de démontrer qu’une concentration d’environ 50 % d’hélium dans le flux capté assure un fonctionnement optimal, garantissant à la fois l’efficacité du recyclage et la stabilité du procédé de fabrication.
+
+Enfin, une contribution technologique importante réside dans la capacité à intégrer l’ensemble du système de récupération et de purification dans un environnement industriel contraint, sans modification intrusive des installations existantes. Les solutions développées respectent des contraintes sévères d’encombrement et garantissent l’absence d’impact sur les propriétés optiques et mécaniques des fibres produites.
+
+Les résultats de nos travaux nous ont permis de valider la faisabilité d’un procédé complet de récupération et de recyclage de l’hélium, capable d’atteindre les performances visées en termes de pureté, de taux de récupération et de compatibilité avec le procédé industriel. Ces travaux contribuent ainsi à l’avancement des connaissances dans le domaine des procédés de captation et séparation de gaz en conditions réelles non stationnaires et ouvrent la voie à des applications industrielles plus durables.
+```
+
+### CHUNK_ID: projet_8__chunk_000014
+```
+[SECTION : Description des ressources humaines]
+[TABLEAU]
+| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération R&D | Contribution directe à l’acquisition de nouvelles connaissances |
+| ------------------ | ------------------------------------------------------------------------------------ | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DE NOUAL Sébastien | Diplôme universitaire de technologie – Génie électrique et informatique industrielle | Supervision et orientation technique des développements R&D | Pilotage et orientation technique des développements R&D, avec contribution à la définition des procédés et modifications permettant d’atteindre les objectifs recherchés. |
+| BONILLA Geovanni | Ingénieur en mécanique - Ecole Polytechnique de Mexico | Chef de projet | -Contribution à l’étude et développement des différentes briques du système, incluant la coordination des travaux techniques -Suivi des essais R&D, des modifications techniques et des phases d’installation. |
+| SUTHERLAND Anton | Mastère spécialisé – Management d’une unité stratégique | Orientation des décisions techniques R&D | Définition des orientations et prise de décisions techniques structurantes relatives aux développements R&D. |
+```
+
+### CHUNK_ID: projet_9__chunk_000001_sub02
+```
+proposition d’une solution technique fiable en termes de sécurisation du dispositif médical lors de sa manipulation ; L’utilisation de matériaux recyclables ; La mise en œuvre d’un système double protection. |
+| Incertitude/verrou | Le verrou principal de ce projet est lié à l’incapacité de résoudre de manière simultanée les problématiques d’emballage des dispositifs médicaux fragiles et agressifs à savoir : La tenue aux chocs et aux chutes ; La résistance à l’abrasion due aux vibrations pendant le transport ; La sécurisation du dispositif médical en définissant un positionnement mécanique permettant de garantir sa bonne manipulation pendant l’opération chirurgicale et ne pas avoir de risque patient ; La recyclabilité des matériaux : tous les matériaux employés doivent être recyclés indépendamment.
+|
+| Systématicité | Nos travaux ont porté sur quatre principaux axes et suivent le phasage suivant : Investigations et définition de solutions techniques d’emballage pour les dispositifs médicaux fragiles et agressifs ; Réalisation de prototypes par impression 3D, puis des prototypes thermoformés à partir de moules fabriqués en impression 3D pour les différentes solutions identifiées ; Définition de protocoles d’essais et réalisation des essais mécaniques afin d’évaluer les différentes solutions techniques développées ; Développement d’une solution performante d’emballage pour les dispositifs médicaux agressifs et fragiles.
+En effet, les essais effectués dans le cadre de ce projet sont reproductibles et les résultats ont été consignés dans des rapports.
+L’analyse de ces résultats a permis le développement d’un innovant système d’emballage performant et recyclable des dispositifs médicaux agressifs et fragiles.
+|
+| Transférabilité | Les connaissances acquises à l’issue de ces travaux sont transférables au domaine de l’emballage dans l’industrie médicale.
+Les connaissances techniques sont également transférables pour résoudre les problèmes d’amortissement des chocs, de résistance à l’abrasion, de sécurisation des DM et de la recyclabilité des matériaux rencontrés par divers acteurs du domaine.
+En outre, les résultats de nos travaux ont permis de mettre en œuvre un système d’emballage double protection comportant un profil compatible avec une pluralité de boîtiers, de profils et de dimensions différentes.
+|
+```
+
+### CHUNK_ID: projet_9__chunk_000057_sub00
+```
+[SECTION : PRÉSENTATION GLOBALE DE TCP R&I ET DE SA STRATÉGIE DE R&D]
+La création d’une entité de Recherche et Innovation s’inscrit dans le plan stratégique du groupe Top Clean Packaging visant à faire évoluer notre organisation afin de répondre aux attentes du marché concernant la recherche et le développement des dispositifs médicaux haute technologie. Nous souhaitons disposer d’une organisation de recherche et d’innovation capable de développer des dispositifs médicaux et leurs conditionnements novateurs.
+
+Les missions R&D de TCP R&I sont les suivantes :
+
+Recherche et développement en vue de développer de nouveaux produits (Systèmes, équipements, solutions techniques, etc.) ou les procédés nouveaux en vue de préparer leur industrialisation. Cette R&D&I intègre l’ensemble des phases projets : conception, modélisation, essais et validation sur prototypes ;
+
+Réalisation des dossiers de définition des produits à commercialiser (Plan d’ensemble / plans de détail / spécifications / nomenclature / codification) ainsi que les dossiers justificatifs de définition (AMDEC / analyse fonctionnelle / simulation par éléments finis / test en environnement…) ;
+
+Animation des programmes de recherche fondamentale et appliquée permettant d’augmenter notre connaissance et celle de l’état de l’art actuel dans notre métier sur les matériaux et procédés et leur mise en application.
+
+L’objectif de TCP R&I, au-delà de la nécessité de structuration du groupe, permet de regrouper au sein d’une même structure l’ensemble des activités R&I et par voie de conséquence, des moyens humains (des collaborateurs formant équipe pluridisciplinaire et travaillant déjà ensemble) et matériels (laboratoire pour la validation fonctionnelle, dimensionnelle, impression 3D, enceinte climatique…).
+
+Figure : Equipements TCP R&I
+
+Par ailleurs, TCP R&I est agréé au CIR en 2024-2026.
+```
+
+### CHUNK_ID: projet_9__chunk_000001_sub00
+```
+[SECTION : PRÉSENTATION GLOBALE DE TCP R&I ET DE SA STRATÉGIE DE R&D]
+La création d’une entité de Recherche et Innovation s’inscrit dans le plan stratégique du groupe Top Clean Packaging visant à faire évoluer notre organisation afin de répondre aux attentes du marché concernant la recherche et le développement des dispositifs médicaux haute technologie. Nous souhaitons disposer d’une organisation de recherche et d’innovation capable de développer des dispositifs médicaux et leurs conditionnements novateurs.
+
+Les missions R&D de TCP R&I sont les suivantes :
+
+Recherche et développement en vue de mettre en œuvre de nouveaux produits (Systèmes, équipements, solutions techniques, etc.) ou/et procédés afin de préparer leur industrialisation. Cette R&D&I intègre l’ensemble des phases projets : conception, modélisation, essais et validation sur prototypes ;
+
+Réalisation des dossiers de définition des produits à commercialiser (Plan d’ensemble / plans de détail / spécifications / nomenclature / codification) ainsi que les dossiers justificatifs de définition (AMDEC / analyse fonctionnelle / simulation par éléments finis / test en environnement…) ;
+
+Animation des programmes de recherche fondamentale et appliquée permettant d’augmenter notre connaissance et celle de l’état de l’art actuel dans notre métier sur les matériaux et procédés et leur mise en application.
+
+L’objectif de TCP R&I, au-delà de la nécessité de structuration du groupe, permet de regrouper au sein d’une même structure l’ensemble des activités R&I et par voie de conséquence, des moyens humains (des collaborateurs formant équipe pluridisciplinaire et travaillant déjà ensemble) et matériels (laboratoire pour la validation fonctionnelle, dimensionnelle, impression 3D, enceinte climatique…).
+
+Figure 1 : Equipements TCP R&I
+
+L’organigramme de notre société est présenté dans la figure suivante.
+
+Figure 2 : Organigramme TCP R&I
+
+Par ailleurs, TCP R&I est agréé au CIR en 2024-2026.
+```
+
+### CHUNK_ID: projet_9__chunk_000042_sub00
+```
+[SECTION : PRÉSENTATION GLOBALE DE TCP R&I ET DE SA STRATÉGIE DE R&D]
+La création d’une entité de Recherche et Innovation s’inscrit dans le plan stratégique du groupe Top Clean Packaging visant à faire évoluer notre organisation afin de répondre aux attentes du marché concernant la recherche et le développement des dispositifs médicaux haute technologie. Nous souhaitons disposer d’une organisation de recherche et d’innovation capable de développer des dispositifs médicaux et leurs conditionnements novateurs.
+
+Les missions R&D de TCP R&I sont les suivantes :
+
+Recherche et développement en vue de mettre en œuvre de nouveaux produits (Systèmes, équipements, solutions techniques, etc.) ou/et procédés afin de préparer leur industrialisation. Cette R&D&I intègre l’ensemble des phases projets : conception, modélisation, essais et validation sur prototypes ;
+
+Réalisation des dossiers de définition des produits à commercialiser (Plan d’ensemble / plans de détail / spécifications / nomenclature / codification) ainsi que les dossiers justificatifs de définition (AMDEC / analyse fonctionnelle / simulation par éléments finis / test en environnement…) ;
+
+Animation des programmes de recherche fondamentale et appliquée permettant d’augmenter notre connaissance et celle de l’état de l’art actuel dans notre métier sur les matériaux et procédés et leur mise en application.
+
+L’objectif de TCP R&I, au-delà de la nécessité de structuration du groupe, permet de regrouper au sein d’une même structure l’ensemble des activités R&I et par voie de conséquence, des moyens humains (des collaborateurs formant équipe pluridisciplinaire et travaillant déjà ensemble) et matériels (laboratoire pour la validation fonctionnelle, dimensionnelle, impression 3D, enceinte climatique…).
+
+Figure : Equipements TCP R&I
+
+L’organigramme de notre société est présenté dans la figure suivante.
+
+Figure : Organigramme TCP R&I
+
+Par ailleurs, TCP R&I est agréé au CIR en 2024-2026, et, en 2024, 7.5% du temps de travail a été porté sur de la R&D notamment sur ce présent projet.
+```
+
+### CHUNK_ID: projet_9__chunk_000072_sub00
+```
+[SECTION : PRÉSENTATION GLOBALE DE TCP R&I ET DE SA STRATÉGIE DE R&D]
+La création d’une entité de Recherche et Innovation s’inscrit dans le plan stratégique du groupe Top Clean Packaging visant à faire évoluer notre organisation afin de répondre aux attentes du marché concernant la recherche et le développement des dispositifs médicaux haute technologie. Nous souhaitons disposer d’une organisation de recherche et d’innovation capable de développer des dispositifs médicaux et leurs conditionnements novateurs.
+
+Les missions R&D de TCP R&I sont les suivantes :
+
+Recherche et développement en vue de mettre en œuvre de nouveaux produits (Systèmes, équipements, solutions techniques, etc.) ou/et procédés afin de préparer leur industrialisation. Cette R&D&I intègre l’ensemble des phases projets : conception, modélisation, essais et validation sur prototypes ;
+
+Réalisation des dossiers de définition des produits à commercialiser (Plan d’ensemble / plans de détail / spécifications / nomenclature / codification) ainsi que les dossiers justificatifs de définition (AMDEC / analyse fonctionnelle / simulation par éléments finis / test en environnement…) ;
+
+Animation des programmes de recherche fondamentale et appliquée permettant d’augmenter notre connaissance et celle de l’état de l’art actuel dans notre métier sur les matériaux et procédés et leur mise en application.
+
+L’objectif de TCP R&I, au-delà de la nécessité de structuration du groupe, permet de regrouper au sein d’une même structure l’ensemble des activités R&I et par voie de conséquence, des moyens humains (des collaborateurs formant équipe pluridisciplinaire et travaillant déjà ensemble) et matériels (laboratoire pour la validation fonctionnelle, dimensionnelle, impression 3D, enceinte climatique…).
+
+Figure : Equipements TCP R&I
+
+L’organigramme de notre société est présenté dans la figure suivante.
+
+Figure : Organigramme TCP R&I
+
+Par ailleurs, TCP R&I est agréé au CIR en 2024-2026, et, en 2024, 7.5% du temps de travail a été porté sur de la R&D notamment sur ce présent projet.
+```
+
+### CHUNK_ID: projet_9__chunk_000004_sub00
+```
+[SECTION : Objectifs visés et performances à atteindre]
+L’objectif de ce présent projet est de développer un système d’emballage performant et recyclable pour les dispositifs médicaux abrasifs et fragiles qui répond aux problématiques majeures de tenue aux chocs, de résistance à l’abrasion et de sécurisation tout en mettant en œuvre des matériaux novateur dans ce domaine et respectueux de l’environnement.
+
+En effet, pour éviter tout risque de détérioration ou de pollution, nous avons cherché à mettre en œuvre un emballage qui protège et évite toutes les contaminations dues aux frottements entre le dispositif médical et son emballage. Il doit résister à l’abrasion ou aux formes agressives du dispositif médical et éviter toute rayure pouvant altérer son fonctionnement.
+
+En outre, cet emballage doit protéger le dispositif médical des chocs extérieurs tout au long de son cycle de vie : du transport et stockage jusqu’à l’utilisation. Les dispositifs fragiles sont sensibles aux chocs, même de faible intensité. L'emballage doit absorber l'énergie des chocs et protéger les zones les plus vulnérables du dispositif.
+
+De surcroit, l’emballage doit permettre la sécurisation du dispositif médical pendant les opérations notamment lors de sa manipulation par le personnel soignant. Par conséquent, nous devons développer un système d’ouverture aseptique du dispositif permettant une prise facile et évitant tout risque de chute.
+
+Nous avons également pour objectif de mettre en œuvre des emballages médicaux en tenant compte des enjeux environnementaux en favorisant un tri facile des différents matériaux employés. Pour ce faire, nous allons définir des matériaux recyclables, biodégradables ou issus de ressources renouvelables.
+
+En dernier lieu, nous devons répondre aux exigences normatives qui encadrent respectivement les propriétés des matériaux et la performance de l’emballage, ainsi que celles qui spécifient les exigences et les méthodes d’essai pour les tests de transport (essais climatiques, essais mécaniques, gerbage en transport, vibration en chargement libre, pression haute altitude), et les méthodes d’essai pour les matériaux, les systèmes de barrière stérile préformés, les systèmes de barrière stérile et les systèmes d’emballage destinés à maintenir l’état de stérilité des dispositifs médicaux stérilisés au stade terminal jusqu’au point d’utilisation.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 37,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

@@ -1,0 +1,255 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 9/135, 8 chunks)
+
+### CHUNK_ID: projet_2__chunk_000114
+```
+[SECTION : Sécurisation du risque de contamination microbiologique]
+Le dernier verrou concerne la sécurisation du risque de contamination microbiologique lors de la production et du stockage du produit. La prévention du risque de transmission de bactéries nosocomiales s’effectue à deux niveaux :
+
+Le premier concerne le produit en lui-même. La formulation ne doit pas permettre l’introduction de germes pathogènes, que ce soit au moment de la fabrication, ou de l’utilisation du produit. Pour cela, nous allons miser sur l’utilisation d’un nouveau conservateur
+
+Le deuxième aspect concerne l’utilisation du produit. Pour ce faire, nous devons déterminer quels sont les points critiques de l’utilisation du produit (sa concentration minimale, son temps de friction…), afin que celui-ci puisse éliminer le maximum de pathogène en un minimum de temps
+
+Afin d’étudier ces deux aspects, il est indispensable de définir en laboratoire des tests bactériologiques de viabilité. Ces tests doivent être adaptés à notre utilisation, c’est-à-dire que nous devons sélectionner les souches bactériennes d’intérêt en termes de probabilité de contamination et de résistance et de rapidité du test. La rapidité du test joue un rôle crucial, car cela permettra de comparer beaucoup de formulations en un minimum de temps, et permettra également un contrôle quasi en temps réel de la production et du stockage de la formulation, contrairement aux tests microbiologiques « classiques », qui demandent 48 à 72 h. Par conséquent, il est nécessaire de valider de nouvelles méthodes d’analyses, comme la mesure de l’ATPmétrie, et garantir sa robustesse et sa sensibilité.
+```
+
+### CHUNK_ID: projet_2__chunk_000005
+```
+[SECTION : Objectifs visés]
+Au démarrage du projet, en février 2021, nous souhaitions développer une nouvelle formulation de savon liquide, capable d’allier la mention écologique et une efficacité contre les agents pathogènes, notamment contre le SARS-CoV2. Ce savon devait également répondre aux différents problèmes techniques rencontrés par la concurrence en termes de stabilité dans le temps (coloration, aspect, parfum, tenue de la viscosité, contaminations microbiologiques…). De ce projet, trois objectifs en ressortaient.
+
+Objectif 1 : Elaborer une nouvelle formulation de savon avec la mention « écologique »
+
+Cette première phase du projet a pour but d’élaborer une nouvelle formulation de savon à main à destination des hôpitaux, des services de santé et du grand publique. L’élaboration de cette formulation repose en grande partie sur l’identification d’un ou plusieurs conservateurs, permettant de revendiquer la mention « écologique », de conserver les propriétés du savon (couleur, fragrance, texture), même après un traitement de décontamination aux rayons gamma ou une exposition aux UV, et présentant une activité biocide.
+
+Objectif 2 : Démontrer le caractère virucide de la formulation contre le SARS-CoV2
+
+Ce second objectif doit permettre de définir les outils nécessaires pour déterminer l’efficacité virucide du savon à l’encontre du SARS-CoV2 et déterminer les conditions minimales de temps et de concentration pour éliminer au moins 99.9% de SARS-CoV2 de la surface des mains.
+
+Objectif 3 : Prévenir les contaminations bactériennes nosocomiales
+
+La prévention du risque nosocomial intervient à deux moments critiques : au moment de sa production, avec une sécurisation de la chaîne de fabrication, et au moment de l’utilisation du savon. A travers cet objectif, nous désirons sécuriser ces différents moments critiques, d’abord en empêchant toute contamination du produit au moment de sa fabrication et de son stockage, mais également en déterminant les facteurs critiques de son efficacité (temps, concentration…).
+```
+
+### CHUNK_ID: projet_2__chunk_000010
+```
+[SECTION : Maitrise de la souche virale SARS-CoV2]
+Le virus SARS-CoV2 étant une nouvelle souche émergente, il est indispensable, dans un premier temps, de déterminer les conditions optimales de culture, à savoir l’identification du modèle cellulaire pour la reproduction du virus, l’augmentation du taux de reproduction du virus, la mesure de son activité virale. Ces points nous permettront ensuite de définir les conditions de culture du virus SARS-CoV2 (temps d’infection, temps d’incubation, taux d’amplification, sensibilité des cellules rapporteuses…) nécessaires pour l’élaboration d’un test virucide.
+
+Par ailleurs, nous sommes confrontés à des problématiques dans le protocole de purification du virus puisque, durant nos essais préliminaires, nous n’avons pas réussi à dépasser la concentration de 106 pfu. Or, cette concentration est 100 fois moins concentrée que la dose minimale requise pour effectuer des tests virucides conformes à la norme NF ISO 14476+A2. Pour cela, il est impératif de tester les méthodes de tamis moléculaires ou les méthodes de précipitation pour essayer de concentrer d’avantage les particules virales.
+```
+
+### CHUNK_ID: projet_2__chunk_000014
+```
+[SECTION : Raisonnement scientifique et démarche expérimentale appliquée]
+Le projet doit se dérouler en quatre phases :
+
+Phase 1 : Elaboration de formulations candidates en partenariat avec le consultant chimiste Jean-Loïc BARATOUX
+
+Phase 2 : Définition d’outils de microbiologie et de virucidie pour tester l’efficacité des formulations. Ces travaux sont réalisés en collaboration avec l’unit VIM de l’INRAE, qui accueille Madame IGEL, chercheuse au sein de la société FB Product, dont l’objectif est de développer un nouveau test virucide à l’encontre du SARS-CoV2
+
+Phase 3 : Maitrise de la transposition à grande échelle du protocole de développement de la formulation candidate
+
+Phase 4 : Test de l’efficacité virucide de la formulation
+```
+
+### CHUNK_ID: projet_2__chunk_000018_sub02
+```
+1.9x108 spores/mL | 1.9x108 spores/mL | | Après ionisation | 5.2x104 UFC*/mL | 5.3x104 UFC*/mL | 4.4x104 UFC*/mL | Tableau : Résultats des tests de ionisation (*spores et formes végétatives)
+
+Nous avons malheureusement observé qu’une ionisation en conditions réelles (sur palette) ne permettait pas d’éliminer les spores de Geobacillus stearothermophilus DSM 22. La stratégie commerciale initiale visant à revendiquer un savon stérilisé à froid par rayons gamma était donc momentanément suspendue. En effet, Geobacillus stearothermophilus est le micro-organisme de référence le plus résistant, utilisé pour justifier une revendication de stérilité selon les normes européennes.
+
+En parallèle, nous avons également mené des tests à l’usage et des tests cornéométriques sur la formulation S5-2 (la déclinaison colorée et parfumée de S5). Comme pour S3 et S4, ces tests se sont déroulés sous contrôle d’un dermatologue de l’organisme GREDECO à Paris. l’analyse des résultats obtenus a révélé que la formulation S5-2 (et donc par héritage S5 et S-1) était compatible pour un usage intensif, pour les peaux d’enfants et pour le corps entier (douche adulte). S5-2 s’est révélé aussi hydratant, nourrissant et adoucissant. Ces résultats confortaient l’aspect respectueux du savon S5 pour la peau du consommateur et nous permettait de franchir un pas vers une mention « écologique ».
+
+Enfin, les études de stabilité que nous avons menées sur les fabrications industrielles des savons S3, S4, S5, S5-1 et S5-2 de 2023 ont montré qu’après près d’un an stockés à 4°C, température ambiante, 37°C et 44°C, les savons conservaient leurs spécifications physico-chimiques et microbiologiques.
+```
+
+### CHUNK_ID: projet_2__chunk_000038_sub00
+```
+[SECTION : Conclusion et contribution scientifique, technique ou technologique]
+Ce nouveau projet, démarré en 2024, visait à développer un produit innovant pouvant servir d’alternative aux détergents liquides à diluer, utilisés pour le prétrempage des instruments chirurgicaux souillés. L’objectif principal était d’améliorer le confort et l’efficacité du personnel hospitalier en supprimant l’étape de dilution et la nécessité d’un point d’eau, tout en allégeant le poids des bacs de trempage.
+
+Pour cela, ce nouveau produit devait répondre à plusieurs objectifs :
+
+Être prêt à l’emploi
+
+Former une mousse épaisse stable 8 h
+
+Être détergent et enzymatique
+
+Être compatible avec un pulvérisateur ergonomique, portatif, de capacité 2 L, à batterie, rechargeable via une base-support sur secteur
+
+Au cours de cette année 2024, nous avons commencé par identifier un pulvérisateur répondant à nos attentes. Seule la base-support de recharge reste à être développée.
+
+Nous avons pu ensuite entamer le développement d’une formulation d’un nouveau produit. A l’issue de ces travaux de recherche, nous avons obtenu la formulation X1, laquelle a répondu à la majorité des objectifs : prêt à l’emploi, formant une mousse épaisse stable 8 h et compatible avec le pulvérisateur sélectionné.
+
+Néanmoins, cette formulation X1 présente un inconvénient pour la transposition à grande échelle. En effet, le mode opératoire qui permet de fabriquer ce nouveau produit X1 est réalisable au laboratoire mais risque d’être très difficile à appliquer à l’échelle industrielle. Cet inconvénient est lié la difficulté d’introduire le stabilisateur de mousse An sans générer d’agrégats.
+
+En perspectives pour la suite de ce projet, nous avons l’intention de redéfinir le protocole de fabrication en recherchant des solutions pour obtenir le stabilisateur de mousse An sous forme pré-dispersée. En parallèle, nous devrons réaliser des essais à l’échelle laboratoire en testant d’autres stabilisateurs pour identifier une solution nous permettant peut-être de proposer une formulation possédant les mêmes performances que X1, mais sans complexité de fabrication.
+```
+
+### CHUNK_ID: projet_2__chunk_000056
+```
+[SECTION : Objectifs visés]
+Au démarrage du projet, en février 2021, nous souhaitions développer une nouvelle formulation de savon liquide, capable d’allier la mention écologique et une efficacité contre les agents pathogènes, notamment contre le SARS-CoV2. Ce savon devait également répondre aux différents problèmes techniques rencontrés par la concurrence en termes de stabilité dans le temps (coloration, aspect, parfum, tenue de la viscosité, contaminations microbiologiques…). De ce projet, trois objectifs en ressortaient.
+
+Objectif 1 : Elaborer une nouvelle formulation de savon avec la mention « écologique »
+
+Cette première phase du projet a pour but d’élaborer une nouvelle formulation de savon à main à destination des hôpitaux, des services de santé et du grand publique. L’élaboration de cette formulation repose en grande partie sur l’identification d’un ou plusieurs conservateurs, permettant de revendiquer la mention « écologique », de conserver les propriétés du savon (couleur, fragrance, texture), même après un traitement de décontamination aux rayons gamma ou une exposition aux UV, et présentant une activité biocide.
+
+Objectif 2 : Démontrer le caractère virucide de la formulation contre le SARS-CoV2
+
+Ce second objectif doit permettre de définir les outils nécessaires pour déterminer l’efficacité virucide du savon à l’encontre du SARS-CoV2 et déterminer les conditions minimales de temps et de concentration pour éliminer au moins 99.9% de SARS-CoV2 de la surface des mains.
+
+Objectif 3 : Prévenir les contaminations bactériennes nosocomiales
+
+La prévention du risque nosocomial intervient à deux moments critiques : au moment de sa production, avec une sécurisation de la chaîne de fabrication, et au moment de l’utilisation du savon. A travers cet objectif, nous désirons sécuriser ces différents moments critiques, d’abord en empêchant toute contamination du produit au moment de sa fabrication et de son stockage, mais également en déterminant les facteurs critiques de son efficacité (temps, concentration…).
+```
+
+### CHUNK_ID: projet_2__chunk_000061
+```
+[SECTION : Maitrise de la souche virale SARS-CoV2]
+Le virus SARS-CoV2 étant une nouvelle souche émergente, il est indispensable, dans un premier temps, de déterminer les conditions optimales de culture, à savoir l’identification du modèle cellulaire pour la reproduction du virus, l’augmentation du taux de reproduction du virus, la mesure de son activité virale. Ces points nous permettront ensuite de définir les conditions de culture du virus SARS-CoV2 (temps d’infection, temps d’incubation, taux d’amplification, sensibilité des cellules rapporteuses…) nécessaires pour l’élaboration d’un test virucide.
+
+Par ailleurs, nous sommes confrontés à des problématiques dans le protocole de purification du virus puisque, durant nos essais préliminaires, nous n’avons pas réussi à dépasser la concentration de 106 pfu. Or, cette concentration est 100 fois moins concentrée que la dose minimale requise pour effectuer des tests virucides conformes à la norme NF ISO 14476+A2. Pour cela, il est impératif de tester les méthodes de tamis moléculaires ou les méthodes de précipitation pour essayer de concentrer d’avantage les particules virales.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 9,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

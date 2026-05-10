@@ -1,0 +1,259 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 118/135, 8 chunks)
+
+### CHUNK_ID: projet_28__chunk_000025_sub01
+```
+des recommandations spécifiques aux utilisateurs. La solution à ce problème réside dans l’exploitation d’une stratégie d’optimisation des hyperparamètres pour sélectionner les meilleurs (ou approximativement les meilleurs) hyperparamètres pour le modèle.
+
+Les optimisations d’hyperparamètres visent à minimiser la fonction de perte sur un ensemble donné de données. Une de ces techniques est l’optimisation basée sur le gradient, qui est utilisée dans l’entraînement des réseaux neuronaux pour trouver les poids idéaux.
+
+Pour d’autres types de modèles d’apprentissage automatique comme la SVM, les arbres de décision, le Q-learning, etc., nous pouvons essayer d’autres stratégies comme la recherche aléatoire, l’optimisation bayésienne et l’optimisation évolutive. Quelques frameworks populaires pour l’optimisation des hyperparamètres dans un environnement distribué sont Ray et Hyperopt.
+
+Autres optimisations Rétro-propagation efficace en mémoire
+
+Les besoins en mémoire pour l’entraînement d’un réseau neuronal augmentent linéairement avec la profondeur et la taille du batch. Des recherches actives ont été menées pour réduire cette mise à l’échelle linéaire afin de réduire l’utilisation de la mémoire. Chen et al. propose une technique de mise à l’échelle de racine carrée au lieu de linéaire au prix d’un peu plus de complexité de calcul.
+
+Le paquage Openai/gradient-checkpointing implémente une version étendue de cette technique afin que nous puissions également l’exploiter dans les modèles TensorFlow.
+
+Apprentissage de basse précision : C’est un autre domaine avec beaucoup de recherche active. Par défaut, les frameworks d’apprentissage automatique utilisent une précision en virgule flottante 32 bits pour l’inférence et l’apprentissage des modèles. Il existe des preuves que nous pouvons exploiter pour réduire la précision numérique (comme 16 bits pour l’entraînement et 8 bits pour l’inférence) au prix d’une précision minimale.
+```
+
+### CHUNK_ID: projet_28__chunk_000004
+```
+[SECTION : Objectifs visés]
+L’objectif général de nos travaux de R&D est de développer un modèle hybride de recommandation intelligent et contextuel pour fournir à l'utilisateur (entreprise) des entreprises potentiellement adaptées par rapport à ses contraintes/besoins. Ce système s’appuie sur l’intelligence distribuée et graphique sociale (DIDL, Distributed Intelligence based Deep Learning for Graph Matching and Crowdsourcing) et le Machine Learning.
+
+Pour la réalisation de cet objectif général, nous nous sommes focalisés sur les points suivants :
+
+Développer une plateforme B2B Matchmaking intelligente pour connecter les entreprises et leur permettre de réseauter ;
+
+Mise en œuvre d’un corpus d’apprentissage en ligne pour la plateforme B2B Matchmaking intelligente ;
+
+Développement expérimental des algorithmes de Matchmaking (brevet en cours) permettant de fournir automatiquement des recommandations aux entreprises.
+
+En termes de performances, la solution devra être capable de générer des recommandations en un temps acceptable par tout utilisateur humain, c’est-à-dire, en quelques secondes dans le pire des cas. Le moteur de recommandation n’exploitera pas les données extraites en temps réel (de l’utilisateur) mais ces données serviront à enrichir la base d’apprentissage de l’algorithme en vue de son augmentation de performances.
+```
+
+### CHUNK_ID: projet_28__chunk_000010_sub03
+```
+6), à partir desquels ses styles de vie sont extraits à l'aide de l'algorithme « Latent Dirichlet Allocation ». Figure 6 : Concept des Life Documents et extraction des informations
+
+En outre, ils proposent une métrique de similarité pour mesurer la similitude des styles de vie entre les utilisateurs et calculer l'impact en termes de styles de vie avec un graphique de correspondance d'amis.
+
+Dans [Nagarnaik & Thomas], un nouveau système est proposé pour la recommandation de page Web avec l'aide d'une technique de filtrage collaborative hybride qui combine une technique de filtrage collaborative et des algorithmes de recherche de modèles. Dans ce travail, l'algorithme CHARM est utilisé. Pour augmenter les performances de l'algorithme, il a été appliqué sur des ensembles de données en cluster. Ce système de recommandation est développé avec les quatre processus suivants : prétraitement des données ; clustering des fichiers journaux Web ; identification des modèles associatifs ; et la recommandation de page Web.
+
+Figure 8 : Système de recommandation basé sur l’algorithme CHARM
+
+Nous avons identifié également des travaux [Hwangbo et al.] qui proposent un filtrage collaboratif pour recommander des entreprises du monde de la mode qui vendent des produits en ligne et dans les boutiques. En effet, un système appelé K-RecSys est proposé. Il étend l'algorithme de filtrage collaboratif typique basé sur les éléments en reflétant les caractéristiques du domaine de la mode.
+
+K-RecSys combine les données de clic de souris sur les produits en ligne et les données de vente de produits hors ligne pondérées pour refléter les préférences en ligne et hors ligne des clients. Il adopte également une fonction de « preference decay » pour refléter les changements de préférences au fil du temps, et recommande enfin des produits complémentaires et de substitution en utilisant les informations sur les catégories de produits.
+
+Finalement, [Chen et al.] proposent un Framework mathématique qui caractérise un processus de recommandation comme un problème de décision de Markov pour recommander des ressources pédagogiques aux apprenants en fonction de leur profil.
+```
+
+### CHUNK_ID: projet_28__chunk_000006_sub01
+```
+le fait que les données manquantes affectent l'analyse des données dans un large éventail de domaines et que les sources de ces données manquantes s'étendent sur un éventail également large.
+
+Cependant, la plupart des modèles de systèmes d'information commerciale intègrent l'imputation des valeurs manquantes à l'aide de règles d'association en comparant les valeurs d'attribut connues des observations manquantes et la partie antécédente des règles d'association. Ce système basé sur des règles est rarement efficace, surtout lorsque les règles commerciales des entreprises les plus jeunes ne sont pas disponibles dans la base de données ou en raison de la confidentialité des données commerciales. Par conséquent, les données statiques et les règles d'association ne peuvent pas être une solution acceptable pour l'apprentissage et le matchmaking des caractéristiques B2B. Ainsi, le moteur d'aide à la décision pour le matchmaking donne souvent des résultats vagues.
+
+Par ailleurs, les complexités dans le cadre de l’apprentissage non supervisé se manifestent dans l'inférence et l'imputation dans un modèle conjoint sur les caractéristiques avec des valeurs manquantes et qui sont utiles comme étape d'imputation avant un modèle discriminant. Cependant, cette approche n'est pas nécessairement optimale en termes de minimisation de l'erreur de prédiction. Compte tenu du caractère aléatoire et changeant du marché B2B, il est difficile d’exploiter certains algorithmes bifocaux qui pourraient résoudre les caractéristiques des données manquantes. Par la suite, le défi consiste également à exploiter un algorithme semi-supervisé pour le matchamking des entreprises afin de recommander et trouver le matching métier le plus probable.
+
+Par conséquent, il reste difficile d’adopter la combinaison de l'algorithme hybride d'imputation des données manquantes et de l'algorithme non supervisé.
+```
+
+### CHUNK_ID: projet_28__chunk_000015_sub02
+```
+conséquent, nous observons ici la condition de Pareto. Figure 13 : Règles du marché et chevauchements possibles En bref, les conditions de Pareto-optimalité sont importantes ici pour deux raisons :
+
+Dans le système de recommandation MUST, nous visons finalement à traiter un problème d'optimisation multi-objectif en raison des plusieurs contraintes dans le corpus de données, y compris les entrées des utilisateurs ;
+
+Aussi, par la suite, nous devons trouver un ensemble de solutions optimales plutôt qu'une seule solution optimale pour un problème d'optimisation avec un seul objectif.
+
+Ainsi, à partir de la prémisse de la règle ci-dessus, il est évident que la sortie de recommandation de notre système ne domine pas les solutions, où chaque objectif est considéré comme également bon.
+
+Par conséquent, cette recommandation permet une solution candidate typique à la prémisse de règle floue ci-dessus qui pourrait être non dominée ou efficace avec les valeurs linguistiques floues présentes de différents experts, si et seulement si le système ne sera pas en mesure de produire certaines recommandations proches aux utilisateurs qui améliorent simultanément toutes les fonctions objectives.
+
+Nous pouvons ajouter que pour notre système de recommandation, même avec des règles statiques, la régression logistique sera une optimisation multi-objectif générique .
+
+Un autre défi de recherche rencontré lors de la conception de l'algorithme hybride (observé à partir des figures ci-dessus) concerne la nature des relations entre les différents rôles des entreprises, par exemple fournisseur-client, distributeur-concurrence, etc.
+
+Très souvent, elles présentent des ensembles partiels et des graphes bipartites. Les graphes partiels et bipartites sont définis dans un graphe où il peut y avoir des ensembles de sommets qui sont décomposés en ensembles indépendants. Ces ensembles sont appelés les ensembles partiels.
+```
+
+### CHUNK_ID: projet_28__chunk_000024_sub00
+```
+[SECTION : Recommandation basée sur la maximisation de l'espérance et données manquantes]
+Le module de maximisation de l'espérance (algorithme EM) est un algorithme d'estimation itératif qui permet de dériver les estimations du maximum de vraisemblance (ML) en présence de données manquantes/cachées ("données incomplètes"). L'algorithme EM est une procédure itérative efficace pour calculer l'estimation du maximum de vraisemblance (ML) en présence de données manquantes ou cachées. Dans l'estimation ML, nous voulons estimer le ou les paramètres du modèle pour lesquels les données observées sont les plus probables. Chaque itération de l'algorithme EM se compose de deux processus : L'étape E, et l'étape M.
+
+Dans l'étape de l'espérance, ou étape E, les données manquantes sont estimées à partir des données observées et de l'estimation actuelle des paramètres du modèle. Nous exploitons pour cela l'espérance conditionnelle, ce qui explique le choix de la terminologie. Dans l'étape M, la fonction de vraisemblance est maximisée en supposant que les données manquantes sont connues. L'estimation des données manquantes de l'étape E est utilisée à la place des données manquantes réelles. La convergence est assurée puisque l'algorithme est garanti pour augmenter la probabilité à chaque itération.
+
+Une observation de X est appelée un ensemble de données incomplet. Une observation (X, Z) est appelée un ensemble de données complet. Nous ne disposons jamais d'un ensemble complet pour les modèles à variables latentes. Cependant, c'est une construction utile. Comme, nous avons un ensemble de données incomplet D = (x1, ..., xn). Pour simplifier la notation, nous considérons que X représente l'ensemble des données X = (X1, ..., Xn), et Z représente les variables non observées correspondantes Z = (Z1, ..., Zn). Par conséquent, la méthode EM proposée est la suivante :
+```
+
+### CHUNK_ID: projet_28__chunk_000011
+```
+[SECTION : Insuffisances des solutions existantes]
+Notre étude de la littérature concernant le Matchmaking nous a permis de tirer les conclusions suivantes :
+
+Les solutions de l’état de l’art que nous avons étudiées ne s’appuient pas sur des algorithmes d’intelligence artificielle pour la recommandation de services B2B. Ceci a un impact sur les performances et la fiabilité de la recommandation ;
+
+Aucune solution de l’état de l’art n’exploite des règles métier complexes. Nous sommes les premiers à expérimenter cette voie. Comme nous l’avons expliqué dans la partie verrous (voir 1.4), cette voie nous a mis face à des contraintes fortes se manifestant dans l’incertitude, la non-linéarité et la présence de loi de Pareto ;
+
+Aucune solution de l’état de l’art ne propose un matchmaking avancé basé sur l’opinion mining. Voir la partie verrous en 1.4 ;
+
+Malgré les possibilités offertes par les solutions logicielles actuelles, ces dernières restent limitées. En effet, elles n’exploitent pas des règles de gestion et des algorithmes IA qui permettent de fournir du Matchmaking intelligent avec une analyse de contenus capable de générer des recommandations adaptées aux demandes et besoins des entreprises tout en exploitant des données multi-sources ;
+
+Il n'existe aucune solution technique qui s’appuie sur un corpus d'apprentissage ;
+
+D’après ces conclusions, nous avons retenu qu’aucune solution n’est capable de résoudre notre problématique. Dans ce cadre, nous avons mené des travaux de R&D afin de développer et d’expérimenter une plateforme de Matchmaking B2B capable d’offrir à toute organisation une visibilité et un aperçu de son marché et de l'expertise au-delà de ses relations directes ou des réseaux de ses collaborateurs.
+```
+
+### CHUNK_ID: projet_28__chunk_000023_sub01
+```
+utilisateurs d'un système de recommandation. L’AP est une mesure qui prend en compte une liste classée des k recommandations et le compare à une liste de recommandations pertinentes pour l'utilisateur.
+
+D'autre part, la similarité intra-liste est la similarité moyenne en cosinus de tous les éléments d'une liste de recommandations. Ce calcul utilise les caractéristiques des éléments recommandés (comme la catégorie, le type, etc. du produit semi-conducteur) pour calculer la similarité. Si un système de recommandation recommande des listes d'éléments très similaires à un seul utilisateur (par exemple, un utilisateur ne reçoit que des recommandations de fournisseurs de premier choix par rapport aux inputs), la similarité intra-liste sera élevée.
+
+Compte tenu de tous ces arguments, il est prévu d'incorporer six algorithmes de notation pour relever ces défis de mesure de la performance. Il s'agit d'algorithmes de notation classiques basés sur la mémoire (c'est-à-dire l'algorithme de base, le coefficient binaire et le coefficient cosinus), suivis de trois algorithmes avancés (c'est-à-dire le noyau laplacien régularisé (KRL), le noyau de temps de navette (KCT) et le noyau de diffusion de Markov (KMD)), qui sont des noyaux sur un graphique.) Ces algorithmes peuvent être exploités comme norme de référence pour mesurer les performances en termes de précision.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 118,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

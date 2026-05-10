@@ -1,0 +1,90 @@
+{
+  "batch_id": 27,
+  "chunks": [
+    {
+      "chunk_id": "projet_6__chunk_000040_sub02",
+      "project_id": "projet_6_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_6_\\cir_final\\CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_name": "CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "du pic à 590Hz et l’apparition d’un pic vers 640Hz après l’ajout de la troisième vis sur les profilés. La redéfinition de la plaque a donc donné des résultats satisfaisants.\n\nNous avons ensuite redéfini les profils pour nous rapprocher du fonctionnement du viscoanalyseur, c’est-à-dire un déplacement dynamique fixe de 0,2 ou 0,3% de la hauteur de l’échantillon, avec un balayage en fréquence. Cela est complexe avec le pot utilisé à ce stade de l’étude, limité à 50g et 600N.\n\nLes profils étudiés sont :\n\nSine_55 : 5-3000Hz et 0,02-0,002mm\n\nSine_56 : 5-3000Hz et 0,006-0,003mm\n\nSine_57 : 20-1200Hz et 0,01-0,01mm\n\nSine_58 : 20-1200Hz et 0,1-0,01mm\n\nSine_59 : 20-400Hz et 0,09-0,09mm (déplacement constant sur toute la bande de fréquence).\n\nFigure : Mesures du module de Young avec les différents profils étudiés\n\nFigure : Mesures du module de Young avec les différents profils étudiés – Zoom sur l’intervalle [0,1000Hz]\n\nFigure : Mesures du module de Young avec les différents profils étudiés – Zoom sur l’intervalle [0,400Hz]\n\nLes résultats montrent que la réduction du déplacement à basses fréquences entraîne une augmentation significative du bruit, tandis que l'augmentation du déplacement à hautes fréquences est limitée en raison des contraintes du pot vibrant. Nous remarquons aussi que même en changeant les profils, la réponse reste globalement la même. Le profil n’a donc pas de fort impact.\n\nFinalement, nous avons mené de nouveaux essais avec le profil de base suivant : 5-3000 Hz et 0,5-0,0005 mm sur l’échantillon 2 noir avec les configurations suivantes :\n\nSine_60 enlèvement de la vis du milieu des profilés verticaux ;\n\nSine_61 définition de deux vis sur chaque profilé (quatre vis sur chaque profilé).\n\nLes résultats, illustrés ci-dessous, révèlent une légère amélioration avec les quatre vis par profilé.\n\nFigure : Modules de Young après redéfinition du profilé\n\nNous avons réalisé également une étude comparative des résultats obtenus avec le profil Sine_61 et du résultat obtenu sur le viscoanalyseur. Les deux courbes ci-dessous correspondent au même échantillon testé sur les deux bancs avec une précharge de 4.10-3m et un déplacement dynamique de 5.10-5m sur le viscoanalyseur.",
+      "_parent_chunk_id": "projet_6__chunk_000040",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_6__chunk_000034",
+      "project_id": "projet_6_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_6_\\cir_final\\CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_name": "CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Caractérisation des résonances de structures auxétiques]\nLes résultats de l’étude ci-dessus nous ont amenés à réaliser de nouveaux essais dans l’objectif de caractériser les résonances de différentes structures auxétiques et conventionnelles. Nous avons pour cela mené des essais de raideur dynamique sur des échantillons imprimés en 3D. Les mesures ont été réalisées à l’aide de deux marteaux : un avec deux embouts ayant une bande passante de 3200 Hz, ainsi que de 150Hz et un autre marteau d’impact avec une bande passante de 10 000 Hz.\n\nLes échantillons que nous avons analysés sont illustrés ci-dessous.\n\nFigure : Echantillons analysés\n\nLes échantillons sont collés au marbre, et une fine plaque d’aluminium est fixée sur la face supérieure. La figure suivante présente ce montage.\n\nFigure  : Montage de l'échantillon Aux 5x3 TPU\n\nUn accéléromètre monoaxe est placé sur la plaque, proche de l’emplacement de la frappe, afin de mesurer les fréquences de résonance.\n\nLes mesures sont réalisées à l’aide de deux marteaux : un avec deux embouts ayant une bande passante de 3200 Hz ainsi que de 150Hz, et un autre marteau d’impact avec une bande passante de 10 000 Hz.\n\nLes mesures par DMA n’ayant pas permis d’accéder à la raideur dynamique sur une plage de fréquence suffisante, une nouvelle approche a été nécessaire pour identifier les premiers modes propres. L’utilisation d’un banc expérimental, encore en cours d’assemblage à ce moment-là, a été envisagée. En attendant, des essais par frappes au marteau ont été réalisés afin de repérer les premières résonances. Ces essais sont complexes, car l’échantillon semble présenter un domaine linéaire très restreint, limitant la précision des mesures.\n\nLe tableau suivant présente les configurations de test.\n\n[TABLEAU]\n| CONFIGURATION | DESCRIPTION |\n| ------------- | ------------------------------------------------ |\n| Nylon M | Marteau d’impact PCB avec embout nylon blanc |\n| Caoutchouc M | Marteau d’impact PCB avec embout caoutchouc noir |\n| Métal S | Marteau d’impact B&K avec embout métallique |\n\nTableau  : Configurations des essais menés\n\nLes résultats des essais sont présentés ci-après.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_6_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_6__chunk_000013_sub01",
+      "project_id": "projet_6_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_6_\\cir_final\\CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_name": "CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "parasites, notamment le pic à 130 Hz (Figure 34). L'analyse des pics autour de 600 Hz a montré qu'ils étaient liés à des modes propres de l'échantillon et de l'outillage.\n\nNous avons ensuite estimé le module de Young par différentes méthodes, la méthode 3 (déplacement en compression estimé = déplacement bobine) s'étant avérée la plus précise et la plus corrélable avec les résultats du viscoanalyseur.\n\nPour affiner la performance du banc afin de fournir des mesures fiables pour des matériaux aux caractéristiques variées, nous avons mené des essais sur de nouveaux échantillons en EPDM qui ont confirmé la répétabilité des résultats et la présence de pics liés à l'outillage. Nous avons également effectué des redéfinitions supplémentaires du montage expérimental (profilés en acier, suppression des traverses, augmentation du nombre d'équerres, raccourcissement de la plaque), et analysé leur impact.\n\nA l’issue de plusieurs redéfinitions, l’étude comparative avec les essais DMA a montré des résultats satisfaisants. Cependant, un pic récurrent autour de 125 Hz persiste (Figure 51).",
+      "_parent_chunk_id": "projet_6__chunk_000013",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_6__chunk_000036",
+      "project_id": "projet_6_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_6_\\cir_final\\CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_name": "CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Résultats obtenus avec les configurations Métal S et Caoutchouc M]\nPour rester dans la zone de linéarité du matériau, nous avons effectué des mesures dans la configuration Métal S sur l’échantillon 5x3 en PLA avec une force de 2N. Le résultat que nous avons obtenu est présenté sur la figure suivante.\n\nFigure : Résultats des essais suivant la configuration Métal S sur l’échantillon 5x3 en PLA avec une force de 2N\n\nLes données en basse fréquence sont bruitées. Toutefois, nous pouvons constater un décalage qui, contrairement au Nylon M, n’a pas lieu seulement vers les hautes fréquences. Pour compléter notre spectre, nous avons réalisé des mesures dans la configuration Caoutchouc M avec une force de 5N. Nous avons ainsi constaté sur les basses fréquences un shift en fréquence, comme montré sur la figure suivante. Toutefois, il n’est pas dans le même sens pour la première résonance et la deuxième antirésonance.\n\nFigure : Résultats des essais suivant la configuration Caoutchouc M avec une force de 5N\n\nPour analyser l’influence de la force d’impact et déterminer le domaine de linéarité du matériau, nous avons étudié le comportement de l’échantillon 5x3 en PLA avec des frappes de forces croissantes de 5N, 10N et 30N.\n\nFigure  : Résultats des essais menés sur l’échantillon 5x3 en PLA avec des frappes de forces croissantes de 5N, 10N et 30N.\n\nNous remarquons ainsi que la première résonance est mieux définie pour des forces plus élevées. Cependant, pour la deuxième antirésonance, elle semble se décaler vers les hautes fréquences, avec l’apparition d’une troisième antirésonance pour la force la plus élevée de 30 N.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_6_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_6__chunk_000039_sub07",
+      "project_id": "projet_6_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_6_\\cir_final\\CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_name": "CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "nous avons réalisé sur l’échantillon 1 un essai identique au Sine_9 avec la pose d’accélérateurs sur l’outillage pour déterminer la source du pic. Figure : Définition des accélérateurs sur l’outillage\n\nNous avons alors observé un pic de réponse sur l’ensemble des accéléromètres, avec une amplitude maximale enregistrée sur celui positionné sur la plaque inférieure au capteur de force. Cette réponse pourrait correspondre à un mode propre de la plaque.\n\nAnalyse et résolution de la problématique de pic de réponse à 130 Hz\n\nSouhaitant résoudre la problématique constatée, nous avons réalisé des essais identiques à ceux présentés ci-dessus après redéfinition de la plaque. La figure ci-dessous présente la moyenne des résultats obtenus avec les profils Sine_11, Sine_12 et Sine_13 identiques à Sine_2, ainsi que la moyenne des résultats des essais menés sur le viscoanalyseur.\n\nAvec le même profil de Sine_2, nous avons remarqué la disparition du pic à 130 Hz.\n\nFigure : Etude comparative de la moyenne des modules de Young avec les profils Sine_11, Sine 12 et Sine_13 et de la moyenne des résultats des essais sur viscoanalyseur\n\nAnalyse et résolution des problématiques de pics aux alentours de 600 Hz\n\nNous avons cherché également à analyser la source des pics observés aux alentours de 600 Hz en menant des essais avec différentes configurations sur l’échantillon 2. Nous avons ainsi observé le même pic atténué et légèrement décalé vers les basses fréquences. C’est bien le premier mode de l’échantillon.\n\nNous avons ensuite analysé le comportement de trois échantillons à vide pour identifier la source du pic. L’échantillon 2 (Sine_20) et l’échantillon 3 (Sine_24) sont cubiques. En revanche, l’échantillon 1 (Sine_18) est rectangulaire.\n\nFigure : Résultats des essais menés sur les échantillons à vide\n\nNous observons sur cette figure le même mode amorti sur les trois échantillons. Il est cependant décalé. Il est présent à 190Hz pour l’échantillon 1, 415Hz pour l’échantillon 2 et 575Hz pour l’échantillon 3. Plus l’échantillon est petit, plus le mode se décale vers les hautes fréquences, et plus il est important.",
+      "_parent_chunk_id": "projet_6__chunk_000039",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_6__chunk_000003_sub01",
+      "project_id": "projet_6_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_6_\\cir_final\\CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_name": "CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "d’analyser le comportement vibro-acoustique des matériaux auxétiques, dont la réponse dynamique est complexe et non linéaire, en vue de leur application dans des systèmes de découplage vibratoire à haute performance.\n\nDévelopper un nouveau dispositif expérimental capable de réaliser des essais sur des échantillons de grande taille (jusqu'à 25 cm), représentatifs de plots de découplage vibratoire réels intégrant une structure auxétique, et à hautes fréquences (jusqu'à 5 kHz). Cette fréquence est particulièrement élevée pour la caractérisation vibratoire de matériaux, posant des défis techniques importants en termes de mesure des vibrations, de suppression des résonances parasites de l'outillage, et de maintien de la linéarité du comportement des échantillons.\n\nLe développement d’un banc expérimental dédié est nécessaire pour caractériser les propriétés mécaniques et vibroacoustiques des plots à l’échelle 1:1, sur une gamme fréquentielle étendue.",
+      "_parent_chunk_id": "projet_6__chunk_000003",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_6__chunk_000007",
+      "project_id": "projet_6_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_6_\\cir_final\\CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_name": "CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Verrous et difficultés techniques liés à la caractérisation expérimentale des structures auxétiques à de hautes fréquences]\nL’analyse mécanique dynamique (DMA) présente des limitations notables au-delà de 1 kHz, dues à plusieurs facteurs. En effet, les effets d’inertie de l’actionneur et de l’éprouvette faussent les mesures de raideur. Les capteurs classiques manquent de bande passante pour suivre précisément les faibles amplitudes à haute fréquence. De plus, des résonances mécaniques propres à l’appareil peuvent interférer avec les résultats.\n\nLe développement de dispositifs capables de caractériser ces matériaux auxétiques dans des conditions réalistes (grande taille, hautes fréquences, contraintes multiaxiales) a nécessité une phase R&D spécifique. Cela nous a mis face à difficultés techniques importantes liées aux résonances parasites liées à l’outillage et aux structures de montage, ainsi qu’à l’extraction fiable du module de Young dynamique en fonction de la fréquence.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_6_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_6__chunk_000024_sub01",
+      "project_id": "projet_6_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_6_\\cir_final\\CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_name": "CEVAA_CORPLAUX_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "de réduire et d’optimiser la réponse dynamique de pales de ventilateur pour les trois premières fréquences fondamentales, à l’aide d’une structure cellulaire auxétique à géométrie rentrante comme matériau de noyau.\n\nEn outre, Mostafa Ranjbar et al. ont étudié la réponse vibroacoustique de panneaux sandwich avec des noyaux auxétiques anti-tétrachiraux et hexagonaux pour différentes configurations à gradient. Ils ont minimisé le niveau de puissance sonore rayonnée de ces panneaux sandwich auxétiques en modifiant les géométries des noyaux.\n\nPar ailleurs, plusieurs travaux menés par LEM3 depuis une dizaine d’années concernent l’étude du comportement de matériaux architecturés de nature auxétique en petites et grandes transformations,,. Les performances dynamiques de structures sandwichs avec un cœur auxétique réentrant témoignent de propriétés dynamiques supérieures, en particulier en mode de flexion. Des travaux réalisés pour des matériaux cellulaires auxétiques depuis deux décennies montrent que les performances dynamiques et les capacités d’amortissement des vibrations sont significativement améliorées par des matériaux auxétiques poreux, en raison de l’influence notable de la variation de la densité locale du matériau (effet négligeable pour des structures non auxétiques). Le comportement dynamique des matériaux poreux conventionnels et auxétiques a été évalué dans la bande de fréquence 5–500 Hz.\n\nUn autre travail de recherche a porté sur le développement, la modélisation et la validation expérimentale d’un dispositif d’isolation vibratoire basé sur une structure alvéolaire auxétique, composée de nids-d’abeilles hexagonaux réentrants. Les auteurs ont démontré que l’angle de cellule (liant directement le coefficient de Poisson) et la densité relative (fonction de l’épaisseur des parois) avaient un impact significatif sur la performance d’isolation vibratoire. Plus précisément, une densité relative faible combinée à un coefficient de Poisson fortement négatif (typiquement < -3) améliore significativement la réduction du niveau vibratoire (jusqu’à +400 % d’amélioration). Cette étude a été menée dans l’intervalle de fréquences [0,500Hz].",
+      "_parent_chunk_id": "projet_6__chunk_000024",
+      "_is_subchunk": true
+    }
+  ]
+}

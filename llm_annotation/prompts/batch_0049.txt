@@ -1,0 +1,346 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 49/135, 8 chunks)
+
+### CHUNK_ID: projet_11__chunk_000045
+```
+[SECTION : A3Test : Assertion-Augmented Automated Test Case Generation]
+Limites d’AnthenaTest :
+
+Manque de connaissances d'assertion et
+
+Manque de consistance de noms et de vérification de signature de test.
+
+A3Test : Une approche pour générer des cas de tests unitaires basée sur de DL augmenté par « Assertion Knowlegde » avec un mécanisme pour vérifier la consistance des noms et la signature de tests. L’approche profite des principes d’adaptation de domaine où le but est d’adapter les connaissances existantes en partant d’une tâche de génération d’assertion pour l’adapter après sur la tâche de génération de cas de tests.
+
+Ils ont construit d’abord un modèle de langage pré-entrainé d’assertions de manière self-supervised un utilisant une architecture PLBART avec un modèle de langage masqué (masked language models).
+
+Après le modèle pré-entrainé est fine-tuné pour la génération de cas de tests où l’objectif est d’apprendre les relations entre la méthode focale (focal method) et le cas de test correspondant.
+
+Pour chaque cas de test généré ils utilisent une approche de vérification pour la consistance du nom et les signatures des tests.
+
+Ils ont évalué leur modèle sur la BDD Defects4J
+
+RQ1 : De combien est plus effective A3Test comparé avec AnthenaTest ?
+
+A3Test atteint 147% plus de cas de tests corrects (correctness) et 15% plus de couverture de méthodes (method coverage) avec moins de cas de tests générés que AnthenaTest
+
+RQ2 : A3Test performe mieux que les modèles pré-entrainés existants ?
+```
+
+### CHUNK_ID: projet_11__chunk_000055
+```
+[SECTION : A3Test : Assertion-Augmented Automated Test Case Generation]
+Limites d’AnthenaTest :
+
+Manque de connaissances d'assertion et
+
+Manque de consistance de noms et de vérification de signature de test.
+
+A3Test : Une approche pour générer des cas de tests unitaires basée sur de DL augmenté par « Assertion Knowlegde » avec un mécanisme pour vérifier la consistance des noms et la signature de tests. L’approche profite des principes d’adaptation de domaine où le but est d’adapter les connaissances existantes en partant d’une tâche de génération d’assertion pour l’adapter après sur la tâche de génération de cas de tests.
+
+Ils ont construit d’abord un modèle de langage pré-entrainé d’assertions de manière self-supervised un utilisant une architecture PLBART avec un modèle de langage masqué (masked language models).
+
+Après le modèle pré-entrainé est fine-tuné pour la génération de cas de tests où l’objectif est d’apprendre les relations entre la méthode focale (focal method) et le cas de test correspondant.
+
+Pour chaque cas de test généré ils utilisent une approche de vérification pour la consistance du nom et les signatures des tests.
+
+Ils ont évalué leur modèle sur la BDD Defects4J
+
+RQ1 : De combien est plus effective A3Test comparé avec AnthenaTest ?
+
+A3Test atteint 147% plus de cas de tests corrects (correctness) et 15% plus de couverture de méthodes (method coverage) avec moins de cas de tests générés que AnthenaTest
+
+RQ2 : A3Test performe mieux que les modèles pré-entrainés existants ?
+```
+
+### CHUNK_ID: projet_11__chunk_000060
+```
+[SECTION : A3Test : Assertion-Augmented Automated Test Case Generation]
+Limites d’AnthenaTest :
+
+Manque de connaissances d'assertion et
+
+Manque de consistance de noms et de vérification de signature de test.
+
+A3Test : Une approche pour générer des cas de tests unitaires basée sur de DL augmenté par « Assertion Knowlegde » avec un mécanisme pour vérifier la consistance des noms et la signature de tests. L’approche profite des principes d’adaptation de domaine où le but est d’adapter les connaissances existantes en partant d’une tâche de génération d’assertion pour l’adapter après sur la tâche de génération de cas de tests.
+
+Ils ont construit d’abord un modèle de langage pré-entrainé d’assertions de manière self-supervised un utilisant une architecture PLBART avec un modèle de langage masqué (masked language models).
+
+Après le modèle pré-entrainé est fine-tuné pour la génération de cas de tests où l’objectif est d’apprendre les relations entre la méthode focale (focal method) et le cas de test correspondant.
+
+Pour chaque cas de test généré ils utilisent une approche de vérification pour la consistance du nom et les signatures des tests.
+
+Ils ont évalué leur modèle sur la BDD Defects4J
+
+RQ1 : De combien est plus effective A3Test comparé avec AnthenaTest ?
+
+A3Test atteint 147% plus de cas de tests corrects (correctness) et 15% plus de couverture de méthodes (method coverage) avec moins de cas de tests générés que AnthenaTest
+
+RQ2 : A3Test performe mieux que les modèles pré-entrainés existants ?
+```
+
+### CHUNK_ID: projet_11__chunk_000012
+```
+[SECTION : Première partie : Génération de Chaînes de raisonnement structurées selon le modèle AAA par LLM (SCoT AAA)]
+Dans cette première étape, l’objectif est de générer des chaînes de raisonnement structurées selon le modèle Arrange-Act-Assert (AAA) pour une méthode à tester (MaT) à l’aide d’un LLM.
+
+Pour les points (a) et (b) ci-dessus, nous nous appuyons sur la base de données methods2test (Tufano et al.), appliquée initialement pour le fine-tuning du modèle ATHENATEST. Cette base contient des couples « méthode à tester, test unitaire rédigé par un humain », assortis de certains éléments de contexte, mais sans les projets complets dont ces méthodes sont issues.
+
+Pour le point (c), nous avons proposé de générer les explications étape par étape à l’aide d’un LLM pour un échantillon de methods2test. Nous avons, dans un premier temps, rédigé « à la main » des SCoT AAA pour une dizaine de méthodes choisies aléatoirement, en décrivant en langage naturel, selon le modèle AAA, les étapes de rédaction de leurs tests unitaires (ce que nous appelons SCoT AAA). Ces exemples enrichis (MaT, TU, SCoT AAA) ont servi à configurer un premier prompt few-shots, permettant de générer automatiquement des SCoT AAA pour un échantillon plus large de la base methods2test.
+
+À partir de là, nous avons constitué une nouvelle base au format <Méthode à tester, SCoT AAA, test unitaire>. Nous avons ensuite sélectionné aléatoirement un sous-ensemble de ces exemples enrichis et construit un second prompt few-shots ne contenant plus que les couples <MaT, SCoT AAA>. Ce prompt est appliqué pour soumettre au LLM de nouvelles méthodes à tester et lui demander de générer, pour chacune, le SCoT AAA correspondant.
+
+Le recours à un échantillonnage aléatoire répond à deux objectifs :
+
+éviter un biais excessif lié au choix initial des exemples pour lesquels les SCoT AAA ont été rédigés manuellement, en introduisant une variabilité qui « dilue » cet effet ;
+
+tenir compte des observations de Li et al., qui suggèrent que le choix des exemples few-shots peut influencer significativement le comportement du modèle.
+```
+
+### CHUNK_ID: projet_11__chunk_000027_sub01
+```
+de couverture : taux de compilation sans erreur ; code coverage (lignes, branches) ; ratio de tests valides vs tests redondants, vides ou incorrects ; taux de réussite à l’exécution.
+
+Correction automatique en cas d’échec de compilation : le test initial, accompagné du message d’erreur, est réinjecté dans le modèle via re-prompting pour auto-correction.
+
+Différentes stratégies de prompt engineering ont été mises à l’épreuve :
+
+Zero-shot et few-shot prompting : variation du niveau de contexte (signature seule, classe complète, imports, etc.).
+
+Structured Chain of Thought (ScoT) : injection de raisonnement structuré à partir d’une analyse syntaxique (AST).
+
+Self-consistency : génération multiple à partir d’un même prompt, puis sélection de la version la plus cohérente ;
+
+Retrieval-Augmented Generation (RAG) : enrichissement dynamique du prompt avec des fragments similaires extraits de MéthodoTest via embeddings sémantiques.
+
+Ces différentes approches ont été mises en œuvre à plusieurs modèles LLMs open source, notamment : StarCoder, Code-Mistral, Qwen2.5-Coder, CodeLlama, CodeGemma, avec des tailles entre 3B et 7B. Ces modèles ont été mobilisés via API (Hugging Face) ou déployés localement (Ollama). Nous nous sommes appuyés sur les jeux de données SF110, Methods2test et Defects4j pour standardiser l’évaluation.
+
+En outre, les outils mobilisés incluent :
+
+DeepEval pour la détection des test smells et la qualité du code généré ;
+
+EvoSuite pour les métriques de couverture et la comparaison aux tests de référence.
+
+Pour automatiser le processus, un pipeline d'évaluation a été mis en œuvre comprenant le chargement des données, la configuration des modèles et des stratégies de prompt engineering, la génération des tests et l'évaluation des résultats. Ce pipeline a permis une analyse systématique et reproductible des performances des modèles dans différents scénarios.
+
+Charger les données pour la génération de tests unitaires : SF110 ;
+
+Charger le modèle à mettre en œuvre pour la génération de tests :
+
+Appel à l’API (hugging face) ;
+
+Local (ollama)
+
+Configurer le type de prompt à mettre en œuvre :
+
+Stratégie de prompt engineering :
+
+Zero-shot ;
+
+Few-shots ;
+
+Chain-of-thoughs ;
+
+Self-consistency ;
+
+Configurer le niveau de contexte :
+
+Générer les tests : Méthode focale ;
+```
+
+### CHUNK_ID: projet_11__chunk_000047_sub00
+```
+[SECTION : Using Large Language Models to Generate JUnit Tests: An empirical Study]
+Actuellement il n’est pas clair quelle est l’effectivité de l’utilisation de modèles pré-entrainés en génération de code avec prompt pour générer cas de tests unitaires dans un langage de programmation fortement typé comme Java.
+
+Des études ont montré des meilleurs résultats pour l’utilisation de ces modèles pour la génération de cas de tests unitaires dans des langages de programmation moins typés comme python ou javascript.
+
+Les auteurs ont fait une étude empirique pour comparer des modèles LLMs : Codex, GPT-3.5-Turbo et StartCoder pour générer des tests unitaires pour des classes dans la version Java du dataset HumanEval et 47 projets « open-source » dans le dataset SF110.
+
+Questions de recherche :
+
+RQ1 : Dans quelle mesure les LLM peuvent générer des tests JUnit
+
+RQ2 : comment différents styles de contexte (par exemple, l'utilisation uniquement de la méthode testée, la présence/absence de JavaDocs, etc.) fournis en entrée d'un LLM peuvent influencer ses performances
+
+L’évaluation des tests générés a été faite en fonction de leurs taux de compilation, de leur exactitude, de la couverture du code et de leur qualité (en termes d’ «unit test smells »).
+
+Les tests générés ont été examinés non seulement en termes de leur exactitude, mais aussi de leur qualité, ainsi que de l'efficacité de différents styles de contexte.
+
+Unit Test smells : sont des indicateurs de problèmes potentiels, d'inefficacités ou de mauvaises pratiques de programmation/conception dans une suite de tests unitaires, allant des tests trop lents/fragiles aux tests trop complexes ou trop étroitement couplés à l'implémentation du code testé.
+
+D’autres travails concurrents ont étudié l’utilité des LLMs comme une aide pour des techniques de génération de tests basées sur « search-based » sur des langages de programmation peu typés. Le travail des auteurs ont étudié si les LLMs peuvent être utilisés sur étager pour générer des tests unitaires pour un langage comme Java. Ils évaluent les tests générés en termes de correctness mais aussi sa qualité et l’efficacité des différents styles de contexte.
+```
+
+### CHUNK_ID: projet_11__chunk_000047_sub03
+```
+obtenu à la fin 47 projets avec 411 méthodes à tester sur 194 classes. Pour la génération de tests unitaires, les auteurs ont utilisé un processus de deux étapes :
+
+Création du contexte et du prompt : Ils ont créé un prompt pour des tests unitaires, lequel instruit le modèle pour générer 10 cas de tests pour une méthode spécifique, et un contexte qui englobe l'intégralité du code de la classe de déclaration de la méthode ainsi que les instructions d'importation vers les éléments principaux de l'API JUnit5. Dans l’image suivante, nous trouvons un exemple de contexte (lignes 1 – 9) et du prompt (lignes 10 – 20). Le contexte commence par un commentaire indiquant le nom du fichier de la classe suivi de son code complet (c'est-à-dire sa déclaration de package, ses importations, ses champs, ses méthodes, etc.). Le prompt commence par un commentaire indiquant le nom de fichier attendu du test unitaire généré. Étant donné qu'une classe peut avoir plusieurs méthodes testables, nous avons généré un fichier de test unitaire pour chaque méthode testable dans une classe et ajouté un suffixe pour éviter les noms de fichiers de test dupliqués. Un suffixe est un nombre qui commence à zéro. Après ce commentaire de code, le prompt inclut la même déclaration de package et les mêmes instructions d'importation de la classe. Elle contient également des instructions d'importation pour l'annotation @Test et les méthodes assert* (par exemple, assertTrue(...)) de JUnit5. Ensuite, le prompt contient le JavaDoc de la classe de test qui spécifie le MUT et le nombre de cas de test à générer. Le prompt se termine par la déclaration de la classe de test suivie d'une nouvelle ligne (\n), qui déclenchera la génération de code par le LLM pour terminer la déclaration de la classe de test.
+
+Génération de tests unitaires : Les modèles choisis peuvent tous générer du code, mais il y a de différences dans des détails techniques sur le nombre de tokens qu’ils peuvent gérer. Ils ont configuré les LLMs pour profiter de ces capacités :
+```
+
+### CHUNK_ID: projet_11__chunk_000057_sub00
+```
+[SECTION : Using Large Language Models to Generate JUnit Tests: An empirical Study]
+Actuellement il n’est pas clair quelle est l’effectivité de l’utilisation de modèles pré-entrainés en génération de code avec prompt pour générer cas de tests unitaires dans un langage de programmation fortement typé comme Java.
+
+Des études ont montré des meilleurs résultats pour l’utilisation de ces modèles pour la génération de cas de tests unitaires dans des langages de programmation moins typés comme python ou javascript.
+
+Les auteurs ont fait une étude empirique pour comparer des modèles LLMs : Codex, GPT-3.5-Turbo et StartCoder pour générer des tests unitaires pour des classes dans la version Java du dataset HumanEval et 47 projets « open-source » dans le dataset SF110.
+
+Questions de recherche :
+
+RQ1 : Dans quelle mesure les LLM peuvent générer des tests JUnit
+
+RQ2 : comment différents styles de contexte (par exemple, l'utilisation uniquement de la méthode testée, la présence/absence de JavaDocs, etc.) fournis en entrée d'un LLM peuvent influencer ses performances
+
+L’évaluation des tests générés a été faite en fonction de leurs taux de compilation, de leur exactitude, de la couverture du code et de leur qualité (en termes d’ «unit test smells »).
+
+Les tests générés ont été examinés non seulement en termes de leur exactitude, mais aussi de leur qualité, ainsi que de l'efficacité de différents styles de contexte.
+
+Unit Test smells : sont des indicateurs de problèmes potentiels, d'inefficacités ou de mauvaises pratiques de programmation/conception dans une suite de tests unitaires, allant des tests trop lents/fragiles aux tests trop complexes ou trop étroitement couplés à l'implémentation du code testé.
+
+D’autres travails concurrents ont étudié l’utilité des LLMs comme une aide pour des techniques de génération de tests basées sur « search-based » sur des langages de programmation peu typés. Le travail des auteurs ont étudié si les LLMs peuvent être utilisés pour sur étager pour générer des tests unitaires pour un langage comme Java. Ils évaluent les tests générés en termes de correctness mais aussi sa qualité et l’efficacité des différents styles de contexte.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 49,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```

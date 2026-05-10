@@ -1,0 +1,91 @@
+{
+  "batch_id": 22,
+  "chunks": [
+    {
+      "chunk_id": "projet_5__chunk_000007_sub00",
+      "project_id": "projet_5_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_5_\\cir_final\\CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_name": "CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Description des travaux réalisés l’année 2024]\nA l’issue de nos travaux antérieurs menés à température ambiante, nous avons poursuivi notre étude en 2024 dans l’objectif de réaliser une caractérisation expérimentale du comportement acoustique du joint à -24°C.\n\nVue la masse importante de la petite cabine, notamment en raison du bloc béton dans sa partie inférieure, nous n’avons pas pu la transporter puis la placer dans une grande enceinte thermique de 36 m³.\n\nNous avons pour cela adopté une première approche expérimentale consistant à placer les joints dans le banc de compression, présenté sur la figure ci-dessous, situé dans la petite cabine, afin de réaliser des essais de caractérisation acoustique. Avant ces essais, les joints sont préalablement refroidis dans un congélateur pour simuler les conditions nécessaires à l'expérience (-24°C).\n\nFigure : Banc de compression\n\nLa démarche expérimentale que nous avons définie consiste à réaliser dans la petite cabine une mesure dans une configuration de référence et une mesure dans une configuration avec l’échantillon.\n\nPour la configuration de référence, le banc de compression est positionné sans joint dans la petite cabine. Une distance de 2 cm est réglée entre le coulisseau horizontal et le coulisseau vertical. Cette distance correspond à la plus grande épaisseur des joints qui seront soumis à l’essai.\n\nPour la configuration avec l’échantillon, le banc de compression est positionné avec l’échantillon de joint dans la petite cabine. Nous avons réalisé dans cette configuration une mesure sans compression et une mesure en comprimant le joint de 20%.\n\nAfin d’éviter tout fuite du bruit par un autre endroit que l’ouverture sur le panneau supérieur, nous avons mis en place du feutre au niveau de la vis de réglage. En outre, nous avons positionné un capot métallique, ainsi qu’une capote métallique par dessus le banc de compression.\n\nNous avons réalisé nos essais sur cinq échantillons illustrés sur la figure suivante.\n\nFigure : Echantillons de joints, de gauche à droite : le joint oméga, le joint de glace, le joint demi-lune, le joint cellulaire et le joint de profil B",
+      "_parent_chunk_id": "projet_5__chunk_000007",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_5__chunk_000007_sub01",
+      "project_id": "projet_5_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_5_\\cir_final\\CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_name": "CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "suivante. Figure : Echantillons de joints, de gauche à droite : le joint oméga, le joint de glace, le joint demi-lune, le joint cellulaire et le joint de profil B\n\nNous avons réalisé l’acquisition avec le module « Spectral Testing » de TestLab, permettant de réaliser des mesures acoustiques. Ce programme permet d'injecter une tension uniforme au niveau des haut-parleurs et de mesurer le niveau acoustique au niveau des microphones (quatre en zone de réception). Suite à cette acquisition, TestLab réalise une transformée de Fourier pour convertir les signaux temporels en signaux fréquentiels afin d'obtenir des spectres.\n\nLes quatre microphones sont calibrés au début de chaque journée de mesures.\n\nNous avons disposé chaque joint sur le coulisseau horizontal du banc de compression et l’avons maintenu par un adhésif industriel double-face. Le joint de glace a été quant à lui directement fixé sur le banc. La mise en place du joint a nécessité de démonter entièrement le banc de compression.\n\nFigure : Disposition du joint de glace\n\nFigure : Joint de profil B non comprimé (figure gauche) / Joint de profil B en compression (figure droite)\n\nPour les essais menés sans compression du joint, nous nous sommes assurés du maintien de toute la longueur du joint en contact avec le coulisseau vertical.\n\nPour les essais en compression, nous avons positionné les joints selon les réglages présentés dans le tableau suivant.\n\n[TABLEAU]\n| Echantillon | Epaisseur (mm) | 20% épaisseur (mm) | Nombre de tour de la vis de réglage |\n| ----------------- | -------------- | ------------------ | ----------------------------------- |\n| Joint Omega | 2 | 0,4 | 1 |\n| Joint de Glace | 1,6 | 0,32 | 3/4 + une demi-division |\n| Joint Demi-lune | 1 | 0,2 | 1/2 |\n| Joint Cellulaire | 1,5 | 0,3 | 3/4 |\n| Joint de profil B | 1 | 0,2 | 1/2 |\n\nTableau : Réglages du banc de compression",
+      "_parent_chunk_id": "projet_5__chunk_000007",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_5__chunk_000007_sub02",
+      "project_id": "projet_5_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_5_\\cir_final\\CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_name": "CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "| | Joint Cellulaire | 1,5 | 0,3 | 3/4 | | Joint de profil B | 1 | 0,2 | 1/2 | Tableau : Réglages du banc de compression\n\nAfin de préparer les échantillons à température contrôlée, nous les avons refroidis à l’aide d’un congélateur de laboratoire permettant d’obtenir une température théorique de -24°C. Les échantillons de joint ont été placés dans le congélateur pendant au moins 24h. Nous avons remis les joints dans le congélateur entre la mesure sans compression et la mesure en compression.",
+      "_parent_chunk_id": "projet_5__chunk_000007",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_5__chunk_000008",
+      "project_id": "projet_5_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_5_\\cir_final\\CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_name": "CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Résultats obtenus]\nNous avons calculé pour chaque échantillon les pertes d’insertion (IL) à l’aide de TestLab. Les figures suivantes présentent les résultats de nos essais, ainsi que ceux obtenus précédemment à température ambiante, avec et sans compression du joint.\n\nFigure : IL du joint cellulaire pour les deux températures sans compression (figure gauche) et en compression (figure droite)\n\nFigure : IL du joint demi-lune pour les deux températures sans compression (figure gauche) et en compression (figure droite)\n\nFigure : IL du joint de glace pour les deux températures sans compression (figure gauche) et en compression (figure droite)\n\nFigure : IL du joint Omega pour les deux températures sans compression (figure gauche) et en compression (figure droite)\n\nFigure : IL du joint de profil B pour les deux températures sans compression (figure gauche) et en compression (figure droite)\n\nNous constatons pour l’ensemble des joints étudiés des profils de courbe similaires entre l’essai à température ambiante et l’essai avec le joint refroidi. Toutefois, pour l’essai réalisé sur le joint Omega sans compression, les écarts sont très importants.\n\nCes résultats restent néanmoins peu concluants. En effet, la configuration expérimentale que nous avons mise en œuvre est complexe, en raison notamment de la procédure d’assemblage des plaques vissées du banc de compression.\n\nDe plus, les essais à température basse comportent plusieurs sources d'incertitude. La température du congélateur, bien qu'indiquée, reste théorique et peut fluctuer. Par ailleurs, le processus de mise en place du joint sur le banc de compression, ainsi que le montage de ce dernier, nécessite environ 15 minutes, ce qui permet au joint de se réchauffer légèrement avant la mesure.\n\nUne autre source d'écart réside dans le fait que, lorsque l'échantillon est refroidi à -24°C, son adhésion au banc de compression est fortement réduite. Cela peut entraîner une dégradation de l'interaction entre la surface du joint et l'adhésif lors de l'essai sans compression, par rapport à l'essai effectué à température ambiante.",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_5_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_5__chunk_000009_sub00",
+      "project_id": "projet_5_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_5_\\cir_final\\CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_name": "CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Conclusion et contribution scientifique, technique ou technologique]\nLes travaux de R&D que nous avons réalisés en 2024 nous ont permis d’avancer dans notre objectif de caractérisation acoustique des systèmes d’étanchéité des véhicules en froid.\n\nNous avons pour cela adopté une première approche expérimentale consistant à réaliser des mesures acoustiques sur des joints de géométries différentes montés dans le banc de compression que nous avons développé et positionné dans la petite cabine. Nous avons refroidi les échantillons de joints dans un congélateur pour étudier l’impact d’une température de -24°C sur ses performances de transmission du son.\n\nLes résultats des essais réalisés à température ambiante et après refroidissement des échantillons a révélé des écarts significatifs, notamment pour l’essai sur le joint Omega sans compression. Cette différence s’explique par plusieurs facteurs expérimentaux qui influencent la précision et la reproductibilité des mesures.\n\nDans un premier temps, la complexité de l’assemblage du banc de compression a limité la fiabilité des résultats. La procédure de montage des plaques vissées a introduit des contraintes mécaniques susceptibles d'affecter l’uniformité du contact entre le joint et le support, influençant ainsi la transmission des ondes acoustiques.\n\nEn outre, les essais à basse température ont mis en évidence plusieurs sources d’incertitude. La température indiquée par le congélateur reste théorique et sujette à des fluctuations locales. De plus, la durée du processus de manipulation des échantillons, estimée à environ 15 minutes, engendre un réchauffement partiel du joint avant la mesure.\n\nPar ailleurs, une autre source d’incertitude réside dans l’adhésion du joint au banc de compression après refroidissement à -24°C, ce qui altère la qualité du contact entre le joint et la surface de test, affectant ainsi les performances mesurées en termes de transmission acoustique.\n\nCes différents constats montrent la nécessité du développement d’un nouveau protocole expérimental et de la prise en compte des variations d’adhésion des matériaux à basse température dans l’interprétation des résultats.",
+      "_parent_chunk_id": "projet_5__chunk_000009",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_5__chunk_000009_sub01",
+      "project_id": "projet_5_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_5_\\cir_final\\CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_name": "CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "Ces différents constats montrent la nécessité du développement d’un nouveau protocole expérimental et de la prise en compte des variations d’adhésion des matériaux à basse température dans l’interprétation des résultats.\n\nNéanmoins, ce projet a apporté une contribution scientifique et technique à la caractérisation des performances acoustiques des systèmes d’étanchéité d’un véhicule automobile à température basse, et ont permis d’analyser les problématiques inhérentes à cette thématique. Les résultats obtenus constituent une première étape dans la compréhension des interactions entre les propriétés thermiques et acoustiques des élastomères, et a ouvert la voie à des pistes d’amélioration en termes de protocole expérimental.",
+      "_parent_chunk_id": "projet_5__chunk_000009",
+      "_is_subchunk": true
+    },
+    {
+      "chunk_id": "projet_5__chunk_000011",
+      "project_id": "projet_5_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_5_\\cir_final\\CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_name": "CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Description des ressources humaines]\n[TABLEAU]\n| NOM Prénom | Diplôme le plus élevé | Fonction dans l’opération | Contribution directe à l’acquisition de nouvelles connaissances | Temps déclaré pour l’opération en heures |\n| ------------------ | ------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |\n| AYED MARYEM | Master | Ingénieure étude | -Définition d’une démarche expérimentale pour la caractérisation acoustique des joints à température basse -Acquisition et analyse des résultats acoustiques | 210 |\n| CATTEAU ANTONIN | Bachelor Universitaire de Technologie | Technicien d’essais | Réalisation d'essais en petite cabine sur les joints à basse température | 230 |\n| CHEVALLIER NICOLAS | Ingénieur, vibrations, acoustique, capteurs | Ingénieur essais et simulation | -Support technique modélisation et essais. -Analyse des résultats intermédiaires et orientation des travaux en fonction de ces résultats. | 245 |\n| GAROT MARTIN | Master de Sciences et technologies | Ingénieur étude | Analyse des problématiques liées au comportement du joint en compression | 175 |\n| HAVARD ALEXANDRE | Licence professionnelle de Sciences, technologie, santé | Technicien d'essai | Réalisation d'essais en petite cabine sur des échantillons de forme simple | 175 |\n| ROUSSEL LISA | Ingénieur, vibrations, acoustique, Capteurs | Ingénieure d'essais | -Etude bibliographie du comportement mécanique des élastomères de joints. -Réalisation d'essais en petite cabine sur des échantillons de joints à température ambiante. -Analyse de l'influence de la température sur la réponse acoustique et recherche de lois reliant raideur et température | 350 |\n| AIT YOUNES TARIK | Diplôme d’études supérieures spécialisées | Chef de projet | Gestion de l’opération R&D et définition des objectifs et performances à atteindre | 12 |",
+      "_source_json": "C:\\EnnoSmart\\projects\\projet_5_\\extracted\\chunks.json"
+    },
+    {
+      "chunk_id": "projet_5__chunk_000014_sub00",
+      "project_id": "projet_5_",
+      "source_file": "C:\\EnnoSmart\\projects\\projet_5_\\cir_final\\CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_name": "CEVAA_APACHE_CIR-2024_VF.docx",
+      "file_category": "docx",
+      "source_type": "text",
+      "text": "[SECTION : Travaux de recherche sur la caractérisation acoustique des joints : approches numériques et expérimentales]\nUn ensemble de travaux de recherche ont été menés dans le cadre de la caractérisation des joints en termes de comportement acoustique. Nous en citons les plus intéressants.\n\nEn effet, dans leur travail de recherche, Park et al.1 ont étudié la transmission du son à travers un joint bulbe en élastomère. Les auteurs ont conduit un ensemble d’essais sur un spécimen de joint à bulbe en utilisant la méthode de salle réverbérante. La vitesse vibratoire de la paroi du joint a été mesurée à l'aide d'un vibromètre laser Doppler, et la pression sonore à proximité de l'emplacement de mesure de la vitesse a été mesurée simultanément. Ensuite, la réponse aux vibrations et la perte de transmission du son du joint à bulbe ont été calculées à l'aide d'une analyse par éléments finis.\n\nLes données expérimentales obtenues ont permis la validation des modèles numériques. Ensuite, le modèle a été utilisé pour étudier numériquement l'influence de divers paramètres de conception. Les résultats ont alors montré que le module d'élasticité affectait de manière significative la fréquence de résonance du joint du bulbe et que le facteur de perte du matériau avait des effets majeurs sur la perte de transmission du son autour de la résonance.\n\nL’analyse numérique réalisée dans cet article a permis également d’étudier l’effet du ratio de compression sur les pertes de transmission du son prévues. En effet, l'augmentation du taux de compression entraîne une augmentation de la perte de transmission du son dans la région des basses fréquences en dessous de la résonance et un déplacement de l’intervalle de résonance vers des fréquences plus élevées. Toutefois, elle a peu d'impact sur la perte de transmission du son aux fréquences situées au-dessus de la résonance.",
+      "_parent_chunk_id": "projet_5__chunk_000014",
+      "_is_subchunk": true
+    }
+  ]
+}

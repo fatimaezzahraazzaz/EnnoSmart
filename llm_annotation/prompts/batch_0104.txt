@@ -1,0 +1,319 @@
+# MISSION : ANNOTATION NER POUR PROJETS R&D (CIR)
+
+Tu es un expert annotateur pour des projets de R&D éligibles au Crédit Impôt Recherche français.
+Ta tâche : extraire des entités nommées avec une **précision MAXIMALE**.
+
+---
+
+# DÉFINITIONS DES 9 LABELS
+
+**VERROU_TECH**
+- Définition : Obstacle, difficulté, problème technique/scientifique CONCRET à résoudre
+- ✅ Exemples valides :
+     - "manque de précision des capteurs actuels"
+     - "absence de modèle prédictif fiable pour la respiration cellulaire"
+     - "instabilité de la nano-émulsion à température ambiante"
+     - "difficulté de vectorisation de la perfluorodécaline"
+- ❌ NE PAS annoter :
+     - "le projet (trop générique)"
+     - "problème (vague sans précision)"
+     - "défi (sans contexte)"
+
+**METHODE_RD**
+- Définition : Approche, méthodologie, démarche scientifique précise
+- ✅ Exemples valides :
+     - "évaluation ex vivo sur explants de peau humaine"
+     - "analyse par cytométrie en flux"
+     - "méthode Monte Carlo"
+     - "test in vitro sur kératinocytes"
+- ❌ NE PAS annoter :
+     - "méthode (sans précision)"
+     - "étude (vague)"
+
+**TECHNOLOGIE_RD**
+- Définition : Technologie, framework, plateforme ou paradigme technique
+- ✅ Exemples valides :
+     - "nano-émulsion"
+     - "deep learning"
+     - "spectroscopie Raman"
+     - "encapsulation liposomale"
+- ❌ NE PAS annoter :
+     - "technologie (générique)"
+     - "informatique (trop large)"
+
+**EQUIPEMENT_RD**
+- Définition : Équipement physique, machine, instrument utilisé
+- ✅ Exemples valides :
+     - "microscope à fluorescence"
+     - "cytomètre en flux"
+     - "spectromètre de masse"
+     - "banc d'essai thermique"
+- ❌ NE PAS annoter :
+     - "machine (générique)"
+     - "ordinateur (sans spec)"
+
+**COMPOSANT_TECHNIQUE**
+- Définition : Composant, élément technique d'un système ou produit
+- ✅ Exemples valides :
+     - "vectorisateur lipidique"
+     - "capteur infrarouge"
+     - "algorithme de tri"
+     - "complexe oxygénant"
+- ❌ NE PAS annoter :
+     - "composant (générique)"
+     - "système (trop vague)"
+
+**MATERIAU_SPECIFIQUE**
+- Définition : Matériau, substance ou molécule spécifique nommée
+- ✅ Exemples valides :
+     - "perfluorodécaline"
+     - "mélatonine"
+     - "acide hyaluronique"
+     - "polymère biosourcé PLA"
+- ❌ NE PAS annoter :
+     - "matériau (générique)"
+     - "produit (vague)"
+
+**DOMAINE_RD**
+- Définition : Domaine scientifique, secteur d'application, champ disciplinaire
+- ✅ Exemples valides :
+     - "cosmétique"
+     - "respiration cellulaire"
+     - "intelligence artificielle"
+     - "dermatologie"
+- ❌ NE PAS annoter :
+     - "recherche (trop générique)"
+     - "science (trop large)"
+
+**RESULTAT_RD**
+- Définition : Résultat concret obtenu, performance mesurée, livrable
+- ✅ Exemples valides :
+     - "augmentation de 30% de l'oxygénation cellulaire"
+     - "prototype fonctionnel validé"
+     - "brevet déposé EP123456"
+- ❌ NE PAS annoter :
+     - "résultat (générique)"
+     - "succès (vague)"
+
+**OBJECTIF_RD**
+- Définition : Objectif, but ou cible visée par le projet
+- ✅ Exemples valides :
+     - "stimuler la respiration cellulaire"
+     - "développer un système autonome"
+     - "identifier de nouveaux actifs"
+- ❌ NE PAS annoter :
+     - "but (générique)"
+     - "amélioration (sans précision)"
+
+---
+
+# RÈGLES STRICTES
+
+1. **N'annote QUE ce qui correspond CLAIREMENT à une catégorie**
+2. **NE JAMAIS inventer** d'entités absentes du texte
+3. Les positions `start` et `end` doivent être **EXACTES** (positions de caractère dans le chunk)
+4. **Préfère ne pas annoter** plutôt que d'annoter incorrectement
+5. Les entités doivent être **SPÉCIFIQUES** (pas trop génériques)
+6. **Évite les chevauchements** entre entités
+7. Vérification : `chunk_text[start:end] == entity_text` doit être VRAI
+
+---
+
+# CHUNKS À ANNOTER (batch 104/135, 8 chunks)
+
+### CHUNK_ID: projet_23__chunk_000014_sub01
+```
+prélèvement, notamment en prélevant plusieurs fois au niveau de la même vanne, ou en augmentant le volume d’écoulement. Après redéfinition du protocole d’analyse, nous avons pu obtenir des résultats corrects.
+
+Cependant, étant sous Règlement (UE) 2017/745, Directive européenne 93/42/CEE, et sous les normes ISO 9001 : 2015 et ISO 13485: 2016, nous devons étudier la norme ISO 11737-1:2018, qui spécifie les exigences et fournit des recommandations relatives au dénombrement et à la caractérisation microbienne de la population de microorganismes viables sur ou dans un produit de santé, un composant, une matière première ou un emballage.
+
+Nous devrons vérifier si cette norme est applicable et si oui, nous devrons retravailler le protocole.
+```
+
+### CHUNK_ID: projet_23__chunk_000025_sub01
+```
+plus de 40 ans, sur les marchés de la santé, de la recherche et l’enseignement et de l’industrie et a développé en adéquation dix gammes de produits par domaine d’application. Les travaux de recherche présentés dans ce dossier technique se sont effectués
+principalement dans les locaux (laboratoires, équipements…) mis à notre disposition par la
+société FRANKLAB et les missions d’HCM consistent à :
+ Evaluer la faisabilité technique des projets de recherche
+ Accompagner la rédaction des cahiers de charges et des dossiers de conception
+ Aider la formulation de produits détergents et désinfectants
+ Assister l’évaluation analytique, microbiologique et clinique des formulations
+ Suivre et assister le pilotage des projets de recherche
+En 2024, HCM est notamment intervenue sur la résolution de problématiques au
+développement d’un nouveau système de fabrication de détergent, les projets suivants, et le
+temps passé sur cette activité représentait 52.9% du temps de travail annuel.
+Une démarche rigoureuse a été menée pour identifier et sélectionner les opérations éligibles
+au Crédit d’Impôt Recherche (CIR).
+Cette sélection s’appuie sur des critères objectifs, en
+cohérence avec la définition de la recherche et développement (R&D) établie par le Manuel
+de Frascati (2015) publié par l’OCDE.
+Le projet présenté en 2024 s’inscrit dans cette logique,
+en tant que projet stratégique, répondant à un enjeu industriel majeur : développer un nouveau
+système de fabrication de détergents plus performant et plus sécuritaire, reposant sur un
+système d’introduction des matières premières par aspiration, et sur une maîtrise accrue des
+conditions de fabrication et de nettoyage.
+HCM - CONFIDENTIEL PAGE 3
+Ce document est la propriété de la société HCM
+Il ne peut être reproduit ou transmis à des tiers sans son autorisation expresse
+```
+
+### CHUNK_ID: projet_23__chunk_000033
+```
+[PAGE 11]
+
+CIR 2024
+Malheureusement, les premiers essais industriels que nous avons effectués ont mis en
+évidence plusieurs non-conformités, tant au niveau du nettoyage des équipements, que de la
+qualité des formulations obtenues. Ces constats nous ont conduit à engager une démarche
+de R&D approfondie afin d’identifier les causes de ces non-conformités et d’y apporter des
+solutions concrètes.
+Notre démarche R&D s’est donc articulée autour des axes suivants :
+ Redéfinition du protocole de NEP, avec intégration de tests de détection de résidus par
+fluorescence,
+ Analyses microbiologiques post-NEP, pour évaluer l’efficacité du nettoyage,
+ Essais de reformulation en laboratoire.
+II.4.2. Description des travaux réalisés
+II.4.2.1. Définition d’un nouveau protocole de nettoyage des équipements
+de production de détergents
+Concernant la NEP, trois paramètres sont importants : le temps de contact, la température et
+la concentration de soude via la conductivité. Pour l’instant, nous avons seulement analysé le
+paramètre conductivité permettant d’avoir la concentration en soude choisie. En revanche,
+nous ne l’avons pas encore évalué en entrée de cuve, de conditionneuses et de tuyaux. Il
+faudra également travailler sur les paramètres temps et température.
+Ainsi, nous avons envisagé de nettoyer les cuves avec de la soude à une certaine
+concentration. Par conséquent, nous avons effectué plusieurs tests de conductivité avec l’eau
+du robinet au laboratoire. Pour cela, nous avons réalisé différentes dilutions de soude :
+ A 1% de soude dans l’eau, nous avons obtenu une conductivité moyenne à 73 000 µS,
+ A 2% de soude dans l’eau, la conductivité était d’environ 123 000 µS.
+Nous avons donc décidé de régler le niveau de soude à 1% dans le programme de NEP.
+II.4.2.1.1. Essais sur une cuve de 200L
+Nous avons introduit le produit fluorescent dans la cuve pilote (200L), puis nous avons
+effectué une NEP selon les paramètres suivants (température soude 66°C et conductivité
+70 000 µS).
+Au test UV il restait des traces visibles :
+HCM - CONFIDENTIEL PAGE 11
+Ce document est la propriété de la société HCM
+Il ne peut être reproduit ou transmis à des tiers sans son autorisation expresse
+```
+
+### CHUNK_ID: projet_23__chunk_000038
+```
+[PAGE 16]
+
+CIR 2024
+Comparaison du TFD 4 lot P01 avec le témoin TFD 4 lot 8498
+Témoin (lot 8498) TFD 4 lot P01
+Dilutions
+Eau de ville Eau déminéralisée Eau de ville Eau déminéralisée
+3%
+Liquide limpide Liquide limpide Liquide limpide Liquide limpide
+Aspect
+Très peu de mousse Légère mousse Pas de mousse Très peu de mousse
+Odeur Pas d’odeur Pas d’odeur Pas d’odeur Pas d’odeur
+5%
+Liquide limpide Liquide limpide Liquide limpide Liquide limpide
+Aspect
+Légère mousse Légère mousse Pas de mousse Très peu de mousse
+Odeur Pas d’odeur Pas d’odeur Pas d’odeur Pas d’odeur
+Figure 4 : Résultats des tests de mousse
+Nous avons constaté que les mousses à différentes concentrations (2% et 5%) du lot témoin
+fabriqué sur l’ancienne cuve étaient différentes. Malheureusement, tous ces éléments ne nous
+permettaient pas de conclure sur la cause de la non-conformité.
+II.4.2.2.2. Produit TFD 7 stelmi
+Après fabrication, les analyses physico-chimiques que nous avons réalisées ont révélé que la
+densité et l’alcalinité totale n’étaient pas conformes.
+Un problème de densité pour ce type de produit laisse supposer l’introduction d’une mauvaise
+quantité d’eau ou d’éthanol.
+Par conséquent, pour vérifier si les bonnes quantités de ces solvants (eau et éthanol) avaient
+été introduites, nous avons réalisé des essais pour évaluer la quantité de solvant à incorporer
+pour atteindre la bonne densité. Les différents essais laboratoire que nous avons effectués ont
+révélé qu’il était nécessaire de mettre soit 2800 L d’eau, soit 1060 L d’éthanol, ce qui
+représentait de trop grandes quantités pour une fabrication de 5600 L. Finalement ces essais
+ne nous ont pas permis de conclure sur la cause de la non-conformité.
+Pour conclure, n’ayant pas encore défini de méthodologie fiable et reproductible pour
+confirmer le volume d’eau final à mettre en fabrication, les essais de détermination du volume
+d’eau final ont été remis en question. Nous devons donc envisager une réflexion sur une
+nouvelle méthodologie de tests au laboratoire.
+HCM - CONFIDENTIEL PAGE 16
+Ce document est la propriété de la société HCM
+Il ne peut être reproduit ou transmis à des tiers sans son autorisation expresse
+```
+
+### CHUNK_ID: projet_23__chunk_000056_sub01
+```
+prélèvement, notamment en prélevant plusieurs fois au niveau de la même vanne, ou en augmentant le volume d’écoulement. Après redéfinition du protocole d’analyse, nous avons pu obtenir des résultats corrects.
+
+Cependant, étant sous Règlement (UE) 2017/745, Directive européenne 93/42/CEE, et sous les normes ISO 9001 : 2015 et ISO 13485: 2016, nous devons étudier la norme ISO 11737-1:2018, qui spécifie les exigences et fournit des recommandations relatives au dénombrement et à la caractérisation microbienne de la population de microorganismes viables sur ou dans un produit de santé, un composant, une matière première ou un emballage.
+
+Nous devrons vérifier si cette norme est applicable et si oui, nous devrons retravailler le protocole.
+```
+
+### CHUNK_ID: projet_23__chunk_000004
+```
+[SECTION : Objectifs visés et performances à atteindre]
+L’objectif est de définir un nouveau procédé de fabrication de détergents et désinfectants, intégrant un système d’aspiration automatisée des matières premières par le bas, permettant une fabrication plus sécurisée, précise et compatible avec les exigences de propreté du secteur des dispositifs médicaux.
+
+Plus précisément, nous souhaitons :
+
+Augmenter la précision de fabrication, notamment en supprimant le recours au remplissage « au trait » (QSV) pour une gestion rigoureuse de l’eau et des matières premières. Ce système de formulation sans repère visuel nécessite un recalibrage de chaque formule et donc des quantités d’eau à introduire, via des essais laboratoires,
+
+Assurer la reproductibilité et la robustesse du procédé, avec des matières premières difficiles à mélanger, tout en garantissant la conformité physico-chimique des produits. Ceci impose des développement spécifiques et des réflexions sur le procédé, ainsi que des essais de validation. Ainsi, nous devons par exemple, élaborer une stratégie de nettoyage efficace entre chaque production, grâce à la NEP (nettoyage en place), sans usage de produits commerciaux, et garantissant la propreté microbiologique et l’absence de résidus de fabrication (traçabilité par fluorescence et tests microbiologiques), notamment sur des zones critiques telles que tuyauterie ou fonds de cuve.
+
+Avec ce nouveau système de fabrication, nous pourrons ainsi augmenter l’efficacité industrielle, en réduisant les temps de fabrication, de nettoyage et les pertes de matières.
+```
+
+### CHUNK_ID: projet_23__chunk_000006_sub01
+```
+certaines unités utilisent des systèmes semi-automatisés de nettoyage avec validation visuelle, parfois assistés par des détecteurs de contamination. Le nettoyage est souvent plus manuel, notamment pour les cuves et agitateurs.
+
+Limites pour la détergence :
+
+Comme en pharmacie, les cosmétiques utilisent un nombre limité d’ingrédients très contrôlés, dans des volumes plus petits. Les produits cosmétiques sont souvent peu moussants, contrairement aux détergents, ce qui rend leur nettoyage plus simple et les procédures sont longues et peu adaptées à une production à grande cadence.
+
+Pour conclure, les systèmes de nettoyage existants ne sont pas transposables directement au secteur de la détergence en raison de :
+
+La diversité des matières premières utilisées (états, viscosités, propriétés chimiques),
+
+La forte tendance au moussage et à l’adhérence des résidus,
+
+Des exigences économiques et de cadence industrielle spécifiques au secteur.
+
+De plus, aucune méthodologie validée ne traite du nettoyage d’équipements ayant contenu des produits détergents. Les guides et normes existants (ISO, Bonnes Pratiques de Fabrication) proposent des protocoles de nettoyage basés sur l’utilisation de détergents, ce qui n’est pas applicable lorsque les produits eux-mêmes sont des agents nettoyants.
+
+Cela justifie le besoin de développer une solution de nettoyage sur mesure, adaptée aux particularités des lignes de fabrication de détergents
+```
+
+### CHUNK_ID: projet_23__chunk_000020
+```
+[SECTION : Contribution]
+Grâce aux essais, nous avons pu apporter différentes contributions :
+
+Développement en cours d’un protocole d’évaluation par fluorescence adapté à la NEP de cuves de détergents,
+
+Analyse des limites des équipements existants et collaboration avec le fournisseur pour les redéfinir,
+
+Développement en cours d’une nouvelle approche de formulation sans repère visuel, validée par des essais au laboratoire,
+
+Mise en évidence de l’impact des changements de processus sur la conformité des produits finis.
+```
+
+---
+
+# FORMAT DE RÉPONSE ATTENDU
+
+Réponds UNIQUEMENT avec ce JSON dans un bloc ```json ... ``` :
+
+```json
+{
+  "batch_id": 104,
+  "annotations": [
+    {
+      "chunk_id": "ID_DU_CHUNK",
+      "entities": [
+        {"text": "texte exact", "label": "VERROU_TECH", "start": 0, "end": 10}
+      ]
+    }
+  ]
+}
+```
