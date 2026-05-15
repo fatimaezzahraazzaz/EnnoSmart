@@ -1,59 +1,48 @@
 """
-modules/nlp/normalizer.py
+modules/NLP/normalizer.py — VERSION RÉDUITE (universelle)
 ──────────────────────────────────────────────────────────────────────────────
 Normalisation de la terminologie R&D / CIR après nettoyage (cleaner.py).
 
-Rôle dans le pipeline :
-  cleaner.py ──► normalizer.py ──► ner.py ──► terminology.py ──► rag_core/
+  cleaner.py ──► normalizer.py ──► segmenter.py ──► evidence_mapper.py
 
-Problème traité :
-  Le même concept apparaît sous des dizaines de formes différentes
-  dans les documents R&D. Sans normalisation, le RAG rate des
-  correspondances sémantiques critiques.
+CE QUI A CHANGÉ par rapport à l'ancienne version :
+  - SUPPRIMÉ : TECH_CANONICAL_TERMS (SCoT4UT, Defects4J, HumanEval, JUnit,
+    GPT-3.5-Turbo, RAG4UT, métriques logicielles...).
+    → C'était du vocabulaire SCALIAN/IA codé en dur. Inutile et nuisible
+      pour un dossier emballage médical, militaire, chimie, etc.
+  - SUPPRIMÉ : _normalize_technical_terms() et son appel.
+  - CONSERVÉ : uniquement ce qui est VRAIMENT universel et non lié à un
+    domaine technique :
+        * terminologie CIR pure (CIR, CII, R&D, dépenses de R&D...)
+        * concepts R&D structurants (état de l'art, verrou, démarche...)
+        * organismes officiels (BpiFrance, ANR, ANRT, CIFRE, DRFIP)
+        * niveaux TRL
+        * unités financières (k€, M€)
+        * ETP
+        * anglicismes R&D génériques (deliverables, milestones...)
+        * variantes orthographiques courantes
 
-  Exemples :
-    "crédit d'impôt recherche" = "CIR" = "crédit impôt recherche"
-    "R&D" = "recherche et développement" = "R-D" = "R & D"
-    "état de l'art" = "état de l'art" = "ETAT DE L ART"
-    "verrou technologique" = "verrou technique" = "lock technologique"
+Philosophie inchangée : NON-DESTRUCTIVE — on unifie, on ne supprime rien.
 
-Normalisations appliquées :
-  1. Terminologie CIR/RAD    → formes canoniques officielles
-  2. Variantes orthographiques→ graphie unifiée (tirets, apostrophes)
-  3. Abréviations ↔ formes longues → forme canonique choisie
-  4. Unités et montants      → format unifié (k€ → 000 €, M€ → 000 000 €)
-  5. Dates et périodes       → format normalisé
-  6. Anglicismes R&D         → équivalent FR si contexte FR détecté
-  7. Niveaux TRL             → format canonique "TRL N"
-
-Philosophie :
-  La normalisation est NON-DESTRUCTIVE — elle ne supprime rien,
-  elle unifie. "crédit d'impôt recherche" devient "CIR (crédit
-  d'impôt recherche)" pour le RAG afin de préserver la recherche
-  exacte ET la recherche par acronyme.
-
-Auteur  : EnnoSmart
-Version : 1.0.0
+Version : 2.0.0 (réduite, universelle)
 """
 
 from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# DICTIONNAIRES DE NORMALISATION
+# DICTIONNAIRES DE NORMALISATION — UNIQUEMENT UNIVERSELS
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ── 1. Terminologie CIR / dispositifs fiscaux ─────────────────────────────────
-# Forme canonique → liste de variantes à remplacer
-# La forme canonique est choisie pour maximiser la recherche RAG
-
+# Universelle : tout dossier CIR, quel que soit le domaine, utilise ces termes.
 CIR_TERMINOLOGY: dict[str, list[str]] = {
     "CIR (crédit d'impôt recherche)": [
         r"crédit\s+d['']\s*impôt\s+(?:pour\s+la\s+)?recherche",
@@ -111,12 +100,12 @@ CIR_TERMINOLOGY: dict[str, list[str]] = {
 }
 
 # ── 2. Concepts R&D structurants ──────────────────────────────────────────────
+# Universels : ce sont les briques du raisonnement CIR, indépendantes du domaine.
 RD_CONCEPTS: dict[str, list[str]] = {
     "état de l'art": [
         r"[ée]tat\s+de\s+l['']\s*art",
-        r"[ée]tat\s+de\s+l['']\s*Art",
         r"ETAT\s+DE\s+L['']\s*ART",
-        r"prior\s+art",                      # EN → FR
+        r"prior\s+art",
         r"state\s+of\s+the\s+art",
         r"etat\s+art",
     ],
@@ -162,14 +151,13 @@ RD_CONCEPTS: dict[str, list[str]] = {
     ],
     "propriété intellectuelle": [
         r"propri[ée]t[ée]\s+intellectuelle",
-        r"PI\b(?!\s*=)",
         r"droits?\s+(?:de\s+)?propri[ée]t[ée]\s+intellectuelle",
         r"intellectual\s+property",
-        r"\bIP\b(?!\s+address)",
     ],
 }
 
-# ── 3. Organismes et dispositifs (formes canoniques) ──────────────────────────
+# ── 3. Organismes officiels (formes canoniques) ───────────────────────────────
+# Universels : organismes du dispositif CIR français, présents dans tout dossier.
 ORGANISMS: dict[str, list[str]] = {
     "BpiFrance": [
         r"Bpi\s*France",
@@ -196,58 +184,51 @@ ORGANISMS: dict[str, list[str]] = {
     ],
 }
 
-# ── 4. Niveaux TRL (Technology Readiness Level) ────────────────────────────────
+# ── 4. Niveaux TRL (Technology Readiness Level) — universel ───────────────────
 TRL_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\bTRL\s*[-–]?\s*([1-9])\b", re.IGNORECASE), r"TRL \1"),
     (re.compile(r"\bniveau\s+(?:de\s+)?maturit[ée]\s+technologique\s+([1-9])\b", re.IGNORECASE), r"TRL \1"),
-    (re.compile(r"\bNMT\s*([1-9])\b", re.IGNORECASE), r"TRL \1"),  # Variante FR
+    (re.compile(r"\bNMT\s*([1-9])\b", re.IGNORECASE), r"TRL \1"),
 ]
 
-# ── 5. Unités financières (normalisation vers format FR) ──────────────────────
-FINANCIAL_UNITS: list[tuple[re.Pattern, str]] = [
-    # k€ / K€ → 000 €
+# ── 5. Unités financières — universel ─────────────────────────────────────────
+FINANCIAL_UNITS: list[tuple[re.Pattern, object]] = [
     (re.compile(r"(\d+(?:[.,]\d+)?)\s*[kK][€Ee][Uu][Rr]?"), lambda m: f"{_expand_k(m.group(1))} €"),
     (re.compile(r"(\d+(?:[.,]\d+)?)\s*[kK]\s*€"),            lambda m: f"{_expand_k(m.group(1))} €"),
-    # M€ → 000 000 €
     (re.compile(r"(\d+(?:[.,]\d+)?)\s*[Mm][€Ee][Uu][Rr]?"), lambda m: f"{_expand_m(m.group(1))} €"),
     (re.compile(r"(\d+(?:[.,]\d+)?)\s*[Mm]\s*€"),            lambda m: f"{_expand_m(m.group(1))} €"),
-    # Milliers d'euros en toutes lettres
-    (re.compile(r"(\d+)\s+milliers?\s+d['']\s*euros?", re.IGNORECASE), lambda m: f"{int(m.group(1)) * 1000:,} €".replace(",", " ")),
-    # Millions d'euros
-    (re.compile(r"(\d+(?:[.,]\d+)?)\s+millions?\s+d['']\s*euros?", re.IGNORECASE), lambda m: f"{_expand_m(m.group(1))} €"),
+    (re.compile(r"(\d+)\s+milliers?\s+d['']\s*euros?", re.IGNORECASE),
+     lambda m: f"{int(m.group(1)) * 1000:,} €".replace(",", " ")),
+    (re.compile(r"(\d+(?:[.,]\d+)?)\s+millions?\s+d['']\s*euros?", re.IGNORECASE),
+     lambda m: f"{_expand_m(m.group(1))} €"),
 ]
 
 
 def _expand_k(val: str) -> str:
-    """Convertit "150" (k€) → "150 000"."""
     try:
         n = float(val.replace(",", "."))
-        result = int(n * 1000)
-        return f"{result:,}".replace(",", " ")
+        return f"{int(n * 1000):,}".replace(",", " ")
     except ValueError:
         return val
 
 
 def _expand_m(val: str) -> str:
-    """Convertit "1.5" (M€) → "1 500 000"."""
     try:
         n = float(val.replace(",", "."))
-        result = int(n * 1_000_000)
-        return f"{result:,}".replace(",", " ")
+        return f"{int(n * 1_000_000):,}".replace(",", " ")
     except ValueError:
         return val
 
 
-# ── 6. ETP (Équivalent Temps Plein) ──────────────────────────────────────────
+# ── 6. ETP — universel ────────────────────────────────────────────────────────
 ETP_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\b[ée]quivalent[s]?\s*[–-]?\s*temps[\s-]?plein\b", re.IGNORECASE), "ETP"),
-    (re.compile(r"\bFTE\b"),                                                            "ETP"),  # EN → FR
-    (re.compile(r"\bfull[\s-]?time\s+equivalent\b", re.IGNORECASE),                   "ETP"),
-    (re.compile(r"\bE\.T\.P\.\b"),                                                     "ETP"),
+    (re.compile(r"\bFTE\b"), "ETP"),
+    (re.compile(r"\bfull[\s-]?time\s+equivalent\b", re.IGNORECASE), "ETP"),
+    (re.compile(r"\bE\.T\.P\.\b"), "ETP"),
 ]
 
-# ── 7. Anglicismes R&D courants → équivalent FR canonique ────────────────────
-# Appliqué uniquement si le document est majoritairement en FR
+# ── 7. Anglicismes R&D génériques (si texte FR) — universel ───────────────────
 ANGLICISMS: dict[str, list[str]] = {
     "livrables": [
         r"\bdeliverables?\b",
@@ -270,14 +251,13 @@ ANGLICISMS: dict[str, list[str]] = {
         r"\bPoC\b",
     ],
     "prototype": [
-        r"\bprototype\b",                # Déjà FR — garder mais normaliser la casse
         r"\bmockup\b",
     ],
 }
 
-# ── 8. Variantes orthographiques techniques ────────────────────────────────────
+# ── 8. Variantes orthographiques techniques courantes — universel ─────────────
 ORTHOGRAPHIC_VARIANTS: dict[str, list[str]] = {
-    "algorithme": [r"algorythme", r"algorithme\b"],
+    "algorithme": [r"algorythme"],
     "paramètre":  [r"param[eè]tre\b"],
     "modèle":     [r"mod[eè]le\b"],
     "données":    [r"donn[eé]es?\b"],
@@ -308,16 +288,12 @@ _EN_MARKERS = re.compile(
 
 
 def _detect_language(text: str) -> str:
-    """
-    Détecte la langue dominante du texte.
-    Retourne 'fr' | 'en' | 'mixed'.
-    """
+    """Retourne 'fr' | 'en' | 'mixed'. Défaut FR pour les dossiers CIR."""
     sample = text[:2000]
     fr_count = len(_FR_MARKERS.findall(sample))
     en_count = len(_EN_MARKERS.findall(sample))
-
     if fr_count == 0 and en_count == 0:
-        return "fr"   # Défaut FR pour les documents CIR
+        return "fr"
     if fr_count >= en_count * 1.5:
         return "fr"
     if en_count >= fr_count * 1.5:
@@ -331,21 +307,19 @@ def _detect_language(text: str) -> str:
 
 @dataclass
 class NormalizedChunk:
-    """Chunk normalisé avec log des substitutions."""
     original: str
     normalized: str
     language: str
-    substitutions: list[tuple[str, str]]   # (avant, après)
+    substitutions: list[tuple[str, str]]
     substitution_count: int
 
 
 @dataclass
 class NormalizerResult:
-    """Résultat de normalisation d'un lot de chunks."""
     chunks: list[NormalizedChunk]
-    normalized_chunks: list[str]           # Accès direct
+    normalized_chunks: list[str]
     total_substitutions: int
-    substitution_types: dict[str, int]     # Comptage par catégorie
+    substitution_types: dict[str, int]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -357,44 +331,22 @@ def _apply_dict_normalizations(
     dictionary: dict[str, list[str]],
     category: str,
     substitutions: list[tuple[str, str]],
-    expand: bool = False,
 ) -> str:
-    """
-    Applique un dictionnaire de normalisation sur le texte.
-
-    expand=True → "crédit d'impôt recherche" devient "CIR (crédit d'impôt recherche)"
-    expand=False → remplacement simple
-    """
+    """Applique un dictionnaire de normalisation (remplacement simple)."""
     for canonical, patterns in dictionary.items():
         for pattern in patterns:
             try:
                 compiled = re.compile(pattern, re.IGNORECASE | re.UNICODE)
-                matches = compiled.findall(text)
-                if matches:
-                    if expand:
-                        # Forme étendue : préserver le contexte + ajouter la forme canonique
-                        def _expand_replace(m: re.Match) -> str:
-                            original_match = m.group(0)
-                            # Éviter les doublons si déjà normalisé
-                            if canonical.lower() in original_match.lower():
-                                return original_match
-                            return canonical
-
-                        new_text = compiled.sub(_expand_replace, text)
-                    else:
-                        new_text = compiled.sub(canonical, text)
-
-                    if new_text != text:
-                        substitutions.append((f"{category}: {pattern[:40]}", canonical))
-                        text = new_text
+                new_text = compiled.sub(canonical, text)
+                if new_text != text:
+                    substitutions.append((f"{category}: {pattern[:40]}", canonical))
+                    text = new_text
             except re.error as exc:
                 logger.debug("Pattern invalide dans %s : %s — %s", category, pattern, exc)
-
     return text
 
 
 def _normalize_trl(text: str, substitutions: list) -> str:
-    """Normalise les niveaux TRL vers le format canonique 'TRL N'."""
     for pattern, replacement in TRL_PATTERNS:
         new_text = pattern.sub(replacement, text)
         if new_text != text:
@@ -404,12 +356,8 @@ def _normalize_trl(text: str, substitutions: list) -> str:
 
 
 def _normalize_financial(text: str, substitutions: list) -> str:
-    """Normalise les unités financières (k€, M€, milliers d'euros)."""
     for pattern, replacement in FINANCIAL_UNITS:
-        if callable(replacement):
-            new_text = pattern.sub(replacement, text)
-        else:
-            new_text = pattern.sub(replacement, text)
+        new_text = pattern.sub(replacement, text)
         if new_text != text:
             substitutions.append(("financial", "k€/M€ → montant expansé"))
             text = new_text
@@ -417,7 +365,6 @@ def _normalize_financial(text: str, substitutions: list) -> str:
 
 
 def _normalize_etp(text: str, substitutions: list) -> str:
-    """Normalise les variantes ETP → forme canonique 'ETP'."""
     for pattern, replacement in ETP_PATTERNS:
         new_text = pattern.sub(replacement, text)
         if new_text != text:
@@ -426,18 +373,9 @@ def _normalize_etp(text: str, substitutions: list) -> str:
     return text
 
 
-def _normalize_anglicisms(
-    text: str,
-    language: str,
-    substitutions: list,
-) -> str:
-    """
-    Remplace les anglicismes par leurs équivalents FR.
-    Appliqué uniquement si le texte est majoritairement en français.
-    """
+def _normalize_anglicisms(text: str, language: str, substitutions: list) -> str:
     if language not in ("fr", "mixed"):
         return text
-
     for canonical, patterns in ANGLICISMS.items():
         for pattern in patterns:
             try:
@@ -448,22 +386,18 @@ def _normalize_anglicisms(
                     text = new_text
             except re.error:
                 pass
-
     return text
 
 
 def _normalize_orthography(text: str, substitutions: list) -> str:
-    """Corrige les variantes orthographiques techniques courantes."""
     for canonical, patterns in ORTHOGRAPHIC_VARIANTS.items():
         for pattern in patterns:
             try:
                 compiled = re.compile(pattern, re.IGNORECASE)
-                # Préserver la casse de l'original
+
                 def _case_replace(m: re.Match, canon: str = canonical) -> str:
                     orig = m.group(0)
-                    if orig[0].isupper():
-                        return canon.capitalize()
-                    return canon
+                    return canon.capitalize() if orig[:1].isupper() else canon
 
                 new_text = compiled.sub(_case_replace, text)
                 if new_text != text:
@@ -480,27 +414,20 @@ def _normalize_orthography(text: str, substitutions: list) -> str:
 
 def normalize_chunk(text: str) -> NormalizedChunk:
     """
-    Normalise un chunk de texte nettoyé pour le RAG.
+    Normalise un chunk de texte nettoyé.
 
-    Applique dans l'ordre :
+    Applique dans l'ordre (toutes les étapes sont UNIVERSELLES) :
       1. Détection de langue
-      2. Terminologie CIR (formes canoniques)
+      2. Terminologie CIR
       3. Concepts R&D structurants
-      4. Organismes
+      4. Organismes officiels
       5. Niveaux TRL
       6. Unités financières
       7. ETP
-      8. Anglicismes (si texte FR)
+      8. Anglicismes R&D génériques (si texte FR)
       9. Variantes orthographiques
 
-    Paramètres
-    ----------
-    text : str
-        Chunk nettoyé depuis cleaner.py
-
-    Retourne
-    --------
-    NormalizedChunk avec texte normalisé et log des substitutions.
+    PLUS de normalisation de termes techniques spécifiques à un domaine.
     """
     if not text or not text.strip():
         return NormalizedChunk(
@@ -511,39 +438,17 @@ def normalize_chunk(text: str) -> NormalizedChunk:
             substitution_count=0,
         )
 
-    # Détecter la langue avant tout
     language = _detect_language(text)
     substitutions: list[tuple[str, str]] = []
     current = text
 
-    # ── Étape 1 : Terminologie CIR ────────────────────────────────────────
-    current = _apply_dict_normalizations(
-        current, CIR_TERMINOLOGY, "CIR", substitutions, expand=False
-    )
-
-    # ── Étape 2 : Concepts R&D ────────────────────────────────────────────
-    current = _apply_dict_normalizations(
-        current, RD_CONCEPTS, "RD_CONCEPT", substitutions, expand=False
-    )
-
-    # ── Étape 3 : Organismes ──────────────────────────────────────────────
-    current = _apply_dict_normalizations(
-        current, ORGANISMS, "ORGANISM", substitutions, expand=False
-    )
-
-    # ── Étape 4 : Niveaux TRL ─────────────────────────────────────────────
+    current = _apply_dict_normalizations(current, CIR_TERMINOLOGY, "CIR", substitutions)
+    current = _apply_dict_normalizations(current, RD_CONCEPTS, "RD_CONCEPT", substitutions)
+    current = _apply_dict_normalizations(current, ORGANISMS, "ORGANISM", substitutions)
     current = _normalize_trl(current, substitutions)
-
-    # ── Étape 5 : Unités financières ──────────────────────────────────────
     current = _normalize_financial(current, substitutions)
-
-    # ── Étape 6 : ETP ────────────────────────────────────────────────────
     current = _normalize_etp(current, substitutions)
-
-    # ── Étape 7 : Anglicismes (FR seulement) ──────────────────────────────
     current = _normalize_anglicisms(current, language, substitutions)
-
-    # ── Étape 8 : Orthographe ─────────────────────────────────────────────
     current = _normalize_orthography(current, substitutions)
 
     return NormalizedChunk(
@@ -556,21 +461,7 @@ def normalize_chunk(text: str) -> NormalizedChunk:
 
 
 def normalize_chunks(chunks: list[str]) -> NormalizerResult:
-    """
-    Normalise un lot de chunks nettoyés.
-
-    Paramètres
-    ----------
-    chunks : list[str]
-        Chunks depuis CleanerResult.clean_chunks
-
-    Retourne
-    --------
-    NormalizerResult
-        .normalized_chunks   : textes normalisés
-        .total_substitutions : nombre total de substitutions
-        .substitution_types  : comptage par catégorie
-    """
+    """Normalise un lot de chunks nettoyés."""
     normalized_list: list[NormalizedChunk] = []
     substitution_types: dict[str, int] = {}
     total = 0
@@ -579,7 +470,6 @@ def normalize_chunks(chunks: list[str]) -> NormalizerResult:
         nc = normalize_chunk(chunk)
         normalized_list.append(nc)
         total += nc.substitution_count
-
         for category, _ in nc.substitutions:
             cat_key = category.split(":")[0].strip()
             substitution_types[cat_key] = substitution_types.get(cat_key, 0) + 1
@@ -605,26 +495,17 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
     test_chunks = [
-        # CIR variantes
         "Le crédit d'impôt recherche (crédit impôt recherche) représente 30% des dépenses.",
-        # R&D variantes
         "Les activités de recherche et développement et de R-D couvrent 3 domaines.",
-        # TRL
         "Le projet est au niveau de maturité technologique 4, visant le TRL-7.",
-        # Financier k€ M€
         "Budget : 150k€ de personnel R&D et 1.5M€ de sous-traitance.",
-        # ETP
         "L'équipe comprend 3 équivalents-temps-plein (FTE) dédiés à la recherche.",
-        # Anglicismes
         "Les deliverables incluent 3 milestones et une roadmap sur 24 mois.",
-        # État de l'art variantes
-        "L'état de l'art montre que le state of the art en IA évolue rapidement.",
-        # Verrous
-        "Les verrous techniques identifiés sont : précision, latence, coût.",
-        # Organismes
+        "L'état de l'art montre que le state of the art évolue rapidement.",
+        "Les verrous techniques identifiés sont nombreux.",
         "Le projet est financé par Bpi France et l'agence nationale de la recherche.",
-        # Texte EN (pas d'anglicisme remplacé)
-        "The research activities include deliverables and milestones for 2024.",
+        # Doc emballage médical — RIEN ne doit être sur-normalisé ici
+        "L'emballage doit résister aux chocs et à l'abrasion tout en restant recyclable.",
     ]
 
     if len(sys.argv) > 1:

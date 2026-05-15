@@ -16,7 +16,7 @@ Backends :
 from __future__ import annotations
 
 import base64, io, logging, time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -33,6 +33,10 @@ LLAMA_MODEL   = "llama3.2-vision"
 # ── Réduit de 500 → 150 tokens : descriptions courtes, denses, RAG-ready
 MAX_TOKENS    = 120
 FIXED_SIZE    = 448
+
+# Garde-fous : la vision reste disponible, mais bornée.
+VISION_TIMEOUT_SECONDS = 60
+MAX_IMAGES_PER_BATCH = 3
 
 CACHE_DIR = Path("data/vision_cache")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -392,6 +396,29 @@ def _process_one(processed: ProcessedImage, backend: VisionBackend, context_hint
 
 # ── Points d'entrée ───────────────────────────────────────────────────────────
 
+
+def _timeout_result(processed: ProcessedImage, backend: VisionBackend, reason: str) -> VisionResult:
+    """Résultat de secours quand une image dépasse le temps autorisé."""
+    r = VisionResult(
+        processed.image_hash,
+        processed.source_path,
+        processed.page_number,
+        processed.slide_number,
+        processed.visual_type,
+        "",
+        DescriptionQuality.FAILED,
+        backend,
+        VISION_TIMEOUT_SECONDS * 1000,
+        0,
+        error=reason,
+    )
+    r.tags = [
+        f"VISION:{processed.visual_type.value.upper()}",
+        "SKIP_TIMEOUT",
+        f"TIMEOUT:{VISION_TIMEOUT_SECONDS}s",
+    ]
+    return r
+
 def describe_image(processed: ProcessedImage, force_heuristic: bool = False) -> VisionResult:
     if processed.skip_vision:
         r = VisionResult(
@@ -411,12 +438,30 @@ def describe_image_batch(
     context_hints: Optional[dict[int, str]] = None,
 ) -> list[VisionResult]:
     """
-    Batch parallèle avec cache disque.
-    CUDA → 2 workers simultanés (NVIDIA gère plusieurs streams)
-    Ollama → 3 workers
-    Cache hits → résolus instantanément sans thread
+    Batch vision borné.
+
+    Règles :
+    - La vision est désactivée par défaut côté extraction router.
+    - Si activée, on traite au maximum MAX_IMAGES_PER_BATCH images.
+    - Chaque image a un timeout pipeline de VISION_TIMEOUT_SECONDS.
+
+    Note : Python ne peut pas tuer proprement un appel CUDA déjà lancé dans un thread.
+    Ce timeout empêche le pipeline d'attendre indéfiniment et renvoie SKIP_TIMEOUT.
     """
-    backend  = VisionBackend.NONE if force_heuristic else _detect_backend()
+    backend = VisionBackend.NONE if force_heuristic else _detect_backend()
+
+    if not processed_images:
+        return []
+
+    original_count = len(processed_images)
+    processed_images = processed_images[:MAX_IMAGES_PER_BATCH]
+    if original_count > len(processed_images):
+        logger.info(
+            "Vision batch limité : %d images reçues → %d traitées",
+            original_count,
+            len(processed_images),
+        )
+
     results: dict[int, VisionResult] = {}
     remaining = []
 
@@ -430,10 +475,13 @@ def describe_image_batch(
             r.tags = [f"VISION:{r.visual_type.value.upper()}", "SKIP_VISION"]
             results[id(p)] = r
             continue
+
         cached = _cache_get(p.image_hash) if p.image_hash else None
         if cached:
-            loc  = (f" | PAGE {p.page_number}" if p.page_number
-                    else f" | SLIDE {p.slide_number}" if p.slide_number else "")
+            loc = (
+                f" | PAGE {p.page_number}" if p.page_number
+                else f" | SLIDE {p.slide_number}" if p.slide_number else ""
+            )
             r = VisionResult(
                 p.image_hash, p.source_path, p.page_number, p.slide_number, p.visual_type,
                 f"[IMAGE | {p.visual_type.value}{loc}]\n[QUALITÉ: full | cache]\n\n{cached}",
@@ -444,28 +492,66 @@ def describe_image_batch(
         else:
             remaining.append(p)
 
-    logger.info("Batch : %d total | %d cache | %d à traiter",
-                len(processed_images), len(processed_images)-len(remaining), len(remaining))
+    logger.info(
+        "Batch vision : %d total | %d cache/skip | %d à traiter | timeout=%ss",
+        len(processed_images),
+        len(processed_images) - len(remaining),
+        len(remaining),
+        VISION_TIMEOUT_SECONDS,
+    )
 
     if remaining:
-        workers = 2 if backend == VisionBackend.QWEN_CUDA else 3
+        workers = 1 if backend == VisionBackend.QWEN_CUDA else 2
         with ThreadPoolExecutor(max_workers=workers) as ex:
             futures = {
-                ex.submit(_process_one, p, backend,
-                          (context_hints or {}).get(id(p), "")): p
+                ex.submit(
+                    _process_one,
+                    p,
+                    backend,
+                    (context_hints or {}).get(id(p), ""),
+                ): p
                 for p in remaining
             }
-            for future in as_completed(futures):
-                p = futures[future]
-                try:
-                    results[id(p)] = future.result()
-                except Exception as exc:
-                    r = VisionResult(
-                        p.image_hash, p.source_path, p.page_number, p.slide_number,
-                        p.visual_type, "", DescriptionQuality.FAILED,
-                        VisionBackend.NONE, 0, 0, error=str(exc),
+
+            pending = set(futures.keys())
+            started_at = {future: time.time() for future in pending}
+
+            while pending:
+                done, pending = wait(pending, timeout=1, return_when=FIRST_COMPLETED)
+
+                for future in done:
+                    p = futures[future]
+                    try:
+                        results[id(p)] = future.result()
+                    except Exception as exc:
+                        r = VisionResult(
+                            p.image_hash, p.source_path, p.page_number, p.slide_number,
+                            p.visual_type, "", DescriptionQuality.FAILED,
+                            VisionBackend.NONE, 0, 0, error=str(exc),
+                        )
+                        r.tags = ["VISION_ERROR"]
+                        results[id(p)] = r
+
+                now = time.time()
+                timed_out = [
+                    future for future in list(pending)
+                    if now - started_at.get(future, now) >= VISION_TIMEOUT_SECONDS
+                ]
+                for future in timed_out:
+                    p = futures[future]
+                    future.cancel()
+                    results[id(p)] = _timeout_result(
+                        p,
+                        backend,
+                        f"Vision timeout après {VISION_TIMEOUT_SECONDS}s",
                     )
-                    r.tags = ["VISION_ERROR"]
-                    results[id(p)] = r
+                    pending.remove(future)
+                    logger.warning(
+                        "Vision timeout : image_hash=%s type=%s slide=%s page=%s",
+                        p.image_hash,
+                        p.visual_type.value,
+                        p.slide_number,
+                        p.page_number,
+                    )
 
     return [results[id(p)] for p in processed_images]
