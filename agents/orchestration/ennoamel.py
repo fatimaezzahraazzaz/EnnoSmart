@@ -458,23 +458,22 @@ def _short_agent_note(intent: str, agent: str) -> str:
     if intent in {"eligibility", "diagnostic"}:
         return (
             "\n\n---\n"
-            "**Note POC :** cette réponse est une première analyse basée sur les sources indexées. "
-            "Pour un score CIR complet, les preuves détaillées, le niveau de risque et la validation humaine, "
-            "il faudra passer par **EnnoDiagnostic**."
+            "**Note POC :** **EnnoDiagnostic** est encore en cours de construction "
+            "pour produire le score d’éligibilité CIR, les risques détaillés et la validation humaine."
         )
 
     if intent == "scholar":
         return (
             "\n\n---\n"
-            "**Note POC :** pour construire un état de l'art complet avec recherche d'articles, "
-            "citations, classement et gap analysis, il faudra passer par **EnnoScholar**."
+            "**Note POC :** **EnnoScholar** est encore en cours de construction "
+            "pour rédiger un état de l’art complet avec recherche d’articles, bibliographie et citations."
         )
 
     if intent == "valor":
         return (
             "\n\n---\n"
-            "**Note POC :** pour l'extraction financière/RH, le mapping Excel/Cerfa "
-            "et les livrables administratifs, il faudra passer par **EnnoValor**."
+            "**Note POC :** **EnnoValor** est encore en cours de construction "
+            "pour la partie financière/RH, Excel, Cerfa et livrables administratifs."
         )
 
     return ""
@@ -1119,6 +1118,39 @@ class EnnoAmelOrchestrator:
             chat_decision=locals().get("chat_decision"),
             question=question,
         )
+        # ─────────────────────────────────────────────────────────────
+        # Réponse directe du LLM de chat
+        # ─────────────────────────────────────────────────────────────
+        # Si le module chat décide handled=True :
+        # - on répond immédiatement ;
+        # - on NE va PAS vers detect_intent ;
+        # - on NE va PAS vers le RAG ;
+        # - on NE cite PAS de sources.
+        chat_decision_obj = locals().get("chat_decision")
+        if chat_decision_obj is not None and getattr(chat_decision_obj, "handled", False):
+            direct_answer = str(getattr(chat_decision_obj, "answer", "") or "").strip()
+            direct_answer = direct_answer.replace("EnnoAmel", "Orchestrateur")
+
+            return EnnoAmelResponse(
+                answer=direct_answer or "Bonjour, je suis là. Que souhaitez-vous faire ?",
+                intent=str(getattr(chat_decision_obj, "intent", "small_talk")),
+                recommended_agent=str(
+                    getattr(chat_decision_obj, "recommended_agent", "Orchestrateur")
+                ).replace("EnnoAmel", "Orchestrateur"),
+                action="chat_direct_answer_no_rag",
+                confidence=float(getattr(chat_decision_obj, "confidence", 0.95) or 0.95),
+                sources=[],
+                needs_specialized_agent=bool(getattr(chat_decision_obj, "needs_specialized_agent", False)),
+                rag_used=False,
+                chunks_used=0,
+                route_explanation="Réponse directe du module de chat intelligent. RAG désactivé.",
+                processing_time=time.time() - t0,
+                debug={
+                    "chat_decision": getattr(chat_decision_obj, "__dict__", {}),
+                    "rag_skipped": True,
+                    "detect_intent_skipped": True,
+                } if include_debug else {},
+            )
 
         if decision is None:
             decision = detect_intent(
@@ -1126,6 +1158,10 @@ class EnnoAmelOrchestrator:
                 has_document=self.state.has_document,
                 has_rag_index=self.state.has_rag_index,
             )
+
+        chat_decision_obj = locals().get("chat_decision")
+        chat_rag_instruction = str(getattr(chat_decision_obj, "rag_instruction", "") or "").strip()
+        chat_rag_search_query = str(getattr(chat_decision_obj, "rag_search_query", "") or "").strip()
 
         if decision.intent == Intent.HELP:
             return EnnoAmelResponse(
@@ -1142,9 +1178,74 @@ class EnnoAmelOrchestrator:
                 debug={"decision": decision.to_dict()} if include_debug else {},
             )
 
+        if decision.intent in {Intent.ELIGIBILITY, Intent.DIAGNOSTIC}:
+            return EnnoAmelResponse(
+                answer=(
+                    "EnnoDiagnostic est encore en cours de construction pour produire le score "
+                    "d’éligibilité CIR, l’analyse des risques et la validation détaillée. "
+                    "Pour le moment, je peux vous aider à lire le dossier et à résumer les objectifs, "
+                    "verrous, méthodes et résultats à partir des sources indexées."
+                ),
+                intent=decision.intent.value,
+                recommended_agent=AgentName.ENNODIAGNOSTIC.value,
+                action="ennodiagnostic_under_construction",
+                confidence=max(float(decision.confidence), 0.85),
+                sources=[],
+                needs_specialized_agent=True,
+                rag_used=False,
+                chunks_used=0,
+                route_explanation="Demande réservée à EnnoDiagnostic, encore en cours de construction.",
+                processing_time=time.time() - t0,
+                debug={"decision": decision.to_dict()} if include_debug else {},
+            )
+
+        if decision.intent == Intent.SCHOLAR:
+            return EnnoAmelResponse(
+                answer=(
+                    "EnnoScholar est encore en cours de construction pour rédiger un état de l’art complet "
+                    "avec recherche d’articles, bibliographie, citations et gap analysis. "
+                    "Pour le moment, je peux seulement résumer l’état de l’art présent dans le document indexé."
+                ),
+                intent=decision.intent.value,
+                recommended_agent=AgentName.ENNOSCHOLAR.value,
+                action="ennoscholar_under_construction",
+                confidence=max(float(decision.confidence), 0.85),
+                sources=[],
+                needs_specialized_agent=True,
+                rag_used=False,
+                chunks_used=0,
+                route_explanation="Demande réservée à EnnoScholar, encore en cours de construction.",
+                processing_time=time.time() - t0,
+                debug={"decision": decision.to_dict()} if include_debug else {},
+            )
+
+        if decision.intent == Intent.VALOR:
+            return EnnoAmelResponse(
+                answer=(
+                    "EnnoValor est encore en cours de construction pour traiter la partie financière, RH, "
+                    "Excel, Cerfa et livrables administratifs. Pour le moment, je peux vous aider "
+                    "sur la compréhension documentaire du dossier."
+                ),
+                intent=decision.intent.value,
+                recommended_agent=AgentName.ENNOVALOR.value,
+                action="ennovalor_under_construction",
+                confidence=max(float(decision.confidence), 0.85),
+                sources=[],
+                needs_specialized_agent=True,
+                rag_used=False,
+                chunks_used=0,
+                route_explanation="Demande réservée à EnnoValor, encore en cours de construction.",
+                processing_time=time.time() - t0,
+                debug={"decision": decision.to_dict()} if include_debug else {},
+            )
+
         # Résumé direct depuis le JSON NLP si disponible :
         # plus rapide, plus stable, aucun appel LLM/RAG pour la vue globale.
-        if decision.intent == Intent.SUMMARY and self.state.nlp_json:
+        if (
+            decision.intent == Intent.SUMMARY
+            and self.state.nlp_json
+            and not chat_rag_instruction
+        ):
             summary = self._build_summary_from_nlp_json(self.state.nlp_json)
             if summary:
                 return EnnoAmelResponse(
@@ -1235,8 +1336,18 @@ class EnnoAmelOrchestrator:
             )
 
         try:
+            if chat_rag_instruction:
+                effective_rag_question = (
+                    f"Question utilisateur :\n{question}\n\n"
+                    f"Recherche documentaire ciblée :\n{chat_rag_search_query or decision.rag_query or question}\n\n"
+                    f"Instruction de réponse :\n{chat_rag_instruction}\n\n"
+                    "Réponds de façon naturelle, concise si demandé, et uniquement sur le sujet demandé."
+                )
+            else:
+                effective_rag_question = decision.rag_query or question
+
             rag_response = self.rag.ask(
-                question=decision.rag_query or question,
+                question=effective_rag_question,
                 filter_meta=effective_filter_meta,
                 top_k=top_k or self.top_k,
                 intent=decision.intent.value,
@@ -1258,6 +1369,30 @@ class EnnoAmelOrchestrator:
 
             sources = list(getattr(rag_response, "sources", []) or [])
             chunks_used = int(getattr(rag_response, "chunks_used", len(sources)) or 0)
+
+            # Résumé court projet : le RAG sert seulement de contexte interne.
+            # On masque les sources pour éviter l'affichage "Sources utilisées (5)"
+            # et on évite les citations [S1] dans la réponse.
+            no_source_summary = False
+            try:
+                instr_lower = str(chat_rag_instruction or "").lower()
+                no_source_summary = (
+                    decision.intent.value in {"summary", "qa"}
+                    and (
+                        "petit résumé clair" in instr_lower
+                        or "ne pas citer" in instr_lower
+                        or "ne pas afficher de sources" in instr_lower
+                        or "un seul paragraphe" in instr_lower
+                    )
+                )
+            except Exception:
+                no_source_summary = False
+
+            if no_source_summary:
+                sources = []
+                chunks_used = 0
+                answer = re.sub(r"\s*\[S\d+\]", "", answer).strip()
+                answer = re.sub(r"(?is)\n*Sources utilisées.*$", "", answer).strip()
 
             return EnnoAmelResponse(
                 answer=answer,
@@ -1341,10 +1476,16 @@ class EnnoAmelOrchestrator:
             "project_summary": Intent.SUMMARY,
             "summary": Intent.SUMMARY,
             "keywords": Intent.QA,
+            "entities": Intent.QA,
             "verrous": Intent.QA,
             "objectives": Intent.QA,
             "methods": Intent.QA,
             "technologies": Intent.QA,
+            "materials": Intent.QA,
+            "people": Intent.QA,
+            "organisms": Intent.QA,
+            "sections": Intent.QA,
+            "etat_art": Intent.QA,
             "results": Intent.QA,
             "source_proof": Intent.QA,
             "document_question": Intent.QA,
@@ -1366,6 +1507,7 @@ class EnnoAmelOrchestrator:
 
         agent_map = {
             "EnnoAmel": AgentName.ENNOAMEL,
+            "Orchestrateur": AgentName.ENNOAMEL,
             "EnnoDiagnostic": AgentName.ENNODIAGNOSTIC,
             "EnnoScholar": AgentName.ENNOSCHOLAR,
             "EnnoValor": AgentName.ENNOVALOR,
@@ -1407,11 +1549,20 @@ class EnnoAmelOrchestrator:
             f"Routage converti vers {intent.value} / {agent.value}."
         )
 
-        rag_query = self._build_rag_query_from_chat_intent(
-            question=question,
-            chat_intent=raw_intent,
-            intent=intent,
-        )
+        chat_rag_instruction = str(getattr(chat_decision, "rag_instruction", "") or "").strip()
+        chat_rag_search_query = str(getattr(chat_decision, "rag_search_query", "") or "").strip()
+
+        if chat_rag_instruction:
+            rag_query = (
+                f"{chat_rag_search_query or question}\n\n"
+                f"Instruction de réponse : {chat_rag_instruction}"
+            )
+        else:
+            rag_query = self._build_rag_query_from_chat_intent(
+                question=question,
+                chat_intent=raw_intent,
+                intent=intent,
+            )
 
         if needs_doc and not self.state.has_document:
             action = "need_document_first"
@@ -1455,6 +1606,11 @@ class EnnoAmelOrchestrator:
             "objectives": "Objectifs R&D, objectifs techniques, finalités du projet.",
             "methods": "Méthodes R&D, protocoles, approches, expérimentations, modélisation.",
             "technologies": "Outils, technologies, frameworks, logiciels, modèles, architectures.",
+            "materials": "Matériaux, composants, équipements et éléments techniques.",
+            "people": "Personnes, équipe projet, fonctions et contributions.",
+            "organisms": "Organismes, partenaires, entreprises, laboratoires et consortium.",
+            "sections": "Sections du document, structure, plan et passages.",
+            "etat_art": "État de l'art présent dans le document, travaux existants, limites et gap.",
             "results": "Résultats, métriques, performances, validations, limites et perspectives.",
             "source_proof": "Sources exactes, preuves, passages du document et justification.",
             "eligibility": "Éligibilité CIR : verrous, incertitudes, démarche R&D, preuves, résultats, risques.",
@@ -1867,6 +2023,34 @@ class EnnoAmelOrchestrator:
         if self.state.current_document_id and "document_id" not in effective_filter_meta:
             effective_filter_meta["document_id"] = self.state.current_document_id
 
+        # Réponse directe du LLM de chat AVANT toute exigence document.
+        # Les messages sociaux et les agents en construction ne doivent jamais tomber dans need_document_first.
+        chat_decision_obj = locals().get("chat_decision")
+        if chat_decision_obj is not None and getattr(chat_decision_obj, "handled", False):
+            direct_answer = str(getattr(chat_decision_obj, "answer", "") or "").strip()
+            direct_answer = direct_answer.replace("EnnoAmel", "Orchestrateur")
+
+            return EnnoAmelResponse(
+                answer=direct_answer or "Bonjour, je suis là. Que souhaitez-vous faire ?",
+                intent=str(getattr(chat_decision_obj, "intent", "small_talk")),
+                recommended_agent=str(
+                    getattr(chat_decision_obj, "recommended_agent", "Orchestrateur")
+                ).replace("EnnoAmel", "Orchestrateur"),
+                action="chat_direct_answer_before_document_check",
+                confidence=float(getattr(chat_decision_obj, "confidence", 0.95) or 0.95),
+                sources=[],
+                needs_specialized_agent=bool(getattr(chat_decision_obj, "needs_specialized_agent", False)),
+                rag_used=False,
+                chunks_used=0,
+                route_explanation="Réponse directe du module de chat intelligent avant contrôle document.",
+                processing_time=time.time() - t0,
+                debug={
+                    "chat_decision": getattr(chat_decision_obj, "__dict__", {}),
+                    "rag_skipped": True,
+                    "need_document_skipped": True,
+                } if include_debug else {},
+            )
+
         if not self.state.has_rag_index:
             return EnnoAmelResponse(
                 answer="Aucun index RAG prêt. Prépare d'abord un document.",
@@ -2008,27 +2192,97 @@ class EnnoAmelOrchestrator:
     ) -> tuple[Any, dict[str, Any]]:
         """
         Appelle modules.NLP.router.process_extraction() + to_json().
+
+        Compatible ancien NLP + nouveau NLP V7 : on filtre automatiquement
+        les paramètres selon la signature réelle de NLPConfig.
         """
         from modules.NLP.router import NLPConfig, process_extraction, to_json
 
-        config = NLPConfig(
-            use_gliner=use_gliner,
-            use_spacy=False,
-            use_regex=use_regex,
-            use_llm_refiner=False,
-            use_llm_extractor=use_llm_extractor,
-            llm_extractor_model=llm_extractor_model,
-            ner_on_visual_chunks=ner_on_visual_chunks,
-            terminology_text_only=True,
-            include_debug=include_debug,
+        try:
+            params = inspect.signature(NLPConfig).parameters
+        except Exception:
+            params = {}
+
+        candidate_kwargs = {
+            # Ancienne config / compatibilité
+            "use_gliner": use_gliner,
+            "use_spacy": False,
+            "use_regex": use_regex,
+            "use_llm_refiner": False,
+            "use_llm_extractor": use_llm_extractor,
+            "llm_extractor_model": llm_extractor_model,
+            "ner_on_visual_chunks": ner_on_visual_chunks,
+            "terminology_text_only": True,
+            "include_debug": include_debug,
+            "organisme_name": organisme_name,
+            "organisme_id": organisme_id,
+            "file_hash": file_hash,
+            "document_id": document_id,
+
+            # Nouveau NLP V7.1+
+            "use_document_structure_mapper": True,
+            "use_section_extractor": True,
+            "use_role_postprocessor": True,
+            "use_evidence_validator": True,
+            "use_technical_terms_extractor": True,
+            "use_quality_reporter": True,
+            "use_domain_classifier": True,
+            "use_synthesizer": True,
+            "use_final_taxonomy_mapper": True,
+            "use_evidence_mapper": True,
+            "max_llm_passages": 24,
+
+            # GLiNER V7
+            "use_gliner_ner": use_gliner,
+            "gliner_model": "urchade/gliner_multi-v2.1",
+        }
+
+        # Ne passer que les champs acceptés par NLPConfig.
+        if params:
+            filtered_kwargs = {
+                key: value
+                for key, value in candidate_kwargs.items()
+                if key in params
+            }
+        else:
+            filtered_kwargs = candidate_kwargs
+
+        try:
+            config = NLPConfig(**filtered_kwargs)
+        except TypeError as exc:
+            forbidden = {
+                "ner_on_visual_chunks",
+                "terminology_text_only",
+                "use_spacy",
+                "use_regex",
+                "use_gliner",
+                "use_llm_refiner",
+                "file_hash",
+                "document_id",
+            }
+            fallback_kwargs = {
+                key: value
+                for key, value in filtered_kwargs.items()
+                if key not in forbidden
+            }
+            logger.warning(
+                "NLPConfig fallback après erreur %s. kwargs=%s",
+                exc,
+                sorted(fallback_kwargs.keys()),
+            )
+            config = NLPConfig(**fallback_kwargs)
+
+        nlp_result = process_extraction(extraction_result, config)
+        nlp_json = to_json(nlp_result)
+
+        # Forcer l'identité documentaire même si le router ne la gère pas.
+        nlp_json = _apply_document_identity_to_nlp_json(
+            nlp_json,
             organisme_name=organisme_name,
             organisme_id=organisme_id,
             file_hash=file_hash,
             document_id=document_id,
         )
-
-        nlp_result = process_extraction(extraction_result, config)
-        nlp_json = to_json(nlp_result)
 
         return nlp_result, nlp_json
 
@@ -2291,3 +2545,7 @@ if __name__ == "__main__":
 
     print("\n── STATUS ──────────────────────────────")
     print(json.dumps(amel.get_status(), ensure_ascii=False, indent=2))
+
+# Compatibilité nouveau nom interface
+Orchestrator = EnnoAmelOrchestrator
+OrchestratorResponse = EnnoAmelResponse

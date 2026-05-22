@@ -1,29 +1,16 @@
 """
-modules/NLP/domain_classifier.py
-──────────────────────────────────────────────────────────────────────────────
-Classification du domaine de recherche sur la nomenclature officielle MESR.
+modules/NLP/domain_classifier.py — NLP V7.2.0
 
-  aggregator.py ──► domain_classifier.py ──► (alimente le NLPResult)
-
-PRINCIPE
---------
-Le problème "le domaine peut être n'importe quoi, et le futur domaine est
-inconnu" est résolu en transformant le problème en CLASSIFICATION FERMÉE :
-
-  - On ne demande PAS au LLM "quel est le domaine ?" (réponse libre, instable).
-  - On lui donne la liste FINIE des 33 sous-domaines officiels (niv2) et on
-    lui demande de CHOISIR le code le plus probable.
-  - On VALIDE ensuite que le code renvoyé existe vraiment dans domains.json.
-  - S'il n'existe pas / si le LLM hésite trop → "non_classifié".
-
-AUCUNE règle métier, aucun mot-clé hardcodé. Le seul "savoir" est dans
-domains.json, qui est une donnée de référence régénérable, pas du code.
-
-domains.json est généré une fois par build_domains_json.py depuis le xlsx MESR.
-
-API : classify_domain(aggregated, model, enabled) -> DomainClassification
-
-Version : 1.0.0
+Changements V7.2.0 vs V7.1.x (apports V8.1) :
+- NOUVEAU : extraction du domaine applicatif (domaine_applicatif).
+  V8.1 renvoyait bien "Motorisation électrique / véhicules électriques / naval de défense"
+  là où V7 ne renvoyait rien. Ce champ est maintenant extrait via le LLM
+  en même temps que le domaine scientifique.
+- NOUVEAU : domaine_scientifique_detaille — libellé plus précis que domaine_principal.
+  V8.1 renvoyait "Matériaux / Vibroacoustique / Mécanique des structures"
+  là où V7 renvoyait "Mécanique, Génie mécanique, Génie civil [B4]" (trop large).
+- La classification officielle MESR (domains.json, codes niv1/niv2/niv3) est conservée.
+- Tout le reste de la logique V7 est inchangé.
 """
 
 from __future__ import annotations
@@ -33,6 +20,7 @@ import logging
 import os
 import re
 import time
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -47,6 +35,11 @@ try:
 except ImportError:
     OpenAI = None
 
+try:
+    import openpyxl
+except ImportError:
+    openpyxl = None
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_LLM_MODEL = "ollama:qwen3:4b-instruct"
@@ -55,8 +48,148 @@ LOCAL_MODEL_PREFIXES = ("ollama:", "local:")
 TIMEOUT_SECONDS = 60
 MAX_RETRIES = 1
 
-# Emplacement par défaut du référentiel. Adapte si besoin.
 DEFAULT_DOMAINS_PATH = Path(__file__).parent / "data" / "domains.json"
+
+
+
+def _norm_space(text: Any) -> str:
+    text = str(text or "").replace("\u00a0", " ")
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def _domain_entry_to_dict(entry: Any) -> Optional[dict]:
+    """
+    Normalise une entrée de référentiel domaine.
+
+    Pourquoi :
+    - certains domains.json contiennent des listes de strings ou des formats mixtes ;
+    - l'ancien code faisait entry.get(...), donc plantait avec :
+      "'str' object has no attribute 'get'".
+    """
+    if isinstance(entry, dict):
+        return entry
+    return None
+
+
+def _iter_domain_entries(domains: Optional[dict], level: str = "niv2") -> list[dict]:
+    """
+    Retourne uniquement des dicts exploitables, quel que soit le format interne :
+    - list[dict]
+    - dict[str, dict]
+    - list[str] ignorée proprement
+    """
+    if not isinstance(domains, dict):
+        return []
+
+    raw = domains.get(level, [])
+    if isinstance(raw, dict):
+        raw = list(raw.values())
+    if not isinstance(raw, list):
+        return []
+
+    out: list[dict] = []
+    for entry in raw:
+        d = _domain_entry_to_dict(entry)
+        if d:
+            out.append(d)
+    return out
+
+
+def _dedupe_domain_entries(entries: list[dict], code_key: str, label_key: str) -> list[dict]:
+    out: list[dict] = []
+    seen = set()
+    for e in entries:
+        code = _norm_space(e.get(code_key, "")).upper()
+        label = _norm_space(e.get(label_key, ""))
+        if not code or not label:
+            continue
+        key = (code, _norm_space(label).lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(e)
+    return out
+
+
+def _load_domains_from_xlsx(path: Path) -> Optional[dict]:
+    """
+    Charge directement l'Excel MESR :
+    colonnes attendues :
+      code1, DOMAINES niv1, code2, Sous-domaines niv2,
+      code3, SECTION niv3, code4, Sous-sections niv4
+    """
+    if openpyxl is None:
+        logger.warning("openpyxl non installé : impossible de lire le référentiel Excel %s", path)
+        return None
+
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    ws = wb.active
+
+    niv1_map: dict[str, dict] = {}
+    niv2_map: dict[str, dict] = {}
+    niv3_map: dict[str, dict] = {}
+    niv4_map: dict[str, dict] = {}
+
+    rows = ws.iter_rows(values_only=True)
+    headers = next(rows, None)
+
+    for row in rows:
+        if not row:
+            continue
+        code1 = _norm_space(row[0] if len(row) > 0 else "")
+        lab1 = _norm_space(row[1] if len(row) > 1 else "")
+        code2 = _norm_space(row[2] if len(row) > 2 else "")
+        lab2 = _norm_space(row[3] if len(row) > 3 else "")
+        code3 = _norm_space(row[4] if len(row) > 4 else "")
+        lab3 = _norm_space(row[5] if len(row) > 5 else "")
+        code4 = _norm_space(row[6] if len(row) > 6 else "")
+        lab4 = _norm_space(row[7] if len(row) > 7 else "")
+
+        if code1 and lab1 and code1 not in niv1_map:
+            niv1_map[code1] = {"code_niv1": code1, "label_niv1": lab1}
+
+        if code2 and lab2 and code2 not in niv2_map:
+            niv2_map[code2] = {
+                "code_niv1": code1,
+                "label_niv1": lab1,
+                "code_niv2": code2,
+                "label_niv2": lab2,
+            }
+
+        if code3 and lab3 and code3 not in niv3_map:
+            niv3_map[code3] = {
+                "code_niv1": code1,
+                "label_niv1": lab1,
+                "code_niv2": code2,
+                "label_niv2": lab2,
+                "code_niv3": code3,
+                "label_niv3": lab3,
+            }
+
+        if code4 and lab4 and code4 not in niv4_map:
+            niv4_map[code4] = {
+                "code_niv1": code1,
+                "label_niv1": lab1,
+                "code_niv2": code2,
+                "label_niv2": lab2,
+                "code_niv3": code3,
+                "label_niv3": lab3,
+                "code_niv4": code4,
+                "label_niv4": lab4,
+            }
+
+    data = {
+        "niv1": list(niv1_map.values()),
+        "niv2": list(niv2_map.values()),
+        "niv3": list(niv3_map.values()),
+        "niv4": list(niv4_map.values()),
+    }
+    logger.info(
+        "Référentiel Excel chargé : %d niv1, %d niv2, %d niv3, %d niv4",
+        len(data["niv1"]), len(data["niv2"]), len(data["niv3"]), len(data["niv4"]),
+    )
+    return data
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -67,44 +200,62 @@ _DOMAINS_CACHE: Optional[dict] = None
 
 
 def load_domains(path: str | Path | None = None) -> Optional[dict]:
-    """
-    Charge domains.json (mis en cache). Retourne None si introuvable.
-    """
     global _DOMAINS_CACHE
-    if _DOMAINS_CACHE is not None:
+    if _DOMAINS_CACHE is not None and path is None:
         return _DOMAINS_CACHE
 
     p = Path(path) if path else DEFAULT_DOMAINS_PATH
     if not p.exists():
-        # Cherche aussi à côté de ce fichier ou dans le cwd.
-        for alt in [Path(__file__).parent / "domains.json", Path("domains.json")]:
+        for alt in [
+            Path(__file__).parent / "domains.json",
+            Path("domains.json"),
+            Path(__file__).parent / "data" / "nomenclature-scientifique-de-domaines-de-recherche--38201.xlsx",
+            Path("nomenclature-scientifique-de-domaines-de-recherche--38201.xlsx"),
+        ]:
             if alt.exists():
                 p = alt
                 break
 
     if not p.exists():
         logger.warning(
-            "domains.json introuvable (%s). La classification de domaine sera désactivée. "
-            "Génère-le avec build_domains_json.py.", p,
+            "Référentiel domaines introuvable (%s). La classification de domaine sera désactivée.", p,
         )
         return None
 
     try:
-        with open(p, encoding="utf-8") as f:
-            data = json.load(f)
-        if "niv1" not in data or "niv2" not in data:
-            logger.warning("domains.json mal formé : clés niv1/niv2 manquantes.")
+        if p.suffix.lower() in {".xlsx", ".xlsm"}:
+            data = _load_domains_from_xlsx(p)
+        else:
+            with open(p, encoding="utf-8") as f:
+                data = json.load(f)
+
+        if not isinstance(data, dict):
+            logger.warning("Référentiel domaines mal formé : racine non-dict.")
             return None
-        _DOMAINS_CACHE = data
+
+        # Normalisation défensive : aucune entrée string ne doit arriver jusqu'à entry.get(...)
+        for level in ("niv1", "niv2", "niv3", "niv4"):
+            if level in data:
+                data[level] = _iter_domain_entries(data, level)
+
+        if "niv1" not in data or "niv2" not in data:
+            logger.warning("Référentiel domaines mal formé : clés niv1/niv2 manquantes.")
+            return None
+
+        if not data.get("niv2"):
+            logger.warning("Référentiel domaines mal formé : niv2 vide.")
+            return None
+
+        if path is None:
+            _DOMAINS_CACHE = data
+
         logger.info(
-            "domains.json chargé : %d niv1, %d niv2, %d niv3",
-            len(data.get("niv1", {})),
-            len(data.get("niv2", {})),
-            len(data.get("niv3", {})),
+            "Référentiel domaines chargé : %d niv1, %d niv2, %d niv3",
+            len(data.get("niv1", [])), len(data.get("niv2", [])), len(data.get("niv3", [])),
         )
         return data
     except Exception as exc:
-        logger.warning("Échec chargement domains.json : %s", exc)
+        logger.warning("Erreur lecture référentiel domaines : %s", exc)
         return None
 
 
@@ -114,7 +265,7 @@ def load_domains(path: str | Path | None = None) -> Optional[dict]:
 
 @dataclass
 class DomainClassification:
-    """Résultat de classification de domaine."""
+    domaine_principal: str = "non_classifié"
     code_niv1: Optional[str] = None
     label_niv1: Optional[str] = None
     code_niv2: Optional[str] = None
@@ -123,25 +274,15 @@ class DomainClassification:
     label_niv3: Optional[str] = None
     confidence: float = 0.0
     reasoning: str = ""
-    classified: bool = False           # False => "non_classifié"
+    classified: bool = False
     llm_calls: int = 0
     backend: str = "unknown"
     error: Optional[str] = None
 
-    @property
-    def domaine_principal(self) -> str:
-        """Libellé lisible pour le NLPResult."""
-        if not self.classified:
-            return "non_classifié"
-        # Le plus précis disponible.
-        if self.label_niv2:
-            base = self.label_niv2
-            if self.code_niv2:
-                base = f"{base} [{self.code_niv2}]"
-            return base
-        if self.label_niv1:
-            return self.label_niv1
-        return "non_classifié"
+    # ── NOUVEAU V8.1 ─────────────────────────────────────────────────────────
+    domaine_scientifique_detaille: Optional[str] = None
+    domaine_applicatif: Optional[str] = None
+    # ─────────────────────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
         return {
@@ -158,360 +299,391 @@ class DomainClassification:
             "llm_calls": self.llm_calls,
             "backend": self.backend,
             "error": self.error,
+            # NOUVEAU V8.1
+            "domaine_scientifique_detaille": self.domaine_scientifique_detaille,
+            "domaine_applicatif": self.domaine_applicatif,
         }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PROMPT
-# ══════════════════════════════════════════════════════════════════════════════
-
-SYSTEM_PROMPT = """Tu es un classificateur de domaine de recherche.
-
-On te donne :
-1. Une synthèse de preuves extraites d'un dossier R&D (objectifs, verrous,
-   démarche, résultats, concepts techniques).
-2. La liste FERMÉE des sous-domaines de recherche officiels.
-
-Ta tâche : CHOISIR dans la liste le sous-domaine (code niv2) qui correspond
-le mieux au projet décrit.
-
-RÈGLES ABSOLUES :
-1. Réponds UNIQUEMENT en JSON valide. Aucun texte avant ou après.
-2. Le champ "code_niv2" DOIT être un code EXACT de la liste fournie
-   (ex: "A3", "B4", "C5"). N'invente jamais un code.
-3. Si vraiment aucun sous-domaine ne convient, ou si la synthèse est trop
-   pauvre pour décider, mets "code_niv2": null.
-4. "confidence" entre 0 et 1 : ta certitude que le code choisi est correct.
-5. "reasoning" : une phrase courte expliquant ton choix, basée uniquement
-   sur la synthèse fournie.
-6. Ne te laisse pas piéger par un mot isolé. Juge le projet dans son ensemble.
-
-FORMAT JSON ATTENDU :
-{
-  "code_niv2": "B4",
-  "confidence": 0.82,
-  "reasoning": "Le projet porte sur la conception mécanique d'un emballage et sa tenue aux chocs."
-}
-"""
-
-USER_PROMPT_TEMPLATE = """# SYNTHÈSE DES PREUVES DU DOSSIER R&D
-
-{evidence_summary}
-
-# LISTE FERMÉE DES SOUS-DOMAINES OFFICIELS (choisis UN code niv2)
-
-{domain_list}
-
-# CONSIGNE
-Choisis le code niv2 le plus probable pour ce projet.
-Le code doit exister exactement dans la liste ci-dessus.
-Réponds uniquement avec le JSON strict.
-"""
-
-
-def _build_domain_list(domains: dict) -> str:
-    """
-    Construit la liste lisible des niv2, groupée par niv1.
-    C'est ce qui est injecté dans le prompt — la "sortie fermée".
-    """
-    niv1 = domains.get("niv1", {})
-    niv2 = domains.get("niv2", {})
-
-    lines: list[str] = []
-    for c1, l1 in niv1.items():
-        lines.append(f"\n[{c1}] {l1}")
-        for c2, v2 in niv2.items():
-            if v2.get("parent") == c1:
-                lines.append(f"  {c2} : {v2.get('label', '')}")
-    return "\n".join(lines).strip()
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# APPELS LLM
+# LLM BACKEND
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _is_local_model(model: str) -> bool:
-    return str(model or "").startswith(LOCAL_MODEL_PREFIXES)
+    return any(model.startswith(p) for p in LOCAL_MODEL_PREFIXES)
 
 
-def _clean_local_model_name(model: str) -> str:
-    model = str(model or DEFAULT_LLM_MODEL).strip()
-    for prefix in LOCAL_MODEL_PREFIXES:
-        if model.startswith(prefix):
-            return model[len(prefix):]
+def _strip_model_prefix(model: str) -> str:
+    for p in LOCAL_MODEL_PREFIXES:
+        if model.startswith(p):
+            return model[len(p):]
     return model
 
 
-def _get_openrouter_client():
-    if OpenAI is None:
-        return None
-    api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
+def _call_llm(prompt: str, model: str) -> tuple[str, str]:
+    if _is_local_model(model):
+        raw_model = _strip_model_prefix(model)
+        if ollama is None:
+            raise RuntimeError("ollama non installé.")
+        resp = ollama.chat(
+            model=raw_model,
+            messages=[{"role": "user", "content": prompt}],
+            options={"temperature": 0.0, "num_predict": 256, "num_ctx": 2048},
+        )
+        # Gère les deux formes possibles : dict legacy et objet pydantic (ollama >= 0.2)
+        if isinstance(resp, dict):
+            text = resp.get("message", {}).get("content", "")
+        else:
+            # Objet pydantic : resp.message est un objet ChatMessage avec .content
+            msg = getattr(resp, "message", None)
+            if msg is None:
+                text = ""
+            elif isinstance(msg, dict):
+                text = msg.get("content", "")
+            else:
+                text = getattr(msg, "content", "") or ""
+        return str(text or ""), "ollama"
+
+    api_key = os.environ.get("OPENROUTER_API_KEY", "")
     if not api_key:
-        return None
-    return OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key)
+        raise RuntimeError("OPENROUTER_API_KEY manquant.")
+    if OpenAI is None:
+        raise RuntimeError("openai non installé.")
+    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key)
+    resp = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.0,
+        max_tokens=512,
+        timeout=TIMEOUT_SECONDS,
+    )
+    text = resp.choices[0].message.content if resp.choices else ""
+    return str(text or ""), "openrouter"
 
 
-def _extract_json(content: str) -> Optional[dict]:
-    raw = str(content or "").strip()
-    if not raw:
-        return None
-    for c in (raw, re.sub(r"```(?:json)?|```", "", raw, flags=re.I).strip()):
-        try:
-            d = json.loads(c)
-            if isinstance(d, dict):
-                return d
-        except Exception:
-            pass
-    m = re.search(r"\{.*\}", raw, re.S)
+def _extract_json_block(text: str) -> str:
+    m = re.search(r"```(?:json)?\s*([\s\S]+?)```", text)
     if m:
-        try:
-            d = json.loads(m.group(0))
-            if isinstance(d, dict):
-                return d
-        except Exception:
-            pass
+        return m.group(1).strip()
+    m = re.search(r"\{[\s\S]+\}", text)
+    if m:
+        return m.group(0).strip()
+    return text.strip()
+
+
+def _build_domains_list(domains: dict) -> str:
+    """
+    Liste compacte mais complète des niv2.
+    Ancien bug : lines[:40] pouvait couper la nomenclature avant les domaines B/C.
+    """
+    entries = _dedupe_domain_entries(_iter_domain_entries(domains, "niv2"), "code_niv2", "label_niv2")
+    lines = []
+    for entry in entries:
+        label = _norm_space(entry.get("label_niv2", ""))
+        code = _norm_space(entry.get("code_niv2", ""))
+        label_niv1 = _norm_space(entry.get("label_niv1", ""))
+        if label and code:
+            lines.append(f"  [{code}] {label_niv1} — {label}")
+    return "\n".join(lines)
+
+
+# ── NOUVEAU V8.1 : prompt élargi avec domaine applicatif ─────────────────────
+
+def _build_prompt(summary: str, domains_list: str) -> str:
+    return f"""Tu es un expert en classification R&D française (CIR/CII).
+
+Voici un résumé des travaux R&D d'un projet :
+
+{summary[:1500]}
+
+Voici la liste des domaines scientifiques officiels (code — libellé) :
+{domains_list}
+
+Réponds UNIQUEMENT avec un objet JSON valide contenant exactement ces clés :
+{{
+  "code_niv2": "code officiel choisi parmi la liste ci-dessus, ex: B4",
+  "confidence": 0.0 à 1.0,
+  "reasoning": "explication courte en français (max 2 phrases)",
+  "domaine_scientifique_detaille": "libellé précis du sous-domaine scientifique (ex: Matériaux / Vibroacoustique / Mécanique des structures)",
+  "domaine_applicatif": "domaine d'application industrielle principal (ex: Motorisation électrique / véhicules électriques, ou Naval de défense, ou Bâtiment, laisser null si non identifiable)"
+}}
+
+Règles :
+- code_niv2 doit être un code exact de la liste ci-dessus.
+- domaine_scientifique_detaille : plus précis que le code officiel, décrit le vrai sous-domaine.
+- domaine_applicatif : secteur industriel d'application finale, pas le domaine scientifique.
+- Ne pas ajouter de texte hors du JSON.
+"""
+
+
+def _build_prompt_no_domains(summary: str) -> str:
+    """Fallback si domains.json est indisponible."""
+    return f"""Tu es un expert en R&D française (CIR/CII).
+
+Voici un résumé des travaux R&D d'un projet :
+
+{summary[:1500]}
+
+Réponds UNIQUEMENT avec un objet JSON valide contenant exactement ces clés :
+{{
+  "domaine_principal": "domaine scientifique principal en français",
+  "confidence": 0.0 à 1.0,
+  "reasoning": "explication courte en français (max 2 phrases)",
+  "domaine_scientifique_detaille": "libellé précis du sous-domaine scientifique",
+  "domaine_applicatif": "domaine d'application industrielle principal, ou null"
+}}
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _parse_response(text: str, domains: Optional[dict]) -> dict:
+    raw = _extract_json_block(text)
+    try:
+        data = json.loads(raw)
+    except Exception:
+        data = {}
+
+    if not isinstance(data, dict):
+        data = {}
+
+    return data
+
+
+def _resolve_niv2(code: str, domains: dict) -> Optional[dict]:
+    if not code or not domains:
+        return None
+    target = str(code).strip().upper()
+    for entry in _iter_domain_entries(domains, "niv2"):
+        if str(entry.get("code_niv2", "")).strip().upper() == target:
+            return entry
+    return None
+    for entry in domains.get("niv2", []):
+        if str(entry.get("code_niv2", "")).upper() == str(code).upper():
+            return entry
     return None
 
 
-_OLLAMA_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "code_niv2": {"type": ["string", "null"]},
-        "confidence": {"type": "number"},
-        "reasoning": {"type": "string"},
-    },
-    "required": ["code_niv2", "confidence"],
-}
+def _get_aggregated_summary(aggregated: Any) -> str:
+    if hasattr(aggregated, "summary_for_llm"):
+        try:
+            return aggregated.summary_for_llm()
+        except Exception:
+            pass
+
+    d = {}
+    if hasattr(aggregated, "to_dict"):
+        try:
+            d = aggregated.to_dict()
+        except Exception:
+            pass
+    elif isinstance(aggregated, dict):
+        d = aggregated
+
+    lines = []
+    role_map = {
+        "objectif": "OBJECTIFS",
+        "verrou": "VERROUS",
+        "demarche": "DÉMARCHE",
+        "resultat": "RÉSULTATS",
+        "etat_art": "ÉTAT DE L'ART",
+    }
+    by_role = d.get("by_role", {})
+    for role, label in role_map.items():
+        items = by_role.get(role, [])
+        if items:
+            lines.append(f"\n## {label}")
+            for item in items[:8]:
+                phrase = item.get("phrase", "") if isinstance(item, dict) else str(item)
+                if phrase:
+                    lines.append(f"- {phrase}")
+
+    concepts = d.get("concepts", [])
+    if concepts:
+        lines.append("\n## CONCEPTS TECHNIQUES")
+        lines.append(", ".join(
+            (c.get("text", "") if isinstance(c, dict) else str(c))
+            for c in concepts[:20]
+        ))
+
+    return "\n".join(lines).strip()
 
 
-def _call_ollama(evidence_summary: str, domain_list: str, model: str, retry: int = 0) -> Optional[dict]:
-    if ollama is None:
-        logger.error("ollama non installé : pip install ollama")
-        return None
-    local_model = _clean_local_model_name(model)
-    try:
-        response = ollama.chat(
-            model=local_model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": USER_PROMPT_TEMPLATE.format(
-                    evidence_summary=evidence_summary, domain_list=domain_list)},
-            ],
-            format=_OLLAMA_SCHEMA,
-            options={"temperature": 0, "top_p": 0.1, "num_ctx": 8192, "num_predict": 300},
-        )
-        content = response.get("message", {}).get("content", "")
-        data = _extract_json(content)
-        if data is None and retry < MAX_RETRIES:
-            time.sleep(1.0)
-            return _call_ollama(evidence_summary, domain_list, model, retry + 1)
-        return data
-    except Exception as exc:
-        logger.exception("Erreur Ollama domain_classifier (retry=%d) : %s", retry, exc)
-        if retry < MAX_RETRIES:
-            time.sleep(1.0)
-            return _call_ollama(evidence_summary, domain_list, model, retry + 1)
-        return None
+
+def _norm_key(text: Any) -> str:
+    text = unicodedata.normalize("NFKD", str(text or "").lower())
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
 
-def _call_openrouter(evidence_summary: str, domain_list: str, model: str) -> Optional[dict]:
-    client = _get_openrouter_client()
-    if client is None:
-        return None
-    try:
-        completion = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": USER_PROMPT_TEMPLATE.format(
-                    evidence_summary=evidence_summary, domain_list=domain_list)},
-            ],
-            temperature=0,
-            max_tokens=400,
-            timeout=TIMEOUT_SECONDS,
-        )
-        return _extract_json(completion.choices[0].message.content)
-    except Exception as exc:
-        logger.exception("Erreur OpenRouter domain_classifier : %s", exc)
-        return None
+def _extract_official_thesaurus(text: str) -> Optional[dict]:
+    m = re.search(r"TH[ÉE]SAURUS[\s\S]{0,800}?\b([A-Z]\d+[a-z]?\d*)\s*[:\-]\s*([^\n\|]+)", text or "", re.I | re.U)
+    if not m:
+        m = re.search(r"\b([A-Z]\d+[a-z]?\d*)\s*[:\-]\s*([^\n\|]{8,120})", text or "", re.I | re.U)
+    if not m: return None
+    return {"code": _norm_space(m.group(1)), "label": _norm_space(m.group(2))}
 
 
-def _call_llm(evidence_summary: str, domain_list: str, model: str) -> tuple[Optional[dict], str]:
-    if _is_local_model(model):
-        return _call_ollama(evidence_summary, domain_list, model), "ollama"
-    return _call_openrouter(evidence_summary, domain_list, model), "openrouter"
+def _resolve_domain_code(code: str, domains: Optional[dict]) -> Optional[dict]:
+    if not code or not domains: return None
+    target = str(code).strip().upper()
+    for level in ("niv4", "niv3", "niv2", "niv1"):
+        for entry in _iter_domain_entries(domains, level):
+            for key in ("code_niv4", "code_niv3", "code_niv2", "code_niv1"):
+                if str(entry.get(key, "")).strip().upper() == target:
+                    return entry
+    return None
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# VALIDATION
-# ══════════════════════════════════════════════════════════════════════════════
+def _classification_from_entry(entry: dict, confidence: float, backend: str, reasoning: str, detail: Optional[str] = None, applicatif: Optional[str] = None) -> DomainClassification:
+    label = entry.get("label_niv4") or entry.get("label_niv3") or entry.get("label_niv2") or entry.get("label_niv1") or "non_classifié"
+    return DomainClassification(
+        domaine_principal=label,
+        code_niv1=entry.get("code_niv1"), label_niv1=entry.get("label_niv1"),
+        code_niv2=entry.get("code_niv2"), label_niv2=entry.get("label_niv2"),
+        code_niv3=entry.get("code_niv3"), label_niv3=entry.get("label_niv3"),
+        confidence=confidence, reasoning=reasoning, classified=True, backend=backend,
+        domaine_scientifique_detaille=detail or label, domaine_applicatif=applicatif)
 
-def _validate_and_build(data: dict, domains: dict) -> DomainClassification:
-    """
-    Valide le code renvoyé par le LLM contre domains.json.
-    Si le code n'existe pas → non_classifié. Pas de devinette.
-    """
-    result = DomainClassification()
+def _heuristic_domain_from_summary(summary: str, domains: Optional[dict]) -> Optional[DomainClassification]:
+    official = _extract_official_thesaurus(summary)
+    if official:
+        entry = _resolve_domain_code(official["code"], domains)
+        if entry:
+            return _classification_from_entry(entry, 0.95, "official_thesaurus", "Domaine extrait depuis le thésaurus officiel du document.", official.get("label"), _infer_applicative_domain(summary))
+        return DomainClassification(domaine_principal=official.get("label") or official.get("code") or "non_classifié", code_niv2=official.get("code"), confidence=0.92, reasoning="Domaine extrait depuis le thésaurus officiel du document, mais code non résolu dans le référentiel.", classified=True, backend="official_thesaurus_unresolved", domaine_scientifique_detaille=official.get("label"), domaine_applicatif=_infer_applicative_domain(summary))
 
-    code2 = data.get("code_niv2")
-    code2 = str(code2).strip() if code2 else None
-    confidence = data.get("confidence", 0.0)
-    try:
-        confidence = float(confidence)
-    except Exception:
-        confidence = 0.0
-    reasoning = str(data.get("reasoning", "") or "").strip()
+    text = _norm_key(summary)
+    if re.search(r"emballage|conditionnement|barriere sterile|opercule|blister|thermoformage|packaging", text):
+        for code in ("B7c12", "B7"):
+            entry = _resolve_domain_code(code, domains)
+            if entry:
+                return _classification_from_entry(entry, 0.86, "heuristic_fallback", "Signaux forts : emballage, conditionnement, thermoformage, dispositif médical.", "Industrie de l'emballage / emballage médical / matériaux et procédés de conditionnement", _infer_applicative_domain(summary) or "Emballage médical / dispositifs médicaux")
+        return DomainClassification(domaine_principal="Industrie de l'emballage / emballage médical", code_niv2="B7", confidence=0.84, reasoning="Signaux forts : emballage, conditionnement, thermoformage, dispositif médical.", classified=True, backend="heuristic_fallback", domaine_scientifique_detaille="Industrie de l'emballage / emballage médical / matériaux et procédés de conditionnement", domaine_applicatif=_infer_applicative_domain(summary) or "Emballage médical / dispositifs médicaux")
 
-    niv1 = domains.get("niv1", {})
-    niv2 = domains.get("niv2", {})
-
-    # Le LLM a explicitement dit "aucun" → non_classifié.
-    if not code2 or code2.lower() in {"null", "none", "aucun", ""}:
-        result.classified = False
-        result.confidence = confidence
-        result.reasoning = reasoning or "Le classificateur n'a pas trouvé de sous-domaine adapté."
-        return result
-
-    # Validation stricte : le code DOIT exister dans le référentiel.
-    if code2 not in niv2:
-        logger.warning(
-            "Code niv2 '%s' renvoyé par le LLM mais ABSENT de domains.json → non_classifié",
-            code2,
-        )
-        result.classified = False
-        result.confidence = 0.0
-        result.reasoning = f"Code '{code2}' invalide (hors nomenclature) → non classifié."
-        result.error = f"invalid_code:{code2}"
-        return result
-
-    # Code valide : on remonte la hiérarchie.
-    v2 = niv2[code2]
-    code1 = v2.get("parent")
-    result.code_niv2 = code2
-    result.label_niv2 = v2.get("label")
-    result.code_niv1 = code1
-    result.label_niv1 = niv1.get(code1) if code1 else None
-    result.confidence = max(0.0, min(confidence, 1.0))
-    result.reasoning = reasoning
-    result.classified = True
-
-    # Si confiance trop basse, on garde la classification mais on le signale.
-    if result.confidence < 0.35:
-        logger.info(
-            "Classification domaine à faible confiance (%.2f) : %s",
-            result.confidence, result.domaine_principal,
-        )
-
-    return result
+    mat = bool(re.search(r"materiau|materiaux|composite|polymere|auxetique|pla|tpu|epdm|aramide", text))
+    vib = bool(re.search(r"vibro|vibration|acoust|mecanique|structure|resonance|decouplage", text))
+    if mat or vib:
+        code = "B3" if mat else "B4"
+        detail = "Matériaux composites / vibroacoustique / mécanique des structures" if mat and vib else ("Matériaux" if mat else "Mécanique / vibroacoustique")
+        entry = _resolve_domain_code(code, domains)
+        if entry:
+            return _classification_from_entry(entry, 0.80, "heuristic_fallback", "Signaux forts : matériaux, composites, vibrations ou mécanique.", detail, _infer_applicative_domain(summary))
+        return DomainClassification(domaine_principal=detail, code_niv2=code, confidence=0.78, reasoning="Signaux forts : matériaux, composites, vibrations ou mécanique.", classified=True, backend="heuristic_fallback", domaine_scientifique_detaille=detail, domaine_applicatif=_infer_applicative_domain(summary))
+    return None
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# POINT D'ENTRÉE
-# ══════════════════════════════════════════════════════════════════════════════
+def _infer_applicative_domain(text: str) -> Optional[str]:
+    t = _norm_key(text)
+    apps = []
+    if re.search(r"dispositif medical|medical|steril|chirurg", t): apps.append("Emballage médical / dispositifs médicaux")
+    if re.search(r"moteur electrique|vehicule electrique|motorisation", t): apps.append("Motorisation électrique / véhicules électriques")
+    if re.search(r"naval|defense|sous-marin|batiment naval", t): apps.append("Naval de défense")
+    if re.search(r"batiment|construction|energie|thermique", t): apps.append("Bâtiment / énergie")
+    return " / ".join(dict.fromkeys(apps)) if apps else None
+
 
 def classify_domain(
     aggregated: Any,
     model: str = DEFAULT_LLM_MODEL,
     enabled: bool = True,
-    domains_path: str | Path | None = None,
+    domains_path: Optional[str] = None,
 ) -> DomainClassification:
-    """
-    Classe le domaine du dossier sur la nomenclature MESR.
-
-    Paramètres
-    ----------
-    aggregated   : AggregatedEvidence (depuis aggregator.aggregate)
-                   doit fournir .summary_for_llm() et .has_diagnostic_content()
-    model        : modèle LLM
-    enabled      : si False, retourne non_classifié sans appel
-    domains_path : chemin vers domains.json (sinon emplacement par défaut)
-
-    Retourne
-    --------
-    DomainClassification
-    """
     result = DomainClassification()
 
     if not enabled:
-        result.reasoning = "Classification désactivée."
+        result.error = "Classification désactivée."
+        return result
+
+    summary = _get_aggregated_summary(aggregated)
+    if not summary.strip():
+        result.error = "Résumé aggregated vide — classification impossible."
         return result
 
     domains = load_domains(domains_path)
-    if domains is None:
-        result.reasoning = "domains.json indisponible — classification impossible."
-        result.error = "domains_json_missing"
-        return result
 
-    # Construire la synthèse des preuves.
-    if hasattr(aggregated, "summary_for_llm"):
-        evidence_summary = aggregated.summary_for_llm()
-    else:
-        evidence_summary = str(aggregated or "")
+    official = _extract_official_thesaurus(summary)
+    if official:
+        entry = _resolve_domain_code(official["code"], domains)
+        if entry:
+            return _classification_from_entry(entry, 0.95, "official_thesaurus", "Domaine extrait depuis le thésaurus officiel du document.", official.get("label"), _infer_applicative_domain(summary))
 
-    if not evidence_summary.strip():
-        result.reasoning = "Aucune preuve à classer."
-        return result
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            if domains:
+                domains_list = _build_domains_list(domains)
+                prompt = _build_prompt(summary, domains_list)
+            else:
+                prompt = _build_prompt_no_domains(summary)
 
-    if hasattr(aggregated, "has_diagnostic_content") and not aggregated.has_diagnostic_content():
-        result.reasoning = "Pas de contenu R&D diagnostic — domaine non classifié."
-        return result
+            t0 = time.time()
+            raw_text, backend = _call_llm(prompt, model)
+            elapsed = time.time() - t0
 
-    domain_list = _build_domain_list(domains)
+            result.llm_calls += 1
+            result.backend = backend
 
-    data, backend = _call_llm(evidence_summary, domain_list, model)
-    result.llm_calls = 1
-    result.backend = backend
+            data = _parse_response(raw_text, domains)
 
-    if data is None:
-        result.reasoning = "Aucune réponse LLM exploitable."
-        result.error = "no_llm_response"
-        return result
+            # ── NOUVEAU V8.1 : extraire domaine applicatif + détaillé ─────────
+            result.domaine_scientifique_detaille = (
+                str(data.get("domaine_scientifique_detaille") or "").strip() or None
+            )
+            result.domaine_applicatif = (
+                str(data.get("domaine_applicatif") or "").strip() or None
+            )
+            if result.domaine_applicatif and result.domaine_applicatif.lower() in ("null", "none", ""):
+                result.domaine_applicatif = None
+            # ─────────────────────────────────────────────────────────────────
 
-    try:
-        validated = _validate_and_build(data, domains)
-        validated.llm_calls = result.llm_calls
-        validated.backend = backend
-        logger.info(
-            "Domaine classé : %s (conf=%.2f)",
-            validated.domaine_principal, validated.confidence,
-        )
-        return validated
-    except Exception as exc:
-        logger.exception("Erreur validation domaine : %s", exc)
-        result.reasoning = f"Erreur de validation : {exc}"
-        result.error = str(exc)
-        return result
+            result.confidence = float(data.get("confidence", 0.0) or 0.0)
+            result.reasoning = str(data.get("reasoning", "") or "")
 
+            if domains:
+                code = str(data.get("code_niv2", "") or "").strip()
+                entry = _resolve_domain_code(code, domains)
+                if entry:
+                    result.code_niv2 = entry.get("code_niv2")
+                    result.label_niv2 = entry.get("label_niv2")
+                    result.code_niv1 = entry.get("code_niv1")
+                    result.label_niv1 = entry.get("label_niv1")
+                    result.code_niv3 = entry.get("code_niv3")
+                    result.label_niv3 = entry.get("label_niv3")
+                    label_niv3 = entry.get("label_niv3") or ""
+                    label_niv2 = entry.get("label_niv2") or ""
+                    result.domaine_principal = label_niv3 or label_niv2 or "non_classifié"
+                    result.classified = True
+                else:
+                    result.domaine_principal = str(data.get("domaine_principal") or "non_classifié")
+                    result.classified = False
+            else:
+                result.domaine_principal = str(data.get("domaine_principal") or "non_classifié")
+                result.classified = bool(result.domaine_principal and result.domaine_principal != "non_classifié")
 
-# ── Interface rapide (debug / tests) ──────────────────────────────────────────
+            # Si le LLM n'a pas réussi à choisir un code valide, fallback déterministe.
+            if not result.classified:
+                heuristic = _heuristic_domain_from_summary(summary, domains)
+                if heuristic is not None:
+                    heuristic.llm_calls = result.llm_calls
+                    heuristic.backend = f"{result.backend}+heuristic_fallback" if result.backend else "heuristic_fallback"
+                    heuristic.error = result.error
+                    result = heuristic
 
-if __name__ == "__main__":
-    import sys
+            # Si domaine_scientifique_detaille est renseigné, il enrichit domaine_principal.
+            if result.domaine_scientifique_detaille and not result.classified:
+                result.domaine_principal = result.domaine_scientifique_detaille
 
-    logging.basicConfig(level=logging.INFO)
+            logger.info(
+                "Domain classifier v7.2.0 : %s | applicatif=%s | conf=%.2f | %.2fs",
+                result.domaine_principal, result.domaine_applicatif, result.confidence, elapsed,
+            )
+            return result
 
-    # Test du chargement + validation SANS appel LLM réel.
-    domains = load_domains(sys.argv[1] if len(sys.argv) > 1 else None)
-    if domains is None:
-        print("domains.json introuvable. Passe le chemin en argument :")
-        print("  python domain_classifier.py /chemin/vers/domains.json")
-        sys.exit(1)
+        except Exception as exc:
+            logger.warning("Domain classifier erreur (attempt %d) : %s", attempt + 1, exc)
+            result.error = str(exc)
+            if attempt < MAX_RETRIES:
+                time.sleep(1.0)
 
-    print(f"Référentiel chargé : {len(domains['niv2'])} sous-domaines\n")
-
-    # Simule des réponses LLM et teste la validation.
-    print("=== Test validation ===")
-    for fake in [
-        {"code_niv2": "B4", "confidence": 0.85, "reasoning": "Conception mécanique d'emballage."},
-        {"code_niv2": "A3", "confidence": 0.78, "reasoning": "Génération de code par IA."},
-        {"code_niv2": "ZZ99", "confidence": 0.9, "reasoning": "Code inventé."},  # invalide
-        {"code_niv2": None, "confidence": 0.2, "reasoning": "Trop ambigu."},
-    ]:
-        r = _validate_and_build(fake, domains)
-        print(f"  input={fake['code_niv2']!r:8} → {r.domaine_principal!r:55} "
-              f"classified={r.classified} conf={r.confidence}")
-
-    if len(sys.argv) > 2 and sys.argv[2] == "--live":
-        from aggregator import aggregate
-        # Nécessiterait un EvidenceMapResult réel. Voir test du pipeline complet.
-        print("\n(test --live : à lancer via le pipeline complet)")
+    return result

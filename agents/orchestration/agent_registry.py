@@ -1,16 +1,16 @@
 """
-modules/orchestration/agent_registry.py — EnnoSmart / EnnoAmel POC
+modules/orchestration/agent_registry.py — EnnoSmart / Orchestrateur POC
 ──────────────────────────────────────────────────────────────────────────────
 Registre central des agents EnnoSmart.
 
 Rôle :
   - Déclarer les agents disponibles dans l'architecture.
   - Décrire leur rôle, statut et capacités.
-  - Permettre à EnnoAmel de rediriger proprement l'utilisateur.
+  - Permettre à Orchestrateur de rediriger proprement l'utilisateur.
   - Fournir des informations affichables dans Streamlit.
 
 Agents :
-  - EnnoAmel        : orchestrateur, résumé, chat documentaire, amélioration ciblée.
+  - Orchestrateur        : orchestrateur, résumé, chat documentaire, amélioration ciblée.
   - EnnoDiagnostic : score CIR, risques, preuves, diagnostic d'éligibilité.
   - EnnoScholar    : état de l'art, articles scientifiques, citations.
   - EnnoValor      : finance/RH, Excel, Cerfa, livrables administratifs.
@@ -37,8 +37,8 @@ from agents.orchestration.schemas import (
 # ══════════════════════════════════════════════════════════════════════════════
 
 AGENT_REGISTRY: dict[str, AgentInfo] = {
-    "EnnoAmel": AgentInfo(
-        name="EnnoAmel",
+    "Orchestrateur": AgentInfo(
+        name="Orchestrateur",
         kind=AgentKind.ORCHESTRATOR,
         status=AgentStatus.AVAILABLE,
         role="Orchestrateur central intelligent",
@@ -107,7 +107,7 @@ AGENT_REGISTRY: dict[str, AgentInfo] = {
             ),
         ],
         poc_message=(
-            "EnnoAmel est disponible dans le POC. Il peut déjà utiliser Extraction, NLP et RAG "
+            "Orchestrateur est disponible dans le POC. Il peut déjà utiliser Extraction, NLP et RAG "
             "pour répondre avec sources et orienter l'utilisateur vers les bons modules."
         ),
         available_in_poc=True,
@@ -163,7 +163,7 @@ AGENT_REGISTRY: dict[str, AgentInfo] = {
             ),
         ],
         poc_message=(
-            "EnnoDiagnostic est en cours de construction. Dans le POC, EnnoAmel peut fournir "
+            "EnnoDiagnostic est en cours de construction. Dans le POC, Orchestrateur peut fournir "
             "une estimation préliminaire basée sur le RAG, mais pas encore un diagnostic CIR définitif."
         ),
         available_in_poc=False,
@@ -218,7 +218,7 @@ AGENT_REGISTRY: dict[str, AgentInfo] = {
             ),
         ],
         poc_message=(
-            "EnnoScholar n'est pas encore implémenté dans le POC. EnnoAmel peut identifier "
+            "EnnoScholar n'est pas encore implémenté dans le POC. Orchestrateur peut identifier "
             "les verrous et mots-clés utiles, puis recommander le passage à EnnoScholar."
         ),
         available_in_poc=False,
@@ -274,7 +274,7 @@ AGENT_REGISTRY: dict[str, AgentInfo] = {
             ),
         ],
         poc_message=(
-            "EnnoValor n'est pas encore implémenté dans le POC. EnnoAmel peut repérer certaines "
+            "EnnoValor n'est pas encore implémenté dans le POC. Orchestrateur peut repérer certaines "
             "informations financières/RH dans les sources, mais la valorisation finale devra passer par EnnoValor."
         ),
         available_in_poc=False,
@@ -377,7 +377,7 @@ def recommend_agent_for_intent(intent: str) -> AgentInfo:
     if intent == "valor":
         return AGENT_REGISTRY["EnnoValor"]
 
-    return AGENT_REGISTRY["EnnoAmel"]
+    return AGENT_REGISTRY["Orchestrateur"]
 
 
 def build_agent_route(
@@ -401,14 +401,14 @@ def build_agent_route(
     agent = get_agent(preferred_agent) if preferred_agent else recommend_agent_for_intent(intent)
 
     if agent is None:
-        agent = AGENT_REGISTRY["EnnoAmel"]
+        agent = AGENT_REGISTRY["Orchestrateur"]
 
     return AgentRoute(
         agent_name=agent.name,
         intent=intent,
         action=action,
         confidence=confidence,
-        requires_specialized_agent=agent.name != "EnnoAmel",
+        requires_specialized_agent=agent.name != "Orchestrateur",
         reason=reason,
         agent_status=agent.status.value,
         available_in_poc=agent.available_in_poc,

@@ -1,5 +1,5 @@
 """
-modules/RAG/embedder.py — EnnoSmart RAG v1.1
+modules/RAG/embedder.py — EnnoSmart RAG v1.2 NLP V7
 ──────────────────────────────────────────────────────────────────────────────
 Génère des embeddings pour les chunks NLP enrichis.
 
@@ -19,10 +19,7 @@ Objectif :
 
 Modèles recommandés :
   - "BAAI/bge-m3" : recommandé pour EnnoSmart/CIR, FR+EN, multi-domaines.
-  - "paraphrase-multilingual-MiniLM-L12-v2" : fallback rapide.
-  - "distiluse-base-multilingual-cased-v2" : bon FR/EN, plus léger.
-  - "all-MiniLM-L6-v2" : très rapide, mais moins recommandé pour CIR FR.
-
+  - 
 Usage :
   from modules.RAG.embedder import Embedder
 
@@ -180,6 +177,14 @@ def _chunk_to_text(chunk: dict) -> str:
         "materiaux",
         "equipements",
         "technologies",
+
+        # NLP V7.1+
+        "partenaires_rd",
+        "personnes",
+        "organismes",
+        "technical_terms",
+        "quality_report",
+
         "entities",
     ]
 

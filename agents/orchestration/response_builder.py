@@ -1,7 +1,7 @@
 """
-modules/orchestration/response_builder.py — EnnoSmart / EnnoAmel POC
+modules/orchestration/response_builder.py — EnnoSmart / Orchestrateur POC
 ──────────────────────────────────────────────────────────────────────────────
-Builder de réponses pour l'orchestrateur EnnoAmel.
+Builder de réponses pour l'orchestrateur Orchestrateur.
 
 Rôle :
   - Construire une réponse finale propre à partir :
@@ -143,14 +143,14 @@ def build_agent_note(
       ajoute une note seulement pour les agents spécialisés.
 
     force=True :
-      ajoute aussi une note pour EnnoAmel.
+      ajoute aussi une note pour Orchestrateur.
     """
     agent = get_agent(recommended_agent)
 
     if not agent:
         return ""
 
-    if recommended_agent == "EnnoAmel" and not force:
+    if recommended_agent == "Orchestrateur" and not force:
         return ""
 
     status = agent.status.value
@@ -189,11 +189,11 @@ def build_agent_note(
             f"**Statut actuel :** {status}."
         )
 
-    if recommended_agent == "EnnoAmel":
+    if recommended_agent == "Orchestrateur":
         return (
             "\n\n---\n"
             "### Agent utilisé\n"
-            "**EnnoAmel** a traité cette demande directement avec le RAG documentaire."
+            "**Orchestrateur** a traité cette demande directement avec le RAG documentaire."
         )
 
     return get_agent_poc_message(recommended_agent)
@@ -387,7 +387,7 @@ def build_error_response(
     t0 = start_time or time.time()
 
     intent = _value(getattr(decision, "intent", "unknown"))
-    recommended_agent = _value(getattr(decision, "recommended_agent", "EnnoAmel"))
+    recommended_agent = _value(getattr(decision, "recommended_agent", "Orchestrateur"))
 
     return BuiltResponse(
         answer=user_message,
@@ -426,7 +426,7 @@ def build_workflow_status_answer(workflow: Optional[WorkflowReport]) -> str:
         )
 
     lines = [
-        "### État du pipeline EnnoAmel",
+        "### État du pipeline Orchestrateur",
         "",
         f"- **Fichier** : {workflow.file_name or 'inconnu'}",
         f"- **Mode** : {workflow.mode.value}",
@@ -486,7 +486,7 @@ def build_missing_document_answer() -> str:
         "Tu peux importer :\n"
         "- un document brut : PDF, DOCX, PPTX, Excel, email, image ;\n"
         "- ou un fichier `.nlp.json` déjà généré par le pipeline NLP.\n\n"
-        "Ensuite, EnnoAmel pourra lancer : Extraction → NLP → RAG → réponse sourcée."
+        "Ensuite, Orchestrateur pourra lancer : Extraction → NLP → RAG → réponse sourcée."
     )
 
 
@@ -499,7 +499,7 @@ def build_missing_rag_answer() -> str:
 
 def build_help_answer() -> str:
     return (
-        "Je suis **EnnoAmel**, l'orchestrateur POC d'EnnoSmart.\n\n"
+        "Je suis **Orchestrateur**, l'orchestrateur POC d'EnnoSmart.\n\n"
         "Je peux :\n"
         "- préparer un document avec Extraction → NLP → RAG ;\n"
         "- donner une idée générale du projet ;\n"

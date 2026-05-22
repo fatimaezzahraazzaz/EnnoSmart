@@ -1,7 +1,7 @@
 """
-modules/orchestration/workflow.py — EnnoSmart / EnnoAmel POC
+modules/orchestration/workflow.py — EnnoSmart / Orchestrateur POC
 ──────────────────────────────────────────────────────────────────────────────
-Workflow technique utilisé par l'orchestrateur EnnoAmel.
+Workflow technique utilisé par l'orchestrateur Orchestrateur.
 
 Rôle :
   - Lancer l'extraction documentaire.
@@ -218,6 +218,11 @@ def apply_organisme_to_nlp_json(
         meta["organisme_name"] = name
         meta["organisme_id"] = oid
         c["metadata"] = meta
+
+        # Garder aussi les clés au niveau chunk pour compatibilité RAG.
+        c["organisme_name"] = name
+        c["organisme_id"] = oid
+
         chunks.append(c)
 
     out = dict(nlp_json)
@@ -400,6 +405,11 @@ def run_nlp(
 def run_rag_ingest(
     rag_pipeline: Any,
     nlp_json: dict[str, Any],
+    *,
+    organisme_name: Optional[str] = None,
+    organisme_id: Optional[str] = None,
+    file_hash: Optional[str] = None,
+    document_id: Optional[str] = None,
 ) -> tuple[int, StepReport]:
     """
     Indexe un JSON NLP dans le RAG.
@@ -421,7 +431,17 @@ def run_rag_ingest(
         if not is_nlp_json(nlp_json):
             raise ValueError("nlp_json invalide : document_metadata/chunks absents.")
 
-        indexed_chunks = int(rag_pipeline.ingest(nlp_json) or 0)
+        # Nouveau RAG v1.2 : on force l'organisme frontend pendant l'ingestion.
+        indexed_chunks = int(
+            rag_pipeline.ingest(
+                nlp_json,
+                organisme_name=organisme_name,
+                organisme_id=organisme_id,
+                file_hash=file_hash or "",
+                document_id=document_id,
+            )
+            or 0
+        )
         total_chunks = int(getattr(rag_pipeline, "total_chunks", indexed_chunks) or 0)
 
         report.duration = time.time() - t0
@@ -535,7 +555,12 @@ def prepare_raw_document(
             workflow.warnings.append(f"Impossible de sauvegarder le JSON NLP : {exc}")
 
     # 4. RAG
-    indexed_chunks, rag_report = run_rag_ingest(rag_pipeline, nlp_json)
+    indexed_chunks, rag_report = run_rag_ingest(
+        rag_pipeline,
+        nlp_json,
+        organisme_name=organisme_name,
+        organisme_id=organisme_id,
+    )
     workflow.rag = rag_report
     workflow.indexed_chunks = indexed_chunks
 
@@ -610,7 +635,15 @@ def prepare_nlp_json_file(
             organisme_id=organisme_id,
         )
 
-        indexed_chunks, rag_report = run_rag_ingest(rag_pipeline, nlp_json)
+        doc_meta = nlp_json.get("document_metadata", {}) or {}
+        indexed_chunks, rag_report = run_rag_ingest(
+            rag_pipeline,
+            nlp_json,
+            organisme_name=doc_meta.get("organisme_name") or organisme_name,
+            organisme_id=doc_meta.get("organisme_id") or organisme_id,
+            file_hash=doc_meta.get("file_hash"),
+            document_id=doc_meta.get("document_id"),
+        )
 
         workflow.rag = rag_report
         workflow.indexed_chunks = indexed_chunks
@@ -688,7 +721,15 @@ def prepare_nlp_json_memory(
             organisme_id=organisme_id,
         )
 
-        indexed_chunks, rag_report = run_rag_ingest(rag_pipeline, nlp_json)
+        doc_meta = nlp_json.get("document_metadata", {}) or {}
+        indexed_chunks, rag_report = run_rag_ingest(
+            rag_pipeline,
+            nlp_json,
+            organisme_name=doc_meta.get("organisme_name") or organisme_name,
+            organisme_id=doc_meta.get("organisme_id") or organisme_id,
+            file_hash=doc_meta.get("file_hash"),
+            document_id=doc_meta.get("document_id"),
+        )
 
         workflow.rag = rag_report
         workflow.indexed_chunks = indexed_chunks
@@ -857,7 +898,7 @@ if __name__ == "__main__":
         format="%(name)s | %(message)s",
     )
 
-    parser = argparse.ArgumentParser(description="Test workflow EnnoAmel")
+    parser = argparse.ArgumentParser(description="Test workflow Orchestrateur")
     parser.add_argument("file", help="Document brut ou .nlp.json")
     parser.add_argument("--cuda", action="store_true")
     parser.add_argument("--clear", action="store_true")

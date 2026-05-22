@@ -140,12 +140,15 @@ RÈGLES ABSOLUES :
    depuis la synthèse fournie.
 5. Ne mets pas de titres seuls comme preuves.
 6. Classe correctement :
-   - "objectif" = but à atteindre.
+   - "objectif" = but à atteindre, y compris les items de liste (tirets, puces).
    - "verrou" = limite, impossibilité, difficulté, risque, non-résolution.
-   - "etat_art" = solutions existantes et leurs limites.
+     ATTENTION : ne pas mettre en "verrou" un résultat, une démarche, ni une étude bibliographique.
+   - "etat_art" = solutions existantes et leurs limites dans la littérature.
    - "demarche" = actions réalisées : conception, choix, définition, développement.
    - "essais" = tests, mesures, évaluations, prototypes soumis à essai.
-   - "resultats" = constats obtenus, solution retenue, performance observée.
+   - "resultats" = constats obtenus après expérimentation, mesures comparatives,
+     observations sur les courbes, écarts constatés, performances mesurées.
+     Inclure les observations qualitatives (profils similaires, écarts importants, etc.).
 7. "mots_cles" : 6 à 15 concepts techniques centraux du projet.
 8. "lacunes" : uniquement les lacunes réellement visibles.
 
@@ -768,6 +771,40 @@ def _dedup_elements(elements: list[FicheElement]) -> list[FicheElement]:
 # FORCER L'INCLUSION DE TOUTES LES PREUVES (CORRIGÉ - VERSION AVEC MAPPING)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
+def _is_structural_noise(phrase: str) -> bool:
+    """
+    Retourne True si la phrase est un artefact structurel non-informatif :
+    - Entrée de table des matières (titre court + numéro de page)
+    - Titre de section seul (< 6 mots, pas de verbe)
+    - Fragment de phrase (commence par minuscule, conjonction, article)
+    UNIVERSEL : ne contient pas de règles domaine-spécifiques.
+    """
+    import re as _re
+    import unicodedata as _uc
+    p = _re.sub(r"\s+", " ", str(phrase or "")).strip()
+    if not p or len(p) < 20:
+        return True
+    # Entrée TdM : texte court + chiffre final, sans verbe conjugué
+    if _re.match(r".{8,120}\s+\d{1,3}\s*$", p) and len(p.split()) <= 14:
+        if not _re.search(
+            r"\b(?:est|sont|était|avons|avez|ont|sera|serait|permet"
+            r"|nécessite|implique|consiste|vise|visant|porte|réalis"
+            r"|montr|révèl|indiq|confirm|démontr)\b",
+            _uc.normalize("NFKD", p.lower()),
+            _re.I
+        ):
+            return True
+    # Fragment commençant par minuscule ou conjonction
+    if _re.match(
+        r"^(?:[a-zàâéèêëïîôùûü]|(?:et|ou|mais|donc|car|ni|or|que|qui|dont|"
+        r"où|si|bien|ainsi|de|du|des|le|la|les|un|une|en|au|aux)\s)",
+        p
+    ):
+        return True
+    return False
+
+
 def _force_all_evidences_for_role(synthesis: Synthesis, aggregated: Any, role: str, max_items: int = 10) -> None:
     """
     Force l'inclusion des preuves d'un rôle dans la fiche CIR.
@@ -803,7 +840,10 @@ def _force_all_evidences_for_role(synthesis: Synthesis, aggregated: Any, role: s
         phrase = _get_phrase(item)
         if not phrase or _norm(phrase) in existing_phrases:
             continue
-        
+        # CORRIGÉ v2.2 : filtre les entrées structurelles (TdM, titres courts)
+        if _is_structural_noise(phrase):
+            continue
+
         new_element = FicheElement(
             resume=phrase[:200] + "..." if len(phrase) > 200 else phrase,
             preuves=[phrase]
@@ -1175,3 +1215,751 @@ if __name__ == "__main__":
 
     print("synthesizer.py OK - version universelle 1.3.1 (corrigée)")
     print("Modèle par défaut :", DEFAULT_LLM_MODEL)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PATCH UNIVERSEL v1.4 — filtres finaux robustes
+# - supprime TdM/titres dans resume ET preuves
+# - évite les fragments coupés
+# - sépare littérature / travaux du projet
+# - conserve les objectifs infinitifs dans la section objectifs
+# ══════════════════════════════════════════════════════════════════════════════
+
+_TOC_LINE_UNIVERSAL_RE = re.compile(
+    r"^\s*(?:\d+(?:\.\d+)*\.?\s+)?"
+    r"[A-Za-zÀ-ÿ0-9 ,;:'’()/_\-]{3,140}"
+    r"\s+\.{0,}\s*\d{1,3}\s*$",
+    re.I | re.U,
+)
+
+_CONJUGATED_VERB_SIGNAL_RE = re.compile(
+    r"\b(?:est|sont|était|etaient|étaient|avons|avez|ont|sera|serait|permet|"
+    r"permettent|nécessite|implique|consiste|vise|visant|porte|réalise|"
+    r"réalisé|réalisée|réalisés|montr|révèl|indiqu|confirm|démontr|"
+    r"développ|défini|identifi|calcul|mesur|compar)\b",
+    re.I | re.U,
+)
+
+_OBJECTIVE_INFINITIVE_RE = re.compile(
+    r"^\s*(?:[-•*]\s*)?(?:mener|définir|definir|rechercher|développer|developper|"
+    r"caractériser|caracteriser|analyser|concevoir|mettre au point|valider|"
+    r"évaluer|evaluer|optimiser|identifier|démontrer|demontrer|améliorer|"
+    r"ameliorer|qualifier|réduire|reduire|augmenter|diminuer|comprendre|"
+    r"modéliser|modeliser|tester|mesurer|proposer)\b",
+    re.I | re.U,
+)
+
+_BIBLIO_CONTEXT_RE = re.compile(
+    r"\b(?:les auteurs|cette étude|cette etude|une étude|une etude|un article|"
+    r"une thèse|une these|travaux de recherche|dans la littérature|dans la litterature|"
+    r"publié(?:e)? en|publie(?:e)? en|et al\.|bibliographie|état de l'art|"
+    r"etat de l'art|state of the art|prior art|la littérature|la litterature)\b",
+    re.I | re.U,
+)
+
+_PROJECT_CONTEXT_RE = re.compile(
+    r"\b(?:nous avons|nous avions|nos travaux|notre étude|notre etude|notre projet|"
+    r"dans le présent projet|dans le present projet|les travaux que nous avons réalisés|"
+    r"les travaux de R&D que nous avons réalisés|nous proposons|nous développons|"
+    r"nous réalisons|nous avons réalisé|nous avons développé)\b",
+    re.I | re.U,
+)
+
+_FRAGMENT_START_RE = re.compile(
+    r"^(?:[a-zàâäéèêëîïôöùûüç]\S*\s+|(?:et|ou|mais|donc|car|ni|or|"
+    r"que|qui|dont|où|si|bien|ainsi|de|du|des|le|la|les|un|une|en|au|aux|"
+    r"pour|par|avec|sans)\s+)",
+    re.U,
+)
+
+
+def _is_structural_or_toc_line_universal(text: str) -> bool:
+    p = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not p:
+        return True
+    low = _norm(p)
+    if "table des matieres" in low or "sommaire" in low:
+        return True
+    if _TOC_LINE_UNIVERSAL_RE.match(p) and len(p.split()) <= 18:
+        if not _CONJUGATED_VERB_SIGNAL_RE.search(p):
+            return True
+    if len(p.split()) <= 10 and not re.search(r"[.!?]", p):
+        if re.search(
+            r"^(?:objectifs?|contexte|etat de l'art|verrous?|demarche|resultats?|"
+            r"annexes?|description des travaux|ressources humaines|indicateurs?|"
+            r"conclusion|bibliographie|references)",
+            low,
+            re.I,
+        ):
+            return True
+    return False
+
+
+def _is_bibliographic_context_universal(text: str) -> bool:
+    low = _norm(text)
+    return bool(_BIBLIO_CONTEXT_RE.search(low)) and not _PROJECT_CONTEXT_RE.search(low)
+
+
+def _is_project_context_universal(text: str) -> bool:
+    return bool(_PROJECT_CONTEXT_RE.search(_norm(text)))
+
+
+def _is_fragment_universal(text: str) -> bool:
+    p = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not p:
+        return True
+    return bool(_FRAGMENT_START_RE.match(p)) and not _CONJUGATED_VERB_SIGNAL_RE.search(p)
+
+
+def _is_bad_structural_phrase(phrase: str) -> bool:  # type: ignore[override]
+    p = re.sub(r"\s+", " ", str(phrase or "")).strip()
+    if not p or len(p) < 25:
+        return True
+    if _is_structural_or_toc_line_universal(p):
+        return True
+    if _is_fragment_universal(p):
+        return True
+    if INTRO_ONLY_RE.match(p):
+        return True
+    return False
+
+
+def _is_structural_noise(phrase: str) -> bool:  # type: ignore[override]
+    return _is_bad_structural_phrase(phrase)
+
+
+def _is_allowed_phrase_for_role(phrase: str, role: str) -> bool:  # type: ignore[override]
+    if _is_bad_structural_phrase(phrase):
+        return False
+    if ADMIN_OR_LOW_VALUE_RE.search(str(phrase or "")):
+        return False
+
+    low = _norm(phrase)
+
+    # Les contenus bibliographiques ne doivent pas devenir résultat/démarche/verrou du projet.
+    if role in {"resultat", "demarche", "essai", "verrou", "objectif"} and _is_bibliographic_context_universal(phrase):
+        return False
+
+    if role == "objectif":
+        return bool(re.search(
+            r"objectif|vise|afin de|dans le but de|a pour but de|permettre de|"
+            r"doit|nous devons|travaux .* afin de|créer|creer|concevoir|"
+            r"améliorer|ameliorer|optimiser|atteindre|réaliser|realiser|"
+            r"produire|démontrer|demontrer|valider|définir|definir|"
+            r"rechercher|développer|developper|caractériser|caracteriser|"
+            r"mener|analyser|évaluer|evaluer|identifier",
+            low,
+            re.I,
+        )) or bool(_OBJECTIVE_INFINITIVE_RE.search(phrase))
+
+    if role == "verrou":
+        return bool(re.search(
+            r"verrou|incapacit|ne permet pas|ne pouvons pas|difficult|risque|"
+            r"probl[èe]matique|limite|manque|absence de|insuffisant|toutefois|"
+            r"cependant|contrainte|blocage|obstacle|défi|defi|écart|ecart|"
+            r"variance|incertitude|peu répétable|peu repetable|non résolu|non resolu",
+            low,
+            re.I,
+        ))
+
+    if role == "etat_art":
+        return True
+
+    if role == "demarche":
+        return bool(re.search(
+            r"nous avons|nous avions|a été réalisé|ont été réalisés|méthode|methode|"
+            r"protocole|démarche|demarche|approche|processus|procédure|procedure|"
+            r"configuration|mise en oeuvre|mise en œuvre|simulation|modélisation|"
+            r"modelisation|conception|développement|developpement|validation|"
+            r"calibration|étalonnage|calcul|mesure|essai|test",
+            low,
+            re.I,
+        ))
+
+    if role == "essai":
+        return bool(re.search(r"essai|test|mesur|évaluation|evaluation|expériment|experiment|validation", low, re.I))
+
+    if role == "resultat":
+        return bool(re.search(
+            r"résultat|resultat|a permis|ont permis|montre|montré|montree|révèle|revele|"
+            r"observ|constat|écart|ecart|performance|satisfaisant|insatisfaisant|"
+            r"profil|courbe|valeur|pic|niveau|comparaison|différence|difference",
+            low,
+            re.I,
+        ))
+
+    return True
+
+
+_ORIGINAL_SYNTHESIZE_V131 = synthesize
+
+
+def _filter_element_list_universal(items: list[FicheElement], role: str) -> list[FicheElement]:
+    out: list[FicheElement] = []
+    seen: set[str] = set()
+    for el in items or []:
+        if not el:
+            continue
+        preuves = []
+        for p in getattr(el, "preuves", []) or []:
+            p = re.sub(r"\s+", " ", str(p or "")).strip()
+            if _is_allowed_phrase_for_role(p, role):
+                preuves.append(p)
+        if not preuves:
+            continue
+        resume = re.sub(r"\s+", " ", str(getattr(el, "resume", "") or "")).strip()
+        if not resume or _is_bad_structural_phrase(resume):
+            resume = _resume_from_phrase(preuves[0], role)
+        key = _norm(resume + " " + " ".join(preuves))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(FicheElement(resume=resume, preuves=list(dict.fromkeys(preuves))))
+    return out
+
+
+def _reclassify_biblio_elements_universal(result: Synthesis) -> None:
+    """Déplace les éléments bibliographiques restants vers etat_art."""
+    moved: list[FicheElement] = []
+    for attr, role in [("resultats", "resultat"), ("demarche", "demarche"), ("essais", "essai"), ("verrous", "verrou"), ("objectifs", "objectif")]:
+        kept: list[FicheElement] = []
+        for el in getattr(result, attr, []) or []:
+            text = " ".join([el.resume] + list(el.preuves))
+            if _is_bibliographic_context_universal(text):
+                moved.append(el)
+            else:
+                kept.append(el)
+        setattr(result, attr, kept)
+    if moved:
+        result.etat_art = _dedup_elements(result.etat_art + moved)
+
+
+def synthesize(  # type: ignore[override]
+    aggregated: Any,
+    domain_classification: Any = None,
+    model: str = DEFAULT_LLM_MODEL,
+    enabled: bool = True,
+) -> Synthesis:
+    result = _ORIGINAL_SYNTHESIZE_V131(aggregated, domain_classification, model, enabled)
+
+    _reclassify_biblio_elements_universal(result)
+
+    result.objectifs = _filter_element_list_universal(result.objectifs, "objectif")[:12]
+    result.verrous = _filter_element_list_universal(result.verrous, "verrou")[:12]
+    result.etat_art = _filter_element_list_universal(result.etat_art, "etat_art")[:10]
+    result.demarche = _filter_element_list_universal(result.demarche, "demarche")[:10]
+    result.essais = _filter_element_list_universal(result.essais, "essai")[:10]
+    result.resultats = _filter_element_list_universal(result.resultats, "resultat")[:10]
+
+    if result.objet_du_projet and not result.objet_du_projet.preuves:
+        result.objet_du_projet = None
+
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PATCH FINAL UNIVERSEL v1.5
+# But : produire une fiche finale stable pour tous les domaines.
+# Corrige les problèmes restants :
+# - objet_du_projet choisi parmi les vrais objectifs, pas une démarche ;
+# - objectifs de liste tous conservés ;
+# - phrases bibliographiques sorties de resultats/demarche/objectifs ;
+# - titres/TdM/fragments éliminés en dernier recours.
+# ══════════════════════════════════════════════════════════════════════════════
+
+_BIBLIO_CONTEXT_RE = re.compile(
+    r"\b(?:les auteurs|leurs r[ée]sultats|leurs travaux|cette étude|cette etude|"
+    r"une étude|une etude|un article|une thèse|une these|travaux de recherche|"
+    r"dans la littérature|dans la litterature|publié(?:e)? en|publie(?:e)? en|"
+    r"et al\.|bibliographie|état de l'art|etat de l'art|state of the art|prior art|"
+    r"la littérature|la litterature|ont étudié|ont etudie|a étudié|a etudie|"
+    r"a présenté une étude|a presente une etude|a porté sur|a porte sur)\b",
+    re.I | re.U,
+)
+
+_EXPLICIT_OBJECTIVE_RE = re.compile(
+    r"\b(?:le pr[ée]sent projet vise|le present projet vise|ce projet vise|"
+    r"projet vise|l'objectif est|l'objectif était|l'objectif etait|objectif de|"
+    r"dans l'objectif de|vise à|vise a|a pour objectif|a pour but|"
+    r"dans le but de|afin de|pour atteindre cet objectif|nous devons)\b",
+    re.I | re.U,
+)
+
+_PAST_PROJECT_ACTION_RE = re.compile(
+    r"\b(?:nous avons|nous avions|nous sommes|a été|ont été|a ete|ont ete|"
+    r"nous avons adopté|nous avons adopte|nous avons réalisé|nous avons realise|"
+    r"nous avons mis|nous avons calculé|nous avons calcule|nous avons disposé|"
+    r"nous avons dispose|nous avons poursuivi|nous avons développé|nous avons developpe)\b",
+    re.I | re.U,
+)
+
+
+def _is_bibliographic_context_universal(text: str) -> bool:  # type: ignore[override]
+    low = _norm(text)
+    return bool(_BIBLIO_CONTEXT_RE.search(low)) and not _PROJECT_CONTEXT_RE.search(low)
+
+
+def _is_fragment_or_corrupted_final(text: str) -> bool:
+    p = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not p or len(p) < 25:
+        return True
+    # fragments typiques de chunking : "jectif...", "ous avions...", "caractéındaki...", "ac_"
+    if re.match(r"^(?:[a-zàâäéèêëîïôöùûüç]{1,5}\s|[a-zàâäéèêëîïôùûç]{1,8}\w*\s)", p):
+        if not re.match(r"^(?:nous|notre|nos|le|la|les|un|une|des|dans|pour|afin|l['’]objectif|ce|cette)\b", p, re.I):
+            return True
+    if "ındaki" in p or " ac_" in p or p.endswith(" ac_"):
+        return True
+    return False
+
+
+def _is_clear_objective_phrase_final(phrase: str) -> bool:
+    p = re.sub(r"\s+", " ", str(phrase or "")).strip()
+    if not p or _is_bad_structural_phrase(p) or _is_fragment_or_corrupted_final(p):
+        return False
+    low = _norm(p)
+    if _is_bibliographic_context_universal(p):
+        return False
+    # Une action au passé n'est pas l'objectif, sauf formule explicite.
+    if _PAST_PROJECT_ACTION_RE.search(low) and not _EXPLICIT_OBJECTIVE_RE.search(low):
+        return False
+    if _EXPLICIT_OBJECTIVE_RE.search(low):
+        return True
+    if _OBJECTIVE_INFINITIVE_RE.search(p):
+        return True
+    return False
+
+
+def _allowed_for_role_final(phrase: str, role: str) -> bool:
+    p = re.sub(r"\s+", " ", str(phrase or "")).strip()
+    if not p or _is_bad_structural_phrase(p) or _is_fragment_or_corrupted_final(p):
+        return False
+    if role != "etat_art" and _is_bibliographic_context_universal(p):
+        return False
+    low = _norm(p)
+
+    if role == "objectif":
+        return _is_clear_objective_phrase_final(p)
+    if role == "resultat":
+        return bool(re.search(
+            r"r[ée]sultat|a permis|ont permis|montre|montré|montree|révèle|revele|"
+            r"observ|constat|écart|ecart|performance|satisfaisant|insatisfaisant|"
+            r"profil|courbe|valeur|pic|niveau|comparaison|différence|difference|calculé|calcule",
+            low,
+            re.I,
+        ))
+    if role == "demarche":
+        return bool(re.search(
+            r"nous avons|nous avions|a été réalisé|ont été réalisés|a ete realise|"
+            r"méthode|methode|protocole|démarche|demarche|approche|processus|"
+            r"procédure|procedure|configuration|mise en oeuvre|mise en œuvre|"
+            r"simulation|modélisation|modelisation|conception|développement|"
+            r"developpement|validation|calibration|étalonnage|calcul|mesure|essai|test",
+            low,
+            re.I,
+        ))
+    if role == "essai":
+        return bool(re.search(r"essai|test|mesur|évaluation|evaluation|expériment|experiment|validation|échantillon|echantillon", low, re.I))
+    if role == "verrou":
+        return bool(re.search(
+            r"verrou|incapacit|ne permet pas|ne pouvons pas|difficult|risque|"
+            r"probl[èe]matique|limite|manque|absence de|insuffisant|toutefois|"
+            r"cependant|contrainte|blocage|obstacle|défi|defi|écart|ecart|"
+            r"variance|incertitude|peu répétable|peu repetable|complexe|non résolu|non resolu",
+            low,
+            re.I,
+        ))
+    if role == "etat_art":
+        return not _is_bad_structural_phrase(p) and not _is_fragment_or_corrupted_final(p)
+    return True
+
+
+def _filter_element_list_final(items: list[FicheElement], role: str, max_items: int) -> list[FicheElement]:
+    out: list[FicheElement] = []
+    seen: set[str] = set()
+    for el in items or []:
+        preuves: list[str] = []
+        for p in getattr(el, "preuves", []) or []:
+            p = re.sub(r"\s+", " ", str(p or "")).strip()
+            if _allowed_for_role_final(p, role):
+                preuves.append(p)
+        if not preuves:
+            continue
+        resume = re.sub(r"\s+", " ", str(getattr(el, "resume", "") or "")).strip()
+        if not resume or not _allowed_for_role_final(resume, role):
+            resume = _resume_from_phrase(preuves[0], role)
+        key = _norm(" ".join(preuves))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(FicheElement(resume=resume, preuves=list(dict.fromkeys(preuves))))
+        if len(out) >= max_items:
+            break
+    return out
+
+
+def _objective_score_for_object_final(phrase: str) -> int:
+    p = str(phrase or "")
+    low = _norm(p)
+    score = 0
+    if re.search(r"le present projet vise|le pr[ée]sent projet vise|ce projet vise|projet vise", low, re.I):
+        score += 100
+    if re.search(r"impact|analyser|rechercher|caractériser|caracteriser|développer|developper|concevoir|optimiser", low, re.I):
+        score += 25
+    if re.search(r"conditions|temp[ée]rature|syst[èe]me|proc[ée]d[ée]|prototype|mod[èe]le|solution", low, re.I):
+        score += 10
+    if _OBJECTIVE_INFINITIVE_RE.search(p):
+        score += 8
+    if _PAST_PROJECT_ACTION_RE.search(low) and not _EXPLICIT_OBJECTIVE_RE.search(low):
+        score -= 80
+    score += min(len(p) // 80, 8)
+    return score
+
+
+def _objective_elements_from_aggregated_final(aggregated: Any, max_items: int = 12) -> list[FicheElement]:
+    candidates: list[tuple[int, str]] = []
+    for item in _get_items_for_role(aggregated, "objectif"):
+        phrase = _get_phrase(item)
+        if not phrase or not _is_clear_objective_phrase_final(phrase):
+            continue
+        candidates.append((_objective_score_for_object_final(phrase), phrase))
+    candidates.sort(key=lambda x: (-x[0], len(x[1])))
+    out: list[FicheElement] = []
+    seen: set[str] = set()
+    for _, p in candidates:
+        key = _norm(p)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(FicheElement(resume=_resume_from_phrase(p, "objectif"), preuves=[p]))
+        if len(out) >= max_items:
+            break
+    return out
+
+
+def _choose_object_du_projet_final(result: Synthesis, aggregated: Any) -> None:
+    candidates = _objective_elements_from_aggregated_final(aggregated, 12)
+    if not candidates:
+        candidates = result.objectifs or []
+    candidates = [c for c in candidates if c.preuves and _is_clear_objective_phrase_final(c.preuves[0])]
+    if not candidates:
+        result.objet_du_projet = None
+        return
+    candidates.sort(key=lambda el: (-_objective_score_for_object_final(el.preuves[0]), len(el.preuves[0])))
+    result.objet_du_projet = candidates[0]
+
+
+def _merge_missing_objectives_final(result: Synthesis, aggregated: Any) -> None:
+    existing = {_norm(p) for el in result.objectifs for p in el.preuves}
+    for el in _objective_elements_from_aggregated_final(aggregated, 20):
+        key = _norm(el.preuves[0])
+        if key not in existing:
+            result.objectifs.append(el)
+            existing.add(key)
+
+
+def _reclassify_biblio_elements_final(result: Synthesis) -> None:
+    moved: list[FicheElement] = []
+    for attr in ["resultats", "demarche", "essais", "verrous", "objectifs"]:
+        kept: list[FicheElement] = []
+        for el in getattr(result, attr, []) or []:
+            text = " ".join([getattr(el, "resume", "")] + list(getattr(el, "preuves", []) or []))
+            if _is_bibliographic_context_universal(text):
+                moved.append(el)
+            else:
+                kept.append(el)
+        setattr(result, attr, kept)
+    if moved:
+        result.etat_art = _dedup_elements((result.etat_art or []) + moved)
+
+
+_SYNTHESIZE_V14_WRAPPED = synthesize
+
+
+def synthesize(  # type: ignore[override]
+    aggregated: Any,
+    domain_classification: Any = None,
+    model: str = DEFAULT_LLM_MODEL,
+    enabled: bool = True,
+) -> Synthesis:
+    result = _SYNTHESIZE_V14_WRAPPED(aggregated, domain_classification, model, enabled)
+
+    _reclassify_biblio_elements_final(result)
+    _merge_missing_objectives_final(result, aggregated)
+
+    result.objectifs = _filter_element_list_final(result.objectifs, "objectif", 12)
+    result.verrous = _filter_element_list_final(result.verrous, "verrou", 12)
+    result.etat_art = _filter_element_list_final(result.etat_art, "etat_art", 10)
+    result.demarche = _filter_element_list_final(result.demarche, "demarche", 10)
+    result.essais = _filter_element_list_final(result.essais, "essai", 10)
+    result.resultats = _filter_element_list_final(result.resultats, "resultat", 10)
+
+    _choose_object_du_projet_final(result, aggregated)
+
+    result.lacunes = [x for x in (result.lacunes or []) if not _is_bad_structural_phrase(str(x))]
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PATCH RAFFINAGE FINAL UNIVERSEL v1.6
+# But : retirer les derniers faux objectifs procéduraux et les résultats
+# bibliographiques résiduels, sans règle spécifique à un domaine/projet.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# IMPORTANT : on redéfinit les regex précédentes avec des critères plus stricts.
+# "afin de" seul n'est PAS suffisant pour classer un objectif : il peut introduire
+# une simple étape de protocole (ex: "Afin de préparer les échantillons...").
+_EXPLICIT_OBJECTIVE_RE = re.compile(
+    r"\b(?:le pr[ée]sent projet vise|le present projet vise|ce projet vise|"
+    r"projet vise|l'objectif est|l'objectif était|l'objectif etait|objectif de|"
+    r"dans l'objectif de|vise à|vise a|a pour objectif|a pour but|"
+    r"dans le but de|pour atteindre cet objectif|nous devons)\b",
+    re.I | re.U,
+)
+
+# Actions déjà réalisées : ne doivent pas devenir objectifs, sauf formule explicite
+# d'objectif. La liste reste universelle et indépendante du domaine.
+_PAST_PROJECT_ACTION_RE = re.compile(
+    r"\b(?:nous avons|nous avions|nous sommes|nous les avons|nous l'avons|"
+    r"a été|ont été|a ete|ont ete|"
+    r"nous avons adopté|nous avons adopte|nous avons réalisé|nous avons realise|"
+    r"nous avons mis|nous avons calculé|nous avons calcule|nous avons disposé|"
+    r"nous avons dispose|nous avons poursuivi|nous avons développé|nous avons developpe|"
+    r"nous avons refroidi|nous avons préparé|nous avons prepare|"
+    r"nous avions d'abord|nous avions ensuite|nous avions également|nous avions egalement)\b",
+    re.I | re.U,
+)
+
+# Résultats probablement bibliographiques : formulation impersonnelle typique
+# d'un paragraphe d'état de l'art. On ne les garde pas en resultats projet
+# s'il n'y a aucun marqueur projet (nous/notre/nos/présent projet...).
+_BIBLIO_RESULT_STYLE_RE = re.compile(
+    r"\b(?:les r[ée]sultats ont alors montr[ée]|les r[ée]sultats ont montr[ée]|"
+    r"les r[ée]sultats de cette [ée]tude|leurs r[ée]sultats ont|"
+    r"les auteurs ont montr[ée]|cette [ée]tude a montr[ée])\b",
+    re.I | re.U,
+)
+
+
+def _is_bibliographic_context_universal(text: str) -> bool:  # type: ignore[override]
+    low = _norm(text)
+    has_project_marker = bool(_PROJECT_CONTEXT_RE.search(low))
+    if has_project_marker:
+        return False
+    if _BIBLIO_CONTEXT_RE.search(low):
+        return True
+    if _BIBLIO_RESULT_STYLE_RE.search(low):
+        return True
+    return False
+
+
+def _is_clear_objective_phrase_final(phrase: str) -> bool:  # type: ignore[override]
+    p = re.sub(r"\s+", " ", str(phrase or "")).strip()
+    if not p or _is_bad_structural_phrase(p) or _is_fragment_or_corrupted_final(p):
+        return False
+    low = _norm(p)
+    if _is_bibliographic_context_universal(p):
+        return False
+
+    # Les phrases de protocole commençant par "Afin de préparer/mesurer/tester..."
+    # ne sont pas des objectifs finaux, sauf si elles contiennent une formule
+    # explicite de but de projet.
+    if re.match(r"^afin de\b", low, re.I) and not _EXPLICIT_OBJECTIVE_RE.search(low):
+        return False
+
+    # Une action au passé n'est pas l'objectif, sauf formule explicite.
+    if _PAST_PROJECT_ACTION_RE.search(low) and not _EXPLICIT_OBJECTIVE_RE.search(low):
+        return False
+
+    if _EXPLICIT_OBJECTIVE_RE.search(low):
+        return True
+    if _OBJECTIVE_INFINITIVE_RE.search(p):
+        return True
+    return False
+
+
+def _allowed_for_role_final(phrase: str, role: str) -> bool:  # type: ignore[override]
+    p = re.sub(r"\s+", " ", str(phrase or "")).strip()
+    if not p or _is_bad_structural_phrase(p) or _is_fragment_or_corrupted_final(p):
+        return False
+    low = _norm(p)
+
+    # Bibliographie : jamais dans objectif/démarche/essai/verrou/résultat projet.
+    if role != "etat_art" and _is_bibliographic_context_universal(p):
+        return False
+
+    if role == "objectif":
+        return _is_clear_objective_phrase_final(p)
+
+    if role == "resultat":
+        # Pour éviter de reprendre un résultat bibliographique résiduel, un résultat
+        # final doit être soit explicitement rattaché au projet, soit issu d'une
+        # formulation expérimentale concrète du dossier.
+        if _BIBLIO_RESULT_STYLE_RE.search(low) and not _PROJECT_CONTEXT_RE.search(low):
+            return False
+        return bool(re.search(
+            r"r[ée]sultat|a permis|ont permis|montre|montr[ée]|r[ée]v[èe]le|revele|"
+            r"observ|constat|[ée]cart|ecart|performance|satisfaisant|insatisfaisant|"
+            r"profil|courbe|valeur|pic|niveau|comparaison|diff[ée]rence|difference|calcul[ée]|calcule|"
+            r"corr[ée]lation|bruit[ée]|mesur[ée]|obtenu|obtenus",
+            low,
+            re.I,
+        ))
+
+    if role == "demarche":
+        return bool(re.search(
+            r"nous avons|nous avions|a été réalisé|ont été réalisés|a ete realise|"
+            r"méthode|methode|protocole|démarche|demarche|approche|processus|"
+            r"proc[ée]dure|procedure|configuration|mise en oeuvre|mise en œuvre|"
+            r"simulation|mod[ée]lisation|modelisation|conception|d[ée]veloppement|"
+            r"developpement|validation|calibration|[ée]talonnage|calcul|mesure|essai|test",
+            low,
+            re.I,
+        ))
+    if role == "essai":
+        return bool(re.search(r"essai|test|mesur|[ée]valuation|evaluation|exp[ée]riment|experiment|validation|[ée]chantillon|echantillon", low, re.I))
+    if role == "verrou":
+        return bool(re.search(
+            r"verrou|incapacit|ne permet pas|ne pouvons pas|difficult|risque|"
+            r"probl[èe]matique|limite|manque|absence de|insuffisant|toutefois|"
+            r"cependant|contrainte|blocage|obstacle|d[ée]fi|defi|[ée]cart|ecart|"
+            r"variance|incertitude|peu r[ée]p[ée]table|peu repetable|complexe|non r[ée]solu|non resolu",
+            low,
+            re.I,
+        ))
+    if role == "etat_art":
+        return not _is_bad_structural_phrase(p) and not _is_fragment_or_corrupted_final(p)
+    return True
+
+# Re-wrapper final : on réutilise le wrapper v1.5 et on applique un dernier filtre.
+_SYNTHESIZE_V16_BASE = synthesize
+
+
+def synthesize(  # type: ignore[override]
+    aggregated: Any,
+    domain_classification: Any = None,
+    model: str = DEFAULT_LLM_MODEL,
+    enabled: bool = True,
+) -> Synthesis:
+    result = _SYNTHESIZE_V16_BASE(aggregated, domain_classification, model, enabled)
+
+    # Refiltrage strict après fusion/fallbacks.
+    _reclassify_biblio_elements_final(result)
+    result.objectifs = _filter_element_list_final(result.objectifs, "objectif", 10)
+    result.verrous = _filter_element_list_final(result.verrous, "verrou", 10)
+    result.etat_art = _filter_element_list_final(result.etat_art, "etat_art", 10)
+    result.demarche = _filter_element_list_final(result.demarche, "demarche", 10)
+    result.essais = _filter_element_list_final(result.essais, "essai", 10)
+    result.resultats = _filter_element_list_final(result.resultats, "resultat", 10)
+
+    # Objet du projet recalculé après nettoyage des objectifs.
+    _choose_object_du_projet_final(result, aggregated)
+    result.lacunes = [x for x in (result.lacunes or []) if not _is_bad_structural_phrase(str(x))]
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PATCH v1.7 — fallback extractif robuste pour documents narratifs
+#
+# Problème résolu : le LLM de synthèse reçoit le résumé de l'agrégateur.
+# Si l'agrégateur a mal capté les preuves (doc narratif, sections "unknown"),
+# le LLM produit une fiche vide, ET le fallback est trop filtrant sur
+# les objectifs (objectif_re trop strict).
+#
+# Solution :
+# 1. Après la synthèse finale, si un rôle critique est vide ET que
+#    l'agrégateur a des preuves, on injecte directement les meilleures preuves
+#    brutes sans passer par le filtre _is_allowed_phrase_for_role.
+# 2. Pour les "objectifs" : assouplir le filtre final si aucun objectif n'a
+#    été trouvé (plutôt que rester à zéro, prendre les meilleures preuves de
+#    rôle "objectif" ou "contexte" sans regex strict).
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _emergency_fill_role(
+    synthesis: Synthesis,
+    aggregated: Any,
+    agg_role: str,
+    synth_attr: str,
+    max_items: int = 5,
+) -> None:
+    """
+    Injection d'urgence : si synth_attr est vide après tous les fallbacks,
+    injecte les meilleures preuves brutes de agg_role depuis l'agrégateur.
+    Pas de filtre regex — on garde les preuves non-structurelles et non-bruit.
+    """
+    current = getattr(synthesis, synth_attr, [])
+    if current:  # Déjà rempli → ne pas toucher
+        return
+
+    items = _get_items_for_role(aggregated, agg_role)
+    if not items:
+        return
+
+    # Tri par fréquence puis confiance
+    def _sort_key(item: Any) -> tuple:
+        return (-_get_frequency(item), -_get_confidence(item))
+
+    sorted_items = sorted(items, key=_sort_key)
+    added = 0
+    seen: set[str] = set()
+
+    for item in sorted_items:
+        if added >= max_items:
+            break
+        phrase = _get_phrase(item)
+        if not phrase or len(phrase) < 30:
+            continue
+        # Seulement filtrer le bruit structurel évident
+        if _is_structural_or_toc_line_universal(phrase):
+            continue
+        key = _norm(phrase)
+        if key in seen:
+            continue
+        seen.add(key)
+        el = FicheElement(
+            resume=phrase[:220] + "..." if len(phrase) > 220 else phrase,
+            preuves=[phrase],
+        )
+        getattr(synthesis, synth_attr).append(el)
+        added += 1
+
+    if added:
+        logger.info(
+            "PATCH v1.7 : injection d'urgence de %d preuve(s) pour '%s' (attr='%s') — LLM n'avait rien produit.",
+            added, agg_role, synth_attr,
+        )
+
+
+_SYNTHESIZE_V16_FINAL = synthesize
+
+
+def synthesize(  # type: ignore[override]
+    aggregated: Any,
+    domain_classification: Any = None,
+    model: str = DEFAULT_LLM_MODEL,
+    enabled: bool = True,
+) -> Synthesis:
+    """
+    v1.7 : après tous les filtres, injection d'urgence si un rôle critique est vide.
+    """
+    result = _SYNTHESIZE_V16_FINAL(aggregated, domain_classification, model, enabled)
+
+    if not enabled:
+        return result
+
+    # Injection d'urgence pour les rôles critiques vides.
+    # Ordre : du plus important au moins important.
+    _emergency_fill_role(result, aggregated, "objectif", "objectifs", max_items=6)
+    _emergency_fill_role(result, aggregated, "verrou",   "verrous",   max_items=6)
+    _emergency_fill_role(result, aggregated, "resultat", "resultats", max_items=5)
+    _emergency_fill_role(result, aggregated, "demarche", "demarche",  max_items=5)
+    _emergency_fill_role(result, aggregated, "essai",    "essais",    max_items=5)
+    _emergency_fill_role(result, aggregated, "etat_art", "etat_art",  max_items=4)
+
+    # Si objectif toujours vide, utiliser les meilleures preuves de "contexte"
+    if not result.objectifs:
+        _emergency_fill_role(result, aggregated, "contexte", "objectifs", max_items=3)
+
+    # Recalcul objet_du_projet si nécessaire
+    if not result.objet_du_projet and result.objectifs:
+        result.objet_du_projet = result.objectifs[0]
+
+    return result

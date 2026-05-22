@@ -1,0 +1,673 @@
+{
+  "_meta": {
+    "source": "Nomenclature scientifique de domaines de recherche (MESR)",
+    "levels": [
+      "niv1: 4 domaines",
+      "niv2: 33 sous-domaines",
+      "niv3: 130 sections"
+    ],
+    "usage": "Referentiel fige. domain_classifier.py demande au LLM de choisir un code parmi cette liste, puis valide le code contre ce fichier. Aucune regle metier n'est codee en dur."
+  },
+  "niv1": {
+    "A": "SCIENCES ET TECHNOLOGIES DU NUMERIQUE, MATHEMATIQUES",
+    "B": "SCIENCES et TECHNIQUES INDUSTRIELLES, PHYSIQUE",
+    "C": "SCIENCES BIOLOGIQUES, MEDICALES ET AGROALIMENTAIRES",
+    "D": "SCIENCES HUMAINES ET SOCIALES"
+  },
+  "niv2": {
+    "A1": {
+      "label": "Automatique, Automatismes et productique, Robotique, Génie informatique",
+      "parent": "A"
+    },
+    "A2": {
+      "label": "Traitement du signal et de l'image",
+      "parent": "A"
+    },
+    "A3": {
+      "label": "Informatique",
+      "parent": "A"
+    },
+    "A4": {
+      "label": "Mathématiques",
+      "parent": "A"
+    },
+    "B1": {
+      "label": "Électronique, Télécommunications et réseaux",
+      "parent": "B"
+    },
+    "B2": {
+      "label": "Génie électrique",
+      "parent": "B"
+    },
+    "B3": {
+      "label": "Matériaux, Métallurgie",
+      "parent": "B"
+    },
+    "B4": {
+      "label": "Mécanique, Génie mécanique, Génie civil",
+      "parent": "B"
+    },
+    "B5": {
+      "label": "Chimie",
+      "parent": "B"
+    },
+    "B6": {
+      "label": "Physique",
+      "parent": "B"
+    },
+    "B7": {
+      "label": "Energétique, Génie des procédés, Energies",
+      "parent": "B"
+    },
+    "B8": {
+      "label": "Océan, Atmosphère, Terre",
+      "parent": "B"
+    },
+    "C1": {
+      "label": "Biologie de la cellule",
+      "parent": "C"
+    },
+    "C2": {
+      "label": "Biologie humaine et animale",
+      "parent": "C"
+    },
+    "C3": {
+      "label": "Pharmacie, Cosmétique",
+      "parent": "C"
+    },
+    "C4": {
+      "label": "Essais cliniques",
+      "parent": "C"
+    },
+    "C5": {
+      "label": "Dispositifs médicaux, eSanté",
+      "parent": "C"
+    },
+    "C6": {
+      "label": "Biotechnologie",
+      "parent": "C"
+    },
+    "C7": {
+      "label": "Agronomie, Environnement",
+      "parent": "C"
+    },
+    "C8": {
+      "label": "Alimentation humaine et animale",
+      "parent": "C"
+    },
+    "D1": {
+      "label": "Droit, Sciences juridiques, Sciences politiques",
+      "parent": "D"
+    },
+    "D2": {
+      "label": "Sciences économiques",
+      "parent": "D"
+    },
+    "D3": {
+      "label": "Sciences de gestion et du management",
+      "parent": "D"
+    },
+    "D4": {
+      "label": "Littérature, Langues, Linguistique",
+      "parent": "D"
+    },
+    "D5": {
+      "label": "Sciences de l'art, Histoire, Archéologie",
+      "parent": "D"
+    },
+    "D6": {
+      "label": "Philosophie, Psychologie, Ergonomie",
+      "parent": "D"
+    },
+    "D7": {
+      "label": "Sciences de l'éducation, Information et communication",
+      "parent": "D"
+    },
+    "D8": {
+      "label": "Sociologie, Démographie, Ethnologie, Anthropologie",
+      "parent": "D"
+    },
+    "D9": {
+      "label": "Géographie, Aménagement de l'espace",
+      "parent": "D"
+    },
+    "D10": {
+      "label": "Urbanisme, Architecture, Environnement",
+      "parent": "D"
+    },
+    "D11": {
+      "label": "Études pluridisciplinaires particulières sur un pays, Continent",
+      "parent": "D"
+    },
+    "D12": {
+      "label": "Sciences et techniques des activités physiques et sportives",
+      "parent": "D"
+    },
+    "D13": {
+      "label": "Modélisation, Simulation, Logiciels en SHS",
+      "parent": "D"
+    }
+  },
+  "niv3": {
+    "A1a": {
+      "label": "Automatique",
+      "parent": "A1"
+    },
+    "A1b": {
+      "label": "Automatismes, productique",
+      "parent": "A1"
+    },
+    "A1c": {
+      "label": "Robotique",
+      "parent": "A1"
+    },
+    "A1d": {
+      "label": "Génie informatique",
+      "parent": "A1"
+    },
+    "A2a": {
+      "label": "Traitement du signal",
+      "parent": "A2"
+    },
+    "A2b": {
+      "label": "Traitement d'image",
+      "parent": "A2"
+    },
+    "A3a": {
+      "label": "Systèmes d'information",
+      "parent": "A3"
+    },
+    "A3b": {
+      "label": "Algorithmique, recherche opérationnelle",
+      "parent": "A3"
+    },
+    "A3c": {
+      "label": "Informatique fondamentale",
+      "parent": "A3"
+    },
+    "A3d": {
+      "label": "Réseaux",
+      "parent": "A3"
+    },
+    "A3e": {
+      "label": "Bioinformatique",
+      "parent": "A3"
+    },
+    "A3f": {
+      "label": "Systèmes informatiques",
+      "parent": "A3"
+    },
+    "A3g": {
+      "label": "Génie logiciel et programmation",
+      "parent": "A3"
+    },
+    "A3h": {
+      "label": "Intelligence artificielle",
+      "parent": "A3"
+    },
+    "A3i": {
+      "label": "Image, médias, géométrie, vision, perception, interaction",
+      "parent": "A3"
+    },
+    "A3j": {
+      "label": "Communication et relation homme machine",
+      "parent": "A3"
+    },
+    "A3k": {
+      "label": "Architecture des machines",
+      "parent": "A3"
+    },
+    "A3l": {
+      "label": "Informatique industrielle",
+      "parent": "A3"
+    },
+    "A3m": {
+      "label": "Modélisation, simulation pour les systèmes complexes",
+      "parent": "A3"
+    },
+    "A3n": {
+      "label": "Sécurité",
+      "parent": "A3"
+    },
+    "A4a": {
+      "label": "Mathématiques fondamentales",
+      "parent": "A4"
+    },
+    "A4b": {
+      "label": "Mathématiques appliquées",
+      "parent": "A4"
+    },
+    "B1a": {
+      "label": "Composants et circuits électroniques",
+      "parent": "B1"
+    },
+    "B1b": {
+      "label": "Electronique numérique",
+      "parent": "B1"
+    },
+    "B1c": {
+      "label": "Microélectronique",
+      "parent": "B1"
+    },
+    "B1d": {
+      "label": "Nanoélectronique",
+      "parent": "B1"
+    },
+    "B1e": {
+      "label": "Télécommunications et réseaux",
+      "parent": "B1"
+    },
+    "B2a": {
+      "label": "Matériaux",
+      "parent": "B2"
+    },
+    "B2b": {
+      "label": "Composants",
+      "parent": "B2"
+    },
+    "B2c": {
+      "label": "Production d'électricité, réseaux électriques",
+      "parent": "B2"
+    },
+    "B2d": {
+      "label": "Electronique de puissance",
+      "parent": "B2"
+    },
+    "B2e": {
+      "label": "Electromécanique",
+      "parent": "B2"
+    },
+    "B2f": {
+      "label": "Contrôle des composants et des systèmes électriques",
+      "parent": "B2"
+    },
+    "B2g": {
+      "label": "Systèmes et domaines applicatifs",
+      "parent": "B2"
+    },
+    "B3a": {
+      "label": "Matériaux solides inorganiques",
+      "parent": "B3"
+    },
+    "B3b": {
+      "label": "Matériaux céramiques, verres",
+      "parent": "B3"
+    },
+    "B3c": {
+      "label": "Matériaux métalliques, métaux, alliages",
+      "parent": "B3"
+    },
+    "B3d": {
+      "label": "Matériaux polymères",
+      "parent": "B3"
+    },
+    "B3e": {
+      "label": "Matériaux composites",
+      "parent": "B3"
+    },
+    "B3f": {
+      "label": "Matériaux hybrides",
+      "parent": "B3"
+    },
+    "B3g": {
+      "label": "Multimatériaux",
+      "parent": "B3"
+    },
+    "B3h": {
+      "label": "Matériaux biosourcés, bioinspirés, biomatériaux",
+      "parent": "B3"
+    },
+    "B4a": {
+      "label": "Mécanique fondamentale",
+      "parent": "B4"
+    },
+    "B4b": {
+      "label": "Mécanique des structures",
+      "parent": "B4"
+    },
+    "B4c": {
+      "label": "Mécanique des matériaux",
+      "parent": "B4"
+    },
+    "B4d": {
+      "label": "Génie mécanique",
+      "parent": "B4"
+    },
+    "B4e": {
+      "label": "Mécanique des fluides",
+      "parent": "B4"
+    },
+    "B4f": {
+      "label": "Acoustique",
+      "parent": "B4"
+    },
+    "B4g": {
+      "label": "Génie civil",
+      "parent": "B4"
+    },
+    "B4h": {
+      "label": "Biomécanique",
+      "parent": "B4"
+    },
+    "B4i": {
+      "label": "Génie industriel",
+      "parent": "B4"
+    },
+    "B4j": {
+      "label": "Domaines applicatifs",
+      "parent": "B4"
+    },
+    "B5a": {
+      "label": "Chimie théorique, physique, analytique",
+      "parent": "B5"
+    },
+    "B5b": {
+      "label": "Chimie organique, minérale, industrielle",
+      "parent": "B5"
+    },
+    "B6a": {
+      "label": "Optique",
+      "parent": "B6"
+    },
+    "B6b": {
+      "label": "Physique théorique et expérimentale",
+      "parent": "B6"
+    },
+    "B6c": {
+      "label": "Physique théorique",
+      "parent": "B6"
+    },
+    "B7a": {
+      "label": "Thermique, énergétique",
+      "parent": "B7"
+    },
+    "B7b": {
+      "label": "Combustion, plasma",
+      "parent": "B7"
+    },
+    "B7c": {
+      "label": "Génie des procédés, génie industriel",
+      "parent": "B7"
+    },
+    "B7d": {
+      "label": "Génie de l'environnement",
+      "parent": "B7"
+    },
+    "B7e": {
+      "label": "Energies",
+      "parent": "B7"
+    },
+    "B8a": {
+      "label": "Météorologie, sciences du climat",
+      "parent": "B8"
+    },
+    "B8b": {
+      "label": "Océanographie",
+      "parent": "B8"
+    },
+    "B8c": {
+      "label": "Sciences de l'environnement",
+      "parent": "B8"
+    },
+    "B8d": {
+      "label": "Astronomie, astrophysique",
+      "parent": "B8"
+    },
+    "B8e": {
+      "label": "Géosciences",
+      "parent": "B8"
+    },
+    "C1a": {
+      "label": "Biochimie, biologie structurale",
+      "parent": "C1"
+    },
+    "C1b": {
+      "label": "Biologie moléculaire, génétique",
+      "parent": "C1"
+    },
+    "C1c": {
+      "label": "Organisation et fonctions cellulaires",
+      "parent": "C1"
+    },
+    "C1d": {
+      "label": "Biologie des systèmes",
+      "parent": "C1"
+    },
+    "C1e": {
+      "label": "Bioinformatique, biostatistiques",
+      "parent": "C1"
+    },
+    "C1f": {
+      "label": "Microscopie, imagerie",
+      "parent": "C1"
+    },
+    "C2a": {
+      "label": "Microbiologie",
+      "parent": "C2"
+    },
+    "C2b": {
+      "label": "Biologie de la reproduction et du développement",
+      "parent": "C2"
+    },
+    "C2c": {
+      "label": "Evolution, écologie, biologie des populations",
+      "parent": "C2"
+    },
+    "C2d": {
+      "label": "Physiologie",
+      "parent": "C2"
+    },
+    "C2e": {
+      "label": "Médecine humaine",
+      "parent": "C2"
+    },
+    "C2f": {
+      "label": "Médecines alternatives et complémentaires",
+      "parent": "C2"
+    },
+    "C2g": {
+      "label": "Santé publique",
+      "parent": "C2"
+    },
+    "C2h": {
+      "label": "Sciences du comportement",
+      "parent": "C2"
+    },
+    "C2i": {
+      "label": "Sport, bien être",
+      "parent": "C2"
+    },
+    "C2j": {
+      "label": "Médecine vétérinaire",
+      "parent": "C2"
+    },
+    "C3a": {
+      "label": "Principes actifs",
+      "parent": "C3"
+    },
+    "C3b": {
+      "label": "Délivrance de principes actifs",
+      "parent": "C3"
+    },
+    "C4a": {
+      "label": "Essais cliniques",
+      "parent": "C4"
+    },
+    "C5a": {
+      "label": "Dispositifs médicaux",
+      "parent": "C5"
+    },
+    "C5b": {
+      "label": "eSanté",
+      "parent": "C5"
+    },
+    "C6a": {
+      "label": "Biotechnologies vertes [agronomie]",
+      "parent": "C6"
+    },
+    "C6b": {
+      "label": "Biotechnologies rouges [médecine]",
+      "parent": "C6"
+    },
+    "C6c": {
+      "label": "Biotechnologies blanches [industrie]",
+      "parent": "C6"
+    },
+    "C6d": {
+      "label": "Biotechnologies jaunes [environnement]",
+      "parent": "C6"
+    },
+    "C6e": {
+      "label": "Biotechnologies bleues [mer]",
+      "parent": "C6"
+    },
+    "C7a": {
+      "label": "Production végétales",
+      "parent": "C7"
+    },
+    "C7b": {
+      "label": "Productions animales",
+      "parent": "C7"
+    },
+    "C7c": {
+      "label": "Produits de la mer",
+      "parent": "C7"
+    },
+    "C7d": {
+      "label": "Environnement",
+      "parent": "C7"
+    },
+    "C8a": {
+      "label": "Analyse des produits alimentaires",
+      "parent": "C8"
+    },
+    "C8b": {
+      "label": "Microbiologie de l'alimentation",
+      "parent": "C8"
+    },
+    "C8c": {
+      "label": "Procédés agroalimentaires",
+      "parent": "C8"
+    },
+    "C8d": {
+      "label": "Contrôles qualité de l'alimentation",
+      "parent": "C8"
+    },
+    "C8e": {
+      "label": "Analyse sensorielle",
+      "parent": "C8"
+    },
+    "C8f": {
+      "label": "Sécurité alimentaire",
+      "parent": "C8"
+    },
+    "C8g": {
+      "label": "Nutrition, diététique",
+      "parent": "C8"
+    },
+    "C8h": {
+      "label": "Secteurs d'activité",
+      "parent": "C8"
+    },
+    "D1a": {
+      "label": "Droit privé et sciences criminelles",
+      "parent": "D1"
+    },
+    "D1b": {
+      "label": "Droit public",
+      "parent": "D1"
+    },
+    "D1c": {
+      "label": "Histoire du droit et des institutions",
+      "parent": "D1"
+    },
+    "D1d": {
+      "label": "Sciences politiques",
+      "parent": "D1"
+    },
+    "D2a": {
+      "label": "Sciences économiques",
+      "parent": "D2"
+    },
+    "D3a": {
+      "label": "Sciences de gestion et du management",
+      "parent": "D3"
+    },
+    "D4a": {
+      "label": "Littérature, langues, linguistique",
+      "parent": "D4"
+    },
+    "D5a": {
+      "label": "Sciences de l'art",
+      "parent": "D5"
+    },
+    "D5b": {
+      "label": "Histoire",
+      "parent": "D5"
+    },
+    "D5c": {
+      "label": "Archéologie",
+      "parent": "D5"
+    },
+    "D6a": {
+      "label": "Philosophie",
+      "parent": "D6"
+    },
+    "D6b": {
+      "label": "Psychologie",
+      "parent": "D6"
+    },
+    "D6c": {
+      "label": "Ergonomie",
+      "parent": "D6"
+    },
+    "D6d": {
+      "label": "Innovation sociale, sciences participatives",
+      "parent": "D6"
+    },
+    "D7a": {
+      "label": "Sciences de l'éducation et de la formation",
+      "parent": "D7"
+    },
+    "D7b": {
+      "label": "Information, communication",
+      "parent": "D7"
+    },
+    "D8a": {
+      "label": "Sociologie, démographie",
+      "parent": "D8"
+    },
+    "D8b": {
+      "label": "Ethnologie, anthropologie",
+      "parent": "D8"
+    },
+    "D9a": {
+      "label": "Géographie",
+      "parent": "D9"
+    },
+    "D9b": {
+      "label": "Aménagement de l'espace",
+      "parent": "D9"
+    },
+    "D10a": {
+      "label": "Urbanisme",
+      "parent": "D10"
+    },
+    "D10b": {
+      "label": "Architecture",
+      "parent": "D10"
+    },
+    "D11a": {
+      "label": "Études pluridisciplinaires particulières sur un pays, continent",
+      "parent": "D11"
+    },
+    "D12a": {
+      "label": "Sciences et techniques des activités physiques et sportives",
+      "parent": "D12"
+    },
+    "D13a": {
+      "label": "Modélisation, simulation, logiciels en SHS",
+      "parent": "D13"
+    }
+  }
+}

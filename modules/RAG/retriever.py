@@ -268,6 +268,18 @@ def _detect_light_intent(query: str) -> str:
     return best_intent
 
 
+def detect_intent(query: str) -> str:
+    """
+    Alias public utilisé par query_engine.py.
+
+    Garde la compatibilité avec :
+        from modules.RAG.retriever import detect_intent
+
+    La logique reste exactement celle de _detect_light_intent().
+    """
+    return _detect_light_intent(query)
+
+
 def _normalize_filter_meta(filter_meta: Optional[dict]) -> Optional[dict]:
     """
     Normalise les filtres envoyés au VectorStore.

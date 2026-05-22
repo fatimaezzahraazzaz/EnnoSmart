@@ -1,7 +1,7 @@
 """
-modules/orchestration/schemas.py — EnnoSmart / EnnoAmel POC
+modules/orchestration/schemas.py — EnnoSmart / Orchestrateur POC
 ──────────────────────────────────────────────────────────────────────────────
-Schémas communs pour l'orchestrateur EnnoAmel.
+Schémas communs pour l'orchestrateur Orchestrateur.
 
 Rôle :
   - Centraliser les dataclasses utilisées par l'orchestration.
@@ -10,7 +10,7 @@ Rôle :
   - Fournir des objets JSON-serializables pour Streamlit/API.
 
 Architecture :
-  Extraction → NLP → RAG → EnnoAmel
+  Extraction → NLP → RAG → Orchestrateur
 """
 
 from __future__ import annotations
@@ -187,7 +187,7 @@ class WorkflowReport(SerializableMixin):
 @dataclass
 class OrchestratorState(SerializableMixin):
     """
-    État courant de l'orchestrateur EnnoAmel.
+    État courant de l'orchestrateur Orchestrateur.
     """
     has_document: bool = False
     has_extraction: bool = False
@@ -294,7 +294,7 @@ class AskContext(SerializableMixin):
     """
     question: str
     intent: str = "qa"
-    recommended_agent: str = "EnnoAmel"
+    recommended_agent: str = "Orchestrateur"
     action: str = "answer_question_with_rag"
     confidence: float = 0.0
     rag_query: str = ""
@@ -327,4 +327,4 @@ class SidebarStatus(SerializableMixin):
     indexed_chunks: int = 0
     embedding_model: str = ""
     llm_model: str = ""
-    active_agent: str = "EnnoAmel"
+    active_agent: str = "Orchestrateur"

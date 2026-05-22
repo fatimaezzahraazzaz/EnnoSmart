@@ -1,5 +1,5 @@
 """
-modules/RAG/query_engine.py — EnnoSmart RAG v1.2 EnnoAmel POC
+modules/RAG/query_engine.py — EnnoSmart RAG v1.2 NLP V7 EnnoAmel POC
 ──────────────────────────────────────────────────────────────────────────────
 Query Engine : transforme les chunks récupérés par le Retriever en réponse LLM.
 
@@ -29,7 +29,7 @@ Modèle recommandé pour ce POC :
 Important :
   - Le QueryEngine ne doit pas halluciner.
   - Il répond uniquement depuis les sources récupérées.
-  - Il cite les sources [S1], [S2], etc.
+  - Il cite les sources [S1], [S2], etc. sauf si l'instruction demande explicitement de ne pas citer.
 """
 
 from __future__ import annotations
@@ -76,6 +76,17 @@ Style de réponse attendu :
 - Réponds comme un assistant professionnel, naturel et clair.
 - Ne sois pas robotique.
 - Va directement à l'essentiel.
+- Si l'utilisateur demande un petit résumé clair du projet :
+  * réponds en un seul paragraphe ;
+  * inclue seulement le domaine, l'objectif principal, les verrous importants, les mots-clés et technologies importantes ;
+  * ne parle pas des agents EnnoDiagnostic, EnnoScholar ou EnnoValor ;
+  * ne parle pas de rescrit, JEI, agrément, DGA, ministère, administratif ou score CIR sauf si demandé ;
+  * ne cite pas les sources dans le corps de la réponse ;
+  * ne transforme pas le résumé en analyse CIR.
+- Respecte strictement le format demandé par l'utilisateur.
+- Si l'utilisateur demande une réponse courte, ne donne pas une réponse longue.
+- Si l'utilisateur demande un nombre de points, respecte exactement ce nombre.
+- Si l'utilisateur demande un sujet précis, ne mélange pas avec les autres sujets.
 - Structure la réponse avec des titres courts si utile.
 - Utilise des listes seulement quand cela aide vraiment la compréhension.
 - Explique les choses simplement, même si le contenu est technique.
@@ -84,9 +95,18 @@ Style de réponse attendu :
 - Si l'utilisateur demande "de quoi parle ce projet", donne une synthèse claire.
 - Si l'utilisateur demande les mots-clés, verrous, méthodes ou outils, extrais-les clairement depuis les sources.
 
+Règle prioritaire pour le résumé court :
+- Si la question contient une instruction du type "petit résumé clair du projet", "un seul paragraphe", "ne pas citer les sources" ou "ne pas parler des agents" :
+  * utilise le contexte RAG seulement comme matière interne ;
+  * rédige un paragraphe naturel ;
+  * ne mets jamais [S1], [S2], [S3] ;
+  * ne termine pas par une liste de sources ;
+  * ne parle pas des agents ;
+  * ne parle pas de CIR, score, rescrit, JEI, DGA, ministère ou administratif sauf demande explicite.
+
 Règles strictes :
 - Base-toi uniquement sur le contexte fourni.
-- Cite les sources sous forme [S1], [S2], etc.
+- Cite les sources sous forme [S1], [S2], etc., sauf si la question ou l'instruction demande de ne pas citer les sources.
 - Si une information n'est pas présente dans le contexte, dis-le clairement.
 - Ne donne pas un score CIR définitif dans ce POC.
 - Ne présente jamais une hypothèse comme une certitude.
@@ -124,20 +144,25 @@ Réponds uniquement à partir du contexte fourni.
 Tu dois produire une réponse naturelle, claire et utile, comme un vrai assistant de dialogue.
 
 Règles générales :
-- Cite les sources avec [S1], [S2], etc.
-- Ne cite que les sources réellement utiles.
+- Cite les sources avec [S1], [S2], etc. seulement si l'instruction ne demande pas de les masquer.
+- Si l'instruction demande de ne pas citer les sources, n'ajoute aucun [S1], [S2] dans la réponse.
 - Si une information est absente du contexte, dis-le clairement.
 - Ne fais pas de conclusion définitive si les preuves sont insuffisantes.
 - Ne répète pas tout le contexte brut.
 - Reformule les informations importantes de manière compréhensible.
+- La section "Question utilisateur" peut contenir une "Instruction de réponse" : elle est prioritaire.
+- Si l'instruction demande uniquement les verrous, ne parle pas des objectifs, méthodes, outils ou résultats.
+- Si l'instruction demande uniquement les objectifs, ne parle pas des verrous, méthodes, outils ou résultats.
+- Si l'instruction demande une réponse en 3 points, réponds exactement en 3 points.
 
 Si l'intention est "summary" :
-- présente l'idée générale du projet ;
-- donne le domaine principal si disponible ;
-- explique l'objet de recherche ;
-- liste les objectifs R&D, verrous, méthodes, outils et résultats s'ils sont disponibles ;
-- termine par une phrase de synthèse claire ;
-- cite les sources.
+- si la question demande un petit résumé clair du projet, réponds en un seul paragraphe naturel ;
+- pour ce résumé court, donne uniquement : domaine, objectif principal, verrous importants, mots-clés et technologies importantes ;
+- ne cite aucune source dans le texte : pas de [S1], [S2], [S3] ;
+- ne parle pas des agents EnnoDiagnostic, EnnoScholar ou EnnoValor ;
+- ne parle pas de rescrit, JEI, agrément, DGA, ministère, administratif ou score CIR sauf si demandé explicitement ;
+- si la question demande un sujet précis, réponds uniquement sur ce sujet ;
+- ne liste pas automatiquement objectifs, verrous, méthodes, outils et résultats si l'utilisateur ne les demande pas.
 
 Si l'intention est "eligibility" :
 - donne une estimation préliminaire, pas un verdict final ;
@@ -176,7 +201,8 @@ Si l'intention est "standards" :
 - précise si aucune norme claire n'est trouvée.
 
 Sinon :
-- réponds directement à la question avec sources.
+- réponds directement à la question ;
+- cite les sources seulement si l'instruction ne demande pas de les masquer.
 """
 
 

@@ -1,7 +1,7 @@
 """
-modules/orchestration/intent_router.py — EnnoSmart / EnnoAmel POC
+modules/orchestration/intent_router.py — EnnoSmart / Orchestrateur POC
 ──────────────────────────────────────────────────────────────────────────────
-Détection d'intention utilisateur pour l'orchestrateur EnnoAmel.
+Détection d'intention utilisateur pour l'orchestrateur Orchestrateur.
 
 Rôle :
   - Comprendre ce que l'utilisateur veut faire.
@@ -11,12 +11,12 @@ Rôle :
 
 Architecture :
   Streamlit / API
-      → EnnoAmelOrchestrator
+      → Orchestrator
       → intent_router.py
       → RAG / agent spécialisé
 
 Agents :
-  - EnnoAmel       : résumé, chat documentaire, amélioration ciblée, orchestration.
+  - Orchestrateur       : résumé, chat documentaire, amélioration ciblée, orchestration.
   - EnnoDiagnostic : score CIR, éligibilité, verrous, risques, preuves.
   - EnnoScholar   : état de l'art, articles scientifiques, citations.
   - EnnoValor     : données financières/RH, Excel, Cerfa, livrables admin.
@@ -55,7 +55,8 @@ class Intent(str, Enum):
 
 
 class AgentName(str, Enum):
-    ENNOAMEL = "EnnoAmel"
+    ORCHESTRATEUR = "Orchestrateur"
+    ENNOAMEL = "Orchestrateur"  # alias compatibilité
     ENNODIAGNOSTIC = "EnnoDiagnostic"
     ENNOSCHOLAR = "EnnoScholar"
     ENNOVALOR = "EnnoValor"
@@ -526,7 +527,7 @@ def _agent_for_intent(intent: Intent) -> AgentName:
     if intent == Intent.VALOR:
         return AgentName.ENNOVALOR
 
-    return AgentName.ENNOAMEL
+    return AgentName.ORCHESTRATEUR
 
 
 def _specialized_required(intent: Intent) -> bool:
@@ -606,13 +607,13 @@ def _build_action(intent: Intent, agent: AgentName) -> str:
 
 def _build_explanation(intent: Intent, agent: AgentName, matches: list[str]) -> str:
     if intent == Intent.SUMMARY:
-        return "La demande porte sur une vue globale du projet. EnnoAmel peut répondre directement avec le RAG."
+        return "La demande porte sur une vue globale du projet. Orchestrateur peut répondre directement avec le RAG."
 
     if intent == Intent.QA:
-        return "La demande est une question documentaire générale. EnnoAmel répond à partir des sources RAG."
+        return "La demande est une question documentaire générale. Orchestrateur répond à partir des sources RAG."
 
     if intent == Intent.ELIGIBILITY:
-        return "La demande concerne l'éligibilité CIR ou le score. EnnoAmel donne une estimation préliminaire, puis recommande EnnoDiagnostic."
+        return "La demande concerne l'éligibilité CIR ou le score. Orchestrateur donne une estimation préliminaire, puis recommande EnnoDiagnostic."
 
     if intent == Intent.DIAGNOSTIC:
         return "La demande nécessite une analyse CIR détaillée. L'agent cible est EnnoDiagnostic."
@@ -624,24 +625,24 @@ def _build_explanation(intent: Intent, agent: AgentName, matches: list[str]) -> 
         return "La demande concerne les données financières, RH ou livrables administratifs. L'agent cible est EnnoValor."
 
     if intent == Intent.IMPROVE:
-        return "La demande concerne l'amélioration ou la reformulation d'un texte. EnnoAmel peut traiter cette action."
+        return "La demande concerne l'amélioration ou la reformulation d'un texte. Orchestrateur peut traiter cette action."
 
     if intent == Intent.EXTRACTION:
-        return "La demande concerne l'extraction documentaire. EnnoAmel doit lancer ou afficher l'étape Extraction."
+        return "La demande concerne l'extraction documentaire. Orchestrateur doit lancer ou afficher l'étape Extraction."
 
     if intent == Intent.NLP:
-        return "La demande concerne les entités, métadonnées ou résultats NLP. EnnoAmel doit utiliser ou afficher l'étape NLP."
+        return "La demande concerne les entités, métadonnées ou résultats NLP. Orchestrateur doit utiliser ou afficher l'étape NLP."
 
     if intent == Intent.RAG_DEBUG:
-        return "La demande concerne le debug RAG, les chunks ou les scores. EnnoAmel doit afficher les sources récupérées."
+        return "La demande concerne le debug RAG, les chunks ou les scores. Orchestrateur doit afficher les sources récupérées."
 
     if intent == Intent.HELP:
         return "La demande concerne les capacités disponibles du POC."
 
     if intent == Intent.CHAT:
-        return "La demande est une conversation humaine simple. EnnoAmel peut répondre sans document ni RAG."
+        return "La demande est une conversation humaine simple. Orchestrateur peut répondre sans document ni RAG."
 
-    return "Intention incertaine. EnnoAmel utilisera une réponse RAG générale si un document est chargé."
+    return "Intention incertaine. Orchestrateur utilisera une réponse RAG générale si un document est chargé."
 
 
 def _build_rag_query(user_message: str, intent: Intent) -> str:
@@ -715,7 +716,7 @@ def detect_intent(
     if not msg:
         return IntentDecision(
             intent=Intent.UNKNOWN,
-            recommended_agent=AgentName.ENNOAMEL,
+            recommended_agent=AgentName.ORCHESTRATEUR,
             confidence=0.0,
             action="empty_message",
             rag_query="",

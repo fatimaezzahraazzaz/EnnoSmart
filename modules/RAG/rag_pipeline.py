@@ -1,18 +1,23 @@
 """
-modules/RAG/rag_pipeline.py — EnnoSmart RAG v1.1 ChromaDB + EnnoAmel POC
+modules/RAG/rag_pipeline.py — EnnoSmart RAG v2 structured ChromaDB + EnnoAmel POC
 ──────────────────────────────────────────────────────────────────────────────
 Pipeline RAG complet :
   - ingestion de JSON NLP enrichis ;
+  - construction de chunks RAG structurés :
+      1) sections réelles du document
+      2) field cards : objectifs, verrous, état de l'art, méthodes, résultats
+      3) entity cards : technologies, matériaux, personnes, organismes, métriques
+      4) raw chunks optionnels
   - stockage ChromaDB ;
   - recherche metadata-aware ;
   - réponse via QueryEngine ;
   - compatible avec EnnoAmel orchestrateur.
 
 Architecture :
-  Extraction → NLP → RAG → EnnoAmel
+  Extraction → NLP router → JSON NLP final → RAG → EnnoAmel
 
 Entrée :
-  NLPResult.to_json() produit par modules.NLP.router.to_json()
+  JSON produit par modules.NLP.router.to_json()
 
 Sortie :
   RAGResponse avec :
@@ -21,16 +26,14 @@ Sortie :
     - intent
     - recommended_agent
     - chunks_used
-
-Modèles recommandés :
-  Embedding : BAAI/bge-m3
-  LLM       : ollama:mistral:7b-instruct
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
+import unicodedata
 from pathlib import Path
 from typing import Any, Optional
 
@@ -49,12 +52,461 @@ DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
 DEFAULT_LLM_MODEL = "ollama:mistral:7b-instruct"
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# HELPERS
+# ════════════════════════════════════════════════════════════════════════════
+
+def slugify_org(name: str) -> str:
+    """
+    Transforme le nom saisi dans le frontend en organisme_id stable.
+
+    Exemple :
+      "ABINNOV" → "abinnov"
+      "GIRODIN SAUER" → "girodin_sauer"
+    """
+    text = unicodedata.normalize("NFKD", str(name or "").lower())
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = re.sub(r"[^a-z0-9]+", "_", text)
+    text = re.sub(r"_+", "_", text).strip("_")
+    return text or "organisme_inconnu"
+
+
+def _clean_metadata_str(value: Any, default: str = "") -> str:
+    text = str(value or "").strip()
+    return text if text else default
+
+
+def _clean_text(value: Any) -> str:
+    text = str(value or "").replace("\u00a0", " ")
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def _as_list(value: Any) -> list:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    if isinstance(value, set):
+        return list(value)
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    return [value]
+
+
+def _flatten_text_items(value: Any) -> list[str]:
+    """
+    Transforme une valeur JSON quelconque en liste de textes propres.
+    Gère strings, listes, dicts, objets simples.
+    """
+    out: list[str] = []
+
+    for item in _as_list(value):
+        if item is None:
+            continue
+
+        if isinstance(item, str):
+            txt = _clean_text(item)
+            if txt:
+                out.append(txt)
+            continue
+
+        if isinstance(item, dict):
+            preferred_keys = [
+                "resume",
+                "phrase",
+                "phrase_source",
+                "text",
+                "label",
+                "name",
+                "titre",
+                "title",
+                "numero",
+                "date",
+                "inventeurs",
+                "deposant",
+            ]
+
+            parts = []
+            for key in preferred_keys:
+                if key in item:
+                    val = item.get(key)
+                    if isinstance(val, list):
+                        parts.extend(_flatten_text_items(val))
+                    else:
+                        txt = _clean_text(val)
+                        if txt:
+                            parts.append(txt)
+
+            if parts:
+                out.append(" | ".join(parts))
+            else:
+                txt = _clean_text(json.dumps(item, ensure_ascii=False))
+                if txt:
+                    out.append(txt)
+            continue
+
+        txt = _clean_text(item)
+        if txt:
+            out.append(txt)
+
+    seen = set()
+    deduped = []
+    for x in out:
+        key = x.lower()
+        if key not in seen:
+            seen.add(key)
+            deduped.append(x)
+
+    return deduped
+
+
+def _safe_doc_meta(nlp_json: dict[str, Any]) -> dict[str, Any]:
+    doc_meta = nlp_json.setdefault("document_metadata", {})
+    if not isinstance(doc_meta, dict):
+        doc_meta = {}
+        nlp_json["document_metadata"] = doc_meta
+    return doc_meta
+
+
+def force_organisme_metadata(
+    nlp_json: dict[str, Any],
+    organisme_name: str,
+    organisme_id: Optional[str] = None,
+    file_hash: str = "",
+    document_id: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Force organisme_name / organisme_id dans document_metadata et dans tous les chunks.
+
+    Pourquoi :
+      Le NLP peut deviner l'organisme depuis le nom du fichier.
+      Mais dans ton application, l'organisme vient du champ de saisie frontend.
+      Cette fonction rend ce champ prioritaire et évite de mélanger les clients.
+    """
+    if not isinstance(nlp_json, dict):
+        raise TypeError("force_organisme_metadata() attend un dict NLP JSON.")
+
+    org_name = _clean_metadata_str(organisme_name, "Organisme inconnu")
+    org_id = _clean_metadata_str(organisme_id, slugify_org(org_name))
+    file_hash = _clean_metadata_str(file_hash, "")
+
+    doc_meta = _safe_doc_meta(nlp_json)
+    doc_meta["organisme_name"] = org_name
+    doc_meta["organisme_id"] = org_id
+
+    if file_hash:
+        doc_meta["file_hash"] = file_hash
+
+    final_file_hash = _clean_metadata_str(doc_meta.get("file_hash"), file_hash)
+    file_name = _clean_metadata_str(doc_meta.get("file_name"), "document")
+
+    if document_id:
+        final_document_id = str(document_id).strip()
+    elif final_file_hash:
+        final_document_id = f"{org_id}_{final_file_hash[:16]}"
+    else:
+        final_document_id = f"{org_id}_{slugify_org(file_name)}"
+
+    doc_meta["document_id"] = final_document_id
+    doc_meta["file_hash"] = final_file_hash
+
+    for chunk in nlp_json.get("chunks", []) or []:
+        if not isinstance(chunk, dict):
+            continue
+
+        meta = chunk.setdefault("metadata", {})
+        if not isinstance(meta, dict):
+            meta = {}
+            chunk["metadata"] = meta
+
+        meta["organisme_name"] = org_name
+        meta["organisme_id"] = org_id
+        meta["document_id"] = final_document_id
+        meta["file_hash"] = final_file_hash
+
+        chunk["organisme_name"] = org_name
+        chunk["organisme_id"] = org_id
+        chunk["document_id"] = final_document_id
+        chunk["file_hash"] = final_file_hash
+
+    return nlp_json
+
+
+def build_organisme_filter(
+    organisme_name: Optional[str] = None,
+    organisme_id: Optional[str] = None,
+    document_id: Optional[str] = None,
+    file_hash: Optional[str] = None,
+) -> dict[str, str]:
+    """
+    Construit un filtre RAG robuste depuis le frontend.
+    organisme_id est prioritaire. Si absent, il est calculé depuis organisme_name.
+    """
+    org_id = _clean_metadata_str(organisme_id, "")
+    if not org_id and organisme_name:
+        org_id = slugify_org(organisme_name)
+
+    if not org_id:
+        raise ValueError("organisme_id ou organisme_name est obligatoire pour filtrer le RAG.")
+
+    f: dict[str, str] = {"organisme_id": org_id}
+
+    if document_id:
+        f["document_id"] = str(document_id).strip()
+
+    if file_hash:
+        f["file_hash"] = str(file_hash).strip()
+
+    return f
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# RAG V2 STRUCTURED CHUNKS
+# ════════════════════════════════════════════════════════════════════════════
+
+def build_rag_chunks_from_nlp_json(
+    nlp_json: dict[str, Any],
+    include_raw_chunks: bool = False,
+) -> list[dict]:
+    """
+    Construit des chunks RAG structurés depuis le JSON NLP final.
+
+    Paramètres :
+      nlp_json           : JSON produit par le router NLP.
+      include_raw_chunks : si True, ajoute aussi les chunks bruts NLP.
+                           si False, garde seulement section / field_card / entity_card.
+                           si aucune structure n'existe, les chunks bruts sont utilisés en fallback.
+
+    Types de chunks créés :
+      - section     : sections réelles du document
+      - field_card  : champs R&D structurés
+      - entity_card : entités / mots-clés / technologies / personnes / organismes
+      - raw_chunk   : optionnel ou fallback
+
+    Objectif :
+      éviter que le RAG dépende uniquement des chunks bruts ou de métadonnées
+      globales bruitées.
+    """
+    if not isinstance(nlp_json, dict):
+        return []
+
+    doc_meta = _safe_doc_meta(nlp_json)
+
+    file_name = _clean_metadata_str(doc_meta.get("file_name"), "document")
+    document_id = _clean_metadata_str(doc_meta.get("document_id"), file_name)
+    organisme_name = _clean_metadata_str(doc_meta.get("organisme_name"), "Organisme inconnu")
+    organisme_id = _clean_metadata_str(doc_meta.get("organisme_id"), "organisme_inconnu")
+    file_hash = _clean_metadata_str(doc_meta.get("file_hash"), "")
+    title = _clean_metadata_str(doc_meta.get("title"), "")
+
+    chunks: list[dict] = []
+
+    def base_meta(extra: Optional[dict] = None) -> dict:
+        meta = {
+            "file_name": file_name,
+            "file_category": doc_meta.get("file_category", ""),
+            "source_tag": doc_meta.get("source_tag", ""),
+            "organisme_name": organisme_name,
+            "organisme_id": organisme_id,
+            "file_hash": file_hash,
+            "document_id": document_id,
+            "title": title,
+            "domaine_principal": doc_meta.get("domaine_principal", ""),
+            "domaine_applicatif": doc_meta.get("domaine_applicatif", ""),
+            "domaine_scientifique_detaille": doc_meta.get("domaine_scientifique_detaille", ""),
+        }
+        if extra:
+            meta.update(extra)
+        return meta
+
+    def add_chunk(
+        chunk_id: str,
+        content: str,
+        source_type: str,
+        meta_extra: Optional[dict] = None,
+        index: Optional[int] = None,
+    ) -> None:
+        content = _clean_text(content)
+        if not content:
+            return
+
+        meta = base_meta(
+            {
+                "chunk_source_type": source_type,
+                "source_type": source_type,
+                **(meta_extra or {}),
+            }
+        )
+
+        idx = len(chunks) if index is None else index
+
+        chunks.append(
+            {
+                "chunk_id": chunk_id,
+                "index": idx,
+                "content": content,
+                "source": source_type,
+                "organisme_name": organisme_name,
+                "organisme_id": organisme_id,
+                "document_id": document_id,
+                "file_hash": file_hash,
+                "metadata": meta,
+            }
+        )
+
+    # 1) Sections réelles du document
+    structure = doc_meta.get("document_structure", {}) or {}
+    sections = structure.get("sections", []) if isinstance(structure, dict) else []
+
+    for i, sec in enumerate(sections):
+        if not isinstance(sec, dict):
+            continue
+
+        section_id = _clean_metadata_str(sec.get("section_id"), f"{document_id}_section_{i:04d}")
+        sec_title = _clean_text(sec.get("title"))
+        sec_role = _clean_text(sec.get("role"))
+        sec_content = _clean_text(sec.get("content") or sec.get("text"))
+
+        if sec_title and sec_content:
+            content = f"{sec_title}\n\n{sec_content}"
+        else:
+            content = sec_title or sec_content
+
+        add_chunk(
+            chunk_id=f"{document_id}_section_{i:04d}",
+            content=content,
+            source_type="section",
+            meta_extra={
+                "section_id": section_id,
+                "section_title": sec_title,
+                "section_role": sec_role,
+                "source_chunk_indexes": sec.get("source_chunk_indexes", []),
+                "start_line": sec.get("start_line"),
+                "end_line": sec.get("end_line"),
+            },
+        )
+
+    # 2) Field cards R&D
+    field_map = {
+        "objet_recherche": "Objet de recherche",
+        "objectifs_rd": "Objectifs R&D",
+        "verrous_techniques": "Verrous techniques",
+        "etat_art": "État de l'art",
+        "methodes_rd": "Méthodes / démarche R&D",
+        "resultats_rd": "Résultats R&D",
+        "limitations_perspectives": "Limites / perspectives",
+        "brevets": "Brevets",
+    }
+
+    for field, label in field_map.items():
+        values = _flatten_text_items(doc_meta.get(field))
+        if not values:
+            continue
+
+        content = f"{label}\n" + "\n".join(f"- {x}" for x in values)
+
+        add_chunk(
+            chunk_id=f"{document_id}_field_{field}",
+            content=content,
+            source_type="field_card",
+            meta_extra={
+                "field_name": field,
+                "field_label": label,
+                "section_role": field,
+            },
+        )
+
+    # 3) Entity cards
+    entity_map = {
+        "mots_cles_projet": "Mots-clés projet",
+        "technologies": "Technologies",
+        "materiaux_composants": "Matériaux / composants / éléments techniques",
+        "equipements": "Équipements",
+        "metriques_evaluation": "Métriques / paramètres",
+        "metriques": "Métriques / paramètres",
+        "normes_techniques": "Normes / standards",
+        "normes": "Normes / standards",
+        "personnes": "Personnes détectées",
+        "organismes": "Organismes détectés",
+        "partenaires_rd": "Partenaires R&D",
+    }
+
+    for field, label in entity_map.items():
+        raw = doc_meta.get(field)
+
+        if field == "mots_cles_projet" and isinstance(raw, dict):
+            values = []
+            values.extend(_flatten_text_items(raw.get("high_confidence")))
+            values.extend(_flatten_text_items(raw.get("candidates")))
+        else:
+            values = _flatten_text_items(raw)
+
+        if not values:
+            continue
+
+        content = f"{label}\n" + "\n".join(f"- {x}" for x in values)
+
+        add_chunk(
+            chunk_id=f"{document_id}_entity_{field}",
+            content=content,
+            source_type="entity_card",
+            meta_extra={
+                "field_name": field,
+                "field_label": label,
+                "entity_type": field,
+                "extraction_status": (
+                    "automatic_to_verify"
+                    if field in {"personnes", "organismes", "materiaux_composants"}
+                    else "automatic"
+                ),
+            },
+        )
+
+    # 4) Chunks bruts optionnels
+    # include_raw_chunks=False : on garde seulement section / field_card / entity_card
+    # include_raw_chunks=True  : on ajoute aussi les chunks bruts NLP
+    # si aucune structure n'existe, on utilise les chunks bruts en fallback
+    if include_raw_chunks or not chunks:
+        for i, chunk in enumerate(nlp_json.get("chunks", []) or []):
+            if not isinstance(chunk, dict):
+                continue
+
+            content = _clean_text(chunk.get("content"))
+            if not content:
+                continue
+
+            raw_meta = dict(chunk.get("metadata", {}) or {})
+            add_chunk(
+                chunk_id=_clean_metadata_str(
+                    chunk.get("chunk_id") or raw_meta.get("chunk_id"),
+                    f"{document_id}_raw_{i:04d}",
+                ),
+                content=content,
+                source_type="raw_chunk",
+                meta_extra={
+                    "chunk_index": i,
+                    **raw_meta,
+                },
+                index=i,
+            )
+
+    return chunks
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# PIPELINE
+# ════════════════════════════════════════════════════════════════════════════
+
 class RAGPipeline:
     """
     Pipeline RAG complet pour EnnoSmart.
 
     Rôle :
       - recevoir le JSON NLP enrichi ;
+      - construire des chunks structurés ;
       - embedder les chunks ;
       - les stocker dans ChromaDB ;
       - rechercher les sources pertinentes ;
@@ -75,17 +527,6 @@ class RAGPipeline:
         embedding_device: str = "cpu",
         auto_load: bool = True,
     ):
-        """
-        Paramètres :
-          embedding_model  : modèle sentence-transformers.
-          llm_model        : "ollama:mistral:7b-instruct".
-          index_dir        : dossier ChromaDB local.
-          cache_dir        : cache embeddings.
-          top_k            : nombre de chunks récupérés par défaut.
-          min_score        : score minimum après reranking.
-          embedding_device : "cpu" ou "cuda".
-          auto_load        : charger/init la base ChromaDB au démarrage.
-        """
         from modules.RAG.embedder import Embedder
         from modules.RAG.vector_store import VectorStore
         from modules.RAG.retriever import Retriever
@@ -141,138 +582,65 @@ class RAGPipeline:
     @staticmethod
     def _merge_document_metadata_into_chunks(nlp_json: dict[str, Any]) -> list[dict]:
         """
-        Fusionne document_metadata dans chaque chunk.
+        Compatibilité ancien comportement.
+
+        V2 :
+          on construit d'abord des chunks structurés avec
+          build_rag_chunks_from_nlp_json().
 
         Pourquoi :
-          ChromaDB stocke/recherche chunk par chunk.
-          Les chunks doivent donc garder les infos globales du document :
-            - domaine_principal
-            - objet_recherche
-            - verrous_techniques
-            - methodes_rd
-            - outils_technologies
-            etc.
-
-        Les métadonnées chunk gardent la priorité si elles existent déjà.
+          les chunks structurés évitent de répéter les metadata globales bruitées
+          partout et permettent d'afficher :
+            - sections exactes
+            - field cards R&D
+            - entity cards
         """
-        doc_meta = nlp_json.get("document_metadata", {}) or {}
-        chunks = nlp_json.get("chunks", []) or []
+        return build_rag_chunks_from_nlp_json(
+            nlp_json,
+            include_raw_chunks=False,
+        )
 
-        organisme_name = str(doc_meta.get("organisme_name") or "Organisme inconnu").strip()
-        organisme_id = str(doc_meta.get("organisme_id") or "organisme_inconnu").strip()
-        file_hash = str(doc_meta.get("file_hash") or "").strip()
-        document_id = str(doc_meta.get("document_id") or "").strip()
-
-        if not organisme_name:
-            organisme_name = "Organisme inconnu"
-        if not organisme_id:
-            organisme_id = "organisme_inconnu"
-        if not document_id and file_hash:
-            document_id = f"{organisme_id}_{file_hash[:16]}"
-
-        useful_doc_fields = [
-            "file_name",
-            "file_category",
-            "source_tag",
-            "organisme_name",
-            "organisme_id",
-            "file_hash",
-            "document_id",
-            "title",
-            "author",
-            "domaine_principal",
-            "domaines_scores",
-            "mots_cles_projet",
-            "objet_recherche",
-            "sous_domaines",
-            "verrous_techniques",
-            "objectifs_rd",
-            "hypotheses_rd",
-            "methodes_rd",
-            "protocoles_experimentaux",
-            "outils_technologies",
-            "modeles_algorithmes",
-            "architectures_systeme",
-            "jeux_donnees_benchmarks",
-            "metriques_evaluation",
-            "parametres_variables",
-            "normes_techniques",
-            "materiaux_composants",
-            "limitations_perspectives",
-            "resultats_rd",
-            "livrables",
-        ]
-
-        enriched_chunks: list[dict] = []
-
-        for i, chunk in enumerate(chunks):
-            content = str(chunk.get("content", "") or "").strip()
-            if not content:
-                continue
-
-            c = dict(chunk)
-            chunk_meta = dict(c.get("metadata", {}) or {})
-
-            # Ajouter metadata document si absent du chunk.
-            for field in useful_doc_fields:
-                if field not in chunk_meta and field in doc_meta:
-                    chunk_meta[field] = doc_meta.get(field)
-
-            # Normalisation champs pratiques.
-            chunk_id = (
-                c.get("chunk_id")
-                or chunk_meta.get("chunk_id")
-                or f"{doc_meta.get('file_name', 'doc')}_chunk_{i:04d}"
-            )
-
-            c["chunk_id"] = chunk_id
-            c["index"] = int(c.get("index", i))
-            c["source"] = c.get("source", chunk_meta.get("source", "text"))
-
-            chunk_meta["chunk_id"] = chunk_id
-            chunk_meta["chunk_index"] = c["index"]
-            chunk_meta["source"] = c["source"]
-            chunk_meta["file_name"] = chunk_meta.get("file_name") or doc_meta.get("file_name", "unknown")
-            chunk_meta["organisme_name"] = str(chunk_meta.get("organisme_name") or organisme_name)
-            chunk_meta["organisme_id"] = str(chunk_meta.get("organisme_id") or organisme_id)
-            chunk_meta["file_hash"] = str(chunk_meta.get("file_hash") or file_hash)
-            chunk_meta["document_id"] = str(chunk_meta.get("document_id") or document_id)
-            c["file_hash"] = chunk_meta["file_hash"]
-            c["document_id"] = chunk_meta["document_id"]
-            c["organisme_name"] = chunk_meta["organisme_name"]
-            c["organisme_id"] = chunk_meta["organisme_id"]
-            chunk_meta["domaine_principal"] = chunk_meta.get("domaine_principal") or doc_meta.get(
-                "domaine_principal",
-                "non_classifié",
-            )
-
-            # Simplifier mots_cles_projet pour les filtres/recherche.
-            mots_cles = chunk_meta.get("mots_cles_projet")
-            if isinstance(mots_cles, dict):
-                high = mots_cles.get("high_confidence", []) or []
-                cand = mots_cles.get("candidates", []) or []
-                chunk_meta.setdefault("mots_cles_high_confidence", high)
-                chunk_meta.setdefault("mots_cles_candidates", cand)
-
-            c["metadata"] = chunk_meta
-            enriched_chunks.append(c)
-
-        return enriched_chunks
-
-    def ingest(self, nlp_json: dict, save: bool = True) -> int:
+    def ingest(
+        self,
+        nlp_json: dict,
+        save: bool = True,
+        organisme_name: Optional[str] = None,
+        organisme_id: Optional[str] = None,
+        file_hash: str = "",
+        document_id: Optional[str] = None,
+        include_raw_chunks: bool = False,
+    ) -> int:
         """
         Indexe les chunks d'un document NLP.
 
-        Paramètre :
-          nlp_json : sortie de router.to_json(nlp_result)
+        Paramètres :
+          nlp_json           : sortie de router.to_json(nlp_result)
+          organisme_name     : nom saisi dans le frontend, ex. "ABINNOV"
+          organisme_id       : id stable optionnel. Si absent, calculé depuis organisme_name.
+          file_hash          : hash du fichier, recommandé pour éviter les doublons.
+          document_id        : id logique optionnel.
+          include_raw_chunks : si True, ajoute aussi les chunks bruts NLP dans l'index.
 
-        Retour :
-          nombre de chunks indexés.
+        Important :
+          Si organisme_name/organisme_id est fourni, il est forcé dans le JSON
+          avant l'indexation. C'est le comportement recommandé avec ton frontend.
         """
         if not isinstance(nlp_json, dict):
             raise TypeError("ingest() attend un dict JSON NLP.")
 
-        chunks = self._merge_document_metadata_into_chunks(nlp_json)
+        if organisme_name or organisme_id:
+            nlp_json = force_organisme_metadata(
+                nlp_json=nlp_json,
+                organisme_name=organisme_name or organisme_id or "Organisme inconnu",
+                organisme_id=organisme_id,
+                file_hash=file_hash,
+                document_id=document_id,
+            )
+
+        chunks = build_rag_chunks_from_nlp_json(
+            nlp_json,
+            include_raw_chunks=include_raw_chunks,
+        )
 
         if not chunks:
             logger.warning("ingest() : aucun chunk valide dans le JSON NLP.")
@@ -286,27 +654,33 @@ class RAGPipeline:
 
         n = self.store.add(vectors, embedded_chunks)
 
-        # Avec ChromaDB, save() est surtout compatibilité.
         if save:
             self.store.save()
 
         doc_meta = nlp_json.get("document_metadata", {}) or {}
         file_name = doc_meta.get("file_name", "inconnu")
-        organisme_id = doc_meta.get("organisme_id", "organisme_inconnu")
-        file_hash = doc_meta.get("file_hash", "")
+        org_id = doc_meta.get("organisme_id", "organisme_inconnu")
+        fh = doc_meta.get("file_hash", "")
 
         logger.info(
             "ingest() : '%s' | organisme=%s | hash=%s → %d chunks indexés | total store=%d",
             file_name,
-            organisme_id,
-            str(file_hash)[:12] if file_hash else "",
+            org_id,
+            str(fh)[:12] if fh else "",
             n,
             self.store.total_chunks,
         )
 
         return n
 
-    def ingest_file(self, json_path: str | Path, save: bool = True) -> int:
+    def ingest_file(
+        self,
+        json_path: str | Path,
+        save: bool = True,
+        organisme_name: Optional[str] = None,
+        organisme_id: Optional[str] = None,
+        include_raw_chunks: bool = False,
+    ) -> int:
         """
         Charge et indexe un fichier .nlp.json.
         """
@@ -318,7 +692,13 @@ class RAGPipeline:
         with open(path, "r", encoding="utf-8") as f:
             nlp_json = json.load(f)
 
-        return self.ingest(nlp_json, save=save)
+        return self.ingest(
+            nlp_json,
+            save=save,
+            organisme_name=organisme_name,
+            organisme_id=organisme_id,
+            include_raw_chunks=include_raw_chunks,
+        )
 
     def ingest_batch(self, nlp_jsons: list[dict], save: bool = True) -> dict[str, int]:
         """
@@ -354,9 +734,6 @@ class RAGPipeline:
     ) -> dict[str, int]:
         """
         Indexe tous les fichiers .nlp.json d'un dossier.
-
-        Exemple :
-          rag.ingest_folder("projects/")
         """
         folder_path = Path(folder)
 
@@ -389,24 +766,25 @@ class RAGPipeline:
         top_k: Optional[int] = None,
         intent: str = "qa",
         recommended_agent: Optional[str] = "EnnoAmel",
+        organisme_name: Optional[str] = None,
+        organisme_id: Optional[str] = None,
+        document_id: Optional[str] = None,
+        file_hash: Optional[str] = None,
     ):
         """
         Répond à une question en langage naturel.
 
-        Paramètres :
-          question          : question utilisateur.
-          filter_meta       : filtre metadata optionnel.
-          top_k             : nombre de chunks à récupérer.
-          intent            : intention détectée par EnnoAmel.
-          recommended_agent : agent recommandé.
-
-        Exemple :
-          rag.ask(
-              "Est-ce que ce projet est éligible CIR ?",
-              intent="eligibility",
-              recommended_agent="EnnoDiagnostic"
-          )
+        Tu peux soit passer filter_meta directement,
+        soit passer organisme_name/organisme_id pour filtrer automatiquement.
         """
+        if filter_meta is None and (organisme_name or organisme_id):
+            filter_meta = build_organisme_filter(
+                organisme_name=organisme_name,
+                organisme_id=organisme_id,
+                document_id=document_id,
+                file_hash=file_hash,
+            )
+
         return self.engine.ask(
             question=question,
             filter_meta=filter_meta,
@@ -421,13 +799,22 @@ class RAGPipeline:
         top_k: Optional[int] = None,
         filter_meta: Optional[dict] = None,
         intent: str = "qa",
+        organisme_name: Optional[str] = None,
+        organisme_id: Optional[str] = None,
+        document_id: Optional[str] = None,
+        file_hash: Optional[str] = None,
     ) -> list[dict]:
         """
         Recherche les chunks pertinents sans appeler le LLM.
-
-        Utile pour debug :
-          results = rag.search("Quels sont les verrous techniques ?")
         """
+        if filter_meta is None and (organisme_name or organisme_id):
+            filter_meta = build_organisme_filter(
+                organisme_name=organisme_name,
+                organisme_id=organisme_id,
+                document_id=document_id,
+                file_hash=file_hash,
+            )
+
         return self.retriever.search(
             query=question,
             top_k=top_k or self.top_k,
@@ -445,9 +832,6 @@ class RAGPipeline:
     ) -> list[dict]:
         """
         Recherche multi-requêtes.
-
-        Utile pour l'orchestrateur :
-          question originale + reformulation.
         """
         return self.retriever.search_multi(
             queries=queries,
@@ -493,28 +877,57 @@ class RAGPipeline:
             document_id=document_id,
         )
 
-
     def list_documents(self, organisme_id: Optional[str] = None) -> list[dict[str, Any]]:
         """
         Liste les documents uniques réellement indexés dans ChromaDB.
-
-        Utilisé par Streamlit pour afficher les dossiers déjà disponibles
-        sans dépendre du dossier uploads/ et sans créer de doublons.
         """
         if not hasattr(self.store, "list_documents"):
             return []
         return self.store.list_documents(organisme_id=organisme_id)
 
-    def delete_document(self, file_name: str) -> int:
+    def delete_document(
+        self,
+        file_name: Optional[str] = None,
+        *,
+        organisme_id: Optional[str] = None,
+        file_hash: Optional[str] = None,
+        document_id: Optional[str] = None,
+    ) -> int:
         """
         Supprime tous les chunks d'un document de l'index.
+
+        Compatibilité :
+        - ancien usage : delete_document(file_name)
+        - usage recommandé : delete_document(document_id=..., file_hash=..., organisme_id=...)
         """
-        n = self.store.delete_document(file_name)
+        if not hasattr(self.store, "delete_document"):
+            logger.warning("VectorStore ne supporte pas delete_document().")
+            return 0
+
+        n = self.store.delete_document(
+            file_name=file_name,
+            organisme_id=organisme_id,
+            file_hash=file_hash,
+            document_id=document_id,
+        )
 
         if n > 0:
             self.store.save()
 
         return n
+
+    def delete_organisme(self, organisme_id: str) -> int:
+        """
+        Supprime tous les chunks d'un organisme si VectorStore le supporte.
+        """
+        if hasattr(self.store, "delete_organisme"):
+            n = self.store.delete_organisme(organisme_id)
+            if n > 0:
+                self.store.save()
+            return n
+
+        logger.warning("VectorStore ne supporte pas delete_organisme().")
+        return 0
 
     def save(self) -> None:
         """
@@ -532,7 +945,6 @@ class RAGPipeline:
     def clear(self, delete_files: bool = False) -> None:
         """
         Vide le store.
-
         delete_files=True supprime aussi les fichiers Chroma locaux.
         """
         self.store.clear(delete_files=delete_files)
@@ -550,14 +962,24 @@ class RAGPipeline:
         return not self.store.is_empty
 
     def stats(self) -> dict:
+        dims = None
+        try:
+            dims = self.embedder.dims if self.store.total_chunks > 0 else None
+        except Exception:
+            try:
+                dims = self.embedder._load_model().get_embedding_dimension()
+            except Exception:
+                dims = None
+
         return {
             "vector_store": "ChromaDB",
             "total_chunks": self.store.total_chunks,
             "embedding_model": self.embedder.model_name,
             "embedding_device": getattr(self.embedder, "device", "unknown"),
-            "embedding_dims": self.embedder.dims if self.store.total_chunks > 0 else None,
+            "embedding_dims": dims,
             "llm_model": self.llm_model,
             "top_k": self.top_k,
             "min_score": self.min_score,
             "index_ready": self.is_ready,
+            "rag_version": "v2-structured-include-raw-fix",
         }
