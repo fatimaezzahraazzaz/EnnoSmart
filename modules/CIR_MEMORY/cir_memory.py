@@ -1,0 +1,737 @@
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
+"""
+CIR_MEMORY V3
+
+Corrections par rapport V2 :
+1) CIR final mémoire = SANS FrascatiGuard, sections structurées uniquement.
+2) Correction ProjectStore : compatible avec signatures organisme/project OU organisme_id/project_id.
+3) Comparaison :
+   - les supporting_passages ne deviennent plus des verrous séparés.
+   - current_items_count baisse.
+   - verrou_count correspond aux verrous principaux seulement.
+4) Pour le CIR final, les sections larges sont gardées comme sections, mais la comparaison
+   utilise aussi section_title + section_type + texte pour matcher.
+"""
+
+import json
+import re
+from pathlib import Path
+from datetime import datetime
+from difflib import SequenceMatcher
+from typing import Any, Dict, List, Optional, Tuple
+
+
+BASE_DIR = Path(r"C:\EnnoSmart")
+STORAGE_DIR = BASE_DIR / "storage" / "organismes"
+OUTPUTS_DIR = BASE_DIR / "outputs" / "safe_rag_upload"
+
+PACK_KEYS = [
+    "objectifs_locaux",
+    "verrous_rnd_locaux",
+    "methodes_locales",
+    "resultats_locaux",
+    "limites_locales",
+    "contributions_locales",
+    "etat_art_local",
+    "parametres_locaux",
+]
+
+ROLE_BY_PACK = {
+    "objectifs_locaux": "objectif",
+    "verrous_rnd_locaux": "verrou",
+    "methodes_locales": "methode",
+    "resultats_locaux": "resultat",
+    "limites_locales": "limite",
+    "contributions_locales": "contribution",
+    "etat_art_local": "etat_art",
+    "parametres_locaux": "parametre",
+}
+
+STOP = {
+    "avec", "dans", "pour", "plus", "moins", "entre", "comme", "cette",
+    "cela", "ainsi", "afin", "etre", "être", "sont", "nous", "notre",
+    "leur", "leurs", "des", "les", "une", "aux", "sur", "par", "que",
+    "qui", "quoi", "dont", "de", "du", "la", "le", "un", "en", "et",
+    "ou", "au", "ce", "ces", "son", "ses", "projet", "systeme", "système",
+    "verrou", "possible", "question", "qualification", "documents", "concernés",
+    "concernes", "partir", "indices", "dispersés", "disperses", "consultant",
+}
+
+TECH_THEMES = {
+    "performance_pression_debit": [
+        "performance", "débit", "debit", "pression", "300", "400", "bar", "m3/h",
+        "haute pression", "refoulement", "rendement", "atteindre", "compression",
+    ],
+    "vibration_acoustique": [
+        "vibration", "vibratoire", "acoustique", "bruit", "sonore", "silencieux",
+        "aspiration", "équilibrage", "equilibrage", "contrepoids", "moteur",
+        "signature vibratoire", "fréquence", "frequence", "hz", "rpm", "poulie",
+    ],
+    "thermique_refroidissement": [
+        "thermique", "température", "temperature", "refroidissement", "réfrigérant",
+        "refrigerant", "échauffement", "echauffement", "chaleur", "eau",
+        "circuit d'eau", "inter-étage", "inter etage", "étage", "etage", "tubes",
+    ],
+    "qualite_air_sechage": [
+        "air sec", "humidité", "humidite", "rosée", "rosee", "point de rosée",
+        "point de rosee", "sécheur", "secheur", "membrane", "condensat",
+        "condensats", "huile", "eau", "filtre", "purge", "qualité de l'air",
+    ],
+    "usure_fiabilite_etancheite": [
+        "usure", "fiabilité", "fiabilite", "résistance", "resistance",
+        "étanchéité", "etancheite", "segment", "segmentation", "piston",
+        "chemise", "rotule", "bielle", "reniflard", "fuite", "huile",
+        "flambage", "transformateur", "soufflage carter", "carter",
+    ],
+    "cause_racine_essais": [
+        "cause", "racine", "identifier", "identification", "analyse",
+        "essai", "essais", "test", "mesure", "relevé", "releve",
+        "prototype", "validation", "comparaison", "simulation", "calcul",
+        "modélisation", "modelisation", "microscopie", "dureté", "durete",
+    ],
+    "compromis_contraintes": [
+        "compromis", "contrainte", "contraintes", "exigence", "exigences",
+        "sous-marin", "sous marin", "compact", "encombrement", "débit",
+        "pression", "bruit", "température", "simultanément", "simultanement",
+    ],
+    "etat_art_non_transferable": [
+        "état de l'art", "etat de l'art", "connaissances existantes",
+        "solutions existantes", "insuffisances", "insuffisance", "bibliographie",
+        "littérature", "litterature", "non transposable", "non transférable",
+        "non transferable", "architecture", "barillet",
+    ],
+}
+
+
+def slug(x: Any) -> str:
+    x = str(x or "").strip().lower()
+    x = re.sub(r"[^\w\-]+", "_", x, flags=re.UNICODE)
+    x = re.sub(r"_+", "_", x).strip("_")
+    return x or "unknown"
+
+
+def clean_text(x: Any) -> str:
+    x = str(x or "")
+    x = x.replace("\r\n", "\n").replace("\r", "\n")
+    x = re.sub(r"[ \t]+", " ", x)
+    x = re.sub(r"\n{3,}", "\n\n", x)
+    return x.strip()
+
+
+def norm(x: Any) -> str:
+    x = clean_text(x).lower()
+    tr = str.maketrans("àâäéèêëîïôöùûüç’", "aaaeeeeiioouuuc'")
+    x = x.translate(tr)
+    x = re.sub(r"[^\w%/.,\-]+", " ", x)
+    x = re.sub(r"\s+", " ", x)
+    return x.strip()
+
+
+def read_json(path: str | Path, default=None):
+    p = Path(path)
+    if not p.exists():
+        return default
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return default
+
+
+def write_json(path: str | Path, data: Any) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def year_dir(organisme: str, project: str, year: str) -> Path:
+    return STORAGE_DIR / slug(organisme) / "projects" / slug(project) / "years" / str(year)
+
+
+def cir_final_dir(organisme: str, project: str, year: str) -> Path:
+    return year_dir(organisme, project, year) / "cir_final"
+
+
+def cir_final_report_path(organisme: str, project: str, year: str) -> Path:
+    return cir_final_dir(organisme, project, year) / "cir_final_extracted.json"
+
+
+def current_nlp_default_path(organisme: str, project: str, year: str) -> Path:
+    return OUTPUTS_DIR / organisme / project / str(year) / "nlp_result.json"
+
+
+def comparison_report_path(organisme: str, project: str, year: str) -> Path:
+    return year_dir(organisme, project, year) / "cir_memory" / "cir_memory_comparison_report.json"
+
+
+def _safe_pack(pack: Any) -> Dict[str, List[Dict[str, Any]]]:
+    out = {k: [] for k in PACK_KEYS}
+    if isinstance(pack, dict):
+        for k in PACK_KEYS:
+            arr = pack.get(k)
+            if isinstance(arr, list):
+                out[k] = [x for x in arr if isinstance(x, dict)]
+    return out
+
+
+def get_cir_structured_pack_without_frascati(nlp: Dict[str, Any]) -> Tuple[Dict[str, List[Dict[str, Any]]], str]:
+    """
+    CIR final mémoire :
+    PAS de FrascatiGuard.
+    On garde les sections CIR structurées comme elles sont.
+    """
+    if not isinstance(nlp, dict):
+        return _safe_pack({}), "empty"
+
+    cir = nlp.get("cir_structured_result")
+    if isinstance(cir, dict):
+        pack = cir.get("evidence_pack_before_frascati")
+        if isinstance(pack, dict):
+            return _safe_pack(pack), "cir_structured_result.evidence_pack_before_frascati"
+
+    if nlp.get("pipeline_type") == "cir_structured":
+        pack = nlp.get("evidence_pack_before_frascati")
+        if isinstance(pack, dict):
+            return _safe_pack(pack), "top_level_cir_structured.evidence_pack_before_frascati"
+
+    pack = nlp.get("merged_evidence_pack_before_frascati")
+    if isinstance(pack, dict):
+        return _safe_pack(pack), "merged_evidence_pack_before_frascati"
+
+    pack = nlp.get("evidence_pack_before_frascati")
+    if isinstance(pack, dict):
+        return _safe_pack(pack), "top_level.evidence_pack_before_frascati"
+
+    return _safe_pack({}), "not_found"
+
+
+def get_current_raw_pack_with_frascati(nlp: Dict[str, Any]) -> Tuple[Dict[str, List[Dict[str, Any]]], str]:
+    """
+    Bruts de l'année N :
+    FrascatiGuard autorisé.
+    Mais on récupère seulement les items principaux.
+    Les supporting_passages restent dans l'item, ils ne deviennent pas des verrous séparés.
+    """
+    if not isinstance(nlp, dict):
+        return _safe_pack({}), "empty"
+
+    fg = nlp.get("frascati_guard")
+    if isinstance(fg, dict):
+        pack = fg.get("qualified_pack_for_ennodiagnostic")
+        if isinstance(pack, dict):
+            return _safe_pack(pack), "frascati_guard.qualified_pack_for_ennodiagnostic"
+
+    for key in [
+        "multi_document_evidence_pack_for_ennodiagnostic",
+        "merged_evidence_pack_for_ennodiagnostic",
+        "evidence_pack_for_ennodiagnostic",
+        "merged_evidence_pack_before_frascati",
+        "evidence_pack_before_frascati",
+    ]:
+        pack = nlp.get(key)
+        if isinstance(pack, dict):
+            return _safe_pack(pack), key
+
+    return _safe_pack({}), "not_found"
+
+
+def item_text(item: Dict[str, Any]) -> str:
+    title = clean_text(item.get("section_title") or item.get("title") or "")
+    label = clean_text(item.get("section_label") or "")
+    text = clean_text(item.get("text") or item.get("source_text") or "")
+    parts = []
+    if label:
+        parts.append(label)
+    if title and norm(title) not in norm(text[:250]):
+        parts.append(title)
+    parts.append(text)
+    return "\n".join([p for p in parts if p]).strip()
+
+
+def pack_to_items(pack: Dict[str, Any], source_type: str) -> List[Dict[str, Any]]:
+    """
+    IMPORTANT V3 :
+    Ne crée PAS un item pour chaque supporting_passage.
+    Sinon un seul verrou générique avec 6 preuves devient 7 verrous.
+    """
+    out: List[Dict[str, Any]] = []
+    seen = set()
+
+    for pack_key in PACK_KEYS:
+        role = ROLE_BY_PACK.get(pack_key, "general")
+        for idx, item in enumerate(pack.get(pack_key) or []):
+            if not isinstance(item, dict):
+                continue
+
+            txt = item_text(item)
+            if len(txt) < 35:
+                continue
+
+            doc = str(item.get("document") or item.get("file_name") or "")
+            sec_title = str(item.get("section_title") or item.get("title") or "")
+            sec_type = str(item.get("section_type") or "")
+            passage_id = str(item.get("passage_id") or item.get("id") or f"{pack_key}_{idx}")
+
+            key = (role, doc, sec_title, norm(txt)[:220])
+            if key in seen:
+                continue
+            seen.add(key)
+
+            out.append({
+                "id": passage_id,
+                "role": role,
+                "pack_key": pack_key,
+                "text": txt,
+                "document": doc,
+                "section_title": sec_title,
+                "section_type": sec_type,
+                "section_label": item.get("section_label"),
+                "source_path": item.get("source_path"),
+                "source_type": source_type,
+                "content_origin": item.get("content_origin"),
+                "quality_status": item.get("quality_status"),
+                "frascati_decision": (item.get("frascati") or {}).get("decision") or item.get("frascati_decision"),
+                "frascati_score": (item.get("frascati") or {}).get("frascati_score") or item.get("frascati_score"),
+                "theme_id": item.get("theme_id"),
+                "theme_label": item.get("theme_label"),
+                "supporting_passages": item.get("supporting_passages") or [],
+            })
+
+    return out
+
+
+def roles_count(items: List[Dict[str, Any]]) -> Dict[str, int]:
+    out: Dict[str, int] = {}
+    for x in items:
+        r = str(x.get("role") or "unknown")
+        out[r] = out.get(r, 0) + 1
+    return dict(sorted(out.items()))
+
+
+def _make_project_store(organisme: str, project: str, year: str):
+    from modules.RAG.project_store import ProjectStore
+    try:
+        return ProjectStore(organisme=organisme, project=project, year=year)
+    except TypeError:
+        try:
+            return ProjectStore(organisme_id=organisme, project_id=project, year=year)
+        except TypeError:
+            return ProjectStore(organisme, project, year)
+
+
+def register_final_cir_nlp_result_in_chroma(
+    organisme: str,
+    project: str,
+    year: str,
+    cir_final: str | Path,
+    nlp_result_path: str | Path,
+) -> Dict[str, Any]:
+    nlp_path = Path(nlp_result_path)
+    if not nlp_path.exists():
+        raise FileNotFoundError(f"NLP result du CIR final introuvable : {nlp_path}")
+
+    nlp = read_json(nlp_path, {})
+    pack, pack_source = get_cir_structured_pack_without_frascati(nlp)
+    items = pack_to_items(pack, source_type="cir_final_structured_without_frascati")
+
+    if not items:
+        raise RuntimeError(
+            "Aucun item CIR structuré trouvé sans Frascati. "
+            "Vérifie que le nlp_result contient cir_structured_result.evidence_pack_before_frascati."
+        )
+
+    report = {
+        "ok": True,
+        "version": "cir_memory_v3_cir_without_frascati",
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "organisme": organisme,
+        "project": project,
+        "year": str(year),
+        "cir_final_file": str(cir_final),
+        "nlp_result_path": str(nlp_path),
+        "rule": "CIR final mémoire = sections CIR structurées AVANT FrascatiGuard",
+        "pack_source": pack_source,
+        "items_count": len(items),
+        "roles": roles_count(items),
+        "items": items,
+    }
+
+    out_path = cir_final_report_path(organisme, project, year)
+    write_json(out_path, report)
+
+    chroma_info = {"attempted": False}
+    try:
+        from modules.RAG.vector_store import RAGVectorStore
+        from modules.RAG.json_to_chunks import nlp_json_to_chunks
+
+        ps = _make_project_store(organisme, project, year)
+        if hasattr(ps, "ensure"):
+            ps.ensure()
+
+        pseudo_nlp = {
+            "version": "cir_memory_v3_cir_without_frascati",
+            "pipeline_type": "cir_final_memory_without_frascati",
+            "evidence_pack_before_frascati": pack,
+            "evidence_pack_for_ennodiagnostic": pack,
+        }
+        try:
+            chunks = nlp_json_to_chunks(project_id=project, nlp_result=pseudo_nlp)
+        except TypeError:
+            # Compatibilité avec anciennes signatures éventuelles.
+            try:
+                chunks = nlp_json_to_chunks(project, pseudo_nlp)
+            except TypeError:
+                chunks = nlp_json_to_chunks(pseudo_nlp)
+        collection_name = f"ennosmart_{slug(organisme)}_{slug(project)}_{year}_cir_final"
+
+        chroma_dir = getattr(ps, "chroma_dir", None)
+        if chroma_dir is None:
+            chroma_dir = year_dir(organisme, project, year) / "rag" / "chroma"
+
+        vs = RAGVectorStore(chroma_dir)
+        try:
+            vs.add_chunks(collection_name=collection_name, chunks=chunks)
+        except TypeError:
+            vs.add_chunks(chunks)
+
+        chroma_info = {
+            "attempted": True,
+            "ok": True,
+            "collection": collection_name,
+            "chroma_dir": str(chroma_dir),
+            "chunks_indexed": len(chunks),
+        }
+    except Exception as e:
+        chroma_info = {
+            "attempted": True,
+            "ok": False,
+            "error": str(e),
+            "note": "La mémoire JSON est créée même si l'index Chroma échoue.",
+        }
+
+    report["chroma"] = chroma_info
+    write_json(out_path, report)
+    return report
+
+
+def words(text: str, limit: int = 80) -> List[str]:
+    ws = re.findall(r"\b[\wÀ-ÿ'-]{4,}\b", norm(text))
+    ws = [w for w in ws if w not in STOP]
+    freq = {}
+    for w in ws:
+        freq[w] = freq.get(w, 0) + 1
+    return [w for w, _ in sorted(freq.items(), key=lambda kv: (-kv[1], kv[0]))[:limit]]
+
+
+def jaccard(a: List[str], b: List[str]) -> float:
+    sa, sb = set(a), set(b)
+    if not sa or not sb:
+        return 0.0
+    return len(sa & sb) / len(sa | sb)
+
+
+def numbers(text: str) -> List[str]:
+    return re.findall(r"\b\d+(?:[,.]\d+)?\s*(?:bar|bars|kg|mm|°c|db|hz|rpm|m3/h|%)?\b", norm(text))
+
+
+def themes(text: str) -> List[str]:
+    low = norm(text)
+    found = []
+    for th, kws in TECH_THEMES.items():
+        if any(norm(k) in low for k in kws):
+            found.append(th)
+    return found
+
+
+def expanded_current_text(item: Dict[str, Any]) -> str:
+    """
+    Pour un verrou brut Frascati, on ajoute les preuves support dans le texte de scoring,
+    mais pas comme verrous séparés.
+    """
+    parts = [item.get("text") or ""]
+    for sp in item.get("supporting_passages") or []:
+        if isinstance(sp, dict):
+            parts.append(sp.get("text") or "")
+    return "\n".join([clean_text(p) for p in parts if clean_text(p)])
+
+
+def score_pair(current: Dict[str, Any], previous: Dict[str, Any]) -> Dict[str, Any]:
+    ct = expanded_current_text(current)
+    pt = previous.get("text", "")
+
+    seq = SequenceMatcher(None, norm(ct)[:3500], norm(pt)[:3500]).ratio()
+    kw = jaccard(words(ct), words(pt))
+
+    th_c, th_p = themes(ct), themes(pt)
+    theme_score = len(set(th_c) & set(th_p)) / max(1, len(set(th_c) | set(th_p))) if (th_c or th_p) else 0.0
+
+    num_c, num_p = set(numbers(ct)), set(numbers(pt))
+    number_score = len(num_c & num_p) / max(1, len(num_c | num_p)) if (num_c or num_p) else 0.0
+
+    role_bonus = 0.10 if current.get("role") == previous.get("role") else 0.0
+    prev_relevant_bonus = 0.08 if previous.get("role") in {"verrou", "limite", "etat_art", "objectif"} else 0.0
+
+    score = 0.20 * seq + 0.25 * kw + 0.38 * theme_score + 0.07 * number_score + role_bonus + prev_relevant_bonus
+    score = max(0.0, min(1.0, score))
+
+    return {
+        "score": round(score, 4),
+        "sequence": round(seq, 4),
+        "keyword_jaccard": round(kw, 4),
+        "theme_score": round(theme_score, 4),
+        "number_score": round(number_score, 4),
+        "role_bonus": role_bonus,
+        "prev_relevant_bonus": prev_relevant_bonus,
+        "current_themes": th_c,
+        "previous_themes": th_p,
+        "shared_themes": sorted(set(th_c) & set(th_p)),
+        "current_keywords": words(ct, 20),
+        "previous_keywords": words(pt, 20),
+        "current_numbers": sorted(num_c),
+        "previous_numbers": sorted(num_p),
+    }
+
+
+def decision_from_score(score: float, details: Dict[str, Any]) -> Dict[str, Any]:
+    shared_themes = details.get("shared_themes") or []
+    if score >= 0.66:
+        status = "continuity_strong"
+        label = "Continuité forte avec le CIR précédent"
+    elif score >= 0.38 or shared_themes:
+        status = "evolution_or_partial_continuity"
+        label = "Évolution ou continuité partielle à vérifier"
+    else:
+        status = "new_or_not_found"
+        label = "Nouveauté potentielle ou non retrouvée dans le CIR précédent"
+
+    continuity = score
+    if status == "continuity_strong":
+        continuity = max(continuity, 0.70)
+    elif status == "evolution_or_partial_continuity":
+        continuity = max(continuity, 0.45)
+
+    continuity = round(max(0.0, min(1.0, continuity)), 4)
+    novelty = round(1.0 - continuity, 4)
+    return {
+        "status": status,
+        "label": label,
+        "continuity_score": continuity,
+        "novelty_score": novelty,
+    }
+
+
+def load_previous_cir_memory_items(organisme: str, project: str, current_year: str, max_previous_years: int = 3) -> Tuple[List[str], List[Dict[str, Any]]]:
+    root = STORAGE_DIR / slug(organisme) / "projects" / slug(project) / "years"
+    if not root.exists():
+        return [], []
+
+    years = []
+    for yd in root.iterdir():
+        if not yd.is_dir():
+            continue
+        y = yd.name
+        if str(y) == str(current_year):
+            continue
+        p = cir_final_report_path(organisme, project, y)
+        if p.exists():
+            years.append(y)
+
+    def ykey(y):
+        m = re.search(r"\d+", str(y))
+        return int(m.group(0)) if m else -1
+
+    years = sorted(years, key=ykey, reverse=True)[:max_previous_years]
+    items: List[Dict[str, Any]] = []
+
+    for y in years:
+        report = read_json(cir_final_report_path(organisme, project, y), {})
+        for item in report.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            txt = clean_text(item.get("text"))
+            if len(txt) < 35:
+                continue
+            x = dict(item)
+            x["year"] = str(y)
+            x["source_type"] = "previous_cir_final_without_frascati"
+            items.append(x)
+
+    return years, items
+
+
+def compare_one(current: Dict[str, Any], previous_items: List[Dict[str, Any]], top_k: int = 3) -> Dict[str, Any]:
+    scored = []
+    for prev in previous_items:
+        details = score_pair(current, prev)
+        scored.append({
+            "previous_candidate": prev,
+            "similarity_score": details["score"],
+            "similarity_details": details,
+        })
+    scored.sort(key=lambda x: x["similarity_score"], reverse=True)
+    candidates = scored[:top_k]
+    best = candidates[0] if candidates else None
+
+    if best:
+        dec = decision_from_score(best["similarity_score"], best["similarity_details"])
+        best["final_scores"] = dec
+    else:
+        dec = {
+            "status": "new_or_not_found",
+            "label": "Aucun CIR précédent trouvé",
+            "continuity_score": 0.0,
+            "novelty_score": 1.0,
+        }
+
+    return {
+        "current_item": current,
+        "best_match": best,
+        "candidates": candidates,
+        "decision": dec,
+    }
+
+
+def summarize(comparisons: List[Dict[str, Any]]) -> Dict[str, Any]:
+    verrous = [c for c in comparisons if (c.get("current_item") or {}).get("role") == "verrou"]
+
+    def status(c):
+        return (c.get("decision") or {}).get("status")
+
+    new_v = [c for c in verrous if status(c) == "new_or_not_found"]
+    evo_v = [c for c in verrous if status(c) == "evolution_or_partial_continuity"]
+    cont_v = [c for c in verrous if status(c) == "continuity_strong"]
+
+    novelty = None
+    if verrous:
+        novelty = (len(new_v) + 0.5 * len(evo_v)) / max(1, len(verrous))
+
+    if novelty is None:
+        signal = "no_verrou"
+        explanation = "Aucun verrou courant à comparer."
+    elif novelty >= 0.60:
+        signal = "new_rnd_attention"
+        explanation = "Plusieurs verrous semblent nouveaux ou en évolution par rapport au CIR précédent."
+    elif novelty <= 0.25:
+        signal = "continuity_reuse_risk"
+        explanation = "Beaucoup d'éléments sont en continuité avec le CIR précédent : attention à justifier la nouveauté de l'année N."
+    else:
+        signal = "mixed"
+        explanation = "Profil mixte : certains éléments prolongent le CIR précédent, d'autres semblent nouveaux ou évolutifs."
+
+    return {
+        "comparisons_count": len(comparisons),
+        "verrou_count": len(verrous),
+        "new_verrou_count": len(new_v),
+        "evolution_verrou_count": len(evo_v),
+        "continuity_verrou_count": len(cont_v),
+        "project_novelty_score": round(novelty, 4) if novelty is not None else None,
+        "frascati_context_signal": signal,
+        "frascati_context_explanation": explanation,
+    }
+
+
+def compare_current_raw_with_cir_memory(
+    organisme: str,
+    project: str,
+    year: str,
+    nlp_result_path: Optional[str | Path] = None,
+    top_k: int = 3,
+    max_previous_years: int = 3,
+) -> Dict[str, Any]:
+    nlp_path = Path(nlp_result_path) if nlp_result_path else current_nlp_default_path(organisme, project, year)
+    if not nlp_path.exists():
+        raise FileNotFoundError(f"NLP courant introuvable : {nlp_path}")
+
+    nlp = read_json(nlp_path, {})
+    current_pack, current_pack_source = get_current_raw_pack_with_frascati(nlp)
+    current_items = pack_to_items(current_pack, source_type="current_raw_with_frascati")
+
+    previous_years, previous_items = load_previous_cir_memory_items(
+        organisme=organisme,
+        project=project,
+        current_year=year,
+        max_previous_years=max_previous_years,
+    )
+
+    if not previous_items:
+        report = {
+            "ok": True,
+            "version": "cir_memory_v3_compare",
+            "has_previous_cir": False,
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "organisme": organisme,
+            "project": project,
+            "current_year": str(year),
+            "current_pack_source": current_pack_source,
+            "summary": {
+                "current_items_count": len(current_items),
+                "previous_cir_items_count": 0,
+                "project_novelty_score": None,
+                "frascati_context_signal": "no_previous_cir",
+            },
+            "comparisons": [],
+            "verrou_comparisons": [],
+        }
+    else:
+        comparisons = [compare_one(cur, previous_items, top_k=top_k) for cur in current_items]
+        summ = summarize(comparisons)
+        report = {
+            "ok": True,
+            "version": "cir_memory_v3_compare",
+            "has_previous_cir": True,
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "organisme": organisme,
+            "project": project,
+            "current_year": str(year),
+            "previous_cir_years_used": previous_years,
+            "current_pack_source": current_pack_source,
+            "previous_cir_rule": "CIR final mémoire chargé depuis cir_final_extracted.json, sans FrascatiGuard",
+            "summary": {
+                "current_items_count": len(current_items),
+                "previous_cir_items_count": len(previous_items),
+                **summ,
+            },
+            "comparisons": comparisons,
+            "verrou_comparisons": [
+                c for c in comparisons if (c.get("current_item") or {}).get("role") == "verrou"
+            ],
+            "new_or_not_found": [
+                c for c in comparisons if (c.get("decision") or {}).get("status") == "new_or_not_found"
+            ],
+            "evolution_or_partial_continuity": [
+                c for c in comparisons if (c.get("decision") or {}).get("status") == "evolution_or_partial_continuity"
+            ],
+            "continuity_strong": [
+                c for c in comparisons if (c.get("decision") or {}).get("status") == "continuity_strong"
+            ],
+        }
+
+    out_path = comparison_report_path(organisme, project, year)
+    write_json(out_path, report)
+    return report
+
+
+load_or_create_cir_memory_comparison = compare_current_raw_with_cir_memory
+
+
+def cir_memory_prompt_block(report: Dict[str, Any], max_items: int = 6) -> str:
+    if not report or not report.get("has_previous_cir"):
+        return "Aucune mémoire CIR précédente disponible."
+
+    lines = [
+        "Mémoire CIR précédente disponible.",
+        f"Résumé : {report.get('summary')}",
+        "Comparaisons verrous principales :",
+    ]
+    for x in (report.get("verrou_comparisons") or [])[:max_items]:
+        cur = x.get("current_item") or {}
+        best = x.get("best_match") or {}
+        prev = best.get("previous_candidate") or {}
+        dec = x.get("decision") or {}
+        lines.append(
+            f"- Verrou courant : {clean_text(cur.get('text'))[:220]} | "
+            f"Décision : {dec.get('status')} | "
+            f"Ancien CIR : {clean_text(prev.get('text'))[:220]}"
+        )
+    return "\n".join(lines)

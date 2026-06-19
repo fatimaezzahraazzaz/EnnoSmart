@@ -1,689 +1,394 @@
+# -*- coding: utf-8 -*-
 """
-modules/NLP/domain_classifier.py — NLP V7.2.0
+Domain classifier EnnoSmart - affichage simplifié domaine/sous-domaine.
 
-Changements V7.2.0 vs V7.1.x (apports V8.1) :
-- NOUVEAU : extraction du domaine applicatif (domaine_applicatif).
-  V8.1 renvoyait bien "Motorisation électrique / véhicules électriques / naval de défense"
-  là où V7 ne renvoyait rien. Ce champ est maintenant extrait via le LLM
-  en même temps que le domaine scientifique.
-- NOUVEAU : domaine_scientifique_detaille — libellé plus précis que domaine_principal.
-  V8.1 renvoyait "Matériaux / Vibroacoustique / Mécanique des structures"
-  là où V7 renvoyait "Mécanique, Génie mécanique, Génie civil [B4]" (trop large).
-- La classification officielle MESR (domains.json, codes niv1/niv2/niv3) est conservée.
-- Tout le reste de la logique V7 est inchangé.
+Objectif :
+- Garder la compatibilité avec l'ancien JSON : niv1 / niv2 / niv3.
+- Ajouter un affichage plus clair :
+    Domaine principal = niv2  (ex: Informatique)
+    Sous-domaine      = niv3  (ex: Intelligence artificielle)
+    Domaine large     = niv1  (ex: Sciences et technologies du numérique...)
+
+Aucune règle projet spécifique n'est codée ici.
+Le scoring s'appuie uniquement sur domains.json.
 """
-
 from __future__ import annotations
 
 import json
-import logging
-import os
+import math
 import re
-import time
 import unicodedata
-from dataclasses import dataclass, field
+from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any, Optional
-
-try:
-    import ollama
-except ImportError:
-    ollama = None
-
-try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None
-
-try:
-    import openpyxl
-except ImportError:
-    openpyxl = None
-
-logger = logging.getLogger(__name__)
-
-DEFAULT_LLM_MODEL = "ollama:qwen3:4b-instruct"
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-LOCAL_MODEL_PREFIXES = ("ollama:", "local:")
-TIMEOUT_SECONDS = 60
-MAX_RETRIES = 1
-
-DEFAULT_DOMAINS_PATH = Path(__file__).parent / "data" / "domains.json"
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 
-
-def _norm_space(text: Any) -> str:
-    text = str(text or "").replace("\u00a0", " ")
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+BASE_DIR = Path(__file__).resolve().parents[2] if len(Path(__file__).resolve().parents) >= 3 else Path.cwd()
+DEFAULT_DOMAINS_PATH = BASE_DIR / "modules" / "NLP" / "data" / "domains.json"
 
 
-def _domain_entry_to_dict(entry: Any) -> Optional[dict]:
-    """
-    Normalise une entrée de référentiel domaine.
+# ---------------------------------------------------------------------
+# Normalisation texte
+# ---------------------------------------------------------------------
 
-    Pourquoi :
-    - certains domains.json contiennent des listes de strings ou des formats mixtes ;
-    - l'ancien code faisait entry.get(...), donc plantait avec :
-      "'str' object has no attribute 'get'".
-    """
-    if isinstance(entry, dict):
-        return entry
-    return None
+def _strip_accents(text: str) -> str:
+    text = unicodedata.normalize("NFKD", str(text or ""))
+    return "".join(ch for ch in text if not unicodedata.combining(ch))
 
 
-def _iter_domain_entries(domains: Optional[dict], level: str = "niv2") -> list[dict]:
-    """
-    Retourne uniquement des dicts exploitables, quel que soit le format interne :
-    - list[dict]
-    - dict[str, dict]
-    - list[str] ignorée proprement
-    """
-    if not isinstance(domains, dict):
-        return []
-
-    raw = domains.get(level, [])
-    if isinstance(raw, dict):
-        raw = list(raw.values())
-    if not isinstance(raw, list):
-        return []
-
-    out: list[dict] = []
-    for entry in raw:
-        d = _domain_entry_to_dict(entry)
-        if d:
-            out.append(d)
-    return out
+def normalize_text(text: str) -> str:
+    text = _strip_accents(text).lower()
+    text = re.sub(r"[^a-z0-9+#.%µμ\-_/ ]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
 
-def _dedupe_domain_entries(entries: list[dict], code_key: str, label_key: str) -> list[dict]:
-    out: list[dict] = []
-    seen = set()
-    for e in entries:
-        code = _norm_space(e.get(code_key, "")).upper()
-        label = _norm_space(e.get(label_key, ""))
-        if not code or not label:
-            continue
-        key = (code, _norm_space(label).lower())
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(e)
-    return out
+def _tokens(text: str) -> List[str]:
+    text = normalize_text(text)
+    return [t for t in re.split(r"\s+", text) if len(t) >= 2]
 
 
-def _load_domains_from_xlsx(path: Path) -> Optional[dict]:
-    """
-    Charge directement l'Excel MESR :
-    colonnes attendues :
-      code1, DOMAINES niv1, code2, Sous-domaines niv2,
-      code3, SECTION niv3, code4, Sous-sections niv4
-    """
-    if openpyxl is None:
-        logger.warning("openpyxl non installé : impossible de lire le référentiel Excel %s", path)
-        return None
+def _text_from_input(data: Union[str, List[Dict[str, Any]], Dict[str, Any], List[str]]) -> str:
+    """Accepte string, document dict, liste de documents, nlp_result, etc."""
+    if data is None:
+        return ""
 
-    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    ws = wb.active
-
-    niv1_map: dict[str, dict] = {}
-    niv2_map: dict[str, dict] = {}
-    niv3_map: dict[str, dict] = {}
-    niv4_map: dict[str, dict] = {}
-
-    rows = ws.iter_rows(values_only=True)
-    headers = next(rows, None)
-
-    for row in rows:
-        if not row:
-            continue
-        code1 = _norm_space(row[0] if len(row) > 0 else "")
-        lab1 = _norm_space(row[1] if len(row) > 1 else "")
-        code2 = _norm_space(row[2] if len(row) > 2 else "")
-        lab2 = _norm_space(row[3] if len(row) > 3 else "")
-        code3 = _norm_space(row[4] if len(row) > 4 else "")
-        lab3 = _norm_space(row[5] if len(row) > 5 else "")
-        code4 = _norm_space(row[6] if len(row) > 6 else "")
-        lab4 = _norm_space(row[7] if len(row) > 7 else "")
-
-        if code1 and lab1 and code1 not in niv1_map:
-            niv1_map[code1] = {"code_niv1": code1, "label_niv1": lab1}
-
-        if code2 and lab2 and code2 not in niv2_map:
-            niv2_map[code2] = {
-                "code_niv1": code1,
-                "label_niv1": lab1,
-                "code_niv2": code2,
-                "label_niv2": lab2,
-            }
-
-        if code3 and lab3 and code3 not in niv3_map:
-            niv3_map[code3] = {
-                "code_niv1": code1,
-                "label_niv1": lab1,
-                "code_niv2": code2,
-                "label_niv2": lab2,
-                "code_niv3": code3,
-                "label_niv3": lab3,
-            }
-
-        if code4 and lab4 and code4 not in niv4_map:
-            niv4_map[code4] = {
-                "code_niv1": code1,
-                "label_niv1": lab1,
-                "code_niv2": code2,
-                "label_niv2": lab2,
-                "code_niv3": code3,
-                "label_niv3": lab3,
-                "code_niv4": code4,
-                "label_niv4": lab4,
-            }
-
-    data = {
-        "niv1": list(niv1_map.values()),
-        "niv2": list(niv2_map.values()),
-        "niv3": list(niv3_map.values()),
-        "niv4": list(niv4_map.values()),
-    }
-    logger.info(
-        "Référentiel Excel chargé : %d niv1, %d niv2, %d niv3, %d niv4",
-        len(data["niv1"]), len(data["niv2"]), len(data["niv3"]), len(data["niv4"]),
-    )
-    return data
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# CHARGEMENT DU RÉFÉRENTIEL
-# ══════════════════════════════════════════════════════════════════════════════
-
-_DOMAINS_CACHE: Optional[dict] = None
-
-
-def load_domains(path: str | Path | None = None) -> Optional[dict]:
-    global _DOMAINS_CACHE
-    if _DOMAINS_CACHE is not None and path is None:
-        return _DOMAINS_CACHE
-
-    p = Path(path) if path else DEFAULT_DOMAINS_PATH
-    if not p.exists():
-        for alt in [
-            Path(__file__).parent / "domains.json",
-            Path("domains.json"),
-            Path(__file__).parent / "data" / "nomenclature-scientifique-de-domaines-de-recherche--38201.xlsx",
-            Path("nomenclature-scientifique-de-domaines-de-recherche--38201.xlsx"),
-        ]:
-            if alt.exists():
-                p = alt
-                break
-
-    if not p.exists():
-        logger.warning(
-            "Référentiel domaines introuvable (%s). La classification de domaine sera désactivée.", p,
-        )
-        return None
-
-    try:
-        if p.suffix.lower() in {".xlsx", ".xlsm"}:
-            data = _load_domains_from_xlsx(p)
-        else:
-            with open(p, encoding="utf-8") as f:
-                data = json.load(f)
-
-        if not isinstance(data, dict):
-            logger.warning("Référentiel domaines mal formé : racine non-dict.")
-            return None
-
-        # Normalisation défensive : aucune entrée string ne doit arriver jusqu'à entry.get(...)
-        for level in ("niv1", "niv2", "niv3", "niv4"):
-            if level in data:
-                data[level] = _iter_domain_entries(data, level)
-
-        if "niv1" not in data or "niv2" not in data:
-            logger.warning("Référentiel domaines mal formé : clés niv1/niv2 manquantes.")
-            return None
-
-        if not data.get("niv2"):
-            logger.warning("Référentiel domaines mal formé : niv2 vide.")
-            return None
-
-        if path is None:
-            _DOMAINS_CACHE = data
-
-        logger.info(
-            "Référentiel domaines chargé : %d niv1, %d niv2, %d niv3",
-            len(data.get("niv1", [])), len(data.get("niv2", [])), len(data.get("niv3", [])),
-        )
+    if isinstance(data, str):
         return data
-    except Exception as exc:
-        logger.warning("Erreur lecture référentiel domaines : %s", exc)
-        return None
+
+    if isinstance(data, list):
+        parts: List[str] = []
+        for item in data:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                for k in ("title", "document", "section_title", "text", "content", "passage", "raw_text"):
+                    v = item.get(k)
+                    if isinstance(v, str) and v.strip():
+                        parts.append(v)
+        return "\n".join(parts)
+
+    if isinstance(data, dict):
+        parts = []
+
+        # Documents bruts
+        docs = data.get("documents") or data.get("docs") or data.get("raw_documents")
+        if isinstance(docs, list):
+            parts.append(_text_from_input(docs))
+
+        # Evidence packs NLP
+        for key in (
+            "merged_evidence_pack_for_ennodiagnostic",
+            "multi_document_evidence_pack_for_ennodiagnostic",
+            "evidence_pack_for_ennodiagnostic",
+        ):
+            pack = data.get(key)
+            if isinstance(pack, dict):
+                for v in pack.values():
+                    if isinstance(v, list):
+                        parts.append(_text_from_input(v))
+                    elif isinstance(v, str):
+                        parts.append(v)
+
+        # Résumés par document
+        summaries = data.get("document_evidence_summaries")
+        if isinstance(summaries, list):
+            parts.append(_text_from_input(summaries))
+
+        # Champs texte simples
+        for k in ("text", "content", "summary", "resume", "objective", "objectif"):
+            v = data.get(k)
+            if isinstance(v, str):
+                parts.append(v)
+
+        return "\n".join([p for p in parts if p])
+
+    return str(data)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# DATACLASS
-# ══════════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------
+# Chargement référentiel
+# ---------------------------------------------------------------------
 
-@dataclass
-class DomainClassification:
-    domaine_principal: str = "non_classifié"
-    code_niv1: Optional[str] = None
-    label_niv1: Optional[str] = None
-    code_niv2: Optional[str] = None
-    label_niv2: Optional[str] = None
-    code_niv3: Optional[str] = None
-    label_niv3: Optional[str] = None
-    confidence: float = 0.0
-    reasoning: str = ""
-    classified: bool = False
-    llm_calls: int = 0
-    backend: str = "unknown"
-    error: Optional[str] = None
-
-    # ── NOUVEAU V8.1 ─────────────────────────────────────────────────────────
-    domaine_scientifique_detaille: Optional[str] = None
-    domaine_applicatif: Optional[str] = None
-    # ─────────────────────────────────────────────────────────────────────────
-
-    def to_dict(self) -> dict:
-        return {
-            "domaine_principal": self.domaine_principal,
-            "code_niv1": self.code_niv1,
-            "label_niv1": self.label_niv1,
-            "code_niv2": self.code_niv2,
-            "label_niv2": self.label_niv2,
-            "code_niv3": self.code_niv3,
-            "label_niv3": self.label_niv3,
-            "confidence": round(float(self.confidence), 3),
-            "reasoning": self.reasoning,
-            "classified": self.classified,
-            "llm_calls": self.llm_calls,
-            "backend": self.backend,
-            "error": self.error,
-            # NOUVEAU V8.1
-            "domaine_scientifique_detaille": self.domaine_scientifique_detaille,
-            "domaine_applicatif": self.domaine_applicatif,
-        }
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# LLM BACKEND
-# ══════════════════════════════════════════════════════════════════════════════
-
-def _is_local_model(model: str) -> bool:
-    return any(model.startswith(p) for p in LOCAL_MODEL_PREFIXES)
-
-
-def _strip_model_prefix(model: str) -> str:
-    for p in LOCAL_MODEL_PREFIXES:
-        if model.startswith(p):
-            return model[len(p):]
-    return model
-
-
-def _call_llm(prompt: str, model: str) -> tuple[str, str]:
-    if _is_local_model(model):
-        raw_model = _strip_model_prefix(model)
-        if ollama is None:
-            raise RuntimeError("ollama non installé.")
-        resp = ollama.chat(
-            model=raw_model,
-            messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0.0, "num_predict": 256, "num_ctx": 2048},
-        )
-        # Gère les deux formes possibles : dict legacy et objet pydantic (ollama >= 0.2)
-        if isinstance(resp, dict):
-            text = resp.get("message", {}).get("content", "")
-        else:
-            # Objet pydantic : resp.message est un objet ChatMessage avec .content
-            msg = getattr(resp, "message", None)
-            if msg is None:
-                text = ""
-            elif isinstance(msg, dict):
-                text = msg.get("content", "")
-            else:
-                text = getattr(msg, "content", "") or ""
-        return str(text or ""), "ollama"
-
-    api_key = os.environ.get("OPENROUTER_API_KEY", "")
-    if not api_key:
-        raise RuntimeError("OPENROUTER_API_KEY manquant.")
-    if OpenAI is None:
-        raise RuntimeError("openai non installé.")
-    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key)
-    resp = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.0,
-        max_tokens=512,
-        timeout=TIMEOUT_SECONDS,
-    )
-    text = resp.choices[0].message.content if resp.choices else ""
-    return str(text or ""), "openrouter"
-
-
-def _extract_json_block(text: str) -> str:
-    m = re.search(r"```(?:json)?\s*([\s\S]+?)```", text)
-    if m:
-        return m.group(1).strip()
-    m = re.search(r"\{[\s\S]+\}", text)
-    if m:
-        return m.group(0).strip()
-    return text.strip()
-
-
-def _build_domains_list(domains: dict) -> str:
-    """
-    Liste compacte mais complète des niv2.
-    Ancien bug : lines[:40] pouvait couper la nomenclature avant les domaines B/C.
-    """
-    entries = _dedupe_domain_entries(_iter_domain_entries(domains, "niv2"), "code_niv2", "label_niv2")
-    lines = []
-    for entry in entries:
-        label = _norm_space(entry.get("label_niv2", ""))
-        code = _norm_space(entry.get("code_niv2", ""))
-        label_niv1 = _norm_space(entry.get("label_niv1", ""))
-        if label and code:
-            lines.append(f"  [{code}] {label_niv1} — {label}")
-    return "\n".join(lines)
-
-
-# ── NOUVEAU V8.1 : prompt élargi avec domaine applicatif ─────────────────────
-
-def _build_prompt(summary: str, domains_list: str) -> str:
-    return f"""Tu es un expert en classification R&D française (CIR/CII).
-
-Voici un résumé des travaux R&D d'un projet :
-
-{summary[:1500]}
-
-Voici la liste des domaines scientifiques officiels (code — libellé) :
-{domains_list}
-
-Réponds UNIQUEMENT avec un objet JSON valide contenant exactement ces clés :
-{{
-  "code_niv2": "code officiel choisi parmi la liste ci-dessus, ex: B4",
-  "confidence": 0.0 à 1.0,
-  "reasoning": "explication courte en français (max 2 phrases)",
-  "domaine_scientifique_detaille": "libellé précis du sous-domaine scientifique (ex: Matériaux / Vibroacoustique / Mécanique des structures)",
-  "domaine_applicatif": "domaine d'application industrielle principal (ex: Motorisation électrique / véhicules électriques, ou Naval de défense, ou Bâtiment, laisser null si non identifiable)"
-}}
-
-Règles :
-- code_niv2 doit être un code exact de la liste ci-dessus.
-- domaine_scientifique_detaille : plus précis que le code officiel, décrit le vrai sous-domaine.
-- domaine_applicatif : secteur industriel d'application finale, pas le domaine scientifique.
-- Ne pas ajouter de texte hors du JSON.
-"""
-
-
-def _build_prompt_no_domains(summary: str) -> str:
-    """Fallback si domains.json est indisponible."""
-    return f"""Tu es un expert en R&D française (CIR/CII).
-
-Voici un résumé des travaux R&D d'un projet :
-
-{summary[:1500]}
-
-Réponds UNIQUEMENT avec un objet JSON valide contenant exactement ces clés :
-{{
-  "domaine_principal": "domaine scientifique principal en français",
-  "confidence": 0.0 à 1.0,
-  "reasoning": "explication courte en français (max 2 phrases)",
-  "domaine_scientifique_detaille": "libellé précis du sous-domaine scientifique",
-  "domaine_applicatif": "domaine d'application industrielle principal, ou null"
-}}
-"""
-
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-def _parse_response(text: str, domains: Optional[dict]) -> dict:
-    raw = _extract_json_block(text)
-    try:
-        data = json.loads(raw)
-    except Exception:
-        data = {}
-
-    if not isinstance(data, dict):
-        data = {}
-
+def load_domains(domains_path: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+    path = Path(domains_path or DEFAULT_DOMAINS_PATH)
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
     return data
 
 
-def _resolve_niv2(code: str, domains: dict) -> Optional[dict]:
-    if not code or not domains:
-        return None
-    target = str(code).strip().upper()
-    for entry in _iter_domain_entries(domains, "niv2"):
-        if str(entry.get("code_niv2", "")).strip().upper() == target:
-            return entry
-    return None
-    for entry in domains.get("niv2", []):
-        if str(entry.get("code_niv2", "")).upper() == str(code).upper():
-            return entry
-    return None
+def _get_parent_chain(domains: Dict[str, Any], code: str) -> Tuple[Optional[str], Optional[str]]:
+    """Retourne (niv2_code, niv1_code) pour un code niv3, ou équivalent."""
+    niv1 = domains.get("niv1", {})
+    niv2 = domains.get("niv2", {})
+    niv3 = domains.get("niv3", {})
+
+    if code in niv3:
+        n2 = niv3[code].get("parent")
+        n1 = niv2.get(n2, {}).get("parent") if n2 else None
+        return n2, n1
+
+    if code in niv2:
+        return code, niv2[code].get("parent")
+
+    if code in niv1:
+        return None, code
+
+    return None, None
 
 
-def _get_aggregated_summary(aggregated: Any) -> str:
-    if hasattr(aggregated, "summary_for_llm"):
-        try:
-            return aggregated.summary_for_llm()
-        except Exception:
-            pass
+# ---------------------------------------------------------------------
+# Scoring générique par mots-clés
+# ---------------------------------------------------------------------
 
-    d = {}
-    if hasattr(aggregated, "to_dict"):
-        try:
-            d = aggregated.to_dict()
-        except Exception:
-            pass
-    elif isinstance(aggregated, dict):
-        d = aggregated
+def _keyword_score(text_norm: str, token_counter: Counter, keywords: Iterable[str], level_weight: float = 1.0) -> float:
+    score = 0.0
 
-    lines = []
-    role_map = {
-        "objectif": "OBJECTIFS",
-        "verrou": "VERROUS",
-        "demarche": "DÉMARCHE",
-        "resultat": "RÉSULTATS",
-        "etat_art": "ÉTAT DE L'ART",
+    for kw in keywords or []:
+        kw_norm = normalize_text(kw)
+        if not kw_norm:
+            continue
+
+        # Match expression exacte : plus fort
+        if len(kw_norm) >= 4 and kw_norm in text_norm:
+            # Bonus selon taille de l'expression
+            word_count = max(1, len(kw_norm.split()))
+            score += level_weight * (2.5 + min(word_count, 6) * 0.4)
+
+        # Match token par token : plus faible
+        for t in kw_norm.split():
+            if len(t) < 3:
+                continue
+            freq = token_counter.get(t, 0)
+            if freq:
+                score += level_weight * min(freq, 8) * 0.15
+
+    return score
+
+
+def _build_scores(domains: Dict[str, Any], text: str) -> Dict[str, float]:
+    text_norm = normalize_text(text)
+    token_counter = Counter(_tokens(text))
+
+    scores: Dict[str, float] = defaultdict(float)
+
+    niv1 = domains.get("niv1", {}) or {}
+    niv2 = domains.get("niv2", {}) or {}
+    niv3 = domains.get("niv3", {}) or {}
+
+    # Score niveau 1 : large, moins déterminant
+    niv1_scores: Dict[str, float] = {}
+    for code, obj in niv1.items():
+        niv1_scores[code] = _keyword_score(text_norm, token_counter, obj.get("keywords", []), level_weight=0.45)
+
+    # Score niveau 2 : domaine principal affiché
+    niv2_scores: Dict[str, float] = {}
+    for code, obj in niv2.items():
+        parent = obj.get("parent")
+        base = _keyword_score(text_norm, token_counter, obj.get("keywords", []), level_weight=0.85)
+        base += 0.25 * niv1_scores.get(parent, 0.0)
+        niv2_scores[code] = base
+
+    # Score niveau 3 : sous-domaine affiché
+    for code, obj in niv3.items():
+        parent2 = obj.get("parent")
+        parent1 = niv2.get(parent2, {}).get("parent")
+
+        score = _keyword_score(text_norm, token_counter, obj.get("keywords", []), level_weight=1.15)
+        score += 0.35 * niv2_scores.get(parent2, 0.0)
+        score += 0.12 * niv1_scores.get(parent1, 0.0)
+
+        # Petit bonus si le label exact du niv3 apparaît
+        label = obj.get("label", "")
+        if label and normalize_text(label) in text_norm:
+            score += 2.0
+
+        scores[code] = score
+
+    # Si aucun niv3 ne score mais un niv2 score, créer score virtuel pour ses sections
+    # afin d'éviter une sortie vide.
+    if scores and max(scores.values() or [0]) <= 0:
+        for n2_code, n2_score in niv2_scores.items():
+            children = [c for c, o in niv3.items() if o.get("parent") == n2_code]
+            for c in children:
+                scores[c] += n2_score * 0.5
+
+    return dict(scores)
+
+
+# ---------------------------------------------------------------------
+# Format sortie
+# ---------------------------------------------------------------------
+
+def _format_top_item(domains: Dict[str, Any], code: str, score: float) -> Dict[str, Any]:
+    niv1 = domains.get("niv1", {})
+    niv2 = domains.get("niv2", {})
+    niv3 = domains.get("niv3", {})
+
+    n2, n1 = _get_parent_chain(domains, code)
+    return {
+        "code": code,
+        "label": niv3.get(code, {}).get("label") or niv2.get(code, {}).get("label") or niv1.get(code, {}).get("label") or code,
+        "level": "niv3" if code in niv3 else "niv2" if code in niv2 else "niv1",
+        "niv1": n1,
+        "niv1_label": niv1.get(n1, {}).get("label") if n1 else None,
+        "niv2": n2,
+        "niv2_label": niv2.get(n2, {}).get("label") if n2 else None,
+        "score": round(float(score), 3),
     }
-    by_role = d.get("by_role", {})
-    for role, label in role_map.items():
-        items = by_role.get(role, [])
-        if items:
-            lines.append(f"\n## {label}")
-            for item in items[:8]:
-                phrase = item.get("phrase", "") if isinstance(item, dict) else str(item)
-                if phrase:
-                    lines.append(f"- {phrase}")
-
-    concepts = d.get("concepts", [])
-    if concepts:
-        lines.append("\n## CONCEPTS TECHNIQUES")
-        lines.append(", ".join(
-            (c.get("text", "") if isinstance(c, dict) else str(c))
-            for c in concepts[:20]
-        ))
-
-    return "\n".join(lines).strip()
 
 
-
-def _norm_key(text: Any) -> str:
-    text = unicodedata.normalize("NFKD", str(text or "").lower())
-    text = "".join(ch for ch in text if not unicodedata.combining(ch))
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
-
-
-def _extract_official_thesaurus(text: str) -> Optional[dict]:
-    m = re.search(r"TH[ÉE]SAURUS[\s\S]{0,800}?\b([A-Z]\d+[a-z]?\d*)\s*[:\-]\s*([^\n\|]+)", text or "", re.I | re.U)
-    if not m:
-        m = re.search(r"\b([A-Z]\d+[a-z]?\d*)\s*[:\-]\s*([^\n\|]{8,120})", text or "", re.I | re.U)
-    if not m: return None
-    return {"code": _norm_space(m.group(1)), "label": _norm_space(m.group(2))}
-
-
-def _resolve_domain_code(code: str, domains: Optional[dict]) -> Optional[dict]:
-    if not code or not domains: return None
-    target = str(code).strip().upper()
-    for level in ("niv4", "niv3", "niv2", "niv1"):
-        for entry in _iter_domain_entries(domains, level):
-            for key in ("code_niv4", "code_niv3", "code_niv2", "code_niv1"):
-                if str(entry.get(key, "")).strip().upper() == target:
-                    return entry
-    return None
-
-
-def _classification_from_entry(entry: dict, confidence: float, backend: str, reasoning: str, detail: Optional[str] = None, applicatif: Optional[str] = None) -> DomainClassification:
-    label = entry.get("label_niv4") or entry.get("label_niv3") or entry.get("label_niv2") or entry.get("label_niv1") or "non_classifié"
-    return DomainClassification(
-        domaine_principal=label,
-        code_niv1=entry.get("code_niv1"), label_niv1=entry.get("label_niv1"),
-        code_niv2=entry.get("code_niv2"), label_niv2=entry.get("label_niv2"),
-        code_niv3=entry.get("code_niv3"), label_niv3=entry.get("label_niv3"),
-        confidence=confidence, reasoning=reasoning, classified=True, backend=backend,
-        domaine_scientifique_detaille=detail or label, domaine_applicatif=applicatif)
-
-def _heuristic_domain_from_summary(summary: str, domains: Optional[dict]) -> Optional[DomainClassification]:
-    official = _extract_official_thesaurus(summary)
-    if official:
-        entry = _resolve_domain_code(official["code"], domains)
-        if entry:
-            return _classification_from_entry(entry, 0.95, "official_thesaurus", "Domaine extrait depuis le thésaurus officiel du document.", official.get("label"), _infer_applicative_domain(summary))
-        return DomainClassification(domaine_principal=official.get("label") or official.get("code") or "non_classifié", code_niv2=official.get("code"), confidence=0.92, reasoning="Domaine extrait depuis le thésaurus officiel du document, mais code non résolu dans le référentiel.", classified=True, backend="official_thesaurus_unresolved", domaine_scientifique_detaille=official.get("label"), domaine_applicatif=_infer_applicative_domain(summary))
-
-    text = _norm_key(summary)
-    if re.search(r"emballage|conditionnement|barriere sterile|opercule|blister|thermoformage|packaging", text):
-        for code in ("B7c12", "B7"):
-            entry = _resolve_domain_code(code, domains)
-            if entry:
-                return _classification_from_entry(entry, 0.86, "heuristic_fallback", "Signaux forts : emballage, conditionnement, thermoformage, dispositif médical.", "Industrie de l'emballage / emballage médical / matériaux et procédés de conditionnement", _infer_applicative_domain(summary) or "Emballage médical / dispositifs médicaux")
-        return DomainClassification(domaine_principal="Industrie de l'emballage / emballage médical", code_niv2="B7", confidence=0.84, reasoning="Signaux forts : emballage, conditionnement, thermoformage, dispositif médical.", classified=True, backend="heuristic_fallback", domaine_scientifique_detaille="Industrie de l'emballage / emballage médical / matériaux et procédés de conditionnement", domaine_applicatif=_infer_applicative_domain(summary) or "Emballage médical / dispositifs médicaux")
-
-    mat = bool(re.search(r"materiau|materiaux|composite|polymere|auxetique|pla|tpu|epdm|aramide", text))
-    vib = bool(re.search(r"vibro|vibration|acoust|mecanique|structure|resonance|decouplage", text))
-    if mat or vib:
-        code = "B3" if mat else "B4"
-        detail = "Matériaux composites / vibroacoustique / mécanique des structures" if mat and vib else ("Matériaux" if mat else "Mécanique / vibroacoustique")
-        entry = _resolve_domain_code(code, domains)
-        if entry:
-            return _classification_from_entry(entry, 0.80, "heuristic_fallback", "Signaux forts : matériaux, composites, vibrations ou mécanique.", detail, _infer_applicative_domain(summary))
-        return DomainClassification(domaine_principal=detail, code_niv2=code, confidence=0.78, reasoning="Signaux forts : matériaux, composites, vibrations ou mécanique.", classified=True, backend="heuristic_fallback", domaine_scientifique_detaille=detail, domaine_applicatif=_infer_applicative_domain(summary))
-    return None
-
-
-def _infer_applicative_domain(text: str) -> Optional[str]:
-    t = _norm_key(text)
-    apps = []
-    if re.search(r"dispositif medical|medical|steril|chirurg", t): apps.append("Emballage médical / dispositifs médicaux")
-    if re.search(r"moteur electrique|vehicule electrique|motorisation", t): apps.append("Motorisation électrique / véhicules électriques")
-    if re.search(r"naval|defense|sous-marin|batiment naval", t): apps.append("Naval de défense")
-    if re.search(r"batiment|construction|energie|thermique", t): apps.append("Bâtiment / énergie")
-    return " / ".join(dict.fromkeys(apps)) if apps else None
+def _make_empty_result(domains_path: Path, warning: str) -> Dict[str, Any]:
+    return {
+        "domain_code_niv1": None,
+        "domain_label_niv1": None,
+        "domain_code_niv2": None,
+        "domain_label_niv2": None,
+        "domain_code_niv3": None,
+        "domain_label_niv3": None,
+        "confidence": 0.0,
+        "top_domains": [],
+        "source": str(domains_path),
+        "warning": warning,
+        "display": {
+            "main_domain_code": None,
+            "main_domain_label": None,
+            "sub_domain_code": None,
+            "sub_domain_label": None,
+            "broad_domain_code": None,
+            "broad_domain_label": None,
+            "display_label": "Domaine non détecté",
+        },
+    }
 
 
 def classify_domain(
-    aggregated: Any,
-    model: str = DEFAULT_LLM_MODEL,
-    enabled: bool = True,
-    domains_path: Optional[str] = None,
-) -> DomainClassification:
-    result = DomainClassification()
+    data: Union[str, List[Dict[str, Any]], Dict[str, Any], List[str]],
+    domains_path: Optional[Union[str, Path]] = None,
+    top_k: int = 10,
+) -> Dict[str, Any]:
+    """
+    Fonction principale utilisée par le pipeline NLP.
 
-    if not enabled:
-        result.error = "Classification désactivée."
-        return result
+    Retourne toujours l'ancien format + un bloc display :
+    - Ancien format : domain_code_niv1/niv2/niv3, labels, confidence, top_domains.
+    - Nouveau format : display.main_domain_label = niv2, display.sub_domain_label = niv3.
+    """
+    path = Path(domains_path or DEFAULT_DOMAINS_PATH)
 
-    summary = _get_aggregated_summary(aggregated)
-    if not summary.strip():
-        result.error = "Résumé aggregated vide — classification impossible."
-        return result
+    try:
+        domains = load_domains(path)
+    except Exception as e:
+        return _make_empty_result(path, f"Impossible de charger domains.json : {e}")
 
-    domains = load_domains(domains_path)
+    text = _text_from_input(data)
+    if not text.strip():
+        return _make_empty_result(path, "Texte vide pour la détection du domaine.")
 
-    official = _extract_official_thesaurus(summary)
-    if official:
-        entry = _resolve_domain_code(official["code"], domains)
-        if entry:
-            return _classification_from_entry(entry, 0.95, "official_thesaurus", "Domaine extrait depuis le thésaurus officiel du document.", official.get("label"), _infer_applicative_domain(summary))
+    scores = _build_scores(domains, text)
+    if not scores:
+        return _make_empty_result(path, "Aucun score domaine calculé.")
 
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            if domains:
-                domains_list = _build_domains_list(domains)
-                prompt = _build_prompt(summary, domains_list)
-            else:
-                prompt = _build_prompt_no_domains(summary)
+    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    best_code, best_score = sorted_scores[0]
 
-            t0 = time.time()
-            raw_text, backend = _call_llm(prompt, model)
-            elapsed = time.time() - t0
+    # Si tout est à zéro, on garde une sortie propre.
+    if best_score <= 0:
+        return _make_empty_result(path, "Aucun domaine suffisamment détecté.")
 
-            result.llm_calls += 1
-            result.backend = backend
+    n2, n1 = _get_parent_chain(domains, best_code)
+    niv1 = domains.get("niv1", {})
+    niv2 = domains.get("niv2", {})
+    niv3 = domains.get("niv3", {})
 
-            data = _parse_response(raw_text, domains)
+    # Confiance simple : best / somme top scores, bornée.
+    positive_scores = [s for _, s in sorted_scores[: max(3, top_k)] if s > 0]
+    denom = sum(positive_scores) or best_score
+    confidence = best_score / denom if denom else 0.0
+    confidence = max(0.0, min(1.0, confidence))
 
-            # ── NOUVEAU V8.1 : extraire domaine applicatif + détaillé ─────────
-            result.domaine_scientifique_detaille = (
-                str(data.get("domaine_scientifique_detaille") or "").strip() or None
-            )
-            result.domaine_applicatif = (
-                str(data.get("domaine_applicatif") or "").strip() or None
-            )
-            if result.domaine_applicatif and result.domaine_applicatif.lower() in ("null", "none", ""):
-                result.domaine_applicatif = None
-            # ─────────────────────────────────────────────────────────────────
+    top_domains = [_format_top_item(domains, c, s) for c, s in sorted_scores[:top_k] if s > 0]
 
-            result.confidence = float(data.get("confidence", 0.0) or 0.0)
-            result.reasoning = str(data.get("reasoning", "") or "")
+    main_domain_code = n2
+    main_domain_label = niv2.get(n2, {}).get("label") if n2 else None
+    sub_domain_code = best_code if best_code in niv3 else None
+    sub_domain_label = niv3.get(best_code, {}).get("label") if best_code in niv3 else None
+    broad_domain_code = n1
+    broad_domain_label = niv1.get(n1, {}).get("label") if n1 else None
 
-            if domains:
-                code = str(data.get("code_niv2", "") or "").strip()
-                entry = _resolve_domain_code(code, domains)
-                if entry:
-                    result.code_niv2 = entry.get("code_niv2")
-                    result.label_niv2 = entry.get("label_niv2")
-                    result.code_niv1 = entry.get("code_niv1")
-                    result.label_niv1 = entry.get("label_niv1")
-                    result.code_niv3 = entry.get("code_niv3")
-                    result.label_niv3 = entry.get("label_niv3")
-                    label_niv3 = entry.get("label_niv3") or ""
-                    label_niv2 = entry.get("label_niv2") or ""
-                    result.domaine_principal = label_niv3 or label_niv2 or "non_classifié"
-                    result.classified = True
-                else:
-                    result.domaine_principal = str(data.get("domaine_principal") or "non_classifié")
-                    result.classified = False
-            else:
-                result.domaine_principal = str(data.get("domaine_principal") or "non_classifié")
-                result.classified = bool(result.domaine_principal and result.domaine_principal != "non_classifié")
+    display_label = main_domain_label or broad_domain_label or "Domaine non détecté"
+    if sub_domain_label and main_domain_label and sub_domain_label != main_domain_label:
+        display_label = f"{main_domain_label} → {sub_domain_label}"
 
-            # Si le LLM n'a pas réussi à choisir un code valide, fallback déterministe.
-            if not result.classified:
-                heuristic = _heuristic_domain_from_summary(summary, domains)
-                if heuristic is not None:
-                    heuristic.llm_calls = result.llm_calls
-                    heuristic.backend = f"{result.backend}+heuristic_fallback" if result.backend else "heuristic_fallback"
-                    heuristic.error = result.error
-                    result = heuristic
+    return {
+        # Ancien format conservé
+        "domain_code_niv1": broad_domain_code,
+        "domain_label_niv1": broad_domain_label,
+        "domain_code_niv2": main_domain_code,
+        "domain_label_niv2": main_domain_label,
+        "domain_code_niv3": sub_domain_code,
+        "domain_label_niv3": sub_domain_label,
+        "confidence": round(float(confidence), 4),
+        "top_domains": top_domains,
+        "source": str(path),
+        "warning": None,
 
-            # Si domaine_scientifique_detaille est renseigné, il enrichit domaine_principal.
-            if result.domaine_scientifique_detaille and not result.classified:
-                result.domaine_principal = result.domaine_scientifique_detaille
+        # Nouveau format pour affichage simple
+        "display": {
+            "main_domain_code": main_domain_code,
+            "main_domain_label": main_domain_label,
+            "sub_domain_code": sub_domain_code,
+            "sub_domain_label": sub_domain_label,
+            "broad_domain_code": broad_domain_code,
+            "broad_domain_label": broad_domain_label,
+            "display_label": display_label,
+        },
 
-            logger.info(
-                "Domain classifier v7.2.0 : %s | applicatif=%s | conf=%.2f | %.2fs",
-                result.domaine_principal, result.domaine_applicatif, result.confidence, elapsed,
-            )
-            return result
+        # Alias pratiques pour l'interface
+        "main_domain_code": main_domain_code,
+        "main_domain_label": main_domain_label,
+        "sub_domain_code": sub_domain_code,
+        "sub_domain_label": sub_domain_label,
+        "broad_domain_code": broad_domain_code,
+        "broad_domain_label": broad_domain_label,
+        "display_label": display_label,
+    }
 
-        except Exception as exc:
-            logger.warning("Domain classifier erreur (attempt %d) : %s", attempt + 1, exc)
-            result.error = str(exc)
-            if attempt < MAX_RETRIES:
-                time.sleep(1.0)
 
-    return result
+# ---------------------------------------------------------------------
+# Compatibilité avec anciens appels possibles
+# ---------------------------------------------------------------------
+
+def detect_domain(data: Any, domains_path: Optional[Union[str, Path]] = None, top_k: int = 10) -> Dict[str, Any]:
+    return classify_domain(data=data, domains_path=domains_path, top_k=top_k)
+
+
+def classify_project_domain(data: Any, domains_path: Optional[Union[str, Path]] = None, top_k: int = 10) -> Dict[str, Any]:
+    return classify_domain(data=data, domains_path=domains_path, top_k=top_k)
+
+
+class DomainClassifier:
+    def __init__(self, domains_path: Optional[Union[str, Path]] = None):
+        self.domains_path = Path(domains_path or DEFAULT_DOMAINS_PATH)
+
+    def classify(self, data: Any, top_k: int = 10) -> Dict[str, Any]:
+        return classify_domain(data=data, domains_path=self.domains_path, top_k=top_k)
+
+    def detect(self, data: Any, top_k: int = 10) -> Dict[str, Any]:
+        return self.classify(data=data, top_k=top_k)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--text", type=str, default="")
+    parser.add_argument("--file", type=str, default="")
+    parser.add_argument("--domains", type=str, default=str(DEFAULT_DOMAINS_PATH))
+    args = parser.parse_args()
+
+    txt = args.text
+    if args.file:
+        txt = Path(args.file).read_text(encoding="utf-8", errors="ignore")
+
+    print(json.dumps(classify_domain(txt, args.domains), ensure_ascii=False, indent=2))

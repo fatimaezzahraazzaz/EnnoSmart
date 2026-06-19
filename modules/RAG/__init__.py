@@ -1,20 +1,12 @@
+# -*- coding: utf-8 -*-
 """
-modules/RAG/__init__.py
-RAG v2 structured — exports propres
+Module RAG EnnoSmart.
+
+Important :
+- Ce module ne contient PAS de LLM.
+- Il sert uniquement à indexer, stocker et retrouver les sources.
+- La génération de texte est dans modules/LLM.
 """
 
-from modules.RAG.rag_pipeline import (
-    RAGPipeline,
-    build_rag_chunks_from_nlp_json,
-    slugify_org,
-    force_organisme_metadata,
-    build_organisme_filter,
-)
-
-__all__ = [
-    "RAGPipeline",
-    "build_rag_chunks_from_nlp_json",
-    "slugify_org",
-    "force_organisme_metadata",
-    "build_organisme_filter",
-]
+from .retriever import EnnoRetriever
+from .indexer import index_nlp_result, index_nlp_result_file

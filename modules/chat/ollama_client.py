@@ -8,21 +8,19 @@ import requests
 def clean_ollama_model(model: str) -> str:
     """
     Accepte :
-      - ollama:mistral:7b-instruct
-      - mistral:7b-instruct
-      - ollama:qwen2.5:1.5b
-      - qwen2.5:1.5b
+      - ollama:llama3.2:3b
+      - llama3.2:3b
+      - ollama:qwen3:4b-instruct
+      - qwen3:4b-instruct
 
-    Retourne :
-      - mistral:7b-instruct
-      - qwen2.5:1.5b
+    Retourne le nom attendu par Ollama.
     """
-    model = str(model or "qwen2.5:1.5b").strip()
+    model = str(model or "qwen3:4b-instruct").strip()
 
     if model.startswith("ollama:"):
         model = model.replace("ollama:", "", 1)
 
-    return model or "qwen2.5:1.5b"
+    return model or "qwen3:4b-instruct"
 
 
 def ollama_chat(
@@ -30,17 +28,15 @@ def ollama_chat(
     model: str,
     system_prompt: str,
     user_prompt: str,
-    temperature: float = 0.2,
-    num_predict: int = 180,
-    timeout: int = 30,
+    temperature: float = 0.15,
+    num_predict: int = 350,
+    timeout: int = 45,
 ) -> str:
     """
-    Appel simple à Ollama /api/chat.
+    Appel court à Ollama /api/chat.
 
-    keep_alive évite de recharger le modèle à chaque message.
-    num_ctx réduit le contexte pour accélérer les petites décisions de chat.
+    Utilisé par le module chat pour produire une décision JSON.
     """
-
     payload = {
         "model": clean_ollama_model(model),
         "messages": [
@@ -52,7 +48,7 @@ def ollama_chat(
         "options": {
             "temperature": temperature,
             "num_predict": num_predict,
-            "num_ctx": 2048,
+            "num_ctx": 3072,
         },
     }
 

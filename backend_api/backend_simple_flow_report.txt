@@ -1,0 +1,75 @@
+## Lecture Frascati du dossier  
+Le score moyen Frascati du dossier est de **0,68** sur 8 occurrences, toutes classées « verrou_a_verifier ». Ce score indique que les métadonnées extraites identifient des points potentiels de blocage technique qui nécessitent une validation humaine. Le statut doit donc être confirmé par le consultant avant toute décision CIR.
+
+## Synthèse stratégique du projet  
+Le projet porte sur l’optimisation du compresseur maritime TGM100 (et TGM60/100) : amélioration acoustique via le déport de l’aspiration, adaptation des réfrigérants du premier étage, et rééquilibrage du contrepoids. Les difficultés rencontrées concernent le **soufflage du carter** (air/huile remontant, perte de compression), la **fiabilité/usure des segments** et la **maîtrise thermique**. Le travail implique des essais acoustiques, des mesures de vibrations, des essais de réfrigérants et des études de contrepoids, offrant un fort potentiel de recherche‑développement sur la performance et la robustesse des compresseurs navals.
+
+## Objectif global reformulé  
+Développer et valider une architecture de compresseur TGM100 intégrant :
+
+- une aspiration acoustique déportée optimisée pour réduire le bruit et les vibrations ;
+- un système de réfrigérant du 1ᵉʳ étage amélioré (diamètre interne, géométrie des tubes) afin de maîtriser les températures de fonctionnement ;
+- un dispositif de contrepoids sans plomb garantissant l’équilibrage dynamique du vilebrequin ;
+- une solution de réduction du soufflage carter qui préserve l’étanchéité et la puissance du compresseur.
+
+Le tout doit être démontré par essais en condition réelle et par analyses de fiabilité.
+
+## Verrous R&D / signaux de verrous  
+
+| Verrou (titre reformulé) | Difficulté technique | Indices / sources | Statut |
+|---|---|---|---|
+| **Non‑transférabilité des solutions existantes** | Les solutions acoustiques ou de réfrigération déjà connues ne sont pas applicables tel quel au contexte du TGM100. | Sources 1, 4 (analyse segments, CR soufflage, essais acoustiques, étude réfrigérant) | à vérifier |
+| **Compromis entre contraintes contradictoires** | Satisfaire simultanément contraintes acoustiques, thermiques et mécaniques (pression, débit, poids). | Sources 2, 4 (CR soufflage, étude réfrigérant, synthèse contrepoids) | à vérifier |
+| **Performance insuffisante sous contrainte** | Le système ne délivre pas les performances attendues (pression, débit) dans les conditions limites. | Sources 3, 6 (CR soufflage, essais acoustiques, étude réfrigérant) | à vérifier |
+| **Qualité de sortie non conforme** | La sortie (pression, débit, niveau de bruit) ne respecte pas les spécifications malgré les réglages. | Sources 4, 5 (analyse segments, CR soufflage, PV‑EM) | à vérifier |
+| **Identification de la cause racine** | Difficulté à déterminer la cause exacte de l’usure anormale des segments (microstructure vs montage). | Sources 2, 5 (analyse segments, PV‑EM) | à vérifier |
+| **Fiabilité, usure ou dégradation en fonctionnement** | Risque d’usure prématurée des segments et perte d’étanchéité liée au soufflage du carter. | Sources 3, 6 (CR soufflage, PV‑EM) | à vérifier |
+| **Comportement instable ou non maîtrisé** | Vibrations excessives, déséquilibre de la poulie, instabilité du système. | Sources 7 (essais acoustiques, relevés vibrations, synthèse contrepoids) | à vérifier |
+| **Maîtrise thermique / refroidissement** | Le nouveau réfrigérant doit garantir le contrôle des températures sous différents débits d’eau. | Sources 8 (CR température, étude réfrigérant, comparatif T°) | à vérifier |
+
+## Démarche expérimentale détectée  
+- **Essais acoustiques** : mesures de bruit de structure (accéléromètres Bruel & Kjaer 4534 B‑001 ou PCB 356A15) et bruit aérien (microphone 4189) avec le logiciel Seolane (source 1).  
+- **Essais de vibrations** : relevés sur 4 points du compresseur, analyse harmonique (source 6).  
+- **Essais de réfrigérants** : fabrication de nouveaux tubes (Ø5 × Ø3) montés au 1er étage, tests à 100 bar, relevés de température selon débit d’eau (sources 7‑9).  
+- **Étude de contrepoids** : modélisation 3D SolidWorks, impression 3D sable, équilibrage statique (sources 2‑5).  
+- **Mesure de soufflage du carter** : quantification des débits d’air/huile via reniflard, suivi de l’usure des segments (source 4).  
+
+## Résultats et métriques disponibles  
+
+**Chiffrés**  
+- Niveau sonore : 82 dBA (sans gaine) → 79 dBA (avec gaine) – décibel moyen (source 6).  
+- Débit d’air soufflé : 120 L/min = 7,2 m³/h @ 250 bar (source 1 paramètre).  
+- Température de sortie : variation ≈ 15 °C entre 3 m³/h et 7,5 m³/h de débit d’eau (source 9 résultat).  
+- Masse du contrepoids : 17,50 kg (source 5 objectif).  
+
+**Qualitatifs**  
+- Vibration « extrêmement forte » due à déséquilibre de la poulie (source 7 verrou).  
+- Usure prononcée des segments du 4ᵉ étage, perte d’étanchéité (source 9 résultat).  
+- Microstructure (perlite vs ferrite) ne corrèle pas avec l’usure observée (source 2 résultat).  
+
+## Paramètres et contraintes techniques  
+- Débit d’air soufflé : 120 L/min (7,2 m³/h) @ 250 bar.  
+- Vitesse de rotation du compresseur : 1030 tr/min @ 54 Hz.  
+- Débits d’eau de refroidissement : 3 – 7,5 m³/h, impact sur température de sortie.  
+- Géométrie des réfrigérants : tubes Ø5 × Ø3, 2 étages (16 + 10 tubes).  
+- Masse et centre de gravité du contrepoids (X = 0,71 ; Y = 37,39 ; Z = 63,27 mm).  
+- Niveau d’humidité et d’huile dans le carter influençant le soufflage.  
+
+## Points à valider par le consultant  
+1. **Transférabilité** : les solutions acoustiques et de réfrigération développées sont‑elles réellement inédites pour le contexte naval ?  
+2. **Cause racine** : quelles investigations complémentaires (ex. essais de frottement, analyses de surface) sont prévues pour confirmer la cause de l’usure des segments ?  
+3. **Performance thermique** : les relevés de température sont‑ils suffisants pour valider le nouveau réfrigérant sur l’ensemble de la plage de fonctionnement ?  
+4. **Stabilité mécanique** : quelles actions sont envisagées pour corriger le déséquilibre de la poulie et les vibrations excessives ?  
+5. **Contrepoids sans plomb** : le processus d’équilibrage (perçage, usinage) a‑t‑il été validé par des essais dynamiques ?  
+6. **Mesure du soufflage** : la méthode de quantification du débit d’air/huile est‑elle calibrée et reproductible ?  
+7. **Critères de succès** : quels seuils de réduction de bruit, de vibration et d’amélioration thermique sont attendus pour qualifier le projet comme R&D ?  
+
+---  
+
+## Contrôle IA documentaire  
+- Score IA moyen : 0,064  
+- Niveau : faible  
+- Passages analysés : 72  
+- Passages risque élevé : 0  
+- Passages risque moyen : 0  
+Note : ce score concerne les passages extraits des documents bruts, pas la synthèse LLM.

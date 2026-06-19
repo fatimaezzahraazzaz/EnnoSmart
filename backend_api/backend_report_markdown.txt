@@ -1,0 +1,68 @@
+## Lecture Frascati du dossier  
+Le score moyen Frascati de 0,68 provient de l’agrégation des métadonnées « verrou » extraites des différents chunks indexés dans Chroma. Ce score indique que la majorité des éléments identifiés sont classés comme « verrou à vérifier », mais il ne constitue pas une décision définitive : chaque verrou doit être confirmé ou infirmé par le consultant au regard du dossier complet.
+
+## Synthèse stratégique du projet  
+Le projet porte sur le compresseur TGM100 (et le TGM60/100) utilisé dans le SNLE 3G. Plusieurs essais (acoustiques, thermiques, vibratoires) ont été menés pour évaluer l’impact d’un système d’aspiration d’air déporté et d’une gaine acoustique sur le bruit, la température, la stabilité mécanique et l’usure des segments de piston. Le problème technique majeur est la persistance de phénomènes d’usure, de vibrations excessives et de maîtrise thermique insuffisante, malgré des solutions connues (gaines, équilibrage, modification du débit d’eau). L’intérêt R&D réside dans la recherche d’une solution intégrée capable de réduire le bruit, d’améliorer la fiabilité des segments et de maîtriser la thermique dans un environnement sous‑pression élevé.
+
+## Objectif global reformulé  
+Développer et valider une architecture de compresseur TGM100 intégrant :
+
+- une aspiration acoustique déportée optimisée pour réduire le bruit et les vibrations ;
+- un système de réfrigérant du 1ᵉʳ étage amélioré (diamètre interne, géométrie des tubes) afin de maîtriser les températures de fonctionnement ;
+- un dispositif de contrepoids sans plomb garantissant l’équilibrage dynamique du vilebrequin ;
+- une solution de réduction du soufflage carter qui préserve l’étanchéité et la puissance du compresseur.
+
+Le tout doit être démontré par essais en condition réelle et par analyses de fiabilité.
+
+## Verrous R&D / signaux de verrous  
+
+| Verrou (titre reformulé) | Difficulté technique | Indices / sources | Statut |
+|---|---|---|---|
+| Non‑transférabilité des solutions existantes | Adapter des solutions acoustiques/thermiques déjà utilisées sur d’autres compresseurs au contexte SNLE 3G | Source 1 (verrou 1) – Analyse des segments, Détails, Essais acoustiques | probable |
+| Compromis entre contraintes contradictoires (thermiques vs acoustiques vs vibratoires) | Satisfaire simultanément exigences de bruit, de température et de stabilité mécanique | Source 2, 4, 8 (verrou 2, 4, 8) – CR température, comparatif débit, relevés de vibrations | à vérifier |
+| Performance insuffisante sous contrainte | Atteindre les performances cibles (débit, pression, bruit) malgré les limites mécaniques | Source 3, 7 (verrou 3, 7) – CR température, essais acoustiques | à vérifier |
+| Identification de la cause racine (usure, remontée d’air/oil) | Déterminer si l’usure des segments provient d’un défaut de conception, d’un montage ou d’un phénomène de soufflage carter | Source 4, 5 (verrou 4, 5) – Analyse des segments, PV‑EM, relevés de vibrations | à valider |
+| Fiabilité et usure en fonctionnement | Garantir la durée de vie des segments sans dégradation incompatible | Source 7 (verrou 6) – Analyse des segments, PV‑EM | probable |
+| Qualité de sortie non conforme | Assurer que les paramètres de sortie (pression, température, bruit) respectent les spécifications | Source 6 (verrou 6) – Analyse des segments, CR température | à vérifier |
+| Comportement instable ou non maîtrisé (vibrations, déséquilibre) | Maîtriser les vibrations excessives liées à un déséquilibre de poulie ou de contrepoids | Source 5 (verrou 5) – 58042, relevés de vibrations | probable |
+| Maîtrise thermique / refroidissement | Contrôler les températures d’entrée/sortie des étages du compresseur selon le débit d’eau | Source 8 (verrou 8) – CR température, comparatif débit | à vérifier |
+
+## Démarche expérimentale détectée  
+* **Essais acoustiques** : mesures de bruit structurel et aérien avec accéléromètres (Bruel & Kjaer 4534 B‑001, PCB 356A15), analyseur OROS OR34 et microphones (Bruel & Kjaer 4189). Comparaison « avec » vs « sans » gaine déportée (gain ≈ 2 dB).  
+* **Essais thermiques** : relevés de températures aux étages du compresseur en fonction du débit d’eau (3 → 7,5 m³/h) et du sens de circulation (normal vs inversé). Observation d’une hausse de 8‑13 % de la température de sortie selon le débit.  
+* **Essais vibratoires** : relevés de vibrations sur 4 points du compresseur, analyse RMS (dB) et accélération (m/s²). Identification d’une vibration très forte liée à un déséquilibre de poulie.  
+* **Analyse microstructurale** : coupes micrographiques, dureté, attaque nital pour comparer les lots de segments (perlite vs ferrite).  
+* **Équilibrage statique** : mise en place de contrepoids (plomb vs sans plomb) et mesure des écarts de masse.  
+* **Essais de soufflage carter** : contrôle du débit d’air/huile à travers le reniflard, identification d’une remontée d’air/huile excessive.
+
+## Résultats et métriques disponibles  
+
+**Chiffrés**  
+* Niveau de bruit : 82 dBA (sans gaine) → 80 dBA (avec gaine) – gain ≈ 2 dB (Source 1, paramètre).  
+* Température de sortie (1er étage) : +8,9 % entre 3 et 7,5 m³/h (Source 12, méthode).  
+* Vibration RMS : valeurs entre 120 et 133 dB selon les points (Source 7, résultat).  
+* Dureté microstructurale : perlite plus dure que ferrite, mais pas corrélée à l’usure (Source 2, résultat).  
+
+**Qualitatifs**  
+* Identification d’une usure prononcée du piston/segment liée à un mauvais montage (Source 7, limite).  
+* Observation d’un déséquilibre de poulie générant des vibrations fortes (Source 6, limite).  
+* Confirmation que la microstructure ne justifie pas l’usure anormale (Source 2, limite).  
+
+## Paramètres et contraintes techniques  
+* Vitesse du compresseur : 1030 tr/min, pression 300 bar.  
+* Débit d’eau de refroidissement : 3 – 7,5 m³/h, sens d’écoulement variable.  
+* Température ambiante du local : 25 °C.  
+* Configuration d’aspiration : gaine acoustique Ø 75 mm, longueur 10 m, aspiration déportée dans un compartiment séparé.  
+* Masse des contrepoids : 18,07 kg (avec plomb) vs 17,385 kg (sans plomb).  
+* Durée de conservation des échantillons : 3 mois avant destruction.  
+
+## Points à valider par le consultant  
+1. **Transférabilité** : Les solutions acoustiques/thermiques testées sont‑elles réellement applicables au SNLE 3G ou nécessitent‑elles une adaptation majeure ?  
+2. **Critères de performance** : Quels sont les seuils de bruit, de température et de vibration acceptables pour le programme ?  
+3. **Cause racine** : L’usure des segments est‑elle confirmée comme étant due à un montage, à la remontée d’air/oil ou à un autre facteur ?  
+4. **Équilibrage dynamique** : Le contrepoids actuel suffit‑il à réduire les vibrations à un niveau admissible ?  
+5. **Maîtrise thermique** : Le changement de sens de circulation de l’eau apporte‑t‑il un bénéfice net sur la température des étages critiques ?  
+6. **Validité des mesures** : Les instruments (sonomètre, accéléromètres, thermocouples) ont‑ils été calibrés conformément aux exigences CIR ?  
+7. **Documentation** : Tous les jeux de données (température, vibration, bruit) sont‑ils archivés et traçables pour le dossier CIR ?  
+
+Ces éléments permettront de confirmer ou d’infirmer les verrous identifiés et de finaliser le dossier CIR.

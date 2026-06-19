@@ -236,6 +236,40 @@ def _detect_rd_sections(text: str) -> list[str]:
     return unique
 
 
+def _is_word_toc_or_field(raw_text: str, style_name: str = "") -> bool:
+    """
+    Ignore la table des matières Word.
+    Sans ça, les sections CIR sont détectées dans le sommaire : PAGEREF / _Toc.
+    """
+    raw = str(raw_text or "").strip()
+    low = raw.lower()
+    style = str(style_name or "").lower().strip()
+
+    if not raw:
+        return True
+
+    if style.startswith("toc"):
+        return True
+
+    if "pageref" in low or "_toc" in low or low.startswith("toc \\o"):
+        return True
+
+    if low in {"table des matières", "table des matieres", "sommaire"}:
+        return True
+
+    # Lignes de sommaire après extraction : 1.3. Etat de l'art 5
+    if re.match(r"^\d+(?:\.\d+)*\.?\s+.{3,180}\s+\d{1,3}$", raw):
+        words = re.findall(r"[A-Za-zÀ-ÿ]{3,}", raw)
+        if len(words) >= 2:
+            return True
+
+    # Coordonnées Word parasites extraites depuis certains DOCX.
+    if re.match(r"^-?\d{8,}$", raw):
+        return True
+
+    return False
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # DOCX
 # ══════════════════════════════════════════════════════════════════════════════
@@ -375,6 +409,11 @@ def _extract_docx(path: Path) -> OfficeResult:
                 continue
             style_obj = getattr(para, "style", None)
             style_name = (getattr(style_obj, "name", None) or "").lower()
+
+            # Important : ne pas envoyer la table des matières Word au NLP/CIR.
+            if _is_word_toc_or_field(raw_text, style_name):
+                continue
+
             is_heading = any(h in style_name for h in DOCX_HEADING_STYLES)
             level = 0
             if is_heading:

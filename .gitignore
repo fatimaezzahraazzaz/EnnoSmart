@@ -1,16 +1,96 @@
-# caches / bases vectorielles locales
-modules/RAG/.chroma/
-modules/RAG/.cache/
+# =========================
+# Données / outputs / storage
+# =========================
+storage/
+data/
+dataset_final/
+debug/
+docs/
+output/
+outputs/
+projects/
+train/
+llm_annotation/
 
-# caches python
+# =========================
+# Modèles / poids / gros fichiers
+# =========================
+models/
+*.pt
+*.pth
+*.onnx
+*.bin
+*.safetensors
+*.gguf
+*.pkl
+*.joblib
+
+# =========================
+# Chroma / vector DB RAG
+# =========================
+**/chroma/
+**/chroma_db/
+**/chromadb/
+**/.chroma/
+modules/RAG/chroma*/
+modules/RAG/*chroma*/
+modules/RAGv1/chroma*/
+modules/RAGv1/*chroma*/
+
+# =========================
+# Archives / patches
+# =========================
+archiv/
+patch_*.py
+PATCH_*.py
+*.bak
+*.bak_*
+
+# =========================
+# README / notes / commandes
+# =========================
+README*
+commande_lancement.txt
+models_ollama.txt
+
+# =========================
+# Apps Streamlit / tests / checks
+# =========================
+app_*.py
+backend_run_*.py
+check_*.py
+test_*.py
+run_*.py
+safe_pipeline_worker.py
+list_models.py
+enno_restart_core.py
+main.py
+
+# =========================
+# Streamlit config locale
+# =========================
+.streamlit/
+config.toml
+
+# =========================
+# Cache Python
+# =========================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+.ipynb_checkpoints/
 
-# environnements
-.venv/
-venv/
-
-# fichiers secrets
+# =========================
+# Environnements / secrets
+# =========================
 .env
+.env.*
+venv/
+.venv/
+
+# =========================
+# Poppler / outils locaux
+# =========================
+poppler-*/

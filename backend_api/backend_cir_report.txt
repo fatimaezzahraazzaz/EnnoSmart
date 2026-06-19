@@ -1,0 +1,87 @@
+## Lecture Frascati du dossier  
+Le score moyen Frascati de 0,68, calculé à partir des métadonnées des chunks de rôle « verrou » indexés dans Chroma, indique que la majorité des éléments identifiés sont considérés comme des verrous à vérifier (8 verrous sur 8). Ce score reflète uniquement le contrôle déjà appliqué par le NLP ; il ne constitue pas une validation définitive. Une revue humaine est donc indispensable pour confirmer ou infirmer chaque verrou.
+
+## Synthèse stratégique du projet  
+Le projet porte sur le compresseur à pistons TGM100 destiné aux sous-marins (SNLE 3G). Les travaux visent à améliorer les performances acoustiques (déport de l’aspiration), thermiques (nouveaux réfrigérants du 1ᵉʳ étage) et mécaniques (contrepoids sans plomb, maîtrise du soufflage carter). Les difficultés rencontrées (vibrations excessives, usure des segments, perte de compression) justifient un programme de R&D structuré afin de garantir la robustesse, la discrétion vibro‑acoustique et la fiabilité du système dans des conditions de haute pression (≈ 300 bar) et de débit élevé (≈ 100 m³/h).
+
+## Objectif global reformulé  
+Développer et valider une architecture de compresseur TGM100 intégrant :
+
+- une aspiration acoustique déportée optimisée pour réduire le bruit et les vibrations ;
+- un système de réfrigérant du 1ᵉʳ étage amélioré (diamètre interne, géométrie des tubes) afin de maîtriser les températures de fonctionnement ;
+- un dispositif de contrepoids sans plomb garantissant l’équilibrage dynamique du vilebrequin ;
+- une solution de réduction du soufflage carter qui préserve l’étanchéité et la puissance du compresseur.
+
+Le tout doit être démontré par essais en condition réelle et par analyses de fiabilité.
+
+## Verrous R&D / signaux de verrous  
+
+| Titre du verrou (technique & contexte) | Difficulté technique | Preuves / documents sources | Statut |
+|---|---|---|---|
+| **Maîtrise du soufflage carter et de son impact sur la perte de compression** | Le soufflage carter entraîne une perte de puissance et une détérioration de l’étanchéité des segments du 4ᵉ étage. | *Analyse des segments après soufflage carter_e_d5ffa8028265.pdf* ; *CR Soufflage carter TGM_INTERNE_FR_Rev1_313064ccd82a.docx* ; *Essais acoustiques avec aspiration déportée - TGM100_ Rev0 _ FR_10e9ab05d1ab.pdf* | à vérifier |
+| **Compromis entre contraintes mécaniques et équilibrage dynamique du contrepoids sans plomb** | Concevoir un contrepoids plein (≈ 17,5 kg) sans plomb tout en respectant le centre de gravité et les exigences d’équilibrage dynamique. | *Synthèse Contrepoids - étude et prix_511c54cd3cc9.docx* (modélisation SolidWorks, études de masse) | probable |
+| **Maîtrise thermique du réfrigérant du 1ᵉʳ étage sous forte pression** | Validation du nouveau réfrigérant (Ø 5 × 3 mm, 26 tubes) à 100 bar et optimisation du débit d’eau de refroidissement. | *Etude réfrigérant 1er étage - TGM100_bc7db782bf19.docx* ; *CR des relevés en température… - TGM100 - @300bar - 06‑02‑2023 - B_605d01fc4028.pdf* ; *TGM100 - Comparatif des T°… - A_be247fc08d52.pdf* | à vérifier |
+| **Stabilité vibro‑acoustique du compresseur avec aspiration déportée** | Vibrations très fortes observées (déséquilibre de la poulie) ; besoin de réduire le niveau sonore tout en conservant le débit. | *Essais acoustiques avec aspiration déportée - TGM100_ Rev0 _ FR_10e9ab05d1ab.pdf* ; *Relevés de vibrations TMG 100_f9c25614902d.xlsx* ; *Synthèse Contrepoids - étude et prix_511c54cd3cc9.docx* | à vérifier |
+| **Identification de la cause racine de l’usure anormale des segments du lot 2** | L’usure ne semble pas liée à la microstructure (perlite/ferrite) mais possiblement au montage ou aux conditions de frottement. | *PV‑EM 22‑0167_8c0b21102117.pdf* (analyses microstructurales, dureté) ; *Analyse des segments après soufflage carter_e_d5ffa8028265.pdf* | à vérifier |
+| **Fiabilité à long terme du système face à l’usure et à la dégradation** | Vérifier que le compresseur reste performant sur la durée malgré le soufflage, l’humidité et la contamination d’huile. | *PV‑EM 22‑0167_8c0b21102117.pdf* ; *CR Soufflage carter TGM_INTERNE_FR_Rev1_313064ccd82a.docx* | à vérifier |
+| **Non‑transférabilité des solutions existantes au contexte SNLE 3G** | Les solutions connues (compresseurs de climatisation, etc.) ne répondent pas aux exigences de pression, débit et discrétion. | *Analyse des segments après soufflage carter_e_d5ffa8028265.pdf* ; *CR Soufflage carter TGM_INTERNE_FR_Rev1_313064ccd82a.docx* ; *Essais acoustiques avec aspiration déportée - TGM100_ Rev0 _ FR_10e9ab05d1ab.pdf* | à vérifier |
+| **Performance insuffisante sous contraintes combinées (pression, débit, vibration)** | Le système doit atteindre les performances cibles malgré les contraintes de pression élevée, débit important et exigences acoustiques. | *Essais acoustiques avec aspiration déportée - TGM100_ Rev0 _ FR_10e9ab05d1ab.pdf* ; *CR Soufflage carter TGM_INTERNE_FR_Rev1_313064ccd82a.docx* ; *Etude réfrigérant 1er étage - TGM100_bc7db782bf19.docx* | à vérifier |
+
+## Démarche expérimentale détectée  
+- **Essais acoustiques** : mesures de niveau sonore (dB A) avec et sans gaine déportée, utilisation d’accéléromètres et de microphones (document « Essais acoustiques avec aspiration déportée »).  
+- **Tests thermiques** : relevés de température du 1ᵉʳ étage selon différents débits d’eau (documents « CR des relevés en température… », « TGM100 – Comparatif des T° »).  
+- **Analyse de segmentation** : inspection visuelle et chimique (réactif nital) des segments du 4ᵉ étage, mesures de dureté et microstructure (PV‑EM 22‑0167).  
+- **Équilibrage dynamique** : conception et validation d’un contrepoids sans plomb via modélisation 3D (SolidWorks) et pesées (document « Synthèse Contrepoids »).  
+- **Mesure de débit d’air** : utilisation d’un débitmètre (120 L/min ≈ 7,2 m³/h @ 250 bar) avec mise en garde sur la précision (document « CR Soufflage carter »).  
+
+## Résultats et métriques disponibles  
+
+**Chiffrés**  
+- Niveau sonore moyen : 78 – 82 dB A selon configuration (avec/ sans gaine) – *Essais acoustiques*.  
+- Débit d’air mesuré : 120 L/min (≈ 7,2 m³/h @ 250 bar) – *CR Soufflage carter*.  
+- Variation de température du 1ᵉʳ étage : + ≈ 15 °C entre 3 m³/h et 7,5 m³/h de débit d’eau – *CR des relevés en température*.  
+- Masse du contrepoids sans plomb : 17,5 kg (géométrie X = 0,71 ; Y = 37,39 ; Z = 63,27) – *Synthèse Contrepoids*.  
+
+**Qualitatifs**  
+- Vibrations très fortes attribuées à un déséquilibre de la poulie – *Relevés de vibrations*.  
+- Usure anormale des segments du lot 2 non corrélée à la microstructure – *PV‑EM 22‑0167*.  
+- Soufflage carter identifié comme facteur de perte de compression et de contamination d’huile – *Analyse des segments* / *CR Soufflage carter*.  
+
+## Paramètres et contraintes techniques  
+- Débit cible : 90‑100 m³/h.  
+- Pression de refoulement : 300 bar.  
+- Vitesse de rotation : 1030 tr/min (≈ 54 Hz).  
+- Température d’entrée du compresseur : variable selon débit d’eau.  
+- Masse du contrepoids : 17,5 kg, sans plomb, équilibrage dynamique requis.  
+- Débit d’air mesuré : 120 L/min (≈ 7,2 m³/h @ 250 bar).  
+- Niveau d’humidité et de contamination d’huile dans le carter à contrôler.  
+
+## Comparaison avec le CIR précédent  
+
+| Catégorie | Nombre | Observations |
+|---|---|---|
+| Verrous nouveaux ou non retrouvés | 0 | Tous les verrous identifiés existent déjà sous forme d’évolution du CIR 2022. |
+| Verrous en évolution / continuité partielle | 8 | Chaque verrou montre une continuité partielle (scores de continuité 0,46‑0,59) : les thématiques (vibrations, soufflage, thermique, contrepoids) sont reprises mais avec de nouveaux paramètres ou contextes (déport d’aspiration, nouveaux réfrigérants). |
+| Continuités fortes | 0 | Aucun verrou n’est strictement identique au précédent. |
+| Changements techniques constatés | • Introduction du contrepoids sans plomb ; <br>• Déport de l’aspiration d’air vers un compartiment distinct ; <br>• Nouveaux réfrigérants du 1ᵉʳ étage testés à 100 bar. | Ces évolutions justifient la qualification de « évolution partielle ». |
+| Risque de répétition | Le consultant devra vérifier que les travaux d‑détection de vibrations et de soufflage ne reproduisent pas simplement les mêmes essais que l’an‑dernier CIR, mais qu’ils intègrent les nouvelles configurations (gaine déportée, contrepoids sans plomb). |
+
+## Points à valider par le consultant  
+1. **Vérification du verrou « Maîtrise du soufflage carter »** : les mesures de débit d’air sont‑elles suffisantes pour quantifier l’impact sur la compression ?  
+2. **Équilibrage du contrepoids sans plomb** : la masse cible (17,5 kg) et la répartition X‑Y‑Z ont‑elles été validées par essais dynamiques ?  
+3. **Performance thermique du nouveau réfrigérant** : les relevés de température démontrent‑ils une amélioration significative par rapport à l’ancien réfrigérant ?  
+4. **Stabilité vibro‑acoustique avec aspiration déportée** : les niveaux sonores mesurés sont‑ils conformes aux exigences du SNLE 3G ?  
+5. **Cause racine de l’usure des segments** : les analyses microstructurales excluent‑elles définitivement la matière comme facteur ?  
+6. **Fiabilité à long terme** : existe‑t‑il des données d’essais en durée (cycles) pour confirmer l’absence de dégradation liée au soufflage ou à l’humidité ?  
+7. **Transférabilité des solutions** : les solutions développées (contrepoids, réfrigérant, aspiration) sont‑elles réellement nouvelles par rapport à l’état de l’art ou simplement des adaptations ?  
+
+---  
+
+**Contrôle IA documentaire**  
+- Score IA moyen : 6,4 %  
+- Niveau : faible  
+- Passages analysés : 72  
+- Passages à risque élevé : 0  
+- Passages à risque moyen : 0  
+
+*Ce score porte sur les extraits bruts des documents ; il ne remet pas en cause la synthèse ci‑dessus.*

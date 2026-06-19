@@ -15,28 +15,26 @@ from modules.chat.schemas import ChatDecision
 
 @dataclass
 class EnnoChatConfig:
-    model: str = "ollama:llama3.2:3b"
-    timeout: int = 30
-    temperature: float = 0.2
-    num_predict: int = 180
+    # LLM léger conseillé pour comprendre l'intention.
+    model: str = "ollama:qwen3:4b-instruct"
+    timeout: int = 45
+    temperature: float = 0.15
+    num_predict: int = 350
     debug: bool = True
 
 
 class EnnoChat:
     """
-    Module de chat intelligent indépendant de EnnoAmel.
+    Module de compréhension conversationnelle par LLM.
 
-    Rôle :
-      - Comprendre le message utilisateur.
-      - Répondre directement uniquement aux messages humains simples.
-      - Ne jamais analyser le dossier à la place de EnnoAmel.
-      - Dire à EnnoAmel quoi faire ensuite.
+    Version intelligente :
+    - pas de routing documentaire par mots-clés ;
+    - même bonjour/merci/ok/ça va passent par le LLM ;
+    - le LLM produit une décision JSON structurée ;
+    - l'orchestrateur utilise cette décision pour répondre directement
+      ou transmettre une consigne précise au RAG.
 
-    EnnoAmel utilise ce module AVANT intent_router et AVANT le RAG.
-
-    Version corrigée :
-      - Les messages humains simples sont détectés localement.
-      - Le LLM n'est appelé que si le message nécessite une vraie analyse d'intention.
+    Le module ne fait pas lui-même l'analyse documentaire.
     """
 
     def __init__(self, config: Optional[EnnoChatConfig] = None):
@@ -51,14 +49,6 @@ class EnnoChat:
         document_metadata: Optional[dict[str, Any]] = None,
         chat_history: Optional[list[dict[str, str]]] = None,
     ) -> ChatDecision:
-        """
-        Point d'entrée principal.
-
-        Retourne :
-          - handled=True si le chat répond directement.
-          - handled=False si EnnoAmel doit continuer.
-        """
-
         t0 = time.time()
         metadata = document_metadata or {}
         normalized = self._normalize(user_message)
@@ -68,33 +58,16 @@ class EnnoChat:
                 handled=True,
                 answer="Je n’ai pas bien reçu votre message. Pouvez-vous reformuler ?",
                 intent="clarification",
-                action="local_empty_message",
+                action="chat_empty_message",
                 use_rag=False,
                 use_llm=False,
-                recommended_agent="EnnoAmel",
+                recommended_agent="Orchestrateur",
                 needs_specialized_agent=False,
                 confidence=0.95,
                 normalized_question=normalized,
-                debug={
-                    "reason": "empty_message",
-                    "processing_time": round(time.time() - t0, 3),
-                },
+                debug={"reason": "empty_message", "processing_time": round(time.time() - t0, 3)},
             )
 
-        # 1. Détection locale instantanée pour les messages humains simples.
-        # Ici, on évite totalement l'appel LLM.
-        local_decision = self._try_local_direct_chat(
-            normalized=normalized,
-            has_document=has_document,
-            has_rag_index=has_rag_index,
-        )
-
-        if local_decision is not None:
-            local_decision.debug["processing_time"] = round(time.time() - t0, 3)
-            return local_decision
-
-        # 2. Si ce n'est pas un message humain simple,
-        # alors seulement on appelle le LLM pour comprendre l'intention.
         system_prompt = self._build_system_prompt()
         user_prompt = self._build_user_prompt(
             user_message=user_message,
@@ -124,361 +97,170 @@ class EnnoChat:
             )
 
         except Exception as exc:
+            # Fallback sûr : on laisse l'orchestrateur/RAG répondre au document.
             return ChatDecision(
                 handled=False,
                 answer="",
-                intent="fallback_to_ennoamel",
-                action="chat_fallback",
-                use_rag=False,
+                intent="document_question",
+                action="chat_fallback_to_rag",
+                use_rag=bool(has_rag_index),
                 use_llm=True,
-                recommended_agent="EnnoAmel",
+                recommended_agent="Orchestrateur",
                 needs_specialized_agent=False,
+                topic="general",
+                answer_style="natural",
+                requested_format="free_text",
+                detail_level="normal",
+                rag_search_query=user_message,
+                rag_instruction=(
+                    "Réponds naturellement à la question utilisateur, uniquement à partir des sources RAG. "
+                    "Respecte le niveau de détail demandé par l'utilisateur."
+                ),
                 confidence=0.25,
                 normalized_question=normalized,
-                debug={
-                    "error": str(exc),
-                    "processing_time": round(time.time() - t0, 3),
-                },
+                debug={"error": str(exc), "processing_time": round(time.time() - t0, 3)},
             )
 
-    def _try_local_direct_chat(
-        self,
-        *,
-        normalized: str,
-        has_document: bool,
-        has_rag_index: bool,
-    ) -> Optional[ChatDecision]:
-        """
-        Détection locale des messages humains simples.
-
-        Objectif :
-          - répondre instantanément à bonjour, merci, ça va, très bien, etc. ;
-          - éviter un appel LLM inutile ;
-          - ne jamais traiter ici les questions liées au dossier.
-        """
-
-        greetings = {
-            "bonjour",
-            "bonsoir",
-            "salut",
-            "hello",
-            "hi",
-            "coucou",
-            "salam",
-            "salam alaykom",
-            "salam alaykoum",
-            "assalam alaykom",
-            "assalam alaykoum",
-            "salam alaikom",
-            "salam alaikoum",
-        }
-
-        thanks = {
-            "merci",
-            "merci beaucoup",
-            "thanks",
-            "thank you",
-            "chokran",
-            "shukran",
-            "baraka allah fik",
-            "barakallah fik",
-        }
-
-        positive_followups = {
-            "ok",
-            "okay",
-            "d accord",
-            "daccord",
-            "tres bien",
-            "très bien",
-            "parfait",
-            "bien",
-            "super",
-            "c est bon",
-            "cest bon",
-            "oui",
-            "yes",
-        }
-
-        how_are_you_patterns = [
-            "ca va",
-            "ça va",
-            "cv",
-            "tu vas bien",
-            "vous allez bien",
-            "comment ca va",
-            "comment ça va",
-            "et toi",
-            "et vous",
-            "labas",
-            "labass",
-            "labes",
-        ]
-
-        help_patterns = [
-            "aide",
-            "help",
-            "tu peux faire quoi",
-            "vous pouvez faire quoi",
-            "que peux tu faire",
-            "que pouvez vous faire",
-            "comment tu peux m aider",
-            "comment vous pouvez m aider",
-        ]
-
-        # Important :
-        # Si le message contient déjà des mots métier,
-        # on ne répond pas localement.
-        # On laisse EnnoAmel / RAG / agents spécialisés gérer.
-        dossier_keywords = [
-            "projet",
-            "dossier",
-            "document",
-            "resume",
-            "résumé",
-            "synthese",
-            "synthèse",
-            "mots cles",
-            "mots clés",
-            "keyword",
-            "keywords",
-            "entite",
-            "entité",
-            "entites",
-            "entités",
-            "verrou",
-            "verrous",
-            "incertitude",
-            "incertitudes",
-            "objectif",
-            "objectifs",
-            "methode",
-            "méthode",
-            "methodes",
-            "méthodes",
-            "protocole",
-            "protocoles",
-            "technologie",
-            "technologies",
-            "outil",
-            "outils",
-            "resultat",
-            "résultat",
-            "resultats",
-            "résultats",
-            "metrique",
-            "métrique",
-            "performance",
-            "cir",
-            "eligible",
-            "éligible",
-            "eligibilite",
-            "éligibilité",
-            "score",
-            "taux",
-            "diagnostic",
-            "risque",
-            "risques",
-            "preuve",
-            "preuves",
-            "source",
-            "sources",
-            "passage",
-            "passages",
-            "etat de l art",
-            "état de l art",
-            "article",
-            "articles",
-            "publication",
-            "publications",
-            "bibliographie",
-            "finance",
-            "financier",
-            "rh",
-            "depense",
-            "dépense",
-            "depenses",
-            "dépenses",
-            "montant",
-            "montants",
-            "etp",
-            "cerfa",
-            "excel",
-        ]
-
-        if any(keyword in normalized for keyword in dossier_keywords):
-            return None
-
-        if normalized in greetings:
-            return ChatDecision(
-                handled=True,
-                answer=(
-                    "Bonjour, je suis là. Vous pouvez me demander un résumé, "
-                    "les mots-clés, les verrous techniques ou une première lecture du dossier."
-                ),
-                intent="small_talk",
-                action="local_direct_chat",
-                use_rag=False,
-                use_llm=False,
-                recommended_agent="EnnoAmel",
-                needs_specialized_agent=False,
-                confidence=0.98,
-                normalized_question=normalized,
-                debug={"reason": "local_greeting"},
-            )
-
-        if normalized in thanks:
-            return ChatDecision(
-                handled=True,
-                answer="Avec plaisir.",
-                intent="thanks",
-                action="local_direct_chat",
-                use_rag=False,
-                use_llm=False,
-                recommended_agent="EnnoAmel",
-                needs_specialized_agent=False,
-                confidence=0.98,
-                normalized_question=normalized,
-                debug={"reason": "local_thanks"},
-            )
-
-        if normalized in positive_followups:
-            if has_document or has_rag_index:
-                answer = (
-                    "Parfait. Dites-moi ce que vous souhaitez faire sur le dossier : "
-                    "résumé, mots-clés, verrous, méthodes, résultats ou éligibilité CIR."
-                )
-            else:
-                answer = (
-                    "Parfait. Vous pouvez me transmettre un dossier ou me dire "
-                    "ce que vous souhaitez analyser."
-                )
-
-            return ChatDecision(
-                handled=True,
-                answer=answer,
-                intent="small_talk",
-                action="local_direct_chat",
-                use_rag=False,
-                use_llm=False,
-                recommended_agent="EnnoAmel",
-                needs_specialized_agent=False,
-                confidence=0.95,
-                normalized_question=normalized,
-                debug={"reason": "local_positive_followup"},
-            )
-
-        if any(pattern in normalized for pattern in how_are_you_patterns):
-            return ChatDecision(
-                handled=True,
-                answer=(
-                    "Ça va très bien, merci. Je suis prêt à vous aider "
-                    "sur votre dossier EnnoSmart."
-                ),
-                intent="small_talk",
-                action="local_direct_chat",
-                use_rag=False,
-                use_llm=False,
-                recommended_agent="EnnoAmel",
-                needs_specialized_agent=False,
-                confidence=0.95,
-                normalized_question=normalized,
-                debug={"reason": "local_how_are_you"},
-            )
-
-        if any(pattern in normalized for pattern in help_patterns):
-            return ChatDecision(
-                handled=True,
-                answer=(
-                    "Je peux vous aider à comprendre un dossier, produire un résumé, "
-                    "identifier les mots-clés, les verrous techniques, les objectifs R&D, "
-                    "les méthodes, les technologies, les résultats, ou orienter vers "
-                    "l’éligibilité CIR avec EnnoDiagnostic."
-                ),
-                intent="help",
-                action="local_direct_chat",
-                use_rag=False,
-                use_llm=False,
-                recommended_agent="EnnoAmel",
-                needs_specialized_agent=False,
-                confidence=0.96,
-                normalized_question=normalized,
-                debug={"reason": "local_help"},
-            )
-
-        return None
+    # ═══════════════════════════════════════════════════════════════════════
+    # PROMPTS
+    # ═══════════════════════════════════════════════════════════════════════
 
     def _build_system_prompt(self) -> str:
         return """
-Tu es le module de chat intelligent d'EnnoSmart.
+Tu es l’Orchestrateur intelligent d’un assistant R&D/CIR.
 
-Tu n'es PAS EnnoAmel.
-Tu es placé AVANT EnnoAmel pour comprendre l'intention utilisateur.
+Ton rôle :
+- comprendre précisément l’intention utilisateur ;
+- comprendre le sujet demandé ;
+- comprendre le format attendu ;
+- décider s’il faut répondre directement ou utiliser le RAG ;
+- transmettre une instruction claire au RAG.
 
-Objectif :
-- répondre naturellement aux messages humains simples ;
-- sinon rediriger vers EnnoAmel, le RAG ou l'agent spécialisé.
+Tu es expert en dossiers R&D/CIR :
+objectifs R&D, verrous scientifiques/techniques, état de l’art, méthodes expérimentales,
+résultats, matériaux, technologies, personnes, organismes, preuves documentaires.
 
-Tu dois répondre uniquement en JSON valide.
+Tu dois raisonner sur le sens global de la demande, pas par simple mots-clés.
 
-Intentions possibles :
-- small_talk : salutation, discussion naturelle, "tu vas bien ?", "bonjour", "très bien", etc.
-- thanks : remerciement simple.
-- help : demande des capacités.
-- project_summary : résumé simple ou idée générale du projet.
-- keywords : mots-clés, entités, éléments extraits.
-- verrous : verrous techniques, limites, incertitudes.
-- objectives : objectifs R&D.
-- methods : méthodes, protocoles, approches.
-- technologies : outils, technologies, modèles, frameworks.
-- results : résultats, métriques, performances.
-- eligibility : taux, score, éligibilité CIR, diagnostic CIR.
-- diagnostic_detail : analyse détaillée CIR, justification détaillée, risques, preuves, analyse approfondie.
-- scholar : état de l'art, articles, publications, bibliographie.
-- valorisation : finance, RH, dépenses, montants, ETP, Cerfa, Excel.
-- source_proof : sources, preuves, passages exacts du document.
-- document_question : question documentaire qui nécessite le dossier.
-- clarification : message ambigu.
+Tu dois répondre UNIQUEMENT en JSON valide.
 
-Règles strictes :
-1. Si l'intention est small_talk, thanks ou help, tu peux répondre directement.
-2. Pour small_talk, thanks et help : handled=true et answer doit être non vide.
-3. Si l'utilisateur demande une petite vue simple du dossier :
-   résumé simple, mots-clés, verrous, objectifs, méthodes, technologies ou résultats,
-   alors handled=false, recommended_agent=EnnoAmel, needs_specialized_agent=false.
-4. Si l'utilisateur demande une analyse détaillée, un diagnostic complet, des risques CIR,
-   une justification approfondie, une analyse des preuves ou une validation d'éligibilité,
-   alors intent=diagnostic_detail, handled=false, recommended_agent=EnnoDiagnostic,
-   needs_specialized_agent=true.
-5. Si l'utilisateur demande le taux, score ou l'éligibilité CIR,
-   alors intent=eligibility, handled=false, recommended_agent=EnnoDiagnostic,
-   needs_specialized_agent=true.
-6. Si l'utilisateur demande l'état de l'art, des articles ou une bibliographie,
-   alors intent=scholar, handled=false, recommended_agent=EnnoScholar,
-   needs_specialized_agent=true.
-7. Si l'utilisateur demande finance, RH, dépenses, montants, ETP, Cerfa ou Excel,
-   alors intent=valorisation, handled=false, recommended_agent=EnnoValor,
-   needs_specialized_agent=true.
-8. Si l'utilisateur demande des sources ou preuves exactes, use_rag=true.
-9. Tu ne dois jamais inventer des informations sur le dossier.
-10. Tu ne dois jamais répondre en dehors du JSON.
+CRITIQUE : si le message utilisateur est uniquement social ou conversationnel
+(exemples : "bonjour", "salut", "merci", "ok", "ça va", "d'accord", "très bien"),
+tu dois répondre :
+- handled=true
+- use_rag=false
+- intent="small_talk" ou "thanks"
+- answer courte, humaine et naturelle
+- ne parle jamais du document
+- ne cite jamais de sources
+- ne mentionne jamais le projet, le CIR, EnnoDiagnostic, EnnoScholar ou EnnoValor
 
-Très important :
-- Tu ne dois répondre directement que pour small_talk, thanks et help.
-- Pour toutes les demandes liées au dossier, le champ answer doit être vide.
-- Pour les demandes liées au dossier, handled doit être false.
-- Ne donne jamais de résumé, de mots-clés, de verrous, de résultats ou de score toi-même.
-- Pour une question comme "très bien", "ça va", "et toi", "que fais-tu aujourd'hui", intent=small_talk.
+────────────────────────────────
+Cas où tu réponds directement
+────────────────────────────────
+1. Salutation, remerciement, "ça va", "ok", discussion simple :
+   handled=true, use_rag=false, réponse courte et naturelle.
+   Ne parle jamais du document, ne cite jamais de sources, ne mentionne jamais EnnoDiagnostic, EnnoScholar ou EnnoValor.
+
+2. Si l'utilisateur demande un score CIR, un taux d’éligibilité, une validation d’éligibilité,
+   un diagnostic CIR complet, ou une analyse détaillée des risques :
+   handled=true
+   answer="EnnoDiagnostic est encore en cours de construction pour produire le score d’éligibilité CIR, l’analyse des risques et la validation détaillée. Pour le moment, je peux seulement vous aider à lire le dossier, résumer les objectifs, verrous, méthodes et résultats à partir des sources indexées."
+   recommended_agent="EnnoDiagnostic"
+   needs_specialized_agent=true
+
+3. Si l'utilisateur demande la rédaction d’un état de l’art complet, une recherche d’articles,
+   une bibliographie, des citations scientifiques externes ou un gap analysis :
+   handled=true
+   answer="EnnoScholar est encore en cours de construction pour rédiger un état de l’art complet avec recherche d’articles, bibliographie et citations. Pour le moment, je peux seulement résumer l’état de l’art présent dans le document indexé."
+   recommended_agent="EnnoScholar"
+   needs_specialized_agent=true
+
+Ces réponses spécialisées ne nécessitent pas de document préparé.
+Même si has_document=false ou has_rag_index=false, tu dois répondre directement
+que l'agent spécialisé est en cours de construction.
+
+4. Si l'utilisateur demande finance/RH/Cerfa/Excel/valorisation :
+   handled=true
+   answer="EnnoValor est encore en cours de construction pour traiter la partie financière, RH, Excel et Cerfa. Pour le moment, je peux vous aider sur la compréhension documentaire du dossier."
+   recommended_agent="EnnoValor"
+   needs_specialized_agent=true
+
+────────────────────────────────
+Cas où il faut utiliser le RAG
+────────────────────────────────
+Si la demande concerne le document chargé :
+- résumé du projet ;
+- résumé d’une partie précise ;
+- verrous ;
+- objectifs ;
+- méthodes ;
+- résultats ;
+- technologies ;
+- matériaux ;
+- personnes ;
+- organismes ;
+- sections ;
+- état de l’art présent dans le document ;
+- preuves/sources ;
+alors handled=false, use_rag=true, recommended_agent="Orchestrateur".
+
+Tu dois générer :
+- intent : le sujet principal.
+- topic : sujet exact demandé.
+- answer_style : ex. short_summary, detailed_explanation, extraction, reformulation.
+- requested_format : ex. bullet_points, paragraph, table, list.
+- max_points : nombre demandé si l'utilisateur en donne un, sinon null.
+- detail_level : short, normal, detailed.
+- rag_search_query : requête courte pour récupérer les bonnes sources.
+- rag_instruction : consigne claire pour le RAG.
+
+Règles importantes :
+- Si l’utilisateur demande les verrous, la réponse finale doit parler uniquement des verrous.
+- Si l’utilisateur demande les objectifs, la réponse finale doit parler uniquement des objectifs.
+- Si l’utilisateur demande "en 3 points", max_points=3 et la consigne doit dire exactement 3 points.
+- Si l’utilisateur demande "petit résumé", "simple", "court", ou une forme courte, detail_level="short".
+- Si l’utilisateur veut une réponse naturelle, éviter de recopier tout le JSON.
+- Ne mélange pas objectifs, verrous, méthodes et résultats sauf si l’utilisateur demande une synthèse globale.
+- Si l’utilisateur demande seulement un sujet précis, interdis les autres sujets dans rag_instruction.
+- Si aucun document n'est disponible, use_rag=false et demande d'abord d'importer/préparer un document.
+
+
+Résumé court projet — règle prioritaire :
+Si l'utilisateur demande un petit résumé clair du projet, un résumé simple, ou une synthèse courte du projet :
+- handled=false
+- use_rag=true
+- intent="project_summary"
+- topic="project_summary"
+- answer_style="short_summary"
+- requested_format="single_paragraph"
+- detail_level="short"
+- rag_instruction doit demander :
+  "Faire un petit résumé clair du projet en un seul paragraphe. Inclure uniquement le domaine, l'objectif principal, les verrous importants, les mots-clés et technologies importantes. Ne pas parler des agents, du score CIR, du rescrit, de la JEI, de l’agrément, de la DGA ou des informations administratives sauf si l'utilisateur le demande. Ne pas citer [S1], [S2] et ne pas afficher de sources."
+
+Valeurs possibles d'intent :
+small_talk, thanks, help,
+project_summary, verrous, objectives, methods, results,
+etat_art, technologies, materials, people, organisms, sections,
+keywords, source_proof, document_question,
+eligibility, diagnostic_detail, scholar, valorisation, clarification.
 
 Format JSON obligatoire :
 {
-  "handled": true,
-  "answer": "réponse naturelle si handled=true, sinon chaîne vide",
-  "intent": "small_talk",
-  "use_rag": false,
-  "recommended_agent": "EnnoAmel",
+  "handled": false,
+  "answer": "",
+  "intent": "verrous",
+  "topic": "verrous",
+  "answer_style": "short_summary",
+  "requested_format": "bullet_points",
+  "max_points": 3,
+  "detail_level": "short",
+  "use_rag": true,
+  "recommended_agent": "Orchestrateur",
   "needs_specialized_agent": false,
-  "confidence": 0.95
+  "rag_search_query": "verrous techniques incertitudes limites scientifiques techniques du projet",
+  "rag_instruction": "Répondre uniquement sur les verrous techniques du document, en exactement 3 points courts. Ne pas détailler les objectifs, méthodes, technologies ou résultats.",
+  "confidence": 0.9
 }
 """.strip()
 
@@ -495,8 +277,10 @@ Format JSON obligatoire :
             "has_document": has_document,
             "has_rag_index": has_rag_index,
             "file_name": metadata.get("file_name"),
+            "title": metadata.get("title"),
             "domaine_principal": metadata.get("domaine_principal"),
-            "metadata_keys_available": list(metadata.keys())[:40],
+            "domaine_applicatif": metadata.get("domaine_applicatif"),
+            "metadata_keys_available": list(metadata.keys())[:50],
         }
 
         compact_history = chat_history[-4:] if chat_history else []
@@ -510,7 +294,13 @@ Contexte technique disponible :
 
 Historique court :
 {json.dumps(compact_history, ensure_ascii=False)}
+
+Analyse la demande et retourne uniquement le JSON de décision.
 """.strip()
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # JSON → ChatDecision
+    # ═══════════════════════════════════════════════════════════════════════
 
     def _decision_from_json(
         self,
@@ -520,133 +310,208 @@ Historique court :
         normalized: str,
         processing_time: float,
     ) -> ChatDecision:
-        intent = str(parsed.get("intent") or "clarification").strip()
+        intent = str(parsed.get("intent") or "document_question").strip()
         answer = str(parsed.get("answer") or "").strip()
 
         handled = self._to_bool(parsed.get("handled", False))
         use_rag = self._to_bool(parsed.get("use_rag", False))
-        needs_specialized_agent = self._to_bool(
-            parsed.get("needs_specialized_agent", False)
-        )
+        needs_specialized_agent = self._to_bool(parsed.get("needs_specialized_agent", False))
 
-        recommended_agent = str(
-            parsed.get("recommended_agent") or "EnnoAmel"
-        ).strip()
+        recommended_agent = str(parsed.get("recommended_agent") or "Orchestrateur").strip()
+
+        # Compatibilité avec les anciens noms.
+        if recommended_agent in {"EnnoAmel", "Orchestrateur"}:
+            recommended_agent = "Orchestrateur"
 
         if recommended_agent not in {
-            "EnnoAmel",
+            "Orchestrateur",
             "EnnoDiagnostic",
             "EnnoScholar",
             "EnnoValor",
         }:
-            recommended_agent = "EnnoAmel"
+            recommended_agent = "Orchestrateur"
 
         try:
             confidence = float(parsed.get("confidence", 0.75))
         except Exception:
             confidence = 0.75
-
         confidence = max(0.0, min(confidence, 1.0))
 
-        direct_chat_intents = {
-            "small_talk",
-            "thanks",
-            "help",
-        }
+        max_points = parsed.get("max_points")
+        try:
+            max_points = int(max_points) if max_points is not None else None
+        except Exception:
+            max_points = None
 
-        ennoamel_intents = {
-            "project_summary",
-            "keywords",
-            "verrous",
-            "objectives",
-            "methods",
-            "technologies",
-            "results",
-            "source_proof",
-            "document_question",
-        }
+        topic = str(parsed.get("topic") or intent or "general").strip()
+        answer_style = str(parsed.get("answer_style") or "natural").strip()
+        requested_format = str(parsed.get("requested_format") or "free_text").strip()
+        detail_level = str(parsed.get("detail_level") or "normal").strip()
+        rag_search_query = str(parsed.get("rag_search_query") or "").strip()
+        rag_instruction = str(parsed.get("rag_instruction") or "").strip()
 
-        specialized_diagnostic_intents = {
-            "eligibility",
-            "diagnostic_detail",
-        }
+        # Garde-fou résumé projet : doit rester court et centré projet.
+        forced_summary = self._force_project_summary_if_needed(normalized)
+        if forced_summary is not None:
+            return ChatDecision(
+                handled=False,
+                answer="",
+                intent=forced_summary["intent"],
+                action="chat_forced_project_summary",
+                use_rag=True,
+                use_llm=True,
+                recommended_agent="Orchestrateur",
+                needs_specialized_agent=False,
+                topic=forced_summary["topic"],
+                answer_style=forced_summary["answer_style"],
+                requested_format=forced_summary["requested_format"],
+                detail_level=forced_summary["detail_level"],
+                max_points=None,
+                rag_search_query=forced_summary["rag_search_query"],
+                rag_instruction=forced_summary["rag_instruction"],
+                confidence=forced_summary["confidence"],
+                normalized_question=normalized,
+                debug={
+                    "forced_summary": True,
+                    "raw_llm_output": raw,
+                    "parsed": parsed,
+                    "processing_time": round(processing_time, 3),
+                },
+            )
 
-        # 1. Chat humain : EnnoChat peut répondre directement.
-        if intent in direct_chat_intents:
-            recommended_agent = "EnnoAmel"
+        # Garde-fou spécialisé avant toute logique documentaire.
+        forced_specialized = self._force_specialized_if_needed(normalized)
+        if forced_specialized is not None:
+            return ChatDecision(
+                handled=True,
+                answer=forced_specialized["answer"],
+                intent=forced_specialized["intent"],
+                action="chat_specialized_agent_under_construction",
+                use_rag=False,
+                use_llm=True,
+                recommended_agent=forced_specialized["recommended_agent"],
+                needs_specialized_agent=True,
+                topic=forced_specialized["topic"],
+                answer_style="direct_notice",
+                requested_format="free_text",
+                detail_level="short",
+                max_points=None,
+                rag_search_query="",
+                rag_instruction="",
+                confidence=forced_specialized["confidence"],
+                normalized_question=normalized,
+                debug={
+                    "forced_specialized": True,
+                    "raw_llm_output": raw,
+                    "parsed": parsed,
+                    "processing_time": round(processing_time, 3),
+                },
+            )
+
+        # Garde-fou : même si le LLM se trompe, une salutation pure ne doit jamais partir au RAG.
+        if self._is_pure_conversation(normalized):
+            return ChatDecision(
+                handled=True,
+                answer=answer or self._fallback_direct_answer("small_talk"),
+                intent="small_talk" if intent not in {"thanks", "help"} else intent,
+                action="chat_guard_pure_conversation",
+                use_rag=False,
+                use_llm=True,
+                recommended_agent="Orchestrateur",
+                needs_specialized_agent=False,
+                topic="conversation",
+                answer_style="natural",
+                requested_format="free_text",
+                detail_level="short",
+                max_points=None,
+                rag_search_query="",
+                rag_instruction="",
+                confidence=max(confidence, 0.95),
+                normalized_question=normalized,
+                debug={
+                    "raw_llm_output": raw,
+                    "parsed": parsed,
+                    "guard": "pure_conversation_no_rag",
+                    "processing_time": round(processing_time, 3),
+                },
+            )
+
+        direct_intents = {"small_talk", "thanks", "help", "clarification", "general_chat"}
+        specialized_direct = {"eligibility", "diagnostic_detail", "scholar", "valorisation"}
+
+        if intent in direct_intents:
+            handled = True
+            use_rag = False
             needs_specialized_agent = False
+            recommended_agent = "Orchestrateur"
+            if not answer:
+                answer = self._fallback_direct_answer(intent)
+
+        elif intent in specialized_direct:
+            handled = True
             use_rag = False
-
-            if answer:
-                handled = True
-            else:
-                # Fallback propre si le petit modèle oublie la réponse.
-                handled = True
-                answer = self._fallback_direct_answer(intent, normalized)
-
-        # 2. Vue simple dossier : EnnoAmel prend la main.
-        elif intent in ennoamel_intents:
-            handled = False
-            answer = ""
-            recommended_agent = "EnnoAmel"
-            needs_specialized_agent = False
-
-            if intent == "source_proof":
-                use_rag = True
-
-        # 3. Diagnostic / éligibilité : EnnoDiagnostic.
-        elif intent in specialized_diagnostic_intents:
-            handled = False
-            answer = ""
-            recommended_agent = "EnnoDiagnostic"
             needs_specialized_agent = True
-            use_rag = False
 
-        # 4. État de l'art : EnnoScholar.
-        elif intent == "scholar":
-            handled = False
-            answer = ""
-            recommended_agent = "EnnoScholar"
-            needs_specialized_agent = True
-            use_rag = False
+            if intent in {"eligibility", "diagnostic_detail"}:
+                recommended_agent = "EnnoDiagnostic"
+                if not answer:
+                    answer = (
+                        "EnnoDiagnostic est encore en cours de construction pour produire le score "
+                        "d’éligibilité CIR, l’analyse des risques et la validation détaillée. "
+                        "Pour le moment, je peux seulement vous aider à lire le dossier, résumer les objectifs, "
+                        "verrous, méthodes et résultats à partir des sources indexées."
+                    )
 
-        # 5. Finance / RH : EnnoValor.
-        elif intent == "valorisation":
-            handled = False
-            answer = ""
-            recommended_agent = "EnnoValor"
-            needs_specialized_agent = True
-            use_rag = False
+            elif intent == "scholar":
+                recommended_agent = "EnnoScholar"
+                if not answer:
+                    answer = (
+                        "EnnoScholar est encore en cours de construction pour rédiger un état de l’art complet "
+                        "avec recherche d’articles, bibliographie et citations. Pour le moment, je peux seulement "
+                        "résumer l’état de l’art présent dans le document indexé."
+                    )
 
-        # 6. Clarification ou inconnu : EnnoChat peut demander une clarification.
+            elif intent == "valorisation":
+                recommended_agent = "EnnoValor"
+                if not answer:
+                    answer = (
+                        "EnnoValor est encore en cours de construction pour traiter la partie financière, RH, "
+                        "Excel et Cerfa. Pour le moment, je peux vous aider sur la compréhension documentaire du dossier."
+                    )
+
         else:
-            recommended_agent = "EnnoAmel"
+            # Toute vraie demande documentaire passe par le RAG.
+            handled = False
+            answer = ""
+            use_rag = True
+            recommended_agent = "Orchestrateur"
             needs_specialized_agent = False
-            use_rag = False
 
-            if answer:
-                handled = True
-            else:
-                handled = True
-                intent = "clarification"
-                answer = (
-                    "Je ne suis pas sûr de comprendre votre demande. "
-                    "Souhaitez-vous un résumé, les mots-clés, les verrous techniques, "
-                    "les résultats ou le taux d’éligibilité CIR ?"
+            if not rag_search_query:
+                rag_search_query = normalized
+
+            if not rag_instruction:
+                rag_instruction = (
+                    "Réponds naturellement à la question posée, uniquement avec les sources RAG. "
+                    "Respecte le sujet, le format et le niveau de détail demandés par l'utilisateur."
                 )
-
-        if recommended_agent == "EnnoAmel":
-            needs_specialized_agent = False
 
         return ChatDecision(
             handled=handled,
             answer=answer,
             intent=intent,
-            action="chat_understanding",
+            action="llm_intent_planning",
             use_rag=use_rag,
             use_llm=True,
             recommended_agent=recommended_agent,
             needs_specialized_agent=needs_specialized_agent,
+            topic=topic,
+            answer_style=answer_style,
+            requested_format=requested_format,
+            detail_level=detail_level,
+            max_points=max_points,
+            rag_search_query=rag_search_query,
+            rag_instruction=rag_instruction,
             confidence=confidence,
             normalized_question=normalized,
             debug={
@@ -656,24 +521,166 @@ Historique court :
             },
         )
 
-    def _fallback_direct_answer(self, intent: str, normalized: str) -> str:
+
+    def _is_pure_conversation(self, normalized: str) -> bool:
+        """
+        Garde-fou minimal pour empêcher le RAG de répondre à une salutation pure.
+        Le LLM reste utilisé en priorité, mais si le JSON LLM se trompe, on corrige.
+        """
+        simple = {
+            "bonjour", "bonsoir", "salut", "hello", "hi", "coucou", "salam",
+            "merci", "merci beaucoup", "ok", "okay", "d accord", "daccord",
+            "ca va", "ça va", "cv", "tres bien", "très bien", "parfait"
+        }
+        if normalized in simple:
+            return True
+        # Messages très courts sans terme documentaire.
+        doc_terms = {
+            "document", "projet", "resume", "résumé", "verrou", "objectif",
+            "etat", "art", "methode", "résultat", "resultat", "score", "cir",
+            "eligibilite", "éligibilité", "source", "preuve"
+        }
+        parts = normalized.split()
+        return len(parts) <= 3 and not any(t in normalized for t in doc_terms)
+
+
+    def _force_specialized_if_needed(self, normalized: str) -> dict[str, Any] | None:
+        """
+        Garde-fou : les demandes réservées aux agents spécialisés doivent répondre
+        directement que l'agent est en construction, même sans document préparé.
+        """
+        q = normalized
+
+        scholar_signals = [
+            "rediger un etat de lart", "rediger etat de lart",
+            "rédiger un état de lart", "rédiger état de lart",
+            "etat de lart complet", "état de lart complet",
+            "bibliographie", "article scientifique", "articles scientifiques",
+            "recherche d articles", "recherche articles", "gap analysis",
+        ]
+        diagnostic_signals = [
+            "score eligibilite", "score d eligibilite", "score d éligibilité",
+            "taux eligibilite", "taux d eligibilite",
+            "eligible cir", "éligible cir", "eligibilite cir", "éligibilité cir",
+            "diagnostic cir", "analyse cir complete", "risque cir", "risques cir",
+        ]
+        valor_signals = [
+            "cerfa", "finance", "financier", "depense", "dépense",
+            "depenses", "dépenses", "excel", "rh", "ressources humaines",
+            "valorisation", "etp",
+        ]
+
+        if any(s in q for s in scholar_signals):
+            return {
+                "handled": True,
+                "answer": (
+                    "EnnoScholar est encore en cours de construction pour rédiger un état de l’art complet "
+                    "avec recherche d’articles, bibliographie, citations et gap analysis. Pour le moment, "
+                    "je peux seulement résumer l’état de l’art présent dans un document déjà indexé."
+                ),
+                "intent": "scholar",
+                "topic": "etat_art_externe",
+                "use_rag": False,
+                "recommended_agent": "EnnoScholar",
+                "needs_specialized_agent": True,
+                "confidence": 0.98,
+            }
+
+        if any(s in q for s in diagnostic_signals):
+            return {
+                "handled": True,
+                "answer": (
+                    "EnnoDiagnostic est encore en cours de construction pour produire le score "
+                    "d’éligibilité CIR, l’analyse des risques et la validation détaillée. Pour le moment, "
+                    "je peux seulement aider à lire le dossier et résumer les objectifs, verrous, méthodes "
+                    "et résultats à partir des sources indexées."
+                ),
+                "intent": "eligibility",
+                "topic": "score_eligibilite_cir",
+                "use_rag": False,
+                "recommended_agent": "EnnoDiagnostic",
+                "needs_specialized_agent": True,
+                "confidence": 0.98,
+            }
+
+        if any(s in q for s in valor_signals):
+            return {
+                "handled": True,
+                "answer": (
+                    "EnnoValor est encore en cours de construction pour traiter la partie financière, RH, "
+                    "Excel, Cerfa et livrables administratifs. Pour le moment, je peux vous aider sur "
+                    "la compréhension documentaire du dossier."
+                ),
+                "intent": "valorisation",
+                "topic": "valorisation",
+                "use_rag": False,
+                "recommended_agent": "EnnoValor",
+                "needs_specialized_agent": True,
+                "confidence": 0.98,
+            }
+
+        return None
+
+
+
+    def _force_project_summary_if_needed(self, normalized: str) -> dict[str, Any] | None:
+        """
+        Garde-fou résumé projet.
+        Objectif : éviter que "petit résumé clair du projet" devienne
+        une analyse administrative ou un message sur les agents.
+        """
+        q = normalized
+
+        summary_signals = [
+            "petit resume", "petit résumé",
+            "resume clair", "résumé clair",
+            "resumer le projet", "résumer le projet",
+            "resume du projet", "résumé du projet",
+            "synthese du projet", "synthèse du projet",
+            "presente le projet", "présente le projet",
+            "explique le projet",
+        ]
+
+        if any(s in q for s in summary_signals):
+            return {
+                "handled": False,
+                "answer": "",
+                "intent": "project_summary",
+                "topic": "project_summary",
+                "answer_style": "short_summary",
+                "requested_format": "single_paragraph",
+                "detail_level": "short",
+                "use_rag": True,
+                "recommended_agent": "Orchestrateur",
+                "needs_specialized_agent": False,
+                "rag_search_query": (
+                    "domaine objectif principal verrous importants mots clés technologies importantes projet"
+                ),
+                "rag_instruction": (
+                    "Faire un petit résumé clair du projet en un seul paragraphe. "
+                    "Inclure uniquement le domaine, l'objectif principal, les verrous importants, "
+                    "les mots-clés et technologies importantes. "
+                    "Ne pas parler des agents, du score CIR, du rescrit, de la JEI, de l'agrément, "
+                    "de la DGA ou des informations administratives sauf si l'utilisateur le demande. "
+                    "Ne pas citer [S1], [S2] et ne pas afficher de sources."
+                ),
+                "confidence": 0.98,
+            }
+
+        return None
+
+
+    def _fallback_direct_answer(self, intent: str) -> str:
         if intent == "thanks":
             return "Avec plaisir."
-
         if intent == "help":
             return (
-                "Je peux vous aider à comprendre un dossier, demander un résumé, "
-                "identifier les mots-clés, les verrous techniques, les objectifs R&D, "
-                "les technologies, les résultats ou orienter vers l’éligibilité CIR."
+                "Je peux vous aider à interroger le dossier : résumé, verrous, objectifs, "
+                "méthodes, résultats, technologies, matériaux, personnes, organismes ou sources."
             )
-
-        if "tres bien" in normalized or "très bien" in normalized:
-            return "Parfait. Dites-moi ce que vous souhaitez faire sur le dossier."
-
-        if "que fais" in normalized or "aujourd" in normalized:
-            return "Je suis disponible pour vous aider sur votre dossier EnnoSmart."
-
-        return "Oui, je vous écoute. Comment puis-je vous aider ?"
+        if intent == "clarification":
+            return "Je peux vous aider. Pouvez-vous préciser ce que vous voulez obtenir du dossier ?"
+        return "Bonjour, je suis là. Que souhaitez-vous faire ?"
 
     def _safe_json_loads(self, text: str) -> dict[str, Any]:
         text = str(text or "").strip()
@@ -695,20 +702,24 @@ Historique court :
         return {
             "handled": False,
             "answer": "",
-            "intent": "clarification",
-            "use_rag": False,
-            "recommended_agent": "EnnoAmel",
+            "intent": "document_question",
+            "topic": "general",
+            "answer_style": "natural",
+            "requested_format": "free_text",
+            "detail_level": "normal",
+            "use_rag": True,
+            "recommended_agent": "Orchestrateur",
             "needs_specialized_agent": False,
+            "rag_search_query": "",
+            "rag_instruction": "Réponds naturellement à la question utilisateur depuis les sources RAG.",
             "confidence": 0.4,
         }
 
     def _to_bool(self, value: Any) -> bool:
         if isinstance(value, bool):
             return value
-
         if isinstance(value, str):
             return value.strip().lower() in {"true", "1", "yes", "oui"}
-
         return bool(value)
 
     def _normalize(self, text: str) -> str:

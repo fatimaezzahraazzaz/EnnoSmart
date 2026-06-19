@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+from importlib import metadata
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -57,11 +58,77 @@ except ImportError:
     TESSERACT_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+
+# ── Compatibilité Surya ───────────────────────────────────────────────────────
+# IMPORTANT :
+# Ce fichier utilise l'ancienne API Surya v1 :
+#   FoundationPredictor + RecognitionPredictor + DetectionPredictor
+# Donc il faut figer les versions :
+#   surya-ocr==0.17.1
+#   transformers==4.57.3
+#
+# Ne pas faire "pip install --upgrade surya-ocr" sans adapter le code,
+# car Surya 0.20+ utilise une nouvelle API basée sur SuryaInferenceManager.
+
+EXPECTED_SURYA_MAJOR_MINOR = "0.17"
+EXPECTED_TRANSFORMERS_VERSION = "4.57.3"
+
+
+def _pkg_version(package_name: str) -> str:
+    """Retourne la version installée d'un package, ou 'unknown'."""
+    try:
+        return metadata.version(package_name)
+    except Exception:
+        return "unknown"
+
+
+def _surya_env_versions() -> str:
+    return (
+        f"surya-ocr={_pkg_version('surya-ocr')} | "
+        f"transformers={_pkg_version('transformers')}"
+    )
+
+
+def _is_legacy_surya_env_compatible() -> bool:
+    """
+    Vérifie que l'environnement correspond au code actuel.
+
+    Le bug :
+      'SuryaDecoderConfig' object has no attribute 'pad_token_id'
+    arrive typiquement quand Surya v1 est utilisé avec une version
+    incompatible de transformers.
+
+    Pour ce fichier, la combinaison stable à utiliser est :
+      surya-ocr==0.17.1 + transformers==4.57.3
+    """
+    surya_v = _pkg_version("surya-ocr")
+    transformers_v = _pkg_version("transformers")
+
+    if surya_v != "unknown" and not surya_v.startswith(EXPECTED_SURYA_MAJOR_MINOR):
+        logger.error(
+            "Version Surya incompatible avec ce code : %s. "
+            "Ce fichier utilise l'API Surya v1. "
+            "Installe : pip install \"surya-ocr==0.17.1\" \"transformers==4.57.3\"",
+            _surya_env_versions(),
+        )
+        return False
+
+    if transformers_v != "unknown" and transformers_v != EXPECTED_TRANSFORMERS_VERSION:
+        logger.error(
+            "Version transformers non validée pour Surya v1 : %s. "
+            "Le bug pad_token_id vient souvent de là. "
+            "Installe : pip install \"transformers==4.57.3\"",
+            _surya_env_versions(),
+        )
+        return False
+
+    return True
+
 # ── Constantes ────────────────────────────────────────────────────────────────
 
 # Résolution DPI pour la conversion PDF → image
-# 300 DPI = standard qualité OCR sur documents techniques
-OCR_DPI = 300
+# 250 DPI = standard qualité OCR sur documents techniques
+OCR_DPI = 250
 
 # Langues supportées par Surya et Tesseract pour les CIR
 # Français prioritaire, Anglais pour brevets/publications
@@ -156,23 +223,60 @@ class _SuryaModelCache:
         """Charge les modeles Surya. Retourne True si succes."""
         if cls._loaded:
             return True
+
         if not SURYA_AVAILABLE:
+            logger.error("Surya OCR n'est pas importable. %s", _surya_env_versions())
             return False
+
+        if not _is_legacy_surya_env_compatible():
+            return False
+
         try:
-            logger.info("Chargement modeles Surya OCR (premiere utilisation)...")
-            cls._foundation_predictor = FoundationPredictor()
-            cls._recognition_predictor = RecognitionPredictor(
-                cls._foundation_predictor
-            )
-            cls._detection_predictor = DetectionPredictor()
-            cls._loaded = True
             logger.info(
-                "Modeles Surya charges | torch_device=%s",
+                "Chargement modeles Surya OCR (premiere utilisation)... | %s",
+                _surya_env_versions(),
+            )
+
+            foundation = FoundationPredictor()
+            recognition = RecognitionPredictor(foundation)
+            detection = DetectionPredictor()
+
+            cls._foundation_predictor = foundation
+            cls._recognition_predictor = recognition
+            cls._detection_predictor = detection
+            cls._loaded = True
+
+            logger.info(
+                "Modeles Surya charges | torch_device=%s | %s",
                 os.getenv("TORCH_DEVICE", "auto"),
+                _surya_env_versions(),
             )
             return True
+
+        except AttributeError as exc:
+            cls._foundation_predictor = None
+            cls._recognition_predictor = None
+            cls._detection_predictor = None
+            cls._loaded = False
+
+            if "pad_token_id" in str(exc):
+                logger.error(
+                    "Echec chargement Surya : %s. "
+                    "Correctif : dans le venv du projet, lance : "
+                    "python -m pip install --force-reinstall "
+                    "\"surya-ocr==0.17.1\" \"transformers==4.57.3\"",
+                    exc,
+                )
+            else:
+                logger.error("Echec chargement Surya : %s", exc)
+            return False
+
         except Exception as exc:
-            logger.error("Echec chargement Surya : %s", exc)
+            cls._foundation_predictor = None
+            cls._recognition_predictor = None
+            cls._detection_predictor = None
+            cls._loaded = False
+            logger.error("Echec chargement Surya : %s | %s", exc, _surya_env_versions())
             return False
 
     @classmethod
@@ -191,16 +295,30 @@ def _detect_available_engine() -> OCREngine:
     """
     Détecte le moteur OCR disponible dans l'environnement.
     Priorité : Surya > Tesseract > None
+
+    Pour les tests, tu peux forcer l'échec au lieu du fallback :
+      set OCR_STRICT_SURYA=1
     """
+    strict_surya = os.getenv("OCR_STRICT_SURYA", "0") == "1"
+
     if SURYA_AVAILABLE and _SuryaModelCache.load():
         return OCREngine.SURYA
+
+    if strict_surya:
+        logger.error(
+            "Surya indisponible et OCR_STRICT_SURYA=1, donc pas de fallback Tesseract. %s",
+            _surya_env_versions(),
+        )
+        return OCREngine.NONE
+
     if TESSERACT_AVAILABLE:
         try:
             pytesseract.get_tesseract_version()
-            logger.warning("Surya indisponible → fallback Tesseract")
+            logger.warning("Surya indisponible → fallback Tesseract | %s", _surya_env_versions())
             return OCREngine.TESSERACT
         except Exception:
             pass
+
     logger.error("Aucun moteur OCR disponible (Surya ni Tesseract)")
     return OCREngine.NONE
 
@@ -316,11 +434,16 @@ def _ocr_page_tesseract(
             lang=lang_str,
             output_type=pytesseract.Output.DICT,
         )
-        confidences = [
-            c for c in data.get("conf", [])
-            if isinstance(c, (int, float)) and c >= 0
-        ]
-        avg_conf = sum(confidences) / len(confidences) / 100.0 if confidences else 0.5
+        confidences: list[float] = []
+        for c in data.get("conf", []):
+            try:
+                val = float(c)
+                if val >= 0:
+                    confidences.append(val)
+            except Exception:
+                continue
+
+        avg_conf = sum(confidences) / len(confidences) / 100.0 if confidences else 0.0
 
         return text.strip(), round(avg_conf, 3)
 

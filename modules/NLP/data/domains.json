@@ -6,668 +6,2626 @@
       "niv2: 33 sous-domaines",
       "niv3: 130 sections"
     ],
-    "usage": "Referentiel fige. domain_classifier.py demande au LLM de choisir un code parmi cette liste, puis valide le code contre ce fichier. Aucune regle metier n'est codee en dur."
+    "usage": "Referentiel fige. domain_classifier.py demande au LLM de choisir un code parmi cette liste, puis valide le code contre ce fichier. Aucune regle metier n'est codee en dur.",
+    "enrichment": {
+      "version": "v22.3",
+      "description": "Keywords ajoutés aux niveaux niv1, niv2 et niv3 pour améliorer la détection de domaine sans fallback codé en dur.",
+      "principle": "Les mots-clés sont dans le référentiel JSON, pas dans domain_classifier.py."
+    }
   },
   "niv1": {
-    "A": "SCIENCES ET TECHNOLOGIES DU NUMERIQUE, MATHEMATIQUES",
-    "B": "SCIENCES et TECHNIQUES INDUSTRIELLES, PHYSIQUE",
-    "C": "SCIENCES BIOLOGIQUES, MEDICALES ET AGROALIMENTAIRES",
-    "D": "SCIENCES HUMAINES ET SOCIALES"
+    "A": {
+      "label": "SCIENCES ET TECHNOLOGIES DU NUMERIQUE, MATHEMATIQUES",
+      "keywords": [
+        "SCIENCES ET TECHNOLOGIES DU NUMERIQUE, MATHEMATIQUES",
+        "SCIENCES ET TECHNOLOGIES DU NUMERIQUE",
+        "MATHEMATIQUES",
+        "numérique",
+        "mathématiques",
+        "informatique",
+        "algorithme",
+        "logiciel",
+        "données",
+        "réseau",
+        "IA",
+        "modèle numérique",
+        "système d'information"
+      ]
+    },
+    "B": {
+      "label": "SCIENCES et TECHNIQUES INDUSTRIELLES, PHYSIQUE",
+      "keywords": [
+        "SCIENCES et TECHNIQUES INDUSTRIELLES, PHYSIQUE",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES",
+        "PHYSIQUE",
+        "industrie",
+        "ingénierie",
+        "mécanique",
+        "électronique",
+        "matériaux",
+        "chimie",
+        "énergie",
+        "procédé",
+        "système physique"
+      ]
+    },
+    "C": {
+      "label": "SCIENCES BIOLOGIQUES, MEDICALES ET AGROALIMENTAIRES",
+      "keywords": [
+        "SCIENCES BIOLOGIQUES, MEDICALES ET AGROALIMENTAIRES",
+        "SCIENCES BIOLOGIQUES",
+        "MEDICALES ET AGROALIMENTAIRES",
+        "biologie",
+        "médical",
+        "santé",
+        "agroalimentaire",
+        "pharmacie",
+        "biotechnologie",
+        "cellule",
+        "organisme vivant",
+        "essai clinique"
+      ]
+    },
+    "D": {
+      "label": "SCIENCES HUMAINES ET SOCIALES",
+      "keywords": [
+        "SCIENCES HUMAINES ET SOCIALES",
+        "sciences humaines",
+        "sciences sociales",
+        "droit",
+        "gestion",
+        "économie",
+        "linguistique",
+        "sociologie",
+        "psychologie",
+        "urbanisme"
+      ]
+    }
   },
   "niv2": {
     "A1": {
       "label": "Automatique, Automatismes et productique, Robotique, Génie informatique",
-      "parent": "A"
+      "parent": "A",
+      "keywords": [
+        "Automatique, Automatismes et productique, Robotique, Génie informatique",
+        "Automatique",
+        "Automatismes et productique",
+        "Robotique",
+        "Génie informatique",
+        "SCIENCES ET TECHNOLOGIES DU NUMERIQUE, MATHEMATIQUES",
+        "SCIENCES ET TECHNOLOGIES DU NUMERIQUE",
+        "MATHEMATIQUES",
+        "automatisme",
+        "productique",
+        "commande",
+        "contrôle",
+        "asservissement",
+        "automatisation",
+        "robot",
+        "capteur",
+        "actionneur",
+        "système cyber-physique"
+      ]
     },
     "A2": {
       "label": "Traitement du signal et de l'image",
-      "parent": "A"
+      "parent": "A",
+      "keywords": [
+        "Traitement du signal et de l'image",
+        "SCIENCES ET TECHNOLOGIES DU NUMERIQUE, MATHEMATIQUES",
+        "SCIENCES ET TECHNOLOGIES DU NUMERIQUE",
+        "MATHEMATIQUES",
+        "traitement du signal",
+        "traitement d'image",
+        "signal",
+        "image",
+        "filtrage",
+        "détection",
+        "reconstruction",
+        "segmentation",
+        "vision",
+        "spectre",
+        "fréquence",
+        "bruit de mesure"
+      ]
     },
     "A3": {
       "label": "Informatique",
-      "parent": "A"
+      "parent": "A",
+      "keywords": [
+        "Informatique",
+        "SCIENCES ET TECHNOLOGIES DU NUMERIQUE, MATHEMATIQUES",
+        "SCIENCES ET TECHNOLOGIES DU NUMERIQUE",
+        "MATHEMATIQUES",
+        "logiciel",
+        "programmation",
+        "algorithme",
+        "base de données",
+        "API",
+        "architecture logicielle",
+        "cybersécurité",
+        "cloud",
+        "système d'information",
+        "intelligence artificielle"
+      ]
     },
     "A4": {
       "label": "Mathématiques",
-      "parent": "A"
+      "parent": "A",
+      "keywords": [
+        "Mathématiques",
+        "SCIENCES ET TECHNOLOGIES DU NUMERIQUE, MATHEMATIQUES",
+        "SCIENCES ET TECHNOLOGIES DU NUMERIQUE",
+        "MATHEMATIQUES",
+        "modélisation mathématique",
+        "analyse numérique",
+        "statistiques",
+        "probabilités",
+        "optimisation",
+        "équation",
+        "théorème",
+        "calcul scientifique"
+      ]
     },
     "B1": {
       "label": "Électronique, Télécommunications et réseaux",
-      "parent": "B"
+      "parent": "B",
+      "keywords": [
+        "Électronique, Télécommunications et réseaux",
+        "Électronique",
+        "Télécommunications et réseaux",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES, PHYSIQUE",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES",
+        "PHYSIQUE",
+        "télécommunications",
+        "réseaux",
+        "circuit",
+        "composant électronique",
+        "microélectronique",
+        "radiofréquence",
+        "RF",
+        "antenne",
+        "transmission",
+        "capteur électronique"
+      ]
     },
     "B2": {
       "label": "Génie électrique",
-      "parent": "B"
+      "parent": "B",
+      "keywords": [
+        "Génie électrique",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES, PHYSIQUE",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES",
+        "PHYSIQUE",
+        "électricité",
+        "puissance électrique",
+        "moteur électrique",
+        "convertisseur",
+        "réseau électrique",
+        "électromécanique",
+        "commande électrique",
+        "tension",
+        "courant"
+      ]
     },
     "B3": {
       "label": "Matériaux, Métallurgie",
-      "parent": "B"
+      "parent": "B",
+      "keywords": [
+        "Matériaux, Métallurgie",
+        "Matériaux",
+        "Métallurgie",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES, PHYSIQUE",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES",
+        "PHYSIQUE",
+        "alliage",
+        "polymère",
+        "composite",
+        "céramique",
+        "verre",
+        "propriété matériau",
+        "résistance mécanique",
+        "traitement thermique"
+      ]
     },
     "B4": {
       "label": "Mécanique, Génie mécanique, Génie civil",
-      "parent": "B"
+      "parent": "B",
+      "keywords": [
+        "Mécanique, Génie mécanique, Génie civil",
+        "Mécanique",
+        "Génie mécanique",
+        "Génie civil",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES, PHYSIQUE",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES",
+        "PHYSIQUE",
+        "structure",
+        "fluide",
+        "vibration",
+        "acoustique",
+        "compresseur",
+        "pression",
+        "débit",
+        "contrepoids",
+        "équilibrage",
+        "thermique mécanique"
+      ]
     },
     "B5": {
       "label": "Chimie",
-      "parent": "B"
+      "parent": "B",
+      "keywords": [
+        "Chimie",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES, PHYSIQUE",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES",
+        "PHYSIQUE",
+        "réaction chimique",
+        "synthèse",
+        "molécule",
+        "catalyse",
+        "solvant",
+        "formulation",
+        "analyse chimique",
+        "procédé chimique"
+      ]
     },
     "B6": {
       "label": "Physique",
-      "parent": "B"
+      "parent": "B",
+      "keywords": [
+        "Physique",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES, PHYSIQUE",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES",
+        "optique",
+        "photonique",
+        "mesure physique",
+        "expérimental",
+        "modèle physique",
+        "électromagnétisme",
+        "mécanique quantique",
+        "rayonnement"
+      ]
     },
     "B7": {
       "label": "Energétique, Génie des procédés, Energies",
-      "parent": "B"
+      "parent": "B",
+      "keywords": [
+        "Energétique, Génie des procédés, Energies",
+        "Energétique",
+        "Génie des procédés",
+        "Energies",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES, PHYSIQUE",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES",
+        "PHYSIQUE",
+        "énergétique",
+        "énergie",
+        "thermique",
+        "combustion",
+        "plasma",
+        "procédé industriel",
+        "rendement énergétique",
+        "chaleur",
+        "échange thermique"
+      ]
     },
     "B8": {
       "label": "Océan, Atmosphère, Terre",
-      "parent": "B"
+      "parent": "B",
+      "keywords": [
+        "Océan, Atmosphère, Terre",
+        "Océan",
+        "Atmosphère",
+        "Terre",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES, PHYSIQUE",
+        "SCIENCES et TECHNIQUES INDUSTRIELLES",
+        "PHYSIQUE",
+        "climat",
+        "météorologie",
+        "océanographie",
+        "géosciences",
+        "environnement",
+        "sol",
+        "hydrologie"
+      ]
     },
     "C1": {
       "label": "Biologie de la cellule",
-      "parent": "C"
+      "parent": "C",
+      "keywords": [
+        "Biologie de la cellule",
+        "SCIENCES BIOLOGIQUES, MEDICALES ET AGROALIMENTAIRES",
+        "SCIENCES BIOLOGIQUES",
+        "MEDICALES ET AGROALIMENTAIRES",
+        "biologie cellulaire",
+        "cellule",
+        "biochimie",
+        "biologie moléculaire",
+        "génétique",
+        "protéine",
+        "ADN",
+        "ARN",
+        "culture cellulaire"
+      ]
     },
     "C2": {
       "label": "Biologie humaine et animale",
-      "parent": "C"
+      "parent": "C",
+      "keywords": [
+        "Biologie humaine et animale",
+        "SCIENCES BIOLOGIQUES, MEDICALES ET AGROALIMENTAIRES",
+        "SCIENCES BIOLOGIQUES",
+        "MEDICALES ET AGROALIMENTAIRES",
+        "biologie humaine",
+        "biologie animale",
+        "physiologie",
+        "médecine",
+        "microbiologie",
+        "reproduction",
+        "développement",
+        "santé publique",
+        "vétérinaire"
+      ]
     },
     "C3": {
       "label": "Pharmacie, Cosmétique",
-      "parent": "C"
+      "parent": "C",
+      "keywords": [
+        "Pharmacie, Cosmétique",
+        "Pharmacie",
+        "Cosmétique",
+        "SCIENCES BIOLOGIQUES, MEDICALES ET AGROALIMENTAIRES",
+        "SCIENCES BIOLOGIQUES",
+        "MEDICALES ET AGROALIMENTAIRES",
+        "principe actif",
+        "formulation cosmétique",
+        "délivrance",
+        "galénique",
+        "toxicologie",
+        "stabilité"
+      ]
     },
     "C4": {
       "label": "Essais cliniques",
-      "parent": "C"
+      "parent": "C",
+      "keywords": [
+        "Essais cliniques",
+        "SCIENCES BIOLOGIQUES, MEDICALES ET AGROALIMENTAIRES",
+        "SCIENCES BIOLOGIQUES",
+        "MEDICALES ET AGROALIMENTAIRES",
+        "essai clinique",
+        "protocole clinique",
+        "patient",
+        "cohorte",
+        "randomisation",
+        "critère clinique",
+        "tolérance",
+        "efficacité clinique"
+      ]
     },
     "C5": {
       "label": "Dispositifs médicaux, eSanté",
-      "parent": "C"
+      "parent": "C",
+      "keywords": [
+        "Dispositifs médicaux, eSanté",
+        "Dispositifs médicaux",
+        "eSanté",
+        "SCIENCES BIOLOGIQUES, MEDICALES ET AGROALIMENTAIRES",
+        "SCIENCES BIOLOGIQUES",
+        "MEDICALES ET AGROALIMENTAIRES",
+        "dispositif médical",
+        "santé numérique",
+        "DM",
+        "capteur médical",
+        "imagerie médicale",
+        "télémédecine",
+        "diagnostic",
+        "logiciel médical"
+      ]
     },
     "C6": {
       "label": "Biotechnologie",
-      "parent": "C"
+      "parent": "C",
+      "keywords": [
+        "Biotechnologie",
+        "SCIENCES BIOLOGIQUES, MEDICALES ET AGROALIMENTAIRES",
+        "SCIENCES BIOLOGIQUES",
+        "MEDICALES ET AGROALIMENTAIRES",
+        "bioprocédé",
+        "fermentation",
+        "enzyme",
+        "micro-organisme",
+        "culture cellulaire",
+        "bioproduction",
+        "bio-industrie"
+      ]
     },
     "C7": {
       "label": "Agronomie, Environnement",
-      "parent": "C"
+      "parent": "C",
+      "keywords": [
+        "Agronomie, Environnement",
+        "Agronomie",
+        "Environnement",
+        "SCIENCES BIOLOGIQUES, MEDICALES ET AGROALIMENTAIRES",
+        "SCIENCES BIOLOGIQUES",
+        "MEDICALES ET AGROALIMENTAIRES",
+        "production végétale",
+        "production animale",
+        "sol",
+        "écologie",
+        "agriculture",
+        "biodiversité",
+        "pollution"
+      ]
     },
     "C8": {
       "label": "Alimentation humaine et animale",
-      "parent": "C"
+      "parent": "C",
+      "keywords": [
+        "Alimentation humaine et animale",
+        "SCIENCES BIOLOGIQUES, MEDICALES ET AGROALIMENTAIRES",
+        "SCIENCES BIOLOGIQUES",
+        "MEDICALES ET AGROALIMENTAIRES",
+        "alimentation",
+        "alimentaire",
+        "agroalimentaire",
+        "produit alimentaire",
+        "microbiologie alimentaire",
+        "nutrition",
+        "procédé agroalimentaire",
+        "sécurité alimentaire"
+      ]
     },
     "D1": {
       "label": "Droit, Sciences juridiques, Sciences politiques",
-      "parent": "D"
+      "parent": "D",
+      "keywords": [
+        "Droit, Sciences juridiques, Sciences politiques",
+        "Droit",
+        "Sciences juridiques",
+        "Sciences politiques",
+        "SCIENCES HUMAINES ET SOCIALES",
+        "réglementation",
+        "contrat",
+        "norme juridique",
+        "institution",
+        "contentieux"
+      ]
     },
     "D2": {
       "label": "Sciences économiques",
-      "parent": "D"
+      "parent": "D",
+      "keywords": [
+        "Sciences économiques",
+        "SCIENCES HUMAINES ET SOCIALES",
+        "économie",
+        "marché",
+        "modèle économique",
+        "coût",
+        "prix",
+        "macroéconomie",
+        "microéconomie",
+        "économétrie"
+      ]
     },
     "D3": {
       "label": "Sciences de gestion et du management",
-      "parent": "D"
+      "parent": "D",
+      "keywords": [
+        "Sciences de gestion et du management",
+        "SCIENCES HUMAINES ET SOCIALES",
+        "gestion",
+        "management",
+        "organisation",
+        "stratégie",
+        "pilotage",
+        "processus métier",
+        "finance",
+        "ressources humaines",
+        "marketing"
+      ]
     },
     "D4": {
       "label": "Littérature, Langues, Linguistique",
-      "parent": "D"
+      "parent": "D",
+      "keywords": [
+        "Littérature, Langues, Linguistique",
+        "Littérature",
+        "Langues",
+        "Linguistique",
+        "SCIENCES HUMAINES ET SOCIALES",
+        "langue",
+        "traduction",
+        "discours",
+        "corpus linguistique",
+        "sémantique",
+        "syntaxe"
+      ]
     },
     "D5": {
       "label": "Sciences de l'art, Histoire, Archéologie",
-      "parent": "D"
+      "parent": "D",
+      "keywords": [
+        "Sciences de l'art, Histoire, Archéologie",
+        "Sciences de l'art",
+        "Histoire",
+        "Archéologie",
+        "SCIENCES HUMAINES ET SOCIALES",
+        "art",
+        "patrimoine",
+        "œuvre",
+        "archive",
+        "datation",
+        "culture matérielle"
+      ]
     },
     "D6": {
       "label": "Philosophie, Psychologie, Ergonomie",
-      "parent": "D"
+      "parent": "D",
+      "keywords": [
+        "Philosophie, Psychologie, Ergonomie",
+        "Philosophie",
+        "Psychologie",
+        "Ergonomie",
+        "SCIENCES HUMAINES ET SOCIALES",
+        "cognition",
+        "comportement",
+        "usage",
+        "expérience utilisateur",
+        "facteurs humains"
+      ]
     },
     "D7": {
       "label": "Sciences de l'éducation, Information et communication",
-      "parent": "D"
+      "parent": "D",
+      "keywords": [
+        "Sciences de l'éducation, Information et communication",
+        "Sciences de l'éducation",
+        "Information et communication",
+        "SCIENCES HUMAINES ET SOCIALES",
+        "éducation",
+        "formation",
+        "information",
+        "communication",
+        "pédagogie",
+        "média",
+        "apprentissage",
+        "dispositif de formation"
+      ]
     },
     "D8": {
       "label": "Sociologie, Démographie, Ethnologie, Anthropologie",
-      "parent": "D"
+      "parent": "D",
+      "keywords": [
+        "Sociologie, Démographie, Ethnologie, Anthropologie",
+        "Sociologie",
+        "Démographie",
+        "Ethnologie",
+        "Anthropologie",
+        "SCIENCES HUMAINES ET SOCIALES",
+        "population",
+        "enquête sociale",
+        "terrain",
+        "pratique sociale"
+      ]
     },
     "D9": {
       "label": "Géographie, Aménagement de l'espace",
-      "parent": "D"
+      "parent": "D",
+      "keywords": [
+        "Géographie, Aménagement de l'espace",
+        "Géographie",
+        "Aménagement de l'espace",
+        "SCIENCES HUMAINES ET SOCIALES",
+        "aménagement",
+        "territoire",
+        "espace",
+        "cartographie",
+        "SIG",
+        "mobilité",
+        "analyse spatiale"
+      ]
     },
     "D10": {
       "label": "Urbanisme, Architecture, Environnement",
-      "parent": "D"
+      "parent": "D",
+      "keywords": [
+        "Urbanisme, Architecture, Environnement",
+        "Urbanisme",
+        "Architecture",
+        "Environnement",
+        "SCIENCES HUMAINES ET SOCIALES",
+        "environnement urbain",
+        "bâtiment",
+        "ville",
+        "espace public",
+        "conception architecturale"
+      ]
     },
     "D11": {
       "label": "Études pluridisciplinaires particulières sur un pays, Continent",
-      "parent": "D"
+      "parent": "D",
+      "keywords": [
+        "Études pluridisciplinaires particulières sur un pays, Continent",
+        "Études pluridisciplinaires particulières sur un pays",
+        "Continent",
+        "SCIENCES HUMAINES ET SOCIALES",
+        "études pluridisciplinaires",
+        "pays",
+        "aire culturelle",
+        "études régionales",
+        "géopolitique"
+      ]
     },
     "D12": {
       "label": "Sciences et techniques des activités physiques et sportives",
-      "parent": "D"
+      "parent": "D",
+      "keywords": [
+        "Sciences et techniques des activités physiques et sportives",
+        "SCIENCES HUMAINES ET SOCIALES",
+        "activité physique",
+        "sport",
+        "STAPS",
+        "performance sportive",
+        "entrainement",
+        "biomécanique sportive",
+        "motricité"
+      ]
     },
     "D13": {
       "label": "Modélisation, Simulation, Logiciels en SHS",
-      "parent": "D"
+      "parent": "D",
+      "keywords": [
+        "Modélisation, Simulation, Logiciels en SHS",
+        "Modélisation",
+        "Simulation",
+        "Logiciels en SHS",
+        "SCIENCES HUMAINES ET SOCIALES",
+        "modélisation SHS",
+        "simulation SHS",
+        "logiciel SHS",
+        "modèle social",
+        "agent-based model",
+        "système complexe social"
+      ]
     }
   },
   "niv3": {
     "A1a": {
       "label": "Automatique",
-      "parent": "A1"
+      "parent": "A1",
+      "keywords": [
+        "Automatique",
+        "Automatique, Automatismes et productique, Robotique, Génie informatique",
+        "Automatismes et productique",
+        "Robotique",
+        "Génie informatique",
+        "commande automatique",
+        "asservissement",
+        "régulation",
+        "contrôle robuste",
+        "système dynamique",
+        "observateur",
+        "PID",
+        "boucle de contrôle"
+      ]
     },
     "A1b": {
       "label": "Automatismes, productique",
-      "parent": "A1"
+      "parent": "A1",
+      "keywords": [
+        "Automatismes, productique",
+        "Automatismes",
+        "productique",
+        "Automatique, Automatismes et productique, Robotique, Génie informatique",
+        "Automatique",
+        "Automatismes et productique",
+        "Robotique",
+        "Génie informatique",
+        "ligne de production",
+        "automate programmable",
+        "PLC",
+        "manufacturing",
+        "ordonnancement",
+        "production industrielle"
+      ]
     },
     "A1c": {
       "label": "Robotique",
-      "parent": "A1"
+      "parent": "A1",
+      "keywords": [
+        "Robotique",
+        "Automatique, Automatismes et productique, Robotique, Génie informatique",
+        "Automatique",
+        "Automatismes et productique",
+        "Génie informatique",
+        "robot",
+        "manipulateur",
+        "navigation robot",
+        "robot mobile",
+        "bras robotisé",
+        "SLAM",
+        "cinématique robot",
+        "planification de trajectoire"
+      ]
     },
     "A1d": {
       "label": "Génie informatique",
-      "parent": "A1"
+      "parent": "A1",
+      "keywords": [
+        "Génie informatique",
+        "Automatique, Automatismes et productique, Robotique, Génie informatique",
+        "Automatique",
+        "Automatismes et productique",
+        "Robotique",
+        "informatique industrielle",
+        "système embarqué",
+        "commande numérique",
+        "supervision",
+        "automate",
+        "système temps réel"
+      ]
     },
     "A2a": {
       "label": "Traitement du signal",
-      "parent": "A2"
+      "parent": "A2",
+      "keywords": [
+        "Traitement du signal",
+        "Traitement du signal et de l'image",
+        "signal",
+        "filtrage signal",
+        "analyse spectrale",
+        "Fourier",
+        "ondelette",
+        "bruit",
+        "fréquence",
+        "capteur",
+        "série temporelle"
+      ]
     },
     "A2b": {
       "label": "Traitement d'image",
-      "parent": "A2"
+      "parent": "A2",
+      "keywords": [
+        "Traitement d'image",
+        "Traitement du signal et de l'image",
+        "image",
+        "imagerie",
+        "segmentation image",
+        "classification image",
+        "détection objet",
+        "vision par ordinateur",
+        "pixel",
+        "reconstruction image"
+      ]
     },
     "A3a": {
       "label": "Systèmes d'information",
-      "parent": "A3"
+      "parent": "A3",
+      "keywords": [
+        "Systèmes d'information",
+        "Informatique",
+        "ERP",
+        "base de données",
+        "workflow",
+        "processus métier",
+        "SI",
+        "urbanisation SI",
+        "données métier"
+      ]
     },
     "A3b": {
       "label": "Algorithmique, recherche opérationnelle",
-      "parent": "A3"
+      "parent": "A3",
+      "keywords": [
+        "Algorithmique, recherche opérationnelle",
+        "Algorithmique",
+        "recherche opérationnelle",
+        "Informatique",
+        "optimisation combinatoire",
+        "graphe",
+        "heuristique",
+        "programmation linéaire",
+        "planification",
+        "ordonnancement"
+      ]
     },
     "A3c": {
       "label": "Informatique fondamentale",
-      "parent": "A3"
+      "parent": "A3",
+      "keywords": [
+        "Informatique fondamentale",
+        "Informatique",
+        "complexité",
+        "langage formel",
+        "automate",
+        "calculabilité",
+        "preuve formelle",
+        "théorie des graphes"
+      ]
     },
     "A3d": {
       "label": "Réseaux",
-      "parent": "A3"
+      "parent": "A3",
+      "keywords": [
+        "Réseaux",
+        "Informatique",
+        "protocole",
+        "TCP/IP",
+        "routage",
+        "latence",
+        "paquet",
+        "sécurité réseau",
+        "réseau sans fil",
+        "QoS"
+      ]
     },
     "A3e": {
       "label": "Bioinformatique",
-      "parent": "A3"
+      "parent": "A3",
+      "keywords": [
+        "Bioinformatique",
+        "Informatique",
+        "génomique computationnelle",
+        "séquençage",
+        "alignement",
+        "annotation génomique",
+        "données omiques"
+      ]
     },
     "A3f": {
       "label": "Systèmes informatiques",
-      "parent": "A3"
+      "parent": "A3",
+      "keywords": [
+        "Systèmes informatiques",
+        "Informatique",
+        "système distribué",
+        "système d'exploitation",
+        "virtualisation",
+        "cloud",
+        "conteneur",
+        "architecture serveur"
+      ]
     },
     "A3g": {
       "label": "Génie logiciel et programmation",
-      "parent": "A3"
+      "parent": "A3",
+      "keywords": [
+        "Génie logiciel et programmation",
+        "Informatique",
+        "génie logiciel",
+        "programmation",
+        "développement logiciel",
+        "test logiciel",
+        "Java",
+        "JUnit",
+        "API",
+        "framework",
+        "DevOps",
+        "CI/CD",
+        "qualité logicielle"
+      ]
     },
     "A3h": {
       "label": "Intelligence artificielle",
-      "parent": "A3"
+      "parent": "A3",
+      "keywords": [
+        "Intelligence artificielle",
+        "Informatique",
+        "IA",
+        "machine learning",
+        "deep learning",
+        "réseau de neurones",
+        "LLM",
+        "NLP",
+        "apprentissage supervisé",
+        "modèle génératif"
+      ]
     },
     "A3i": {
       "label": "Image, médias, géométrie, vision, perception, interaction",
-      "parent": "A3"
+      "parent": "A3",
+      "keywords": [
+        "Image, médias, géométrie, vision, perception, interaction",
+        "Image",
+        "médias",
+        "géométrie",
+        "vision",
+        "perception",
+        "interaction",
+        "Informatique",
+        "réalité augmentée",
+        "3D",
+        "tracking",
+        "interface visuelle"
+      ]
     },
     "A3j": {
       "label": "Communication et relation homme machine",
-      "parent": "A3"
+      "parent": "A3",
+      "keywords": [
+        "Communication et relation homme machine",
+        "Informatique",
+        "interaction homme machine",
+        "IHM",
+        "HMI",
+        "UX",
+        "interface utilisateur",
+        "communication homme machine",
+        "ergonomie logicielle"
+      ]
     },
     "A3k": {
       "label": "Architecture des machines",
-      "parent": "A3"
+      "parent": "A3",
+      "keywords": [
+        "Architecture des machines",
+        "Informatique",
+        "processeur",
+        "GPU",
+        "mémoire",
+        "microarchitecture",
+        "calcul parallèle",
+        "FPGA",
+        "matériel informatique"
+      ]
     },
     "A3l": {
       "label": "Informatique industrielle",
-      "parent": "A3"
+      "parent": "A3",
+      "keywords": [
+        "Informatique industrielle",
+        "Informatique",
+        "SCADA",
+        "supervision industrielle",
+        "automate",
+        "MES",
+        "capteur industriel",
+        "commande numérique"
+      ]
     },
     "A3m": {
       "label": "Modélisation, simulation pour les systèmes complexes",
-      "parent": "A3"
+      "parent": "A3",
+      "keywords": [
+        "Modélisation, simulation pour les systèmes complexes",
+        "Modélisation",
+        "simulation pour les systèmes complexes",
+        "Informatique",
+        "simulation",
+        "systèmes complexes",
+        "modèle multi-agent",
+        "simulation numérique",
+        "jumeau numérique",
+        "système dynamique complexe"
+      ]
     },
     "A3n": {
       "label": "Sécurité",
-      "parent": "A3"
+      "parent": "A3",
+      "keywords": [
+        "Sécurité",
+        "Informatique",
+        "sécurité informatique",
+        "cybersécurité",
+        "cryptographie",
+        "attaque",
+        "vulnérabilité",
+        "authentification",
+        "contrôle d'accès",
+        "intrusion"
+      ]
     },
     "A4a": {
       "label": "Mathématiques fondamentales",
-      "parent": "A4"
+      "parent": "A4",
+      "keywords": [
+        "Mathématiques fondamentales",
+        "Mathématiques",
+        "algèbre",
+        "géométrie",
+        "analyse",
+        "topologie",
+        "théorie des nombres",
+        "démonstration"
+      ]
     },
     "A4b": {
       "label": "Mathématiques appliquées",
-      "parent": "A4"
+      "parent": "A4",
+      "keywords": [
+        "Mathématiques appliquées",
+        "Mathématiques",
+        "statistiques",
+        "probabilités",
+        "optimisation",
+        "équations différentielles",
+        "modèle mathématique",
+        "calcul numérique"
+      ]
     },
     "B1a": {
       "label": "Composants et circuits électroniques",
-      "parent": "B1"
+      "parent": "B1",
+      "keywords": [
+        "Composants et circuits électroniques",
+        "Électronique, Télécommunications et réseaux",
+        "Électronique",
+        "Télécommunications et réseaux",
+        "composants électroniques",
+        "circuit électronique",
+        "semi-conducteur",
+        "diode",
+        "transistor",
+        "capteur électronique",
+        "PCB"
+      ]
     },
     "B1b": {
       "label": "Electronique numérique",
-      "parent": "B1"
+      "parent": "B1",
+      "keywords": [
+        "Electronique numérique",
+        "Électronique, Télécommunications et réseaux",
+        "Électronique",
+        "Télécommunications et réseaux",
+        "électronique numérique",
+        "logique numérique",
+        "FPGA",
+        "microcontrôleur",
+        "processeur",
+        "signal numérique",
+        "convertisseur ADC"
+      ]
     },
     "B1c": {
       "label": "Microélectronique",
-      "parent": "B1"
+      "parent": "B1",
+      "keywords": [
+        "Microélectronique",
+        "Électronique, Télécommunications et réseaux",
+        "Électronique",
+        "Télécommunications et réseaux",
+        "circuit intégré",
+        "CMOS",
+        "wafer",
+        "gravure",
+        "puce",
+        "ASIC"
+      ]
     },
     "B1d": {
       "label": "Nanoélectronique",
-      "parent": "B1"
+      "parent": "B1",
+      "keywords": [
+        "Nanoélectronique",
+        "Électronique, Télécommunications et réseaux",
+        "Électronique",
+        "Télécommunications et réseaux",
+        "nanocomposant",
+        "nanostructure",
+        "transistor nanoscale",
+        "nanofil",
+        "quantum dot"
+      ]
     },
     "B1e": {
       "label": "Télécommunications et réseaux",
-      "parent": "B1"
+      "parent": "B1",
+      "keywords": [
+        "Télécommunications et réseaux",
+        "Électronique, Télécommunications et réseaux",
+        "Électronique",
+        "télécommunications",
+        "réseaux",
+        "antenne",
+        "RF",
+        "5G",
+        "communication sans fil",
+        "modulation",
+        "canal radio"
+      ]
     },
     "B2a": {
       "label": "Matériaux",
-      "parent": "B2"
+      "parent": "B2",
+      "keywords": [
+        "Matériaux",
+        "Génie électrique",
+        "matériaux électriques",
+        "isolant",
+        "conducteur",
+        "diélectrique",
+        "matériau magnétique",
+        "câble"
+      ]
     },
     "B2b": {
       "label": "Composants",
-      "parent": "B2"
+      "parent": "B2",
+      "keywords": [
+        "Composants",
+        "Génie électrique",
+        "composants électriques",
+        "convertisseur",
+        "transformateur",
+        "bobine",
+        "condensateur",
+        "capteur électrique"
+      ]
     },
     "B2c": {
       "label": "Production d'électricité, réseaux électriques",
-      "parent": "B2"
+      "parent": "B2",
+      "keywords": [
+        "Production d'électricité, réseaux électriques",
+        "Production d'électricité",
+        "réseaux électriques",
+        "Génie électrique",
+        "smart grid",
+        "distribution électrique",
+        "centrale",
+        "stockage électrique"
+      ]
     },
     "B2d": {
       "label": "Electronique de puissance",
-      "parent": "B2"
+      "parent": "B2",
+      "keywords": [
+        "Electronique de puissance",
+        "Génie électrique",
+        "électronique de puissance",
+        "onduleur",
+        "redresseur",
+        "convertisseur DC/DC",
+        "IGBT",
+        "MOSFET",
+        "commande moteur"
+      ]
     },
     "B2e": {
       "label": "Electromécanique",
-      "parent": "B2"
+      "parent": "B2",
+      "keywords": [
+        "Electromécanique",
+        "Génie électrique",
+        "électromécanique",
+        "moteur électrique",
+        "actionneur",
+        "machine électrique",
+        "alternateur",
+        "couple électromécanique"
+      ]
     },
     "B2f": {
       "label": "Contrôle des composants et des systèmes électriques",
-      "parent": "B2"
+      "parent": "B2",
+      "keywords": [
+        "Contrôle des composants et des systèmes électriques",
+        "Génie électrique",
+        "contrôle composants électriques",
+        "diagnostic électrique",
+        "surveillance",
+        "test électrique",
+        "fiabilité électrique"
+      ]
     },
     "B2g": {
       "label": "Systèmes et domaines applicatifs",
-      "parent": "B2"
+      "parent": "B2",
+      "keywords": [
+        "Systèmes et domaines applicatifs",
+        "Génie électrique",
+        "systèmes électriques applicatifs",
+        "application électrique",
+        "véhicule électrique",
+        "système embarqué électrique",
+        "énergie embarquée"
+      ]
     },
     "B3a": {
       "label": "Matériaux solides inorganiques",
-      "parent": "B3"
+      "parent": "B3",
+      "keywords": [
+        "Matériaux solides inorganiques",
+        "Matériaux, Métallurgie",
+        "Matériaux",
+        "Métallurgie",
+        "matériaux inorganiques",
+        "solide inorganique",
+        "oxyde",
+        "céramique technique",
+        "minéral"
+      ]
     },
     "B3b": {
       "label": "Matériaux céramiques, verres",
-      "parent": "B3"
+      "parent": "B3",
+      "keywords": [
+        "Matériaux céramiques, verres",
+        "Matériaux céramiques",
+        "verres",
+        "Matériaux, Métallurgie",
+        "Matériaux",
+        "Métallurgie",
+        "céramique",
+        "verre",
+        "vitrification",
+        "sintering",
+        "porcelaine",
+        "verre technique"
+      ]
     },
     "B3c": {
       "label": "Matériaux métalliques, métaux, alliages",
-      "parent": "B3"
+      "parent": "B3",
+      "keywords": [
+        "Matériaux métalliques, métaux, alliages",
+        "Matériaux métalliques",
+        "métaux",
+        "alliages",
+        "Matériaux, Métallurgie",
+        "Matériaux",
+        "Métallurgie",
+        "acier",
+        "aluminium",
+        "fonte",
+        "cuivre",
+        "usinage"
+      ]
     },
     "B3d": {
       "label": "Matériaux polymères",
-      "parent": "B3"
+      "parent": "B3",
+      "keywords": [
+        "Matériaux polymères",
+        "Matériaux, Métallurgie",
+        "Matériaux",
+        "Métallurgie",
+        "polymère",
+        "plastique",
+        "résine",
+        "élastomère",
+        "thermoplastique",
+        "composite polymère"
+      ]
     },
     "B3e": {
       "label": "Matériaux composites",
-      "parent": "B3"
+      "parent": "B3",
+      "keywords": [
+        "Matériaux composites",
+        "Matériaux, Métallurgie",
+        "Matériaux",
+        "Métallurgie",
+        "matériau composite",
+        "fibre",
+        "matrice",
+        "stratifié",
+        "composite carbone",
+        "composite verre"
+      ]
     },
     "B3f": {
       "label": "Matériaux hybrides",
-      "parent": "B3"
+      "parent": "B3",
+      "keywords": [
+        "Matériaux hybrides",
+        "Matériaux, Métallurgie",
+        "Matériaux",
+        "Métallurgie",
+        "hybride organique inorganique",
+        "sol-gel",
+        "revêtement hybride"
+      ]
     },
     "B3g": {
       "label": "Multimatériaux",
-      "parent": "B3"
+      "parent": "B3",
+      "keywords": [
+        "Multimatériaux",
+        "Matériaux, Métallurgie",
+        "Matériaux",
+        "Métallurgie",
+        "assemblage matériau",
+        "interface matériau",
+        "jonction",
+        "collage"
+      ]
     },
     "B3h": {
       "label": "Matériaux biosourcés, bioinspirés, biomatériaux",
-      "parent": "B3"
+      "parent": "B3",
+      "keywords": [
+        "Matériaux biosourcés, bioinspirés, biomatériaux",
+        "Matériaux biosourcés",
+        "bioinspirés",
+        "biomatériaux",
+        "Matériaux, Métallurgie",
+        "Matériaux",
+        "Métallurgie",
+        "biosourcé",
+        "bioinspiré",
+        "biomatériau",
+        "matériau naturel",
+        "polymère biosourcé"
+      ]
     },
     "B4a": {
       "label": "Mécanique fondamentale",
-      "parent": "B4"
+      "parent": "B4",
+      "keywords": [
+        "Mécanique fondamentale",
+        "Mécanique, Génie mécanique, Génie civil",
+        "Mécanique",
+        "Génie mécanique",
+        "Génie civil",
+        "dynamique",
+        "cinématique",
+        "statique",
+        "mécanique analytique",
+        "modèle mécanique"
+      ]
     },
     "B4b": {
       "label": "Mécanique des structures",
-      "parent": "B4"
+      "parent": "B4",
+      "keywords": [
+        "Mécanique des structures",
+        "Mécanique, Génie mécanique, Génie civil",
+        "Mécanique",
+        "Génie mécanique",
+        "Génie civil",
+        "structure",
+        "poutre",
+        "coque",
+        "contrainte",
+        "déformation",
+        "éléments finis",
+        "résistance des structures"
+      ]
     },
     "B4c": {
       "label": "Mécanique des matériaux",
-      "parent": "B4"
+      "parent": "B4",
+      "keywords": [
+        "Mécanique des matériaux",
+        "Mécanique, Génie mécanique, Génie civil",
+        "Mécanique",
+        "Génie mécanique",
+        "Génie civil",
+        "fatigue",
+        "rupture",
+        "plasticité",
+        "élasticité",
+        "contrainte matériau",
+        "essai mécanique"
+      ]
     },
     "B4d": {
       "label": "Génie mécanique",
-      "parent": "B4"
+      "parent": "B4",
+      "keywords": [
+        "Génie mécanique",
+        "Mécanique, Génie mécanique, Génie civil",
+        "Mécanique",
+        "Génie civil",
+        "compresseur",
+        "piston",
+        "pistons",
+        "barillet",
+        "contrepoids",
+        "équilibrage statique",
+        "équilibrage dynamique",
+        "poulie",
+        "vilebrequin",
+        "masse",
+        "centre de gravité",
+        "pression",
+        "débit",
+        "cylindre",
+        "segments",
+        "soufflage carter",
+        "usinage",
+        "fonderie",
+        "SolidWorks"
+      ]
     },
     "B4e": {
       "label": "Mécanique des fluides",
-      "parent": "B4"
+      "parent": "B4",
+      "keywords": [
+        "Mécanique des fluides",
+        "Mécanique, Génie mécanique, Génie civil",
+        "Mécanique",
+        "Génie mécanique",
+        "Génie civil",
+        "écoulement",
+        "fluide",
+        "débit",
+        "pression",
+        "perte de charge",
+        "turbulence",
+        "CFD",
+        "hydraulique",
+        "aéraulique"
+      ]
     },
     "B4f": {
       "label": "Acoustique",
-      "parent": "B4"
+      "parent": "B4",
+      "keywords": [
+        "Acoustique",
+        "Mécanique, Génie mécanique, Génie civil",
+        "Mécanique",
+        "Génie mécanique",
+        "Génie civil",
+        "vibro-acoustique",
+        "vibration",
+        "vibrations",
+        "bruit",
+        "nuisances acoustiques",
+        "dB",
+        "harmoniques",
+        "RMS",
+        "accélération",
+        "célérité",
+        "déséquilibre",
+        "poulie déséquilibrée"
+      ]
     },
     "B4g": {
       "label": "Génie civil",
-      "parent": "B4"
+      "parent": "B4",
+      "keywords": [
+        "Génie civil",
+        "Mécanique, Génie mécanique, Génie civil",
+        "Mécanique",
+        "Génie mécanique",
+        "béton",
+        "ouvrage",
+        "structure bâtiment",
+        "pont",
+        "sol",
+        "fondation",
+        "construction"
+      ]
     },
     "B4h": {
       "label": "Biomécanique",
-      "parent": "B4"
+      "parent": "B4",
+      "keywords": [
+        "Biomécanique",
+        "Mécanique, Génie mécanique, Génie civil",
+        "Mécanique",
+        "Génie mécanique",
+        "Génie civil",
+        "mouvement humain",
+        "articulation",
+        "tissu biologique",
+        "implant",
+        "modèle biomécanique"
+      ]
     },
     "B4i": {
       "label": "Génie industriel",
-      "parent": "B4"
+      "parent": "B4",
+      "keywords": [
+        "Génie industriel",
+        "Mécanique, Génie mécanique, Génie civil",
+        "Mécanique",
+        "Génie mécanique",
+        "Génie civil",
+        "production",
+        "industrialisation",
+        "maintenance",
+        "qualité industrielle",
+        "optimisation processus",
+        "lean"
+      ]
     },
     "B4j": {
       "label": "Domaines applicatifs",
-      "parent": "B4"
+      "parent": "B4",
+      "keywords": [
+        "Domaines applicatifs",
+        "Mécanique, Génie mécanique, Génie civil",
+        "Mécanique",
+        "Génie mécanique",
+        "Génie civil",
+        "domaines applicatifs mécanique",
+        "application mécanique",
+        "système mécanique",
+        "équipement industriel",
+        "machine spéciale"
+      ]
     },
     "B5a": {
       "label": "Chimie théorique, physique, analytique",
-      "parent": "B5"
+      "parent": "B5",
+      "keywords": [
+        "Chimie théorique, physique, analytique",
+        "Chimie théorique",
+        "physique",
+        "analytique",
+        "Chimie",
+        "chimie physique",
+        "chimie analytique",
+        "spectroscopie",
+        "chromatographie",
+        "pH",
+        "réaction"
+      ]
     },
     "B5b": {
       "label": "Chimie organique, minérale, industrielle",
-      "parent": "B5"
+      "parent": "B5",
+      "keywords": [
+        "Chimie organique, minérale, industrielle",
+        "Chimie organique",
+        "minérale",
+        "industrielle",
+        "Chimie",
+        "chimie minérale",
+        "chimie industrielle",
+        "synthèse organique",
+        "catalyse",
+        "formulation",
+        "procédé chimique"
+      ]
     },
     "B6a": {
       "label": "Optique",
-      "parent": "B6"
+      "parent": "B6",
+      "keywords": [
+        "Optique",
+        "Physique",
+        "photonique",
+        "laser",
+        "lentille",
+        "spectre optique",
+        "imagerie optique",
+        "fibre optique"
+      ]
     },
     "B6b": {
       "label": "Physique théorique et expérimentale",
-      "parent": "B6"
+      "parent": "B6",
+      "keywords": [
+        "Physique théorique et expérimentale",
+        "Physique",
+        "physique expérimentale",
+        "physique théorique",
+        "mesure physique",
+        "expérience",
+        "modèle physique",
+        "instrumentation"
+      ]
     },
     "B6c": {
       "label": "Physique théorique",
-      "parent": "B6"
+      "parent": "B6",
+      "keywords": [
+        "Physique théorique",
+        "Physique",
+        "théorie physique",
+        "modèle théorique",
+        "équation physique",
+        "mécanique quantique",
+        "relativité"
+      ]
     },
     "B7a": {
       "label": "Thermique, énergétique",
-      "parent": "B7"
+      "parent": "B7",
+      "keywords": [
+        "Thermique, énergétique",
+        "Thermique",
+        "énergétique",
+        "Energétique, Génie des procédés, Energies",
+        "Energétique",
+        "Génie des procédés",
+        "Energies",
+        "température",
+        "chaleur",
+        "échange thermique",
+        "refroidissement",
+        "réfrigérant",
+        "rendement thermique",
+        "flux thermique"
+      ]
     },
     "B7b": {
       "label": "Combustion, plasma",
-      "parent": "B7"
+      "parent": "B7",
+      "keywords": [
+        "Combustion, plasma",
+        "Combustion",
+        "plasma",
+        "Energétique, Génie des procédés, Energies",
+        "Energétique",
+        "Génie des procédés",
+        "Energies",
+        "flamme",
+        "brûleur",
+        "gaz ionisé",
+        "arc plasma"
+      ]
     },
     "B7c": {
       "label": "Génie des procédés, génie industriel",
-      "parent": "B7"
+      "parent": "B7",
+      "keywords": [
+        "Génie des procédés, génie industriel",
+        "Génie des procédés",
+        "génie industriel",
+        "Energétique, Génie des procédés, Energies",
+        "Energétique",
+        "Energies",
+        "procédé industriel",
+        "réacteur",
+        "séparation",
+        "distillation",
+        "transfert matière",
+        "transfert chaleur"
+      ]
     },
     "B7d": {
       "label": "Génie de l'environnement",
-      "parent": "B7"
+      "parent": "B7",
+      "keywords": [
+        "Génie de l'environnement",
+        "Energétique, Génie des procédés, Energies",
+        "Energétique",
+        "Génie des procédés",
+        "Energies",
+        "traitement eau",
+        "traitement air",
+        "pollution",
+        "déchet",
+        "émission",
+        "dépollution"
+      ]
     },
     "B7e": {
       "label": "Energies",
-      "parent": "B7"
+      "parent": "B7",
+      "keywords": [
+        "Energies",
+        "Energétique, Génie des procédés, Energies",
+        "Energétique",
+        "Génie des procédés",
+        "énergies",
+        "énergie renouvelable",
+        "solaire",
+        "éolien",
+        "hydrogène",
+        "stockage énergie",
+        "batterie"
+      ]
     },
     "B8a": {
       "label": "Météorologie, sciences du climat",
-      "parent": "B8"
+      "parent": "B8",
+      "keywords": [
+        "Météorologie, sciences du climat",
+        "Météorologie",
+        "sciences du climat",
+        "Océan, Atmosphère, Terre",
+        "Océan",
+        "Atmosphère",
+        "Terre",
+        "climat",
+        "prévision météo",
+        "température atmosphérique"
+      ]
     },
     "B8b": {
       "label": "Océanographie",
-      "parent": "B8"
+      "parent": "B8",
+      "keywords": [
+        "Océanographie",
+        "Océan, Atmosphère, Terre",
+        "Océan",
+        "Atmosphère",
+        "Terre",
+        "courant marin",
+        "salinité",
+        "vague",
+        "littoral"
+      ]
     },
     "B8c": {
       "label": "Sciences de l'environnement",
-      "parent": "B8"
+      "parent": "B8",
+      "keywords": [
+        "Sciences de l'environnement",
+        "Océan, Atmosphère, Terre",
+        "Océan",
+        "Atmosphère",
+        "Terre",
+        "environnement",
+        "écosystème",
+        "pollution",
+        "biodiversité",
+        "impact environnemental"
+      ]
     },
     "B8d": {
       "label": "Astronomie, astrophysique",
-      "parent": "B8"
+      "parent": "B8",
+      "keywords": [
+        "Astronomie, astrophysique",
+        "Astronomie",
+        "astrophysique",
+        "Océan, Atmosphère, Terre",
+        "Océan",
+        "Atmosphère",
+        "Terre",
+        "étoile",
+        "galaxie",
+        "télescope",
+        "cosmologie"
+      ]
     },
     "B8e": {
       "label": "Géosciences",
-      "parent": "B8"
+      "parent": "B8",
+      "keywords": [
+        "Géosciences",
+        "Océan, Atmosphère, Terre",
+        "Océan",
+        "Atmosphère",
+        "Terre",
+        "géologie",
+        "roche",
+        "sol",
+        "sismologie",
+        "géophysique",
+        "minéral"
+      ]
     },
     "C1a": {
       "label": "Biochimie, biologie structurale",
-      "parent": "C1"
+      "parent": "C1",
+      "keywords": [
+        "Biochimie, biologie structurale",
+        "Biochimie",
+        "biologie structurale",
+        "Biologie de la cellule",
+        "protéine",
+        "enzyme",
+        "métabolite",
+        "structure moléculaire"
+      ]
     },
     "C1b": {
       "label": "Biologie moléculaire, génétique",
-      "parent": "C1"
+      "parent": "C1",
+      "keywords": [
+        "Biologie moléculaire, génétique",
+        "Biologie moléculaire",
+        "génétique",
+        "Biologie de la cellule",
+        "ADN",
+        "ARN",
+        "gène",
+        "mutation",
+        "expression génique"
+      ]
     },
     "C1c": {
       "label": "Organisation et fonctions cellulaires",
-      "parent": "C1"
+      "parent": "C1",
+      "keywords": [
+        "Organisation et fonctions cellulaires",
+        "Biologie de la cellule",
+        "fonctions cellulaires",
+        "cellule",
+        "organite",
+        "cycle cellulaire",
+        "signalisation cellulaire"
+      ]
     },
     "C1d": {
       "label": "Biologie des systèmes",
-      "parent": "C1"
+      "parent": "C1",
+      "keywords": [
+        "Biologie des systèmes",
+        "Biologie de la cellule",
+        "réseau biologique",
+        "modèle biologique",
+        "omique",
+        "système cellulaire"
+      ]
     },
     "C1e": {
       "label": "Bioinformatique, biostatistiques",
-      "parent": "C1"
+      "parent": "C1",
+      "keywords": [
+        "Bioinformatique, biostatistiques",
+        "Bioinformatique",
+        "biostatistiques",
+        "Biologie de la cellule",
+        "séquençage",
+        "analyse omique",
+        "pipeline bioinformatique"
+      ]
     },
     "C1f": {
       "label": "Microscopie, imagerie",
-      "parent": "C1"
+      "parent": "C1",
+      "keywords": [
+        "Microscopie, imagerie",
+        "Microscopie",
+        "imagerie",
+        "Biologie de la cellule",
+        "imagerie biologique",
+        "fluorescence",
+        "microscope",
+        "image cellulaire"
+      ]
     },
     "C2a": {
       "label": "Microbiologie",
-      "parent": "C2"
+      "parent": "C2",
+      "keywords": [
+        "Microbiologie",
+        "Biologie humaine et animale",
+        "bactérie",
+        "virus",
+        "champignon",
+        "micro-organisme",
+        "culture microbienne"
+      ]
     },
     "C2b": {
       "label": "Biologie de la reproduction et du développement",
-      "parent": "C2"
+      "parent": "C2",
+      "keywords": [
+        "Biologie de la reproduction et du développement",
+        "Biologie humaine et animale",
+        "reproduction",
+        "développement",
+        "embryon",
+        "fertilité",
+        "développement animal"
+      ]
     },
     "C2c": {
       "label": "Evolution, écologie, biologie des populations",
-      "parent": "C2"
+      "parent": "C2",
+      "keywords": [
+        "Evolution, écologie, biologie des populations",
+        "Evolution",
+        "écologie",
+        "biologie des populations",
+        "Biologie humaine et animale",
+        "évolution",
+        "population",
+        "biodiversité",
+        "sélection",
+        "espèce"
+      ]
     },
     "C2d": {
       "label": "Physiologie",
-      "parent": "C2"
+      "parent": "C2",
+      "keywords": [
+        "Physiologie",
+        "Biologie humaine et animale",
+        "organe",
+        "fonction biologique",
+        "métabolisme",
+        "homéostasie"
+      ]
     },
     "C2e": {
       "label": "Médecine humaine",
-      "parent": "C2"
+      "parent": "C2",
+      "keywords": [
+        "Médecine humaine",
+        "Biologie humaine et animale",
+        "patient",
+        "pathologie",
+        "diagnostic",
+        "traitement médical",
+        "clinique"
+      ]
     },
     "C2f": {
       "label": "Médecines alternatives et complémentaires",
-      "parent": "C2"
+      "parent": "C2",
+      "keywords": [
+        "Médecines alternatives et complémentaires",
+        "Biologie humaine et animale",
+        "médecine alternative",
+        "médecine complémentaire",
+        "thérapie complémentaire",
+        "soin alternatif"
+      ]
     },
     "C2g": {
       "label": "Santé publique",
-      "parent": "C2"
+      "parent": "C2",
+      "keywords": [
+        "Santé publique",
+        "Biologie humaine et animale",
+        "épidémiologie",
+        "prévention",
+        "population",
+        "politique de santé"
+      ]
     },
     "C2h": {
       "label": "Sciences du comportement",
-      "parent": "C2"
+      "parent": "C2",
+      "keywords": [
+        "Sciences du comportement",
+        "Biologie humaine et animale",
+        "comportement",
+        "cognition",
+        "neurosciences comportementales"
+      ]
     },
     "C2i": {
       "label": "Sport, bien être",
-      "parent": "C2"
+      "parent": "C2",
+      "keywords": [
+        "Sport, bien être",
+        "Sport",
+        "bien être",
+        "Biologie humaine et animale",
+        "bien-être",
+        "activité physique",
+        "entrainement",
+        "santé sportive"
+      ]
     },
     "C2j": {
       "label": "Médecine vétérinaire",
-      "parent": "C2"
+      "parent": "C2",
+      "keywords": [
+        "Médecine vétérinaire",
+        "Biologie humaine et animale",
+        "animal",
+        "pathologie animale",
+        "soin vétérinaire"
+      ]
     },
     "C3a": {
       "label": "Principes actifs",
-      "parent": "C3"
+      "parent": "C3",
+      "keywords": [
+        "Principes actifs",
+        "Pharmacie, Cosmétique",
+        "Pharmacie",
+        "Cosmétique",
+        "principe actif",
+        "molécule active",
+        "pharmacologie",
+        "substance active"
+      ]
     },
     "C3b": {
       "label": "Délivrance de principes actifs",
-      "parent": "C3"
+      "parent": "C3",
+      "keywords": [
+        "Délivrance de principes actifs",
+        "Pharmacie, Cosmétique",
+        "Pharmacie",
+        "Cosmétique",
+        "délivrance principes actifs",
+        "drug delivery",
+        "libération contrôlée",
+        "formulation pharmaceutique"
+      ]
     },
     "C4a": {
       "label": "Essais cliniques",
-      "parent": "C4"
+      "parent": "C4",
+      "keywords": [
+        "Essais cliniques",
+        "essai clinique",
+        "protocole",
+        "cohorte",
+        "patient",
+        "randomisé",
+        "critère clinique"
+      ]
     },
     "C5a": {
       "label": "Dispositifs médicaux",
-      "parent": "C5"
+      "parent": "C5",
+      "keywords": [
+        "Dispositifs médicaux",
+        "Dispositifs médicaux, eSanté",
+        "eSanté",
+        "dispositif médical",
+        "DM",
+        "implant",
+        "instrument médical",
+        "diagnostic médical",
+        "capteur médical"
+      ]
     },
     "C5b": {
       "label": "eSanté",
-      "parent": "C5"
+      "parent": "C5",
+      "keywords": [
+        "eSanté",
+        "Dispositifs médicaux, eSanté",
+        "Dispositifs médicaux",
+        "santé numérique",
+        "télémédecine",
+        "application santé",
+        "dossier médical numérique"
+      ]
     },
     "C6a": {
       "label": "Biotechnologies vertes [agronomie]",
-      "parent": "C6"
+      "parent": "C6",
+      "keywords": [
+        "Biotechnologies vertes [agronomie]",
+        "Biotechnologies vertes",
+        "agronomie",
+        "Biotechnologie",
+        "plante",
+        "biopesticide",
+        "amélioration végétale"
+      ]
     },
     "C6b": {
       "label": "Biotechnologies rouges [médecine]",
-      "parent": "C6"
+      "parent": "C6",
+      "keywords": [
+        "Biotechnologies rouges [médecine]",
+        "Biotechnologies rouges",
+        "médecine",
+        "Biotechnologie",
+        "thérapie cellulaire",
+        "biomédicament",
+        "vaccin"
+      ]
     },
     "C6c": {
       "label": "Biotechnologies blanches [industrie]",
-      "parent": "C6"
+      "parent": "C6",
+      "keywords": [
+        "Biotechnologies blanches [industrie]",
+        "Biotechnologies blanches",
+        "industrie",
+        "Biotechnologie",
+        "fermentation",
+        "enzyme industrielle",
+        "bioprocédé"
+      ]
     },
     "C6d": {
       "label": "Biotechnologies jaunes [environnement]",
-      "parent": "C6"
+      "parent": "C6",
+      "keywords": [
+        "Biotechnologies jaunes [environnement]",
+        "Biotechnologies jaunes",
+        "environnement",
+        "Biotechnologie",
+        "bioremédiation",
+        "traitement biologique"
+      ]
     },
     "C6e": {
       "label": "Biotechnologies bleues [mer]",
-      "parent": "C6"
+      "parent": "C6",
+      "keywords": [
+        "Biotechnologies bleues [mer]",
+        "Biotechnologies bleues",
+        "mer",
+        "Biotechnologie",
+        "microalgue",
+        "biomasse marine",
+        "ressource marine"
+      ]
     },
     "C7a": {
       "label": "Production végétales",
-      "parent": "C7"
+      "parent": "C7",
+      "keywords": [
+        "Production végétales",
+        "Agronomie, Environnement",
+        "Agronomie",
+        "Environnement",
+        "production végétale",
+        "culture",
+        "plante",
+        "rendement agricole",
+        "semence"
+      ]
     },
     "C7b": {
       "label": "Productions animales",
-      "parent": "C7"
+      "parent": "C7",
+      "keywords": [
+        "Productions animales",
+        "Agronomie, Environnement",
+        "Agronomie",
+        "Environnement",
+        "production animale",
+        "élevage",
+        "nutrition animale",
+        "santé animale"
+      ]
     },
     "C7c": {
       "label": "Produits de la mer",
-      "parent": "C7"
+      "parent": "C7",
+      "keywords": [
+        "Produits de la mer",
+        "Agronomie, Environnement",
+        "Agronomie",
+        "Environnement",
+        "aquaculture",
+        "pêche",
+        "ressource marine",
+        "poisson"
+      ]
     },
     "C7d": {
       "label": "Environnement",
-      "parent": "C7"
+      "parent": "C7",
+      "keywords": [
+        "Environnement",
+        "Agronomie, Environnement",
+        "Agronomie",
+        "écologie",
+        "sol",
+        "eau",
+        "pollution",
+        "biodiversité"
+      ]
     },
     "C8a": {
       "label": "Analyse des produits alimentaires",
-      "parent": "C8"
+      "parent": "C8",
+      "keywords": [
+        "Analyse des produits alimentaires",
+        "Alimentation humaine et animale",
+        "analyse produits alimentaires",
+        "analyse alimentaire",
+        "composition alimentaire",
+        "qualité alimentaire"
+      ]
     },
     "C8b": {
       "label": "Microbiologie de l'alimentation",
-      "parent": "C8"
+      "parent": "C8",
+      "keywords": [
+        "Microbiologie de l'alimentation",
+        "Alimentation humaine et animale",
+        "microbiologie alimentaire",
+        "bactérie alimentaire",
+        "contamination",
+        "fermentation alimentaire"
+      ]
     },
     "C8c": {
       "label": "Procédés agroalimentaires",
-      "parent": "C8"
+      "parent": "C8",
+      "keywords": [
+        "Procédés agroalimentaires",
+        "Alimentation humaine et animale",
+        "transformation alimentaire",
+        "pasteurisation",
+        "séchage",
+        "cuisson"
+      ]
     },
     "C8d": {
       "label": "Contrôles qualité de l'alimentation",
-      "parent": "C8"
+      "parent": "C8",
+      "keywords": [
+        "Contrôles qualité de l'alimentation",
+        "Alimentation humaine et animale",
+        "contrôle qualité alimentation",
+        "qualité alimentaire",
+        "traçabilité",
+        "norme alimentaire"
+      ]
     },
     "C8e": {
       "label": "Analyse sensorielle",
-      "parent": "C8"
+      "parent": "C8",
+      "keywords": [
+        "Analyse sensorielle",
+        "Alimentation humaine et animale",
+        "goût",
+        "odeur",
+        "texture",
+        "panel sensoriel"
+      ]
     },
     "C8f": {
       "label": "Sécurité alimentaire",
-      "parent": "C8"
+      "parent": "C8",
+      "keywords": [
+        "Sécurité alimentaire",
+        "Alimentation humaine et animale",
+        "contamination",
+        "toxicité alimentaire",
+        "risque alimentaire"
+      ]
     },
     "C8g": {
       "label": "Nutrition, diététique",
-      "parent": "C8"
+      "parent": "C8",
+      "keywords": [
+        "Nutrition, diététique",
+        "Nutrition",
+        "diététique",
+        "Alimentation humaine et animale",
+        "nutriment",
+        "régime alimentaire",
+        "métabolisme nutritionnel"
+      ]
     },
     "C8h": {
       "label": "Secteurs d'activité",
-      "parent": "C8"
+      "parent": "C8",
+      "keywords": [
+        "Secteurs d'activité",
+        "Alimentation humaine et animale",
+        "secteur alimentaire",
+        "industrie alimentaire",
+        "filière alimentaire",
+        "produit agroalimentaire"
+      ]
     },
     "D1a": {
       "label": "Droit privé et sciences criminelles",
-      "parent": "D1"
+      "parent": "D1",
+      "keywords": [
+        "Droit privé et sciences criminelles",
+        "Droit, Sciences juridiques, Sciences politiques",
+        "Droit",
+        "Sciences juridiques",
+        "Sciences politiques",
+        "droit privé",
+        "sciences criminelles",
+        "contrat",
+        "responsabilité civile",
+        "droit pénal"
+      ]
     },
     "D1b": {
       "label": "Droit public",
-      "parent": "D1"
+      "parent": "D1",
+      "keywords": [
+        "Droit public",
+        "Droit, Sciences juridiques, Sciences politiques",
+        "Droit",
+        "Sciences juridiques",
+        "Sciences politiques",
+        "administration",
+        "collectivité",
+        "service public",
+        "droit administratif"
+      ]
     },
     "D1c": {
       "label": "Histoire du droit et des institutions",
-      "parent": "D1"
+      "parent": "D1",
+      "keywords": [
+        "Histoire du droit et des institutions",
+        "Droit, Sciences juridiques, Sciences politiques",
+        "Droit",
+        "Sciences juridiques",
+        "Sciences politiques",
+        "histoire du droit",
+        "institutions",
+        "source juridique",
+        "droit ancien"
+      ]
     },
     "D1d": {
       "label": "Sciences politiques",
-      "parent": "D1"
+      "parent": "D1",
+      "keywords": [
+        "Sciences politiques",
+        "Droit, Sciences juridiques, Sciences politiques",
+        "Droit",
+        "Sciences juridiques",
+        "politique publique",
+        "gouvernance",
+        "élection",
+        "institution politique"
+      ]
     },
     "D2a": {
       "label": "Sciences économiques",
-      "parent": "D2"
+      "parent": "D2",
+      "keywords": [
+        "Sciences économiques",
+        "économie",
+        "modèle économique",
+        "marché",
+        "économétrie"
+      ]
     },
     "D3a": {
       "label": "Sciences de gestion et du management",
-      "parent": "D3"
+      "parent": "D3",
+      "keywords": [
+        "Sciences de gestion et du management",
+        "gestion",
+        "management",
+        "organisation",
+        "stratégie",
+        "pilotage",
+        "marketing"
+      ]
     },
     "D4a": {
       "label": "Littérature, langues, linguistique",
-      "parent": "D4"
+      "parent": "D4",
+      "keywords": [
+        "Littérature, langues, linguistique",
+        "Littérature",
+        "langues",
+        "linguistique",
+        "corpus",
+        "sémantique",
+        "traduction"
+      ]
     },
     "D5a": {
       "label": "Sciences de l'art",
-      "parent": "D5"
+      "parent": "D5",
+      "keywords": [
+        "Sciences de l'art",
+        "Sciences de l'art, Histoire, Archéologie",
+        "Histoire",
+        "Archéologie",
+        "œuvre",
+        "création",
+        "esthétique",
+        "pratique artistique"
+      ]
     },
     "D5b": {
       "label": "Histoire",
-      "parent": "D5"
+      "parent": "D5",
+      "keywords": [
+        "Histoire",
+        "Sciences de l'art, Histoire, Archéologie",
+        "Sciences de l'art",
+        "Archéologie",
+        "archive",
+        "période historique",
+        "historiographie",
+        "document historique"
+      ]
     },
     "D5c": {
       "label": "Archéologie",
-      "parent": "D5"
+      "parent": "D5",
+      "keywords": [
+        "Archéologie",
+        "Sciences de l'art, Histoire, Archéologie",
+        "Sciences de l'art",
+        "Histoire",
+        "fouille",
+        "artefact",
+        "site archéologique",
+        "datation"
+      ]
     },
     "D6a": {
       "label": "Philosophie",
-      "parent": "D6"
+      "parent": "D6",
+      "keywords": [
+        "Philosophie",
+        "Philosophie, Psychologie, Ergonomie",
+        "Psychologie",
+        "Ergonomie",
+        "éthique",
+        "concept",
+        "épistémologie",
+        "argumentation"
+      ]
     },
     "D6b": {
       "label": "Psychologie",
-      "parent": "D6"
+      "parent": "D6",
+      "keywords": [
+        "Psychologie",
+        "Philosophie, Psychologie, Ergonomie",
+        "Philosophie",
+        "Ergonomie",
+        "cognition",
+        "émotion",
+        "comportement",
+        "test psychologique"
+      ]
     },
     "D6c": {
       "label": "Ergonomie",
-      "parent": "D6"
+      "parent": "D6",
+      "keywords": [
+        "Ergonomie",
+        "Philosophie, Psychologie, Ergonomie",
+        "Philosophie",
+        "Psychologie",
+        "facteurs humains",
+        "poste de travail",
+        "charge cognitive",
+        "usage"
+      ]
     },
     "D6d": {
       "label": "Innovation sociale, sciences participatives",
-      "parent": "D6"
+      "parent": "D6",
+      "keywords": [
+        "Innovation sociale, sciences participatives",
+        "Innovation sociale",
+        "sciences participatives",
+        "Philosophie, Psychologie, Ergonomie",
+        "Philosophie",
+        "Psychologie",
+        "Ergonomie",
+        "co-conception",
+        "participation citoyenne"
+      ]
     },
     "D7a": {
       "label": "Sciences de l'éducation et de la formation",
-      "parent": "D7"
+      "parent": "D7",
+      "keywords": [
+        "Sciences de l'éducation et de la formation",
+        "Sciences de l'éducation, Information et communication",
+        "Sciences de l'éducation",
+        "Information et communication",
+        "éducation",
+        "formation",
+        "pédagogie",
+        "apprentissage",
+        "compétence"
+      ]
     },
     "D7b": {
       "label": "Information, communication",
-      "parent": "D7"
+      "parent": "D7",
+      "keywords": [
+        "Information, communication",
+        "Information",
+        "communication",
+        "Sciences de l'éducation, Information et communication",
+        "Sciences de l'éducation",
+        "Information et communication",
+        "média",
+        "communication numérique",
+        "journalisme"
+      ]
     },
     "D8a": {
       "label": "Sociologie, démographie",
-      "parent": "D8"
+      "parent": "D8",
+      "keywords": [
+        "Sociologie, démographie",
+        "Sociologie",
+        "démographie",
+        "Sociologie, Démographie, Ethnologie, Anthropologie",
+        "Ethnologie",
+        "Anthropologie",
+        "enquête",
+        "population",
+        "statistique sociale"
+      ]
     },
     "D8b": {
       "label": "Ethnologie, anthropologie",
-      "parent": "D8"
+      "parent": "D8",
+      "keywords": [
+        "Ethnologie, anthropologie",
+        "Ethnologie",
+        "anthropologie",
+        "Sociologie, Démographie, Ethnologie, Anthropologie",
+        "Sociologie",
+        "Démographie",
+        "terrain",
+        "culture",
+        "pratique sociale"
+      ]
     },
     "D9a": {
       "label": "Géographie",
-      "parent": "D9"
+      "parent": "D9",
+      "keywords": [
+        "Géographie",
+        "Géographie, Aménagement de l'espace",
+        "Aménagement de l'espace",
+        "territoire",
+        "cartographie",
+        "espace",
+        "SIG"
+      ]
     },
     "D9b": {
       "label": "Aménagement de l'espace",
-      "parent": "D9"
+      "parent": "D9",
+      "keywords": [
+        "Aménagement de l'espace",
+        "Géographie, Aménagement de l'espace",
+        "Géographie",
+        "aménagement",
+        "territoire",
+        "planification spatiale"
+      ]
     },
     "D10a": {
       "label": "Urbanisme",
-      "parent": "D10"
+      "parent": "D10",
+      "keywords": [
+        "Urbanisme",
+        "Urbanisme, Architecture, Environnement",
+        "Architecture",
+        "Environnement",
+        "ville",
+        "quartier",
+        "mobilité urbaine",
+        "espace public"
+      ]
     },
     "D10b": {
       "label": "Architecture",
-      "parent": "D10"
+      "parent": "D10",
+      "keywords": [
+        "Architecture",
+        "Urbanisme, Architecture, Environnement",
+        "Urbanisme",
+        "Environnement",
+        "bâtiment",
+        "conception architecturale",
+        "patrimoine bâti"
+      ]
     },
     "D11a": {
       "label": "Études pluridisciplinaires particulières sur un pays, continent",
-      "parent": "D11"
+      "parent": "D11",
+      "keywords": [
+        "Études pluridisciplinaires particulières sur un pays, continent",
+        "Études pluridisciplinaires particulières sur un pays",
+        "continent",
+        "études pays",
+        "études continent",
+        "aire culturelle",
+        "études pluridisciplinaires"
+      ]
     },
     "D12a": {
       "label": "Sciences et techniques des activités physiques et sportives",
-      "parent": "D12"
+      "parent": "D12",
+      "keywords": [
+        "Sciences et techniques des activités physiques et sportives",
+        "STAPS",
+        "activité physique",
+        "sport",
+        "performance sportive",
+        "motricité"
+      ]
     },
     "D13a": {
       "label": "Modélisation, simulation, logiciels en SHS",
-      "parent": "D13"
+      "parent": "D13",
+      "keywords": [
+        "Modélisation, simulation, logiciels en SHS",
+        "Modélisation",
+        "simulation",
+        "logiciels en SHS",
+        "modélisation SHS",
+        "simulation SHS",
+        "logiciel SHS",
+        "système social",
+        "agent-based model"
+      ]
     }
   }
 }

@@ -4,8 +4,16 @@ modules/extraction/router.py — EnnoSmart extraction router optimisé
 Nouveautés :
 - formula_mode = "off" | "fast" | "explain"
   Par défaut : "off" pendant la refonte NLP evidence-first.
+
 - vision_mode = "text_only" | "auto" | "fast" | "full"
   Par défaut : "text_only" pour éviter le coût vision pendant les tests NLP.
+
+- Transcription audio/vidéo via faster-whisper :
+  MP3/WAV/M4A/MP4/MOV/etc. → text_chunks compatibles NLP + RAG.
+
+- Regroupement intelligent des segments audio :
+  évite d'indexer 900+ petits chunks pour un seul audio long.
+
 - Warmup vision seulement après filtrage réel des images utiles.
 - Limite images par document pour éviter des traitements trop longs.
 - Compatible avec l'ancien paramètre enable_formulas=True/False.
@@ -24,19 +32,62 @@ from modules.extraction.base import ExtractionResult, FileCategory, SourceTag
 
 logger = logging.getLogger(__name__)
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Extensions supportées
+# ──────────────────────────────────────────────────────────────────────────────
+
 EXTENSION_MAP: dict[str, FileCategory] = {
     ".pdf": FileCategory.PDF_NATIVE,
-    ".docx": FileCategory.DOCX, ".doc": FileCategory.DOCX,
-    ".pptx": FileCategory.PPTX, ".ppt": FileCategory.PPTX,
-    ".eml": FileCategory.EMAIL, ".msg": FileCategory.EMAIL,
-    ".xlsx": FileCategory.EXCEL, ".xlsm": FileCategory.EXCEL,
-    ".xls": FileCategory.EXCEL, ".csv": FileCategory.EXCEL,
-    ".png": FileCategory.IMAGE, ".jpg": FileCategory.IMAGE,
-    ".jpeg": FileCategory.IMAGE, ".tiff": FileCategory.IMAGE,
-    ".tif": FileCategory.IMAGE, ".bmp": FileCategory.IMAGE,
-    ".gif": FileCategory.IMAGE, ".webp": FileCategory.IMAGE,
+
+    ".docx": FileCategory.DOCX,
+    ".doc": FileCategory.DOCX,
+
+    ".pptx": FileCategory.PPTX,
+    ".ppt": FileCategory.PPTX,
+
+    ".eml": FileCategory.EMAIL,
+    ".msg": FileCategory.EMAIL,
+
+    ".xlsx": FileCategory.EXCEL,
+    ".xlsm": FileCategory.EXCEL,
+    ".xls": FileCategory.EXCEL,
+    ".csv": FileCategory.EXCEL,
+
+    ".png": FileCategory.IMAGE,
+    ".jpg": FileCategory.IMAGE,
+    ".jpeg": FileCategory.IMAGE,
+    ".tiff": FileCategory.IMAGE,
+    ".tif": FileCategory.IMAGE,
+    ".bmp": FileCategory.IMAGE,
+    ".gif": FileCategory.IMAGE,
+    ".webp": FileCategory.IMAGE,
     ".svg": FileCategory.IMAGE,
 }
+
+AUDIO_EXTENSIONS: set[str] = {
+    ".mp3",
+    ".wav",
+    ".m4a",
+    ".aac",
+    ".flac",
+    ".ogg",
+    ".opus",
+    ".wma",
+}
+
+VIDEO_EXTENSIONS: set[str] = {
+    ".mp4",
+    ".mov",
+    ".avi",
+    ".mkv",
+    ".webm",
+    ".mpeg",
+    ".mpg",
+    ".3gp",
+}
+
+AUDIO_VIDEO_EXTENSIONS: set[str] = AUDIO_EXTENSIONS | VIDEO_EXTENSIONS
 
 MAGIC_BYTES = [
     (b"%PDF", FileCategory.PDF_NATIVE),
@@ -49,26 +100,57 @@ MAX_IMAGES_PER_DOCUMENT_AUTO = 2
 MAX_IMAGES_PER_DOCUMENT_FAST = 3
 MAX_IMAGES_PER_DOCUMENT_FULL = 3
 
+DEFAULT_TRANSCRIPTION_CHUNK_SECONDS = 90
+DEFAULT_TRANSCRIPTION_CHUNK_MAX_CHARS = 2500
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Détection type fichier
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _is_audio_video(path: Path) -> bool:
+    return path.suffix.lower() in AUDIO_VIDEO_EXTENSIONS
+
+
+def _is_video(path: Path) -> bool:
+    return path.suffix.lower() in VIDEO_EXTENSIONS
+
+
+def _audio_file_category() -> FileCategory:
+    """
+    Garde le router compatible même si ton enum FileCategory
+    n'a pas encore AUDIO_VIDEO.
+    """
+    for name in ("AUDIO_VIDEO", "AUDIO", "VIDEO", "TRANSCRIPTION"):
+        if hasattr(FileCategory, name):
+            return getattr(FileCategory, name)
+
+    return FileCategory.UNKNOWN
+
+
 def _detect_category(path: Path) -> FileCategory:
     ext = path.suffix.lower()
+
+    if ext in AUDIO_VIDEO_EXTENSIONS:
+        return _audio_file_category()
+
     if ext in EXTENSION_MAP and ext not in (".docx", ".pptx", ".xlsx", ".xlsm"):
         return EXTENSION_MAP[ext]
 
     try:
         with open(path, "rb") as f:
             header = f.read(8)
+
         for magic, cat in MAGIC_BYTES:
             if header.startswith(magic):
                 if magic == b"PK\x03\x04":
                     return _detect_zip_subtype(path, ext)
+
                 if magic == b"\xd0\xcf\x11\xe0":
                     return FileCategory.EMAIL if ext == ".msg" else FileCategory.DOCX
+
                 return cat
+
     except Exception:
         pass
 
@@ -76,6 +158,7 @@ def _detect_category(path: Path) -> FileCategory:
         return EXTENSION_MAP[ext]
 
     mime, _ = mimetypes.guess_type(str(path))
+
     if mime:
         for k, v in [
             ("pdf", FileCategory.PDF_NATIVE),
@@ -88,44 +171,70 @@ def _detect_category(path: Path) -> FileCategory:
             if k in mime:
                 return v
 
+        if mime.startswith("audio/") or mime.startswith("video/"):
+            return _audio_file_category()
+
     return FileCategory.UNKNOWN
 
 
 def _detect_zip_subtype(path: Path, ext: str) -> FileCategory:
     try:
         import zipfile
+
         with zipfile.ZipFile(str(path)) as zf:
             names = zf.namelist()
+
             if any("word/" in n for n in names):
                 return FileCategory.DOCX
+
             if any("ppt/" in n for n in names):
                 return FileCategory.PPTX
+
             if any("xl/" in n for n in names):
                 return FileCategory.EXCEL
+
     except Exception:
         pass
+
     return EXTENSION_MAP.get(ext, FileCategory.UNKNOWN)
 
 
-def _normalize_formula_mode(formula_mode: str | None = None, enable_formulas: Optional[bool] = None) -> str:
+def _category_label(category: FileCategory, path: Path) -> str:
+    if _is_audio_video(path):
+        return "audio_video"
+
+    return getattr(category, "value", str(category))
+
+
+def _normalize_formula_mode(
+    formula_mode: str | None = None,
+    enable_formulas: Optional[bool] = None,
+) -> str:
     if enable_formulas is False:
         return "off"
+
     mode = (formula_mode or "off").lower().strip()
+
     if mode in {"false", "none", "disabled", "no", "0"}:
         return "off"
+
     if mode not in {"off", "fast", "explain"}:
         logger.warning("formula_mode inconnu %r → off", formula_mode)
         return "off"
+
     return mode
 
 
 def _normalize_vision_mode(mode: str | None) -> str:
     m = (mode or "text_only").lower().strip()
+
     if m in {"none", "off", "no_vision", "disabled"}:
         return "text_only"
+
     if m not in {"text_only", "auto", "fast", "full"}:
         logger.warning("vision_mode inconnu %r → text_only", mode)
         return "text_only"
+
     return m
 
 
@@ -140,10 +249,13 @@ def _slide_num(header: str) -> Optional[int]:
 
 def _build_chunk_index(chunks: list[str]) -> dict[int, int]:
     idx: dict[int, int] = {}
+
     for i, c in enumerate(chunks or []):
         n = _slide_num(c.split("\n")[0] if c else "")
+
         if n is not None:
             idx[n] = i
+
     return idx
 
 
@@ -154,21 +266,29 @@ def _safe_normalize_image(img_bytes: bytes) -> Optional[bytes]:
 
         img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
         img.load()
+
         w, h = img.size
+
         if w < 50 or h < 50:
             return None
+
         aspect = w / h if h > 0 else 1
+
         if aspect > 5 or aspect < 0.2:
             return None
+
         if w == 1135 and h == 289:
             return None
 
         canvas = Image.new("RGB", (448, 448), (255, 255, 255))
         img.thumbnail((448, 448), Image.LANCZOS)
         canvas.paste(img, ((448 - img.width) // 2, (448 - img.height) // 2))
+
         buf = io.BytesIO()
         canvas.save(buf, "PNG")
+
         return buf.getvalue()
+
     except Exception:
         return None
 
@@ -183,6 +303,7 @@ def _inject_formulas(
     formula_mode: str = "off",
 ) -> list[str]:
     mode = _normalize_formula_mode(formula_mode)
+
     if mode == "off":
         return chunks
 
@@ -199,26 +320,37 @@ def _inject_formulas(
         ctx = (f"Slide/Page {num} — " if num else "") + context_file
 
         has, _ = _detect(chunk, ctx)
+
         if not has:
             result.append(chunk)
             continue
 
-        fmls = extract_formulas(text=chunk, context=ctx, formula_mode=mode)
+        fmls = extract_formulas(
+            text=chunk,
+            context=ctx,
+            formula_mode=mode,
+        )
+
         if not fmls:
             result.append(chunk)
             continue
 
         seen: set[str] = set()
         section = "\n[FORMULES DÉTECTÉES]\n"
+
         for i, f in enumerate(fmls, 1):
             k = re.sub(r"\s+", "", f.latex.strip().lower())
+
             if not k or k in seen:
                 continue
+
             seen.add(k)
-            # Sortie courte : on n'injecte plus d'explication longue.
+
             section += (
                 f"  {i}. LaTeX: {f.latex}\n"
-                f"     Source: {f.source.value} | Domaine: {f.domain.value} | Confiance: {f.confidence:.2f}\n"
+                f"     Source: {f.source.value} | "
+                f"Domaine: {f.domain.value} | "
+                f"Confiance: {f.confidence:.2f}\n"
             )
 
         result.append(chunk.rstrip() + section if seen else chunk)
@@ -226,7 +358,11 @@ def _inject_formulas(
     return result
 
 
-def _run_docx_omml(path: Path, chunks: list[str], formula_mode: str = "off") -> list[str]:
+def _run_docx_omml(
+    path: Path,
+    chunks: list[str],
+    formula_mode: str = "off",
+) -> list[str]:
     if _normalize_formula_mode(formula_mode) == "off":
         return chunks
 
@@ -236,9 +372,11 @@ def _run_docx_omml(path: Path, chunks: list[str], formula_mode: str = "off") -> 
         from modules.extraction.formula.formula import extract_formulas
 
         ns = "http://schemas.openxmlformats.org/officeDocument/2006/math"
+
         with zipfile.ZipFile(str(path)) as zf:
             if "word/document.xml" not in zf.namelist():
                 return chunks
+
             root = ET.fromstring(zf.read("word/document.xml"))
             omaths = list(root.iter("{" + ns + "}oMath"))
 
@@ -256,6 +394,7 @@ def _run_docx_omml(path: Path, chunks: list[str], formula_mode: str = "off") -> 
                 formula_mode=formula_mode,
             ):
                 k = re.sub(r"\s+", "", r.latex.strip().lower())
+
                 if k and k not in seen:
                     seen.add(k)
                     section += f"  • {r.latex} — {r.source.value} | {r.confidence:.2f}\n"
@@ -270,7 +409,11 @@ def _run_docx_omml(path: Path, chunks: list[str], formula_mode: str = "off") -> 
         return chunks
 
 
-def _run_pptx_omml(path: Path, chunks: list[str], formula_mode: str = "off") -> list[str]:
+def _run_pptx_omml(
+    path: Path,
+    chunks: list[str],
+    formula_mode: str = "off",
+) -> list[str]:
     if _normalize_formula_mode(formula_mode) == "off":
         return chunks
 
@@ -284,19 +427,32 @@ def _run_pptx_omml(path: Path, chunks: list[str], formula_mode: str = "off") -> 
         enriched = list(chunks)
 
         with zipfile.ZipFile(str(path)) as zf:
-            for sf in sorted(f for f in zf.namelist() if f.startswith("ppt/slides/slide") and f.endswith(".xml")):
+            slide_files = sorted(
+                f
+                for f in zf.namelist()
+                if f.startswith("ppt/slides/slide") and f.endswith(".xml")
+            )
+
+            for sf in slide_files:
                 try:
                     tree = ET.fromstring(zf.read(sf))
                     omaths = list(tree.iter("{" + ns + "}oMath"))
+
                     if not omaths:
                         continue
 
                     m = re.search(r"slide(\d+)\.xml", sf)
                     snum = int(m.group(1)) if m else 0
-                    ctx = enriched[cidx[snum]][:400] if snum in cidx else f"Slide {snum} R&D"
+
+                    ctx = (
+                        enriched[cidx[snum]][:400]
+                        if snum in cidx
+                        else f"Slide {snum} R&D"
+                    )
 
                     seen: set[str] = set()
                     section = ""
+
                     for omath in omaths:
                         for r in extract_formulas(
                             omml_xml=ET.tostring(omath, encoding="unicode"),
@@ -304,12 +460,17 @@ def _run_pptx_omml(path: Path, chunks: list[str], formula_mode: str = "off") -> 
                             formula_mode=formula_mode,
                         ):
                             k = re.sub(r"\s+", "", r.latex.strip().lower())
+
                             if k and k not in seen:
                                 seen.add(k)
                                 section += f"  • {r.latex} — {r.source.value} | {r.confidence:.2f}\n"
 
                     if section and snum in cidx:
-                        enriched[cidx[snum]] = enriched[cidx[snum]].rstrip() + "\n[FORMULES OMML]\n" + section
+                        enriched[cidx[snum]] = (
+                            enriched[cidx[snum]].rstrip()
+                            + "\n[FORMULES OMML]\n"
+                            + section
+                        )
 
                 except Exception as exc:
                     logger.debug("OMML slide %s : %s", sf, exc)
@@ -330,10 +491,12 @@ def _limit_images_per_slide(items: list[dict]) -> list[dict]:
     import io
 
     groups: dict = defaultdict(list)
+
     for item in items or []:
         groups[item.get("slide") or item.get("page") or 0].append(item)
 
     result = []
+
     for group in groups.values():
         if len(group) <= MAX_IMAGES_PER_SLIDE:
             result.extend(group)
@@ -342,23 +505,31 @@ def _limit_images_per_slide(items: list[dict]) -> list[dict]:
         def _sz(it):
             try:
                 from PIL import Image
+
                 img = Image.open(io.BytesIO(it["bytes"]))
                 return img.width * img.height
+
             except Exception:
                 return 0
 
-        result.extend(sorted(group, key=_sz, reverse=True)[:MAX_IMAGES_PER_SLIDE])
+        result.extend(
+            sorted(group, key=_sz, reverse=True)[:MAX_IMAGES_PER_SLIDE]
+        )
 
     return result
 
 
-def _filter_processed_images(processed_list: list[tuple], vision_mode: str) -> list[tuple]:
+def _filter_processed_images(
+    processed_list: list[tuple],
+    vision_mode: str,
+) -> list[tuple]:
     """
     processed_list = [(ProcessedImage, normalized_bytes, original_item), ...]
     """
     from modules.extraction.visual.image import VisualType
 
     mode = _normalize_vision_mode(vision_mode)
+
     if mode == "text_only":
         return []
 
@@ -374,6 +545,7 @@ def _filter_processed_images(processed_list: list[tuple], vision_mode: str) -> l
     }
 
     kept = []
+
     for p, norm, item in processed_list:
         if p.skip_vision:
             continue
@@ -382,14 +554,26 @@ def _filter_processed_images(processed_list: list[tuple], vision_mode: str) -> l
         conf = float(p.visual_type_confidence or 0.0)
 
         if mode == "auto":
-            # Mode recommandé : très strict.
-            if vtype not in {VisualType.GRAPHIQUE, VisualType.SCHEMA_TECHNIQUE, VisualType.EQUATION, VisualType.TABLEAU_IMAGE}:
+            if vtype not in {
+                VisualType.GRAPHIQUE,
+                VisualType.SCHEMA_TECHNIQUE,
+                VisualType.EQUATION,
+                VisualType.TABLEAU_IMAGE,
+            }:
                 continue
+
             if vtype != VisualType.EQUATION and conf < 0.35:
                 continue
+
         elif mode == "fast":
-            if vtype not in {VisualType.EQUATION, VisualType.SCHEMA_TECHNIQUE, VisualType.GRAPHIQUE, VisualType.TABLEAU_IMAGE}:
+            if vtype not in {
+                VisualType.EQUATION,
+                VisualType.SCHEMA_TECHNIQUE,
+                VisualType.GRAPHIQUE,
+                VisualType.TABLEAU_IMAGE,
+            }:
                 continue
+
         elif mode == "full":
             pass
 
@@ -426,14 +610,18 @@ def _inject_images(
     from modules.extraction.visual.vision import describe_image_batch
 
     mode = _normalize_vision_mode(vision_mode)
+
     if not items or mode == "text_only":
         return chunks, []
 
     processed_list = []
+
     for item in items:
         norm = _safe_normalize_image(item["bytes"])
+
         if norm is None:
             continue
+
         try:
             p = process_image_bytes(
                 norm,
@@ -443,27 +631,32 @@ def _inject_images(
                 filename=item.get("filename"),
                 caption=item.get("caption"),
             )
+
             processed_list.append((p, norm, item))
+
         except Exception as exc:
             logger.debug("Image ignorée : %s", exc)
 
     processed_list = _filter_processed_images(processed_list, mode)
+
     if not processed_list:
         return chunks, []
 
-    # Warmup uniquement si des images seront vraiment traitées.
     try:
         from modules.extraction.visual.vision import warmup_vision_backend
+
         warmup_vision_backend()
+
     except Exception as exc:
         logger.debug("Warmup vision ignoré : %s", exc)
 
-    # Hints de contexte par image : on passe les premiers caractères du chunk associé.
     cidx = _build_chunk_index(chunks)
     context_hints: dict[int, str] = {}
+
     for p, _, item in processed_list:
         num = item.get("slide") or item.get("page")
         tidx = cidx.get(num) if num else None
+
         if tidx is not None and 0 <= tidx < len(chunks):
             context_hints[id(p)] = chunks[tidx][:600]
 
@@ -483,19 +676,26 @@ def _inject_images(
         tidx = cidx.get(num) if num else None
 
         fml_section = ""
-        if _normalize_formula_mode(formula_mode) != "off" and p.visual_type == VisualType.EQUATION:
+
+        if (
+            _normalize_formula_mode(formula_mode) != "off"
+            and p.visual_type == VisualType.EQUATION
+        ):
             try:
                 from modules.extraction.formula.formula import extract_formulas
+
                 fmls = extract_formulas(
                     image_bytes=norm,
                     page_number=item.get("page"),
                     formula_mode=formula_mode,
                 )
+
                 if fmls:
                     fml_section = "\n[FORMULES DÉTECTÉES]\n" + "".join(
                         f"  {i}. LaTeX: {f.latex}\n"
                         for i, f in enumerate(fmls, 1)
                     )
+
             except Exception as exc:
                 logger.debug("Formule image ignorée : %s", exc)
 
@@ -513,7 +713,11 @@ def _inject_images(
 # Pipelines par type fichier
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _run_pdf(path: Path, vision_mode: str, formula_mode: str = "off") -> ExtractionResult:
+def _run_pdf(
+    path: Path,
+    vision_mode: str,
+    formula_mode: str = "off",
+) -> ExtractionResult:
     from modules.extraction.text.pdf_native import extract_pdf_native
     from modules.extraction.text.pdf_ocr import extract_pdf_ocr, merge_native_and_ocr
 
@@ -522,52 +726,87 @@ def _run_pdf(path: Path, vision_mode: str, formula_mode: str = "off") -> Extract
     confidence = native.confidence_score
 
     if native.ocr_needed_pages:
-        ocr = extract_pdf_ocr(str(path), target_pages=native.ocr_needed_pages)
-        final_chunks = merge_native_and_ocr(native.text_chunks, ocr)
+        ocr = extract_pdf_ocr(
+            str(path),
+            target_pages=native.ocr_needed_pages,
+        )
+
+        final_chunks = merge_native_and_ocr(
+            native.text_chunks,
+            ocr,
+        )
+
         native.extraction_errors.extend(ocr.extraction_errors)
         confidence = native.confidence_score * 0.7 + ocr.confidence_score * 0.3
 
-    enriched = _inject_formulas(final_chunks, path.name, formula_mode=formula_mode)
+    enriched = _inject_formulas(
+        final_chunks,
+        path.name,
+        formula_mode=formula_mode,
+    )
 
     image_items = []
+
     if _normalize_vision_mode(vision_mode) != "text_only":
         try:
             import fitz
+
             doc = fitz.open(str(path))
+
             for pr in [p for p in native.pages if getattr(p, "has_images", False)]:
                 for img_info in doc[pr.page_number - 1].get_images(full=True):
-                    image_items.append({
-                        "bytes": doc.extract_image(img_info[0])["image"],
-                        "page": pr.page_number,
-                        "slide": None,
-                    })
+                    image_items.append(
+                        {
+                            "bytes": doc.extract_image(img_info[0])["image"],
+                            "page": pr.page_number,
+                            "slide": None,
+                        }
+                    )
+
             doc.close()
+
         except Exception as exc:
             logger.warning("Images PDF : %s", exc)
 
     image_items = _limit_images_per_slide(image_items)
-    enriched, orphans = _inject_images(enriched, image_items, "pdf_page", vision_mode, formula_mode=formula_mode)
+
+    enriched, orphans = _inject_images(
+        enriched,
+        image_items,
+        "pdf_page",
+        vision_mode,
+        formula_mode=formula_mode,
+    )
 
     tags = list(set(native.tags))
+
     if _normalize_formula_mode(formula_mode) == "off":
         tags.append("FORMULAS_DISABLED")
     else:
         tags.append(f"FORMULA_MODE:{formula_mode.upper()}")
+
     if _normalize_vision_mode(vision_mode) == "text_only":
         tags.append("VISUALS_DISABLED")
     else:
         tags.append(f"VISION_MODE:{_normalize_vision_mode(vision_mode).upper()}")
+
     if native.ocr_needed_pages:
         tags.append("MIXED_NATIVE_OCR")
+
     if orphans or any("[IMAGES]" in c for c in enriched):
         tags.append("HAS_VISUAL_DESCRIPTIONS")
+
     if any("[FORMULES" in c for c in enriched):
         tags.append("HAS_FORMULAS")
 
     return ExtractionResult(
         file_name=path.name,
         source_path=str(path.resolve()),
-        file_category=FileCategory.PDF_NATIVE if not native.ocr_needed_pages else FileCategory.PDF_OCR,
+        file_category=(
+            FileCategory.PDF_NATIVE
+            if not native.ocr_needed_pages
+            else FileCategory.PDF_OCR
+        ),
         text_chunks=enriched,
         visual_chunks=orphans,
         title=native.metadata.title,
@@ -582,45 +821,78 @@ def _run_pdf(path: Path, vision_mode: str, formula_mode: str = "off") -> Extract
     )
 
 
-def _run_office(path: Path, vision_mode: str, formula_mode: str = "off") -> ExtractionResult:
+def _run_office(
+    path: Path,
+    vision_mode: str,
+    formula_mode: str = "off",
+) -> ExtractionResult:
     from modules.extraction.text.office import extract_office
 
     office = extract_office(str(path))
 
-    enriched = _inject_formulas(office.text_chunks, path.name, formula_mode=formula_mode)
+    enriched = _inject_formulas(
+        office.text_chunks,
+        path.name,
+        formula_mode=formula_mode,
+    )
+
     if _normalize_formula_mode(formula_mode) != "off" and office.file_type == "docx":
-        enriched = _run_docx_omml(path, enriched, formula_mode=formula_mode)
+        enriched = _run_docx_omml(
+            path,
+            enriched,
+            formula_mode=formula_mode,
+        )
+
     elif _normalize_formula_mode(formula_mode) != "off" and office.file_type == "pptx":
-        enriched = _run_pptx_omml(path, enriched, formula_mode=formula_mode)
+        enriched = _run_pptx_omml(
+            path,
+            enriched,
+            formula_mode=formula_mode,
+        )
 
     image_items = []
+
     if _normalize_vision_mode(vision_mode) != "text_only":
         try:
             if office.file_type == "docx":
                 import zipfile
+
                 with zipfile.ZipFile(str(path)) as zf:
-                    for mf in [f for f in zf.namelist() if f.startswith("word/media/")]:
-                        image_items.append({
-                            "bytes": zf.read(mf),
-                            "page": None,
-                            "slide": None,
-                            "filename": Path(mf).name,
-                        })
+                    for mf in [
+                        f
+                        for f in zf.namelist()
+                        if f.startswith("word/media/")
+                    ]:
+                        image_items.append(
+                            {
+                                "bytes": zf.read(mf),
+                                "page": None,
+                                "slide": None,
+                                "filename": Path(mf).name,
+                            }
+                        )
+
             elif office.visual_candidates:
                 from pptx import Presentation
+
                 prs = Presentation(str(path))
+
                 for snum in office.visual_candidates:
                     for shape in prs.slides[snum - 1].shapes:
                         if hasattr(shape, "image"):
-                            image_items.append({
-                                "bytes": shape.image.blob,
-                                "slide": snum,
-                                "page": None,
-                            })
+                            image_items.append(
+                                {
+                                    "bytes": shape.image.blob,
+                                    "slide": snum,
+                                    "page": None,
+                                }
+                            )
+
         except Exception as exc:
             logger.warning("Collecte images office : %s", exc)
 
     image_items = _limit_images_per_slide(image_items)
+
     enriched, orphans = _inject_images(
         enriched,
         image_items,
@@ -630,23 +902,31 @@ def _run_office(path: Path, vision_mode: str, formula_mode: str = "off") -> Extr
     )
 
     tags = list(set(office.tags))
+
     if _normalize_formula_mode(formula_mode) == "off":
         tags.append("FORMULAS_DISABLED")
     else:
         tags.append(f"FORMULA_MODE:{formula_mode.upper()}")
+
     if _normalize_vision_mode(vision_mode) == "text_only":
         tags.append("VISUALS_DISABLED")
     else:
         tags.append(f"VISION_MODE:{_normalize_vision_mode(vision_mode).upper()}")
+
     if orphans or any("[IMAGES]" in c for c in enriched):
         tags.append("HAS_VISUAL_DESCRIPTIONS")
+
     if any("[FORMULES" in c for c in enriched):
         tags.append("HAS_FORMULAS")
 
     return ExtractionResult(
         file_name=path.name,
         source_path=str(path.resolve()),
-        file_category=FileCategory.DOCX if office.file_type == "docx" else FileCategory.PPTX,
+        file_category=(
+            FileCategory.DOCX
+            if office.file_type == "docx"
+            else FileCategory.PPTX
+        ),
         text_chunks=enriched,
         visual_chunks=orphans,
         title=office.metadata.title,
@@ -659,7 +939,10 @@ def _run_office(path: Path, vision_mode: str, formula_mode: str = "off") -> Extr
     )
 
 
-def _run_email(path: Path, formula_mode: str = "off") -> ExtractionResult:
+def _run_email(
+    path: Path,
+    formula_mode: str = "off",
+) -> ExtractionResult:
     from modules.extraction.text.email_parser import extract_email
 
     email_result = extract_email(str(path))
@@ -671,15 +954,23 @@ def _run_email(path: Path, formula_mode: str = "off") -> ExtractionResult:
                 tmp = Path(tempfile.mkdtemp(prefix="ennosmart_att_")) / att.filename
                 tmp.write_bytes(att.content)
                 attachment_paths.append(str(tmp))
+
             except Exception:
                 pass
 
-    enriched = _inject_formulas(email_result.text_chunks, path.name, formula_mode=formula_mode)
+    enriched = _inject_formulas(
+        email_result.text_chunks,
+        path.name,
+        formula_mode=formula_mode,
+    )
+
     tags = list(set(email_result.tags))
+
     if _normalize_formula_mode(formula_mode) == "off":
         tags.append("FORMULAS_DISABLED")
     else:
         tags.append(f"FORMULA_MODE:{formula_mode.upper()}")
+
     if any("[FORMULES" in c for c in enriched):
         tags.append("HAS_FORMULAS")
 
@@ -696,7 +987,10 @@ def _run_email(path: Path, formula_mode: str = "off") -> ExtractionResult:
     )
 
 
-def _run_excel(path: Path, formula_mode: str = "off") -> ExtractionResult:
+def _run_excel(
+    path: Path,
+    formula_mode: str = "off",
+) -> ExtractionResult:
     from modules.extraction.structured.excel_struct import extract_excel
 
     excel = extract_excel(str(path))
@@ -707,30 +1001,49 @@ def _run_excel(path: Path, formula_mode: str = "off") -> ExtractionResult:
             from modules.extraction.formula.formula import extract_formulas
 
             for sheet in excel.sheets:
-                sidx = next((i for i, c in enumerate(enriched) if sheet.name in c), len(enriched) - 1)
+                sidx = next(
+                    (
+                        i
+                        for i, c in enumerate(enriched)
+                        if sheet.name in c
+                    ),
+                    len(enriched) - 1,
+                )
+
                 seen: set[str] = set()
                 section = ""
 
                 for addr, cell in sheet.raw_cells.items():
                     value = str(cell.value or "")
+
                     if value.startswith("="):
-                        for r in extract_formulas(excel_formula=value, formula_mode=formula_mode):
+                        for r in extract_formulas(
+                            excel_formula=value,
+                            formula_mode=formula_mode,
+                        ):
                             k = re.sub(r"\s+", "", r.latex.strip().lower())
+
                             if k and k not in seen:
                                 seen.add(k)
                                 section += f"  • {addr}: {r.latex}\n"
 
                 if section and 0 <= sidx < len(enriched):
-                    enriched[sidx] = enriched[sidx].rstrip() + "\n[FORMULES DÉTECTÉES]\n" + section
+                    enriched[sidx] = (
+                        enriched[sidx].rstrip()
+                        + "\n[FORMULES DÉTECTÉES]\n"
+                        + section
+                    )
 
         except Exception as exc:
             logger.debug("Formules Excel ignorées : %s", exc)
 
     tags = list(set(excel.tags))
+
     if _normalize_formula_mode(formula_mode) == "off":
         tags.append("FORMULAS_DISABLED")
     else:
         tags.append(f"FORMULA_MODE:{formula_mode.upper()}")
+
     if any("[FORMULES" in c for c in enriched):
         tags.append("HAS_FORMULAS")
 
@@ -747,7 +1060,11 @@ def _run_excel(path: Path, formula_mode: str = "off") -> ExtractionResult:
     )
 
 
-def _run_image(path: Path, vision_mode: str, formula_mode: str = "off") -> ExtractionResult:
+def _run_image(
+    path: Path,
+    vision_mode: str,
+    formula_mode: str = "off",
+) -> ExtractionResult:
     from modules.extraction.visual.image import process_image_file, VisualType
     from modules.extraction.visual.vision import describe_image
 
@@ -768,23 +1085,39 @@ def _run_image(path: Path, vision_mode: str, formula_mode: str = "off") -> Extra
     vr = describe_image(processed)
     chunk = vr.description or ""
 
-    if _normalize_formula_mode(formula_mode) != "off" and processed.visual_type == VisualType.EQUATION and chunk:
+    if (
+        _normalize_formula_mode(formula_mode) != "off"
+        and processed.visual_type == VisualType.EQUATION
+        and chunk
+    ):
         try:
             from modules.extraction.formula.formula import extract_formulas
-            fmls = extract_formulas(image_bytes=processed.image_bytes, formula_mode=formula_mode)
+
+            fmls = extract_formulas(
+                image_bytes=processed.image_bytes,
+                formula_mode=formula_mode,
+            )
+
             if fmls:
-                chunk = chunk.rstrip() + "\n[FORMULES DÉTECTÉES]\n" + "".join(
-                    f"  {i}. LaTeX: {f.latex}\n"
-                    for i, f in enumerate(fmls, 1)
+                chunk = (
+                    chunk.rstrip()
+                    + "\n[FORMULES DÉTECTÉES]\n"
+                    + "".join(
+                        f"  {i}. LaTeX: {f.latex}\n"
+                        for i, f in enumerate(fmls, 1)
+                    )
                 )
+
         except Exception as exc:
             logger.debug("Formule image ignorée : %s", exc)
 
     tags = list(set(processed.tags + vr.tags))
+
     if _normalize_formula_mode(formula_mode) == "off":
         tags.append("FORMULAS_DISABLED")
     else:
         tags.append(f"FORMULA_MODE:{formula_mode.upper()}")
+
     if "[FORMULES" in chunk:
         tags.append("HAS_FORMULAS")
 
@@ -801,6 +1134,244 @@ def _run_image(path: Path, vision_mode: str, formula_mode: str = "off") -> Extra
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Audio / Vidéo — transcription
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _format_time(seconds: float) -> str:
+    seconds = max(0.0, float(seconds or 0.0))
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def _engine_value(engine) -> str:
+    if engine is None:
+        return "faster_whisper"
+
+    return getattr(engine, "value", str(engine))
+
+
+def _build_grouped_transcription_chunks(
+    path: Path,
+    tr,
+    max_seconds: int = DEFAULT_TRANSCRIPTION_CHUNK_SECONDS,
+    max_chars: int = DEFAULT_TRANSCRIPTION_CHUNK_MAX_CHARS,
+) -> list[str]:
+    """
+    Regroupe les segments Whisper en chunks RAG plus stables.
+
+    Exemple :
+    - au lieu de 963 segments = 963 chunks
+    - on obtient environ 35 à 60 chunks pour un audio d'une heure.
+    """
+    segments = list(getattr(tr, "segments", []) or [])
+
+    if not segments:
+        return list(getattr(tr, "text_chunks", []) or [])
+
+    engine = _engine_value(getattr(tr, "engine_used", None))
+    chunks: list[str] = []
+
+    current_texts: list[str] = []
+    current_start: Optional[float] = None
+    current_end: Optional[float] = None
+    current_chars = 0
+    chunk_index = 1
+
+    def flush() -> None:
+        nonlocal current_texts, current_start, current_end, current_chars, chunk_index
+
+        text = " ".join(t.strip() for t in current_texts if t and t.strip()).strip()
+
+        if not text:
+            current_texts = []
+            current_start = None
+            current_end = None
+            current_chars = 0
+            return
+
+        start = 0.0 if current_start is None else current_start
+        end = start if current_end is None else current_end
+
+        chunk = (
+            f"[AUDIO:{path.name}] "
+            f"[CHUNK {chunk_index}] "
+            f"[{_format_time(start)} → {_format_time(end)}] "
+            f"[TRANSCRIPTION:{engine}]\n\n"
+            f"{text}"
+        )
+
+        chunks.append(chunk)
+
+        chunk_index += 1
+        current_texts = []
+        current_start = None
+        current_end = None
+        current_chars = 0
+
+    for seg in segments:
+        text = str(getattr(seg, "text", "") or "").strip()
+
+        if not text:
+            continue
+
+        start = float(getattr(seg, "start", 0.0) or 0.0)
+        end = float(getattr(seg, "end", start) or start)
+
+        if current_start is None:
+            current_start = start
+
+        should_flush = False
+
+        if current_end is not None:
+            duration_if_added = end - current_start
+            chars_if_added = current_chars + len(text)
+
+            if duration_if_added >= max_seconds:
+                should_flush = True
+
+            if chars_if_added >= max_chars:
+                should_flush = True
+
+        if should_flush:
+            flush()
+            current_start = start
+
+        current_texts.append(text)
+        current_end = end
+        current_chars += len(text) + 1
+
+    flush()
+
+    return chunks
+
+
+def _run_audio(
+    path: Path,
+    transcription_model: str = "small",
+    transcription_language: Optional[str] = "fr",
+    transcription_beam_size: int = 5,
+    transcription_group_chunks: bool = True,
+    transcription_chunk_seconds: int = DEFAULT_TRANSCRIPTION_CHUNK_SECONDS,
+    transcription_chunk_max_chars: int = DEFAULT_TRANSCRIPTION_CHUNK_MAX_CHARS,
+) -> ExtractionResult:
+    """
+    Audio/vidéo → transcription texte.
+
+    Résultat aligné avec les autres extracteurs :
+    - text_chunks : chunks horodatés utilisables par NLP + RAG
+    - visual_chunks : vide
+    - tags : transcription, modèle, langue, device
+    - métadonnées transcription remplies dans ExtractionResult
+    """
+    try:
+        from modules.extraction.audio.audio_transcriber import extract_audio_transcription
+    except Exception as exc:
+        logger.error("Module transcription indisponible : %s", exc)
+
+        return ExtractionResult(
+            file_name=path.name,
+            source_path=str(path.resolve()),
+            file_category=_audio_file_category(),
+            text_chunks=[],
+            visual_chunks=[],
+            tags=[
+                "TRANSCRIPTION:NONE",
+                "ERROR:TRANSCRIBER_IMPORT_FAILED",
+            ],
+            confidence_score=0.0,
+            extraction_errors=[
+                "Module audio_transcriber indisponible. "
+                "Vérifier modules/extraction/audio/audio_transcriber.py "
+                "et installer faster-whisper.",
+                str(exc),
+            ],
+        )
+
+    tr = extract_audio_transcription(
+        file_path=str(path),
+        model_name=transcription_model,
+        language=transcription_language,
+        beam_size=transcription_beam_size,
+    )
+
+    if transcription_group_chunks:
+        chunks = _build_grouped_transcription_chunks(
+            path=path,
+            tr=tr,
+            max_seconds=transcription_chunk_seconds,
+            max_chars=transcription_chunk_max_chars,
+        )
+    else:
+        chunks = list(getattr(tr, "text_chunks", []) or [])
+
+    if not chunks and getattr(tr, "full_text", ""):
+        chunks = [
+            (
+                f"[AUDIO:{path.name}] "
+                f"[TRANSCRIPTION:{_engine_value(getattr(tr, 'engine_used', None))}]\n\n"
+                f"{tr.full_text.strip()}"
+            )
+        ]
+
+    duration = getattr(tr, "duration", None)
+    language = getattr(tr, "language", None)
+    model_name = getattr(tr, "model_name", None)
+    engine = _engine_value(getattr(tr, "engine_used", None))
+
+    tags = list(set(getattr(tr, "tags", []) or []))
+    tags.append("AUDIO_VIDEO_TRANSCRIPTION")
+
+    if _is_video(path):
+        tags.append("SOURCE:VIDEO")
+    else:
+        tags.append("SOURCE:AUDIO")
+
+    if language:
+        tags.append(f"TRANSCRIPTION_LANG:{language}")
+
+    if model_name:
+        tags.append(f"TRANSCRIPTION_MODEL:{model_name}")
+
+    if duration is not None:
+        try:
+            tags.append(f"DURATION_SECONDS:{round(float(duration), 2)}")
+        except Exception:
+            pass
+
+    if transcription_group_chunks:
+        tags.append("TRANSCRIPTION_CHUNKS_GROUPED")
+        tags.append(f"TRANSCRIPTION_CHUNK_SECONDS:{transcription_chunk_seconds}")
+
+    errors = list(getattr(tr, "extraction_errors", []) or [])
+
+    if not chunks:
+        errors.append("Transcription vide : aucun texte exploitable extrait")
+
+    return ExtractionResult(
+        file_name=path.name,
+        source_path=str(path.resolve()),
+        file_category=_audio_file_category(),
+        text_chunks=chunks,
+        visual_chunks=[],
+        tags=list(set(tags)),
+        confidence_score=float(getattr(tr, "confidence_score", 0.0) or 0.0),
+        extraction_errors=errors,
+
+        # Métadonnées audio/vidéo corrigées
+        media_duration_seconds=(
+            float(duration)
+            if duration is not None
+            else None
+        ),
+        transcription_language=language,
+        transcription_model=model_name,
+        transcription_engine=engine,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Point d'entrée
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -811,6 +1382,15 @@ def extract(
     formula_mode: str = "off",
     enable_formulas: Optional[bool] = None,
     mode: Optional[str] = None,
+
+    # Transcription audio/vidéo
+    enable_transcription: bool = True,
+    transcription_model: str = "small",
+    transcription_language: Optional[str] = "fr",
+    transcription_beam_size: int = 5,
+    transcription_group_chunks: bool = True,
+    transcription_chunk_seconds: int = DEFAULT_TRANSCRIPTION_CHUNK_SECONDS,
+    transcription_chunk_max_chars: int = DEFAULT_TRANSCRIPTION_CHUNK_MAX_CHARS,
 ) -> ExtractionResult:
     """
     Paramètres recommandés :
@@ -825,6 +1405,12 @@ def extract(
       vision_mode="full"
       formula_mode="fast"
 
+    Audio/vidéo :
+      enable_transcription=True
+      transcription_model="small"
+      transcription_language="fr"
+      transcription_group_chunks=True
+
     Compatibilité :
       - enable_formulas=False équivaut à formula_mode="off"
       - mode="text" ou "text_only" désactive vision
@@ -836,15 +1422,21 @@ def extract(
     # Compatibilité avec anciens scripts : --mode text/fast/full
     if mode:
         m = str(mode).lower().strip()
+
         if m in {"text", "text_only"}:
             vision_mode = "text_only"
+
         elif m == "fast" and vision_mode in {"auto", "", None}:
             vision_mode = "fast"
+
         elif m == "full" and vision_mode in {"", None}:
             vision_mode = "full"
 
     vision_mode = _normalize_vision_mode(vision_mode)
-    formula_mode = _normalize_formula_mode(formula_mode, enable_formulas=enable_formulas)
+    formula_mode = _normalize_formula_mode(
+        formula_mode,
+        enable_formulas=enable_formulas,
+    )
 
     if not path.exists():
         return ExtractionResult(
@@ -855,22 +1447,72 @@ def extract(
         )
 
     category = _detect_category(path)
+
     logger.info(
-        "Extraction : %s [%s] vision=%s formula=%s",
-        path.name, category.value, vision_mode, formula_mode,
+        "Extraction : %s [%s] vision=%s formula=%s transcription=%s",
+        path.name,
+        _category_label(category, path),
+        vision_mode,
+        formula_mode,
+        enable_transcription,
     )
 
     try:
-        if category in (FileCategory.PDF_NATIVE, FileCategory.PDF_OCR):
-            result = _run_pdf(path, vision_mode, formula_mode=formula_mode)
+        if _is_audio_video(path):
+            if not enable_transcription:
+                return ExtractionResult(
+                    file_name=path.name,
+                    source_path=str(path.resolve()),
+                    file_category=_audio_file_category(),
+                    extraction_errors=[
+                        "Fichier audio/vidéo détecté mais transcription désactivée"
+                    ],
+                    tags=["TRANSCRIPTION_DISABLED"],
+                )
+
+            result = _run_audio(
+                path,
+                transcription_model=transcription_model,
+                transcription_language=transcription_language,
+                transcription_beam_size=transcription_beam_size,
+                transcription_group_chunks=transcription_group_chunks,
+                transcription_chunk_seconds=transcription_chunk_seconds,
+                transcription_chunk_max_chars=transcription_chunk_max_chars,
+            )
+
+        elif category in (FileCategory.PDF_NATIVE, FileCategory.PDF_OCR):
+            result = _run_pdf(
+                path,
+                vision_mode,
+                formula_mode=formula_mode,
+            )
+
         elif category in (FileCategory.DOCX, FileCategory.PPTX):
-            result = _run_office(path, vision_mode, formula_mode=formula_mode)
+            result = _run_office(
+                path,
+                vision_mode,
+                formula_mode=formula_mode,
+            )
+
         elif category == FileCategory.EMAIL:
-            result = _run_email(path, formula_mode=formula_mode)
+            result = _run_email(
+                path,
+                formula_mode=formula_mode,
+            )
+
         elif category == FileCategory.EXCEL:
-            result = _run_excel(path, formula_mode=formula_mode)
+            result = _run_excel(
+                path,
+                formula_mode=formula_mode,
+            )
+
         elif category == FileCategory.IMAGE:
-            result = _run_image(path, vision_mode, formula_mode=formula_mode)
+            result = _run_image(
+                path,
+                vision_mode,
+                formula_mode=formula_mode,
+            )
+
         else:
             return ExtractionResult(
                 file_name=path.name,
@@ -890,9 +1532,27 @@ def extract(
                         source_tag=source_tag,
                         vision_mode=vision_mode,
                         formula_mode=formula_mode,
+                        enable_formulas=enable_formulas,
+                        enable_transcription=enable_transcription,
+                        transcription_model=transcription_model,
+                        transcription_language=transcription_language,
+                        transcription_beam_size=transcription_beam_size,
+                        transcription_group_chunks=transcription_group_chunks,
+                        transcription_chunk_seconds=transcription_chunk_seconds,
+                        transcription_chunk_max_chars=transcription_chunk_max_chars,
                     )
+
                     result.text_chunks.extend(ar.text_chunks)
                     result.visual_chunks.extend(ar.visual_chunks)
+
+                    if ar.extraction_errors:
+                        result.extraction_errors.extend(
+                            [
+                                f"PJ {Path(att_path).name}: {e}"
+                                for e in ar.extraction_errors
+                            ]
+                        )
+
                 except Exception as exc:
                     logger.warning("PJ %s : %s", att_path, exc)
 
@@ -901,10 +1561,12 @@ def extract(
             len(result.text_chunks),
             len(result.visual_chunks),
         )
+
         return result
 
     except Exception as exc:
         logger.error("Erreur extraction %s : %s", path.name, exc, exc_info=True)
+
         return ExtractionResult(
             file_name=path.name,
             source_path=str(path),
