@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import datetime
 from typing import Any, Dict, List
 import importlib
 import json
@@ -653,6 +654,133 @@ def write_state_of_art_from_frontend_selection(
 
     _write_json(out_dir / "ennoscholar_state_of_art_report.json", report)
     return report
+
+
+
+
+def _read_state_of_art_json(path: Path, default: Any = None) -> Any:
+    if default is None:
+        default = {}
+    try:
+        if not path.exists():
+            return default
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return default
+
+
+def _state_of_art_report_summary(report: Dict[str, Any]) -> Dict[str, Any]:
+    results = report.get("results") or []
+    if not isinstance(results, list):
+        results = []
+
+    selected_total = 0
+    used_total = 0
+    verrou_titles: List[str] = []
+
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        selected_total += int(result.get("selected_articles_count") or 0)
+        title = _clean(result.get("verrou_title") or result.get("structured_state_of_art", {}).get("verrou_title"), 800)
+        if title:
+            verrou_titles.append(title)
+
+        guard = result.get("state_of_art", {}).get("citation_guard") if isinstance(result.get("state_of_art"), dict) else {}
+        used = guard.get("used_citations") if isinstance(guard, dict) else []
+        if isinstance(used, list):
+            used_total += len(set(str(x) for x in used if str(x).strip()))
+        else:
+            refs = result.get("structured_state_of_art", {}).get("references") if isinstance(result.get("structured_state_of_art"), dict) else []
+            if isinstance(refs, list):
+                used_total += len(refs)
+
+    return {
+        "verrous_written": int(report.get("verrous_written") or len(results)),
+        "selected_articles_count": selected_total,
+        "used_citations_count": used_total,
+        "llm_used": bool(report.get("llm_used")),
+        "fallback_used": bool(report.get("fallback_used")),
+        "writer_mode": report.get("writer_mode"),
+        "format": report.get("format"),
+        "verrou_titles": verrou_titles,
+    }
+
+
+@router.get("/{project_id}/scholar/state-of-art/history")
+def get_state_of_art_history(project_id: int, limit: int = Query(20, ge=1, le=100)):
+    """
+    Historique des états de l'art rédigés depuis le frontend.
+    Source réelle : outputs/frontend_state_of_art/project_<project_id>/<timestamp>/
+    """
+    base_dir = _repo_root() / "outputs" / "frontend_state_of_art" / f"project_{project_id}"
+
+    if not base_dir.exists():
+        return {
+            "ok": True,
+            "project_id": project_id,
+            "count": 0,
+            "base_dir": str(base_dir),
+            "reports": [],
+        }
+
+    entries: List[Dict[str, Any]] = []
+
+    report_paths = sorted(
+        base_dir.glob("*/ennoscholar_state_of_art_report.json"),
+        key=lambda p: p.stat().st_mtime if p.exists() else 0,
+        reverse=True,
+    )[:limit]
+
+    for report_path in report_paths:
+        run_dir = report_path.parent
+        selection_path = run_dir / "selected_articles_from_frontend.json"
+        report = _read_state_of_art_json(report_path, {})
+        selection_payload = _read_state_of_art_json(selection_path, {})
+
+        try:
+            updated_at = datetime.fromtimestamp(report_path.stat().st_mtime).isoformat(timespec="seconds")
+        except Exception:
+            updated_at = None
+
+        run_id = run_dir.name
+        generated_at = None
+        try:
+            generated_at = datetime.fromtimestamp(int(run_id)).isoformat(timespec="seconds")
+        except Exception:
+            generated_at = updated_at
+
+        entries.append({
+            "run_id": run_id,
+            "generated_at": generated_at,
+            "updated_at": updated_at,
+            "run_dir": str(run_dir),
+            "state_of_art_report_path": str(report_path),
+            "selection_payload_path": str(selection_path) if selection_path.exists() else None,
+            "summary": _state_of_art_report_summary(report if isinstance(report, dict) else {}),
+            "report": report,
+            "selection_payload": selection_payload,
+        })
+
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "count": len(entries),
+        "base_dir": str(base_dir),
+        "reports": entries,
+    }
+
+
+@router.get("/{project_id}/scholar/state-of-art/latest")
+def get_latest_state_of_art(project_id: int):
+    history = get_state_of_art_history(project_id=project_id, limit=1)
+    reports = history.get("reports") or []
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "latest": reports[0] if reports else None,
+        "base_dir": history.get("base_dir"),
+    }
 
 
 @router.post("/{project_id}/scholar/state-of-art/chat")

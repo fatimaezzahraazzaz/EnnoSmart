@@ -1,6 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState } from "react"
 import {
   AlertCircle,
   AlertTriangle,
@@ -17,14 +21,24 @@ import {
   TrendingUp,
   Upload,
   XCircle,
-} from "lucide-react"
+  } from "lucide-react"
 
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger } from "@/components/ui/tabs"
 
 import {
   getAccessToken,
@@ -41,9 +55,10 @@ import {
   type VerrouRead,
 } from "@/lib/api"
 import { getCurrentProjectId, setCurrentProjectId } from "@/lib/project-session"
-import { EnnoScholarGroupedStateOfArtPanel } from "@/components/ennosmart/ennoscholar-grouped-state-of-art-panel"
 import { CirFinalConsultantPanel } from "@/components/ennosmart/cir-final-consultant-panel"
+import CirPreviousContinuityTab from "@/components/ennosmart/cir-previous-continuity-tab"
 
+import { SourceTextWithDocuments, useProjectSourceDocuments, type DbSourceDocument } from "@/components/ennosmart/source-documents-dialog"
 type ConsultantDecision = "garde" | "rejete" | "reformuler" | "en_attente"
 type RunMode = "prepare" | "agent" | "full" | "import" | null
 
@@ -74,6 +89,74 @@ const fullSteps = [
   "Agent EnnoDiagnostic",
   "Synchronisation",
 ]
+
+
+function firstNonEmptyArray(...values: any[]) {
+  for (const value of values) {
+    if (Array.isArray(value) && value.length > 0) return value
+  }
+  return []
+}
+
+function unwrapCirPreviousReportForDisplay(value: any): any {
+  if (!value || typeof value !== "object") return {}
+
+  const candidates = [
+    value?.report,
+    value?.comparison_report,
+    value?.cir_memory_report,
+    value?.cir_previous_report,
+    value?.previous_cir_report,
+    value?.data,
+    value?.result,
+    value,
+  ]
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== "object") continue
+    if (
+      candidate?.has_previous_cir === true ||
+      candidate?.summary ||
+      firstNonEmptyArray(candidate?.verrou_comparisons, candidate?.comparisons, candidate?.new_or_not_found, candidate?.evolution_or_partial_continuity, candidate?.continuity_strong).length > 0 ||
+      firstNonEmptyArray(candidate?.previous_cir_years_used, candidate?.previous_years, candidate?.registered_previous_cirs).length > 0
+    ) {
+      return candidate
+    }
+  }
+
+  return {}
+}
+
+function cirReportHasComparisons(value: any) {
+  const report = unwrapCirPreviousReportForDisplay(value)
+  return firstNonEmptyArray(
+    report?.verrou_comparisons,
+    report?.comparisons,
+    report?.new_or_not_found,
+    report?.evolution_or_partial_continuity,
+    report?.continuity_strong
+  ).length > 0
+}
+
+function chooseCirMemoryReport(...values: any[]) {
+  for (const value of values) {
+    const report = unwrapCirPreviousReportForDisplay(value)
+    if (cirReportHasComparisons(report)) return report
+  }
+
+  for (const value of values) {
+    const report = unwrapCirPreviousReportForDisplay(value)
+    if (
+      report?.has_previous_cir === true ||
+      report?.summary ||
+      firstNonEmptyArray(report?.previous_cir_years_used, report?.previous_years, report?.registered_previous_cirs).length > 0
+    ) {
+      return report
+    }
+  }
+
+  return {}
+}
 
 function formatScore(score: number | string | null | undefined) {
   if (score === null || score === undefined || score === "") return "—"
@@ -358,12 +441,556 @@ function ConsultantTextCard({
           {parsed.title}
         </p>
       )}
-      <p className="text-sm leading-7 text-muted-foreground whitespace-pre-wrap">
-        {parsed.body || parsed.title || "—"}
-      </p>
+      <BackendSectionRendererV93 text={parsed.body || parsed.title || "—"} />
     </div>
   )
 }
+
+
+// ===============================
+// V93 - Rendu propre des sections backend EnnoDiagnostic
+// ===============================
+function parseJsonMaybeV93(value: any): any {
+  if (!value) return null
+  if (typeof value === "object") return value
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    try {
+      return JSON.parse(trimmed)
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+function fixFrenchMojibakeV93(value: string): string {
+  return String(value || "")
+    .replace(/Ã©/g, "é")
+    .replace(/Ã¨/g, "è")
+    .replace(/Ãª/g, "ê")
+    .replace(/Ã«/g, "ë")
+    .replace(/Ã /g, "à")
+    .replace(/Ã¢/g, "â")
+    .replace(/Ã§/g, "ç")
+    .replace(/Ã´/g, "ô")
+    .replace(/Ã¹/g, "ù")
+    .replace(/Ã»/g, "û")
+    .replace(/Ã®/g, "î")
+    .replace(/Ã¯/g, "ï")
+    .replace(/Ã‰/g, "É")
+    .replace(/â€™/g, "’")
+    .replace(/â€œ/g, "“")
+    .replace(/â€/g, "”")
+    .replace(/â€“/g, "–")
+    .replace(/â€”/g, "—")
+}
+
+function normalizeKeyV93(value: string): string {
+  return fixFrenchMojibakeV93(String(value || ""))
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+}
+
+function unwrapBackendDiagnosticReportV93(payload: any): any {
+  const walk = (value: any, depth = 0): any => {
+    if (!value || depth > 8) return null
+
+    const obj = typeof value === "string" ? parseJsonMaybeV93(value) : value
+    if (!obj || typeof obj !== "object") return null
+
+    if (
+      obj.diagnostic_sections ||
+      obj.report_sections ||
+      obj.display?.report_sections ||
+      obj.diagnostic?.sections ||
+      obj.diagnostic?.content ||
+      obj.display?.report_markdown
+    ) {
+      return obj
+    }
+
+    const candidates = [
+      obj.report,
+      obj.diagnostic,
+      obj.display,
+      obj.data,
+      obj.result,
+      obj.latest,
+      obj.latest_run,
+      obj.latestRun,
+      obj.diagnostic_run,
+      obj.run,
+      obj.item,
+      obj.bundle,
+      obj.payload,
+    ]
+
+    for (const candidate of candidates) {
+      const found = walk(candidate, depth + 1)
+      if (found) return found
+    }
+
+    for (const key of [
+      "result_json",
+      "report_json",
+      "raw_json",
+      "output_json",
+      "content_json",
+      "data_json",
+    ]) {
+      const found = walk(obj[key], depth + 1)
+      if (found) return found
+    }
+
+    return null
+  }
+
+  return walk(payload) || {}
+}
+
+function getBackendDiagnosticSectionsV93(payload: any, display: any): Record<string, string> {
+  const report = unwrapBackendDiagnosticReportV93(payload)
+
+  const candidates = [
+    report?.diagnostic_sections,
+    report?.report_sections,
+    report?.diagnostic?.sections,
+    report?.display?.report_sections,
+    display?.report_sections,
+  ]
+
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === "object") {
+      return candidate as Record<string, string>
+    }
+  }
+
+  return {}
+}
+
+function getBackendDiagnosticMarkdownV93(payload: any, display: any): string {
+  const report = unwrapBackendDiagnosticReportV93(payload)
+
+  return fixFrenchMojibakeV93(String(
+    report?.diagnostic?.content ||
+    report?.diagnostic_content ||
+    report?.content ||
+    report?.markdown ||
+    report?.display?.report_markdown ||
+    display?.report_markdown ||
+    ""
+  )).trim()
+}
+
+function extractSectionFromMarkdownV93(markdown: string, titles: string[]): string {
+  const content = fixFrenchMojibakeV93(markdown || "").replace(/\r\n/g, "\n").trim()
+  if (!content) return ""
+
+  const lines = content.split("\n")
+  const wanted = titles.map(normalizeKeyV93)
+  let start = -1
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i].trim()
+    const match = line.match(/^#{1,6}\s+(.+?)\s*$/)
+    if (!match) continue
+
+    const heading = normalizeKeyV93(match[1])
+    if (wanted.some((item) => heading === item || heading.includes(item) || item.includes(heading))) {
+      start = i + 1
+      break
+    }
+  }
+
+  if (start < 0) return ""
+
+  const out: string[] = []
+  for (let i = start; i < lines.length; i += 1) {
+    if (/^#{1,6}\s+/.test(lines[i].trim())) break
+    out.push(lines[i])
+  }
+
+  return fixFrenchMojibakeV93(out.join("\n").trim())
+}
+
+function pickBackendSectionV93(
+  sections: Record<string, string>,
+  markdown: string,
+  titles: string[],
+  fallback = ""
+): string {
+  for (const title of titles) {
+    const direct = sections?.[title]
+    if (typeof direct === "string" && direct.trim()) {
+      return fixFrenchMojibakeV93(direct).trim()
+    }
+  }
+
+  const entries = Object.entries(sections || {})
+  for (const title of titles) {
+    const normalizedTitle = normalizeKeyV93(title)
+    const found = entries.find(([key, value]) => {
+      const normalizedKey = normalizeKeyV93(key)
+      return (
+        typeof value === "string" &&
+        value.trim() &&
+        (normalizedKey === normalizedTitle ||
+          normalizedKey.includes(normalizedTitle) ||
+          normalizedTitle.includes(normalizedKey))
+      )
+    })
+
+    if (found) return fixFrenchMojibakeV93(String(found[1])).trim()
+  }
+
+  const fromMarkdown = extractSectionFromMarkdownV93(markdown, titles)
+  if (fromMarkdown) return fromMarkdown
+
+  return fixFrenchMojibakeV93(fallback || "").trim()
+}
+
+
+function getBackendFrascatiJustificationV94(
+  payload: any,
+  sections: Record<string, string>,
+  markdown: string
+): string {
+  const report = unwrapBackendDiagnosticReportV93(payload)
+
+  const fromSection = pickBackendSectionV93(sections, markdown, [
+    "Justification Frascati du score",
+    "Justification du score Frascati",
+    "Justification Frascati",
+  ])
+
+  if (fromSection) return fromSection
+
+  const structured =
+    report?.frascati_justification?.text ||
+    report?.diagnostic?.frascati_justification?.text ||
+    report?.display?.frascati_justification?.text ||
+    report?.frascati_justification?.pourquoi_ce_score ||
+    ""
+
+  if (typeof structured === "string" && structured.trim()) {
+    return fixFrenchMojibakeV93(structured).trim()
+  }
+
+  return ""
+}
+
+function stripMarkdownSymbolsV93(value: string) {
+  return fixFrenchMojibakeV93(String(value || ""))
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/\u00a0/g, " ")
+    .trim()
+}
+
+function InlineMarkdownV93({ text }: { text: string }) {
+  const value = fixFrenchMojibakeV93(String(text || ""))
+  const parts = value.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g).filter(Boolean)
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return (
+            <strong key={index} className="font-semibold text-foreground">
+              {part.slice(2, -2)}
+            </strong>
+          )
+        }
+
+        if (part.startsWith("*") && part.endsWith("*")) {
+          return (
+            <span key={index} className="font-semibold text-foreground">
+              {part.slice(1, -1)}
+            </span>
+          )
+        }
+
+        return <span key={index}>{part}</span>
+      })}
+    </>
+  )
+}
+
+function isMarkdownTableSeparatorV93(line: string) {
+  return /^\|\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(String(line || "").trim())
+}
+
+function splitMarkdownTableRowV93(line: string) {
+  return String(line || "")
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => stripMarkdownSymbolsV93(cell))
+}
+
+function MarkdownTableV93({
+  lines,
+  projectId,
+  sourceDocuments = [],
+  enableSourceDocs = false,
+}: {
+  lines: string[]
+  projectId?: number | string
+  sourceDocuments?: DbSourceDocument[]
+  enableSourceDocs?: boolean
+}) {
+  const tableLines = lines.filter((line) => line.trim().startsWith("|"))
+  const header = splitMarkdownTableRowV93(tableLines[0] || "")
+  const rows = tableLines
+    .slice(2)
+    .map(splitMarkdownTableRowV93)
+    .filter((row) => row.some((cell) => cell.trim()))
+
+  return (
+    <div className="overflow-x-auto rounded-xl border bg-white">
+      <table className="min-w-full divide-y divide-border text-sm">
+        <thead className="bg-muted/60">
+          <tr>
+            {header.map((cell, index) => (
+              <th
+                key={index}
+                className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                {cell || "—"}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {rows.map((row, rowIndex) => (
+            <tr key={rowIndex} className="hover:bg-muted/30">
+              {header.map((headerCell, cellIndex) => {
+                const cellText = row[cellIndex] || "—"
+                const isSourceCell =
+                  enableSourceDocs &&
+                  /source/i.test(String(headerCell || "")) &&
+                  projectId
+
+                return (
+                  <td
+                    key={cellIndex}
+                    className="px-4 py-3 align-top text-sm leading-7 text-foreground"
+                  >
+                    {isSourceCell ? (
+                      <SourceTextWithDocuments
+                        projectId={projectId}
+                        text={cellText}
+                        documents={sourceDocuments}
+                        compact
+                        hideTextWhenMatched
+                      />
+                    ) : (
+                      <InlineMarkdownV93 text={cellText} />
+                    )}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function BackendSectionRendererV93({
+  text,
+  projectId,
+  sourceDocuments = [],
+  enableSourceDocs = false,
+}: {
+  text: string
+  projectId?: number | string
+  sourceDocuments?: DbSourceDocument[]
+  enableSourceDocs?: boolean
+}) {
+  const raw = fixFrenchMojibakeV93(String(text || "").replace(/\r\n/g, "\n")).trim()
+
+  if (!raw) {
+    return <p className="text-sm text-muted-foreground">Aucun contenu disponible.</p>
+  }
+
+  const lines = raw.split("\n")
+  const hasTable = lines.some((line) => line.trim().startsWith("|")) && lines.some(isMarkdownTableSeparatorV93)
+
+  if (hasTable) {
+    const blocks: Array<{ type: "table" | "text"; lines: string[] }> = []
+    let textBuffer: string[] = []
+    let tableBuffer: string[] = []
+    let inTable = false
+
+    const flushText = () => {
+      if (textBuffer.some((line) => line.trim())) {
+        blocks.push({ type: "text", lines: textBuffer })
+      }
+      textBuffer = []
+    }
+
+    const flushTable = () => {
+      if (tableBuffer.length) {
+        blocks.push({ type: "table", lines: tableBuffer })
+      }
+      tableBuffer = []
+    }
+
+    for (const line of lines) {
+      if (line.trim().startsWith("|")) {
+        if (!inTable) {
+          flushText()
+          inTable = true
+        }
+        tableBuffer.push(line)
+      } else {
+        if (inTable) {
+          flushTable()
+          inTable = false
+        }
+        textBuffer.push(line)
+      }
+    }
+
+    if (inTable) flushTable()
+    flushText()
+
+    return (
+      <div className="space-y-4">
+        {blocks.map((block, index) =>
+          block.type === "table" ? (
+            <MarkdownTableV93 key={index} lines={block.lines} projectId={projectId} sourceDocuments={sourceDocuments} enableSourceDocs={enableSourceDocs} />
+          ) : (
+            <BackendSectionRendererV93 key={index} text={block.lines.join("\n")} projectId={projectId} sourceDocuments={sourceDocuments} enableSourceDocs={enableSourceDocs} />
+          )
+        )}
+      </div>
+    )
+  }
+
+  const paragraphs = raw
+    .split(/\n\s*\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  return (
+    <div className="space-y-3">
+      {paragraphs.map((paragraph, index) => {
+        const pLines = paragraph
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+
+        if (pLines.length === 1 && /^#{1,6}\s+/.test(pLines[0])) {
+          return (
+            <h3 key={index} className="text-sm font-semibold text-foreground">
+              <InlineMarkdownV93 text={pLines[0].replace(/^#{1,6}\s+/, "")} />
+            </h3>
+          )
+        }
+
+        const bulletLines = pLines.filter((line) => /^[-*•]\s+/.test(line))
+        if (bulletLines.length === pLines.length && bulletLines.length > 0) {
+          return (
+            <ul key={index} className="list-disc space-y-2 pl-5 text-sm leading-7 text-muted-foreground">
+              {bulletLines.map((line, lineIndex) => (
+                <li key={lineIndex}>
+                  <InlineMarkdownV93 text={line.replace(/^[-*•]\s+/, "")} />
+                </li>
+              ))}
+            </ul>
+          )
+        }
+
+        const numberedLines = pLines.filter((line) => /^\d+[.)]\s+/.test(line))
+        if (numberedLines.length === pLines.length && numberedLines.length > 0) {
+          return (
+            <ol key={index} className="list-decimal space-y-2 pl-5 text-sm leading-7 text-muted-foreground">
+              {numberedLines.map((line, lineIndex) => (
+                <li key={lineIndex}>
+                  <InlineMarkdownV93 text={line.replace(/^\d+[.)]\s+/, "")} />
+                </li>
+              ))}
+            </ol>
+          )
+        }
+
+        return (
+          <p key={index} className="text-sm leading-7 text-muted-foreground whitespace-pre-wrap">
+            <InlineMarkdownV93 text={paragraph} />
+          </p>
+        )
+      })}
+    </div>
+  )
+}
+
+function BackendSectionCardV93({
+  title,
+  description,
+  icon,
+  text,
+  emptyText = "Aucun contenu disponible.",
+  tone = "default",
+  projectId,
+  sourceDocuments = [],
+  enableSourceDocs = false,
+}: {
+  title: string
+  description?: string
+  icon?: any
+  text: string
+  emptyText?: string
+  tone?: "default" | "brand" | "success" | "warning"
+  projectId?: number | string
+  sourceDocuments?: DbSourceDocument[]
+  enableSourceDocs?: boolean
+}) {
+  const Icon = icon
+  const toneClass =
+    tone === "brand"
+      ? "border-brand/20 bg-brand/5"
+      : tone === "success"
+        ? "border-success/20 bg-success/5"
+        : tone === "warning"
+          ? "border-warning/20 bg-warning/5"
+          : ""
+
+  return (
+    <Card className={toneClass}>
+      <CardHeader>
+        <CardTitle className="text-sm flex items-center gap-2">
+          {Icon ? <Icon className="size-4 text-brand" /> : null}
+          {title}
+        </CardTitle>
+        {description ? (
+          <CardDescription className="text-xs">
+            {description}
+          </CardDescription>
+        ) : null}
+      </CardHeader>
+      <CardContent>
+        <div className="rounded-xl border bg-white/80 p-4">
+          {text?.trim() ? (
+            <BackendSectionRendererV93 text={text} projectId={projectId} sourceDocuments={sourceDocuments} enableSourceDocs={enableSourceDocs} />
+          ) : (
+            <p className="text-sm text-muted-foreground">{emptyText}</p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 
 function getComparisonCurrentText(item: any) {
   return (
@@ -1163,6 +1790,61 @@ async function postDiagnosticAction(projectId: number, action: "prepare-sources"
   return data
 }
 
+async function compareCurrentWithPreviousCir(projectId: number) {
+  const token = getAccessToken()
+
+  if (!token) {
+    throw new Error("Utilisateur non authentifié.")
+  }
+
+  const response = await fetch(`${API_BASE_URL}/projects/${projectId}/cir-previous/compare-current`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  })
+
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    throw new Error(
+      typeof data?.detail === "string"
+        ? data.detail
+        : "Erreur comparaison CIR précédent."
+    )
+  }
+
+  return data
+}
+
+async function getPreviousCirComparisonLatest(projectId: number) {
+  const token = getAccessToken()
+
+  if (!token) {
+    throw new Error("Utilisateur non authentifié.")
+  }
+
+  const response = await fetch(`${API_BASE_URL}/projects/${projectId}/cir-previous/comparison-latest`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    throw new Error(
+      typeof data?.detail === "string"
+        ? data.detail
+        : "Erreur lecture comparaison CIR précédent."
+    )
+  }
+
+  return data
+}
+
 export function DiagnosisPage() {
   const [activeTab, setActiveTab] = useState("overview")
   const [loading, setLoading] = useState(true)
@@ -1185,6 +1867,10 @@ export function DiagnosisPage() {
   const [previousCirUploading, setPreviousCirUploading] = useState(false)
   const [previousCirList, setPreviousCirList] = useState<any[]>([])
   const [previousCirUploadReport, setPreviousCirUploadReport] = useState<any>(null)
+  const [cirPreviousComparisonReport, setCirPreviousComparisonReport] = useState<any>(null)
+  const [cirPreviousCompareLoading, setCirPreviousCompareLoading] = useState(false)
+  const [previousCirComparisonReport, setPreviousCirComparisonReport] = useState<any>(null)
+  const [previousCirCompareLoading, setPreviousCirCompareLoading] = useState(false)
   const [scholarBundle, setScholarBundle] = useState<any>(null)
   const [articles, setArticles] = useState<any[]>([])
   const [scholarLoading, setScholarLoading] = useState(false)
@@ -1243,18 +1929,126 @@ export function DiagnosisPage() {
   const styleRoles = display?.style_memory_roles || styleMemory?.examples_by_role_count || {}
   const styleStats = display?.style_memory_stats || styleMemory?.stats || {}
 
-  const cirMemory = display?.cir_memory || {}
+  const cirMemory = previousCirComparisonReport || display?.cir_memory || {}
   const cirMemoryOk = Boolean(display?.cir_memory_ok || cirMemory?.ok)
   const cirMemoryHasPrevious = Boolean(display?.cir_memory_has_previous || cirMemory?.has_previous_cir)
   const cirMemorySummary = display?.cir_memory_summary || cirMemory?.summary || {}
-  const cirMemoryPreviousYears = display?.cir_memory_previous_years || cirMemory?.previous_cir_years_used || []
+  const cirMemoryPreviousYears = firstNonEmptyArray(display?.cir_memory_previous_years, cirMemory?.previous_cir_years_used, cirMemory?.previous_years)
   const cirMemoryNoveltyScore = display?.cir_memory_project_novelty_score ?? cirMemorySummary?.project_novelty_score
   const cirMemorySignal = display?.cir_memory_signal || cirMemorySummary?.frascati_context_signal
   const cirMemoryExplanation = display?.cir_memory_explanation || cirMemorySummary?.frascati_context_explanation
-  const cirMemoryNewVerrous = display?.cir_memory_new_verrous || cirMemory?.new_or_not_found || []
-  const cirMemoryEvolutions = display?.cir_memory_evolutions || cirMemory?.evolution_or_partial_continuity || []
-  const cirMemoryContinuities = display?.cir_memory_continuities || cirMemory?.continuity_strong || []
-  const cirMemoryComparisons = display?.cir_memory_verrou_comparisons || cirMemory?.verrou_comparisons || []
+  const cirMemoryNewVerrous = firstNonEmptyArray(display?.cir_memory_new_verrous, cirMemory?.new_or_not_found)
+  const cirMemoryEvolutions = firstNonEmptyArray(display?.cir_memory_evolutions, cirMemory?.evolution_or_partial_continuity)
+  const cirMemoryContinuities = firstNonEmptyArray(display?.cir_memory_continuities, cirMemory?.continuity_strong)
+  const cirMemoryComparisons = display?.cir_memory_verrou_comparisons || cirMemory?.verrou_comparisons || previousCirComparisonReport?.verrou_comparisons || previousCirComparisonReport?.comparisons || []
+
+  // V102.2 - Le CIR précédent peut déjà exister en mémoire même si la comparaison
+  // n'a pas encore été recalculée dans le rapport EnnoDiagnostic.
+  // IMPORTANT : ces constantes doivent être déclarées AVANT cirContinuityDiagnostic.
+  const previousCirAvailable = previousCirList.length > 0 || Boolean(previousCirUploadReport)
+
+  const previousCirYearsAvailable = useMemo(() => {
+    const years = previousCirList
+      .map((item: any) => String(item?.year || item?.previous_cir_year || "").trim())
+      .filter(Boolean)
+
+    if (years.length > 0) return years
+
+    const uploadYear = String(previousCirUploadReport?.previous_cir_year || previousCirYear || "").trim()
+    return uploadYear ? [uploadYear] : []
+  }, [previousCirList, previousCirUploadReport, previousCirYear])
+
+  const previousCirItemsCount = useMemo(() => {
+    const fromList = previousCirList.reduce((total: number, item: any) => {
+      return total + Number(item?.items_count || item?.passages_count || item?.count || 0)
+    }, 0)
+
+    return fromList || Number(previousCirUploadReport?.items_count || 0)
+  }, [previousCirList, previousCirUploadReport])
+
+  const cirContinuityDiagnostic = useMemo(() => {
+    const hasPreviousCir = cirMemoryHasPrevious || previousCirAvailable || Boolean(previousCirComparisonReport?.has_previous_cir)
+    const previousYears =
+      Array.isArray(cirMemoryPreviousYears) && cirMemoryPreviousYears.length > 0
+        ? cirMemoryPreviousYears
+        : (previousCirComparisonReport?.previous_cir_years_used || previousCirComparisonReport?.previous_years || previousCirYearsAvailable)
+
+    const normalizedSummary = {
+      ...(cirMemorySummary || {}),
+      has_previous_cir: hasPreviousCir,
+      previous_cir_available: hasPreviousCir,
+      previous_years: previousYears,
+      previous_cir_years_used: previousYears,
+      registered_previous_cirs_count: previousCirList.length,
+      registered_memory_items_count: previousCirItemsCount,
+    }
+
+    return {
+      ...(diagnosticBundle || {}),
+      ...(display || {}),
+
+      // Champs top-level lus par certains composants anciens
+      has_previous_cir: hasPreviousCir,
+      previous_cir_available: hasPreviousCir,
+      previous_cir_years_used: previousYears,
+      previous_years: previousYears,
+      registered_previous_cirs: previousCirList,
+
+      cir_memory_ok: cirMemoryOk || hasPreviousCir,
+      cir_memory_has_previous: hasPreviousCir,
+      cir_memory_previous_years: previousYears,
+      cir_memory_summary: normalizedSummary,
+      cir_memory_project_novelty_score: cirMemoryNoveltyScore,
+      cir_memory_signal: cirMemorySignal,
+      cir_memory_explanation: cirMemoryExplanation,
+      cir_memory_new_verrous: cirMemoryNewVerrous,
+      cir_memory_evolutions: cirMemoryEvolutions,
+      cir_memory_continuities: cirMemoryContinuities,
+      cir_memory_verrou_comparisons: cirMemoryComparisons,
+
+      cir_memory_report: {
+        ...(cirMemory || {}),
+        ...(previousCirComparisonReport || {}),
+        ok: cirMemoryOk || hasPreviousCir,
+        has_previous_cir: hasPreviousCir,
+        previous_cir_available: hasPreviousCir,
+        previous_cir_years_used: previousYears,
+        previous_years: previousYears,
+        registered_previous_cirs: previousCirList,
+        registered_previous_cirs_count: previousCirList.length,
+        registered_memory_items_count: previousCirItemsCount,
+        summary: normalizedSummary,
+        project_novelty_score: cirMemoryNoveltyScore,
+        frascati_context_signal: cirMemorySignal,
+        frascati_context_explanation: cirMemoryExplanation,
+        new_or_not_found: cirMemoryNewVerrous,
+        evolution_or_partial_continuity: cirMemoryEvolutions,
+        continuity_strong: cirMemoryContinuities,
+        verrou_comparisons: cirMemoryComparisons,
+        comparisons: cirMemoryComparisons,
+      },
+    }
+  }, [
+    diagnosticBundle,
+    display,
+    cirMemory,
+    cirMemoryOk,
+    cirMemoryHasPrevious,
+    cirMemorySummary,
+    cirMemoryPreviousYears,
+    cirMemoryNoveltyScore,
+    cirMemorySignal,
+    cirMemoryExplanation,
+    cirMemoryNewVerrous,
+    cirMemoryEvolutions,
+    cirMemoryContinuities,
+    cirMemoryComparisons,
+    previousCirAvailable,
+    previousCirYearsAvailable,
+    previousCirItemsCount,
+    previousCirList,
+  ])
+
 
   const documentCompareDisplay = display?.document_compare || {}
   const docCompareIndex = documentCompareIndex || documentCompareDisplay || {}
@@ -1269,54 +2063,135 @@ export function DiagnosisPage() {
   const scholarResults = scholarReport?.results || []
   const scholarDecisionCounts = scholarSummary?.decision_counts || scholarReport?.decision_counts || {}
   const scholarRunId = scholarBundle?.latest_run?.id
+  const scholarPayload = scholarBundle?.bundle?.payload || {}
+  const scholarGroupingSummary = scholarPayload?.grouping_summary || scholarReport?.grouping_summary || scholarSummary?.grouping_summary || {}
+  const scholarGroupingGroups = scholarPayload?.grouping_report?.groups || scholarReport?.grouping_report?.groups || scholarSummary?.grouping_report?.groups || []
+  const scholarGroupingActive = Boolean(
+    scholarGroupingSummary?.active ||
+    scholarGroupingSummary?.grouping_applied ||
+    scholarGroupingGroups.length > 0
+  )
 
   const decisions = useMemo(() => countByDecision(verrous), [verrous])
+  const sourceDocuments = useProjectSourceDocuments(project?.id)
+
+  const backendMarkdownV93 = useMemo(() => {
+    return getBackendDiagnosticMarkdownV93(diagnosticBundle, display)
+  }, [diagnosticBundle, display])
+
+  const backendSectionsV93 = useMemo(() => {
+    return getBackendDiagnosticSectionsV93(diagnosticBundle, display)
+  }, [diagnosticBundle, display])
 
   const summary = useMemo(() => {
-    return cleanDisplayText(
-      pickSection(display, ["synthese", "synthèse", "synthese_strategique", "summary"]) ||
+    return (
+      pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
+        "Synthèse stratégique du projet",
+        "Synthèse stratégique",
+      ]) ||
+      cleanDisplayText(pickSection(display, ["synthese", "synthèse", "synthese_strategique", "summary"]) || "") ||
       "La synthèse stratégique apparaîtra après l’exécution d’EnnoDiagnostic."
     )
-  }, [display])
+  }, [backendSectionsV93, backendMarkdownV93, display])
 
   const objective = useMemo(() => {
-    return cleanDisplayText(
-      pickSection(display, ["objectif", "objectif_global", "objective"]) ||
+    return (
+      pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
+        "Objectif global reformulé",
+        "Objectif global",
+      ]) ||
+      cleanDisplayText(pickSection(display, ["objectif", "objectif_global", "objective"]) || "") ||
       "L’objectif global apparaîtra après l’exécution d’EnnoDiagnostic."
     )
-  }, [display])
+  }, [backendSectionsV93, backendMarkdownV93, display])
+
+  const lectureFrascatiText = useMemo(() => {
+    return pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
+      "Lecture Frascati du dossier",
+    ])
+  }, [backendSectionsV93, backendMarkdownV93])
+
+  const frascatiJustificationText = useMemo(() => {
+    return getBackendFrascatiJustificationV94(
+      diagnosticBundle,
+      backendSectionsV93,
+      backendMarkdownV93
+    )
+  }, [diagnosticBundle, backendSectionsV93, backendMarkdownV93])
 
   const verrousText = useMemo(() => {
-    return cleanDisplayText(pickSection(display, ["verrous", "verrous_r_d", "verrous_rnd"]) || "")
-  }, [display])
+    return pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
+      "Verrous R&D / signaux de verrous",
+      "Verrous CIR consolidés",
+      "Verrous R&D",
+      "Verrous",
+    ])
+  }, [backendSectionsV93, backendMarkdownV93])
+
+  const demarcheText = useMemo(() => {
+    return pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
+      "Démarche expérimentale détectée",
+      "Démarche détectée",
+      "Démarche expérimentale",
+    ])
+  }, [backendSectionsV93, backendMarkdownV93])
+
+  const resultatsText = useMemo(() => {
+    return pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
+      "Résultats et métriques disponibles",
+      "Résultats / métriques",
+      "Résultats",
+    ])
+  }, [backendSectionsV93, backendMarkdownV93])
+
+  const parametresText = useMemo(() => {
+    return pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
+      "Paramètres et contraintes techniques",
+      "Paramètres techniques",
+    ])
+  }, [backendSectionsV93, backendMarkdownV93])
+
+  const validationText = useMemo(() => {
+    return pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
+      "Points à valider par le consultant",
+      "Points à valider",
+      "Points de validation",
+    ])
+  }, [backendSectionsV93, backendMarkdownV93])
 
   const methods = useMemo(() => {
-    const text = pickSection(display, ["demarche", "démarche", "methodes", "méthodes"])
-    return listFromText(text, [
-      "Préparation des sources par extraction et NLP",
-      "Indexation des passages techniques dans Chroma",
-      "Récupération des méthodes et essais depuis les sources projet",
-    ])
-  }, [display])
+    const text = demarcheText || pickSection(display, ["demarche", "démarche", "methodes", "méthodes"])
+    return text
+      ? [text]
+      : [
+          "Préparation des sources par extraction et NLP",
+          "Indexation des passages techniques dans Chroma",
+          "Récupération des méthodes et essais depuis les sources projet",
+        ]
+  }, [demarcheText, display])
 
   const results = useMemo(() => {
-    const text = pickSection(display, ["resultats", "résultats", "results"])
-    return listFromText(text, [
-      "Résultats techniques disponibles après diagnostic",
-      "Métriques et observations à confirmer par le consultant",
-    ])
-  }, [display])
+    const text = resultatsText || pickSection(display, ["resultats", "résultats", "results"])
+    return text
+      ? [text]
+      : [
+          "Résultats techniques disponibles après diagnostic",
+          "Métriques et observations à confirmer par le consultant",
+        ]
+  }, [resultatsText, display])
 
   const validationPoints = useMemo(() => {
-    const text = pickSection(display, ["points_validation", "points_a_valider", "validation"])
-    return listFromText(text, [
-      "Confirmer les verrous réellement R&D",
-      "Valider les sources et les résultats techniques",
-      "Séparer contraintes industrielles et incertitudes technologiques",
-    ])
-  }, [display])
+    const text = validationText || pickSection(display, ["points_validation", "points_a_valider", "validation"])
+    return text
+      ? [text]
+      : [
+          "Confirmer les verrous réellement R&D",
+          "Valider les sources et les résultats techniques",
+          "Séparer contraintes industrielles et incertitudes technologiques",
+        ]
+  }, [validationText, display])
 
-  const hasDiagnostic = Boolean(reportMarkdown || latestRun || verrous.length > 0)
+  const hasDiagnostic = Boolean(backendMarkdownV93 || latestRun || verrous.length > 0 || reportMarkdown)
 
   const loadData = async () => {
     setLoading(true)
@@ -1344,7 +2219,7 @@ export function DiagnosisPage() {
       setCurrentProjectId(selectedProject.id)
       setProject(selectedProject)
 
-      const [verrousData, documentsData, diagnosticData, compareIndexData, scholarData, articlesData, previousCirData] = await Promise.all([
+      const [verrousData, documentsData, diagnosticData, compareIndexData, scholarData, articlesData, previousCirData, previousCirComparisonData] = await Promise.all([
         getVerrous(selectedProject.id).catch(() => []),
         getDocuments(selectedProject.id).catch(() => []),
         getDiagnosticLatest(selectedProject.id).catch(() => null),
@@ -1352,6 +2227,7 @@ export function DiagnosisPage() {
         getScholarLatest(selectedProject.id).catch(() => null),
         getArticles(selectedProject.id).catch(() => []),
         getPreviousCirFinals(selectedProject.id).catch(() => []),
+        getPreviousCirComparisonLatest(selectedProject.id).catch(() => null),
       ])
 
       setVerrous(verrousData)
@@ -1361,6 +2237,11 @@ export function DiagnosisPage() {
       setScholarBundle(scholarData)
       setArticles(articlesData)
       setPreviousCirList(previousCirData)
+      const latestCirComparison = await getPreviousCirComparisonLatest(selectedProject.id).catch(() => null)
+      setCirPreviousComparisonReport(latestCirComparison)
+      setPreviousCirComparisonReport(previousCirComparisonData)
+      const previousComparison = await getPreviousCirComparisonLatest(selectedProject.id).catch(() => null)
+      if (previousComparison && previousComparison.ok) setPreviousCirComparisonReport(previousComparison)
       if (!previousCirYear) {
         const previousYear = Number(selectedProject.year)
         setPreviousCirYear(Number.isFinite(previousYear) ? String(previousYear - 1) : "")
@@ -1544,7 +2425,7 @@ export function DiagnosisPage() {
       const selectedProject = projects.find((item) => item.id === projectId) || null
       setProject(selectedProject)
 
-      const [verrousData, documentsData, diagnosticData, compareIndexData, scholarData, articlesData, previousCirData] = await Promise.all([
+      const [verrousData, documentsData, diagnosticData, compareIndexData, scholarData, articlesData, previousCirData, previousCirComparisonData] = await Promise.all([
         getVerrous(projectId).catch(() => []),
         getDocuments(projectId).catch(() => []),
         getDiagnosticLatest(projectId).catch(() => null),
@@ -1552,6 +2433,7 @@ export function DiagnosisPage() {
         getScholarLatest(projectId).catch(() => null),
         getArticles(projectId).catch(() => []),
         getPreviousCirFinals(projectId).catch(() => []),
+        getPreviousCirComparisonLatest(projectId).catch(() => null),
       ])
 
       setVerrous(verrousData)
@@ -1563,6 +2445,9 @@ export function DiagnosisPage() {
       setScholarBundle(scholarData)
       setArticles(articlesData)
       setPreviousCirList(previousCirData)
+      setPreviousCirComparisonReport(previousCirComparisonData)
+      const previousComparison = await getPreviousCirComparisonLatest(projectId).catch(() => null)
+      if (previousComparison && previousComparison.ok) setPreviousCirComparisonReport(previousComparison)
       const previousYear = Number(selectedProject?.year)
       setPreviousCirYear(Number.isFinite(previousYear) ? String(previousYear - 1) : "")
     } catch (err) {
@@ -1576,6 +2461,60 @@ export function DiagnosisPage() {
     }
   }
 
+
+  const comparePreviousCirOnly = async () => {
+    if (!project) return
+
+    if (!previousCirAvailable) {
+      setError("Ajoute d’abord un CIR précédent avant de lancer la comparaison.")
+      return
+    }
+
+    setPreviousCirCompareLoading(true)
+    setError("")
+    setActiveTab("cir-precedent")
+
+    try {
+      const report = await compareCurrentWithPreviousCir(project.id)
+      setPreviousCirComparisonReport(report)
+      await loadData()
+      setActiveTab("cir-precedent")
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Impossible de comparer le dossier courant avec le CIR précédent."
+      )
+    } finally {
+      setPreviousCirCompareLoading(false)
+    }
+  }
+
+
+  const runCirPreviousComparison = async () => {
+    if (!project) return
+
+    setError("")
+    setActiveTab("cir-precedent")
+    startProgress("agent")
+
+    try {
+      const report = await compareCurrentWithPreviousCir(project.id)
+      setPreviousCirComparisonReport(report)
+      await loadData()
+      setActiveTab("cir-precedent")
+      stopProgress(true)
+    } catch (err) {
+      stopProgress(false)
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Impossible de lancer la comparaison avec le CIR précédent."
+      )
+    } finally {
+      setTimeout(() => setRunningMode(null), 700)
+    }
+  }
 
   const uploadPreviousCir = async () => {
     if (!project) return
@@ -2025,10 +2964,8 @@ export function DiagnosisPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border bg-muted/20 p-4">
-                <p className="text-sm leading-7 text-foreground whitespace-pre-wrap">
-                  {summary}
-                </p>
+              <div className="rounded-xl border bg-muted/20 p-4">
+                <BackendSectionRendererV93 text={summary} />
               </div>
             </CardContent>
           </Card>
@@ -2036,21 +2973,44 @@ export function DiagnosisPage() {
         </TabsContent>
 
         <TabsContent value="diagnostic" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Target className="size-4 text-brand" />
-                Objectif global
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-md border bg-muted/20 p-4">
-                <p className="text-sm leading-7 text-foreground whitespace-pre-wrap">
-                  {objective}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <BackendSectionCardV93
+            title="Objectif global"
+            icon={Target}
+            text={objective}
+            emptyText="L’objectif global apparaîtra après l’exécution d’EnnoDiagnostic."
+          />
+
+          {lectureFrascatiText && (
+            <BackendSectionCardV93
+              title="Lecture Frascati du dossier"
+              description="Lecture du potentiel CIR à partir des scores Frascati et du contrôle IA documentaire."
+              icon={AlertTriangle}
+              text={lectureFrascatiText}
+              tone="warning"
+            />
+          )}
+
+          {frascatiJustificationText && (
+            <BackendSectionCardV93
+              title="Justification Frascati du score"
+              description="Justification spécifique au projet courant. Le score reste calculé par le NLP/Frascati ; le LLM explique le score à partir des preuves RAG/Chroma."
+              icon={AlertCircle}
+              text={frascatiJustificationText}
+              tone="brand"
+            />
+          )}
+
+          <BackendSectionCardV93
+            title="Verrous CIR consolidés"
+            description="Verrous reformulés par EnnoDiagnostic à partir des sources RAG. Les décisions restent à prendre dans les signaux NLP synchronisés ci-dessous."
+            icon={Lock}
+            text={verrousText}
+            emptyText="Aucun verrou CIR consolidé généré. Lance EnnoDiagnostic pour générer les verrous reformulés."
+            projectId={project?.id || 0}
+            sourceDocuments={sourceDocuments}
+            enableSourceDocs
+            tone="brand"
+          />
 
           <Card>
             <CardHeader>
@@ -2081,6 +3041,7 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                     const whyVerrou = consultantInterpretation(verrou)
                     const action = consultantAction(verrou)
                     const excerpt = shortSourceText(verrou)
+                    const sourceTextForDocs = `${verrou.title || ""} ${verrou.justification || ""} ${excerpt || ""} ${JSON.stringify(verrou.source_json || {})}`
 
                     return (
                       <AccordionItem
@@ -2162,9 +3123,11 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                                 Extrait source utile
                               </p>
-                              <p className="text-sm leading-7 text-foreground whitespace-pre-wrap">
-                                {excerpt}
-                              </p>
+                              <SourceTextWithDocuments
+                                projectId={project?.id || 0}
+                                text={sourceTextForDocs || excerpt}
+                                documents={sourceDocuments}
+                              />
                             </div>
 
                             <div className="rounded-lg border bg-brand/5 border-brand/20 p-4 space-y-2">
@@ -2255,89 +3218,43 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
           </Card>
 
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <RefreshCw className="size-4 text-brand" />
-                Comparaison avec le CIR précédent
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Lecture automatique de la continuité et de la nouveauté par rapport aux CIR déjà enregistrés.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {cirMemoryHasPrevious ? (
-                <div className="space-y-3 text-sm">
-                  <div className="rounded-md border bg-muted/20 p-3">
-                    <p className="text-muted-foreground">Année(s) comparée(s)</p>
-                    <p className="font-semibold text-foreground mt-1">
-                      {cirMemoryPreviousYears.join(", ") || "—"}
-                    </p>
-                  </div>
-                  <div className="rounded-md border bg-muted/20 p-3">
-                    <p className="text-muted-foreground">Score de nouveauté projet</p>
-                    <p className="font-semibold text-foreground mt-1">
-                      {noveltyPercent(cirMemoryNoveltyScore)}
-                    </p>
-                  </div>
-                  <p className="leading-relaxed text-muted-foreground whitespace-pre-wrap">
-                    {cleanDisplayText(cirMemoryExplanation || "Comparaison disponible.")}
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  Aucun CIR précédent exploitable n’a été trouvé pour ce projet.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <BackendSectionCardV93
+              title="Démarche détectée"
+              description="Méthodes, protocoles, essais ou analyses détectés dans les documents sources."
+              icon={Search}
+              text={demarcheText}
+              emptyText="Aucune démarche détectée."
+            />
 
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Search className="size-4 text-brand" />
-                  Démarche détectée
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {methods.map((method, index) => (
-                  <ConsultantTextCard key={index} item={method} />
-                ))}
-              </CardContent>
-            </Card>
+            <BackendSectionCardV93
+              title="Résultats / métriques"
+              description="Résultats chiffrés, observations qualitatives et éléments insuffisants à confirmer."
+              icon={TrendingUp}
+              text={resultatsText}
+              emptyText="Aucun résultat ou métrique disponible."
+              tone="success"
+            />
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <TrendingUp className="size-4 text-success" />
-                  Résultats / métriques
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {results.map((result, index) => (
-                  <ConsultantTextCard key={index} item={result} tone="success" />
-                ))}
-              </CardContent>
-            </Card>
+            <BackendSectionCardV93
+              title="Paramètres et contraintes techniques"
+              description="Contraintes de pression, débit, environnement, mécanique ou acoustique."
+              icon={FileText}
+              text={parametresText}
+              emptyText="Aucun paramètre technique disponible."
+            />
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <AlertCircle className="size-4 text-warning" />
-                  Points à valider
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {validationPoints.map((item, index) => (
-                  <ConsultantTextCard key={index} item={item} tone="warning" />
-                ))}
-              </CardContent>
-            </Card>
+            <BackendSectionCardV93
+              title="Points à valider"
+              description="Contrôles à faire par le consultant avant décision d’éligibilité CIR."
+              icon={AlertCircle}
+              text={validationText}
+              emptyText="Aucun point de validation disponible."
+              tone="warning"
+            />
           </div>
 
         </TabsContent>
-
 
 
         <TabsContent value="controle-ia" className="space-y-4">
@@ -2407,6 +3324,7 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                 Ce fichier sert de mémoire CIR N-1. Il n’est pas traité comme document brut du projet courant.
               </CardDescription>
             </CardHeader>
+
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-[160px_1fr_auto] gap-3 items-end">
                 <div className="space-y-1">
@@ -2458,7 +3376,11 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {previousCirList.map((item: any) => (
-                      <Badge key={item.year} variant="outline" className="text-xs bg-success/10 text-success border-success/30">
+                      <Badge
+                        key={item.year}
+                        variant="outline"
+                        className="text-xs bg-success/10 text-success border-success/30"
+                      >
                         {item.year} · {item.items_count || 0} passages mémoire
                       </Badge>
                     ))}
@@ -2472,172 +3394,105 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                     CIR final {previousCirUploadReport.previous_cir_year} enregistré.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {previousCirUploadReport.items_count || 0} passages ont été ajoutés à la mémoire CIR. Relance EnnoDiagnostic pour recalculer le rapport avec la comparaison N vs N-1.
+                    {previousCirUploadReport.items_count || 0} passages ont été ajoutés à la mémoire CIR. Tu peux lancer la comparaison avec le CIR précédent sans réimporter le fichier et sans relancer EnnoDiagnostic.
                   </p>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-blue-200 bg-blue-50/70">
             <CardHeader>
               <CardTitle className="text-sm flex items-center gap-2">
-                <RefreshCw className="size-4 text-brand" />
+                <RefreshCw className="size-4 text-blue-700" />
                 Comparaison avec le CIR précédent
               </CardTitle>
               <CardDescription className="text-xs">
-                Lecture consultant N vs N-1 : expliquer la progression technique, pas seulement afficher des titres.
+                {previousCirAvailable
+                  ? "Un CIR précédent est déjà enregistré. Tu peux lancer directement la comparaison sans réimporter le fichier."
+                  : "Aucun CIR précédent n’est encore enregistré. Ajoute d’abord un CIR final précédent pour activer la comparaison."}
               </CardDescription>
             </CardHeader>
 
-            <CardContent className="space-y-5">
-              {!cirMemoryOk ? (
-                <div className="p-5 rounded-xl border border-warning/30 bg-warning/5">
-                  <p className="text-sm font-semibold text-warning">
-                    Comparaison CIR précédente indisponible.
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  className="bg-brand hover:bg-brand/90"
+                  onClick={comparePreviousCirOnly}
+                  disabled={running || previousCirCompareLoading || !previousCirAvailable}
+                >
+                  {previousCirCompareLoading ? (
+                    <Loader2 className="size-4 mr-2 animate-spin" />
+                  ) : (
+                    <Play className="size-4 mr-2" />
+                  )}
+                  Lancer la comparaison CIR précédent
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadData}
+                  disabled={running}
+                >
+                  <RefreshCw className="size-4 mr-2" />
+                  Actualiser
+                </Button>
+              </div>
+
+              {previousCirAvailable ? (
+                <div className="rounded-lg border bg-white/80 p-3">
+                  <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide mb-2">
+                    CIR précédent disponible
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Enregistre d’abord un CIR final précédent, puis relance EnnoDiagnostic pour recalculer la comparaison N vs N-1.
-                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {previousCirList.length > 0 ? (
+                      previousCirList.map((item: any) => (
+                        <Badge
+                          key={String(item.year || item.previous_cir_year || Math.random())}
+                          variant="outline"
+                          className="text-xs bg-success/10 text-success border-success/30"
+                        >
+                          {item.year || item.previous_cir_year || "Année inconnue"} · {item.items_count || item.passages_count || 0} passages mémoire
+                        </Badge>
+                      ))
+                    ) : (
+                      <Badge variant="outline" className="text-xs bg-success/10 text-success border-success/30">
+                        CIR précédent enregistré
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               ) : (
-                <>
-                  <div className="rounded-xl border bg-gradient-to-br from-brand/10 to-background p-5 space-y-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="outline" className={comparisonBadgeClass(cirMemorySignal)}>
-                        {cirSignalLabel(cirMemorySignal)}
-                      </Badge>
-                      <Badge variant="outline">
-                        CIR comparé : {cirMemoryPreviousYears.join(", ") || "—"}
-                      </Badge>
-                    </div>
-
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">
-                        Lecture EnnoDiagnostic pour le consultant
-                      </p>
-                      <p className="text-sm leading-7 text-muted-foreground mt-2">
-                        {cirConsultantReading(cirMemorySummary, cirMemoryExplanation, cirMemoryNoveltyScore)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg border border-warning/20 bg-warning/5 p-3">
-                      <p className="text-xs font-semibold text-warning uppercase tracking-wide mb-1">
-                        Point de vigilance CIR
-                      </p>
-                      <p className="text-sm leading-7 text-foreground">
-                        {cirConsultantRisk(cirMemorySummary)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <div className="rounded-xl border bg-white p-4 shadow-sm">
-                      <p className="text-xs text-muted-foreground">Année CIR précédente</p>
-                      <p className="text-lg font-bold mt-2 text-foreground">
-                        {cirMemoryPreviousYears.join(", ") || "—"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border bg-white p-4 shadow-sm">
-                      <p className="text-xs text-muted-foreground">Nouveauté projet</p>
-                      <p className="text-2xl font-bold mt-1 text-brand">
-                        {noveltyPercent(cirMemoryNoveltyScore)}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Différence estimée vs CIR précédent
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border bg-white p-4 shadow-sm">
-                      <p className="text-xs text-muted-foreground">Évolutions détectées</p>
-                      <p className="text-2xl font-bold mt-1 text-warning">
-                        {cirMemorySummary?.evolution_verrou_count ?? cirMemoryEvolutions.length ?? 0}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Points proches du CIR N-1, à valoriser
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border bg-white p-4 shadow-sm">
-                      <p className="text-xs text-muted-foreground">Continuités fortes</p>
-                      <p className="text-2xl font-bold mt-1 text-success">
-                        {cirMemorySummary?.continuity_verrou_count ?? cirMemoryContinuities.length ?? 0}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        À sécuriser si réutilisé
-                      </p>
-                    </div>
-                  </div>
-
-                  <Card className="border-brand/20">
-                    <CardHeader>
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Sparkles className="size-4 text-brand" />
-                        Analyse par verrou
-                      </CardTitle>
-                      <CardDescription className="text-xs">
-                        Chaque carte explique ce qui est proche du CIR précédent, ce qui évolue dans le dossier courant et ce que le consultant doit justifier.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {cirMemoryComparisons.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          Aucune comparaison détaillée disponible.
-                        </p>
-                      ) : (
-                        cirMemoryComparisons.slice(0, 10).map((item: any, index: number) => (
-                          <CirComparisonCard key={`cmp-${index}`} item={item} index={index} />
-                        ))
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  {(cirMemoryNewVerrous.length > 0 || cirMemoryEvolutions.length > 0) && (
-                    <details className="rounded-xl border bg-white p-4">
-                      <summary className="cursor-pointer text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Voir les fragments détectés automatiquement
-                      </summary>
-                      <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                            Fragments classés évolutions
-                          </p>
-                          {cirMemoryEvolutions.slice(0, 6).map((item: any, index: number) => (
-                            <p key={`evo-frag-${index}`} className="text-xs text-muted-foreground whitespace-pre-wrap rounded-md border bg-muted/20 p-2">
-                              {cleanComparisonEvidence(item, 260)}
-                            </p>
-                          ))}
-                        </div>
-
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                            Fragments classés nouveautés
-                          </p>
-                          {cirMemoryNewVerrous.slice(0, 6).map((item: any, index: number) => (
-                            <p key={`new-frag-${index}`} className="text-xs text-muted-foreground whitespace-pre-wrap rounded-md border bg-muted/20 p-2">
-                              {cleanComparisonEvidence(item, 260)}
-                            </p>
-                          ))}
-                        </div>
-                      </div>
-                    </details>
-                  )}
-
-                  {reportSections?.comparaison_cir && (
-                    <details className="rounded-xl border bg-white p-4">
-                      <summary className="cursor-pointer text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Voir la section brute générée dans le rapport
-                      </summary>
-                      <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed font-sans text-muted-foreground">
-                        {cleanDisplayText(reportSections.comparaison_cir)}
-                      </pre>
-                    </details>
-                  )}
-                </>
+                <p className="text-xs text-muted-foreground">
+                  Ajoute un CIR précédent pour lancer la comparaison.
+                </p>
               )}
             </CardContent>
-          </Card>        </TabsContent>
+          </Card>
+
+          <CirPreviousContinuityTab
+            diagnostic={cirContinuityDiagnostic}
+            projectId={project.id}
+            apiBaseUrl={API_BASE_URL}
+            authToken={getAccessToken() || undefined}
+            organisme={project.organisme || ""}
+            projectName={project.project_name || ""}
+            currentYear={project.year || ""}
+          />
+
+          {reportSections?.comparaison_cir && (
+            <details className="rounded-xl border bg-white p-4">
+              <summary className="cursor-pointer text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Voir la section brute générée dans le rapport
+              </summary>
+              <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed font-sans text-muted-foreground">
+                {cleanDisplayText(reportSections.comparaison_cir)}
+              </pre>
+            </details>
+          )}
+        </TabsContent>
 
         <TabsContent value="cir-final-consultant" className="space-y-4">
           <CirFinalConsultantPanel
@@ -3020,9 +3875,65 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                 </div>
               )}
 
+              {scholarGroupingActive && (
+                <Card className="border-brand/30 bg-brand/5">
+                  <CardHeader>
+                    <CardTitle className="text-sm">Regroupement automatique avant EnnoScholar</CardTitle>
+                    <CardDescription className="text-xs">
+                      Les signaux gardés par le consultant ont été regroupés en verrous scientifiques uniques avant la recherche, pour éviter les doublons.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="p-3 rounded-md border bg-background/70">
+                        <p className="text-xs text-muted-foreground">Signaux retenus</p>
+                        <p className="text-xl font-bold mt-1">{scholarGroupingSummary?.input_signals_count ?? selectedVerrousForScholar.length}</p>
+                      </div>
+                      <div className="p-3 rounded-md border bg-background/70">
+                        <p className="text-xs text-muted-foreground">Verrous scientifiques envoyés</p>
+                        <p className="text-xl font-bold mt-1">{scholarGroupingSummary?.grouped_verrous_count ?? scholarResults.length}</p>
+                      </div>
+                      <div className="p-3 rounded-md border bg-background/70">
+                        <p className="text-xs text-muted-foreground">Doublons regroupés</p>
+                        <p className="text-xl font-bold mt-1">{scholarGroupingSummary?.duplicates_removed ?? 0}</p>
+                      </div>
+                    </div>
+
+                    {scholarGroupingGroups.length > 0 && (
+                      <div className="space-y-2">
+                        {scholarGroupingGroups.map((group: any, index: number) => (
+                          <div key={`${group.group_key || group.consolidated_title || index}`} className="p-3 rounded-md border bg-background/80">
+                            <div className="flex items-center gap-2 flex-wrap mb-2">
+                              <Badge variant="outline" className="text-xs">
+                                {group.grouped_count || 1} signal{Number(group.grouped_count || 1) > 1 ? "s" : ""} regroupé{Number(group.grouped_count || 1) > 1 ? "s" : ""}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                {group.profile || "profil scientifique"}
+                              </Badge>
+                            </div>
+                            <p className="text-sm font-medium text-foreground">
+                              {group.consolidated_title || "Verrou scientifique consolidé"}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Regroupe : {(group.grouped_original_titles || []).join(" ; ") || "signal unique"}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Pourquoi : {group.reason || "même objet technique ou même phénomène scientifique détecté dans les sources"}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-sm">Verrous envoyés à EnnoScholar</CardTitle>
+                  <CardTitle className="text-sm">Signaux retenus par le consultant</CardTitle>
+                  <CardDescription className="text-xs">
+                    Cette liste montre la décision du consultant. La recherche EnnoScholar utilise ensuite les verrous scientifiques regroupés ci-dessus.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {selectedVerrousForScholar.length === 0 ? (
@@ -3156,7 +4067,6 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                 <CardHeader>
 
           <div className="mt-6">
-            {project?.id && <EnnoScholarGroupedStateOfArtPanel projectId={project.id} />}
           </div>
 
 
@@ -3231,10 +4141,10 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {reportMarkdown ? (
-                <pre className="whitespace-pre-wrap text-sm leading-relaxed font-sans">
-                  {reportMarkdown}
-                </pre>
+              {(backendMarkdownV93 || reportMarkdown) ? (
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <BackendSectionRendererV93 text={backendMarkdownV93 || reportMarkdown} />
+                </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Aucun rapport disponible. Lance EnnoDiagnostic.

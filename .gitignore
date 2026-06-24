@@ -10,3 +10,9 @@ modules/RAGv1/
 modules/chat/
 modules/NLP.zip
 modules/llm_gateway/
+
+# Python virtual environments
+.venv/
+venv/
+backend_api/.venv/
+backend_api/venv/

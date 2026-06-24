@@ -10,7 +10,7 @@ import re
 import shutil
 import sys
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, undefer
 
 from core.config import settings
 from db.models import DiagnosticRun, Project, Verrou
@@ -104,43 +104,82 @@ def get_project_store(project: Project):
 # ============================================================
 
 def get_uploaded_document_paths(db: Session, project: Project) -> List[str]:
+    """
+    Compatibilité ancienne : retourne les chemins disque si certains documents
+    existent encore physiquement sur disque.
+    """
     paths: List[str] = []
     if Document is None:
         return paths
 
-    try:
-        docs = (
-            db.query(Document)
-            .filter(Document.project_id == project.id)
-            .order_by(Document.created_at.asc())
-            .all()
-        )
-    except Exception:
-        return paths
+    docs = (
+        db.query(Document)
+        .filter(Document.project_id == project.id)
+        .order_by(Document.created_at.asc())
+        .all()
+    )
 
     for doc in docs:
         file_path = getattr(doc, "file_path", None)
-        if file_path and Path(str(file_path)).exists():
+        if file_path and not str(file_path).startswith("db://") and Path(str(file_path)).exists():
             paths.append(str(file_path))
+
     return paths
 
 
 def copy_uploaded_docs_to_project_store(db: Session, project: Project) -> List[str]:
+    """
+    Source officielle des documents = table documents.
+
+    Cas nouveau :
+    - documents.file_data contient le fichier complet BYTEA
+    - on reconstruit les fichiers dans ProjectStore.documents_raw_dir
+    - le NLP/RAG continue ensuite à travailler sur des vrais fichiers locaux
+
+    Cas ancien :
+    - si file_path pointe encore vers un fichier disque réel, on le copie aussi.
+    """
     ps = get_project_store(project)
+    ps.documents_raw_dir.mkdir(parents=True, exist_ok=True)
+
     copied: List[str] = []
 
-    for src in get_uploaded_document_paths(db, project):
-        src_path = Path(src)
-        if not src_path.exists():
+    if Document is None:
+        return copied
+
+    docs = (
+        db.query(Document)
+        .options(undefer(Document.file_data))
+        .filter(Document.project_id == project.id)
+        .order_by(Document.created_at.asc())
+        .all()
+    )
+
+    for doc in docs:
+        stored_name = getattr(doc, "stored_filename", None) or getattr(doc, "filename", None) or f"document_{doc.id}"
+        safe_name = re.sub(r'[\\/:*?"<>|]+', "_", str(stored_name)).strip() or f"document_{doc.id}"
+        dst = ps.documents_raw_dir / safe_name
+
+        file_data = getattr(doc, "file_data", None)
+
+        if file_data:
+            dst.write_bytes(bytes(file_data))
+            copied.append(str(dst))
             continue
-        dst = ps.documents_raw_dir / src_path.name
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        if src_path.resolve() != dst.resolve() and not dst.exists():
-            shutil.copy2(src_path, dst)
-        copied.append(str(dst))
+
+        file_path = getattr(doc, "file_path", None)
+        if file_path and not str(file_path).startswith("db://"):
+            src_path = Path(str(file_path))
+            if src_path.exists() and src_path.is_file():
+                if src_path.resolve() != dst.resolve():
+                    shutil.copy2(src_path, dst)
+                copied.append(str(dst))
+
+    print(f"✅ Documents reconstruits depuis PostgreSQL vers raw : {len(copied)}")
+    for path in copied[:20]:
+        print(f"   - {path}")
 
     return copied
-
 
 # ============================================================
 # Diagnostic paths
@@ -679,7 +718,7 @@ def run_ennodiagnostic_agent_only(db: Session, project: Project) -> DiagnosticRu
         selected_verrous_path=str(paths["selected_verrous"]) if paths["selected_verrous"].exists() else None,
         raw_result_json=sanitize_json_value({
             "button": "ennodiagnostic_agent_only",
-            "pipeline": "chroma_score_ia_memory_cir_ennodiagnostic_agent",
+            "pipeline": "chroma_score_ia_style_memory_llm_reformulation_ennodiagnostic_agent",
             "prepare_sources_report": prepare_report,
             "script_or_pipeline_result": {
                 "report": report,
@@ -812,14 +851,69 @@ def _pick_report_from_run_data(data: Dict[str, Any]) -> Dict[str, Any]:
 
 def _collect_clean_chroma_verrous_from_report(report: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Source unique pour la validation consultant :
-    report.chroma_sections.verrous
+    Source prioritaire pour la validation consultant :
+    report.llm_reformulated_verrous
 
     Pourquoi ?
-    - Ce sont les verrous consolidés par l'agent/RAG.
-    - Les passages NLP bruts restent des preuves, pas des verrous à valider.
-    - Cela évite les doublons et les faux verrous affichés dans React.
+    - Frascati/NLP donne des signaux bruts et des scores.
+    - EnnoDiagnostic LLM reformule ces signaux en titres CIR lisibles.
+    - Le consultant doit valider les titres reformulés, pas les thèmes bruts Chroma.
+
+    Fallback conservé : report.chroma_sections.verrous si l'ancien agent ne fournit pas
+    encore llm_reformulated_verrous.
     """
+
+    def normalize_candidate(item: Dict[str, Any], source_name: str) -> Optional[Dict[str, Any]]:
+        title = _clean_text(
+            item.get("title")
+            or item.get("llm_title")
+            or item.get("verrou_title")
+            or item.get("theme_label"),
+            500,
+        )
+        if not title:
+            return None
+
+        score = _to_float(item.get("score") or item.get("frascati_score"))
+        decision = _clean_text(item.get("frascati_decision") or item.get("decision") or "verrou_a_verifier", 100)
+        tag = item.get("tag_cir") or _tag_from_score(score, decision)
+
+        source_json = item.get("source_json") if isinstance(item.get("source_json"), dict) else dict(item)
+        source_json["validation_source"] = source_name
+        source_json["display_title_source"] = "LLM reformulation" if source_name == "report.llm_reformulated_verrous" else "Chroma fallback"
+
+        return sanitize_json_value({
+            "title": title,
+            "tag_cir": tag,
+            "score": score,
+            "justification": _clean_text(item.get("justification") or item.get("text") or item.get("llm_block"), 1800),
+            "document": _clean_text(item.get("document") or "Sources Chroma", 800),
+            "text": _clean_text(item.get("text") or item.get("justification") or "", 2500),
+            "frascati_decision": decision,
+            "consultant_status": item.get("consultant_status") or "a_valider",
+            "source_json": sanitize_json_value(source_json),
+        })
+
+    # 1) Nouveau flux V120 : titres reformulés par LLM + preuves Chroma.
+    llm_items = report.get("llm_reformulated_verrous")
+    if isinstance(llm_items, list) and llm_items:
+        clean: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in llm_items:
+            if not isinstance(item, dict):
+                continue
+            normalized = normalize_candidate(item, "report.llm_reformulated_verrous")
+            if not normalized:
+                continue
+            key = str(normalized.get("title") or "").lower().strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            clean.append(normalized)
+        if clean:
+            return clean
+
+    # 2) Fallback ancien flux : chunks Chroma rôle verrou.
     sections = report.get("chroma_sections")
     if not isinstance(sections, dict):
         return []
@@ -843,7 +937,6 @@ def _collect_clean_chroma_verrous_from_report(report: Dict[str, Any]) -> List[Di
 
         title = theme_label or final_role
         if not title:
-            # Dernier fallback : ne jamais prendre tout un passage brut comme titre.
             text_preview = _clean_text(item.get("text") or item.get("source_text"), 180)
             title = text_preview or "Verrou à vérifier"
 
@@ -888,6 +981,7 @@ def _collect_clean_chroma_verrous_from_report(report: Dict[str, Any]) -> List[Di
                     "frascati_decision": decision,
                     "source_json": {
                         "source": "report.chroma_sections.verrous",
+                        "validation_source": "fallback_chroma_sections_verrous",
                         "text": text,
                         "metadata": meta,
                     },
@@ -896,7 +990,6 @@ def _collect_clean_chroma_verrous_from_report(report: Dict[str, Any]) -> List[Di
         )
 
     return clean
-
 
 def sync_verrous_from_diagnostic(db: Session, run: DiagnosticRun) -> List[Verrou]:
     """

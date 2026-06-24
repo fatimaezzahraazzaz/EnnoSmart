@@ -39,6 +39,15 @@ export type AppPage =
   | "scholar"
   | "chat"
 
+export type NewProjectPreset = {
+  organisme?: string
+  lockOrganisme?: boolean
+}
+
+export type NavigateOptions = {
+  newProjectPreset?: NewProjectPreset | null
+}
+
 interface AppShellProps {
   user: UserRead
   onLogout: () => void
@@ -66,8 +75,16 @@ function getInitials(fullName: string) {
 export default function AppShell({ user, onLogout }: AppShellProps) {
   const [activePage, setActivePage] = useState<AppPage>("dashboard")
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [newProjectPreset, setNewProjectPreset] =
+    useState<NewProjectPreset | null>(null)
 
-  const navigateTo = (page: AppPage) => {
+  const navigateTo = (page: AppPage, options?: NavigateOptions) => {
+    if (page === "new-project") {
+      setNewProjectPreset(options?.newProjectPreset ?? null)
+    } else {
+      setNewProjectPreset(null)
+    }
+
     setActivePage(page)
     setSidebarOpen(false)
   }
@@ -81,7 +98,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       case "project-detail":
         return <ProjectDetailPage navigateTo={navigateTo} />
       case "new-project":
-        return <NewProjectPage navigateTo={navigateTo} />
+        return (
+          <NewProjectPage
+            navigateTo={navigateTo}
+            preset={newProjectPreset}
+          />
+        )
       case "upload":
         return <UploadPage navigateTo={navigateTo} />
       case "diagnosis":

@@ -1,0 +1,188 @@
+# -*- coding: utf-8 -*-
+"""
+document_type_classifier.py — version universelle sans perte d'information
+
+But :
+- typer chaque document de manière générique, sans règle liée à un projet précis ;
+- conserver le type documentaire pour l'affichage et la traçabilité ;
+- ne jamais empêcher l'extraction NLP des rôles objectif/verrou/méthode/résultat/limite
+  uniquement à cause du type document ;
+- éviter de classer abusivement les plans, pièces, assemblages et nomenclatures comme
+  normes/réglementation ;
+- distinguer un CIR final validé d'un pré-CIR client.
+"""
+from __future__ import annotations
+
+import re
+import unicodedata
+from pathlib import Path
+from typing import Any, Dict
+
+
+def _norm(s: str) -> str:
+    s = str(s or "").lower()
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = s.replace("’", "'").replace("`", "'").replace("´", "'")
+    s = re.sub(r"[^a-z0-9]+", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _has(pattern: str, text: str) -> bool:
+    return re.search(pattern, text, flags=re.IGNORECASE) is not None
+
+
+# Important : toutes les sources non-CIR-final sont extractibles.
+# source_policy n'est plus un verrou d'extraction ; c'est seulement une indication d'usage.
+TYPE_CONFIG = {
+    "pre_cir_client": {"policy": "core_or_useful", "weight": 1.30},
+    "cir_final_validated": {"policy": "memory_only", "weight": 1.00},
+    "concept_projet": {"policy": "core_or_useful", "weight": 1.25},
+    "note_projet": {"policy": "core_or_useful", "weight": 1.15},
+    "presentation_projet": {"policy": "core_or_useful", "weight": 1.05},
+    "rapport_test": {"policy": "core_or_useful", "weight": 1.20},
+    "resultats_mesures": {"policy": "core_or_useful", "weight": 1.20},
+    "brevet_invention": {"policy": "core_or_useful", "weight": 1.20},
+    "preuve_depot": {"policy": "core_or_useful", "weight": 1.05},
+    "methodologie_protocole": {"policy": "core_or_useful", "weight": 0.95},
+    "notice_memoire_technique": {"policy": "core_or_useful", "weight": 0.95},
+    "etat_art_bibliographie": {"policy": "core_or_useful", "weight": 0.90},
+    "norme_reglementation": {"policy": "core_or_useful", "weight": 0.90},
+    "plan_schema": {"policy": "core_or_useful", "weight": 0.95},
+    "administratif": {"policy": "core_or_useful", "weight": 0.75},
+    "template_formulaire": {"policy": "core_or_useful", "weight": 0.75},
+    "unknown_document": {"policy": "core_or_useful", "weight": 0.90},
+}
+
+
+def _make(doc_type: str, confidence: float, reason: str) -> Dict[str, Any]:
+    cfg = TYPE_CONFIG.get(doc_type, TYPE_CONFIG["unknown_document"])
+    return {
+        "document_type": doc_type,
+        "document_type_confidence": float(confidence),
+        "source_policy": cfg["policy"],
+        "document_weight": float(cfg["weight"]),
+        "document_type_reason": reason,
+        "extractable_for_roles": doc_type != "cir_final_validated",
+    }
+
+
+def _is_cir_context(joined: str) -> bool:
+    return _has(
+        r"\b(cir|credit impot recherche|credit d impot recherche|dossier cir|fiche cir|declaration cir)\b",
+        joined,
+    )
+
+
+def _looks_like_technical_drawing_or_part(name: str, joined: str) -> bool:
+    """Détection générique des plans, pièces, assemblages et nomenclatures techniques.
+
+    Cette règle n'est liée à aucun projet. Elle évite qu'un plan avec un numéro,
+    une matière ou une référence soit classé en norme/réglementation.
+    """
+    technical_name = _has(
+        r"\b(plan|schema|sch[ée]ma|dessin|coupe|ensemble|assemblage|mecanisme|m[ée]canisme|"
+        r"nomenclature|piece|pi[eè]ce|composant|sous ensemble|eclateur|[ée]clateur|"
+        r"separateur|s[ée]parateur|refrigerant|r[ée]frig[ée]rant|contrepoids|"
+        r"fonderie|usinage|percage|per[çc]age|cavite|cavit[ée]|tube|tubulaire)\b",
+        name,
+    )
+    drawing_markers = _has(r"\b(a0|a1|a2|a3|a4|rev|indice|echelle|[ée]chelle|matiere|mati[èe]re)\b", joined)
+    short_structured = len(joined) < 6500 and _has(r"\b(ref|r[ée]f|revision|r[ée]vision|masse|cdg|diametre|diam[èe]tre|\bo\d|ø|bar)\b", joined)
+    return bool(technical_name and (drawing_markers or short_structured or len(joined) < 5000))
+
+
+def _looks_like_norm_or_regulation(joined: str) -> bool:
+    """Détection normes/réglementation sans confondre 'en 2023' avec une norme EN."""
+    return _has(
+        r"\b(norme|standard|reglement|r[èe]glement|reglementation|r[èe]glementation|certification|label)\b"
+        r"|\b(iso|astm|iec|ieee|nf\s?[a-z0-9]*|en\s?iso\s?\d{2,}|norme\s+en\s?\d{2,})\b",
+        joined,
+    )
+
+
+def classify_document_type(doc: Dict[str, Any]) -> Dict[str, Any]:
+    name_raw = str(doc.get("document") or doc.get("file_name") or "")
+    name = _norm(Path(name_raw).name)
+    text = _norm(str(doc.get("text") or "")[:12000])
+    joined = f"{name} {text}"
+    origin = str(doc.get("content_origin") or "unknown")
+    has_cir = _is_cir_context(joined)
+
+    pre_cir_signal = _has(
+        r"\b(pre cir|pre-cir|pre dossier cir|pre dossier|preparation cir|preparatoire cir|"
+        r"brouillon cir|draft cir|note cir|fiche cir preparatoire|elements cir|element cir|"
+        r"trame cir|projet de dossier cir|dossier cir provisoire|version provisoire cir|"
+        r"cir provisoire|premiere version cir)\b",
+        joined,
+    )
+    final_validated_signal = _has(
+        r"\b(cir final|dossier cir final|version finale du cir|dossier cir valide|dossier cir validee|"
+        r"cir valide|declaration cir|declaration de cir|declaration credit impot recherche|"
+        r"cir n 1|cir n-1|annee precedente|exercice precedent)\b",
+        joined,
+    )
+    filename_final_signal = has_cir and _has(r"\b(vf|final|version finale)\b", name)
+
+    if has_cir and final_validated_signal:
+        return _make("cir_final_validated", 0.96, "CIR final validé / CIR précédent / déclaration CIR")
+    if has_cir and pre_cir_signal:
+        return _make("pre_cir_client", 0.94, "pré-CIR client / brouillon CIR à exploiter comme brut structuré")
+    if filename_final_signal and not pre_cir_signal:
+        return _make("cir_final_validated", 0.90, "CIR avec signal de version finale dans le nom")
+
+    # Ordre important : plans/pièces techniques avant normes, sinon beaucoup de plans deviennent faux context_only.
+    if _looks_like_technical_drawing_or_part(name, joined):
+        return _make("plan_schema", 0.90, "plan / schéma / pièce / assemblage technique extractible")
+
+    if _has(r"\b(concept|concepts|prototype|prototypage|solution retenue|solution technique|architecture de solution|choix technique|conception|red[ée]finition|developpement|d[ée]veloppement)\b", joined):
+        return _make("concept_projet", 0.92, "concept/prototype/solution technique")
+    if _has(r"\b(note de cadrage|cadrage|brief|expression besoin|expression du besoin|fiche projet|note projet|cdc|cahier des charges)\b", joined):
+        return _make("note_projet", 0.92, "note projet / cadrage")
+    if _has(r"\b(presentation|slides?|pptx|avancement|point projet|travaux)\b", joined):
+        return _make("presentation_projet", 0.88, "présentation / avancement")
+    if _has(r"\b(brevet|invention|inventeur|revendication|claims?|patent|inpi|propriete industrielle)\b", joined):
+        return _make("brevet_invention", 0.92, "brevet / invention")
+    if _has(r"\b(depot|d[ée]p[ôo]t|recepisse|r[ée]c[ée]piss[ée]|horodatage|preuve de depot)\b", joined):
+        return _make("preuve_depot", 0.86, "preuve de dépôt / traçabilité")
+    if _has(r"\b(rapport d essais?|rapport de tests?|pv d essais?|compte rendu d essais?|compte-rendu d essais?|resultats d essais?|mesures?|campagne de mesure|validation experimentale|test de validation|essais?|relev[ée]s?)\b", joined):
+        return _make("rapport_test", 0.90, "rapport test / mesures")
+    if _has(r"\b(resultats?|metriques?|m[ée]triques?|performances?|courbes?|graphiques?|tableau comparatif|comparaison)\b", name):
+        return _make("resultats_mesures", 0.85, "résultats / métriques dans le nom")
+    if _has(r"\b(methodologie|m[ée]thodologie|protocole|demarche|d[ée]marche|plan d essais|plan de test|procedure|proc[ée]dure|mode operatoire|mode op[ée]ratoire)\b", joined):
+        return _make("methodologie_protocole", 0.82, "méthodologie / protocole")
+    if _has(r"\b(benchmark|comparatif|baseline|etat de l art|state of art|survey|review|bibliographie|references|r[ée]f[ée]rences|article scientifique|publication|doi|arxiv|ieee)\b", joined):
+        return _make("etat_art_bibliographie", 0.82, "état de l'art / bibliographie")
+    if _looks_like_norm_or_regulation(joined):
+        return _make("norme_reglementation", 0.86, "norme / certification / réglementation extractible")
+    if _has(r"\b(notice|memoire|m[ée]moire|descriptif|explicatif|technique|dce|pro|aps|apd|doe|aor)\b", joined):
+        return _make("notice_memoire_technique", 0.80, "notice / mémoire technique")
+    if _has(r"\b(cerfa|budget|facture|devis|planning|calendrier|administratif|contrat|marche|march[ée]|honoraires|annexe financiere|finance)\b", joined):
+        return _make("administratif", 0.78, "administratif / planning / financier extractible mais pondéré")
+    if _has(r"\b(template|trame|modele|mod[èe]le|formulaire|exemple|a remplir|à remplir)\b", joined):
+        return _make("template_formulaire", 0.85, "template / formulaire extractible mais pondéré")
+
+    if origin == "project_core":
+        return _make("note_projet", 0.70, "content_origin project_core")
+    if origin == "state_of_art":
+        return _make("etat_art_bibliographie", 0.70, "content_origin state_of_art")
+    if origin == "metadata":
+        return _make("administratif", 0.65, "content_origin metadata")
+    return _make("unknown_document", 0.50, "fallback extractible")
+
+
+def enrich_document_type(doc: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(doc or {})
+    info = classify_document_type(out)
+    out.update(info)
+    out["source_weight"] = float(out.get("source_weight") or info.get("document_weight") or 0.90)
+
+    if info["document_type"] == "pre_cir_client":
+        out["pre_cir_client"] = True
+        out["needs_human_validation"] = True
+        out["validation_status"] = out.get("validation_status") or "consultant_required"
+        out["content_origin"] = out.get("content_origin") or "client_pre_cir"
+    if info["document_type"] == "cir_final_validated":
+        out["cir_final_validated"] = True
+        out["content_origin"] = out.get("content_origin") or "cir_final_validated"
+    return out

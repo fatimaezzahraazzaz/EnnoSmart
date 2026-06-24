@@ -28,15 +28,6 @@ from services.project_service import get_project_for_user
 router = APIRouter(tags=["ennodiagnostic"])
 
 
-TGM100_OBJECTIVE_EXACT = """Développer et valider une architecture de compresseur TGM100 intégrant :
-
-- une aspiration acoustique déportée optimisée pour réduire le bruit et les vibrations ;
-- un système de réfrigérant du 1ᵉʳ étage amélioré (diamètre interne, géométrie des tubes) afin de maîtriser les températures de fonctionnement ;
-- un dispositif de contrepoids sans plomb garantissant l’équilibrage dynamique du vilebrequin ;
-- une solution de réduction du soufflage carter qui préserve l’étanchéité et la puissance du compresseur.
-
-Le tout doit être démontré par essais en condition réelle et par analyses de fiabilité."""
-
 
 def _latest_run_for_project(db: Session, project_id: int) -> DiagnosticRun | None:
     return (
@@ -99,19 +90,9 @@ def _replace_section(markdown: str, section_title: str, body: str) -> str:
     return (markdown.rstrip() + "\n\n" + new_block).strip()
 
 
-def _force_tgm100_objective(content: str) -> str:
-    """
-    Force uniquement l'objectif global TGM100 à la forme validée type Streamlit.
-    """
-    content = _clean(content)
-    if "tgm100" not in content.lower():
-        return content
-
-    return _replace_section(
-        markdown=content,
-        section_title="Objectif global reformulé",
-        body=TGM100_OBJECTIVE_EXACT,
-    )
+def _normalize_agent_report_content(content: str) -> str:
+    """Normalisation générique du rapport agent, sans forcer d'objectif projet."""
+    return _clean(content)
 
 
 def _extract_latest_run_report(latest_run: DiagnosticRun | None) -> tuple[Dict[str, Any], str]:
@@ -143,7 +124,7 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
     if not content:
         return display
 
-    content = _force_tgm100_objective(content)
+    content = _normalize_agent_report_content(content)
     sections = _extract_sections(content)
 
     display["source"] = "ennodiagnostic_agent"
@@ -184,9 +165,6 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
         }
 
     display["forced_from_latest_run"] = True
-    display["forced_tgm100_objective_v22"] = True
-
-
 
     # Comparaison documentaire brute exposée au frontend.
     doc_compare_index = {}
@@ -333,8 +311,7 @@ def get_latest_diagnostic(
 
     display = build_diagnostic_display(project, bundle)
 
-    # V22 : on force toujours depuis latest_run si le rapport existe.
-    # Comme ça on évite que display retombe sur les anciens objectifs bruts.
+    # On privilégie le rapport agent le plus récent si disponible.
     display = _force_display_from_latest_run(display, latest_run, project=project)
 
     latest_run_dump = None
@@ -366,7 +343,7 @@ def get_latest_diagnostic(
                 VerrouRead.model_validate(v).model_dump() for v in latest_verrous
             ],
             "source_policy": {
-                "diagnostic_display_source": "V22 forced from latest_run.raw_result_json.script_or_pipeline_result.report.diagnostic.content",
+                "diagnostic_display_source": "latest_run.raw_result_json.script_or_pipeline_result.report.diagnostic.content",
                 "validation_source": "validation_verrous or /projects/{id}/verrous",
                 "note": "Flow simple : prepare-sources prépare extraction/NLP/RAG ; run-agent lance seulement l’agent EnnoDiagnostic. /diagnostic/run garde le mode complet en un bouton.",
             },
@@ -773,6 +750,101 @@ def compare_with_previous_cir(
         )
 
 
+
+
+@router.post("/projects/{project_id}/cir-previous/compare-current")
+def compare_current_with_previous_cir_independent(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Lance uniquement la comparaison CIR précédent.
+
+    Cette route ne lance pas EnnoDiagnostic, ne relance pas le LLM diagnostic,
+    ne relance pas le score IA et ne refait pas le NLP.
+    Elle compare le nlp_result.json courant déjà préparé avec la mémoire CIR N-1.
+    """
+    project = get_project_for_user(db, project_id, current_user)
+
+    try:
+        from services.diagnostic_service import get_project_store
+        from modules.CIR_MEMORY.cir_memory import compare_current_raw_with_cir_memory
+
+        ps = get_project_store(project)
+        nlp_path = ps.nlp_dir / "nlp_result.json"
+
+        if not nlp_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="nlp_result.json introuvable. Lance d'abord Préparer les sources.",
+            )
+
+        report = compare_current_raw_with_cir_memory(
+            organisme=project.organisme,
+            project=project.project_name,
+            year=str(project.year),
+            nlp_result_path=nlp_path,
+        )
+
+        return sanitize_json_value(report)
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Comparaison CIR précédent impossible : {exc}",
+        )
+
+
+@router.get("/projects/{project_id}/cir-previous/comparison-latest")
+def get_latest_previous_cir_comparison(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Lit le dernier rapport de comparaison CIR précédent sauvegardé.
+    Ne lance aucun calcul.
+    """
+    project = get_project_for_user(db, project_id, current_user)
+
+    try:
+        from modules.CIR_MEMORY.cir_memory import comparison_report_path
+
+        path = comparison_report_path(project.organisme, project.project_name, str(project.year))
+        if not path.exists():
+            return sanitize_json_value({
+                "ok": False,
+                "missing": True,
+                "has_previous_cir": False,
+                "message": "Aucune comparaison CIR précédent sauvegardée pour ce projet.",
+                "report_path": str(path),
+            })
+
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Rapport CIR précédent illisible : {exc}",
+            )
+
+        if isinstance(report, dict):
+            report["report_path"] = str(path)
+            report["loaded_from_saved_report"] = True
+
+        return sanitize_json_value(report)
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lecture comparaison CIR précédent impossible : {exc}",
+        )
+
 @router.post("/projects/{project_id}/diagnostic/prepare-sources")
 def prepare_diagnostic_sources(
     project_id: int,
@@ -1044,7 +1116,7 @@ def _split_cir_final_into_items(text: str, filename: str) -> Dict[str, Any]:
             current_title = first_line[:180]
 
         # On évite les pages, pieds de page et bouts trop courts.
-        p = re.sub(r"(?i)GIRODIN-SAUER\s*-\s*CONFIDENTIEL\s*PAGE\s*\d+", "", p).strip()
+        p = re.sub(r"(?i).*confidentiel\s*page\s*\d+", "", p).strip()
         p = re.sub(r"(?i)Ce document est la propriété.*", "", p).strip()
         if len(p) < 80:
             continue

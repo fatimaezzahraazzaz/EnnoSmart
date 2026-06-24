@@ -25,6 +25,7 @@ import {
   getArticles,
   getProjects,
   getScholarLatest,
+  getStateOfArtHistory,
   updateArticleDecision,
   type ArticleRead,
   type ProjectRead,
@@ -417,11 +418,55 @@ function v46Short(value: any, max = 260): string {
   return s.length > max ? `${s.slice(0, max)}...` : s
 }
 
-function getArticleVerrouTitle(article: ArticleRead): string {
+function getArticleGrouping(article: ArticleRead, groupingGroups: any[] = []) {
+  if (!Array.isArray(groupingGroups) || groupingGroups.length === 0) return null
+
   const sj: any = article.source_json || {}
+  const validation: any = sj.verrou_scientific_validation || {}
+
+  const ids = [
+    (article as any).verrou_id,
+    validation.verrou_id,
+    sj.verrou_id,
+    sj.db_verrou_id,
+    sj.db_article_id,
+  ]
+    .filter((value) => value !== null && value !== undefined && String(value).trim())
+    .map((value) => String(value).trim())
+
+  const titleCandidates = [
+    validation.verrou_title,
+    sj?.scientific_intent?.verrou_title,
+    sj?.verrou_title,
+    sj?.enriched_title,
+    (article as any)?.verrou_title,
+  ].map((value) => v46Norm(value))
+
+  return (
+    groupingGroups.find((group: any) => {
+      const groupedDbIds = (group?.grouped_db_verrou_ids || []).map((value: any) => String(value).trim())
+      const groupedSourceIds = (group?.grouped_source_verrou_ids || []).map((value: any) => String(value).trim())
+      const groupedIds = [...groupedDbIds, ...groupedSourceIds]
+
+      if (ids.some((id) => groupedIds.includes(id))) return true
+
+      const groupedTitle = v46Norm(group?.consolidated_title)
+      if (groupedTitle && titleCandidates.includes(groupedTitle)) return true
+
+      return false
+    }) || null
+  )
+}
+
+function getArticleVerrouTitle(article: ArticleRead, groupingGroups: any[] = []): string {
+  const sj: any = article.source_json || {}
+  const validation: any = sj.verrou_scientific_validation || {}
+  const grouping = getArticleGrouping(article, groupingGroups)
 
   return v46Short(
-    sj?.scientific_intent?.verrou_title ||
+    grouping?.consolidated_title ||
+      validation?.verrou_title ||
+      sj?.scientific_intent?.verrou_title ||
       sj?.scientific_intent?.title ||
       sj?.verrou_title ||
       sj?.enriched_title ||
@@ -452,10 +497,17 @@ function getArticleOriginalSignal(article: ArticleRead): string {
   )
 }
 
-function getArticleVerrouKey(article: ArticleRead): string {
+function getArticleVerrouKey(article: ArticleRead, groupingGroups: any[] = []): string {
   const sj: any = article.source_json || {}
+  const grouping = getArticleGrouping(article, groupingGroups)
+
+  if (grouping?.group_key) return `group:${String(grouping.group_key)}`
+  if (grouping?.consolidated_title) return `group-title:${v46Norm(grouping.consolidated_title).slice(0, 180)}`
+
+  const validation: any = sj.verrou_scientific_validation || {}
   const explicit =
     sj?.scientific_intent?.verrou_id ||
+    validation?.verrou_id ||
     sj?.verrou_id ||
     sj?.verrou_key ||
     sj?.group_id ||
@@ -465,7 +517,7 @@ function getArticleVerrouKey(article: ArticleRead): string {
     return `id:${String(explicit).trim()}`
   }
 
-  const title = getArticleVerrouTitle(article)
+  const title = getArticleVerrouTitle(article, groupingGroups)
   return `title:${v46Norm(title).slice(0, 160)}`
 }
 
@@ -484,12 +536,16 @@ function getArticleUniqueKey(article: ArticleRead): string {
   return `title:${v46Norm(article.title).slice(0, 180)}:${article.year || ""}`
 }
 
-function groupArticlesByScientificVerrou(articles: ArticleRead[]) {
+function groupArticlesByScientificVerrou(articles: ArticleRead[], groupingGroups: any[] = []) {
   const groups = new Map<
     string,
     {
       key: string
       title: string
+      profile?: string
+      reason?: string
+      groupedCount?: number
+      groupedIds?: string[]
       signals: string[]
       articles: ArticleRead[]
       seenArticles: Set<string>
@@ -497,13 +553,18 @@ function groupArticlesByScientificVerrou(articles: ArticleRead[]) {
   >()
 
   for (const article of articles) {
-    const key = getArticleVerrouKey(article)
-    const title = getArticleVerrouTitle(article)
+    const grouping = getArticleGrouping(article, groupingGroups)
+    const key = getArticleVerrouKey(article, groupingGroups)
+    const title = getArticleVerrouTitle(article, groupingGroups)
 
     if (!groups.has(key)) {
       groups.set(key, {
         key,
         title,
+        profile: grouping?.profile,
+        reason: grouping?.reason,
+        groupedCount: Number(grouping?.grouped_count || 1),
+        groupedIds: grouping?.grouped_db_verrou_ids || grouping?.grouped_source_verrou_ids || [],
         signals: [],
         articles: [],
         seenArticles: new Set<string>(),
@@ -511,8 +572,19 @@ function groupArticlesByScientificVerrou(articles: ArticleRead[]) {
     }
 
     const group = groups.get(key)!
-    const signal = getArticleOriginalSignal(article)
 
+    const groupingSignals = Array.isArray(grouping?.grouped_original_titles)
+      ? grouping.grouped_original_titles
+      : []
+
+    for (const item of groupingSignals) {
+      const signal = v46Short(item, 260)
+      if (signal && !group.signals.some((x) => v46Norm(x) === v46Norm(signal))) {
+        group.signals.push(signal)
+      }
+    }
+
+    const signal = getArticleOriginalSignal(article)
     if (signal && !group.signals.some((item) => v46Norm(item) === v46Norm(signal))) {
       group.signals.push(signal)
     }
@@ -527,13 +599,11 @@ function groupArticlesByScientificVerrou(articles: ArticleRead[]) {
   return Array.from(groups.values())
     .map((group) => ({
       ...group,
-      signals: group.signals.slice(0, 8),
+      signals: group.signals.slice(0, 12),
       articles: sortArticles(group.articles),
     }))
     .sort((a, b) => b.articles.length - a.articles.length)
 }
-
-
 
 function v48ReadCookie(name: string): string {
   if (typeof document === "undefined") return ""
@@ -704,10 +774,12 @@ function EnnoScholarByVerrouSection({
   groups,
   projectId,
   onUpdated,
+  groupingSummary,
 }: {
   groups: ReturnType<typeof groupArticlesByScientificVerrou>
   projectId: number
   onUpdated: (article: ArticleRead) => void
+  groupingSummary?: any
 }) {
   const [selectedVerrouKey, setSelectedVerrouKey] = useState<string>("all")
   const [selectedTag, setSelectedTag] = useState<"all" | "Direct" | "Connexe" | "Fondamental" | "Autres">("all")
@@ -725,6 +797,11 @@ function EnnoScholarByVerrouSection({
     selectedVerrouKey === "all"
       ? "Tous les verrous scientifiques"
       : groups.find((group) => group.key === selectedVerrouKey)?.title || "Verrou sélectionné"
+
+  const selectedVerrouGroup =
+    selectedVerrouKey === "all"
+      ? null
+      : groups.find((group) => group.key === selectedVerrouKey) || null
 
   const writableGroups = filteredGroups
     .map((group) => {
@@ -841,6 +918,23 @@ function EnnoScholarByVerrouSection({
         </CardHeader>
 
         <CardContent className="space-y-4">
+          {groupingSummary?.active && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="rounded-md border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Signaux retenus au départ</p>
+                <p className="text-xl font-bold mt-1">{groupingSummary?.input_signals_count ?? "—"}</p>
+              </div>
+              <div className="rounded-md border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Verrous scientifiques après regroupement</p>
+                <p className="text-xl font-bold mt-1">{groupingSummary?.grouped_verrous_count ?? groups.length}</p>
+              </div>
+              <div className="rounded-md border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Doublons évités</p>
+                <p className="text-xl font-bold mt-1">{groupingSummary?.duplicates_removed ?? 0}</p>
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-3 lg:grid-cols-[1.6fr_1fr]">
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground">Filtre par verrou</p>
@@ -859,12 +953,35 @@ function EnnoScholarByVerrouSection({
             </div>
 
             <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Verrou affiché</p>
+              <p className="text-xs font-medium text-muted-foreground">Nom du verrou affiché</p>
               <div className="rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground">
                 {selectedVerrouTitle}
               </div>
             </div>
           </div>
+
+          {selectedVerrouGroup && (
+            <div className="rounded-md border border-brand/20 bg-background p-3 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="text-xs">
+                  {selectedVerrouGroup.groupedCount || 1} signal{Number(selectedVerrouGroup.groupedCount || 1) > 1 ? "s" : ""} regroupé{Number(selectedVerrouGroup.groupedCount || 1) > 1 ? "s" : ""}
+                </Badge>
+                {selectedVerrouGroup.profile && (
+                  <Badge variant="outline" className="text-xs">
+                    Profil : {selectedVerrouGroup.profile}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Ce que ce verrou regroupe : </span>
+                {selectedVerrouGroup.signals.length > 0 ? selectedVerrouGroup.signals.join(" ; ") : "signal unique"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Pourquoi ce regroupement : </span>
+                {selectedVerrouGroup.reason || "même objet technique ou même phénomène scientifique détecté dans les sources."}
+              </p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Filtre par type d’article</p>
@@ -898,7 +1015,7 @@ function EnnoScholarByVerrouSection({
                   Rédaction de l’état de l’art
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Articles Direct/Connexe utilisés pour l'état de l'art du verrou affiché : {selectedDirectConnexeCount}
+                  Articles Direct/Connexe trouvés automatiquement pour le verrou affiché : {selectedDirectConnexeCount}
                 </p>
               </div>
 
@@ -1005,18 +1122,37 @@ function EnnoScholarByVerrouSection({
             </CardHeader>
 
             <CardContent className="space-y-4">
-              {group.signals.length > 0 && (
-                <div className="p-3 rounded-md bg-muted/40 border border-border">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">
-                    Signaux EnnoDiagnostic liés
+              <div className="p-3 rounded-md bg-muted/40 border border-border space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Regroupement EnnoDiagnostic → EnnoScholar
                   </p>
-                  <ul className="list-disc pl-5 text-xs text-muted-foreground space-y-1">
-                    {group.signals.map((signal) => (
-                      <li key={signal}>{signal}</li>
-                    ))}
-                  </ul>
+                  <Badge variant="outline" className="text-xs">
+                    {group.groupedCount || group.signals.length || 1} signal{Number(group.groupedCount || group.signals.length || 1) > 1 ? "s" : ""}
+                  </Badge>
+                  {group.profile && (
+                    <Badge variant="outline" className="text-xs">
+                      {group.profile}
+                    </Badge>
+                  )}
                 </div>
-              )}
+
+                {group.signals.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-foreground mb-1">Signaux regroupés</p>
+                    <ul className="list-disc pl-5 text-xs text-muted-foreground space-y-1">
+                      {group.signals.map((signal) => (
+                        <li key={signal}>{signal}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Pourquoi : </span>
+                  {group.reason || "les articles sont rattachés au même verrou scientifique consolidé."}
+                </p>
+              </div>
 
               <div className="flex flex-wrap gap-2">
                 <Badge variant="outline" className="bg-success/10 text-success border-success/30">
@@ -1071,6 +1207,152 @@ function v51MarkdownText(value: any): string {
     .trim()
 }
 
+
+function formatStateArtDate(value: any) {
+  if (!value) return "—"
+
+  try {
+    const date = new Date(String(value))
+    if (Number.isNaN(date.getTime())) return String(value)
+    return date.toLocaleString("fr-FR")
+  } catch {
+    return String(value)
+  }
+}
+
+function StateOfArtHistorySection({
+  entries,
+  selectedEntry,
+  selectedRunId,
+  onSelect,
+  projectId,
+}: {
+  entries: any[]
+  selectedEntry: any | null
+  selectedRunId: string | null
+  onSelect: (value: string) => void
+  projectId: number
+}) {
+  if (!entries.length) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>États de l’art rédigés</CardTitle>
+          <CardDescription>
+            Aucun état de l’art rédigé n’a encore été trouvé pour ce projet.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          Lance d’abord une rédaction depuis la sélection d’articles. Le rapport sera ensuite affiché ici.
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const summary = selectedEntry?.summary || {}
+  const report = selectedEntry?.report || null
+  const selectionPayload = selectedEntry?.selection_payload || null
+  const verrousWritten = Number(summary?.verrous_written || report?.verrous_written || 0)
+  const selectedArticlesCount = Number(summary?.selected_articles_count || 0)
+  const usedCitationsCount = Number(summary?.used_citations_count || 0)
+  const results = Array.isArray(report?.results) ? report.results : []
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>États de l’art rédigés</CardTitle>
+          <CardDescription>
+            Historique des rédactions sauvegardées dans outputs/frontend_state_of_art.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">
+                Rédaction disponible
+              </label>
+              <select
+                value={selectedRunId || String(entries[0]?.run_id || "")}
+                onChange={(event) => onSelect(event.target.value)}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              >
+                {entries.map((entry) => {
+                  const s = entry.summary || {}
+                  return (
+                    <option key={String(entry.run_id)} value={String(entry.run_id)}>
+                      {formatStateArtDate(entry.generated_at || entry.updated_at)} — {Number(s.verrous_written || 0)} verrou(x) — {Number(s.selected_articles_count || 0)} article(s)
+                    </option>
+                  )
+                })}
+              </select>
+            </div>
+
+            <div className="text-xs text-muted-foreground">
+              {entries.length} rédaction(s) trouvée(s)
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="rounded-lg border bg-background p-3">
+              <p className="text-xs text-muted-foreground">Verrous rédigés</p>
+              <p className="text-2xl font-semibold">{verrousWritten}</p>
+            </div>
+            <div className="rounded-lg border bg-background p-3">
+              <p className="text-xs text-muted-foreground">Articles sélectionnés</p>
+              <p className="text-2xl font-semibold">{selectedArticlesCount}</p>
+            </div>
+            <div className="rounded-lg border bg-background p-3">
+              <p className="text-xs text-muted-foreground">Articles cités</p>
+              <p className="text-2xl font-semibold">{usedCitationsCount}</p>
+            </div>
+            <div className="rounded-lg border bg-background p-3">
+              <p className="text-xs text-muted-foreground">Mode</p>
+              <p className="text-sm font-semibold">{summary?.writer_mode || report?.writer_mode || "—"}</p>
+              <p className="text-xs text-muted-foreground">LLM : {summary?.llm_used || report?.llm_used ? "oui" : "non"}</p>
+            </div>
+          </div>
+
+          {selectedEntry?.state_of_art_report_path && (
+            <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+              <p className="font-medium text-foreground">Traçabilité</p>
+              <p className="mt-1 break-all">{selectedEntry.state_of_art_report_path}</p>
+            </div>
+          )}
+
+          {results.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Verrous contenus dans cette rédaction</p>
+              <div className="flex flex-wrap gap-2">
+                {results.map((result: any, idx: number) => (
+                  <Badge key={idx} variant="outline" className="max-w-full whitespace-normal text-left">
+                    {result?.verrou_title || result?.structured_state_of_art?.verrou_title || `Verrou ${idx + 1}`}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {report ? (
+        <EnnoScholarStructuredStateArtPanel
+          key={String(selectedEntry?.run_id || "state-art")}
+          projectId={projectId}
+          initialReport={report}
+          selectionPayload={selectionPayload}
+        />
+      ) : (
+        <Card>
+          <CardContent className="p-5 text-sm text-muted-foreground">
+            Rapport introuvable ou illisible.
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
+
 export function EnnoScholarPage() {
   const [activeTab, setActiveTab] = useState("par-verrou")
   const [loading, setLoading] = useState(true)
@@ -1081,6 +1363,22 @@ export function EnnoScholarPage() {
   const [projects, setProjects] = useState<ProjectRead[]>([])
   const [articles, setArticles] = useState<ArticleRead[]>([])
   const [scholarBundle, setScholarBundle] = useState<any>(null)
+  const [stateOfArtHistory, setStateOfArtHistory] = useState<any[]>([])
+  const [selectedStateOfArtRunId, setSelectedStateOfArtRunId] = useState<string | null>(null)
+
+  const scholarPayload = scholarBundle?.bundle?.payload || scholarBundle?.latest_run?.raw_result_json?.payload || {}
+  const scholarReport = scholarBundle?.bundle?.report || scholarBundle?.latest_run?.raw_result_json?.report || {}
+  const scholarSummary = scholarBundle?.bundle?.summary || scholarBundle?.latest_run?.raw_result_json?.summary || {}
+  const scholarGroupingGroups =
+    scholarPayload?.grouping_report?.groups ||
+    scholarReport?.grouping_report?.groups ||
+    scholarSummary?.grouping_report?.groups ||
+    []
+  const scholarGroupingSummary =
+    scholarPayload?.grouping_summary ||
+    scholarReport?.grouping_summary ||
+    scholarSummary?.grouping_summary ||
+    {}
 
   const filtered = useMemo(
     () => sortArticles(filterArticles(articles, query)),
@@ -1090,16 +1388,74 @@ export function EnnoScholarPage() {
   const grouped = useMemo(() => groupArticles(filtered), [filtered])
 
   const groupedByVerrou = useMemo(
-    () => groupArticlesByScientificVerrou(filtered),
-    [filtered]
+    () => groupArticlesByScientificVerrou(filtered, scholarGroupingGroups),
+    [filtered, scholarGroupingGroups]
   )
+  const latestScholarReport = useMemo(() => {
+    const bundle: any = scholarBundle || {}
 
-  const groupedByVerrouArticleCount = groupedByVerrou.reduce(
-    (total, group) => total + group.articles.length,
-    0
-  )
+    if (bundle?.report?.results) return bundle.report
+    if (bundle?.bundle?.report?.results) return bundle.bundle.report
+    if (bundle?.raw_result_json?.report?.results) return bundle.raw_result_json.report
+    if (bundle?.data?.report?.results) return bundle.data.report
+    if (bundle?.results) return bundle
+
+    return null
+  }, [scholarBundle])
+
+  const foundArticleCounts = useMemo(() => {
+    const results = Array.isArray(latestScholarReport?.results) ? latestScholarReport.results : []
+    const counts = {
+      total: 0,
+      direct: 0,
+      connexe: 0,
+      fondamental: 0,
+      horsSujet: 0,
+      autres: 0,
+      directConnexe: 0,
+    }
+
+    for (const result of results) {
+      const items = Array.isArray(result?.articles) ? result.articles : []
+
+      for (const item of items) {
+        counts.total += 1
+        const tag = normalizeTag(item?.tag_article || item?.tag || item?.classification || item?.label || null)
+
+        if (tag === "Direct") counts.direct += 1
+        else if (tag === "Connexe") counts.connexe += 1
+        else if (tag === "Fondamental") counts.fondamental += 1
+        else if (tag === "Hors sujet") counts.horsSujet += 1
+        else counts.autres += 1
+      }
+    }
+
+    counts.directConnexe = counts.direct + counts.connexe
+    return counts
+  }, [latestScholarReport])
+
+  const hasLatestReportArticles = Boolean(latestScholarReport?.results)
+
+  const groupedByVerrouArticleCount = hasLatestReportArticles
+    ? foundArticleCounts.total
+    : groupedByVerrou.reduce(
+        (total, group) => total + group.articles.length,
+        0
+      )
 
   const usefulArticlesCount = groupedByVerrouArticleCount
+
+  const selectedStateOfArtEntry = useMemo(() => {
+    if (!stateOfArtHistory.length) return null
+    return (
+      stateOfArtHistory.find((entry: any) => String(entry?.run_id) === String(selectedStateOfArtRunId)) ||
+      stateOfArtHistory[0]
+    )
+  }, [stateOfArtHistory, selectedStateOfArtRunId])
+  const directArticlesFoundCount = hasLatestReportArticles ? foundArticleCounts.direct : grouped.direct.length
+  const connexeArticlesFoundCount = hasLatestReportArticles ? foundArticleCounts.connexe : grouped.connexe.length
+  const fondamentalArticlesFoundCount = hasLatestReportArticles ? foundArticleCounts.fondamental : grouped.fondamental.length
+  const horsSujetArticlesFoundCount = hasLatestReportArticles ? foundArticleCounts.horsSujet : grouped.horsSujet.length;
 
   const loadData = async () => {
     setLoading(true)
@@ -1112,6 +1468,8 @@ export function EnnoScholarPage() {
       if (projectList.length === 0) {
         setProject(null)
         setArticles([])
+        setStateOfArtHistory([])
+        setSelectedStateOfArtRunId(null)
         return
       }
 
@@ -1122,13 +1480,18 @@ export function EnnoScholarPage() {
       setCurrentProjectId(selectedProject.id)
       setProject(selectedProject)
 
-      const [articlesData, scholarData] = await Promise.all([
+      const [articlesData, scholarData, stateArtData] = await Promise.all([
         getArticles(selectedProject.id),
         getScholarLatest(selectedProject.id).catch(() => null),
+        getStateOfArtHistory(selectedProject.id).catch(() => null),
       ])
+
+      const stateArtReports = Array.isArray(stateArtData?.reports) ? stateArtData.reports : []
 
       setArticles(articlesData)
       setScholarBundle(scholarData)
+      setStateOfArtHistory(stateArtReports)
+      setSelectedStateOfArtRunId(stateArtReports[0]?.run_id ? String(stateArtReports[0].run_id) : null)
     } catch (err) {
       setError(
         err instanceof Error
@@ -1153,13 +1516,18 @@ export function EnnoScholarPage() {
       const selectedProject = projects.find((item) => item.id === projectId) || null
       setProject(selectedProject)
 
-      const [articlesData, scholarData] = await Promise.all([
+      const [articlesData, scholarData, stateArtData] = await Promise.all([
         getArticles(projectId),
         getScholarLatest(projectId).catch(() => null),
+        getStateOfArtHistory(projectId).catch(() => null),
       ])
+
+      const stateArtReports = Array.isArray(stateArtData?.reports) ? stateArtData.reports : []
 
       setArticles(articlesData)
       setScholarBundle(scholarData)
+      setStateOfArtHistory(stateArtReports)
+      setSelectedStateOfArtRunId(stateArtReports[0]?.run_id ? String(stateArtReports[0].run_id) : null)
     } catch (err) {
       setError(
         err instanceof Error
@@ -1276,7 +1644,7 @@ export function EnnoScholarPage() {
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Articles utiles</p>
+            <p className="text-xs text-muted-foreground">Articles trouvés</p>
             <p className="text-2xl font-bold text-foreground mt-1">
               {usefulArticlesCount}
             </p>
@@ -1285,27 +1653,27 @@ export function EnnoScholarPage() {
 
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Directs</p>
+            <p className="text-xs text-muted-foreground">Directs trouvés</p>
             <p className="text-2xl font-bold text-success mt-1">
-              {grouped.direct.length}
+              {directArticlesFoundCount}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Connexes</p>
+            <p className="text-xs text-muted-foreground">Connexes trouvés</p>
             <p className="text-2xl font-bold text-brand mt-1">
-              {grouped.connexe.length}
+              {connexeArticlesFoundCount}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Fondamentaux</p>
+            <p className="text-xs text-muted-foreground">Fondamentaux trouvés</p>
             <p className="text-2xl font-bold text-blue-700 mt-1">
-              {grouped.fondamental.length}
+              {fondamentalArticlesFoundCount}
             </p>
           </CardContent>
         </Card>
@@ -1314,7 +1682,7 @@ export function EnnoScholarPage() {
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">Hors sujet</p>
             <p className="text-2xl font-bold text-muted-foreground mt-1">
-              {grouped.horsSujet.length}
+              {horsSujetArticlesFoundCount}
             </p>
           </CardContent>
         </Card>
@@ -1354,12 +1722,13 @@ export function EnnoScholarPage() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid grid-cols-2 lg:grid-cols-6 h-auto">
+        <TabsList className="grid grid-cols-2 lg:grid-cols-7 h-auto">
           <TabsTrigger value="par-verrou">Par verrou</TabsTrigger>
           <TabsTrigger value="direct">Directs</TabsTrigger>
           <TabsTrigger value="connexe">Connexes</TabsTrigger>
           <TabsTrigger value="fondamental">Fondamentaux</TabsTrigger>
           <TabsTrigger value="selection">Sélection consultant</TabsTrigger>
+          <TabsTrigger value="etat-art-rediges">États de l’art rédigés</TabsTrigger>
           <TabsTrigger value="hors-sujet" disabled={!showHorsSujet}>
             Hors sujet
           </TabsTrigger>
@@ -1370,6 +1739,7 @@ export function EnnoScholarPage() {
             groups={groupedByVerrou}
             projectId={project.id}
             onUpdated={updateLocalArticle}
+            groupingSummary={scholarGroupingSummary}
           />
         </TabsContent>
 
@@ -1410,6 +1780,16 @@ export function EnnoScholarPage() {
             articles={sortArticles(articles.filter((article) => article.consultant_status === "garde"))}
             projectId={project.id}
             onUpdated={updateLocalArticle}
+          />
+        </TabsContent>
+
+        <TabsContent value="etat-art-rediges">
+          <StateOfArtHistorySection
+            entries={stateOfArtHistory}
+            selectedEntry={selectedStateOfArtEntry}
+            selectedRunId={selectedStateOfArtRunId}
+            onSelect={setSelectedStateOfArtRunId}
+            projectId={project.id}
           />
         </TabsContent>
 

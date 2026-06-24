@@ -9,7 +9,7 @@ if str(ROOT_DIR) not in sys.path:
 from services.scholar_service import _extract_articles_from_report
 
 
-DEFAULT_REPORT = Path("C:/EnnoSmart/outputs/safe_rag_upload/Girodin/TGM100/2023/ennoscholar/ennoscholar_report.json")
+DEFAULT_REPORT = Path("ennoscholar_report.json")
 
 
 def load_json(path: Path):

@@ -10,7 +10,7 @@ Ne pas envoyer n'importe quel extrait NLP à EnnoScholar.
 Problème observé :
 - Des paramètres/preuves comme "120 l/min = 7.2m3/h @250bar AVERTISSEMENT..."
   étaient envoyés comme verrous.
-- EnnoScholar cherchait donc des articles sur le débitmètre ou le refrigerant au lieu de chercher
+- EnnoScholar cherchait donc des articles sur le un mauvais objet technique au lieu de chercher
   le vrai problème scientifique.
 
 Méthode :
@@ -54,8 +54,8 @@ TECHNICAL_PROBLEM_MARKERS = {
     "non conforme", "difficile", "instable", "dégradation", "degradation", "usure",
     "erreur", "precision", "précision", "robustesse", "performance",
     # mécanique/physique
-    "fuite", "leakage", "soufflage", "carter", "segmentation", "segment", "sealing", "étanchéité",
-    "etancheite", "frottement", "friction", "vibration", "acoustique", "bruit", "thermal",
+    "technical_issue", "technical_issue", "technical_issue", "technical_issue", "technical_issue", "technical_issue", "technical_issue", "technical_issue",
+    "technical_issue", "frottement", "friction", "vibration", "acoustique", "bruit", "thermal",
     "thermique", "refroidissement", "température", "temperature", "condensat", "séchage",
     # chimie/bio/logiciel/etc.
     "corrosion", "oxydation", "stabilité", "stabilite", "toxicité", "toxicite",

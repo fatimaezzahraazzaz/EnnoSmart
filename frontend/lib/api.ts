@@ -254,6 +254,17 @@ export async function getDiagnosticLatest(projectId: number) {
   return apiRequest<any>(`/projects/${projectId}/diagnostic/latest`)
 }
 
+
+export async function compareCurrentWithPreviousCir(projectId: number) {
+  return apiRequest<any>(`/projects/${projectId}/cir-previous/compare-current`, {
+    method: "POST",
+  })
+}
+
+export async function getPreviousCirComparisonLatest(projectId: number) {
+  return apiRequest<any>(`/projects/${projectId}/cir-previous/comparison-latest`)
+}
+
 export async function importExistingDiagnostic(projectId: number) {
   return apiRequest<any>(`/projects/${projectId}/diagnostic/import-existing`, {
     method: "POST",
@@ -277,6 +288,10 @@ export async function syncVerrous(projectId: number, runId: number) {
 
 export async function getScholarLatest(projectId: number) {
   return apiRequest<any>(`/projects/${projectId}/scholar/latest`)
+}
+
+export async function getStateOfArtHistory(projectId: number) {
+  return apiRequest<any>(`/projects/${projectId}/scholar/state-of-art/history`)
 }
 
 export async function importExistingScholar(projectId: number) {

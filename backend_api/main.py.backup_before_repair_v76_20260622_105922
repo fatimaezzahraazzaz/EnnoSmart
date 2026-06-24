@@ -1,0 +1,59 @@
+from routers.source_preview import router as source_preview_router
+from routers.source_highlight_preview import router as source_highlight_preview_router
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from core.config import settings
+from db.database import Base, engine
+from routers import auth, projects, documents, diagnostic, scholar, scholar_state_of_art_direct
+from routers import cir_final_consultant
+from routers.source_highlight_preview import router as source_highlight_preview_router
+from routers.cir_source_view import router as cir_source_view_router
+from routers.truth_logger import router as truth_logger_router, install_truth_logger
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title=settings.APP_NAME,
+        version="1.0.0",
+        description="Backend API EnnoSmart : auth, projets, documents, EnnoDiagnostic, EnnoScholar.",
+    )
+install_truth_logger(app)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    Base.metadata.create_all(bind=engine)
+
+    app.include_router(auth.router)
+    app.include_router(projects.router)
+    app.include_router(documents.router)
+    app.include_router(diagnostic.router)
+    app.include_router(scholar.router)
+
+    @app.get("/health", tags=["health"])
+    def health_check():
+        return {
+            "status": "ok",
+            "app": settings.APP_NAME,
+            "env": settings.ENV,
+        }
+
+    app.include_router(scholar_state_of_art_direct.router)
+    return app
+
+
+app = create_app()
+
+app.include_router(cir_final_consultant.router)
+app.include_router(source_preview_router)
+app.include_router(source_highlight_preview_router)
+app.include_router(source_highlight_preview_router)
+app.include_router(cir_source_view_router)
+
+app.include_router(truth_logger_router)

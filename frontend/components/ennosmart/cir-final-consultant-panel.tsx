@@ -6,9 +6,20 @@ type Props = {
   projectId: number | string
   apiBaseUrl?: string
   authToken?: string
-  defaultOrganisme?: string
-  defaultProject?: string
-  defaultYear?: string | number
+  defaultOrganisme?: string | null
+  defaultProject?: string | null
+  defaultYear?: string | number | null
+}
+
+type SectionCard = {
+  key: string
+  label: string
+  text: string
+}
+
+function toSafeString(value: unknown): string {
+  if (value === null || value === undefined) return ""
+  return String(value)
 }
 
 function apiUrl(base: string | undefined, path: string) {
@@ -16,18 +27,46 @@ function apiUrl(base: string | undefined, path: string) {
   return `${b}${path}`
 }
 
-function Badge({ children, ok }: { children: React.ReactNode; ok?: boolean }) {
-  return (
-    <span
-      className={
-        ok
-          ? "rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
-          : "rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700"
+function sectionLabel(key: string) {
+  const labels: Record<string, string> = {
+    objectifs_projet: "Objectifs du projet",
+    etat_art: "État de l’art",
+    insuffisances: "Limites des solutions existantes",
+    verrous: "Verrous et incertitudes",
+    demarche_experimentale: "Démarche R&D",
+    travaux_realises: "Travaux réalisés",
+    resultats_obtenus: "Résultats obtenus",
+    conclusion_contribution: "Conclusion et contribution",
+  }
+
+  return labels[key] || key
+}
+
+function buildSections(report: any): SectionCard[] {
+  const full = report?.sections_full || {}
+  const previews = report?.detected_sections || {}
+
+  const keys = [
+    "objectifs_projet",
+    "etat_art",
+    "insuffisances",
+    "verrous",
+    "demarche_experimentale",
+    "travaux_realises",
+    "resultats_obtenus",
+    "conclusion_contribution",
+  ]
+
+  return keys
+    .map((key) => {
+      const text = full?.[key] || previews?.[key]?.preview || ""
+      return {
+        key,
+        label: sectionLabel(key),
+        text: toSafeString(text).trim(),
       }
-    >
-      {children}
-    </span>
-  )
+    })
+    .filter((x) => x.text.length > 0)
 }
 
 export function CirFinalConsultantPanel({
@@ -40,10 +79,12 @@ export function CirFinalConsultantPanel({
 }: Props) {
   const fileRef = useRef<HTMLInputElement | null>(null)
 
-  const [organisme, setOrganisme] = useState(String(defaultOrganisme || ""))
-  const [project, setProject] = useState(String(defaultProject || ""))
-  const [year, setYear] = useState(String(defaultYear || ""))
+  const [organisme, setOrganisme] = useState<string>(() => toSafeString(defaultOrganisme))
+  const [project, setProject] = useState<string>(() => toSafeString(defaultProject))
+  const [year, setYear] = useState<string>(() => toSafeString(defaultYear))
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [fileInputKey, setFileInputKey] = useState<number>(0)
+
   const [loading, setLoading] = useState(false)
   const [report, setReport] = useState<any | null>(null)
   const [error, setError] = useState("")
@@ -62,9 +103,15 @@ export function CirFinalConsultantPanel({
       const data = await res.json()
       if (res.ok && data?.status !== "empty") {
         setReport(data)
+
+        // Remplissage doux des champs seulement s'ils sont vides.
+        // Toujours avec des chaînes pour éviter controlled/uncontrolled.
+        if (!organisme && data?.organisme) setOrganisme(toSafeString(data.organisme))
+        if (!project && data?.project) setProject(toSafeString(data.project))
+        if (!year && data?.year) setYear(toSafeString(data.year))
       }
     } catch {
-      // silencieux
+      // Absence de CIR final enregistré : pas d'erreur affichée.
     }
   }
 
@@ -75,7 +122,7 @@ export function CirFinalConsultantPanel({
 
   async function uploadFinalCir() {
     if (!selectedFile) {
-      setError("Sélectionne d’abord un fichier CIR final.")
+      setError("Veuillez sélectionner un fichier CIR final.")
       return
     }
 
@@ -85,9 +132,9 @@ export function CirFinalConsultantPanel({
     try {
       const form = new FormData()
       form.append("file", selectedFile)
-      form.append("organisme", organisme || "organisme_unknown")
-      form.append("project", project || "project_unknown")
-      form.append("year", year || "unknown")
+      form.append("organisme", organisme.trim() || "organisme_unknown")
+      form.append("project", project.trim() || "project_unknown")
+      form.append("year", year.trim() || "unknown")
 
       const res = await fetch(
         apiUrl(apiBaseUrl, `/projects/${projectId}/cir-final-consultant/upload`),
@@ -103,12 +150,14 @@ export function CirFinalConsultantPanel({
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data?.detail || "Erreur upload CIR final.")
+        throw new Error(data?.detail || "Erreur lors de l’enregistrement du CIR final.")
       }
 
       setReport(data)
       setSelectedFile(null)
 
+      // Reset propre du champ fichier sans le rendre contrôlé.
+      setFileInputKey((x) => x + 1)
       if (fileRef.current) {
         fileRef.current.value = ""
       }
@@ -119,63 +168,51 @@ export function CirFinalConsultantPanel({
     }
   }
 
-  const sections = report?.detected_sections || {}
+  const sections = buildSections(report)
 
   return (
     <div className="space-y-5 rounded-3xl border border-violet-100 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">
-            CIR final consultant
-          </h2>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-            Dépose ici le CIR final validé. Il n’est pas utilisé comme document brut :
-            il alimente la mémoire de style CIR et la mémoire de comparaison N-1.
-          </p>
-        </div>
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900">
+          CIR précédent / CIR final consultant
+        </h2>
 
-        <div className="flex flex-wrap gap-2">
-          <Badge ok={report?.style_memory?.used}>
-            Mémoire de style : {report?.style_memory?.used ? "oui" : "non"}
-          </Badge>
-          <Badge ok={report?.cir_memory?.used}>
-            Mémoire CIR N-1 : {report?.cir_memory?.used ? "oui" : "non"}
-          </Badge>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-        Important : ce fichier représente le livrable final validé par le consultant.
-        Il ne doit pas être mélangé avec les documents bruts analysés par EnnoDiagnostic.
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+          Déposez ici votre version finale du CIR afin de la conserver comme
+          référence pour les futurs dossiers du projet.
+        </p>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
         <input
-          value={organisme}
-          onChange={(e) => setOrganisme(e.target.value)}
-          placeholder="Organisme ex. Girodin"
-          className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          value={organisme ?? ""}
+          onChange={(e) => setOrganisme(e.currentTarget.value ?? "")}
+          placeholder="Organisme"
+          className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-violet-400"
         />
+
         <input
-          value={project}
-          onChange={(e) => setProject(e.target.value)}
-          placeholder="Projet ex. TGM100"
-          className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          value={project ?? ""}
+          onChange={(e) => setProject(e.currentTarget.value ?? "")}
+          placeholder="Projet"
+          className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-violet-400"
         />
+
         <input
-          value={year}
-          onChange={(e) => setYear(e.target.value)}
-          placeholder="Année ex. 2023"
-          className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          value={year ?? ""}
+          onChange={(e) => setYear(e.currentTarget.value ?? "")}
+          placeholder="Année"
+          className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-violet-400"
         />
       </div>
 
       <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
         <input
+          key={fileInputKey}
           ref={fileRef}
           type="file"
           accept=".docx,.pdf,.txt,.md"
-          onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+          onChange={(e) => setSelectedFile(e.currentTarget.files?.[0] || null)}
           className="block w-full text-sm text-slate-700"
         />
 
@@ -183,7 +220,7 @@ export function CirFinalConsultantPanel({
           <button
             onClick={uploadFinalCir}
             disabled={loading || !selectedFile}
-            className="rounded-xl bg-violet-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-xl bg-violet-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? "Enregistrement..." : "Enregistrer le CIR final"}
           </button>
@@ -206,49 +243,50 @@ export function CirFinalConsultantPanel({
         <div className="space-y-4">
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
             <h3 className="font-semibold text-emerald-900">
-              CIR final enregistré
+              CIR final enregistré avec succès
             </h3>
 
-            <div className="mt-2 grid gap-2 text-sm text-emerald-900 md:grid-cols-2">
-              <p><span className="font-medium">Fichier :</span> {report?.file?.name || "-"}</p>
-              <p><span className="font-medium">Texte extrait :</span> {report?.extraction?.text_chars || 0} caractères</p>
-              <p><span className="font-medium">Style memory :</span> {report?.style_memory?.path || "-"}</p>
-              <p><span className="font-medium">CIR memory :</span> {report?.cir_memory?.path || "-"}</p>
+            <p className="mt-1 text-sm leading-6 text-emerald-800">
+              Le document est maintenant disponible comme référence pour ce projet.
+            </p>
+
+            <div className="mt-3 grid gap-2 text-sm text-emerald-900 md:grid-cols-2">
+              <p>
+                <span className="font-medium">Fichier :</span>{" "}
+                {report?.file?.name || "-"}
+              </p>
+
+              <p>
+                <span className="font-medium">Année :</span>{" "}
+                {year || report?.year || "-"}
+              </p>
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            {Object.entries(sections).map(([key, value]: any) => (
-              <div key={key} className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h4 className="text-sm font-semibold text-slate-900">{key}</h4>
-                  <Badge ok={value?.found}>{value?.found ? "détecté" : "non détecté"}</Badge>
-                </div>
-
-                <p className="text-xs text-slate-500">{value?.chars || 0} caractères</p>
-
-                {value?.preview && (
-                  <p className="mt-2 line-clamp-6 text-sm leading-6 text-slate-600">
-                    {value.preview}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {report?.style_memory?.examples_added?.length > 0 && (
-            <div className="rounded-2xl border border-violet-100 bg-violet-50 p-4">
-              <h3 className="font-semibold text-violet-900">
-                Exemples ajoutés à la mémoire de style
+          {sections.length > 0 && (
+            <div>
+              <h3 className="mb-3 text-sm font-semibold text-slate-900">
+                Contenu reconnu dans le CIR
               </h3>
 
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-violet-900">
-                {report.style_memory.examples_added.map((x: any, i: number) => (
-                  <li key={i}>
-                    rôle={x.role} — section={x.section} — {x.chars} caractères
-                  </li>
+              <div className="grid gap-3 md:grid-cols-2">
+                {sections.map((section) => (
+                  <div
+                    key={section.key}
+                    className="rounded-2xl border border-slate-200 bg-white p-4"
+                  >
+                    <h4 className="mb-2 text-sm font-semibold text-slate-900">
+                      {section.label}
+                    </h4>
+
+                    <div className="max-h-72 overflow-y-auto rounded-xl bg-slate-50 p-3">
+                      <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                        {section.text}
+                      </p>
+                    </div>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
         </div>
@@ -256,3 +294,5 @@ export function CirFinalConsultantPanel({
     </div>
   )
 }
+
+export default CirFinalConsultantPanel

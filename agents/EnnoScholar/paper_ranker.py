@@ -177,11 +177,11 @@ def _profile_score(paper: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str, A
         score += points
         matched.append(term)
 
-    if profile == "blowby_segments_crankcase":
+    if profile == "legacy_domain_profile_disabled":
         if _contains(nt, "reciprocating compressor", "compressor"):
             add(0.20, "compressor")
-        if _contains(nt, "piston ring", "piston rings", "seal ring", "sealing ring", "segments"):
-            add(0.25, "piston/seal rings")
+        if _contains(nt, "technical evidence", "technical uncertainty", "technical limitation"):
+            add(0.25, "technical terms")
         if _contains(nt, "blow-by", "blowby", "blow by", "leakage"):
             add(0.20, "blow-by/leakage")
         if _contains(nt, "crankcase", "crankcase pressure", "ventilation"):

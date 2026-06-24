@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 """
-CIR_MEMORY V3
+CIR_MEMORY V68.1 - comparaison CIR précédent segmentée + scoring calibré + filtre anti-bruit
 
 Corrections par rapport V2 :
 1) CIR final mémoire = SANS FrascatiGuard, sections structurées uniquement.
@@ -295,7 +295,7 @@ def pack_to_items(pack: Dict[str, Any], source_type: str) -> List[Dict[str, Any]
                 "frascati_score": (item.get("frascati") or {}).get("frascati_score") or item.get("frascati_score"),
                 "theme_id": item.get("theme_id"),
                 "theme_label": item.get("theme_label"),
-                "supporting_passages": item.get("supporting_passages") or [],
+                "supporting_passages": filter_supporting_passages(item.get("supporting_passages") or []),
             })
 
     return out
@@ -343,7 +343,7 @@ def register_final_cir_nlp_result_in_chroma(
 
     report = {
         "ok": True,
-        "version": "cir_memory_v3_cir_without_frascati",
+        "version": "cir_memory_v68_1_cir_without_frascati",
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "organisme": organisme,
         "project": project,
@@ -370,7 +370,7 @@ def register_final_cir_nlp_result_in_chroma(
             ps.ensure()
 
         pseudo_nlp = {
-            "version": "cir_memory_v3_cir_without_frascati",
+            "version": "cir_memory_v68_1_cir_without_frascati",
             "pipeline_type": "cir_final_memory_without_frascati",
             "evidence_pack_before_frascati": pack,
             "evidence_pack_for_ennodiagnostic": pack,
@@ -456,69 +456,560 @@ def expanded_current_text(item: Dict[str, Any]) -> str:
     return "\n".join([clean_text(p) for p in parts if clean_text(p)])
 
 
+
+def is_universal_implicit_current(current: Dict[str, Any]) -> bool:
+    cid = norm(current.get("id") or "")
+    text = norm(current.get("text") or "")
+    quality = norm(current.get("quality_status") or "")
+    return (
+        cid.startswith("implicit_universal")
+        or "frascati_universal" in quality
+        or text.startswith("verrou implicite possible")
+    )
+
+
+def is_previous_broad_segment(previous: Dict[str, Any], previous_themes: List[str]) -> bool:
+    text = previous.get("text") or ""
+    low = norm(text)
+    if len(previous_themes) >= 5:
+        return True
+    if len(text) > 650 and len(previous_themes) >= 4:
+        return True
+    if re.search(r"processus de compression.*plusieurs problematiques|ensemble de ces performances|parametres du compresseur", low):
+        return True
+    return False
+
+
+def current_counterweight_mismatch(current_text: str, previous_text: str) -> bool:
+    c = norm(current_text)
+    p = norm(previous_text)
+    if not re.search(r"contrepoids|masselotte|equilibr|plomb|fonte", c):
+        return False
+    # Pour un passage contrepoids, le CIR précédent doit parler au moins de vibration/équilibrage/résistance/compromis mécanique.
+    return not re.search(r"contrepoids|masselotte|equilibr|plomb|forces d inertie|vibration|vibratoire|resistance mecanique|compromis", p)
+
+
+def current_refrigerant_mismatch(current_text: str, previous_text: str) -> bool:
+    c = norm(current_text)
+    p = norm(previous_text)
+    if not re.search(r"refrigerant|refroidissement|temperature|debit d eau|tube|100bar", c):
+        return False
+    return not re.search(r"refrigerant|refroidissement|temperature|echauffement|eau liquide|secheur|condensat|pression", p)
+
+
+def current_acoustic_mismatch(current_text: str, previous_text: str) -> bool:
+    c = norm(current_text)
+    p = norm(previous_text)
+    if not re.search(r"aspiration|acoustique|bruit|gaine|insonorise|silencieux", c):
+        return False
+    return not re.search(r"aspiration|acoustique|bruit|nuisance sonore|silencieux|vibration|vibratoire", p)
+
+
+def calibration_cap_and_penalty(current: Dict[str, Any], previous: Dict[str, Any], details: Dict[str, Any]) -> Tuple[float, Optional[float], List[str]]:
+    ct = expanded_current_text(current)
+    pt = previous.get("text", "")
+    kw = float(details.get("keyword_jaccard") or 0.0)
+    seq = float(details.get("sequence") or 0.0)
+    theme_score = float(details.get("theme_score") or 0.0)
+    number_score = float(details.get("number_score") or 0.0)
+    current_themes = details.get("current_themes") or []
+    previous_themes = details.get("previous_themes") or []
+    shared = details.get("shared_themes") or []
+
+    penalty = 0.0
+    cap: Optional[float] = None
+    reasons: List[str] = []
+
+    universal = is_universal_implicit_current(current)
+    broad_prev = is_previous_broad_segment(previous, previous_themes)
+
+    if universal:
+        penalty += 0.10
+        cap = 0.58 if cap is None else min(cap, 0.58)
+        reasons.append("current_universal_implicit_weight_reduced")
+
+    if broad_prev:
+        penalty += 0.08
+        cap = 0.62 if cap is None else min(cap, 0.62)
+        reasons.append("previous_segment_too_broad")
+
+    if kw < 0.03 and number_score == 0 and seq < 0.12:
+        cap = 0.64 if cap is None else min(cap, 0.64)
+        reasons.append("low_keyword_overlap_no_number_match")
+
+    # V68.1 : les objectifs/propositions faibles ne doivent pas devenir continuité forte
+    # si le match repose surtout sur des thèmes larges.
+    current_role = str(current.get("role") or "")
+    if current_role != "verrou" and kw < 0.04 and seq < 0.08 and number_score == 0:
+        penalty += 0.04
+        cap = 0.60 if cap is None else min(cap, 0.60)
+        reasons.append("non_verrou_low_direct_evidence")
+
+    if len(current_themes) >= 6:
+        penalty += 0.07
+        cap = 0.60 if cap is None else min(cap, 0.60)
+        reasons.append("current_item_too_broad_many_themes")
+
+    if len(previous_themes) >= 6:
+        penalty += 0.06
+        cap = 0.64 if cap is None else min(cap, 0.64)
+        reasons.append("previous_item_too_broad_many_themes")
+
+    if current_counterweight_mismatch(ct, pt):
+        penalty += 0.28
+        cap = 0.42 if cap is None else min(cap, 0.42)
+        reasons.append("counterweight_specific_mismatch")
+
+    if current_refrigerant_mismatch(ct, pt):
+        penalty += 0.15
+        cap = 0.55 if cap is None else min(cap, 0.55)
+        reasons.append("refrigerant_specific_mismatch")
+
+    if current_acoustic_mismatch(ct, pt):
+        penalty += 0.15
+        cap = 0.55 if cap is None else min(cap, 0.55)
+        reasons.append("acoustic_specific_mismatch")
+
+    # Si le score vient presque uniquement du thème, on évite le faux "fort".
+    if theme_score >= 0.75 and kw < 0.025 and seq < 0.05 and len(shared) <= 3:
+        penalty += 0.08
+        cap = 0.56 if cap is None else min(cap, 0.56)
+        reasons.append("theme_only_similarity")
+
+    return penalty, cap, reasons
+
+
 def score_pair(current: Dict[str, Any], previous: Dict[str, Any]) -> Dict[str, Any]:
     ct = expanded_current_text(current)
     pt = previous.get("text", "")
 
-    seq = SequenceMatcher(None, norm(ct)[:3500], norm(pt)[:3500]).ratio()
-    kw = jaccard(words(ct), words(pt))
+    seq = SequenceMatcher(None, norm(ct)[:2500], norm(pt)[:2500]).ratio()
+
+    cw = [w for w in words(ct, 80) if not is_too_generic_keyword(w)]
+    pw = [w for w in words(pt, 80) if not is_too_generic_keyword(w)]
+    kw = jaccard(cw, pw)
 
     th_c, th_p = themes(ct), themes(pt)
-    theme_score = len(set(th_c) & set(th_p)) / max(1, len(set(th_c) | set(th_p))) if (th_c or th_p) else 0.0
+    shared = sorted(set(th_c) & set(th_p))
+    theme_score = len(shared) / max(1, len(set(th_c) | set(th_p))) if (th_c or th_p) else 0.0
 
     num_c, num_p = set(numbers(ct)), set(numbers(pt))
     number_score = len(num_c & num_p) / max(1, len(num_c | num_p)) if (num_c or num_p) else 0.0
 
-    role_bonus = 0.10 if current.get("role") == previous.get("role") else 0.0
-    prev_relevant_bonus = 0.08 if previous.get("role") in {"verrou", "limite", "etat_art", "objectif"} else 0.0
+    same_role = current.get("role") == previous.get("role")
+    role_bonus = 0.08 if same_role else 0.0
+    if current.get("role") == "verrou" and previous.get("role") in {"verrou", "limite", "etat_art", "objectif"}:
+        role_bonus += 0.04
 
-    score = 0.20 * seq + 0.25 * kw + 0.38 * theme_score + 0.07 * number_score + role_bonus + prev_relevant_bonus
-    score = max(0.0, min(1.0, score))
+    prev_priority_bonus = min(0.08, float(previous.get("previous_section_priority") or 0) / 1000.0)
+    specific_bonus = specific_pair_bonus(ct, pt, th_c, th_p)
+    generic_penalty = previous_candidate_penalty(pt)
 
-    return {
-        "score": round(score, 4),
+    raw_score = (
+        0.12 * seq
+        + 0.22 * kw
+        + 0.38 * theme_score
+        + 0.06 * number_score
+        + role_bonus
+        + prev_priority_bonus
+        + specific_bonus
+        - generic_penalty
+    )
+
+    details = {
+        "score_raw_before_calibration": round(max(0.0, min(1.0, raw_score)), 4),
         "sequence": round(seq, 4),
         "keyword_jaccard": round(kw, 4),
         "theme_score": round(theme_score, 4),
         "number_score": round(number_score, 4),
-        "role_bonus": role_bonus,
-        "prev_relevant_bonus": prev_relevant_bonus,
+        "role_bonus": round(role_bonus, 4),
+        "prev_relevant_bonus": round(prev_priority_bonus, 4),
+        "specific_bonus": round(specific_bonus, 4),
+        "generic_penalty": round(generic_penalty, 4),
         "current_themes": th_c,
         "previous_themes": th_p,
-        "shared_themes": sorted(set(th_c) & set(th_p)),
-        "current_keywords": words(ct, 20),
-        "previous_keywords": words(pt, 20),
+        "shared_themes": shared,
+        "current_keywords": cw[:20],
+        "previous_keywords": pw[:20],
         "current_numbers": sorted(num_c),
         "previous_numbers": sorted(num_p),
+        "current_is_universal_implicit": is_universal_implicit_current(current),
+        "previous_is_broad_segment": is_previous_broad_segment(previous, th_p),
     }
+
+    calibration_penalty, score_cap, reasons = calibration_cap_and_penalty(current, previous, details)
+    score = raw_score - calibration_penalty
+    if score_cap is not None:
+        score = min(score, score_cap)
+    score = max(0.0, min(1.0, score))
+
+    details.update({
+        "score": round(score, 4),
+        "calibration_penalty": round(calibration_penalty, 4),
+        "score_cap": round(score_cap, 4) if score_cap is not None else None,
+        "score_cap_reasons": reasons,
+    })
+    return details
 
 
 def decision_from_score(score: float, details: Dict[str, Any]) -> Dict[str, Any]:
     shared_themes = details.get("shared_themes") or []
-    if score >= 0.66:
+    keyword_jaccard = float(details.get("keyword_jaccard") or 0.0)
+    sequence = float(details.get("sequence") or 0.0)
+    number_score = float(details.get("number_score") or 0.0)
+    cap_reasons = details.get("score_cap_reasons") or []
+    universal = bool(details.get("current_is_universal_implicit"))
+    broad_previous = bool(details.get("previous_is_broad_segment"))
+
+    strong_blockers = {
+        "current_universal_implicit_weight_reduced",
+        "previous_segment_too_broad",
+        "current_item_too_broad_many_themes",
+        "previous_item_too_broad_many_themes",
+        "counterweight_specific_mismatch",
+        "refrigerant_specific_mismatch",
+        "acoustic_specific_mismatch",
+        "theme_only_similarity",
+        "non_verrou_low_direct_evidence",
+    }
+    has_strong_blocker = any(r in strong_blockers for r in cap_reasons) or universal or broad_previous
+
+    enough_direct_evidence = (
+        keyword_jaccard >= 0.035
+        or sequence >= 0.18
+        or number_score >= 0.20
+    )
+
+    if score >= 0.72 and len(shared_themes) >= 2 and enough_direct_evidence and not has_strong_blocker:
         status = "continuity_strong"
         label = "Continuité forte avec le CIR précédent"
-    elif score >= 0.38 or shared_themes:
+    elif score >= 0.42 or (score >= 0.32 and shared_themes):
         status = "evolution_or_partial_continuity"
         label = "Évolution ou continuité partielle à vérifier"
     else:
         status = "new_or_not_found"
         label = "Nouveauté potentielle ou non retrouvée dans le CIR précédent"
 
-    continuity = score
-    if status == "continuity_strong":
-        continuity = max(continuity, 0.70)
-    elif status == "evolution_or_partial_continuity":
-        continuity = max(continuity, 0.45)
-
-    continuity = round(max(0.0, min(1.0, continuity)), 4)
+    # Le score de continuité reste le score calibré : on ne le remonte pas artificiellement à 0.70.
+    continuity = round(max(0.0, min(1.0, score)), 4)
     novelty = round(1.0 - continuity, 4)
+
     return {
         "status": status,
         "label": label,
         "continuity_score": continuity,
         "novelty_score": novelty,
+        "calibration": {
+            "keyword_jaccard": round(keyword_jaccard, 4),
+            "sequence": round(sequence, 4),
+            "shared_themes_count": len(shared_themes),
+            "current_is_universal_implicit": universal,
+            "previous_is_broad_segment": broad_previous,
+            "score_cap_reasons": cap_reasons,
+        },
     }
+
+
+
+GENERIC_PREVIOUS_PATTERNS = [
+    "nous devons donc developper des solutions techniques nouvelles",
+    "ainsi le dispositif du module de compression etant un systeme complexe",
+    "necessaire a chaque nouvelle implementation",
+    "realiser une analyse mecanique fine",
+    "consequences de cette implementation",
+    "obtention des parametres du compresseur",
+]
+
+CURRENT_NOISE_PATTERNS = [
+    r"telephone|téléphone",
+    r"urban[- ]valley",
+    r"chemin du bas des indes",
+    r"cormeilles[- ]en[- ]parisis",
+    r"written by|redige|rédigé|date modification",
+    r"mann hummel.*telephone",
+    r"\bape\s*\d{3,4}\s*[a-z]\b",
+    r"\brcs\b|\bsiret\b|\bsiren\b|\btva\b",
+    r"\bfr\s*\d{8,}\b",
+    r"page\s+\d+\s+sur\s+\d+",
+    r"révision\s+[a-z]|revision\s+[a-z]|maj\s+mati[eè]re|m[aà]j",
+    r"^\s*[a-z]\s*\|.*\d{2}/\d{2}/\d{4}",
+]
+
+GENERIC_KEYWORDS = {
+    "compresseur", "compresseurs", "solution", "solutions", "technique", "techniques",
+    "developper", "developpement", "travaux", "projet", "objectif", "objectifs",
+    "parametre", "parametres", "dispositif", "mecanique", "ensemble", "ainsi", "donc",
+    "permettant", "atteindre", "performance", "performances",
+    "mann", "hummel", "europiclon", "urban", "valley", "france", "telephone",
+    "date", "modification", "redige", "written", "chemin", "indes", "cormeilles",
+}
+
+
+def is_generic_previous_text(text: str) -> bool:
+    low = norm(text)
+    return any(p in low for p in GENERIC_PREVIOUS_PATTERNS)
+
+
+def is_current_noise_text(text: str) -> bool:
+    """
+    V68.1 : filtre bruit renforcé.
+    Objectif : empêcher les fragments de type entête, adresse, téléphone, RCS/SIRET,
+    fiche fournisseur ou tableau de révision de devenir des comparaisons CIR.
+    """
+    low = norm(text)
+    if not low:
+        return True
+    if len(low) < 45:
+        return True
+
+    technical_signals = [
+        "essai", "essais", "mesure", "mesures", "vibration", "vibratoire", "acoustique",
+        "temperature", "refrigerant", "refroidissement", "contrepoids", "masselotte",
+        "segment", "segmentation", "soufflage", "condensat", "condensats", "secheur",
+        "hygrometrie", "air sec", "pression", "debit", "reniflard", "etancheite",
+        "poulie", "gaine", "aspiration", "eprouve", "hydraulique", "tube", "tubes",
+        "compresseur", "tgm100", "100bar", "300bar", "kg", "bar",
+    ]
+    has_technical = any(k in low for k in technical_signals)
+    detected_themes = themes(text)
+    has_noise = any(re.search(p, low) for p in CURRENT_NOISE_PATTERNS)
+
+    hard_admin_patterns = [
+        r"\brcs\b|\bsiret\b|\bsiren\b|\bape\b|\btva\b",
+        r"telephone|téléphone|adresse|urban[- ]valley|cormeilles|chemin du bas des indes",
+        r"page\s+\d+\s+sur\s+\d+",
+        r"written by|date modification|redige|rédigé",
+        r"\bfr\s*\d{8,}\b",
+    ]
+    admin_hits = sum(1 for p in hard_admin_patterns if re.search(p, low))
+
+    # Cas typique observé : Mann Hummel / Urban-Valley / téléphone / date modification.
+    if re.search(r"mann\s+hummel|europiclon", low) and admin_hits >= 1:
+        return True
+    if re.search(r"mann\s+hummel|europiclon", low) and re.search(r"rev|revision|révision|redige|rédigé|written|date", low):
+        return True
+
+    # Adresse / téléphone / registre légal : on filtre même s'il reste un mot technique isolé.
+    if admin_hits >= 2:
+        return True
+    if admin_hits >= 1 and len(detected_themes) <= 1:
+        return True
+
+    # Les entêtes de documents fournisseur contiennent souvent des mots comme gaine/cinématique,
+    # mais pas une vraie phrase d'essai ou de résultat.
+    if re.search(r"date modification|written by|redige|rédigé", low) and not re.search(r"essai|mesure|resultat|releve|temperature|vibration|acoustique", low):
+        return True
+
+    if has_noise and not has_technical:
+        return True
+
+    toks = re.findall(r"\b\w+\b", low)
+    if toks:
+        numeric_ratio = sum(1 for t in toks if re.search(r"\d", t)) / max(1, len(toks))
+        alpha_words = [t for t in toks if t.isalpha()]
+        if numeric_ratio > 0.34 and len(detected_themes) <= 1:
+            return True
+        if len(alpha_words) <= 5 and numeric_ratio > 0.25:
+            return True
+
+    # Fragments de révision/tableau sans phrase technique exploitable.
+    if re.search(r"\b(rev|revision|révision)\b", low) and re.search(r"\d{2}/\d{2}/\d{4}", low) and len(detected_themes) <= 1:
+        return True
+
+    # Fragment produit / nomenclature : beaucoup de références, peu de verbe technique.
+    product_like = re.search(r"mann\s+hummel|europiclon|weg\s+w22|gaine papier|corps v\d|cinematique v\d", low)
+    has_project_action = re.search(r"essai|mesure|tester|teste|testes|evaluer|releve|gain|comparaison|ameliorer|optimiser|monte|montes", low)
+    if product_like and not has_project_action:
+        return True
+
+    return False
+
+def filter_supporting_passages(passages: Any) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    if not isinstance(passages, list):
+        return out
+    seen = set()
+    for sp in passages:
+        if not isinstance(sp, dict):
+            continue
+        txt = clean_text(sp.get("text") or "")
+        if not txt or is_current_noise_text(txt):
+            continue
+        key = norm(txt)[:220]
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(sp)
+    return out
+
+def split_sentences(text: str) -> List[str]:
+    clean = clean_text(text).replace("\n", " ")
+    if not clean:
+        return []
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-ZÉÈÀÂÎÔÛÇ])", clean)
+    out = []
+    for p in parts:
+        p = clean_text(p)
+        if len(p) >= 40:
+            out.append(p)
+    return out
+
+
+def previous_section_priority(section_key: str, role: str) -> int:
+    s = norm(f"{section_key} {role}")
+    if "verrou" in s:
+        return 100
+    if "insuffisance" in s or "limite" in s:
+        return 88
+    if "etat_art" in s or "etat" in s:
+        return 82
+    if "objectif" in s:
+        return 78
+    if "travaux" in s or "demarche" in s or "methode" in s:
+        return 70
+    return 50
+
+
+def make_previous_segment_item(parent: Dict[str, Any], segment: str, index: int) -> Dict[str, Any]:
+    parent_id = str(parent.get("id") or parent.get("item_id") or parent.get("section_key") or "previous")
+    section_key = str(parent.get("section_key") or parent.get("pack_key") or parent.get("section_type") or "")
+    role = str(parent.get("role") or "general")
+    title = str(parent.get("section_title") or parent.get("title") or section_key or role)
+
+    x = dict(parent)
+    x.update({
+        "id": f"{parent_id}_seg_{index:03d}",
+        "item_id": f"{parent_id}_seg_{index:03d}",
+        "parent_item_id": parent_id,
+        "parent_role": role,
+        "role": role,
+        "section_key": section_key,
+        "section_type": str(parent.get("section_type") or section_key),
+        "section_title": title,
+        "text": clean_text(segment),
+        "parent_text_preview": clean_text(parent.get("text") or "")[:1200],
+        "segment_index": index,
+        "segment_source": "previous_cir_section_sentence_window",
+        "previous_section_priority": previous_section_priority(section_key, role),
+        "is_generic_previous_segment": is_generic_previous_text(segment),
+    })
+    return x
+
+
+def split_previous_cir_item(parent: Dict[str, Any], max_segments: int = 80) -> List[Dict[str, Any]]:
+    """
+    Transforme une grande section CIR en petits passages comparables.
+    C'est la correction centrale : on ne compare plus 61 items courants avec seulement 8 grandes sections.
+    """
+    text = clean_text(parent.get("text") or "")
+    if len(text) < 60:
+        return []
+
+    sentences = split_sentences(text)
+    windows: List[str] = []
+
+    for i in range(len(sentences)):
+        for size in (1, 2, 3):
+            part = " ".join(sentences[i:i + size]).strip()
+            if 80 <= len(part) <= 1300:
+                windows.append(part)
+
+    for p in re.split(r"\n{2,}", text):
+        p = clean_text(p)
+        if 80 <= len(p) <= 1500:
+            windows.append(p)
+
+    unique: List[str] = []
+    seen = set()
+    for w in windows:
+        key = norm(w)[:260]
+        if key in seen:
+            continue
+        seen.add(key)
+        if is_generic_previous_text(w):
+            continue
+        if not themes(w) and len(words(w, 20)) < 5:
+            continue
+        unique.append(w)
+        if len(unique) >= max_segments:
+            break
+
+    if not unique:
+        unique = [text[:1400]]
+
+    return [make_previous_segment_item(parent, seg, idx) for idx, seg in enumerate(unique)]
+
+
+def current_item_should_be_compared(item: Dict[str, Any]) -> bool:
+    txt_main = clean_text(item.get("text") or "")
+    txt = expanded_current_text(item)
+
+    # Le texte principal détermine si l'item a du sens comme comparaison.
+    # Les supporting_passages ne doivent pas sauver un entête administratif.
+    if is_current_noise_text(txt_main):
+        return False
+    if is_current_noise_text(txt) and len(themes(txt_main)) <= 1:
+        return False
+    if len(clean_text(txt_main)) < 60:
+        return False
+
+    # Objectif faible = simple référence/nomenclature sans action technique exploitable.
+    role = str(item.get("role") or "")
+    low = norm(txt_main)
+    if role == "objectif":
+        has_action = re.search(r"essai|essais|mesure|mesures|evaluer|évaluer|tester|testes|releve|relevés|ameliorer|améliorer|optimiser|monte|montés|realisation|réalisation|developper|développer", low)
+        if not has_action and len(themes(txt_main)) <= 1:
+            return False
+
+    return True
+
+
+def is_too_generic_keyword(w: str) -> bool:
+    return norm(w) in GENERIC_KEYWORDS
+
+
+def specific_pair_bonus(current_text: str, previous_text: str, current_themes: List[str], previous_themes: List[str]) -> float:
+    c = norm(current_text)
+    p = norm(previous_text)
+    bonus = 0.0
+
+    if "vibration_acoustique" in current_themes:
+        if re.search(r"vibrations?|vibratoire|acoustique|bruit|nuisances sonores|aspiration|resonateur", p):
+            bonus += 0.12
+        if "aspiration" in c and re.search(r"aspiration|bruit|acoustique|resonateur|trajet d aspiration", p):
+            bonus += 0.14
+
+    if "thermique_refroidissement" in current_themes:
+        if re.search(r"temperature|echauffement|refroidissement|refrigerant|eau liquide|debit d eau", p):
+            bonus += 0.14
+        if re.search(r"refrigerant|100bar|temperature|debit d eau|refroidissement", c) and re.search(r"temperature|eau liquide|refroidissement|pression|echauffement", p):
+            bonus += 0.12
+
+    if "qualite_air_sechage" in current_themes:
+        if re.search(r"air sec|point de rosee|hygrometrie|condensats?|eau liquide|secheur", p):
+            bonus += 0.14
+
+    if "usure_fiabilite_etancheite" in current_themes:
+        if re.search(r"usure|fuite|huile|reniflard|etancheite|segment|resistance mecanique", p):
+            bonus += 0.15
+
+    if "contrepoids" in c or "masselotte" in c or "equilibr" in c or "plomb" in c:
+        if re.search(r"masselotte|equilibrage|forces d inertie|vibrations|resistance mecanique|comportement vibratoire|compromis", p):
+            bonus += 0.18
+
+    return bonus
+
+
+def previous_candidate_penalty(previous_text: str) -> float:
+    p = norm(previous_text)
+    penalty = 0.0
+    if is_generic_previous_text(previous_text):
+        penalty += 0.35
+    generic_hits = sum(1 for w in ["solution", "solutions", "techniques", "developper", "parametres", "dispositif", "implementation", "compresseur"] if w in p)
+    specific_hits = sum(1 for w in ["vibration", "acoustique", "bruit", "aspiration", "temperature", "refroidissement", "refrigerant", "eau liquide", "hygrometrie", "air sec", "condensat", "usure", "reniflard", "fuite", "segment", "masselotte", "contrepoids", "equilibrage"] if w in p)
+    if generic_hits >= 4 and specific_hits <= 2:
+        penalty += 0.12
+    return penalty
 
 
 def load_previous_cir_memory_items(organisme: str, project: str, current_year: str, max_previous_years: int = 3) -> Tuple[List[str], List[Dict[str, Any]]]:
@@ -543,6 +1034,7 @@ def load_previous_cir_memory_items(organisme: str, project: str, current_year: s
 
     years = sorted(years, key=ykey, reverse=True)[:max_previous_years]
     items: List[Dict[str, Any]] = []
+    section_count = 0
 
     for y in years:
         report = read_json(cir_final_report_path(organisme, project, y), {})
@@ -552,10 +1044,15 @@ def load_previous_cir_memory_items(organisme: str, project: str, current_year: s
             txt = clean_text(item.get("text"))
             if len(txt) < 35:
                 continue
-            x = dict(item)
-            x["year"] = str(y)
-            x["source_type"] = "previous_cir_final_without_frascati"
-            items.append(x)
+            parent = dict(item)
+            parent["year"] = str(y)
+            parent["source_type"] = "previous_cir_final_without_frascati"
+            section_count += 1
+            items.extend(split_previous_cir_item(parent))
+
+    for x in items:
+        x["previous_cir_sections_count"] = section_count
+        x["previous_cir_segmentation"] = "sentence_windows_v68_1_filtered_scoring_calibrated"
 
     return years, items
 
@@ -603,13 +1100,33 @@ def summarize(comparisons: List[Dict[str, Any]]) -> Dict[str, Any]:
     cont_v = [c for c in verrous if status(c) == "continuity_strong"]
 
     novelty = None
-    if verrous:
-        novelty = (len(new_v) + 0.5 * len(evo_v)) / max(1, len(verrous))
+    weighted_novelty_sum = 0.0
+    weight_sum = 0.0
+    universal_count = 0
+    broad_previous_count = 0
+
+    for c in verrous:
+        cur = c.get("current_item") or {}
+        dec = c.get("decision") or {}
+        best = c.get("best_match") or {}
+        details = best.get("similarity_details") or {}
+
+        weight = 0.45 if is_universal_implicit_current(cur) else 1.0
+        if is_universal_implicit_current(cur):
+            universal_count += 1
+        if details.get("previous_is_broad_segment"):
+            broad_previous_count += 1
+
+        weighted_novelty_sum += weight * float(dec.get("novelty_score") or 0.0)
+        weight_sum += weight
+
+    if weight_sum > 0:
+        novelty = weighted_novelty_sum / weight_sum
 
     if novelty is None:
         signal = "no_verrou"
         explanation = "Aucun verrou courant à comparer."
-    elif novelty >= 0.60:
+    elif novelty >= 0.55:
         signal = "new_rnd_attention"
         explanation = "Plusieurs verrous semblent nouveaux ou en évolution par rapport au CIR précédent."
     elif novelty <= 0.25:
@@ -625,7 +1142,10 @@ def summarize(comparisons: List[Dict[str, Any]]) -> Dict[str, Any]:
         "new_verrou_count": len(new_v),
         "evolution_verrou_count": len(evo_v),
         "continuity_verrou_count": len(cont_v),
+        "universal_implicit_verrou_count": universal_count,
+        "broad_previous_match_count": broad_previous_count,
         "project_novelty_score": round(novelty, 4) if novelty is not None else None,
+        "project_novelty_rule": "weighted average of calibrated novelty scores; universal reconstructed verrous weight=0.45",
         "frascati_context_signal": signal,
         "frascati_context_explanation": explanation,
     }
@@ -645,7 +1165,8 @@ def compare_current_raw_with_cir_memory(
 
     nlp = read_json(nlp_path, {})
     current_pack, current_pack_source = get_current_raw_pack_with_frascati(nlp)
-    current_items = pack_to_items(current_pack, source_type="current_raw_with_frascati")
+    raw_current_items = pack_to_items(current_pack, source_type="current_raw_with_frascati")
+    current_items = [x for x in raw_current_items if current_item_should_be_compared(x)]
 
     previous_years, previous_items = load_previous_cir_memory_items(
         organisme=organisme,
@@ -657,7 +1178,7 @@ def compare_current_raw_with_cir_memory(
     if not previous_items:
         report = {
             "ok": True,
-            "version": "cir_memory_v3_compare",
+            "version": "cir_memory_v68_1_segmented_calibrated_compare",
             "has_previous_cir": False,
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "organisme": organisme,
@@ -665,7 +1186,10 @@ def compare_current_raw_with_cir_memory(
             "current_year": str(year),
             "current_pack_source": current_pack_source,
             "summary": {
+                "raw_current_items_count": len(raw_current_items),
                 "current_items_count": len(current_items),
+                "filtered_current_noise_count": len(raw_current_items) - len(current_items),
+                "filter_version": "v68_1_admin_noise_strict",
                 "previous_cir_items_count": 0,
                 "project_novelty_score": None,
                 "frascati_context_signal": "no_previous_cir",
@@ -676,9 +1200,13 @@ def compare_current_raw_with_cir_memory(
     else:
         comparisons = [compare_one(cur, previous_items, top_k=top_k) for cur in current_items]
         summ = summarize(comparisons)
+        previous_sections_count = 0
+        if previous_items:
+            previous_sections_count = int(previous_items[0].get("previous_cir_sections_count") or 0)
+
         report = {
             "ok": True,
-            "version": "cir_memory_v3_compare",
+            "version": "cir_memory_v68_1_segmented_calibrated_compare",
             "has_previous_cir": True,
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "organisme": organisme,
@@ -686,9 +1214,14 @@ def compare_current_raw_with_cir_memory(
             "current_year": str(year),
             "previous_cir_years_used": previous_years,
             "current_pack_source": current_pack_source,
-            "previous_cir_rule": "CIR final mémoire chargé depuis cir_final_extracted.json, sans FrascatiGuard",
+            "previous_cir_rule": "CIR final segmenté en petits passages comparables, scoring calibré V68.1, filtre anti-bruit renforcé, sans FrascatiGuard",
+            "previous_cir_segmentation": "section_to_sentence_windows_v68_1_filtered_scoring_calibrated",
             "summary": {
+                "raw_current_items_count": len(raw_current_items),
                 "current_items_count": len(current_items),
+                "filtered_current_noise_count": len(raw_current_items) - len(current_items),
+                "filter_version": "v68_1_admin_noise_strict",
+                "previous_cir_sections_count": previous_sections_count,
                 "previous_cir_items_count": len(previous_items),
                 **summ,
             },
