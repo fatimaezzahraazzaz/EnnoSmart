@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Optional, Tuple
 BASE_DIR = Path(r"C:\EnnoSmart")
 STORAGE_DIR = BASE_DIR / "storage" / "organismes"
 OUTPUTS_DIR = BASE_DIR / "outputs" / "safe_rag_upload"
+EXPERIENCE_MEMORY_V2_DIR = BASE_DIR / "storage" / "experience_memory_v2"
 
 PACK_KEYS = [
     "objectifs_locaux",
@@ -1012,47 +1013,274 @@ def previous_candidate_penalty(previous_text: str) -> float:
     return penalty
 
 
-def load_previous_cir_memory_items(organisme: str, project: str, current_year: str, max_previous_years: int = 3) -> Tuple[List[str], List[Dict[str, Any]]]:
+
+# ============================================================
+# Memory V2 : CIR précédent automatique le plus proche
+# ============================================================
+
+def _year_int(value: Any) -> Optional[int]:
+    m = re.search(r"\d{4}", str(value or ""))
+    if not m:
+        return None
+    try:
+        return int(m.group(0))
+    except Exception:
+        return None
+
+
+def canonical_project_key(value: Any) -> str:
+    s = norm(value)
+    return re.sub(r"[^a-z0-9]+", "", s)
+
+
+def _meta_from_memory_v2_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    meta = item.get("metadata") if isinstance(item, dict) else {}
+    return meta if isinstance(meta, dict) else {}
+
+
+def _text_from_memory_v2_item(item: Dict[str, Any]) -> str:
+    return clean_text(
+        item.get("text")
+        or item.get("source_text")
+        or item.get("content")
+        or item.get("excerpt")
+        or ""
+    )
+
+
+def _iter_json_items(obj: Any):
+    if isinstance(obj, list):
+        for x in obj:
+            if isinstance(x, dict):
+                yield x
+    elif isinstance(obj, dict):
+        yielded = False
+        for key in ["items", "chunks", "cards", "documents", "data"]:
+            value = obj.get(key)
+            if isinstance(value, list):
+                yielded = True
+                for x in value:
+                    if isinstance(x, dict):
+                        yield x
+        if not yielded:
+            yield obj
+
+
+def _iter_memory_v2_json_files() -> List[Path]:
+    roots = [
+        EXPERIENCE_MEMORY_V2_DIR / "chunks",
+        EXPERIENCE_MEMORY_V2_DIR / "cards",
+        EXPERIENCE_MEMORY_V2_DIR / "runs",
+    ]
+    files: List[Path] = []
+    for root in roots:
+        if root.exists():
+            files.extend(sorted(root.rglob("*.json")))
+    return files
+
+
+def _memory_v2_item_matches_project(
+    item: Dict[str, Any],
+    organisme: str,
+    project: str,
+    year: Optional[int] = None,
+) -> bool:
+    meta = _meta_from_memory_v2_item(item)
+    org = meta.get("organisme") or item.get("organisme") or ""
+    prj = meta.get("project") or meta.get("project_id") or item.get("project") or item.get("project_id") or ""
+    y = meta.get("year") or meta.get("annee") or item.get("year") or item.get("annee") or ""
+
+    if canonical_project_key(org) != canonical_project_key(organisme):
+        return False
+    if canonical_project_key(prj) != canonical_project_key(project):
+        return False
+
+    yi = _year_int(y)
+    if year is not None and yi != year:
+        return False
+
+    return True
+
+
+def list_previous_years_from_memory_v2(
+    organisme: str,
+    project: str,
+    current_year: str,
+) -> List[int]:
+    current_int = _year_int(current_year)
+    if current_int is None:
+        return []
+
+    years = set()
+
+    for path in _iter_memory_v2_json_files():
+        data = read_json(path, None)
+        if data is None:
+            continue
+
+        for item in _iter_json_items(data):
+            if not _memory_v2_item_matches_project(item, organisme, project):
+                continue
+            meta = _meta_from_memory_v2_item(item)
+            yi = _year_int(meta.get("year") or meta.get("annee") or item.get("year") or item.get("annee"))
+            if yi is not None and yi < current_int:
+                years.add(yi)
+
+    return sorted(years, reverse=True)
+
+
+def closest_previous_year_from_memory_v2(
+    organisme: str,
+    project: str,
+    current_year: str,
+) -> Optional[int]:
+    years = list_previous_years_from_memory_v2(organisme, project, current_year)
+    return years[0] if years else None
+
+
+def load_previous_cir_items_from_memory_v2(
+    organisme: str,
+    project: str,
+    previous_year: int,
+) -> List[Dict[str, Any]]:
+    allowed_roles = {
+        "objectif",
+        "verrou",
+        "methode",
+        "resultat",
+        "limite",
+        "contribution",
+        "etat_art",
+        "parametre",
+    }
+
+    raw_items: List[Dict[str, Any]] = []
+    seen = set()
+
+    for path in _iter_memory_v2_json_files():
+        data = read_json(path, None)
+        if data is None:
+            continue
+
+        for item in _iter_json_items(data):
+            if not _memory_v2_item_matches_project(item, organisme, project, previous_year):
+                continue
+
+            meta = _meta_from_memory_v2_item(item)
+            role = clean_text(meta.get("role") or item.get("role") or "")
+            memory_class = clean_text(meta.get("memory_class") or item.get("memory_class") or "")
+            text = _text_from_memory_v2_item(item)
+
+            if role == "style" or memory_class == "style":
+                continue
+            if role and role not in allowed_roles:
+                continue
+            if len(text) < 45:
+                continue
+
+            key = (role, norm(text)[:260])
+            if key in seen:
+                continue
+            seen.add(key)
+
+            raw_items.append({
+                "id": meta.get("chunk_id") or meta.get("rag_chunk_id") or item.get("id") or f"memory_v2_{previous_year}_{len(raw_items)}",
+                "item_id": meta.get("chunk_id") or meta.get("rag_chunk_id") or item.get("id") or f"memory_v2_{previous_year}_{len(raw_items)}",
+                "role": role or "general",
+                "pack_key": meta.get("pack_key") or "",
+                "section_key": meta.get("section_key") or meta.get("pack_key") or role or "",
+                "section_type": meta.get("section_type") or role or "",
+                "section_title": meta.get("section_title") or meta.get("title") or "",
+                "text": text,
+                "document": meta.get("document") or meta.get("source_file") or item.get("document") or "",
+                "source_path": meta.get("source_path") or item.get("source_path") or "",
+                "source_type": "experience_memory_v2_previous_cir",
+                "year": str(previous_year),
+                "memory_v2_path": str(path),
+                "previous_section_priority": previous_section_priority(meta.get("pack_key") or "", role or "general"),
+            })
+
+    segmented: List[Dict[str, Any]] = []
+    section_count = len(raw_items)
+
+    for item in raw_items:
+        segments = split_previous_cir_item(item)
+        if segments:
+            segmented.extend(segments)
+        else:
+            segmented.append(item)
+
+    for x in segmented:
+        x["previous_cir_sections_count"] = section_count
+        x["previous_cir_segmentation"] = "memory_v2_sentence_windows_closest_previous_year"
+        x["previous_source"] = "experience_memory_v2"
+        x["previous_year"] = str(previous_year)
+
+    return segmented
+
+
+def load_previous_cir_memory_items(organisme: str, project: str, current_year: str, max_previous_years: int = 1) -> Tuple[List[str], List[Dict[str, Any]]]:
+    """
+    Charge automatiquement le CIR précédent le plus proche.
+
+    Règle :
+    - dossier courant 2025 -> prendre 2024 si disponible ;
+    - sinon prendre 2023 ;
+    - priorité à Memory V2, car elle contient les CIR finaux consultant validés ;
+    - fallback vers l'ancien stockage local cir_final/cir_final_extracted.json.
+    """
+    current_int = _year_int(current_year)
+
+    v2_year = closest_previous_year_from_memory_v2(organisme, project, current_year)
+    if v2_year is not None:
+        items = load_previous_cir_items_from_memory_v2(organisme, project, v2_year)
+        if items:
+            return [str(v2_year)], items
+
     root = STORAGE_DIR / slug(organisme) / "projects" / slug(project) / "years"
     if not root.exists():
         return [], []
 
-    years = []
+    candidates: List[int] = []
     for yd in root.iterdir():
         if not yd.is_dir():
             continue
-        y = yd.name
-        if str(y) == str(current_year):
+        yi = _year_int(yd.name)
+        if yi is None:
             continue
-        p = cir_final_report_path(organisme, project, y)
+        if current_int is not None and yi >= current_int:
+            continue
+        p = cir_final_report_path(organisme, project, str(yi))
         if p.exists():
-            years.append(y)
+            candidates.append(yi)
 
-    def ykey(y):
-        m = re.search(r"\d+", str(y))
-        return int(m.group(0)) if m else -1
+    if not candidates:
+        return [], []
 
-    years = sorted(years, key=ykey, reverse=True)[:max_previous_years]
+    previous_year = max(candidates)
+    years = [str(previous_year)]
     items: List[Dict[str, Any]] = []
     section_count = 0
 
-    for y in years:
-        report = read_json(cir_final_report_path(organisme, project, y), {})
-        for item in report.get("items") or []:
-            if not isinstance(item, dict):
-                continue
-            txt = clean_text(item.get("text"))
-            if len(txt) < 35:
-                continue
-            parent = dict(item)
-            parent["year"] = str(y)
-            parent["source_type"] = "previous_cir_final_without_frascati"
-            section_count += 1
-            items.extend(split_previous_cir_item(parent))
+    report = read_json(cir_final_report_path(organisme, project, str(previous_year)), {})
+    for item in report.get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        txt = clean_text(item.get("text"))
+        if len(txt) < 35:
+            continue
+        parent = dict(item)
+        parent["year"] = str(previous_year)
+        parent["source_type"] = "previous_cir_final_without_frascati"
+        parent["previous_source"] = "local_cir_final"
+        section_count += 1
+        items.extend(split_previous_cir_item(parent))
 
     for x in items:
         x["previous_cir_sections_count"] = section_count
         x["previous_cir_segmentation"] = "sentence_windows_v68_1_filtered_scoring_calibrated"
+        x["previous_source"] = x.get("previous_source") or "local_cir_final"
+        x["previous_year"] = str(previous_year)
 
     return years, items
 
@@ -1193,6 +1421,7 @@ def compare_current_raw_with_cir_memory(
                 "previous_cir_items_count": 0,
                 "project_novelty_score": None,
                 "frascati_context_signal": "no_previous_cir",
+                "previous_cir_rule": "Memory V2 cherchée automatiquement : année la plus proche avant l’année courante.",
             },
             "comparisons": [],
             "verrou_comparisons": [],
@@ -1214,7 +1443,9 @@ def compare_current_raw_with_cir_memory(
             "current_year": str(year),
             "previous_cir_years_used": previous_years,
             "current_pack_source": current_pack_source,
-            "previous_cir_rule": "CIR final segmenté en petits passages comparables, scoring calibré V68.1, filtre anti-bruit renforcé, sans FrascatiGuard",
+            "previous_cir_rule": "CIR final précédent automatiquement pris depuis Memory V2 : année la plus proche avant l’année courante, ex. 2025 -> 2024 sinon 2023. Fallback ancien stockage local si Memory V2 indisponible.",
+            "previous_cir_source": previous_items[0].get("previous_source") if previous_items else None,
+            "previous_cir_year_used": previous_years[0] if previous_years else None,
             "previous_cir_segmentation": "section_to_sentence_windows_v68_1_filtered_scoring_calibrated",
             "summary": {
                 "raw_current_items_count": len(raw_current_items),

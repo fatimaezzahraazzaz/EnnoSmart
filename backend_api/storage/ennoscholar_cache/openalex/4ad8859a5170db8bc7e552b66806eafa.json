@@ -1,0 +1,430 @@
+{
+  "created_at": "2026-06-26T10:09:17",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "timber wall fire resistance bio-based materials REI",
+      "paper_id": "https://openalex.org/W2979363123",
+      "title": "Fiber-Reinforced Polymer Composites: Manufacturing, Properties, and Applications",
+      "abstract": "Composites have been found to be the most promising and discerning material available in this century. Presently, composites reinforced with fibers of synthetic or natural materials are gaining more importance as demands for lightweight materials with high strength for specific applications are growing in the market. Fiber-reinforced polymer composite offers not only high strength to weight ratio, but also reveals exceptional properties such as high durability; stiffness; damping property; flexural strength; and resistance to corrosion, wear, impact, and fire. These wide ranges of diverse features have led composite materials to find applications in mechanical, construction, aerospace, automobile, biomedical, marine, and many other manufacturing industries. Performance of composite materials predominantly depends on their constituent elements and manufacturing techniques, therefore, functional properties of various fibers available worldwide, their classifications, and the manufacturing techniques used to fabricate the composite materials need to be studied in order to figure out the optimized characteristic of the material for the desired application. An overview of a diverse range of fibers, their properties, functionality, classification, and various fiber composite manufacturing techniques is presented to discover the optimized fiber-reinforced composite material for significant applications. Their exceptional performance in the numerous fields of applications have made fiber-reinforced composite materials a promising alternative over solitary metals or alloys.",
+      "year": 2019,
+      "venue": "Polymers",
+      "url": "https://doi.org/10.3390/polym11101667",
+      "doi": "10.3390/polym11101667",
+      "authors": [
+        "Dipen Kumar Rajak",
+        "Durgesh D. Pagar",
+        "Pradeep L. Menezes",
+        "Emanoil Linul"
+      ],
+      "citation_count": 1615,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Specific strength",
+        "Materials science",
+        "Composite material",
+        "Flexural strength",
+        "Aerospace",
+        "Composite number",
+        "Specific modulus",
+        "Durability"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber wall fire resistance bio-based materials REI",
+      "paper_id": "https://openalex.org/W4414069839",
+      "title": "Influence of Bio-Based Infill Materials on the Fire Resistance of Panelised Timber Wall Assemblies—A Pilot Study",
+      "abstract": "In the pursuit of low-impact and renewable construction materials, various by-products from agriculture, forestry, and the wood processing industry are being explored as potential bio-based infill materials for wall assemblies. This study presents an experimental assessment of the fire performance of timber wall systems composed of block units filled with different lignocellulosic materials, subjected to radiative heat exposure. These assemblies are representative of external walls in contemporary timber-framed buildings. Two configurations were examined: one with sawdust infill and the other with wood pellet infill. Both samples were exposed to radiant heat from the interior side for 60 min, simulating conditions of a fully developed compartment fire. The applied heat flux was 20 kW·m−2, delivered by a calibrated radiant panel. The results indicate that even minor design variations—particularly the choice of infill material—can significantly influence the thermal response, degradation kinetics of wood-based components, and the overall fire resistance of the wall assembly. The sawdust-filled system exhibited superior performance, achieving an estimated fire resistance rating of 60 min (60 REI). It showed reduced internal thermal degradation compared to the pellet-filled variant, which experienced greater charring depth due to internal voids between pellets, although it maintained structural integrity.",
+      "year": 2025,
+      "venue": "Polymers",
+      "url": "https://doi.org/10.3390/polym17172420",
+      "doi": "10.3390/polym17172420",
+      "authors": [
+        "Ľudmila Tereňová",
+        "Zuzana Vidholdová",
+        "Ľubomír Valigurský"
+      ],
+      "citation_count": 2,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Charring",
+        "Infill",
+        "Materials science",
+        "Environmental science",
+        "Heat flux",
+        "Char",
+        "Composite material",
+        "Fire resistance"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber wall fire resistance bio-based materials REI",
+      "paper_id": "https://openalex.org/W4312799464",
+      "title": "Influence of filler material on properties of fiber-reinforced polymer composites: A review",
+      "abstract": "Abstract The current day target for material scientists and researchers is developing a wholesome material to satisfy the parameters such as durability, manufacturability, low cost, and lightweight. Extensive research studies are ongoing on the possible application of polymer matrix composites in engineering and technology, since these materials have an edge over conventional materials in terms of performance. Hybridization of reinforcements is considered to be a better option to enhance the efficiency and performance of composite materials. Accordingly, research studies focus on the surface treatment of natural fibers and the addition of nanofillers (natural or synthetic) by industry and academia to take the properties and application of composites to the next level. This review purely focuses on the influence of fillers on the properties of composites along with the probable application of filler-based polymer composites.",
+      "year": 2022,
+      "venue": "e-Polymers",
+      "url": "https://doi.org/10.1515/epoly-2022-0080",
+      "doi": "10.1515/epoly-2022-0080",
+      "authors": [
+        "Manickam Ramesh",
+        "L. Rajeshkumar",
+        "N. Srinivasan",
+        "D. Vasanth Kumar",
+        "Devarajan Balaji"
+      ],
+      "citation_count": 265,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Composite material",
+        "Materials science",
+        "Filler (materials)",
+        "Design for manufacturability",
+        "Durability",
+        "Natural fiber",
+        "Polymer",
+        "Fiber"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber wall fire resistance bio-based materials REI",
+      "paper_id": "https://openalex.org/W2943552829",
+      "title": "Fire-Resistant Sandwich-Structured Composite Material Based on Alternative Materials and Its Physical and Mechanical Properties",
+      "abstract": "The development of composite materials from alternative raw materials, and the design of their properties for the intended purpose is an integral part of the rational management of raw materials and waste recycling. The submitted paper comprehensively assesses the physical and mechanical properties of sandwich composite material made from particles of winter rapeseed stalks, geopolymer and reinforcing basalt lattices. The developed composite panel is designed for use as a filler in constructions (building or building joinery). The observed properties were: bending characteristics, internal bonding, thermal conductivity coefficient and combustion characteristics. The results showed that the density of the particleboard has a significant effect on the resulting mechanical properties of the entire sandwich panel. On the contrary, the density of the second layer of the sandwich panel, geopolymer, did not have the same influence on its mechanical properties as the density of the particleboard. The basalt fibre reinforcement lattice positively affected the mechanical properties of sandwich composites only if it was sufficiently embedded in the structure of the particle board. All of the manufactured sandwich composites resisted flame for more than 13 min and the fire resistance was positively affected by the density of the geopolymer layer.",
+      "year": 2019,
+      "venue": "Materials",
+      "url": "https://doi.org/10.3390/ma12091432",
+      "doi": "10.3390/ma12091432",
+      "authors": [
+        "Štěpán Hýsek",
+        "Miroslav Frydrych",
+        "Miroslav Herclík",
+        "Petr Louda",
+        "Ludmila Fridrichová",
+        "Van Su Le",
+        "Hiep Le"
+      ],
+      "citation_count": 29,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Composite material",
+        "Composite number",
+        "Sandwich-structured composite",
+        "Sandwich panel",
+        "Geopolymer",
+        "Raw material",
+        "Flexural strength"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber wall fire resistance bio-based materials REI",
+      "paper_id": "https://openalex.org/W3107066807",
+      "title": "Recent Progress in Polymer-Based Building Materials",
+      "abstract": "With the development of human society, the requirements for building materials are becoming higher. The development of polymer materials and their application in the field of architecture have greatly enhanced and broadened the functions of building materials. With the development of material science and technology, many functional materials have been developed. Polymer materials have many excellent properties compared with inorganic materials, and they can also be improved to enhance functional properties by blending or adding various additives (such as flame retardants, antistatic agents, and antioxidants). In this paper, polymer-based building materials are introduced with three classes according to the applications, that is, substrates, coatings, and binders, and their recent signs of progress in the preparations and applications are carefully demonstrated.",
+      "year": 2020,
+      "venue": "International Journal of Polymer Science",
+      "url": "https://doi.org/10.1155/2020/8838160",
+      "doi": "10.1155/2020/8838160",
+      "authors": [
+        "Jingjing Shen",
+        "Jianwei Liang",
+        "Xinfeng Lin",
+        "Hongjian Lin",
+        "Jing Yu",
+        "Zhaogang Yang"
+      ],
+      "citation_count": 74,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Antistatic agent",
+        "Polymer",
+        "Nanotechnology",
+        "Building material",
+        "Polymer science",
+        "Composite material",
+        "Layer (electronics)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber wall fire resistance bio-based materials REI",
+      "paper_id": "https://openalex.org/W2506873566",
+      "title": "Plant Fibre: Molecular Structure and Biomechanical Properties, of a Complex Living Material, Influencing Its Deconstruction towards a Biobased Composite",
+      "abstract": "Plant cell walls form an organic complex composite material that fulfils various functions. The hierarchical structure of this material is generated from the integration of its elementary components. This review provides an overview of wood as a composite material followed by its deconstruction into fibres that can then be incorporated into biobased composites. Firstly, the fibres are defined, and their various origins are discussed. Then, the organisation of cell walls and their components are described. The emphasis is on the molecular interactions of the cellulose microfibrils, lignin and hemicelluloses in planta. Hemicelluloses of diverse species and cell walls are described. Details of their organisation in the primary cell wall are provided, as understanding of the role of hemicellulose has recently evolved and is likely to affect our perception and future study of their secondary cell wall homologs. The importance of the presence of water on wood mechanical properties is also discussed. These sections provide the basis for understanding the molecular arrangements and interactions of the components and how they influence changes in fibre properties once isolated. A range of pulping processes can be used to individualise wood fibres, but these can cause damage to the fibres. Therefore, issues relating to fibre production are discussed along with the dispersion of wood fibres during extrusion. The final section explores various ways to improve fibres obtained from wood.",
+      "year": 2016,
+      "venue": "Materials",
+      "url": "https://doi.org/10.3390/ma9080618",
+      "doi": "10.3390/ma9080618",
+      "authors": [
+        "Mathias Sorieul",
+        "Alan Dickson",
+        "Stefan Hill",
+        "Hamish Pearson"
+      ],
+      "citation_count": 193,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Lignin",
+        "Hemicellulose",
+        "Cellulose",
+        "Materials science",
+        "Composite material",
+        "Cell wall",
+        "Composite number",
+        "Polymer science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber wall fire resistance bio-based materials REI",
+      "paper_id": "https://openalex.org/W3200377389",
+      "title": "The Food–Materials Nexus: Next Generation Bioplastics and Advanced Materials from Agri‐Food Residues",
+      "abstract": "The most recent strategies available for upcycling agri-food losses and waste (FLW) into functional bioplastics and advanced materials are reviewed and the valorization of food residuals are put in perspective, adding to the water-food-energy nexus. Low value or underutilized biomass, biocolloids, water-soluble biopolymers, polymerizable monomers, and nutrients are introduced as feasible building blocks for biotechnological conversion into bioplastics. The latter are demonstrated for their incorporation in multifunctional packaging, biomedical devices, sensors, actuators, and energy conversion and storage devices, contributing to the valorization efforts within the future circular bioeconomy. Strategies are introduced to effectively synthesize, deconstruct and reassemble or engineer FLW-derived monomeric, polymeric, and colloidal building blocks. Multifunctional bioplastics are introduced considering the structural, chemical, physical as well as the accessibility of FLW precursors. Processing techniques are analyzed within the fields of polymer chemistry and physics. The prospects of FLW streams and biomass surplus, considering their availability, interactions with water and thermal stability, are critically discussed in a near-future scenario that is expected to lead to next-generation bioplastics and advanced materials.",
+      "year": 2021,
+      "venue": "Advanced Materials",
+      "url": "https://doi.org/10.1002/adma.202102520",
+      "doi": "10.1002/adma.202102520",
+      "authors": [
+        "Caio G. Otoni",
+        "Henriette Monteiro Cordeiro de Azeredo",
+        "Bruno D. Mattos",
+        "Marco Beaumont",
+        "Daniel S. Corrêa",
+        "Orlando J. Rojas"
+      ],
+      "citation_count": 171,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Bioplastic",
+        "Materials science",
+        "Nexus (standard)",
+        "Food packaging",
+        "Nanotechnology",
+        "Polymer science",
+        "Waste management",
+        "Engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber wall fire resistance bio-based materials REI",
+      "paper_id": "https://openalex.org/W4380047477",
+      "title": "Evolution and Current State of Building Materials, Construction Methods, and Building Regulations in the U.K.: Implications for Sustainable Building Practices",
+      "abstract": "This study presents a comprehensive review of building materials, construction methods, and building regulations on the U.K. mainland. This provides valuable insights into the historical progression and transformation of the construction industry through a comprehensive analysis of both traditional and modern building construction materials and methods and categorising their evolutionary trajectory. Current building regulations in England, Wales, and Scotland are compared, highlighting differences in fire safety, noise safety, energy conservation, and sustainability. For example, fire safety regulations are analysed in detail, including fire resistance duration, wall cladding combustibility, and limitations on unprotected areas. Advances in knowledge and technology have led to increasingly sophisticated and energy-dependent methods, materials, and regulations. This study showcases the vast array of building construction materials spanning centuries, each possessing unique properties and performances. The selected methods and materials represent those currently employed or widely utilised in the U.K. construction industry, affirming their relevance and applicability in modern construction practices. Limitations in construction practices primarily stem from a lack of knowledge and tools rather than material scarcity. Enhancing knowledge and access to advanced tools is crucial to overcoming these limitations and driving advancements in the field. This study provides insights into the evolution of building materials, construction methods, and building regulations that can inform future developments in sustainable building practices. The findings have significant implications for policymakers, building designers, and constructors, particularly in terms of adopting sustainable materials and construction methods that comply with building regulations while reducing the environmental impact of the built environment.",
+      "year": 2023,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings13061480",
+      "doi": "10.3390/buildings13061480",
+      "authors": [
+        "Rune Vagtholm",
+        "Amy Matteo",
+        "Behrang Vand",
+        "Laura Tūpėnaitė"
+      ],
+      "citation_count": 65,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Architectural engineering",
+        "Sustainability",
+        "Building science",
+        "Engineering",
+        "Construction engineering",
+        "Built environment",
+        "Construction industry",
+        "Building construction"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber wall fire resistance bio-based materials REI",
+      "paper_id": "https://openalex.org/W4283577669",
+      "title": "Sustainable wood electronics by iron-catalyzed laser-induced graphitization for large-scale applications",
+      "abstract": "Abstract Ecologically friendly wood electronics will help alleviating the shortcomings of state-of-art cellulose-based “green electronics”. Here we introduce iron-catalyzed laser-induced graphitization (IC-LIG) as an innovative approach for engraving large-scale electrically conductive structures on wood with very high quality and efficiency, overcoming the limitations of conventional LIG including high ablation, thermal damages, need for multiple lasing steps, use of fire retardants and inert atmospheres. An aqueous bio-based coating, inspired by historical iron-gall ink, protects wood from laser ablation and thermal damage while promoting efficient graphitization and smoothening substrate irregularities. Large-scale (100 cm 2 ), highly conductive (≥2500 S m −1 ) and homogeneous surface areas are engraved single-step in ambient atmosphere with a conventional CO 2 laser, even on very thin (∼450 µm) wood veneers. We demonstrate the validity of our approach by turning wood into highly durable strain sensors, flexible electrodes, capacitive touch panels and an electroluminescent LIG-based device.",
+      "year": 2022,
+      "venue": "Nature Communications",
+      "url": "https://doi.org/10.1038/s41467-022-31283-7",
+      "doi": "10.1038/s41467-022-31283-7",
+      "authors": [
+        "Christopher H. Dreimol",
+        "Huizhang Guo",
+        "Maximilian Ritter",
+        "Tobias Keplinger",
+        "Yong Ding",
+        "Roman Günther",
+        "Erik Poloni",
+        "Ingo Burgert",
+        "Guido Panzarasa"
+      ],
+      "citation_count": 138,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Laser ablation",
+        "Substrate (aquarium)",
+        "Engraving",
+        "Nanotechnology",
+        "Electronics",
+        "Laser",
+        "Electrical conductor"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber wall fire resistance bio-based materials REI",
+      "paper_id": "https://openalex.org/W4391320605",
+      "title": "Biomaterials technology and policies in the building sector: a review",
+      "abstract": "Abstract Traditional building materials have some drawbacks in the construction industry, particularly in terms of greenhouse gas emissions and energy consumption. Biomaterials derived from renewable sources are a promising alternative, significantly reducing the greenhouse effect and enhancing energy efficiency. However, traditional materials still dominate the construction sector, and there is a lack of understanding among some policymakers and developers regarding biomaterials. Here, we review building biomaterials and their policies and life cycle assessment through case studies. Bio-based materials have the potential to reduce over 320,000 tons of carbon dioxide emissions by 2050. They also exhibit advantages like decreasing water absorption by 40%, reducing energy consumption by 8.7%, enhancing acoustic absorption by 6.7%, and improving mechanical properties. We summarize recent advancements in mycelial materials, bioconcrete, natural fibers, and fiber-reinforced composites. We also explore the contributions of nanotechnology and microalgae technology in enhancing biomaterials' thermal insulation and eco-friendliness.",
+      "year": 2024,
+      "venue": "Environmental Chemistry Letters",
+      "url": "https://doi.org/10.1007/s10311-023-01689-w",
+      "doi": "10.1007/s10311-023-01689-w",
+      "authors": [
+        "Lin Chen",
+        "Yubing Zhang",
+        "Zhonghao Chen",
+        "Yitong Dong",
+        "Yushan Jiang",
+        "Jianmin Hua",
+        "Yunfei Liu",
+        "Ahmed I. Osman",
+        "Mohamed Farghali",
+        "Lepeng Huang",
+        "David W. Rooney",
+        "Pow‐Seng Yap"
+      ],
+      "citation_count": 167,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Greenhouse gas",
+        "Renewable energy",
+        "Energy consumption",
+        "Life-cycle assessment",
+        "Architectural engineering",
+        "Environmental science",
+        "Nanotechnology",
+        "Materials science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber wall fire resistance bio-based materials REI",
+      "paper_id": "https://openalex.org/W2792564613",
+      "title": "Assessing the main opportunities of integrated biorefining from agro-bioenergy co/by-products and agroindustrial residues into high-value added products associated to some emerging markets: A review",
+      "abstract": "",
+      "year": 2018,
+      "venue": "Renewable and Sustainable Energy Reviews",
+      "url": "https://doi.org/10.1016/j.rser.2018.02.041",
+      "doi": "10.1016/j.rser.2018.02.041",
+      "authors": [
+        "Ugo De Corato",
+        "Isabella De Bari",
+        "Egidio Viola",
+        "Massimo Pugliese"
+      ],
+      "citation_count": 225,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Biorefining",
+        "Biorefinery",
+        "Value added",
+        "Agriculture",
+        "Bioenergy",
+        "Business",
+        "Biotechnology",
+        "Added value"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber wall fire resistance bio-based materials REI",
+      "paper_id": "https://openalex.org/W4380450896",
+      "title": "FIRE SAFE USE OF WOOD IN BUILDINGS - GLOBAL DESIGN GUIDE",
+      "abstract": "Building codes around the globe dictate the design and construction of buildings. For most buildings, designers will follow prescriptive code provisions to demonstrate code compliance. However, some building codes allow the use of performance-based design to demonstrate code compliance. Performance-based design is usually more complex but allows for greater flexibility in the selection of materials and systems. Regardless of the code compliance methods, the combustibility of timber structures and wood products needs to be well-understood and properly accounted for in building designs. This paper describes the development of a new international guidance document on fire safety in timber buildings within the Fire Safe Use of Wood (FSUW) network, written by 13 lead authors assisted by more than 20 experts in over a dozen different countries.",
+      "year": 2023,
+      "venue": "",
+      "url": "https://doi.org/10.52202/069179-0603",
+      "doi": "10.52202/069179-0603",
+      "authors": [
+        "Christian Dagenais",
+        "Andy Buchanan",
+        "Birgit Östman",
+        "Michael Klippel",
+        "David G. Barber",
+        "Ed Claridge",
+        "Andrew Dunn",
+        "P. England",
+        "Marc Janssens",
+        "Alar Just",
+        "Esko Mikkolo",
+        "Colleen Wade",
+        "Norman Werther"
+      ],
+      "citation_count": 10,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Architectural engineering",
+        "Building code",
+        "Flexibility (engineering)",
+        "Building design",
+        "Code (set theory)",
+        "Fire safety",
+        "Engineering",
+        "Combustibility"
+      ],
+      "tldr": ""
+    }
+  ]
+}

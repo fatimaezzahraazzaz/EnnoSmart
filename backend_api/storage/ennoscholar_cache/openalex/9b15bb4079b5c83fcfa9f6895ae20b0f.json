@@ -1,0 +1,104 @@
+{
+  "created_at": "2026-06-26T09:43:58",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "timber wall fire resistance bio-based materials REI",
+      "paper_id": "https://openalex.org/W2979363123",
+      "title": "Fiber-Reinforced Polymer Composites: Manufacturing, Properties, and Applications",
+      "abstract": "Composites have been found to be the most promising and discerning material available in this century. Presently, composites reinforced with fibers of synthetic or natural materials are gaining more importance as demands for lightweight materials with high strength for specific applications are growing in the market. Fiber-reinforced polymer composite offers not only high strength to weight ratio, but also reveals exceptional properties such as high durability; stiffness; damping property; flexural strength; and resistance to corrosion, wear, impact, and fire. These wide ranges of diverse features have led composite materials to find applications in mechanical, construction, aerospace, automobile, biomedical, marine, and many other manufacturing industries. Performance of composite materials predominantly depends on their constituent elements and manufacturing techniques, therefore, functional properties of various fibers available worldwide, their classifications, and the manufacturing techniques used to fabricate the composite materials need to be studied in order to figure out the optimized characteristic of the material for the desired application. An overview of a diverse range of fibers, their properties, functionality, classification, and various fiber composite manufacturing techniques is presented to discover the optimized fiber-reinforced composite material for significant applications. Their exceptional performance in the numerous fields of applications have made fiber-reinforced composite materials a promising alternative over solitary metals or alloys.",
+      "year": 2019,
+      "venue": "Polymers",
+      "url": "https://doi.org/10.3390/polym11101667",
+      "doi": "10.3390/polym11101667",
+      "authors": [
+        "Dipen Kumar Rajak",
+        "Durgesh D. Pagar",
+        "Pradeep L. Menezes",
+        "Emanoil Linul"
+      ],
+      "citation_count": 1615,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Specific strength",
+        "Materials science",
+        "Composite material",
+        "Flexural strength",
+        "Aerospace",
+        "Composite number",
+        "Specific modulus",
+        "Durability"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber wall fire resistance bio-based materials REI",
+      "paper_id": "https://openalex.org/W4414069839",
+      "title": "Influence of Bio-Based Infill Materials on the Fire Resistance of Panelised Timber Wall Assemblies—A Pilot Study",
+      "abstract": "In the pursuit of low-impact and renewable construction materials, various by-products from agriculture, forestry, and the wood processing industry are being explored as potential bio-based infill materials for wall assemblies. This study presents an experimental assessment of the fire performance of timber wall systems composed of block units filled with different lignocellulosic materials, subjected to radiative heat exposure. These assemblies are representative of external walls in contemporary timber-framed buildings. Two configurations were examined: one with sawdust infill and the other with wood pellet infill. Both samples were exposed to radiant heat from the interior side for 60 min, simulating conditions of a fully developed compartment fire. The applied heat flux was 20 kW·m−2, delivered by a calibrated radiant panel. The results indicate that even minor design variations—particularly the choice of infill material—can significantly influence the thermal response, degradation kinetics of wood-based components, and the overall fire resistance of the wall assembly. The sawdust-filled system exhibited superior performance, achieving an estimated fire resistance rating of 60 min (60 REI). It showed reduced internal thermal degradation compared to the pellet-filled variant, which experienced greater charring depth due to internal voids between pellets, although it maintained structural integrity.",
+      "year": 2025,
+      "venue": "Polymers",
+      "url": "https://doi.org/10.3390/polym17172420",
+      "doi": "10.3390/polym17172420",
+      "authors": [
+        "Ľudmila Tereňová",
+        "Zuzana Vidholdová",
+        "Ľubomír Valigurský"
+      ],
+      "citation_count": 2,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Charring",
+        "Infill",
+        "Materials science",
+        "Environmental science",
+        "Heat flux",
+        "Char",
+        "Composite material",
+        "Fire resistance"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber wall fire resistance bio-based materials REI",
+      "paper_id": "https://openalex.org/W4312799464",
+      "title": "Influence of filler material on properties of fiber-reinforced polymer composites: A review",
+      "abstract": "Abstract The current day target for material scientists and researchers is developing a wholesome material to satisfy the parameters such as durability, manufacturability, low cost, and lightweight. Extensive research studies are ongoing on the possible application of polymer matrix composites in engineering and technology, since these materials have an edge over conventional materials in terms of performance. Hybridization of reinforcements is considered to be a better option to enhance the efficiency and performance of composite materials. Accordingly, research studies focus on the surface treatment of natural fibers and the addition of nanofillers (natural or synthetic) by industry and academia to take the properties and application of composites to the next level. This review purely focuses on the influence of fillers on the properties of composites along with the probable application of filler-based polymer composites.",
+      "year": 2022,
+      "venue": "e-Polymers",
+      "url": "https://doi.org/10.1515/epoly-2022-0080",
+      "doi": "10.1515/epoly-2022-0080",
+      "authors": [
+        "Manickam Ramesh",
+        "L. Rajeshkumar",
+        "N. Srinivasan",
+        "D. Vasanth Kumar",
+        "Devarajan Balaji"
+      ],
+      "citation_count": 265,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Composite material",
+        "Materials science",
+        "Filler (materials)",
+        "Design for manufacturability",
+        "Durability",
+        "Natural fiber",
+        "Polymer",
+        "Fiber"
+      ],
+      "tldr": ""
+    }
+  ]
+}

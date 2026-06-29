@@ -25,6 +25,7 @@ import logging
 import mimetypes
 import re
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import Optional
 
@@ -41,9 +42,11 @@ EXTENSION_MAP: dict[str, FileCategory] = {
     ".pdf": FileCategory.PDF_NATIVE,
 
     ".docx": FileCategory.DOCX,
+    ".docm": FileCategory.DOCX,
     ".doc": FileCategory.DOCX,
 
     ".pptx": FileCategory.PPTX,
+    ".pptm": FileCategory.PPTX,
     ".ppt": FileCategory.PPTX,
 
     ".eml": FileCategory.EMAIL,
@@ -89,6 +92,23 @@ VIDEO_EXTENSIONS: set[str] = {
 
 AUDIO_VIDEO_EXTENSIONS: set[str] = AUDIO_EXTENSIONS | VIDEO_EXTENSIONS
 
+# Extensions Office Open XML : on lit le header ZIP pour distinguer Word/PPT/Excel.
+OPENXML_EXTENSIONS: set[str] = {
+    ".docx",
+    ".docm",
+    ".pptx",
+    ".pptm",
+    ".xlsx",
+    ".xlsm",
+}
+
+# Archives : le ZIP est supporté nativement. RAR/7Z peuvent être ajoutés plus tard.
+ARCHIVE_EXTENSIONS: set[str] = {".zip"}
+
+MAX_ARCHIVE_FILES = 80
+MAX_ARCHIVE_TOTAL_BYTES = 250 * 1024 * 1024  # 250 MB
+MAX_ARCHIVE_SINGLE_FILE_BYTES = 100 * 1024 * 1024  # 100 MB
+
 MAGIC_BYTES = [
     (b"%PDF", FileCategory.PDF_NATIVE),
     (b"PK\x03\x04", FileCategory.DOCX),
@@ -128,13 +148,28 @@ def _audio_file_category() -> FileCategory:
     return FileCategory.UNKNOWN
 
 
+
+def _archive_file_category() -> FileCategory:
+    """
+    Garde le router compatible même si FileCategory n'a pas ARCHIVE.
+    """
+    for name in ("ARCHIVE", "ZIP", "CONTAINER"):
+        if hasattr(FileCategory, name):
+            return getattr(FileCategory, name)
+
+    return FileCategory.UNKNOWN
+
+
 def _detect_category(path: Path) -> FileCategory:
     ext = path.suffix.lower()
+
+    if ext in ARCHIVE_EXTENSIONS:
+        return _archive_file_category()
 
     if ext in AUDIO_VIDEO_EXTENSIONS:
         return _audio_file_category()
 
-    if ext in EXTENSION_MAP and ext not in (".docx", ".pptx", ".xlsx", ".xlsm"):
+    if ext in EXTENSION_MAP and ext not in OPENXML_EXTENSIONS:
         return EXTENSION_MAP[ext]
 
     try:
@@ -709,6 +744,255 @@ def _inject_images(
     return enriched, orphans
 
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Archives ZIP
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _safe_archive_member_path(base_dir: Path, member_name: str) -> Path | None:
+    """
+    Empêche le Zip Slip : un membre ZIP ne doit jamais sortir du dossier temporaire.
+    """
+    raw = str(member_name or "").replace("\\", "/").strip()
+
+    if not raw or raw.endswith("/"):
+        return None
+
+    # Ignore les fichiers système inutiles.
+    lower = raw.lower()
+    if lower.startswith("__macosx/") or lower.endswith(".ds_store"):
+        return None
+
+    candidate = (base_dir / raw).resolve()
+    base_resolved = base_dir.resolve()
+
+    try:
+        candidate.relative_to(base_resolved)
+    except Exception:
+        return None
+
+    return candidate
+
+
+def _is_supported_archive_member(path: Path) -> bool:
+    """
+    Détermine si un fichier extrait du ZIP peut être repassé dans le router.
+    """
+    ext = path.suffix.lower()
+    return (
+        ext in EXTENSION_MAP
+        or ext in AUDIO_VIDEO_EXTENSIONS
+        or ext in ARCHIVE_EXTENSIONS
+    )
+
+
+def _run_archive(
+    path: Path,
+    source_tag: SourceTag,
+    vision_mode: str,
+    formula_mode: str = "off",
+    enable_formulas: Optional[bool] = None,
+    enable_transcription: bool = True,
+    transcription_model: str = "small",
+    transcription_language: Optional[str] = "fr",
+    transcription_beam_size: int = 5,
+    transcription_group_chunks: bool = True,
+    transcription_chunk_seconds: int = DEFAULT_TRANSCRIPTION_CHUNK_SECONDS,
+    transcription_chunk_max_chars: int = DEFAULT_TRANSCRIPTION_CHUNK_MAX_CHARS,
+    archive_depth: int = 0,
+    max_archive_depth: int = 2,
+) -> ExtractionResult:
+    """
+    ZIP = conteneur documentaire :
+    - extrait les fichiers supportés ;
+    - repasse chaque fichier dans extract() ;
+    - fusionne les chunks avec préfixe de traçabilité.
+
+    Le NLP ne doit pas être modifié : il reçoit un ExtractionResult standard
+    avec text_chunks / visual_chunks déjà enrichis.
+    """
+    category = _archive_file_category()
+
+    result = ExtractionResult(
+        file_name=path.name,
+        source_path=str(path.resolve()),
+        file_category=category,
+        text_chunks=[],
+        visual_chunks=[],
+        detected_rd_sections=[],
+        tags=["ARCHIVE:ZIP"],
+        confidence_score=1.0,
+        extraction_errors=[],
+    )
+
+    if archive_depth >= max_archive_depth:
+        result.extraction_errors.append(
+            f"Archive ignorée : profondeur maximale atteinte ({max_archive_depth})"
+        )
+        result.confidence_score = 0.2
+        return result
+
+    try:
+        if not zipfile.is_zipfile(str(path)):
+            result.extraction_errors.append("Archive ZIP invalide ou corrompue")
+            result.confidence_score = 0.2
+            return result
+
+        tmp_dir = Path(tempfile.mkdtemp(prefix="ennosmart_zip_"))
+        extracted_files: list[Path] = []
+        total_size = 0
+
+        with zipfile.ZipFile(str(path), "r") as zf:
+            infos = [i for i in zf.infolist() if not i.is_dir()]
+
+            if len(infos) > MAX_ARCHIVE_FILES:
+                result.extraction_errors.append(
+                    f"Archive limitée : {len(infos)} fichiers trouvés, maximum {MAX_ARCHIVE_FILES}"
+                )
+                infos = infos[:MAX_ARCHIVE_FILES]
+
+            for info in infos:
+                try:
+                    member_path = _safe_archive_member_path(tmp_dir, info.filename)
+
+                    if member_path is None:
+                        continue
+
+                    if info.file_size <= 0:
+                        continue
+
+                    if info.file_size > MAX_ARCHIVE_SINGLE_FILE_BYTES:
+                        result.extraction_errors.append(
+                            f"Fichier ZIP ignoré car trop volumineux : {info.filename} "
+                            f"({round(info.file_size / (1024 * 1024), 2)} MB)"
+                        )
+                        continue
+
+                    total_size += int(info.file_size or 0)
+
+                    if total_size > MAX_ARCHIVE_TOTAL_BYTES:
+                        result.extraction_errors.append(
+                            "Archive limitée : taille totale maximale atteinte"
+                        )
+                        break
+
+                    member_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    with zf.open(info, "r") as src, open(member_path, "wb") as dst:
+                        dst.write(src.read())
+
+                    if _is_supported_archive_member(member_path):
+                        extracted_files.append(member_path)
+                    else:
+                        result.extraction_errors.append(
+                            f"Fichier ZIP ignoré type non supporté : {info.filename}"
+                        )
+
+                except Exception as exc:
+                    result.extraction_errors.append(
+                        f"Erreur extraction membre ZIP {info.filename}: {exc}"
+                    )
+
+        logger.info(
+            "Archive ZIP %s : %d fichiers supportés extraits",
+            path.name,
+            len(extracted_files),
+        )
+
+        if not extracted_files:
+            result.extraction_errors.append("Archive ZIP : aucun fichier exploitable trouvé")
+            result.confidence_score = 0.2
+            return result
+
+        chunks_added = 0
+
+        for member_path in extracted_files:
+            try:
+                logger.info("Extraction fichier ZIP : %s", member_path.name)
+
+                ar = extract(
+                    member_path,
+                    source_tag=source_tag,
+                    vision_mode=vision_mode,
+                    formula_mode=formula_mode,
+                    enable_formulas=enable_formulas,
+                    enable_transcription=enable_transcription,
+                    transcription_model=transcription_model,
+                    transcription_language=transcription_language,
+                    transcription_beam_size=transcription_beam_size,
+                    transcription_group_chunks=transcription_group_chunks,
+                    transcription_chunk_seconds=transcription_chunk_seconds,
+                    transcription_chunk_max_chars=transcription_chunk_max_chars,
+                    archive_depth=archive_depth + 1,
+                    max_archive_depth=max_archive_depth,
+                )
+
+                prefixed_text_chunks = [
+                    f"[FICHIER ZIP : {member_path.name}]\n"
+                    f"[ARCHIVE SOURCE : {path.name}]\n\n{chunk}"
+                    for chunk in (ar.text_chunks or [])
+                    if str(chunk or "").strip()
+                ]
+
+                prefixed_visual_chunks = [
+                    f"[FICHIER ZIP : {member_path.name}]\n"
+                    f"[ARCHIVE SOURCE : {path.name}]\n\n{chunk}"
+                    for chunk in (ar.visual_chunks or [])
+                    if str(chunk or "").strip()
+                ]
+
+                result.text_chunks.extend(prefixed_text_chunks)
+                result.visual_chunks.extend(prefixed_visual_chunks)
+
+                chunks_added += len(prefixed_text_chunks) + len(prefixed_visual_chunks)
+
+                if getattr(ar, "detected_rd_sections", None):
+                    result.detected_rd_sections.extend(ar.detected_rd_sections)
+
+                result.tags.append(f"ZIP_FILE_EXTRACTED:{member_path.name}")
+
+                if ar.tags:
+                    for tag in ar.tags:
+                        result.tags.append(f"ZIP:{member_path.name}:{tag}")
+
+                if ar.extraction_errors:
+                    for e in ar.extraction_errors:
+                        # Si le fichier a quand même produit des chunks, certains messages
+                        # sont de simples warnings techniques et ne doivent pas polluer ERRORS.
+                        if (ar.text_chunks or ar.visual_chunks) and _is_benign_extraction_warning(e):
+                            result.tags.append(f"ZIP_WARNING:{member_path.name}:{e}")
+                            continue
+
+                        result.extraction_errors.append(f"ZIP {member_path.name}: {e}")
+
+                if not prefixed_text_chunks and not prefixed_visual_chunks:
+                    result.extraction_errors.append(
+                        f"ZIP {member_path.name}: aucun chunk exploitable extrait"
+                    )
+
+            except Exception as exc:
+                logger.warning("Erreur extraction fichier ZIP %s : %s", member_path, exc)
+                result.extraction_errors.append(f"ZIP {member_path.name}: {exc}")
+
+        if chunks_added:
+            result.tags.append("ARCHIVE_FILES_EXTRACTED")
+            result.tags.append(f"ARCHIVE_FILE_CHUNKS:{chunks_added}")
+            result.confidence_score = 1.0
+        else:
+            result.confidence_score = 0.2
+
+        result.tags = list(dict.fromkeys(result.tags or []))
+        result.detected_rd_sections = list(dict.fromkeys(result.detected_rd_sections or []))
+
+        return result
+
+    except Exception as exc:
+        logger.error("Erreur archive ZIP %s : %s", path.name, exc, exc_info=True)
+        result.extraction_errors.append(str(exc))
+        result.confidence_score = 0.2
+        return result
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Pipelines par type fichier
 # ──────────────────────────────────────────────────────────────────────────────
@@ -836,14 +1120,14 @@ def _run_office(
         formula_mode=formula_mode,
     )
 
-    if _normalize_formula_mode(formula_mode) != "off" and office.file_type == "docx":
+    if _normalize_formula_mode(formula_mode) != "off" and office.file_type in {"docx", "docm"}:
         enriched = _run_docx_omml(
             path,
             enriched,
             formula_mode=formula_mode,
         )
 
-    elif _normalize_formula_mode(formula_mode) != "off" and office.file_type == "pptx":
+    elif _normalize_formula_mode(formula_mode) != "off" and office.file_type in {"pptx", "pptm"}:
         enriched = _run_pptx_omml(
             path,
             enriched,
@@ -854,7 +1138,7 @@ def _run_office(
 
     if _normalize_vision_mode(vision_mode) != "text_only":
         try:
-            if office.file_type == "docx":
+            if office.file_type in {"docx", "docm"}:
                 import zipfile
 
                 with zipfile.ZipFile(str(path)) as zf:
@@ -896,7 +1180,7 @@ def _run_office(
     enriched, orphans = _inject_images(
         enriched,
         image_items,
-        "docx_document" if office.file_type == "docx" else "pptx_slide",
+        "docx_document" if office.file_type in {"docx", "docm"} else "pptx_slide",
         vision_mode,
         formula_mode=formula_mode,
     )
@@ -924,7 +1208,7 @@ def _run_office(
         source_path=str(path.resolve()),
         file_category=(
             FileCategory.DOCX
-            if office.file_type == "docx"
+            if office.file_type in {"docx", "docm"}
             else FileCategory.PPTX
         ),
         text_chunks=enriched,
@@ -939,24 +1223,115 @@ def _run_office(
     )
 
 
+
+def _safe_temp_attachment_name(filename: str, fallback: str = "attachment.bin") -> str:
+    """
+    Nettoie le nom d'une pièce jointe avant écriture temporaire.
+    Le router ne doit jamais faire confiance au chemin fourni par le mail.
+    """
+    name = str(filename or "").replace("\\", "/").split("/")[-1].strip()
+    if not name:
+        name = fallback
+
+    name = re.sub(r"[\x00-\x1f\x7f]+", "_", name)
+    name = re.sub(r"[<>:\"/\\|?*]+", "_", name)
+    name = re.sub(r"\s+", " ", name).strip()
+
+    return name or fallback
+
+
+
+def _is_benign_extraction_warning(message: str) -> bool:
+    """
+    Messages qui ne doivent pas faire échouer un document.
+    Exemple : python-docx refuse un .docm, mais office.py extrait ensuite le contenu via XML fallback.
+    """
+    msg = str(message or "").lower()
+
+    if "fallback xml utilisé" in msg or "xml fallback" in msg:
+        if "python-docx" in msg or "macroenabled" in msg:
+            return True
+
+    if "aucun chunk exploitable extrait" in msg:
+        # Ce message peut être bénin pour une image/logo en mode text_only.
+        return True
+
+    return False
+
+
+def _is_image_attachment_name(filename: str) -> bool:
+    ext = Path(str(filename or "")).suffix.lower()
+    return ext in {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".gif", ".webp", ".svg"}
+
+
 def _run_email(
     path: Path,
     formula_mode: str = "off",
 ) -> ExtractionResult:
+    """
+    Email (.msg/.eml) = conteneur :
+    - extrait le corps du mail ;
+    - conserve les pièces jointes R&D en fichiers temporaires ;
+    - le point d'entrée extract() les repasse ensuite dans le routeur.
+
+    Important :
+    Le parser email ne doit pas analyser les pièces jointes lui-même.
+    Il fournit seulement attachments_paths au router.
+    """
     from modules.extraction.text.email_parser import extract_email
 
     email_result = extract_email(str(path))
-    attachment_paths = []
+    attachment_paths: list[str] = []
+    attachment_errors: list[str] = []
 
-    for att in [a for a in email_result.attachments if a.is_rd_relevant]:
-        if att.content:
-            try:
-                tmp = Path(tempfile.mkdtemp(prefix="ennosmart_att_")) / att.filename
-                tmp.write_bytes(att.content)
-                attachment_paths.append(str(tmp))
+    rd_attachments = [
+        a for a in email_result.attachments
+        if getattr(a, "is_rd_relevant", False)
+    ]
 
-            except Exception:
-                pass
+    logger.info(
+        "Email %s : %d pièces jointes détectées, %d pertinentes R&D",
+        path.name,
+        len(email_result.attachments),
+        len(rd_attachments),
+    )
+
+    for idx, att in enumerate(rd_attachments, start=1):
+        try:
+            content = getattr(att, "content", None)
+
+            if not content:
+                msg = (
+                    f"Pièce jointe sans contenu exploitable : "
+                    f"{getattr(att, 'filename', 'unknown')}"
+                )
+                logger.warning(msg)
+                attachment_errors.append(msg)
+                continue
+
+            safe_name = _safe_temp_attachment_name(
+                getattr(att, "filename", "") or f"attachment_{idx}.bin",
+                fallback=f"attachment_{idx}.bin",
+            )
+
+            tmp_dir = Path(tempfile.mkdtemp(prefix="ennosmart_att_"))
+            tmp_path = tmp_dir / safe_name
+            tmp_path.write_bytes(content)
+
+            attachment_paths.append(str(tmp_path))
+
+            logger.info(
+                "PJ email prête pour extraction : %s | ext=%s | size=%d | tmp=%s",
+                safe_name,
+                getattr(att, "extension", Path(safe_name).suffix.lower()),
+                len(content),
+                tmp_path,
+            )
+
+        except Exception as exc:
+            msg = f"Erreur préparation PJ email {getattr(att, 'filename', 'unknown')} : {exc}"
+            logger.warning(msg)
+            attachment_errors.append(msg)
 
     enriched = _inject_formulas(
         email_result.text_chunks,
@@ -966,6 +1341,13 @@ def _run_email(
 
     tags = list(set(email_result.tags))
 
+    if attachment_paths:
+        tags.append("EMAIL_ATTACHMENTS_READY")
+        tags.append(f"EMAIL_ATTACHMENTS_READY_COUNT:{len(attachment_paths)}")
+
+    if rd_attachments:
+        tags.append(f"EMAIL_RD_ATTACHMENTS_COUNT:{len(rd_attachments)}")
+
     if _normalize_formula_mode(formula_mode) == "off":
         tags.append("FORMULAS_DISABLED")
     else:
@@ -974,6 +1356,8 @@ def _run_email(
     if any("[FORMULES" in c for c in enriched):
         tags.append("HAS_FORMULAS")
 
+    extraction_errors = list(email_result.extraction_errors or []) + attachment_errors
+
     return ExtractionResult(
         file_name=path.name,
         source_path=str(path.resolve()),
@@ -981,9 +1365,9 @@ def _run_email(
         text_chunks=enriched,
         attachments_paths=attachment_paths,
         detected_rd_sections=email_result.detected_rd_sections,
-        tags=tags,
+        tags=list(dict.fromkeys(tags)),
         confidence_score=email_result.confidence_score,
-        extraction_errors=email_result.extraction_errors,
+        extraction_errors=extraction_errors,
     )
 
 
@@ -1255,6 +1639,10 @@ def _run_audio(
     transcription_group_chunks: bool = True,
     transcription_chunk_seconds: int = DEFAULT_TRANSCRIPTION_CHUNK_SECONDS,
     transcription_chunk_max_chars: int = DEFAULT_TRANSCRIPTION_CHUNK_MAX_CHARS,
+
+    # Archives ZIP
+    archive_depth: int = 0,
+    max_archive_depth: int = 2,
 ) -> ExtractionResult:
     """
     Audio/vidéo → transcription texte.
@@ -1391,6 +1779,10 @@ def extract(
     transcription_group_chunks: bool = True,
     transcription_chunk_seconds: int = DEFAULT_TRANSCRIPTION_CHUNK_SECONDS,
     transcription_chunk_max_chars: int = DEFAULT_TRANSCRIPTION_CHUNK_MAX_CHARS,
+
+    # Archives ZIP
+    archive_depth: int = 0,
+    max_archive_depth: int = 2,
 ) -> ExtractionResult:
     """
     Paramètres recommandés :
@@ -1458,7 +1850,25 @@ def extract(
     )
 
     try:
-        if _is_audio_video(path):
+        if path.suffix.lower() in ARCHIVE_EXTENSIONS:
+            result = _run_archive(
+                path=path,
+                source_tag=source_tag,
+                vision_mode=vision_mode,
+                formula_mode=formula_mode,
+                enable_formulas=enable_formulas,
+                enable_transcription=enable_transcription,
+                transcription_model=transcription_model,
+                transcription_language=transcription_language,
+                transcription_beam_size=transcription_beam_size,
+                transcription_group_chunks=transcription_group_chunks,
+                transcription_chunk_seconds=transcription_chunk_seconds,
+                transcription_chunk_max_chars=transcription_chunk_max_chars,
+                archive_depth=archive_depth,
+                max_archive_depth=max_archive_depth,
+            )
+
+        elif _is_audio_video(path):
             if not enable_transcription:
                 return ExtractionResult(
                     file_name=path.name,
@@ -1523,10 +1933,23 @@ def extract(
 
         result.source_tag = source_tag
 
-        # Pièces jointes email
+        # Pièces jointes email : extraction récursive par le même routeur.
+        # Le mail est un conteneur ; ses PJ deviennent du contenu RAG/NLP.
         if result.attachments_paths:
+            logger.info(
+                "Extraction des pièces jointes email pour %s : %d PJ",
+                path.name,
+                len(result.attachments_paths),
+            )
+
+            attachment_chunks_added = 0
+
             for att_path in result.attachments_paths:
+                att_name = Path(att_path).name
+
                 try:
+                    logger.info("Extraction PJ email : %s", att_name)
+
                     ar = extract(
                         att_path,
                         source_tag=source_tag,
@@ -1540,26 +1963,77 @@ def extract(
                         transcription_group_chunks=transcription_group_chunks,
                         transcription_chunk_seconds=transcription_chunk_seconds,
                         transcription_chunk_max_chars=transcription_chunk_max_chars,
+                        archive_depth=archive_depth,
+                        max_archive_depth=max_archive_depth,
                     )
 
-                    result.text_chunks.extend(ar.text_chunks)
-                    result.visual_chunks.extend(ar.visual_chunks)
+                    # Préfixe de traçabilité : on garde l'origine PJ dans le texte.
+                    prefixed_text_chunks = [
+                        f"[PIÈCE JOINTE EMAIL : {att_name}]\n"
+                        f"[EMAIL SOURCE : {path.name}]\n\n{chunk}"
+                        for chunk in (ar.text_chunks or [])
+                        if str(chunk or "").strip()
+                    ]
+
+                    prefixed_visual_chunks = [
+                        f"[PIÈCE JOINTE EMAIL : {att_name}]\n"
+                        f"[EMAIL SOURCE : {path.name}]\n\n{chunk}"
+                        for chunk in (ar.visual_chunks or [])
+                        if str(chunk or "").strip()
+                    ]
+
+                    result.text_chunks.extend(prefixed_text_chunks)
+                    result.visual_chunks.extend(prefixed_visual_chunks)
+
+                    attachment_chunks_added += len(prefixed_text_chunks) + len(prefixed_visual_chunks)
+
+                    if getattr(ar, "detected_rd_sections", None):
+                        result.detected_rd_sections.extend(ar.detected_rd_sections)
+
+                    result.tags.append(f"EMAIL_ATTACHMENT_EXTRACTED:{att_name}")
+
+                    if ar.tags:
+                        for tag in ar.tags:
+                            result.tags.append(f"PJ:{att_name}:{tag}")
 
                     if ar.extraction_errors:
-                        result.extraction_errors.extend(
-                            [
-                                f"PJ {Path(att_path).name}: {e}"
-                                for e in ar.extraction_errors
-                            ]
-                        )
+                        for e in ar.extraction_errors:
+                            if (ar.text_chunks or ar.visual_chunks) and _is_benign_extraction_warning(e):
+                                result.tags.append(f"PJ_WARNING:{att_name}:{e}")
+                                continue
+
+                            result.extraction_errors.append(f"PJ {att_name}: {e}")
+
+                    if not prefixed_text_chunks and not prefixed_visual_chunks:
+                        # Une image/logo/signature en vision_mode=text_only ne doit pas compter
+                        # comme erreur d'extraction. Elle est volontairement ignorée.
+                        if _is_image_attachment_name(att_name) and _normalize_vision_mode(vision_mode) == "text_only":
+                            result.tags.append(f"EMAIL_ATTACHMENT_SKIPPED_NO_TEXT:{att_name}")
+                        else:
+                            result.extraction_errors.append(
+                                f"PJ {att_name}: aucun chunk exploitable extrait"
+                            )
 
                 except Exception as exc:
                     logger.warning("PJ %s : %s", att_path, exc)
+                    result.extraction_errors.append(f"PJ {att_name}: {exc}")
+
+            if attachment_chunks_added:
+                result.tags.append("EMAIL_ATTACHMENTS_EXTRACTED")
+                result.tags.append(f"EMAIL_ATTACHMENT_CHUNKS:{attachment_chunks_added}")
+
+            # Déduplication simple des tags et sections.
+            result.tags = list(dict.fromkeys(result.tags))
+            result.detected_rd_sections = list(dict.fromkeys(result.detected_rd_sections or []))
+
+        result.tags = list(dict.fromkeys(result.tags or []))
+        result.detected_rd_sections = list(dict.fromkeys(result.detected_rd_sections or []))
 
         logger.info(
-            "Résultat : %d chunks texte, %d visuels",
+            "Résultat : %d chunks texte, %d visuels | tags=%s",
             len(result.text_chunks),
             len(result.visual_chunks),
+            result.tags,
         )
 
         return result

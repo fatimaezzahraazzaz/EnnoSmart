@@ -1,0 +1,405 @@
+{
+  "created_at": "2026-06-26T10:04:25",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "straw insulation timber frame wall thermal inertia hygrothermal performance",
+      "paper_id": "https://openalex.org/W4220926306",
+      "title": "Hygrothermal performance of multilayer straw walls in different climates",
+      "abstract": "",
+      "year": 2022,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2022.126873",
+      "doi": "10.1016/j.conbuildmat.2022.126873",
+      "authors": [
+        "Ghadie Tlaiji",
+        "Fabienne Pennec",
+        "Salah-Eddine Ouldboukhitine",
+        "Mohamad Ibrahim",
+        "Pascal Henry Biwolé"
+      ],
+      "citation_count": 37,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Temperate climate",
+        "Environmental science",
+        "Moisture",
+        "Water content",
+        "Mediterranean climate",
+        "Materials science",
+        "Composite material"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw insulation timber frame wall thermal inertia hygrothermal performance",
+      "paper_id": "https://openalex.org/W4200201201",
+      "title": "Thermal and mechanical behavior of straw-based construction: A review",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2021.125915",
+      "doi": "10.1016/j.conbuildmat.2021.125915",
+      "authors": [
+        "Ghadie Tlaiji",
+        "Salah-Eddine Ouldboukhitine",
+        "Fabienne Pennec",
+        "Pascal Henry Biwolé"
+      ],
+      "citation_count": 70,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Context (archaeology)",
+        "Embodied energy",
+        "Environmental science",
+        "Life-cycle assessment",
+        "Work (physics)",
+        "Relative humidity",
+        "Carbon footprint"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw insulation timber frame wall thermal inertia hygrothermal performance",
+      "paper_id": "https://openalex.org/W4385790257",
+      "title": "Are straw bales better insulation materials for constructions? A review",
+      "abstract": "The construction industry significantly impacts climate change, highlighting the urgent need for exploring sustainable building solutions. Among the potential candidates, straw bale constructions have emerged as a promising alternative with low environmental impact and commendable thermal performance. This paper aims to investigate the thermal performance of straw bale constructions and assess the benefits of utilizing straw bales as a sustainable building solution. The findings demonstrate the outstanding thermal performance of straw bales, emphasizing their significant potential as a viable alternative to conventional insulation materials. Nevertheless, the extensive integration of straw bale constructions into the mainstream market is facing challenges from various aspects of the construction industry.",
+      "year": 2023,
+      "venue": "Developments in the Built Environment",
+      "url": "https://doi.org/10.1016/j.dibe.2023.100209",
+      "doi": "10.1016/j.dibe.2023.100209",
+      "authors": [
+        "C. T. Sun",
+        "Jian Gu",
+        "Qi Dong",
+        "Dagang Qu",
+        "Wen‐Shao Chang",
+        "Xunzhi Yin"
+      ],
+      "citation_count": 35,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Mainstream",
+        "Thermal insulation",
+        "Environmental science",
+        "Waste management",
+        "Engineering",
+        "Architectural engineering",
+        "Agricultural engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw insulation timber frame wall thermal inertia hygrothermal performance",
+      "paper_id": "https://openalex.org/W2895942303",
+      "title": "Laboratory and in-situ non-destructive methods to evaluate the thermal transmittance and behavior of walls, windows, and construction elements with innovative materials: A review",
+      "abstract": "",
+      "year": 2018,
+      "venue": "Energy and Buildings",
+      "url": "https://doi.org/10.1016/j.enbuild.2018.10.021",
+      "doi": "10.1016/j.enbuild.2018.10.021",
+      "authors": [
+        "Nelson Soares",
+        "Cláudio Martins",
+        "Margarida Gonçalves",
+        "Paulo Santos",
+        "Luís Simões da Silva",
+        "J.J. Costa"
+      ],
+      "citation_count": 114,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Thermal transmittance",
+        "Homogeneous",
+        "Thermal",
+        "Framing (construction)",
+        "Thermography",
+        "Transmittance",
+        "Materials science",
+        "Thermal insulation"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw insulation timber frame wall thermal inertia hygrothermal performance",
+      "paper_id": "https://openalex.org/W4376139372",
+      "title": "A review on recent research on bio-based building materials and their applications",
+      "abstract": "Abstract Bio-based materials represent a promising alternative in building envelope applications, with the aim of improving in-use energy efficiency. They have the advantage of being renewable, low embodied energy and CO 2 neutral or negative. In addition, they are excellent thermal regulators. This paper presents an overview of the state-of-the-art of bio-based materials used in building construction and their applications. The materials outlined include hemp, wood, date palm wood, cork, alfa and straw. Through this literature study we want to get a broad overview of the current state of theoretical and experimental studies of their hygrothermal characteristics and their thermal and energy performances. The aim is not to be exhaustive but to summarise the most important research results on these materials. This is the first part of a research work that deals with the contribution to the development of a new bio-based construction material to be used in building.",
+      "year": 2023,
+      "venue": "Materials for Renewable and Sustainable Energy",
+      "url": "https://doi.org/10.1007/s40243-023-00234-7",
+      "doi": "10.1007/s40243-023-00234-7",
+      "authors": [
+        "S. Bourbia",
+        "H. Kazeoui",
+        "Rafik Belarbi"
+      ],
+      "citation_count": 109,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Cork",
+        "Architectural engineering",
+        "Building envelope",
+        "Renewable energy",
+        "Embodied energy",
+        "Building material",
+        "Work (physics)",
+        "Natural materials"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw insulation timber frame wall thermal inertia hygrothermal performance",
+      "paper_id": "https://openalex.org/W2896071755",
+      "title": "Evaluating retrofit options in a historical city center: Relevance of bio-based insulation and the need to consider complex urban form in decision-making",
+      "abstract": "",
+      "year": 2018,
+      "venue": "Energy and Buildings",
+      "url": "https://doi.org/10.1016/j.enbuild.2018.10.026",
+      "doi": "10.1016/j.enbuild.2018.10.026",
+      "authors": [
+        "Sophie Claude",
+        "Stéphane Ginestet",
+        "Marion Bonhomme",
+        "Gilles Escadeillas",
+        "Jonathon Taylor",
+        "Valentina Marincioni",
+        "Ivan Korolija",
+        "Héctor Altamirano"
+      ],
+      "citation_count": 35,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Retrofitting",
+        "Mineral wool",
+        "Civil engineering",
+        "Thermal insulation",
+        "Engineering",
+        "Architectural engineering",
+        "Structural engineering",
+        "Materials science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw insulation timber frame wall thermal inertia hygrothermal performance",
+      "paper_id": "https://openalex.org/W2554230828",
+      "title": "Energy evaluation of rammed earth walls using long term in-situ measurements",
+      "abstract": "",
+      "year": 2016,
+      "venue": "Solar Energy",
+      "url": "https://doi.org/10.1016/j.solener.2016.11.002",
+      "doi": "10.1016/j.solener.2016.11.002",
+      "authors": [
+        "Lucile Soudani",
+        "Monika Woloszyn",
+        "Antonin Fabbri",
+        "Jean‐Claude Morel",
+        "Anne‐Cécile Grillet"
+      ],
+      "citation_count": 94,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Rammed earth",
+        "Environmental science",
+        "Moisture",
+        "Thermal",
+        "Geotechnical engineering",
+        "Materials science",
+        "Meteorology",
+        "Geology"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw insulation timber frame wall thermal inertia hygrothermal performance",
+      "paper_id": "https://openalex.org/W4410208000",
+      "title": "A Comprehensive Comparison of Insulation Materials for Timber Building Systems",
+      "abstract": "The key objectives of both European Union and Portuguese policies are energy efficiency and carbon neutrality in the building sector. Timber construction offers unique advantages in achieving these goals, such as increased productivity through faster and more efficient building processes, using renewable resources with lower carbon emissions during production and throughout the lifecycle, and contributions to forest conservation. However, in many countries, timber construction remains underutilised due to concerns about its thermal and acoustic performance, fire safety, and limited availability of raw materials. This study addresses these challenges by evaluating the potential of various insulation materials, including polystyrenes, mineral wools, natural fibres, composites, and acoustic mats, for incorporation into prefabricated timber components. Key performance criteria included thermal insulation, sound absorption, fire reaction, environmental impact, and local availability. Among the materials analysed, glass wool, rock wool, and cork emerged as the most favourable options, offering excellent thermal and acoustic performance and presenting strong results in other key parameters. These findings underscore the potential of incorporating these materials into timber construction systems, contributing to developing sustainable and high-performance building solutions.",
+      "year": 2025,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en18102420",
+      "doi": "10.3390/en18102420",
+      "authors": [
+        "B. Rocha",
+        "Marina Tenório",
+        "Jorge M. Branco",
+        "Sandra Monteiro Silva"
+      ],
+      "citation_count": 13,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Architectural engineering",
+        "Engineering",
+        "Forensic engineering",
+        "Construction engineering",
+        "Civil engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw insulation timber frame wall thermal inertia hygrothermal performance",
+      "paper_id": "https://openalex.org/W4388333444",
+      "title": "Comprehensive Review of Innovative Materials for Sustainable Buildings’ Energy Performance",
+      "abstract": "The building sector, one of the most energy-consuming, is among the most current topics due to the maturing concerns about the anthropogenic factor’s impact on CO2 quantities in the atmosphere and its association with global temperature rise. Using sustainable building materials is a promising alternative in building envelope applications to improve in-use energy efficiency. These materials, having a low environmental impact, the advantage of being renewable, and low embodied energy, contribute to global sustainability. This comprehensive literature review presents a broad overview of these materials’ hygrothermal characteristics, thermal performance, and energy use. The main goal is to compile the most important research findings on these materials’ capabilities for building construction and their contributions and effects on energy performance and thermal insulation.",
+      "year": 2023,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en16217440",
+      "doi": "10.3390/en16217440",
+      "authors": [
+        "Yara Nasr",
+        "Henri El Zakhem",
+        "Ameur El Amine Hamami",
+        "Makram El Bachawati",
+        "Rafik Belarbi"
+      ],
+      "citation_count": 51,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Embodied energy",
+        "Building envelope",
+        "Sustainability",
+        "Renewable energy",
+        "Architectural engineering",
+        "Efficient energy use",
+        "Thermal insulation",
+        "Energy performance"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw insulation timber frame wall thermal inertia hygrothermal performance",
+      "paper_id": "https://openalex.org/W4393987487",
+      "title": "Hygrothermal Performance of the Hemp Concrete Building Envelope",
+      "abstract": "The search for environmentally friendly and low-carbon-footprint construction materials continues progressively. Researchers are now interested in innovative materials that connect with the principles of sustainable construction, and materials such as hemp concrete prove to be promising. This article presents the results of a study that aimed to evaluate the hygrothermal performance of hemp concrete integrated into the building envelope using the hygrothermal tool WUFI Pro 6.2. The simulation model was compared and verified with existing models before its utilization for this study. The results of this verification were in good agreement, which gave us more confidence in its application for further parametric studies of building envelopes in hot climate zones. Three wall systems were simulated: (i) a wall system with hemp concrete, (ii) a compressed earth block wall, and (iii) a cement block wall. The most important variables used in the simulations were the hygrothermal properties of the materials or wall components and the incident solar radiation. The simulation results showed that hemp concrete has good thermal performance and temperature and humidity regulation capabilities of the building envelope. The interior surface temperatures of the hemp concrete walls were between 22.1 °C and 24.6 °C compared to the compressed earth block and cement block walls, where the surface temperatures were between 22.0 °C and 27 °C and between 21.2 °C and 28.7 °C, respectively, and between 23 °C and 45 °C for the exterior temperatures. These values remain the same with the increase in exterior temperatures for hemp concrete walls. In conclusion, hemp concrete could be a great alternative material for use in construction for hot climate zones.",
+      "year": 2024,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en17071740",
+      "doi": "10.3390/en17071740",
+      "authors": [
+        "Aguerata Kaboré",
+        "Wahid Maref",
+        "Claudiane Ouellet‐Plamondon"
+      ],
+      "citation_count": 11,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Building envelope",
+        "Envelope (radar)",
+        "Architectural engineering",
+        "Structural engineering",
+        "Civil engineering",
+        "Engineering",
+        "Forensic engineering",
+        "Telecommunications"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw insulation timber frame wall thermal inertia hygrothermal performance",
+      "paper_id": "https://openalex.org/W4389685093",
+      "title": "Promising biomass waste–derived insulation materials for application in construction and buildings",
+      "abstract": "Abstract Current insulation materials applied in construction engineering and the building industry are generally petrochemical-based polymers and recycled thermal insulation materials. The environmental effects of these materials’ production processes are substantial, despite their high thermal insulation performance. Consequently, the researchers conclude that it is essential to develop and produce insulating materials with superior thermal properties, minimal environmental impact, and a reasonable cost. The study concentrated on the application of insulation materials derived from biomass in the development of thermal insulation. The purpose of this review is to investigate and develop the possibilities of using biomass wastes as renewable and eco-friendly thermal insulation materials for construction engineering and the building industry. The thermal conductivity of those materials was measured using the hot plate and hot box methods, two of the most widely used hot processing methods. With a relatively low thermal conductivity (&lt; 0.100 W·m −1 ·K −1 ), this review provides critical scientific insight into potential building insulation materials derived from biodegradable and abundant resources. It was observed that these materials are appealing for use in building and construction because they have a number of potential advantages from technical, economic, environmental, and green credentials perspectives. The collection of information enables some conclusions regarding the different biomass waste–derived insulation materials that have already been investigated and identifies gaps in the literature. Finally, the scope of commercialization pathways and future research directions to validate the proposed material alternatives’ claim for commercial-scale applications has been identified in this review. Graphical Abstract",
+      "year": 2023,
+      "venue": "Biomass Conversion and Biorefinery",
+      "url": "https://doi.org/10.1007/s13399-023-05192-8",
+      "doi": "10.1007/s13399-023-05192-8",
+      "authors": [
+        "Paweł Lisowski",
+        "Michał A. Glinicki"
+      ],
+      "citation_count": 34,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Thermal insulation",
+        "Biomass (ecology)",
+        "Renewable energy",
+        "Petrochemical",
+        "Scope (computer science)",
+        "Building material",
+        "Thermal conductivity",
+        "Commercialization"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw insulation timber frame wall thermal inertia hygrothermal performance",
+      "paper_id": "https://openalex.org/W4391575733",
+      "title": "Compared Environmental Lifecycle Performances of Earth-Based Walls to Drive Building Envelope Design",
+      "abstract": "Raw earth has useful applications in contemporary buildings as a sustainable and circular construction material. The present study aims to assess the environmental performance of several earth-based wall systems with similar thermal performance, through a life cycle thinking approach. In particular, a life cycle assessment is developed for (a) unstabilized rammed earth (produced in situ), (b) compressed earth blocks (prefabricated in the factory), (c) stabilized rammed earth and (d) light earth, all combined with biobased (natural fibers, e.g., lime hemp, cork) and/or conventional materials for building insulation. Results show benefits in terms of avoided carbon emission, water footprint and embodied energy throughout the production chain and highlight limits and potential improvements. In addition, the CO2 offset by crops is also estimated based on carbon embedded in natural fibers. In particular, light earth wall systems are the most suitable to minimize environmental impacts, while massive constructive technologies (as unstabilized rammed earth) show a higher dynamic thermal performance for intended use in Mediterranean climates.",
+      "year": 2024,
+      "venue": "Sustainability",
+      "url": "https://doi.org/10.3390/su16041367",
+      "doi": "10.3390/su16041367",
+      "authors": [
+        "Giada Giuffrida",
+        "Letizia Dipasquale",
+        "Riccardo Maria Pulselli",
+        "Rosa Caponetto"
+      ],
+      "citation_count": 25,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Rammed earth",
+        "Embodied energy",
+        "Carbon footprint",
+        "Life-cycle assessment",
+        "Environmental science",
+        "Sustainability",
+        "Building envelope",
+        "Earth (classical element)"
+      ],
+      "tldr": ""
+    }
+  ]
+}

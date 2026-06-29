@@ -1,0 +1,82 @@
+{
+  "created_at": "2026-06-26T09:39:39",
+  "items": [
+    {
+      "source": "semantic_scholar",
+      "query": "hemp concrete thermal effusivity thermal diffusivity summer comfort",
+      "paper_id": "bc027d0b0d016075ab00bd5a10d319b99bed7d38",
+      "title": "The Measurement of Hemp Concrete Thermal and Moisture Properties for an Effective Building Construction Proposal in Region of Slovakia (Central Europe)",
+      "abstract": "The construction industry is facing an increased demand to adopt sustainable green building materials to minimize the carbon footprint. Hemp concrete is a green building material not only because of its low embodied carbon but also because of its ability to regulate heat and relative humidity. Its thermal characteristics are often viewed as favorable for reducing the energy used to heat or cool indoor buildings. The current research is focused on the properties of hemp concrete from Slovak manufacturers which can be effectively used in construction as a replacement for conventional building materials and can also be effectively applied in building renovations. The basic thermal properties of hemp concrete, i.e., specific heat capacity, thermal conductivity, effusivity, thermal diffusivity, and lag time, were determined. The determination of all properties is dependent on the knowledge of heat fluxes at the surface and the density of samples. The insulation ability was expressed with a thermal conductivity of 0.099 W·m−1·K−1. The accumulation was expressed with a specific heat of 1540 J·kg−1·K−1 and density of 322 kg·m−3 in the air environment temperature of 22 °C and relative humidity of 50%. To assess moisture properties, the moisture content and the speed of molecules during diffusion and lag time, based on the thickness of the hemp concrete samples, were measured. The speed of water molecules during diffusion in hemp concrete was 8.6 × 10−7 m·s−1. The study shows that hemp concrete has interesting hydrothermal properties for use as an insulation layer in envelope structures. Thus, this material can be used effectively in the construction field in order to meet the requirements of the current standards, which aim to reduce energy and environmental impacts.",
+      "year": 2025,
+      "venue": "Materials",
+      "url": "https://www.semanticscholar.org/paper/bc027d0b0d016075ab00bd5a10d319b99bed7d38",
+      "doi": "10.3390/ma18071651",
+      "authors": [
+        "R. Hrčka",
+        "Patrik Štompf",
+        "Stanislav Jochim",
+        "Marek Mikuš",
+        "Milan Iskra"
+      ],
+      "citation_count": 7,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [
+        "Medicine"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "hemp concrete thermal effusivity thermal diffusivity summer comfort",
+      "paper_id": "2781ee342b3cad05b38c803a2cfc3ffa55251e1a",
+      "title": "Evaluation of Hemp Concrete Thermal Properties",
+      "abstract": "",
+      "year": 2016,
+      "venue": "2016 Intl IEEE Conferences on Ubiquitous Intelligence & Computing, Advanced and Trusted Computing, Scalable Computing and Communications, Cloud and Big Data Computing, Internet of People, and Smart World Congress (UIC/ATC/ScalCom/CBDCom/IoP/SmartWorld)",
+      "url": "https://www.semanticscholar.org/paper/2781ee342b3cad05b38c803a2cfc3ffa55251e1a",
+      "doi": "10.1109/UIC-ATC-ScalCom-CBDCom-IoP-SmartWorld.2016.0154",
+      "authors": [
+        "B. Seng",
+        "C. Magniont",
+        "S. Spagnol",
+        "S. Lorente"
+      ],
+      "citation_count": 2,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle",
+        "Conference"
+      ],
+      "fields_of_study": [
+        "Computer Science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "hemp concrete thermal effusivity thermal diffusivity summer comfort",
+      "paper_id": "6cd237e962303a1e5263e47a82bc53a078dfb7a4",
+      "title": "Characterization of a precast hemp concrete. Part I: Physical and thermal properties",
+      "abstract": "Abstract Hemp concrete is seen as a possible solution for addressing the energy, health and comfort issues of sustainable buildings, thanks to its hygrothermal properties and environmental qualities. This paper aims to determine the physical and thermal properties of an industrial prefabricated hemp concrete block based on hemp shiv and a lime-metakaolin binder. When available, distinct measurement methods were applied and confronted on this precast material in order to evaluate the impact of the experimental procedure on the results. Concerning air permeability, the present study shows that a measurement method initially intended for regular concrete can be adapted to the specific behaviour of highly permeable material such as hemp concrete. The thermal conductivity was measured with a guarded hot plate and a hot wire. Hot wire measurements on different moist states of the material allowed the self-consistent scheme to be applied for the evaluation of the thermal conductivity as a function of the humidity. Two direct measurement methods, differential scanning calorimetry (DSC) on the components and use of a Calvet calorimeter on the hemp concrete, and one indirect method, through effusivity measurement, were adopted for evaluating the specific heat capacity of the material. The original method proposed using DSC was shown to be as accurate as direct calorimetric measurement. The direct measurement methods gave similar results while the indirect one led to a much lower value. A comprehensive analysis of the measurement values available in the literature on hemp concretes confirmed this trend. This first paper highlights the significant influence of the testing method on the determination of the thermal properties of a precast hemp concrete, especially on the heat capacity measurement. This result emphasizes the need for a large inter-laboratory experimental campaign, applied to bio-aggregate based concrete, in order to form the basis of recommendations for adequate physical and thermal characterization methods for these bio-based building materials. A second part of this study will investigate the hydric properties of the same material.",
+      "year": 2019,
+      "venue": "Journal of Building Engineering",
+      "url": "https://www.semanticscholar.org/paper/6cd237e962303a1e5263e47a82bc53a078dfb7a4",
+      "doi": "10.1016/J.JOBE.2018.07.016",
+      "authors": [
+        "B. Seng",
+        "C. Magniont",
+        "S. Lorente"
+      ],
+      "citation_count": 75,
+      "influential_citation_count": 1,
+      "publication_types": [],
+      "fields_of_study": [
+        "Materials Science"
+      ],
+      "tldr": ""
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "created_at": "2026-06-26T09:49:40",
+  "items": [
+    {
+      "source": "semantic_scholar",
+      "query": "vapour open timber frame wall bio-based insulation mould risk",
+      "paper_id": "d7de8f457543ce2aaa682ef1583bc38aa79a27b0",
+      "title": "Influence of omitting the vapor barrier in light timber frame walls with bio-based insulation on the risk of mold growth and indoor climate: A literature review",
+      "abstract": "This paper aligns with the rising interest in improving indoor comfort and health of occupants by moisture buffering with hygroscopic materials and the use of bio-based materials with low embodied emissions. The study focuses on literature on light timber frame walls (LTFW) with bio-based insulation and hempcrete walls, both without a vapor barrier. The aim is to highlight the consequences of omitting the vapor barriers in such wall assemblies and to ensure their durability. This review examines two main questions. Firstly, is there a risk of mold growth in LTFW with bio-based insulation and no vapor barrier? Secondly, are there possible links between these building envelopes and the indoor climate and its potential effects on occupants? The findings show that the risk of mold growth in vapor-open walls depends on the external climate, user behavior and applied materials. It is influenced by several factors such as vapor pressure difference, water vapor resistance ratio, exterior finishing, presence of a ventilated cavity, and the hygroscopic properties of insulation materials. Vapor-open walls exhibit a higher risk of mold growth between insulation and exterior lining compared to walls with vapor barriers. Additionally, there is a lack of field studies that visually examine mold growth in vapor-open buildings. While simulations suggest that vapor-open buildings with hygroscopic insulation can buffer interior relative humidity fluctuations, supporting field studies are limited. Further research and field studies are needed to improve the understanding of vapor-open or permeable building and its implications on mold growth as well as on the indoor climate and effects on occupants.",
+      "year": 2024,
+      "venue": "Journal of Building Physics",
+      "url": "https://www.semanticscholar.org/paper/d7de8f457543ce2aaa682ef1583bc38aa79a27b0",
+      "doi": "10.1177/17442591241275189",
+      "authors": [
+        "L. Claes",
+        "K. Kompatscher",
+        "Christianne N Luijten",
+        "Joost F Vette",
+        "Jan Niederwestberg"
+      ],
+      "citation_count": 2,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle",
+        "Review"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "vapour open timber frame wall bio-based insulation mould risk",
+      "paper_id": "b302cb899e52e9a56624d167c4fba8b7a3bcb2fc",
+      "title": "The comparative in situ hygrothermal performance of Hemp and Stone Wool insulations in vapour open timber frame wall panels",
+      "abstract": "",
+      "year": 2014,
+      "venue": "",
+      "url": "https://www.semanticscholar.org/paper/b302cb899e52e9a56624d167c4fba8b7a3bcb2fc",
+      "doi": "10.1016/J.CONBUILDMAT.2014.09.060",
+      "authors": [
+        "Eshrar Latif",
+        "M. Ciupala",
+        "D. Wijeyesekera"
+      ],
+      "citation_count": 44,
+      "influential_citation_count": 1,
+      "publication_types": [],
+      "fields_of_study": [
+        "Materials Science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "vapour open timber frame wall bio-based insulation mould risk",
+      "paper_id": "5605217471cc89ad8736479e0892b676b239ecdd",
+      "title": "Navigating Energy Efficiency and Mould Risk in Australian Low-Rise Homes: A Comparative Analysis of Nine External Wall Systems in Southeast Australia",
+      "abstract": "As energy-efficient buildings become central to climate change mitigation, the opportunity for interior and interstitial moisture accumulation and mould growth can increase. This study investigated the potential simulation-based mould growth risks associated with the current generation of insulated low-rise timber framed external wall systems within southeastern Australia. More than 8000 hygrothermal and bio-hygrothermal simulations were completed to evaluate seasonal moisture patterns and calculate mould growth potential for nine typical external wall systems. Results reveal that the combination of increased thermal insulation and air-tightness measures between the 2010 and 2022 specified building envelope energy efficiency regulations further increased predicted Mould Index values, particularly in cool-temperate climates. This was in part due to insufficient moisture management requirements, like an air space between the cladding and the weather resistive layer and/or the low-water vapour permeability of exterior weather resistive pliable membranes. By contrast, warmer temperate climates and drier cool-temperate climates exhibit consistently lower calculated Mould Index values. Despite the 2022 requirement for a greater water vapour-permeance of exterior pliable membranes, the external walls systems explored in this research had a higher calculated Mould Index than the 2010 regulatory compliant external wall systems. Lower air change rates significantly increased calculated interstitial mould growth risk, while the use of interior vapour control membranes proved effective in its mitigation for most external wall systems. The addition of ventilated cavity in combination with either or both an interior vapour control membrane and a highly vapour-permeable exterior pliable membranes further reduced risk. The findings underscore the need for tailored, climate-responsive design interventions to minimise surface and interstitial mould growth risk and building durability, whilst achieving high performance external wall systems.",
+      "year": 2025,
+      "venue": "Energies",
+      "url": "https://www.semanticscholar.org/paper/5605217471cc89ad8736479e0892b676b239ecdd",
+      "doi": "10.3390/en18112843",
+      "authors": [
+        "Liqun Guan",
+        "Mark Andrew Dewsbury",
+        "L. Wallis",
+        "Hartwig Kuenzel"
+      ],
+      "citation_count": 2,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    }
+  ]
+}

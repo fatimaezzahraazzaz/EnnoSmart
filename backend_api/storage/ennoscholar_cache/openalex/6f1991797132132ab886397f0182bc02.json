@@ -1,0 +1,101 @@
+{
+  "created_at": "2026-06-26T09:42:27",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "bio-based infill materials fire resistance timber wall assemblies",
+      "paper_id": "https://openalex.org/W4414069839",
+      "title": "Influence of Bio-Based Infill Materials on the Fire Resistance of Panelised Timber Wall Assemblies—A Pilot Study",
+      "abstract": "In the pursuit of low-impact and renewable construction materials, various by-products from agriculture, forestry, and the wood processing industry are being explored as potential bio-based infill materials for wall assemblies. This study presents an experimental assessment of the fire performance of timber wall systems composed of block units filled with different lignocellulosic materials, subjected to radiative heat exposure. These assemblies are representative of external walls in contemporary timber-framed buildings. Two configurations were examined: one with sawdust infill and the other with wood pellet infill. Both samples were exposed to radiant heat from the interior side for 60 min, simulating conditions of a fully developed compartment fire. The applied heat flux was 20 kW·m−2, delivered by a calibrated radiant panel. The results indicate that even minor design variations—particularly the choice of infill material—can significantly influence the thermal response, degradation kinetics of wood-based components, and the overall fire resistance of the wall assembly. The sawdust-filled system exhibited superior performance, achieving an estimated fire resistance rating of 60 min (60 REI). It showed reduced internal thermal degradation compared to the pellet-filled variant, which experienced greater charring depth due to internal voids between pellets, although it maintained structural integrity.",
+      "year": 2025,
+      "venue": "Polymers",
+      "url": "https://doi.org/10.3390/polym17172420",
+      "doi": "10.3390/polym17172420",
+      "authors": [
+        "Ľudmila Tereňová",
+        "Zuzana Vidholdová",
+        "Ľubomír Valigurský"
+      ],
+      "citation_count": 2,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Charring",
+        "Infill",
+        "Materials science",
+        "Environmental science",
+        "Heat flux",
+        "Char",
+        "Composite material",
+        "Fire resistance"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based infill materials fire resistance timber wall assemblies",
+      "paper_id": "https://openalex.org/W1988629860",
+      "title": "Structural benefits of hempcrete infill in timber stud walls",
+      "abstract": "Hempcrete is a bio-composite mix made up of hemp shives, lime, cement and water. Extensive research has shown that it has good thermal and acoustic insulation properties, and can passively regulate humidity in a built environment. However it has low compressive strength and modulus of elasticity and so cannot be used as a direct load bearing material. It is often used as an infill material in timber stud walls. The objective of this study was to determine if the hempcrete infill has sufficient strength and stiffness to act as lateral bracing and prevent weak-axis buckling of the timber studs.Seven timber walls were constructed (both half scale – 1200 mm high; and full scale - up to 2133 mm high) with varying column dimensions. Five of the walls were infilled with hempcrete of two different densities (313 kg/m3 and 715 kg/m3). Two walls were not infilled and were baseline tests. All walls were tested in compression. It was found that high density hempcrete (715 kg/m3) not only prevents weak-axis buckling of columns but also carries some direct load. Low density hempcrete was also successful in preventing weak-axis buckling of the infilled walls. Infilled walls failed in strong-axis buckling at a load twice (for half scale walls with 38 × 89 mm columns) or four times (full scale walls with 38 × 235 mm columns) that of the unfilled walls. An analytical model (based on buckling of a strut on an elastic foundation) was proposed to predict the maximum capacity of hempcrete as a continuous lateral support for a column.",
+      "year": 2013,
+      "venue": "International Journal of Sustainable Building Technology and Urban Development",
+      "url": "https://doi.org/10.1080/2093761x.2013.834280",
+      "doi": "10.1080/2093761x.2013.834280",
+      "authors": [
+        "Agnita Mukherjee",
+        "Colin MacDougall"
+      ],
+      "citation_count": 26,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Infill",
+        "Buckling",
+        "Structural engineering",
+        "Stiffness",
+        "Materials science",
+        "Compressive strength",
+        "Bracing",
+        "Ultimate tensile strength"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based infill materials fire resistance timber wall assemblies",
+      "paper_id": "https://openalex.org/W3126286123",
+      "title": "Environmental performance of miscanthus-lime lightweight concrete using life cycle assessment: Application in external wall assemblies",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Sustainable materials and technologies",
+      "url": "https://doi.org/10.1016/j.susmat.2021.e00253",
+      "doi": "10.1016/j.susmat.2021.e00253",
+      "authors": [
+        "Fabrice Ntimugura",
+        "Raffaele Vinai",
+        "Anna Harper",
+        "Pete Walker"
+      ],
+      "citation_count": 41,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Miscanthus",
+        "Greenhouse gas",
+        "Life-cycle assessment",
+        "Environmental science",
+        "Lime",
+        "Environmental impact assessment",
+        "Raw material",
+        "Bioenergy"
+      ],
+      "tldr": ""
+    }
+  ]
+}

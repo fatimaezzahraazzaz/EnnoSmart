@@ -1,0 +1,101 @@
+{
+  "created_at": "2026-06-26T09:50:05",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "moisture blown insulation bio-based building materials hygrothermal moisture mould mold",
+      "paper_id": "https://openalex.org/W3018027865",
+      "title": "Technical Performance Overview of Bio-Based Insulation Materials Compared to Expanded Polystyrene",
+      "abstract": "The energy efficiency of buildings is well documented. However, to improve standards of energy efficiency, the embodied energy of materials included in the envelope is also increasing. Natural fibers like wood and hemp are used to make low environmental impact insulation products. Technical characterizations of five bio-based materials are described and compared to a common, traditional, synthetic-based insulation material, i.e., expanded polystyrene. The study tests the thermal conductivity and the vapor transmission performance, as well as the combustibility of the material. Achieving densities below 60 kg/m3, wood and hemp batt insulation products show thermal conductivity in the same range as expanded polystyrene (0.036 kW/mK). The vapor permeability depends on the geometry of the internal structure of the material. With long fibers are intertwined with interstices, vapor can diffuse and flow through the natural insulation up to three times more than with cellular synthetic (polymer) -based insulation. Having a short ignition times, natural insulation materials are highly combustible. On the other hand, they release a significantly lower amount of smoke and heat during combustion, making them safer than the expanded polystyrene. The behavior of a bio-based building envelopes needs to be assessed to understand the hygrothermal characteristics of these nontraditional materials which are currently being used in building systems.",
+      "year": 2020,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings10050081",
+      "doi": "10.3390/buildings10050081",
+      "authors": [
+        "Cassandra Lafond",
+        "Pierre Blanchet"
+      ],
+      "citation_count": 52,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Polystyrene",
+        "Combustibility",
+        "Thermal insulation",
+        "Composite material",
+        "Thermal conductivity",
+        "Expanded polystyrene",
+        "Combustion"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "moisture blown insulation bio-based building materials hygrothermal moisture mould mold",
+      "paper_id": "https://openalex.org/W3179418608",
+      "title": "Critical Review of Polymeric Building Envelope Materials: Degradation, Durability and Service Life Prediction",
+      "abstract": "This paper provides a critical review of the degradation, durability and service life prediction (SLP) of polymeric building envelope materials (BEMs), namely, claddings, air/vapour barriers, insulations, sealants, gaskets and fenestration. The rate of material deterioration and properties determine the usefulness of a product; therefore, knowledge of the significant degradation mechanisms in play for BEMs is key to the design of proper SLP methods. SLP seeks to estimate the life expectancy of a material/component exposed to in-service conditions. This topic is especially important with respect to the potential impacts of climate change. The surrounding environment of a building dictates the degradation mechanisms in play, and as climate change progresses, material aging conditions become more unpredictable. This can result in unexpected changes and/or damages to BEMs, and shorter than expected SL. The development of more comprehensive SLP methods is economically and environmentally sound, and it will provide more confidence, comfort and safety to all building users. The goal of this paper is to review the existing literature in order to identify the knowledge gaps and provide suggestions to address these gaps in light of the rapidly evolving climate.",
+      "year": 2021,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings11070299",
+      "doi": "10.3390/buildings11070299",
+      "authors": [
+        "Marzieh Riahinezhad",
+        "Madeleine Hallman",
+        "J-F. Masson"
+      ],
+      "citation_count": 64,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Durability",
+        "Building envelope",
+        "Service life",
+        "Damages",
+        "Computer science",
+        "Life-cycle assessment",
+        "Risk analysis (engineering)",
+        "Forensic engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "moisture blown insulation bio-based building materials hygrothermal moisture mould mold",
+      "paper_id": "https://openalex.org/W7128994746",
+      "title": "Mould susceptibility of bio-based insulation materials in modern construction",
+      "abstract": "Abstract This review compares the mould susceptibility of bio-based and conventional insulation. Mould growth poses a risk to building durability and occupant health, with bio-based materials being more susceptible due to their organic composition. However, testing practices limit meaningful comparisons, and laboratory studies often fail to replicate real-world conditions. Recommendations include standardised testing, in-situ monitoring and field studies, and development of antifungal strategies to understand and address mould risk across insulation options.",
+      "year": 2026,
+      "venue": "npj Materials Degradation",
+      "url": "https://doi.org/10.1038/s41529-026-00742-7",
+      "doi": "10.1038/s41529-026-00742-7",
+      "authors": [
+        "Joni Wildman",
+        "Andrew Shea",
+        "Valeria Cascione",
+        "Daniel A. Henk"
+      ],
+      "citation_count": 5,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Durability",
+        "Engineering",
+        "Forensic engineering",
+        "Materials testing",
+        "Construction engineering",
+        "Replicate",
+        "Limit (mathematics)",
+        "Environmental science"
+      ],
+      "tldr": ""
+    }
+  ]
+}

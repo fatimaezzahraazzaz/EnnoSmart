@@ -1,0 +1,107 @@
+{
+  "created_at": "2026-06-26T09:40:02",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "straw insulation timber frame wall thermal inertia hygrothermal performance",
+      "paper_id": "https://openalex.org/W4220926306",
+      "title": "Hygrothermal performance of multilayer straw walls in different climates",
+      "abstract": "",
+      "year": 2022,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2022.126873",
+      "doi": "10.1016/j.conbuildmat.2022.126873",
+      "authors": [
+        "Ghadie Tlaiji",
+        "Fabienne Pennec",
+        "Salah-Eddine Ouldboukhitine",
+        "Mohamad Ibrahim",
+        "Pascal Henry Biwolé"
+      ],
+      "citation_count": 37,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Temperate climate",
+        "Environmental science",
+        "Moisture",
+        "Water content",
+        "Mediterranean climate",
+        "Materials science",
+        "Composite material"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw insulation timber frame wall thermal inertia hygrothermal performance",
+      "paper_id": "https://openalex.org/W4200201201",
+      "title": "Thermal and mechanical behavior of straw-based construction: A review",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2021.125915",
+      "doi": "10.1016/j.conbuildmat.2021.125915",
+      "authors": [
+        "Ghadie Tlaiji",
+        "Salah-Eddine Ouldboukhitine",
+        "Fabienne Pennec",
+        "Pascal Henry Biwolé"
+      ],
+      "citation_count": 70,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Context (archaeology)",
+        "Embodied energy",
+        "Environmental science",
+        "Life-cycle assessment",
+        "Work (physics)",
+        "Relative humidity",
+        "Carbon footprint"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw insulation timber frame wall thermal inertia hygrothermal performance",
+      "paper_id": "https://openalex.org/W4385790257",
+      "title": "Are straw bales better insulation materials for constructions? A review",
+      "abstract": "The construction industry significantly impacts climate change, highlighting the urgent need for exploring sustainable building solutions. Among the potential candidates, straw bale constructions have emerged as a promising alternative with low environmental impact and commendable thermal performance. This paper aims to investigate the thermal performance of straw bale constructions and assess the benefits of utilizing straw bales as a sustainable building solution. The findings demonstrate the outstanding thermal performance of straw bales, emphasizing their significant potential as a viable alternative to conventional insulation materials. Nevertheless, the extensive integration of straw bale constructions into the mainstream market is facing challenges from various aspects of the construction industry.",
+      "year": 2023,
+      "venue": "Developments in the Built Environment",
+      "url": "https://doi.org/10.1016/j.dibe.2023.100209",
+      "doi": "10.1016/j.dibe.2023.100209",
+      "authors": [
+        "C. T. Sun",
+        "Jian Gu",
+        "Qi Dong",
+        "Dagang Qu",
+        "Wen‐Shao Chang",
+        "Xunzhi Yin"
+      ],
+      "citation_count": 35,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Mainstream",
+        "Thermal insulation",
+        "Environmental science",
+        "Waste management",
+        "Engineering",
+        "Architectural engineering",
+        "Agricultural engineering"
+      ],
+      "tldr": ""
+    }
+  ]
+}

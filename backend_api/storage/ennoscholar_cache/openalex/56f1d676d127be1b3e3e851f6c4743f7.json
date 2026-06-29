@@ -1,0 +1,108 @@
+{
+  "created_at": "2026-06-26T09:47:28",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "timber concrete wood composite shear connectors mould growth timber concrete",
+      "paper_id": "https://openalex.org/W4381510083",
+      "title": "Vibration issues in timber structures: A state-of-the-art review",
+      "abstract": "This paper comprehensively reviews recent research on vibration issues in timber structures. The increasing use of timber structures worldwide has brought attention to the challenges posed by their lightweight nature, making them more prone to vibrations than more massive structures. Consequently, significant research efforts have been dedicated to understanding and mitigating vibrations in timber structures, while scientific committees strive to establish suitable design regulations. This study aims to classify and identify the main research themes related to timber structure vibrations and highlight future research needs and directions. A bibliometric-based selection process briefly introduces each research topic, presenting the latest findings and proposals for vibration design in timber structures. The paper emphasizes the key outcomes and significant contributions to understanding and addressing vibration issues in timber structures. These findings serve as valuable guidance for researchers, designers, and regulatory bodies involved in designing and assessing timber structures subjected to vibrations.",
+      "year": 2023,
+      "venue": "Journal of Building Engineering",
+      "url": "https://doi.org/10.1016/j.jobe.2023.107098",
+      "doi": "10.1016/j.jobe.2023.107098",
+      "authors": [
+        "Angelo Aloisio",
+        "Dag Pasquale Pasca",
+        "Yuri De Santis",
+        "Thomas Hillberger",
+        "Pier Francesco Giordano",
+        "Marco Martino Rosso",
+        "Roberto Tomasi",
+        "Maria Pina Limongelli",
+        "Chiara Bedon"
+      ],
+      "citation_count": 66,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Engineering",
+        "Process (computing)",
+        "Architectural engineering",
+        "Construction engineering",
+        "Computer science",
+        "Operating system"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete wood composite shear connectors mould growth timber concrete",
+      "paper_id": "https://openalex.org/W4388942794",
+      "title": "High-performance timber-concrete-composites with polymer concrete and beech wood",
+      "abstract": "The performance of adhesive-bonded timber-concrete-composites (TCC) can be enhanced by using beech wood and polymer concrete (PC). In this work, two different PCs with an epoxy- and a polyurethane (PUR)-based matrix were investigated for application in TCCs. The mechanical performances were tested in dry and wet state by small-scale shear tests and flexural tests. Epoxy-PC showed high bond strength to beech with a shear strength of 16.7 ± 3.0 MPa compared to 3.2 ± 1.7 MPa observed with PUR-PC. Characterization of the swelling strain with digital image correlation (DIC) showed superior water stability of the epoxy-PC compared to PUR-PC. The results indicate that PCs, especially epoxy-PC, could be viable replacements for cement-based concrete in TCCs.",
+      "year": 2023,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2023.134069",
+      "doi": "10.1016/j.conbuildmat.2023.134069",
+      "authors": [
+        "Sandro Stucki",
+        "Steffen Kelch",
+        "Tim Mamie",
+        "Urs Burckhardt",
+        "Philippe Grönquist",
+        "Roman Elsener",
+        "Mark Schubert",
+        "Andréa Frangi",
+        "Ingo Burgert"
+      ],
+      "citation_count": 4,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Composite material",
+        "Materials science",
+        "Epoxy",
+        "Beech",
+        "Flexural strength",
+        "Adhesive",
+        "Shear strength (soil)",
+        "Polymer concrete"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete wood composite shear connectors mould growth timber concrete",
+      "paper_id": "https://openalex.org/W4206142467",
+      "title": "State of the Art Review of Reinforcement Strategies and Technologies for 3D Printing of Concrete",
+      "abstract": "This state of the art review paper aims to discuss the results of a literature survey on possible ways to reinforce printed concrete based on existing reinforcement strategies. Just as conventional concrete, for 3D printed concrete to be suitable for large-scale construction, reinforcement is needed to increase the tensile capacity of concrete members and reduce temperature and shrinkage cracking. Despite efforts that are currently underway, the development of proper reinforcement suitable for printed concrete is still very active on the research agenda. As an initial step for designing suitable reinforcement for printed concrete, the existing reinforcement methods for printed concrete as well as conventional cast concrete from the literature are reviewed and summarized. Through the preliminary evaluation of the suitability and effectiveness of various reinforcement methods, guidelines are proposed to better understand possible solutions to reinforce printed concrete and inspire new practical ideas to fill the current technology void. The conclusions also include the possible improvements of the existing reinforcement methods to be considered in future applications.",
+      "year": 2022,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en15010360",
+      "doi": "10.3390/en15010360",
+      "authors": [
+        "Zhengyu Wu",
+        "Ali M. Memari",
+        "José Duarte"
+      ],
+      "citation_count": 62,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Reinforcement",
+        "Computer science",
+        "Construction engineering",
+        "Engineering",
+        "Structural engineering"
+      ],
+      "tldr": ""
+    }
+  ]
+}

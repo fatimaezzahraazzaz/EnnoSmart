@@ -9,7 +9,7 @@ Architecture respectée :
 - Cet agent ne recalcule jamais le score Frascati.
 - Le LLM sert uniquement à reformuler le diagnostic et à justifier le score à partir des preuves du projet.
 - La mémoire CIR stylistique est utilisée uniquement comme style rédactionnel, jamais comme preuve factuelle.
-- La comparaison CIR précédent est calculée pendant EnnoDiagnostic si une mémoire CIR N-1 existe ; elle sert à alimenter l'onglet CIR précédent, sans devenir une preuve factuelle du dossier courant.
+- La comparaison CIR précédent est séparée d'EnnoDiagnostic : elle est lancée depuis l'onglet CIR précédent et ne bloque pas le diagnostic principal.
 """
 
 import hashlib
@@ -311,6 +311,105 @@ def dedupe_sources(sources: List[Dict[str, Any]], max_items: int = 30) -> List[D
     return out
 
 
+
+
+def is_universal_reconstruction_source(src: Dict[str, Any]) -> bool:
+    """Détecte les catégories transverses reconstruites, sans logique métier/projet."""
+    if not isinstance(src, dict):
+        return False
+    meta = meta_of(src)
+    blob = " ".join([
+        clean_text(meta.get("verrou_source")),
+        clean_text(meta.get("final_role")),
+        clean_text(meta.get("theme_id")),
+        clean_text(meta.get("rag_chunk_id")),
+        source_text(src)[:220],
+    ]).lower()
+    return (
+        "universal_theme_reconstruction" in blob
+        or "verrou_implicit_universal" in blob
+        or blob.strip().startswith("verrou implicite possible")
+    )
+
+
+def rank_sources_for_agent(sources: List[Dict[str, Any]], max_items: int = 30) -> List[Dict[str, Any]]:
+    """
+    Classe les sources pour donner priorité aux preuves NLP spécifiques.
+    Les catégories universelles restent disponibles, mais seulement en secours.
+    """
+    deduped = dedupe_sources(sources or [], max_items=max_items * 4)
+
+    def score(src: Dict[str, Any]) -> float:
+        meta = meta_of(src)
+        value = 0.0
+        if not is_universal_reconstruction_source(src):
+            value += 100.0
+        if clean_text(meta.get("pack_key")) == "verrous_rnd_locaux":
+            value += 25.0
+        if clean_text(meta.get("role")) == "verrou":
+            value += 10.0
+        for key, weight in [("rank_score", 2.0), ("confidence", 1.0), ("verrou_score", 1.5), ("frascati_score", 1.0)]:
+            try:
+                value += float(meta.get(key) or 0) * weight
+            except Exception:
+                pass
+        value += min(len(source_text(src)), 900) / 9000.0
+        return value
+
+    return sorted(deduped, key=score, reverse=True)[:max_items]
+
+
+def merge_ranked_sources(*groups: List[Dict[str, Any]], max_items: int = 30) -> List[Dict[str, Any]]:
+    combined: List[Dict[str, Any]] = []
+    for group in groups:
+        if isinstance(group, list):
+            combined.extend(group)
+    return rank_sources_for_agent(combined, max_items=max_items)
+
+def technical_title_from_source(src: Dict[str, Any], max_chars: int = 180) -> str:
+    """
+    Extrait un titre technique provisoire depuis une preuve, sans règle métier.
+    Sert uniquement de secours si le LLM n'a pas produit assez de titres.
+    """
+    txt = repair_mojibake(source_text(src))
+    meta = meta_of(src)
+
+    candidates = [
+        clean_text(meta.get("llm_title")),
+        clean_text(meta.get("verrou_title")),
+        clean_text(meta.get("theme_label")) if not is_universal_reconstruction_source(src) else "",
+        clean_text(meta.get("section_title")),
+    ]
+
+    patterns = [
+        r"V\s*\d+\s*\|\s*([^|:\n]{8,140})(?:\s*:\s*([^|\n.]{8,180}))?",
+        r"ID\s+Verrou\s*\|[^\n]*?V\s*\d+\s*\|\s*([^|:\n]{8,140})(?:\s*:\s*([^|\n.]{8,180}))?",
+        r"Verrou\s*\d+\s*[:\-–—]\s*([^\n.]{12,180})",
+        r"OBJ\s*\d+\s*[-–—:]\s*([^\n.]{12,180})",
+        r"P\s*\d+(?:\.\d+)*\s+([^:\n]{8,140})(?:\s*:\s*([^\n.]{8,180}))?",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, txt, flags=re.I)
+        if match:
+            part1 = clean_text(match.group(1) or "")
+            part2 = clean_text(match.group(2) or "") if match.lastindex and match.lastindex >= 2 else ""
+            title = f"{part1} : {part2}" if part2 else part1
+            candidates.append(title)
+
+    first_sentence = re.split(r"[.!?\n]", txt, maxsplit=1)[0]
+    candidates.append(first_sentence)
+
+    for candidate in candidates:
+        candidate = re.sub(r"^[-*•\d.)\s]+", "", clean_text(candidate))
+        candidate = re.sub(r"^Verrou implicite possible\s*[—–:-]\s*", "", candidate, flags=re.I)
+        candidate = re.sub(r"^Question de qualification\s*:\s*", "", candidate, flags=re.I)
+        candidate = candidate.strip(" |:-–—")
+        if len(candidate) >= 12:
+            return truncate(candidate, max_chars)
+
+    return "Signal technique à reformuler"
+
 def build_sources_block(title: str, sources: List[Dict[str, Any]], max_items: int = 10, max_text_chars: int = 520) -> str:
     lines = [f"## {title}"]
 
@@ -397,8 +496,8 @@ class EnnoDiagnosticAgent:
         use_style_memory: bool = True,
         **kwargs,
     ):
-        self.organisme = organisme_id or organisme or "Girodin"
-        self.project = project_id or project or "TGM100"
+        self.organisme = organisme_id or organisme or "unknown_organisme"
+        self.project = project_id or project or "unknown_project"
         self.year = str(year_id or year or "2023")
         self.model = model or gemini_model
         self.use_llm = use_llm
@@ -429,7 +528,7 @@ class EnnoDiagnosticAgent:
             sources = self.retriever.search(question=query, role_filter=role, top_k=top_k)
         else:
             sources = self.retriever.search(question=query, role_filter=None, top_k=top_k)
-        return dedupe_sources(sources, max_items=top_k)
+        return rank_sources_for_agent(sources, max_items=top_k)
 
     def retrieve_all_sections(self) -> Dict[str, List[Dict[str, Any]]]:
         sections: Dict[str, List[Dict[str, Any]]] = {}
@@ -476,22 +575,38 @@ class EnnoDiagnosticAgent:
             top_k=10,
         )
 
-        sections["axe_vibro_acoustique"] = self.search_chroma(
+        # On conserve les sources qui portent le score Frascati séparément.
+        # Elles peuvent être très synthétiques ; elles ne doivent pas écraser
+        # les preuves détaillées utilisées par le LLM pour reformuler.
+        sections["_frascati_verrous"] = list(sections.get("verrous", []))
+
+        # Axes complémentaires génériques : ils servent à récupérer des preuves
+        # sans coder un projet précis ni un domaine précis.
+        sections["axe_problemes_transverses"] = self.search_chroma(
             role=None,
-            query="TGM100 vibro-acoustique vibrations bruit acoustique aspiration déportée accéléromètre microphone contrepoids équilibrage statique dynamique",
-            top_k=10,
+            query="problème difficulté limite incertitude non maîtrisé instabilité anomalie défaut non conforme robustesse fiabilité performance qualité",
+            top_k=12,
         )
 
-        sections["axe_thermique_300bar"] = self.search_chroma(
+        sections["axe_contraintes_transverses"] = self.search_chroma(
             role=None,
-            query="TGM100 thermique 300 bar 250 bar température débit d'eau réfrigérant premier étage multi-étages échauffement refroidissement pression sortie compresseur",
-            top_k=10,
+            query="contraintes exigences conditions paramètres seuils configuration contexte environnement ressources compatibilité objectif attendu",
+            top_k=12,
         )
 
-        sections["axe_air_sec_condensats"] = self.search_chroma(
+        sections["axe_preuves_resultats"] = self.search_chroma(
             role=None,
-            query="air sec sortie compresseur condensats humidité eau liquide séparateur point de rosée air comprimé qualité air conforme exigences sortie",
-            top_k=10,
+            query="preuves mesures tests essais résultats observations métriques comparaison validation limites conclusions valeurs courbes tableaux",
+            top_k=12,
+        )
+
+        # Correction V121 : le LLM doit recevoir les preuves NLP/RAG spécifiques,
+        # pas seulement les catégories Frascati universelles.
+        sections["verrous"] = merge_ranked_sources(
+            sections.get("verrous", []),
+            sections.get("limites", []),
+            sections.get("axe_problemes_transverses", []),
+            max_items=18,
         )
 
         return sections
@@ -667,6 +782,195 @@ class EnnoDiagnosticAgent:
             return truncate("\n".join(lines), max_chars)
 
         return truncate(clean_text(style_memory_report.get("style_block")), max_chars)
+
+
+    # =====================================================
+    # Verrous reformulés par le LLM pour validation consultant
+    # =====================================================
+
+    def _token_set_for_matching(self, text: Any) -> set[str]:
+        text = repair_mojibake(text)
+        text = text.lower()
+        text = re.sub(r"[^a-z0-9àâäéèêëîïôöùûüç]+", " ", text)
+        stop = {
+            "les", "des", "une", "dans", "pour", "avec", "sans", "sur", "par", "aux", "est", "sont", "que", "qui",
+            "verrou", "verrous", "signal", "signaux", "technique", "techniques", "candidat", "candidats", "source", "sources",
+            "document", "documents", "frascati", "validation", "consultant", "projet", "dossier", "preuve", "preuves",
+        }
+        return {w for w in re.findall(r"[a-z0-9àâäéèêëîïôöùûüç]{3,}", text) if w not in stop}
+
+    def _similarity_for_llm_candidate(self, candidate_text: str, src: Dict[str, Any]) -> float:
+        a = self._token_set_for_matching(candidate_text)
+        meta = meta_of(src)
+        source_blob = "\n".join([
+            source_text(src),
+            str(meta.get("theme_label") or ""),
+            str(meta.get("theme_id") or ""),
+            str(meta.get("final_role") or ""),
+            str(meta.get("technical_signature") or ""),
+        ])
+        b = self._token_set_for_matching(source_blob)
+        if not a or not b:
+            return 0.0
+        inter = len(a & b)
+        return inter / max(1, min(len(a), len(b)))
+
+    def _extract_signal_blocks_from_markdown(self, content: str) -> List[Dict[str, str]]:
+        section = extract_markdown_section(content, SIGNAL_SECTION_TITLE) or extract_markdown_section(content, LEGACY_SIGNAL_SECTION_TITLE)
+        section = repair_mojibake(section)
+        if not section:
+            return []
+
+        lines = [ln.rstrip() for ln in section.splitlines()]
+        blocks: List[List[str]] = []
+        current: List[str] = []
+
+        def starts_candidate(line: str) -> bool:
+            s = line.strip()
+            if not s:
+                return False
+            if re.match(r"^#{3,}\s+", s):
+                return True
+            if re.match(r"^(?:[-*]|\d+[\.)])\s+\*\*[^*]{15,}\*\*", s):
+                return True
+            if re.match(r"^(?:[-*]|\d+[\.)])\s+(?:Signal|Hypothèse|Verrou|Axe)\b", s, flags=re.I):
+                return True
+            return False
+
+        for line in lines:
+            if starts_candidate(line):
+                if current:
+                    blocks.append(current)
+                current = [line]
+            else:
+                if current:
+                    current.append(line)
+        if current:
+            blocks.append(current)
+
+        out: List[Dict[str, str]] = []
+        for block in blocks[:12]:
+            raw = "\n".join(block).strip()
+            if len(raw) < 30:
+                continue
+            first = block[0].strip()
+            first = re.sub(r"^#{3,}\s+", "", first)
+            first = re.sub(r"^(?:[-*]|\d+[\.)])\s+", "", first)
+            m = re.search(r"\*\*(.*?)\*\*", first)
+            title = m.group(1).strip() if m else first
+            title = re.split(r"\s+[—–-]\s+|\s*:\s*", title, maxsplit=1)[0]
+            title = re.sub(r"^(Signal|Hypothèse|Verrou|Axe)\s*(candidat|technique)?\s*\d*\s*[:\-–—]?\s*", "", title, flags=re.I).strip()
+            title = truncate(title, 220)
+            if len(title) < 12:
+                continue
+            out.append({"title": title, "block": raw})
+        return out
+
+    def build_llm_reformulated_verrous(
+        self,
+        content: str,
+        sections: Dict[str, List[Dict[str, Any]]],
+        frascati_summary: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """
+        V122 : reformulation dédiée des verrous par groupes de preuves RAG/NLP.
+
+        Ce n'est plus le frontend qui fabrique les verrous depuis les chunks.
+        L'agent crée une vraie sortie JSON : report["llm_reformulated_verrous"].
+
+        Règles :
+        - pas de recalcul Frascati ;
+        - pas d'invention ;
+        - les preuves sources restent attachées ;
+        - les catégories universelles Frascati ne sont qu'un fallback faible ;
+        - plusieurs chunks proches sont fusionnés en un seul verrou candidat.
+        """
+        try:
+            try:
+                from agents.EnnoDiagnostic.consultant_verrou_synthesizer import synthesize_consultant_verrous
+            except Exception:
+                from consultant_verrou_synthesizer import synthesize_consultant_verrous
+
+            style_block = ""
+            try:
+                # On donne uniquement un style court, jamais une preuve factuelle.
+                style_block = self._style_memory_for_role(
+                    getattr(self, "_last_style_memory_report", None),
+                    "verrou",
+                    max_chars=1200,
+                )
+            except Exception:
+                style_block = ""
+
+            synthesis = synthesize_consultant_verrous(
+                sections=sections,
+                frascati_summary=frascati_summary,
+                llm=self.llm,
+                style_block=style_block,
+                max_verrous=int(os.getenv("ENNOSMART_DIAG_MAX_REFORMULATED_VERROUS", "8")),
+                min_verrous=int(os.getenv("ENNOSMART_DIAG_MIN_REFORMULATED_VERROUS", "4")),
+            )
+            self._last_verrou_synthesis_report = synthesis
+            items = synthesis.get("llm_reformulated_verrous") if isinstance(synthesis, dict) else []
+            if isinstance(items, list) and items:
+                return items
+        except Exception as exc:
+            self._last_verrou_synthesis_report = {
+                "ok": False,
+                "mode": "synthesizer_import_or_runtime_error",
+                "error": str(exc),
+            }
+            print(f"[EnnoDiagnostic][V122_VERROU_SYNTHESIS][ERROR] {exc}")
+
+        # Fallback minimal conservateur si le module dédié est indisponible.
+        raw_sources = rank_sources_for_agent(sections.get("verrous", []) or [], max_items=8)
+        structured: List[Dict[str, Any]] = []
+        used_titles: set[str] = set()
+
+        for idx, src in enumerate(raw_sources[:8], start=1):
+            title = technical_title_from_source(src)
+            key = clean_text(title).lower()
+            if not key or key in used_titles:
+                continue
+            used_titles.add(key)
+
+            meta = meta_of(src)
+            doc = source_doc(src)
+            try:
+                score = float(meta.get("frascati_score")) if meta.get("frascati_score") not in (None, "") else frascati_summary.get("average_frascati_score")
+            except Exception:
+                score = frascati_summary.get("average_frascati_score")
+            decision = clean_text(meta.get("frascati_decision") or meta.get("decision") or "verrou_a_verifier")
+            text = source_text(src)
+
+            structured.append({
+                "title": title,
+                "tag_cir": "PERTINENT POUR CIR" if score is not None and float(score) >= 0.68 else "MOYEN POUR CIR",
+                "score": score,
+                "frascati_decision": decision,
+                "consultant_status": "en_attente",
+                "document": doc or "Sources Chroma à vérifier",
+                "justification": truncate(text, 1200),
+                "text": truncate(text, 1200),
+                "source": "fallback_agent_direct_chroma_source",
+                "needs_human_validation": True,
+                "source_json": {
+                    "source": "fallback_agent_direct_chroma_source",
+                    "llm_title": title,
+                    "llm_block": truncate(text, 1200),
+                    "frascati_decision": decision,
+                    "frascati_score": score,
+                    "sources": [{
+                        "document": doc,
+                        "source_path": source_path(src),
+                        "text": truncate(text, 900),
+                        "metadata": meta,
+                    }],
+                    "principle": "Fallback sans LLM dédié : preuve Chroma conservée pour validation consultant.",
+                },
+            })
+
+        return structured
 
     # =====================================================
     # External reports
@@ -849,7 +1153,7 @@ class EnnoDiagnosticAgent:
         budgets = {
             "global": int(os.getenv("ENNOSMART_DIAG_FAST_GLOBAL", "5")),
             "objectifs": int(os.getenv("ENNOSMART_DIAG_FAST_OBJECTIFS", "5")),
-            "verrous": int(os.getenv("ENNOSMART_DIAG_FAST_VERROUS", "10")),
+            "verrous": int(os.getenv("ENNOSMART_DIAG_FAST_VERROUS", "14")),
             "methodes": int(os.getenv("ENNOSMART_DIAG_FAST_METHODES", "7")),
             "resultats": int(os.getenv("ENNOSMART_DIAG_FAST_RESULTATS", "7")),
             "parametres": int(os.getenv("ENNOSMART_DIAG_FAST_PARAMETRES", "5")),
@@ -871,9 +1175,11 @@ class EnnoDiagnosticAgent:
         parts.append("- Si une comparaison CIR précédent est disponible, ne l'utilise pas comme preuve factuelle du dossier courant ; elle sert seulement à distinguer continuité, évolution et nouveauté.")
         parts.append("")
         parts.append("Règles de consolidation CIR :")
-        parts.append("- Transforme les signaux NLP en hypothèses de verrous R&D candidats, pas en titres génériques.")
-        parts.append("- Interdiction comme titres : Non-transférabilité, Cause racine, Performance insuffisante, Comportement instable, Compromis entre contraintes.")
-        parts.append("- Axes attendus si les sources le permettent : vibro-acoustique/équilibrage, thermique/forte pression, air sec/condensats, segmentation/soufflage carter.")
+        parts.append("- Le NLP/Frascati fournit des signaux bruts, des scores et des preuves. Ton rôle est de les reformuler en hypothèses de verrous R&D candidates, lisibles pour un consultant CIR.")
+        parts.append("- La mémoire CIR précédente sert seulement au style de rédaction : niveau de précision, structure, ton prudent. Elle ne doit jamais ajouter un fait absent des sources du dossier courant.")
+        parts.append("- Interdiction de garder des titres génériques comme : Non-transférabilité, Cause racine, Performance insuffisante, Comportement instable, Compromis entre contraintes.")
+        parts.append("- Construis des titres techniques spécifiques à partir des preuves : objet technique + phénomène non maîtrisé + contrainte ou condition d'usage.")
+        parts.append("- Ne force aucun axe métier prédéfini : mécanique, chimie, architecture, IA ou LLM doivent suivre la même logique objet/phénomène/contrainte/incertitude/preuves.")
         parts.append("")
         parts.append("Résumé Frascati déjà calculé par le NLP / Frascati :")
         parts.append(json.dumps(frascati_summary, ensure_ascii=False, indent=2))
@@ -904,9 +1210,9 @@ class EnnoDiagnosticAgent:
         parts.append(build_sources_block("Résultats", sections.get("resultats", []), budgets["resultats"]))
         parts.append(build_sources_block("Paramètres", sections.get("parametres", []), budgets["parametres"]))
         parts.append(build_sources_block("Limites / points à vérifier", sections.get("limites", []), budgets["limites"]))
-        parts.append(build_sources_block("Axe vibro-acoustique / équilibrage", sections.get("axe_vibro_acoustique", []), 5))
-        parts.append(build_sources_block("Axe thermique / 300 bars", sections.get("axe_thermique_300bar", []), 5))
-        parts.append(build_sources_block("Axe air sec / condensats", sections.get("axe_air_sec_condensats", []), 5))
+        parts.append(build_sources_block("Axe problèmes transverses", sections.get("axe_problemes_transverses", []), 5))
+        parts.append(build_sources_block("Axe contraintes transverses", sections.get("axe_contraintes_transverses", []), 5))
+        parts.append(build_sources_block("Axe preuves et résultats", sections.get("axe_preuves_resultats", []), 5))
         parts.append("")
         parts.append("Réponse attendue exactement avec ces titres Markdown :")
         parts.append("## Lecture Frascati du dossier")
@@ -920,8 +1226,9 @@ class EnnoDiagnosticAgent:
         parts.append("## Points à valider par le consultant")
         parts.append("")
         parts.append("Contraintes de rédaction :")
-        parts.append("- Maximum 5 signaux candidats consolidés, techniques, prudents et sourcés.")
-        parts.append("- Pour chaque signal candidat : titre technique provisoire, difficulté observée, phénomène possiblement non maîtrisé, preuves/documents, statut de validation.")
+        parts.append("- Produis entre 4 et 8 signaux candidats si les sources le permettent ; fusionne les doublons, mais ne réduis pas plusieurs incertitudes différentes en deux catégories génériques.")
+        parts.append("- Pour chaque signal candidat : titre technique provisoire reformulé par le LLM, difficulté observée, phénomène possiblement non maîtrisé, preuves/documents, statut de validation.")
+        parts.append("- Le titre doit être exploitable pour EnnoScholar après validation consultant : pas un simple mot-clé, pas un thème générique.")
         parts.append("- Dans la démarche : organiser par axe technique, sans inventer de protocole.")
         parts.append("- Dans les résultats : séparer résultats chiffrés, observations qualitatives, résultats insuffisants/à valider.")
         parts.append("- Ne fabrique jamais de valeur, de résultat ou de document source.")
@@ -976,9 +1283,9 @@ class EnnoDiagnosticAgent:
             parts2.append(build_sources_block_compact("Résultats", sections.get("resultats", []), 4, 240))
             parts2.append(build_sources_block_compact("Paramètres", sections.get("parametres", []), 3, 220))
             parts2.append(build_sources_block_compact("Limites / points à vérifier", sections.get("limites", []), 3, 220))
-            parts2.append(build_sources_block_compact("Axe vibro-acoustique / équilibrage", sections.get("axe_vibro_acoustique", []), 2, 220))
-            parts2.append(build_sources_block_compact("Axe thermique / 300 bars", sections.get("axe_thermique_300bar", []), 2, 220))
-            parts2.append(build_sources_block_compact("Axe air sec / condensats", sections.get("axe_air_sec_condensats", []), 2, 220))
+            parts2.append(build_sources_block_compact("Axe problèmes transverses", sections.get("axe_problemes_transverses", []), 2, 220))
+            parts2.append(build_sources_block_compact("Axe contraintes transverses", sections.get("axe_contraintes_transverses", []), 2, 220))
+            parts2.append(build_sources_block_compact("Axe preuves et résultats", sections.get("axe_preuves_resultats", []), 2, 220))
             parts2.append("")
             parts2.append("Réponse attendue exactement avec ces titres Markdown :")
             parts2.append("## Lecture Frascati du dossier")
@@ -1065,9 +1372,9 @@ class EnnoDiagnosticAgent:
             + (sections.get("resultats") or [])[:5]
             + (sections.get("parametres") or [])[:4]
             + (sections.get("limites") or [])[:4]
-            + (sections.get("axe_vibro_acoustique") or [])[:4]
-            + (sections.get("axe_thermique_300bar") or [])[:4]
-            + (sections.get("axe_air_sec_condensats") or [])[:4],
+            + (sections.get("axe_problemes_transverses") or [])[:4]
+            + (sections.get("axe_contraintes_transverses") or [])[:4]
+            + (sections.get("axe_preuves_resultats") or [])[:4],
             max_items=18,
         )
 
@@ -1075,14 +1382,21 @@ class EnnoDiagnosticAgent:
         evidence_lines: List[str] = []
         joined_text = " ".join(source_text(src) for src in evidence_sources).lower()
 
-        theme_map = [
-            ("soufflage carter / segmentation / étanchéité", ["soufflage", "carter", "segment", "segments", "étanchéité", "etancheite", "reniflard"]),
-            ("vibro-acoustique / aspiration déportée / équilibrage", ["acoustique", "bruit", "vibration", "vibratoire", "aspiration", "déportée", "deportee", "contrepoids", "équilibrage", "equilibrage"]),
-            ("thermique / réfrigérant / débit d’eau / pression", ["thermique", "température", "temperature", "réfrigérant", "refrigerant", "débit", "debit", "eau", "250", "300", "bars", "bar"]),
-            ("air sec / condensats / humidité", ["air sec", "condensat", "condensats", "humidité", "humidite", "point de rosée", "rosee", "huile"]),
-            ("performance débit / pression cible", ["90", "100", "m3", "m³", "pression", "débit", "debit", "performance"]),
-        ]
-        themes = [label for label, words in theme_map if any(word in joined_text for word in words)]
+        # Extraction générique de thèmes dominants depuis les sources, sans lexique projet.
+        theme_terms = []
+        stop_terms = {
+            "verrou", "verrous", "signal", "signaux", "technique", "techniques", "candidat", "candidats",
+            "source", "sources", "document", "documents", "frascati", "validation", "consultant", "projet",
+            "preuve", "preuves", "dossier", "methode", "méthode", "resultat", "résultat", "analyse",
+        }
+        for tok in re.findall(r"[a-zA-ZÀ-ÿ0-9][a-zA-ZÀ-ÿ0-9%°µ/\-.']{3,}", joined_text):
+            t = tok.strip("-_. '").lower()
+            if t and t not in stop_terms:
+                theme_terms.append(t)
+        counts = {}
+        for t in theme_terms:
+            counts[t] = counts.get(t, 0) + 1
+        themes = [t for t, _ in sorted(counts.items(), key=lambda x: (-x[1], x[0]))[:8]]
 
         for src in evidence_sources:
             doc = source_doc(src)
@@ -1164,9 +1478,9 @@ class EnnoDiagnosticAgent:
             + (sections.get("resultats") or [])[:5]
             + (sections.get("parametres") or [])[:4]
             + (sections.get("limites") or [])[:4]
-            + (sections.get("axe_vibro_acoustique") or [])[:4]
-            + (sections.get("axe_thermique_300bar") or [])[:4]
-            + (sections.get("axe_air_sec_condensats") or [])[:4],
+            + (sections.get("axe_problemes_transverses") or [])[:4]
+            + (sections.get("axe_contraintes_transverses") or [])[:4]
+            + (sections.get("axe_preuves_resultats") or [])[:4],
             max_items=22,
         )
 
@@ -1402,54 +1716,30 @@ Contraintes :
         t0 = time.time()
 
         sections = self.retrieve_all_sections()
-        frascati_summary = self.frascati_summary_from_chroma(sections.get("verrous", []))
+        frascati_summary = self.frascati_summary_from_chroma(
+            sections.get("_frascati_verrous", []) or sections.get("verrous", [])
+        )
         ai_detection_report = self.load_ai_detection_report()
 
         # V105 — Comparaison CIR précédent toujours active avec cache.
         # Il n'y a plus de variable d'environnement pour activer/désactiver.
         # Le consultant garde un seul bouton : Lancer EnnoDiagnostic.
-        # Le backend réutilise automatiquement le cache si rien n'a changé.
-        run_cir_memory = True
-        print("🔁 Comparaison CIR précédent toujours active dans /diagnostic/run-agent")
-
-        cir_memory_report = self.load_cir_memory_report()
-        if not isinstance(cir_memory_report, dict):
-            cir_memory_report = {
-                "ok": False,
-                "message": "Rapport CIR mémoire invalide.",
-            }
-
-        if cir_memory_report.get("ok"):
-            summary = cir_memory_report.get("summary") or {}
-            previous_years = (
-                cir_memory_report.get("previous_cir_years_used")
-                or cir_memory_report.get("previous_years")
-                or summary.get("previous_cir_years_used")
-                or summary.get("previous_years")
-                or []
-            )
-            comparisons = (
-                cir_memory_report.get("verrou_comparisons")
-                or cir_memory_report.get("comparisons")
-                or []
-            )
-            if cir_memory_report.get("cached"):
-                print(
-                    "♻️ Comparaison CIR précédent OK depuis cache "
-                    f"years={previous_years} comparisons={len(comparisons) if isinstance(comparisons, list) else 0}"
-                )
-            else:
-                print(
-                    "✅ Comparaison CIR précédent OK recalculée "
-                    f"years={previous_years} comparisons={len(comparisons) if isinstance(comparisons, list) else 0}"
-                )
-        else:
-            print(
-                "⚠️ Comparaison CIR précédent non exploitable : "
-                f"{cir_memory_report.get('message') or cir_memory_report.get('error') or 'aucune mémoire N-1 disponible'}"
-            )
-
+        # V106 — Comparaison CIR précédent séparée du diagnostic principal.
+        # Le bouton "Lancer EnnoDiagnostic" doit rester rapide :
+        # RAG/Chroma + Frascati + contrôle IA + LLM diagnostic.
+        # La comparaison N vs N-1 est lancée indépendamment depuis l'onglet
+        # "CIR précédent" via POST /projects/{project_id}/cir-previous/compare-current.
+        run_cir_memory = False
+        print("⏭️ Comparaison CIR précédent ignorée dans /diagnostic/run-agent. Utilise l'onglet CIR précédent pour la lancer.")
+        cir_memory_report = {
+            "ok": False,
+            "skipped": True,
+            "has_previous_cir": False,
+            "message": "Comparaison CIR précédent non relancée pendant EnnoDiagnostic. Lance-la depuis l'onglet CIR précédent.",
+            "route": "/projects/{project_id}/cir-previous/compare-current",
+        }
         style_memory_report = self.load_style_memory_context(sections)
+        self._last_style_memory_report = style_memory_report
 
         if self.llm is not None:
             prompt = self._build_fast_single_prompt(
@@ -1507,6 +1797,37 @@ Contraintes :
             )
 
         content = normalize_report_vocabulary(content)
+
+        # V122 : on force une vraie reformulation structurée des verrous avant de construire les sections.
+        # Les chunks RAG ne doivent plus être affichés comme des verrous finaux.
+        llm_reformulated_verrous = self.build_llm_reformulated_verrous(
+            content=content,
+            sections=sections,
+            frascati_summary=frascati_summary,
+        )
+        verrou_synthesis_report = getattr(self, "_last_verrou_synthesis_report", {})
+
+        try:
+            try:
+                from agents.EnnoDiagnostic.consultant_verrou_synthesizer import build_verrous_markdown
+            except Exception:
+                from consultant_verrou_synthesizer import build_verrous_markdown
+
+            if llm_reformulated_verrous:
+                verrous_markdown = build_verrous_markdown(
+                    llm_reformulated_verrous,
+                    title=SIGNAL_SECTION_TITLE,
+                )
+                content = replace_or_insert_markdown_section(
+                    content=content,
+                    title=SIGNAL_SECTION_TITLE,
+                    new_section=verrous_markdown,
+                    after_title="Objectif global reformulé",
+                )
+        except Exception as exc:
+            print(f"[EnnoDiagnostic][V122_VERROU_MARKDOWN][WARN] {exc}")
+
+        content = normalize_report_vocabulary(content)
         frascati_justification_text = extract_markdown_section(content, "Justification Frascati du score")
         diagnostic_sections = build_diagnostic_sections(content)
 
@@ -1514,7 +1835,7 @@ Contraintes :
 
         report = {
             "ok": True,
-            "mode": "ennodiagnostic_v105_cir_previous_always_on_cached",
+            "mode": "ennodiagnostic_v122_grouped_llm_verrou_synthesis",
             "principle": (
                 "Chroma remains the source of truth. The Frascati score is calculated by NLP/Frascati; "
                 "the LLM only explains this score from project sources."
@@ -1559,9 +1880,14 @@ Contraintes :
                 "error": llm_error,
             },
             "diagnostic_sections": diagnostic_sections,
+            "llm_reformulated_verrous": llm_reformulated_verrous,
+            "consultant_verrous_cir": llm_reformulated_verrous,
+            "consultant_validation_source": "llm_reformulated_verrous",
+            "verrou_synthesis_report": verrou_synthesis_report,
+            "verrou_synthesis_version": "v122_grouped_rag_llm_json",
             "llm_strategy": {
-                "version": "v105_cir_previous_always_on_cached",
-                "why": "One compact diagnostic LLM call plus one dedicated Frascati justification call. CIR previous comparison is always active and cached to avoid unnecessary recalculation.",
+                "version": "v122_grouped_rag_llm_verrou_reformulation",
+                "why": "NLP/Frascati détecte et score les preuves. EnnoDiagnostic regroupe les chunks RAG proches puis demande au LLM de produire des verrous R&D candidats structurés, sans invention et avec preuves sources.",
                 "prompt_chars": len(prompt),
                 "elapsed_seconds": elapsed,
                 "cir_memory_in_agent": run_cir_memory,
@@ -1578,7 +1904,8 @@ Contraintes :
                 "limites_count": len(sections.get("limites", [])),
                 "style_examples_count": style_memory_report.get("examples_count", 0),
             },
-            "chroma_sections": sections,
+            "chroma_sections": {k: v for k, v in sections.items() if not str(k).startswith("_")},
+            "frascati_source_verrous": sections.get("_frascati_verrous", []),
         }
 
         if save:

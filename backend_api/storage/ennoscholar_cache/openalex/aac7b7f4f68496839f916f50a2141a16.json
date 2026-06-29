@@ -1,0 +1,107 @@
+{
+  "created_at": "2026-06-26T09:42:05",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "fire resistance timber frame wall bio-based insulation",
+      "paper_id": "https://openalex.org/W2023555815",
+      "title": "A Comparative Cradle-to-Gate Life Cycle Assessment of Mid-Rise Office Building Construction Alternatives: Laminated Timber or Reinforced Concrete",
+      "abstract": "The objective of this project was to quantify and compare the environmental impacts associated with alternative designs for a typical North American mid-rise office building. Two scenarios were considered; a traditional cast-in-place, reinforced concrete frame and a laminated timber hybrid design, which utilized engineered wood products (cross-laminated timber (CLT) and glulam). The boundary of the quantitative analysis was cradle-to-construction site gate and encompassed the structural support system and the building enclosure. Floor plans, elevations, material quantities, and structural loads associated with a five-storey concrete-framed building design were obtained from issued-for-construction drawings. A functionally equivalent, laminated timber hybrid design was conceived, based on Canadian Building Code requirements. Design values for locally produced CLT panels were established from in-house material testing. Primary data collected from a pilot-scale manufacturing facility was used to develop the life cycle inventory for CLT, whereas secondary sources were referenced for other construction materials. The TRACI characterization methodology was employed to translate inventory flows into impact indicators. The results indicated that the laminated timber building design offered a lower environmental impact in 10 of 11 assessment categories. The cradle-to-gate process energy was found to be nearly identical in both design scenarios (3.5 GJ/m2), whereas the cumulative embodied energy (feedstock plus process) of construction materials was estimated to be 8.2 and 4.6 GJ/m2 for the timber and concrete designs, respectively; which indicated an increased availability of readily accessible potential energy stored within the building materials of the timber alternative.",
+      "year": 2012,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings2030245",
+      "doi": "10.3390/buildings2030245",
+      "authors": [
+        "Adam Blake Robertson",
+        "Frank Lam",
+        "Raymond J. Cole"
+      ],
+      "citation_count": 238,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cross laminated timber",
+        "Engineering",
+        "Embodied energy",
+        "Life-cycle assessment",
+        "Civil engineering",
+        "Building design",
+        "Enclosure",
+        "Reinforced concrete"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fire resistance timber frame wall bio-based insulation",
+      "paper_id": "https://openalex.org/W4214594915",
+      "title": "Integration of life cycle assessments (LCA) in circular bio-based wall panel design",
+      "abstract": "",
+      "year": 2022,
+      "venue": "Journal of Cleaner Production",
+      "url": "https://doi.org/10.1016/j.jclepro.2022.130938",
+      "doi": "10.1016/j.jclepro.2022.130938",
+      "authors": [
+        "Valeria Cascione",
+        "Matt Roberts",
+        "Stephen Allen",
+        "Barrie Dams",
+        "Daniel Maskell",
+        "Andy Shea",
+        "Pete Walker",
+        "Stephen Emmitt"
+      ],
+      "citation_count": 60,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Life-cycle assessment",
+        "Circular economy",
+        "Cladding (metalworking)",
+        "Flat panel",
+        "Engineering",
+        "Environmental impact assessment",
+        "Structural engineering",
+        "Computer science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fire resistance timber frame wall bio-based insulation",
+      "paper_id": "https://openalex.org/W4211175804",
+      "title": "Bio-based Building Skin",
+      "abstract": "",
+      "year": 2019,
+      "venue": "Directory of Open access Books (OAPEN Foundation)",
+      "url": "https://www.doabooks.org/doab?func=search&query=rid:43479",
+      "doi": "10.1007/978-981-13-3747-5",
+      "authors": [
+        "Andreja Kutnar",
+        "Marcin Brzezicki",
+        "Jakub Sandak",
+        "Anna Sandak"
+      ],
+      "citation_count": 103,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "book"
+      ],
+      "fields_of_study": [
+        "Architectural engineering",
+        "Perspective (graphical)",
+        "Selection (genetic algorithm)",
+        "Engineering",
+        "Computer science",
+        "Engineering drawing",
+        "Construction engineering",
+        "Artificial intelligence"
+      ],
+      "tldr": ""
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+{
+  "created_at": "2026-06-26T09:39:41",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "hemp concrete thermal effusivity thermal diffusivity summer comfort",
+      "paper_id": "https://openalex.org/W3122875397",
+      "title": "Thermal insulation potential of non-industrial hemp (Moroccan cannabis sativa L.) fibers for green plaster-based building materials",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Journal of Cleaner Production",
+      "url": "https://doi.org/10.1016/j.jclepro.2021.126064",
+      "doi": "10.1016/j.jclepro.2021.126064",
+      "authors": [
+        "Mouatassim Charai",
+        "Haitham Sghiouri",
+        "Ahmed Mezrhab",
+        "Mustapha Karkri"
+      ],
+      "citation_count": 111,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Thermogravimetric analysis",
+        "Composite material",
+        "Fiber",
+        "Cannabis sativa",
+        "Chemistry",
+        "Botany",
+        "Organic chemistry"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hemp concrete thermal effusivity thermal diffusivity summer comfort",
+      "paper_id": "https://openalex.org/W887900696",
+      "title": "Moisture buffer potential of experimental wall assemblies incorporating formulated hemp-lime",
+      "abstract": "Experiments were carried out according to the Nordtest protocol to study the moisture buffer potential of hemp-lime walls with a range of different internal linings and surface treatments. It was observed that the moisture buffer value was ‘Excellent’ when the inner surface of hemp-lime was exposed. ‘Excellent’ moisture buffer values were also obtained for hemp-lime with lime plaster. All other assemblies demonstrated ‘Good’ moisture buffer value. Moisture buffer values of the assemblies, after application of paint on the upper surfaces, were also determined. It was observed that application of synthetic pigment based trade paint could reduce the moisture buffer performance of the assembly consisting of hemp-lime and lime-plaster from ‘Excellent’ to ‘Good’ while between 61 and 69% reduction of moisture buffer value was observed for the other assemblies. However, the reduced buffer values of the assemblies are still comparable with other moisture buffering building materials. It was further observed that moisture buffer performance was improved when clay based organic paint was used instead of trade paint.",
+      "year": 2015,
+      "venue": "Building and Environment",
+      "url": "https://doi.org/10.1016/j.buildenv.2015.07.011",
+      "doi": "10.1016/j.buildenv.2015.07.011",
+      "authors": [
+        "Eshrar Latif",
+        "Mike Lawrence",
+        "Andy Shea",
+        "Peter Walker"
+      ],
+      "citation_count": 147,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Lime",
+        "Moisture",
+        "Buffer (optical fiber)",
+        "Materials science",
+        "Water content",
+        "Composite material",
+        "Geotechnical engineering",
+        "Metallurgy"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hemp concrete thermal effusivity thermal diffusivity summer comfort",
+      "paper_id": "https://openalex.org/W4200201201",
+      "title": "Thermal and mechanical behavior of straw-based construction: A review",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2021.125915",
+      "doi": "10.1016/j.conbuildmat.2021.125915",
+      "authors": [
+        "Ghadie Tlaiji",
+        "Salah-Eddine Ouldboukhitine",
+        "Fabienne Pennec",
+        "Pascal Henry Biwolé"
+      ],
+      "citation_count": 70,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Context (archaeology)",
+        "Embodied energy",
+        "Environmental science",
+        "Life-cycle assessment",
+        "Work (physics)",
+        "Relative humidity",
+        "Carbon footprint"
+      ],
+      "tldr": ""
+    }
+  ]
+}

@@ -33,6 +33,8 @@ from typing import Any, Dict, List, Optional
 SIGNAL_SECTION_TITLE = "Signaux de verrous R&D candidats"
 LEGACY_SIGNAL_SECTION_TITLE = "Verrous R&D / signaux de verrous"
 
+MEMORY_V2_SECTION_TITLE = "Mémoire V2"
+
 
 # =========================================================
 # Utils
@@ -189,6 +191,7 @@ def build_diagnostic_sections(content: str) -> Dict[str, str]:
     titles = [
         "Lecture Frascati du dossier",
         "Justification Frascati du score",
+        MEMORY_V2_SECTION_TITLE,
         "Synthèse stratégique du projet",
         "Objectif global reformulé",
         SIGNAL_SECTION_TITLE,
@@ -311,6 +314,105 @@ def dedupe_sources(sources: List[Dict[str, Any]], max_items: int = 30) -> List[D
     return out
 
 
+
+
+def is_universal_reconstruction_source(src: Dict[str, Any]) -> bool:
+    """Détecte les catégories transverses reconstruites, sans logique métier/projet."""
+    if not isinstance(src, dict):
+        return False
+    meta = meta_of(src)
+    blob = " ".join([
+        clean_text(meta.get("verrou_source")),
+        clean_text(meta.get("final_role")),
+        clean_text(meta.get("theme_id")),
+        clean_text(meta.get("rag_chunk_id")),
+        source_text(src)[:220],
+    ]).lower()
+    return (
+        "universal_theme_reconstruction" in blob
+        or "verrou_implicit_universal" in blob
+        or blob.strip().startswith("verrou implicite possible")
+    )
+
+
+def rank_sources_for_agent(sources: List[Dict[str, Any]], max_items: int = 30) -> List[Dict[str, Any]]:
+    """
+    Classe les sources pour donner priorité aux preuves NLP spécifiques.
+    Les catégories universelles restent disponibles, mais seulement en secours.
+    """
+    deduped = dedupe_sources(sources or [], max_items=max_items * 4)
+
+    def score(src: Dict[str, Any]) -> float:
+        meta = meta_of(src)
+        value = 0.0
+        if not is_universal_reconstruction_source(src):
+            value += 100.0
+        if clean_text(meta.get("pack_key")) == "verrous_rnd_locaux":
+            value += 25.0
+        if clean_text(meta.get("role")) == "verrou":
+            value += 10.0
+        for key, weight in [("rank_score", 2.0), ("confidence", 1.0), ("verrou_score", 1.5), ("frascati_score", 1.0)]:
+            try:
+                value += float(meta.get(key) or 0) * weight
+            except Exception:
+                pass
+        value += min(len(source_text(src)), 900) / 9000.0
+        return value
+
+    return sorted(deduped, key=score, reverse=True)[:max_items]
+
+
+def merge_ranked_sources(*groups: List[Dict[str, Any]], max_items: int = 30) -> List[Dict[str, Any]]:
+    combined: List[Dict[str, Any]] = []
+    for group in groups:
+        if isinstance(group, list):
+            combined.extend(group)
+    return rank_sources_for_agent(combined, max_items=max_items)
+
+def technical_title_from_source(src: Dict[str, Any], max_chars: int = 180) -> str:
+    """
+    Extrait un titre technique provisoire depuis une preuve, sans règle métier.
+    Sert uniquement de secours si le LLM n'a pas produit assez de titres.
+    """
+    txt = repair_mojibake(source_text(src))
+    meta = meta_of(src)
+
+    candidates = [
+        clean_text(meta.get("llm_title")),
+        clean_text(meta.get("verrou_title")),
+        clean_text(meta.get("theme_label")) if not is_universal_reconstruction_source(src) else "",
+        clean_text(meta.get("section_title")),
+    ]
+
+    patterns = [
+        r"V\s*\d+\s*\|\s*([^|:\n]{8,140})(?:\s*:\s*([^|\n.]{8,180}))?",
+        r"ID\s+Verrou\s*\|[^\n]*?V\s*\d+\s*\|\s*([^|:\n]{8,140})(?:\s*:\s*([^|\n.]{8,180}))?",
+        r"Verrou\s*\d+\s*[:\-–—]\s*([^\n.]{12,180})",
+        r"OBJ\s*\d+\s*[-–—:]\s*([^\n.]{12,180})",
+        r"P\s*\d+(?:\.\d+)*\s+([^:\n]{8,140})(?:\s*:\s*([^\n.]{8,180}))?",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, txt, flags=re.I)
+        if match:
+            part1 = clean_text(match.group(1) or "")
+            part2 = clean_text(match.group(2) or "") if match.lastindex and match.lastindex >= 2 else ""
+            title = f"{part1} : {part2}" if part2 else part1
+            candidates.append(title)
+
+    first_sentence = re.split(r"[.!?\n]", txt, maxsplit=1)[0]
+    candidates.append(first_sentence)
+
+    for candidate in candidates:
+        candidate = re.sub(r"^[-*•\d.)\s]+", "", clean_text(candidate))
+        candidate = re.sub(r"^Verrou implicite possible\s*[—–:-]\s*", "", candidate, flags=re.I)
+        candidate = re.sub(r"^Question de qualification\s*:\s*", "", candidate, flags=re.I)
+        candidate = candidate.strip(" |:-–—")
+        if len(candidate) >= 12:
+            return truncate(candidate, max_chars)
+
+    return "Signal technique à reformuler"
+
 def build_sources_block(title: str, sources: List[Dict[str, Any]], max_items: int = 10, max_text_chars: int = 520) -> str:
     lines = [f"## {title}"]
 
@@ -429,7 +531,7 @@ class EnnoDiagnosticAgent:
             sources = self.retriever.search(question=query, role_filter=role, top_k=top_k)
         else:
             sources = self.retriever.search(question=query, role_filter=None, top_k=top_k)
-        return dedupe_sources(sources, max_items=top_k)
+        return rank_sources_for_agent(sources, max_items=top_k)
 
     def retrieve_all_sections(self) -> Dict[str, List[Dict[str, Any]]]:
         sections: Dict[str, List[Dict[str, Any]]] = {}
@@ -476,24 +578,38 @@ class EnnoDiagnosticAgent:
             top_k=10,
         )
 
+        # On conserve les sources qui portent le score Frascati séparément.
+        # Elles peuvent être très synthétiques ; elles ne doivent pas écraser
+        # les preuves détaillées utilisées par le LLM pour reformuler.
+        sections["_frascati_verrous"] = list(sections.get("verrous", []))
+
         # Axes complémentaires génériques : ils servent à récupérer des preuves
         # sans coder un projet précis ni un domaine précis.
         sections["axe_problemes_transverses"] = self.search_chroma(
             role=None,
             query="problème difficulté limite incertitude non maîtrisé instabilité anomalie défaut non conforme robustesse fiabilité performance qualité",
-            top_k=10,
+            top_k=12,
         )
 
         sections["axe_contraintes_transverses"] = self.search_chroma(
             role=None,
             query="contraintes exigences conditions paramètres seuils configuration contexte environnement ressources compatibilité objectif attendu",
-            top_k=10,
+            top_k=12,
         )
 
         sections["axe_preuves_resultats"] = self.search_chroma(
             role=None,
             query="preuves mesures tests essais résultats observations métriques comparaison validation limites conclusions valeurs courbes tableaux",
-            top_k=10,
+            top_k=12,
+        )
+
+        # Correction V121 : le LLM doit recevoir les preuves NLP/RAG spécifiques,
+        # pas seulement les catégories Frascati universelles.
+        sections["verrous"] = merge_ranked_sources(
+            sections.get("verrous", []),
+            sections.get("limites", []),
+            sections.get("axe_problemes_transverses", []),
+            max_items=18,
         )
 
         return sections
@@ -547,6 +663,273 @@ class EnnoDiagnosticAgent:
             ensure_ascii=False,
             indent=2,
         )
+
+
+    # =====================================================
+    # Memory V2 - projets similaires / continuité / style
+    # =====================================================
+
+    def load_memory_v2_context(self, sections: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
+        try:
+            from modules.EXPERIENCE_MEMORY.memory_v2_retriever import retrieve_memory_v2_for_diagnostic
+            report = retrieve_memory_v2_for_diagnostic(
+                organisme=self.organisme,
+                project=self.project,
+                year=self.year,
+                sections=sections,
+            )
+            return report if isinstance(report, dict) else {"ok": False, "prompt_block": "Memory V2 rapport invalide."}
+        except Exception as exc:
+            return {
+                "ok": False,
+                "error": str(exc),
+                "message": "Memory V2 indisponible.",
+                "prompt_block": "Memory V2 indisponible.",
+                "similar_projects": [],
+                "by_role": {},
+                "style_examples": [],
+            }
+
+
+
+    def build_memory_v2_usage_report(
+        self,
+        memory_v2_report: Optional[Dict[str, Any]],
+        style_memory_report: Optional[Dict[str, Any]],
+        sections: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+    ) -> Dict[str, Any]:
+        memory_v2_report = memory_v2_report if isinstance(memory_v2_report, dict) else {}
+        style_memory_report = style_memory_report if isinstance(style_memory_report, dict) else {}
+        sections = sections if isinstance(sections, dict) else {}
+
+        similar_projects = memory_v2_report.get("similar_projects") or []
+        if not isinstance(similar_projects, list):
+            similar_projects = []
+
+        by_role = memory_v2_report.get("by_role") or {}
+        if not isinstance(by_role, dict):
+            by_role = {}
+
+        style_examples_count = int(style_memory_report.get("examples_count") or 0)
+        style_by_role = style_memory_report.get("examples_by_role_count") or {}
+        if not isinstance(style_by_role, dict):
+            style_by_role = {}
+
+        cards_consulted = (
+            memory_v2_report.get("cards_consulted")
+            or memory_v2_report.get("cards_count")
+            or memory_v2_report.get("results_count")
+            or memory_v2_report.get("retrieved_count")
+            or 0
+        )
+
+        cards_used = (
+            memory_v2_report.get("cards_used")
+            or memory_v2_report.get("used_count")
+            or memory_v2_report.get("selected_count")
+            or 0
+        )
+
+        if not cards_used and by_role:
+            try:
+                cards_used = sum(len(v or []) for v in by_role.values() if isinstance(v, list))
+            except Exception:
+                cards_used = 0
+
+        if not cards_consulted:
+            cards_consulted = cards_used
+
+        try:
+            similar_verrous = len(by_role.get("verrou") or by_role.get("verrous") or [])
+        except Exception:
+            similar_verrous = 0
+
+        verrous_reused = (
+            memory_v2_report.get("verrous_reused")
+            or memory_v2_report.get("similar_verrous_used")
+            or similar_verrous
+            or 0
+        )
+
+        best_project = similar_projects[0] if similar_projects else {}
+        if not isinstance(best_project, dict):
+            best_project = {}
+
+        best_score = (
+            best_project.get("score")
+            or best_project.get("similarity")
+            or best_project.get("match_score")
+            or best_project.get("confidence")
+            or 0
+        )
+
+        try:
+            best_score_float = float(best_score or 0)
+            if best_score_float > 1:
+                best_score_float = best_score_float / 100.0
+        except Exception:
+            best_score_float = 0.0
+
+        confidence_parts: List[float] = []
+        if memory_v2_report.get("ok") or memory_v2_report.get("available"):
+            confidence_parts.append(0.35)
+        if similar_projects:
+            confidence_parts.append(min(0.25, 0.25 * max(best_score_float, 0.5)))
+        if cards_used:
+            confidence_parts.append(0.20)
+        if style_examples_count:
+            confidence_parts.append(0.20)
+
+        confidence = round(min(1.0, sum(confidence_parts)), 2) if confidence_parts else 0.0
+
+        experience_used = bool(memory_v2_report.get("ok") and (similar_projects or cards_used or by_role))
+        style_used = bool(style_memory_report.get("ok") and style_examples_count > 0)
+
+        similar_projects_clean: List[Dict[str, Any]] = []
+        for p in similar_projects[:8]:
+            if not isinstance(p, dict):
+                continue
+            similar_projects_clean.append({
+                "organisme": p.get("organisme") or p.get("organization") or self.organisme,
+                "project": p.get("project") or p.get("project_name") or p.get("project_slug") or "",
+                "year": str(p.get("year") or p.get("annee") or ""),
+                "score": p.get("score") or p.get("similarity") or p.get("match_score") or p.get("confidence") or "",
+                "reason": p.get("reason") or p.get("why") or p.get("match_reason") or "",
+            })
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "organisme": self.organisme,
+            "project": self.project,
+            "year": self.year,
+            "experience": {
+                "enabled": True,
+                "available": bool(memory_v2_report.get("available") or memory_v2_report.get("ok")),
+                "used": experience_used,
+                "cards_consulted": int(cards_consulted or 0),
+                "cards_used": int(cards_used or 0),
+                "similar_project_found": bool(similar_projects),
+                "similar_projects_count": len(similar_projects),
+                "similar_projects": similar_projects_clean,
+                "similar_verrous": int(similar_verrous or 0),
+                "verrous_reused": int(verrous_reused or 0),
+                "principle": memory_v2_report.get("principle"),
+                "error": memory_v2_report.get("error"),
+            },
+            "style": {
+                "enabled": bool(self.use_style_memory),
+                "available": bool(style_memory_report.get("ok")),
+                "used": style_used,
+                "examples_used": style_examples_count,
+                "examples_by_role_count": style_by_role,
+                "memory_path": style_memory_report.get("memory_path"),
+                "principle": style_memory_report.get("principle"),
+                "error": style_memory_report.get("error"),
+            },
+            "confidence": confidence,
+            "interpretation": {
+                "used_for": [
+                    item for item, enabled in [
+                        ("recherche de projets similaires", bool(similar_projects)),
+                        ("continuité R&D / expérience", experience_used),
+                        ("inspiration de reformulation des verrous", bool(cards_used or similar_verrous)),
+                        ("style CIR", style_used),
+                    ]
+                    if enabled
+                ],
+                "not_used_for": [
+                    "preuve factuelle du dossier courant",
+                    "réutilisation de chiffres historiques",
+                    "validation automatique de l'éligibilité CIR",
+                ],
+            },
+            "debug_counts": {
+                "chroma_sources_current_project": {
+                    k: len(v or [])
+                    for k, v in sections.items()
+                    if isinstance(v, list) and not str(k).startswith("_")
+                },
+                "memory_v2_keys": sorted(list(memory_v2_report.keys())),
+                "style_memory_keys": sorted(list(style_memory_report.keys())),
+            },
+        }
+
+    def render_memory_v2_usage_section(self, usage_report: Dict[str, Any]) -> str:
+        usage_report = usage_report if isinstance(usage_report, dict) else {}
+        exp = usage_report.get("experience") or {}
+        sty = usage_report.get("style") or {}
+        interp = usage_report.get("interpretation") or {}
+
+        lines: List[str] = []
+        lines.append(f"## {MEMORY_V2_SECTION_TITLE}")
+        lines.append("")
+        lines.append("Cette section indique si la base Memory V2 a été utilisée pendant ce diagnostic.")
+        lines.append("")
+        lines.append("### Synthèse d'utilisation")
+        lines.append(f"- Statut mémoire V2 : {'active' if usage_report.get('enabled') else 'inactive'}")
+        lines.append(f"- Expérience / connaissance utilisée : {'oui' if exp.get('used') else 'non'}")
+        lines.append(f"- Style CIR utilisé : {'oui' if sty.get('used') else 'non'}")
+        lines.append(f"- Niveau de confiance mémoire : {usage_report.get('confidence', 0)}")
+        lines.append("")
+        lines.append("### Expérience et continuité")
+        lines.append(f"- Projet similaire trouvé : {'oui' if exp.get('similar_project_found') else 'non'}")
+        lines.append(f"- Projets similaires retrouvés : {exp.get('similar_projects_count', 0)}")
+        lines.append(f"- Cartes consultées : {exp.get('cards_consulted', 0)}")
+        lines.append(f"- Cartes retenues/utilisées : {exp.get('cards_used', 0)}")
+        lines.append(f"- Verrous similaires retrouvés : {exp.get('similar_verrous', 0)}")
+        lines.append(f"- Verrous utilisés comme inspiration : {exp.get('verrous_reused', 0)}")
+
+        similar_projects = exp.get("similar_projects") or []
+        if similar_projects:
+            lines.append("")
+            lines.append("### Projets similaires")
+            for i, p in enumerate(similar_projects[:5], start=1):
+                project_name = clean_text(p.get("project")) or "-"
+                year = clean_text(p.get("year")) or "-"
+                score = p.get("score")
+                score_txt = "-"
+                try:
+                    score_float = float(score)
+                    score_txt = f"{round(score_float * 100, 1)}%" if score_float <= 1 else f"{round(score_float, 1)}%"
+                except Exception:
+                    score_txt = clean_text(score) or "-"
+                lines.append(f"{i}. {project_name} — {year} — similarité : {score_txt}")
+
+        lines.append("")
+        lines.append("### Style CIR")
+        lines.append(f"- Exemples de style utilisés : {sty.get('examples_used', 0)}")
+        by_role = sty.get("examples_by_role_count") or {}
+        if by_role:
+            role_txt = ", ".join(f"{k}={v}" for k, v in by_role.items())
+            lines.append(f"- Répartition par rôle : {role_txt}")
+
+        used_for = interp.get("used_for") or []
+        not_used_for = interp.get("not_used_for") or []
+
+        if used_for:
+            lines.append("")
+            lines.append("### Influence autorisée")
+            for item in used_for:
+                lines.append(f"- {item}")
+
+        if not_used_for:
+            lines.append("")
+            lines.append("### Limites de sécurité")
+            for item in not_used_for:
+                lines.append(f"- Non utilisé pour : {item}")
+
+        if exp.get("error") or sty.get("error"):
+            lines.append("")
+            lines.append("### Alertes techniques")
+            if exp.get("error"):
+                lines.append(f"- Memory V2 expérience : {exp.get('error')}")
+            if sty.get("error"):
+                lines.append(f"- Memory V2 style : {sty.get('error')}")
+
+        return "\n".join(lines).strip()
+
 
     # =====================================================
     # Style memory
@@ -736,7 +1119,7 @@ class EnnoDiagnosticAgent:
             blocks.append(current)
 
         out: List[Dict[str, str]] = []
-        for block in blocks[:8]:
+        for block in blocks[:12]:
             raw = "\n".join(block).strip()
             if len(raw) < 30:
                 continue
@@ -760,105 +1143,102 @@ class EnnoDiagnosticAgent:
         frascati_summary: Dict[str, Any],
     ) -> List[Dict[str, Any]]:
         """
-        Produit une liste structurée pour l'onglet de validation consultant.
+        V122 : reformulation dédiée des verrous par groupes de preuves RAG/NLP.
 
-        Important :
-        - le titre affiché vient de la reformulation LLM ;
-        - les preuves et scores restent ceux de Chroma/NLP/Frascati ;
-        - aucune preuve n'est ajoutée depuis la mémoire CIR précédente.
+        Ce n'est plus le frontend qui fabrique les verrous depuis les chunks.
+        L'agent crée une vraie sortie JSON : report["llm_reformulated_verrous"].
+
+        Règles :
+        - pas de recalcul Frascati ;
+        - pas d'invention ;
+        - les preuves sources restent attachées ;
+        - les catégories universelles Frascati ne sont qu'un fallback faible ;
+        - plusieurs chunks proches sont fusionnés en un seul verrou candidat.
         """
-        raw_sources = dedupe_sources(sections.get("verrous", []) or [], max_items=24)
-        parsed = self._extract_signal_blocks_from_markdown(content)
+        try:
+            try:
+                from agents.EnnoDiagnostic.consultant_verrou_synthesizer import synthesize_consultant_verrous
+            except Exception:
+                from consultant_verrou_synthesizer import synthesize_consultant_verrous
 
-        if not parsed:
-            # Fallback : si le LLM n'a pas structuré la section, on garde les sources Chroma,
-            # mais on marque explicitement que ce n'est pas une reformulation LLM complète.
-            parsed = []
-            for src in raw_sources[:8]:
-                meta = meta_of(src)
-                title = clean_text(meta.get("theme_label") or meta.get("final_role") or "Signal technique à reformuler")
-                parsed.append({
-                    "title": title,
-                    "block": source_text(src),
-                })
+            style_block = ""
+            try:
+                # On donne uniquement un style court, jamais une preuve factuelle.
+                style_block = self._style_memory_for_role(
+                    getattr(self, "_last_style_memory_report", None),
+                    "verrou",
+                    max_chars=1200,
+                )
+            except Exception:
+                style_block = ""
 
+            synthesis = synthesize_consultant_verrous(
+                sections=sections,
+                frascati_summary=frascati_summary,
+                llm=self.llm,
+                style_block=style_block,
+                max_verrous=int(os.getenv("ENNOSMART_DIAG_MAX_REFORMULATED_VERROUS", "8")),
+                min_verrous=int(os.getenv("ENNOSMART_DIAG_MIN_REFORMULATED_VERROUS", "4")),
+            )
+            self._last_verrou_synthesis_report = synthesis
+            items = synthesis.get("llm_reformulated_verrous") if isinstance(synthesis, dict) else []
+            if isinstance(items, list) and items:
+                return items
+        except Exception as exc:
+            self._last_verrou_synthesis_report = {
+                "ok": False,
+                "mode": "synthesizer_import_or_runtime_error",
+                "error": str(exc),
+            }
+            print(f"[EnnoDiagnostic][V122_VERROU_SYNTHESIS][ERROR] {exc}")
+
+        # Fallback minimal conservateur si le module dédié est indisponible.
+        raw_sources = rank_sources_for_agent(sections.get("verrous", []) or [], max_items=8)
         structured: List[Dict[str, Any]] = []
         used_titles: set[str] = set()
 
-        for idx, cand in enumerate(parsed, start=1):
-            title = clean_text(cand.get("title"))
-            block = repair_mojibake(cand.get("block") or "")
-            if not title or title.lower() in used_titles:
+        for idx, src in enumerate(raw_sources[:8], start=1):
+            title = technical_title_from_source(src)
+            key = clean_text(title).lower()
+            if not key or key in used_titles:
                 continue
-            used_titles.add(title.lower())
+            used_titles.add(key)
 
-            scored_sources = sorted(
-                raw_sources,
-                key=lambda s: self._similarity_for_llm_candidate(title + "\n" + block, s),
-                reverse=True,
-            )
-            selected_sources = [s for s in scored_sources[:4] if self._similarity_for_llm_candidate(title + "\n" + block, s) > 0.02]
-            if not selected_sources and idx <= len(raw_sources):
-                selected_sources = [raw_sources[idx - 1]]
-
-            docs: List[str] = []
-            scores: List[float] = []
-            decisions: Dict[str, int] = {}
-            source_payload: List[Dict[str, Any]] = []
-
-            for src in selected_sources:
-                meta = meta_of(src)
-                doc = source_doc(src)
-                if doc and doc not in docs:
-                    docs.append(doc)
-                try:
-                    score = float(meta.get("frascati_score"))
-                    if score > 0:
-                        scores.append(score)
-                except Exception:
-                    pass
-                decision = clean_text(meta.get("frascati_decision") or meta.get("decision") or "verrou_a_verifier")
-                decisions[decision] = decisions.get(decision, 0) + 1
-                source_payload.append({
-                    "document": doc,
-                    "source_path": source_path(src),
-                    "text": truncate(source_text(src), 900),
-                    "metadata": meta,
-                })
-
-            avg_score = round(sum(scores) / len(scores), 4) if scores else frascati_summary.get("average_frascati_score")
-            main_decision = max(decisions.items(), key=lambda x: x[1])[0] if decisions else "verrou_a_verifier"
-            tag = "MOYEN POUR CIR"
+            meta = meta_of(src)
+            doc = source_doc(src)
             try:
-                if avg_score is not None and float(avg_score) >= 0.68:
-                    tag = "PERTINENT POUR CIR"
+                score = float(meta.get("frascati_score")) if meta.get("frascati_score") not in (None, "") else frascati_summary.get("average_frascati_score")
             except Exception:
-                pass
+                score = frascati_summary.get("average_frascati_score")
+            decision = clean_text(meta.get("frascati_decision") or meta.get("decision") or "verrou_a_verifier")
+            text = source_text(src)
 
             structured.append({
                 "title": title,
-                "tag_cir": tag,
-                "score": avg_score,
-                "frascati_decision": main_decision,
-                "consultant_status": "a_valider",
-                "document": "; ".join(docs[:6]) or "Sources Chroma à vérifier",
-                "justification": truncate(block, 1200),
-                "text": block,
-                "source": "llm_reformulated_from_chroma_frascati",
+                "tag_cir": "PERTINENT POUR CIR" if score is not None and float(score) >= 0.68 else "MOYEN POUR CIR",
+                "score": score,
+                "frascati_decision": decision,
+                "consultant_status": "en_attente",
+                "document": doc or "Sources Chroma à vérifier",
+                "justification": truncate(text, 1200),
+                "text": truncate(text, 1200),
+                "source": "fallback_agent_direct_chroma_source",
                 "needs_human_validation": True,
                 "source_json": {
-                    "source": "llm_reformulated_from_chroma_frascati",
+                    "source": "fallback_agent_direct_chroma_source",
                     "llm_title": title,
-                    "llm_block": block,
-                    "frascati_decision": main_decision,
-                    "frascati_score": avg_score,
-                    "sources": source_payload,
-                    "principle": "Titre reformulé par LLM ; preuves et score issus de Chroma/NLP/Frascati.",
+                    "llm_block": truncate(text, 1200),
+                    "frascati_decision": decision,
+                    "frascati_score": score,
+                    "sources": [{
+                        "document": doc,
+                        "source_path": source_path(src),
+                        "text": truncate(text, 900),
+                        "metadata": meta,
+                    }],
+                    "principle": "Fallback sans LLM dédié : preuve Chroma conservée pour validation consultant.",
                 },
             })
-
-            if len(structured) >= 6:
-                break
 
         return structured
 
@@ -1039,11 +1419,12 @@ class EnnoDiagnosticAgent:
         style_memory_report: Optional[Dict[str, Any]],
         ai_detection_report: Optional[Dict[str, Any]],
         cir_memory_report: Optional[Dict[str, Any]],
+        memory_v2_report: Optional[Dict[str, Any]] = None,
     ) -> str:
         budgets = {
             "global": int(os.getenv("ENNOSMART_DIAG_FAST_GLOBAL", "5")),
             "objectifs": int(os.getenv("ENNOSMART_DIAG_FAST_OBJECTIFS", "5")),
-            "verrous": int(os.getenv("ENNOSMART_DIAG_FAST_VERROUS", "10")),
+            "verrous": int(os.getenv("ENNOSMART_DIAG_FAST_VERROUS", "14")),
             "methodes": int(os.getenv("ENNOSMART_DIAG_FAST_METHODES", "7")),
             "resultats": int(os.getenv("ENNOSMART_DIAG_FAST_RESULTATS", "7")),
             "parametres": int(os.getenv("ENNOSMART_DIAG_FAST_PARAMETRES", "5")),
@@ -1064,6 +1445,19 @@ class EnnoDiagnosticAgent:
         parts.append("- Ne cite jamais 'JSON NLP'. Dis sources indexées ou sources Chroma.")
         parts.append("- Si une comparaison CIR précédent est disponible, ne l'utilise pas comme preuve factuelle du dossier courant ; elle sert seulement à distinguer continuité, évolution et nouveauté.")
         parts.append("")
+        if isinstance(memory_v2_report, dict) and memory_v2_report.get("ok"):
+            parts.append("Mémoire V2 disponible :")
+            parts.append(memory_v2_report.get("prompt_block") or "Mémoire V2 vide.")
+            parts.append("")
+            parts.append("Consignes Memory V2 :")
+            parts.append("- Utilise Memory V2 pour repérer projets similaires, continuité et formulations de style.")
+            parts.append("- N'utilise jamais un ancien CIR comme preuve du dossier courant.")
+            parts.append("- Si un signal courant ressemble à un ancien projet mais manque de preuve courante, indique un risque de faux positif.")
+            parts.append("- Reformule les verrous avec objet technique + phénomène + contrainte, sans ajouter de faits historiques.")
+            parts.append("")
+        else:
+            parts.append("Mémoire V2 : aucune mémoire exploitable ou non disponible.")
+            parts.append("")
         parts.append("Règles de consolidation CIR :")
         parts.append("- Le NLP/Frascati fournit des signaux bruts, des scores et des preuves. Ton rôle est de les reformuler en hypothèses de verrous R&D candidates, lisibles pour un consultant CIR.")
         parts.append("- La mémoire CIR précédente sert seulement au style de rédaction : niveau de précision, structure, ton prudent. Elle ne doit jamais ajouter un fait absent des sources du dossier courant.")
@@ -1107,6 +1501,7 @@ class EnnoDiagnosticAgent:
         parts.append("Réponse attendue exactement avec ces titres Markdown :")
         parts.append("## Lecture Frascati du dossier")
         parts.append("## Justification Frascati du score")
+        parts.append(f"## {MEMORY_V2_SECTION_TITLE}")
         parts.append("## Synthèse stratégique du projet")
         parts.append("## Objectif global reformulé")
         parts.append(f"## {SIGNAL_SECTION_TITLE}")
@@ -1116,7 +1511,7 @@ class EnnoDiagnosticAgent:
         parts.append("## Points à valider par le consultant")
         parts.append("")
         parts.append("Contraintes de rédaction :")
-        parts.append("- Maximum 5 signaux candidats consolidés, techniques, prudents et sourcés.")
+        parts.append("- Produis entre 4 et 8 signaux candidats si les sources le permettent ; fusionne les doublons, mais ne réduis pas plusieurs incertitudes différentes en deux catégories génériques.")
         parts.append("- Pour chaque signal candidat : titre technique provisoire reformulé par le LLM, difficulté observée, phénomène possiblement non maîtrisé, preuves/documents, statut de validation.")
         parts.append("- Le titre doit être exploitable pour EnnoScholar après validation consultant : pas un simple mot-clé, pas un thème générique.")
         parts.append("- Dans la démarche : organiser par axe technique, sans inventer de protocole.")
@@ -1180,6 +1575,7 @@ class EnnoDiagnosticAgent:
             parts2.append("Réponse attendue exactement avec ces titres Markdown :")
             parts2.append("## Lecture Frascati du dossier")
             parts2.append("## Justification Frascati du score")
+            parts2.append(f"## {MEMORY_V2_SECTION_TITLE}")
             parts2.append("## Synthèse stratégique du projet")
             parts2.append("## Objectif global reformulé")
             parts2.append(f"## {SIGNAL_SECTION_TITLE}")
@@ -1606,7 +2002,9 @@ Contraintes :
         t0 = time.time()
 
         sections = self.retrieve_all_sections()
-        frascati_summary = self.frascati_summary_from_chroma(sections.get("verrous", []))
+        frascati_summary = self.frascati_summary_from_chroma(
+            sections.get("_frascati_verrous", []) or sections.get("verrous", [])
+        )
         ai_detection_report = self.load_ai_detection_report()
 
         # V105 — Comparaison CIR précédent toujours active avec cache.
@@ -1627,6 +2025,17 @@ Contraintes :
             "route": "/projects/{project_id}/cir-previous/compare-current",
         }
         style_memory_report = self.load_style_memory_context(sections)
+        self._last_style_memory_report = style_memory_report
+
+        memory_v2_report = self.load_memory_v2_context(sections)
+        self._last_memory_v2_report = memory_v2_report
+
+        memory_v2_usage_report = self.build_memory_v2_usage_report(
+            memory_v2_report=memory_v2_report,
+            style_memory_report=style_memory_report,
+            sections=sections,
+        )
+        self._last_memory_v2_usage_report = memory_v2_usage_report
 
         if self.llm is not None:
             prompt = self._build_fast_single_prompt(
@@ -1635,6 +2044,7 @@ Contraintes :
                 style_memory_report=style_memory_report,
                 ai_detection_report=ai_detection_report,
                 cir_memory_report=cir_memory_report,
+                memory_v2_report=memory_v2_report,
             )
             print(
                 f"[EnnoDiagnostic][V95_FAST_CIR_AXES] "
@@ -1683,20 +2093,54 @@ Contraintes :
                 after_title="Lecture Frascati du dossier",
             )
 
+        memory_v2_usage_section = self.render_memory_v2_usage_section(memory_v2_usage_report)
+        content = replace_or_insert_markdown_section(
+            content=content,
+            title=MEMORY_V2_SECTION_TITLE,
+            new_section=memory_v2_usage_section,
+            after_title="Justification Frascati du score",
+        )
+
         content = normalize_report_vocabulary(content)
-        frascati_justification_text = extract_markdown_section(content, "Justification Frascati du score")
-        diagnostic_sections = build_diagnostic_sections(content)
+
+        # V122 : on force une vraie reformulation structurée des verrous avant de construire les sections.
+        # Les chunks RAG ne doivent plus être affichés comme des verrous finaux.
         llm_reformulated_verrous = self.build_llm_reformulated_verrous(
             content=content,
             sections=sections,
             frascati_summary=frascati_summary,
         )
+        verrou_synthesis_report = getattr(self, "_last_verrou_synthesis_report", {})
+
+        try:
+            try:
+                from agents.EnnoDiagnostic.consultant_verrou_synthesizer import build_verrous_markdown
+            except Exception:
+                from consultant_verrou_synthesizer import build_verrous_markdown
+
+            if llm_reformulated_verrous:
+                verrous_markdown = build_verrous_markdown(
+                    llm_reformulated_verrous,
+                    title=SIGNAL_SECTION_TITLE,
+                )
+                content = replace_or_insert_markdown_section(
+                    content=content,
+                    title=SIGNAL_SECTION_TITLE,
+                    new_section=verrous_markdown,
+                    after_title="Objectif global reformulé",
+                )
+        except Exception as exc:
+            print(f"[EnnoDiagnostic][V122_VERROU_MARKDOWN][WARN] {exc}")
+
+        content = normalize_report_vocabulary(content)
+        frascati_justification_text = extract_markdown_section(content, "Justification Frascati du score")
+        diagnostic_sections = build_diagnostic_sections(content)
 
         elapsed = round(time.time() - t0, 2)
 
         report = {
             "ok": True,
-            "mode": "ennodiagnostic_v106_no_cir_previous_in_agent",
+            "mode": "ennodiagnostic_v122_grouped_llm_verrou_synthesis",
             "principle": (
                 "Chroma remains the source of truth. The Frascati score is calculated by NLP/Frascati; "
                 "the LLM only explains this score from project sources."
@@ -1724,6 +2168,15 @@ Contraintes :
             },
             "ai_detection_report": ai_detection_report,
             "cir_memory_report": cir_memory_report,
+            "memory_v2_report": {
+                "ok": memory_v2_report.get("ok") if isinstance(memory_v2_report, dict) else False,
+                "available": memory_v2_report.get("available") if isinstance(memory_v2_report, dict) else False,
+                "similar_projects_count": len(memory_v2_report.get("similar_projects") or []) if isinstance(memory_v2_report, dict) else 0,
+                "similar_projects": memory_v2_report.get("similar_projects") if isinstance(memory_v2_report, dict) else [],
+                "principle": memory_v2_report.get("principle") if isinstance(memory_v2_report, dict) else None,
+                "error": memory_v2_report.get("error") if isinstance(memory_v2_report, dict) else None,
+            },
+            "memory_v2_usage_report": memory_v2_usage_report,
             "style_memory_report": {
                 "ok": style_memory_report.get("ok"),
                 "memory_path": style_memory_report.get("memory_path"),
@@ -1742,10 +2195,13 @@ Contraintes :
             },
             "diagnostic_sections": diagnostic_sections,
             "llm_reformulated_verrous": llm_reformulated_verrous,
+            "consultant_verrous_cir": llm_reformulated_verrous,
             "consultant_validation_source": "llm_reformulated_verrous",
+            "verrou_synthesis_report": verrou_synthesis_report,
+            "verrou_synthesis_version": "v122_grouped_rag_llm_json",
             "llm_strategy": {
-                "version": "v120_llm_reformulation_for_consultant",
-                "why": "NLP/Frascati détecte et score les signaux. Le LLM reformule les hypothèses de verrous en style CIR à partir des sources Chroma et de la mémoire de style, sans utiliser le CIR précédent comme preuve.",
+                "version": "v122_grouped_rag_llm_verrou_reformulation",
+                "why": "NLP/Frascati détecte et score les preuves. EnnoDiagnostic regroupe les chunks RAG proches puis demande au LLM de produire des verrous R&D candidats structurés, sans invention et avec preuves sources.",
                 "prompt_chars": len(prompt),
                 "elapsed_seconds": elapsed,
                 "cir_memory_in_agent": run_cir_memory,
@@ -1761,8 +2217,14 @@ Contraintes :
                 "parametres_count": len(sections.get("parametres", [])),
                 "limites_count": len(sections.get("limites", [])),
                 "style_examples_count": style_memory_report.get("examples_count", 0),
+                "memory_v2_similar_projects_count": len(memory_v2_report.get("similar_projects") or []) if isinstance(memory_v2_report, dict) else 0,
+                "memory_v2_cards_consulted": (memory_v2_usage_report.get("experience") or {}).get("cards_consulted", 0),
+                "memory_v2_cards_used": (memory_v2_usage_report.get("experience") or {}).get("cards_used", 0),
+                "memory_v2_style_examples_used": (memory_v2_usage_report.get("style") or {}).get("examples_used", 0),
+                "memory_v2_confidence": memory_v2_usage_report.get("confidence", 0),
             },
-            "chroma_sections": sections,
+            "chroma_sections": {k: v for k, v in sections.items() if not str(k).startswith("_")},
+            "frascati_source_verrous": sections.get("_frascati_verrous", []),
         }
 
         if save:

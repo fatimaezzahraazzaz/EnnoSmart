@@ -906,7 +906,7 @@ function normalizePassages(
 function hasTechnicalSignal(text: string) {
   const clean = text.toLowerCase()
 
-  return /compresseur|tgm100|pression|bar|débit|debit|m3\/h|vibration|vibratoire|acoustique|bruit|contrepoids|masselotte|équilibr|equilibr|réfrigérant|refrigerant|température|temperature|refroidissement|débit d'eau|debit d'eau|condensat|séparateur|separateur|segment|usure|étanchéité|etancheite|reniflard|soufflage|air sec|hygrométrie|hygrometrie|sous-marin|snle|essai|mesure|épreuve|epreuve|hydraulique/.test(
+  return /essai|essais|mesure|mesures|test|tests|prototype|validation|performance|contrainte|contraintes|incertitude|incertitudes|verrou|limite|limites|résultat|resultat|résultats|resultats|méthode|methode|méthodes|methodes|paramètre|parametre|paramètres|parametres|optimisation|conception|développement|developpement|modèle|modele|modélisation|modelisation|simulation|expérimentation|experimentation|analyse|architecture|dimensionnement|pression|température|temperature|débit|debit|vibration|acoustique|thermique|mécanique|mecanique|électronique|electronique|logiciel|algorithme|matériau|materiau/.test(
     clean
   )
 }

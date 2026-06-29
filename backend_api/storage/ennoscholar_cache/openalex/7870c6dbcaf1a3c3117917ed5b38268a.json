@@ -1,0 +1,103 @@
+{
+  "created_at": "2026-06-26T09:43:10",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "hemp concrete fire resistance building wall",
+      "paper_id": "https://openalex.org/W2077837386",
+      "title": "Novel sustainable hemp-based composites for application in the building industry: Physical, thermal and mechanical characterization",
+      "abstract": "",
+      "year": 2014,
+      "venue": "Energy and Buildings",
+      "url": "https://doi.org/10.1016/j.enbuild.2014.03.033",
+      "doi": "10.1016/j.enbuild.2014.03.033",
+      "authors": [
+        "Enrico Sassoni",
+        "Stefania Manzi",
+        "A. Motori",
+        "Matteo Montecchi",
+        "Max Canti"
+      ],
+      "citation_count": 232,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Composite material",
+        "Flexural strength",
+        "Durability",
+        "Ultimate tensile strength",
+        "Compressive strength",
+        "Composite number",
+        "Scanning electron microscope"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hemp concrete fire resistance building wall",
+      "paper_id": "https://openalex.org/W2335156131",
+      "title": "Life Cycle Assessment of Hemp Cultivation and Use of Hemp-Based Thermal Insulator Materials in Buildings",
+      "abstract": "The aim of this research is to assess the sustainability of a natural fiber, such as hemp (Cannabis sativa), and its use as thermal insulator for building applications. The sustainability of hemp was quantified by life cycle assessment (LCA) and particular attention was given to the amount of CO2eq of the whole process, and the indicator greenhouse gas protocol (GGP) was selected to quantify CO2eq emissions. In this study also CO2 uptake of hemp was considered. Two different allocation procedures (i.e., mass and economic) were adopted. Other indicators, such as Cumulative Energy Demand (CED) and EcoIndicator99 H were calculated. The production of 1 ha yielded 15 ton of hemp, whose global warming potential (GWP100) was equal to about -26.01 ton CO2eq: the amount allocated to the technical fiber (20% of the total amount of hemp biomass) was -5.52 ton CO2eq when mass allocation was used, and -5.54 ton CO2eq when economic allocation was applied. The sustainability for building applications was quantified by considering an insulation panel made by hemp fiber (85%) and polyester fiber (15%) in 1 m(2) of wall having a thermal transmittance (U) equal to 0.2 W/m(2)_K. The environmental performances of the hemp-based panel were compared to those of a rockwool-based one.",
+      "year": 2013,
+      "venue": "Environmental Science & Technology",
+      "url": "https://doi.org/10.1021/es401326a",
+      "doi": "10.1021/es401326a",
+      "authors": [
+        "Luca Zampori",
+        "Giovanni Dotelli",
+        "Valeria Vernelli"
+      ],
+      "citation_count": 185,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Life-cycle assessment",
+        "Environmental science",
+        "Greenhouse gas",
+        "Pulp and paper industry",
+        "Global-warming potential",
+        "Ton",
+        "Waste management",
+        "Production (economics)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hemp concrete fire resistance building wall",
+      "paper_id": "https://openalex.org/W2990883936",
+      "title": "Industrial Hemp Fibers: An Overview",
+      "abstract": "Industrial hemp (Cannabis sativa) is one of the most available and widely produced bast fibers with high cellulose content. Interest in these fibers is warranted due to environmental protection challenges as well as their inherent properties such as low density, high specific strength, and stiffness. In addition, advanced research and progress have gone into increasing their mechanical performance through surface treatments and in the development of new materials. The most promising application for hemp fibers is as reinforcement in polymeric composites or through hybridization. Nonetheless, more research is needed to improve their properties and expand their range of applications. The biodegradability issue is one problem that must be addressed when considering long life-cycle applications as the reproducibility of these composites’ final properties. This review is a comprehensive literature review on hemp fibers. It includes hemp fibers’ chemical and mechanical properties, surface modifications, hybrid composites, as well as current and future applications.",
+      "year": 2019,
+      "venue": "Fibers",
+      "url": "https://doi.org/10.3390/fib7120106",
+      "doi": "10.3390/fib7120106",
+      "authors": [
+        "João P. Manaia",
+        "A. Manaia",
+        "Lúcia Rodriges"
+      ],
+      "citation_count": 307,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Bast fibre",
+        "Cannabis sativa",
+        "Materials science",
+        "Composite material",
+        "Cellulose fiber",
+        "Cellulose",
+        "Synthetic fiber",
+        "Fiber"
+      ],
+      "tldr": ""
+    }
+  ]
+}

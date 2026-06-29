@@ -2,18 +2,25 @@
 from __future__ import annotations
 
 """
-semantic_scholar_client.py — EnnoScholar V2
+semantic_scholar_client.py — EnnoScholar V132
 
-Client Semantic Scholar robuste avec timeout court.
+Client Semantic Scholar robuste :
+- retry avec backoff sur 429 / timeout / erreurs temporaires ;
+- cache JSON local par requête ;
+- fallback sur cache si l'API limite les requêtes ;
+- limite configurable jusqu'à 100 résultats par requête.
 """
 
+import hashlib
 import json
 import os
 import socket
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 SEMANTIC_SCHOLAR_SEARCH_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 
@@ -28,7 +35,52 @@ def _safe(x: Any) -> str:
     return str(x or "").strip()
 
 
-def _open_json(url: str, headers: Dict[str, str], timeout: int = 8) -> Dict[str, Any]:
+def _cache_root() -> Path:
+    root = os.getenv("ENNOSCHOLAR_CACHE_DIR")
+    if root:
+        return Path(root)
+    return Path.cwd() / "storage" / "ennoscholar_cache"
+
+
+def _cache_key(source: str, query: str, limit: int) -> Path:
+    raw = f"{source}|{query}|{limit}|v132".encode("utf-8", errors="replace")
+    h = hashlib.sha256(raw).hexdigest()[:32]
+    return _cache_root() / source / f"{h}.json"
+
+
+def _read_cache(path: Path, max_age_days: int) -> Optional[List[Dict[str, Any]]]:
+    try:
+        if not path.exists():
+            return None
+        age_seconds = time.time() - path.stat().st_mtime
+        if max_age_days > 0 and age_seconds > max_age_days * 86400:
+            return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and isinstance(data.get("items"), list):
+            items = data["items"]
+            for it in items:
+                if isinstance(it, dict):
+                    it.setdefault("cache_hit", True)
+                    it.setdefault("cache_source", str(path))
+            return items
+    except Exception:
+        return None
+    return None
+
+
+def _write_cache(path: Path, items: List[Dict[str, Any]]) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "items": items,
+        }
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _open_json(url: str, headers: Dict[str, str], timeout: int = 10) -> Dict[str, Any]:
     socket.setdefaulttimeout(timeout)
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -36,37 +88,110 @@ def _open_json(url: str, headers: Dict[str, str], timeout: int = 8) -> Dict[str,
     return json.loads(raw)
 
 
+def _is_retryable_error(exc: Exception) -> Tuple[bool, str, int]:
+    if isinstance(exc, urllib.error.HTTPError):
+        code = int(getattr(exc, "code", 0) or 0)
+        if code in {408, 409, 425, 429, 500, 502, 503, 504}:
+            return True, f"HTTP Error {code}: {getattr(exc, 'reason', '')}", code
+        return False, f"HTTP Error {code}: {getattr(exc, 'reason', '')}", code
+    if isinstance(exc, (TimeoutError, socket.timeout, urllib.error.URLError)):
+        return True, str(exc), 0
+    return False, str(exc), 0
+
+
 class SemanticScholarClient:
-    def __init__(self, api_key: Optional[str] = None, timeout: int = 8, sleep_seconds: float = 0.2):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        timeout: int = 12,
+        sleep_seconds: float | None = None,
+        max_retries: int | None = None,
+        cache_ttl_days: int | None = None,
+    ):
         self.api_key = api_key or os.getenv("SEMANTIC_SCHOLAR_API_KEY", "")
         self.timeout = timeout
-        self.sleep_seconds = sleep_seconds
+        self.sleep_seconds = float(
+            sleep_seconds
+            if sleep_seconds is not None
+            else os.getenv("ENNOSCHOLAR_SEMANTIC_SLEEP", "1.2")
+        )
+        self.max_retries = int(
+            max_retries
+            if max_retries is not None
+            else os.getenv("ENNOSCHOLAR_MAX_RETRIES", "3")
+        )
+        self.cache_ttl_days = int(
+            cache_ttl_days
+            if cache_ttl_days is not None
+            else os.getenv("ENNOSCHOLAR_CACHE_TTL_DAYS", "30")
+        )
 
     def headers(self) -> Dict[str, str]:
-        h = {"User-Agent": "EnnoSmart-EnnoScholar/2.0", "Accept": "application/json"}
+        h = {
+            "User-Agent": "EnnoSmart-EnnoScholar/3.2",
+            "Accept": "application/json",
+        }
         if self.api_key:
             h["x-api-key"] = self.api_key
         return h
 
-    def search_papers(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+    def search_papers(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
         query = _safe(query)
         if not query:
             return []
 
-        params = {"query": query, "limit": max(1, min(int(limit or 5), 20)), "fields": FIELDS}
+        limit = max(1, min(int(limit or 20), 100))
+        cache_path = _cache_key("semantic_scholar", query, limit)
+
+        cached = _read_cache(cache_path, self.cache_ttl_days)
+        if cached is not None:
+            return cached
+
+        params = {"query": query, "limit": limit, "fields": FIELDS}
         url = SEMANTIC_SCHOLAR_SEARCH_URL + "?" + urllib.parse.urlencode(params)
 
-        try:
-            data = _open_json(url, headers=self.headers(), timeout=self.timeout)
-            time.sleep(self.sleep_seconds)
-        except Exception as e:
-            return [{"source": "semantic_scholar", "query": query, "error": str(e), "normalized_error": True}]
+        last_error = ""
+        last_code = 0
+        for attempt in range(self.max_retries + 1):
+            try:
+                data = _open_json(url, headers=self.headers(), timeout=self.timeout)
+                out = []
+                for p in data.get("data") or []:
+                    if isinstance(p, dict):
+                        out.append(self.normalize(p, query))
+                _write_cache(cache_path, out)
+                time.sleep(self.sleep_seconds)
+                return out
+            except Exception as exc:
+                retryable, message, code = _is_retryable_error(exc)
+                last_error = message
+                last_code = code
+                if not retryable or attempt >= self.max_retries:
+                    break
+                # Backoff prudent. 429 demande souvent quelques secondes.
+                base = 2.0 if code == 429 else 1.0
+                time.sleep(base * (attempt + 1) + self.sleep_seconds)
 
-        out = []
-        for p in data.get("data") or []:
-            if isinstance(p, dict):
-                out.append(self.normalize(p, query))
-        return out
+        # Fallback cache expiré si l'API est limitée mais qu'on a une ancienne réponse.
+        stale = _read_cache(cache_path, max_age_days=3650)
+        if stale is not None:
+            for it in stale:
+                if isinstance(it, dict):
+                    it["cache_stale_used_after_error"] = True
+                    it["api_error"] = last_error
+            return stale
+
+        return [{
+            "source": "semantic_scholar",
+            "query": query,
+            "error": last_error,
+            "http_status": last_code,
+            "normalized_error": True,
+            "retryable": True,
+            "attempts": self.max_retries + 1,
+            "api_limited": last_code == 429 or "429" in last_error,
+            "cache_path": str(cache_path),
+        }]
 
     def normalize(self, p: Dict[str, Any], query: str) -> Dict[str, Any]:
         external = p.get("externalIds") or {}

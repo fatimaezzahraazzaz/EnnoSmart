@@ -27,6 +27,8 @@ from .utils import (
     tokenize,
 )
 
+from .cir_domain_query_catalog import get_cir_domain_profile
+
 
 TRANSLATIONS = {
     # général
@@ -156,6 +158,112 @@ PHENOMENON_MARKERS = {
     "corrosion", "degradation", "dégradation", "detection", "détection",
     "sealing", "friction", "temperature",
 }
+
+
+# V128 — vocabulaire bâtiment / matériaux biosourcés.
+# Important : ces traductions restent génériques, elles ne ciblent aucun projet particulier.
+TRANSLATIONS.update({
+    "matériaux biosourcés": "bio-based building materials",
+    "materiaux biosources": "bio-based building materials",
+    "biosourcé": "bio-based",
+    "biosource": "bio-based",
+    "bio-sourcé": "bio-based",
+    "chanvre": "hemp",
+    "chènevotte": "hemp shiv",
+    "chenevotte": "hemp shiv",
+    "paille": "straw",
+    "paille hachée": "chopped straw",
+    "paille hachee": "chopped straw",
+    "insufflation": "blown insulation",
+    "insufflé": "blown insulation",
+    "insufflee": "blown insulation",
+    "vrac": "loose-fill",
+    "tassement": "settlement",
+    "paroi": "wall",
+    "parois": "walls",
+    "façade": "facade",
+    "facade": "facade",
+    "ossature bois": "timber frame",
+    "bois": "timber",
+    "bois/béton": "timber concrete composite",
+    "bois beton": "timber concrete composite",
+    "béton": "concrete",
+    "beton": "concrete",
+    "connecteur": "connector",
+    "connecteurs": "connectors",
+    "goujon": "dowel connector",
+    "goujons": "dowel connectors",
+    "ductilité": "ductility",
+    "ductilite": "ductility",
+    "séisme": "seismic loading",
+    "seisme": "seismic loading",
+    "sismique": "seismic",
+    "vent": "wind load",
+    "diaphragme": "diaphragm",
+    "feu": "fire resistance",
+    "incendie": "fire resistance",
+    "rei": "fire resistance rating",
+    "hygrothermique": "hygrothermal",
+    "hygrométrique": "moisture",
+    "hygrometrique": "moisture",
+    "humidité": "moisture",
+    "humidite": "moisture",
+    "fongique": "fungal growth",
+    "moisissure": "mould growth",
+    "moisissures": "mould growth",
+    "perspirant": "vapour-open wall",
+    "perspirante": "vapour-open wall",
+    "diffusivité": "thermal diffusivity",
+    "diffusivite": "thermal diffusivity",
+    "effusivité": "thermal effusivity",
+    "effusivite": "thermal effusivity",
+    "déphasage": "thermal phase shift",
+    "dephasage": "thermal phase shift",
+    "inertie": "thermal inertia",
+    "confort d’été": "summer comfort",
+    "confort d'ete": "summer comfort",
+    "heures d’inconfort": "overheating hours",
+    "heures d'inconfort": "overheating hours",
+})
+
+
+def detect_enrichment_profile_from_text(*parts: Any) -> str:
+    """Profil scientifique générique utilisé par EnnoScholar pour cadrer les requêtes.
+
+    V129 corrige une confusion : un verrou hygro/fongique ne doit pas devenir
+    automatiquement un verrou tassement seulement parce que le texte contient
+    "insufflation" ou "chènevotte". Le tassement exige des marqueurs explicites
+    comme tassement, settlement, densité, vide, compaction.
+    """
+    t = norm(" ".join(str(p or "") for p in parts))
+
+    if any(x in t for x in ["connecteur", "connectors", "connector", "goujon", "goujons", "shear connector", "timber concrete", "bois beton", "bois/beton", "wood concrete"]):
+        if any(x in t for x in ["seisme", "seismic", "earthquake", "ductil", "ductility", "vent", "wind", "diaphrag", "composite", "cyclic"]):
+            return "timber_concrete_seismic_connectors"
+        return "timber_concrete_connectors"
+
+    if any(x in t for x in ["rei", "feu", "incendie", "fire", "resistance au feu", "fire resistance", "reaction to fire"]):
+        return "bio_based_fire_resistance"
+
+    # Thermique/inertie : priorité sur perspirant.
+    if any(x in t for x in ["effusiv", "diffusiv", "dephas", "déphas", "inertie", "thermal inertia", "thermal mass", "summer comfort", "confort d ete", "confort ete", "overheating"]):
+        return "bio_based_thermal_inertia"
+
+    has_hygro = any(x in t for x in ["fongique", "fungal", "moisiss", "mould", "mold", "hygro", "humid", "moisture", "perspir", "vapour", "vapor", "condensation"])
+    has_settlement = any(x in t for x in ["tassement", "settlement", "settling", "compaction", "compactage", "vide superieur", "air cavity", "cavities", "densite d insufflation", "density"])
+    if has_hygro and not has_settlement:
+        return "bio_based_hygro_fungal_moisture"
+    if has_settlement:
+        return "loose_fill_biobased_insulation_settlement"
+
+    if any(x in t for x in ["insufflation", "insuffle", "insufflee", "vrac", "loose fill", "blown insulation", "chenevotte"]):
+        return "loose_fill_biobased_insulation_settlement"
+
+    if any(x in t for x in ["acoust", "vibrat", "vibration", "multi physique", "multiphysics"]):
+        return "building_multiphysics_comfort"
+    if any(x in t for x in ["biosource", "bio based", "bio-based", "chanvre", "hemp", "paille", "straw", "construction"]):
+        return "bio_based_building_materials_general"
+    return "generic"
 
 
 def translate_terms(terms: List[str]) -> List[str]:
@@ -461,6 +569,15 @@ def build_scientific_intent(
         confidence += 0.05
     confidence = min(confidence, 0.95)
 
+    enrichment_profile = detect_enrichment_profile_from_text(
+        title,
+        source_text,
+        context_relevant,
+        " ".join(key_terms_fr),
+        " ".join(key_terms_en),
+        domain_detection.get("display_label") or domain_detection.get("main_domain_label") or "",
+    )
+
     intent = ScientificIntent(
         verrou_id=str(v.get("verrou_id") or ""),
         verrou_title=title,
@@ -482,4 +599,31 @@ def build_scientific_intent(
         confidence=round(confidence, 4),
     )
 
-    return intent.to_dict()
+    out = intent.to_dict()
+    out["enrichment_profile"] = enrichment_profile
+    out["backend_enrichment_profile"] = enrichment_profile
+
+    # V130 : profil CIR complet issu de la nomenclature tous domaines.
+    # Ce profil ne remplace pas l'ancien enrichment_profile ; il l'enrichit
+    # pour construire des requêtes adaptées à tous les domaines CIR.
+    cir_profile = get_cir_domain_profile(
+        domain_detection=domain_detection,
+        text=" ".join([
+            title,
+            source_text,
+            context_relevant,
+            " ".join(key_terms_fr),
+            " ".join(key_terms_en),
+        ]),
+    )
+    out["cir_domain_profile"] = cir_profile
+    out["domain_detection"] = domain_detection
+    out["cir_domain_detection"] = domain_detection
+
+    # Ajout léger de termes de domaine pour aider les requêtes, sans écraser
+    # les termes extraits des preuves sources.
+    extra_terms = list(cir_profile.get("positive_terms") or []) + list(cir_profile.get("domain_terms") or [])
+    out["key_terms_en"] = dedupe_keep_order((out.get("key_terms_en") or []) + extra_terms, 24)
+
+    out["query_builder_version"] = "v130_cir_domain_catalog"
+    return out

@@ -1,0 +1,397 @@
+{
+  "created_at": "2026-06-26T10:11:28",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "seismic performance connectors timber-concrete composite structures",
+      "paper_id": "https://openalex.org/W2127664933",
+      "title": "Strengthening of timber structures with glued-in rods",
+      "abstract": "",
+      "year": 2015,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2015.03.097",
+      "doi": "10.1016/j.conbuildmat.2015.03.097",
+      "authors": [
+        "René Steiger",
+        "Erik Serrano",
+        "Mislav Stepinac",
+        "Vlatka Rajčić",
+        "Caoimhe O’Neill",
+        "Daniel McPolin",
+        "Robert Widmann"
+      ],
+      "citation_count": 154,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Reinforcement",
+        "Load bearing",
+        "Rod",
+        "Bearing capacity",
+        "Engineering",
+        "Structural engineering",
+        "Construction engineering",
+        "Forensic engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "seismic performance connectors timber-concrete composite structures",
+      "paper_id": "https://openalex.org/W2999077158",
+      "title": "Experimental study on seismic performance of glulam-concrete composite beam-to-column joints",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Composite Structures",
+      "url": "https://doi.org/10.1016/j.compstruct.2020.111864",
+      "doi": "10.1016/j.compstruct.2020.111864",
+      "authors": [
+        "Jing Zhang",
+        "Xiamin Hu",
+        "Qimeng Sun",
+        "Yijie Zhang",
+        "Wenwen Zhu",
+        "Lin Li"
+      ],
+      "citation_count": 31,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Structural engineering",
+        "Composite number",
+        "Dissipation",
+        "Beam (structure)",
+        "Stiffness",
+        "Joint (building)",
+        "Slab",
+        "Materials science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "seismic performance connectors timber-concrete composite structures",
+      "paper_id": "https://openalex.org/W4413779509",
+      "title": "Experimental and Design Research on Seismic Performance of Connectors in Timber–Concrete Composite Structures",
+      "abstract": "To evaluate the mechanical properties of connectors in timber–concrete composite (TCC) structures under low-cycle reversed loading, eighteen push-out specimens were designed and fabricated following the standard push-out test method. This study presents the first comparative analysis of the seismic performance between notch-bolted and ordinary bolted connections across three bolt diameters (12 mm, 16 mm, and 20 mm), addressing a gap in systematic experimental data for different connection types. Key performance indices under cyclic loading—including stiffness degradation, strength degradation, energy dissipation capacity, and ductility—were investigated. Furthermore, cumulative damage analysis elucidated the damage accumulation process, establishing a damage index (Dw) based on an energy method and proposing Dw = 0.6 as a critical early-warning threshold for failure. Practical recommendations for seismic design and engineering applications are provided. The results demonstrate that compared to ordinary bolted connections, notch-bolted connections achieve a 15–30% increase in ultimate bearing capacity and exhibit superior stiffness. Specimens with 16 mm bolts exhibited optimal ductility (ductility coefficient ξ = 3.6), while notch-bolted connections maintained stable ductility within the range of ξ = 2–3. Finally, a numerical model was developed using ANSYS finite element software. Validation against experimental results confirmed the model’s accuracy in simulating structural behavior. This research elucidates the cumulative damage mechanisms in TCC structures under cyclic loading, providing a theoretical basis for design optimization and valuable insights for promoting the seismic application of these composite systems.",
+      "year": 2025,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings15173084",
+      "doi": "10.3390/buildings15173084",
+      "authors": [
+        "Zuen Zheng",
+        "Shuai Yuan",
+        "Guojing He"
+      ],
+      "citation_count": 1,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Structural engineering",
+        "Composite number",
+        "Seismic analysis",
+        "Engineering",
+        "Materials science",
+        "Composite material"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "seismic performance connectors timber-concrete composite structures",
+      "paper_id": "https://openalex.org/W105235270",
+      "title": "Seismic Retrofitting Manual for Highway Structures: Part 1 - Bridges",
+      "abstract": "This report is the first of a two-part publication entitled \"Seismic retrofitting manual for highway structures\". Part 1 of this manual is based on previous Federal Highway Administration (FHWA) publications on this subject including Seismic Retrofitting Manual for Highway Bridges, published in 1995 as report FHWA-RD-94-052. Revisions have been made to include current advances in earthquake engineering, field experience with retrofitting highway bridges, and the performance of bridges in recent earthquakes. It is the result of several years of research with contributions from a multidisciplinary team of researchers and practitioners. In particular, a performance-based retrofit philosophy is introduced similar to that used for the performance-based design of new buildings and bridges. Performance criteria are given for two earthquake ground motions with different return periods, 100 and 1000 years. A higher level of performance is required for the event with the shorter return period (the lower level earthquake ground motion) than for the longer return period (the upper level earthquake ground motion). Criteria are recommended according to bridge importance and anticipated service life, with more rigorous performance being required for important, relatively new bridges, and a lesser level for standard bridges nearing the end of their useful life. Minimum recommendations are made for screening, evaluation and retrofitting according to an assigned Seismic Retrofit Category. Bridges in Category A need not be retrofitted whereas those in Categories B, C and D require successively more rigorous consideration and retrofitting as required. Various retrofit strategies are described and a range of related retrofit measures explained in detail, including restrainers, seat extensions, column jackets, footing overlays, and soil remediation.\\n",
+      "year": 2006,
+      "venue": "Rosa P: A digital library for transportation research (United States Department of Transportation)",
+      "url": "http://ntlsearch.bts.gov/ntl/md.do?id=31318",
+      "doi": "",
+      "authors": [
+        "Ian G. Buckle",
+        "Ian M. Friedland",
+        "John B. Mander",
+        "Geoffrey R. Martin",
+        "Richard V. Nutt",
+        "Maurice S. Power"
+      ],
+      "citation_count": 130,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Retrofitting",
+        "Seismic retrofit",
+        "Engineering",
+        "Bridge (graph theory)",
+        "Civil engineering",
+        "Return period",
+        "Multidisciplinary approach",
+        "Ground motion"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "seismic performance connectors timber-concrete composite structures",
+      "paper_id": "https://openalex.org/W4393203431",
+      "title": "Application of High-Performance Cementitious Composites in Steel-Concrete Composite Bridge Deck Systems: A Review",
+      "abstract": "The orthotropic steel bridge deck (OSBD) has been widely used in recent decades, benefiting from its advantages of lightweight and easy assembly. However, the longitudinal and transversal stiffeners of OSBDs are connected to the top flange plate through dense welds, which will easily introduce fatigue cracks. Hence, the composite bridge deck (CBD) system was proposed, adding a concrete layer over a steel plate to increase the sectional stiffness of OSBDs and reduce the fatigue stress amplitude. Furthermore, some new materials with extraordinary properties such as ultra-high-performance concrete (UHPC) and engineering cementitious composites (ECC) were used to replace the normal concrete, to improve the bearing capacity and crack resistance of CBDs. In this review, four kinds of bridge deck systems with different structural types including OSBD, steel–concrete, steel–UHPC, and steel–ECC CBDs were discussed. The flexural performance of four systems under sagging and hogging moments was reviewed, and close attention was paid to the crack resistance of the CBD system. In addition, the shear connection used in the CBDs was concentrated, and the shear behavior of some connectors including studs, perforated rib (PBL), and modified clothoid (MCL) shape shear connectors was investigated. The CBD structure assembled by duplicate profile steel parts proposed recently was introduced and discussed.",
+      "year": 2024,
+      "venue": "Journal of Intelligent Construction",
+      "url": "https://doi.org/10.26599/jic.2024.9180012",
+      "doi": "10.26599/jic.2024.9180012",
+      "authors": [
+        "Yunlong Chen",
+        "Jing‐Zhong Tong",
+        "Qinghua Li",
+        "Shilang Xu",
+        "Luming Shen"
+      ],
+      "citation_count": 64,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Flange",
+        "Structural engineering",
+        "Deck",
+        "Materials science",
+        "Composite number",
+        "Stiffness",
+        "Composite material",
+        "Shear (geology)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "seismic performance connectors timber-concrete composite structures",
+      "paper_id": "https://openalex.org/W2200695490",
+      "title": "Connections for steel–timber hybrid prefabricated buildings. Part I: Experimental tests",
+      "abstract": "",
+      "year": 2015,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2015.12.002",
+      "doi": "10.1016/j.conbuildmat.2015.12.002",
+      "authors": [
+        "Cristiano Loss",
+        "Maurizio Piazza",
+        "Riccardo Zandonini"
+      ],
+      "citation_count": 179,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cross laminated timber",
+        "Prefabrication",
+        "Engineering",
+        "Structural engineering",
+        "Shear wall",
+        "Engineered wood",
+        "Civil engineering",
+        "Construction engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "seismic performance connectors timber-concrete composite structures",
+      "paper_id": "https://openalex.org/W37632198",
+      "title": "The Fire Performance of Timber-Concrete Composite Floors",
+      "abstract": "Semi-passive bioreactors based on iron and arsenic oxidation and coprecipitation are promising for the treatment of As-rich acid mine drainages. However, their performance in the field remains variable and unpredictable. Two bioreactors filled with distinct biomass carriers (plastic or a mix of wood and pozzolana) were monitored during 1 year. We characterized the dynamic of the bacterial communities in these bioreactors, and explored the influence of environmental and operational drivers on their diversity and activity. Bacterial diversity was analyzed by 16S rRNA gene metabarcoding. The aioA genes and transcripts were quantified by qPCR and RT-qPCR. Bacterial communities were dominated by several iron-oxidizing genera. Shifts in the communities were attributed to operational and physiochemical parameters including the nature of the biomass carrier, the water pH, temperature, arsenic, and iron concentrations. The bioreactor filled with wood and pozzolana showed a better resilience to disturbances, related to a higher bacterial alpha diversity. We evidenced for the first time aioA expression in a treatment system, associated with the presence of active Thiomonas spp. This confirmed the contribution of biological arsenite oxidation to arsenic removal. The resilience and the functional redundancy of the communities developed in the bioreactors conferred robustness and stability to the treatment systems.",
+      "year": 2009,
+      "venue": "PubMed",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/37632198",
+      "doi": "10.26021/2529",
+      "authors": [
+        "James O’Neill"
+      ],
+      "citation_count": 24,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Composite number",
+        "Environmental science",
+        "Forensic engineering",
+        "Architectural engineering",
+        "Engineering",
+        "Materials science",
+        "Composite material"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "seismic performance connectors timber-concrete composite structures",
+      "paper_id": "https://openalex.org/W1498427013",
+      "title": "Seismic design of multi-storey buildings using Laminated Veneer Lumber (LVL)",
+      "abstract": "The recent development of laminated veneer lumber (LVL) as an&#13;\\nalternative to solid timber or glue-laminated timber has greatly improved the viability of&#13;\\nstructural timber for the seismic design of certain types of buildings. The low mass,&#13;\\nflexibility of design and rapidity of construction all create the potential for increased use&#13;\\nof LVL timber in low-rise multi-storey buildings. Based on recent developments in the&#13;\\nseismic design of precast concrete for multi-storey buildings, proposals are made for&#13;\\ninnovative types of jointed ductile connections in LVL timber buildings, based on post-tensioning&#13;\\ntechniques to assemble structural members for both frame and wall systems.&#13;\\nThis contribution gives an overview of an going comprehensive research project&#13;\\ninvolving both numerical and experimental investigations. The extremely satisfactory&#13;\\npreliminary results of quasi-static cyclic tests of exterior beam-column joint&#13;\\nsubassemblies are presented as a confirmation of the expected high seismic performance&#13;\\nof the proposed solutions for LVL seismic resisting systems.",
+      "year": 2005,
+      "venue": "University of Canterbury Research Repository (University of Canterbury)",
+      "url": "http://hdl.handle.net/10092/266",
+      "doi": "",
+      "authors": [
+        "Alessandro Palermo",
+        "Stefano Pampanin",
+        "Andy Buchanan",
+        "Michael P. Newcombe"
+      ],
+      "citation_count": 135,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Laminated veneer lumber",
+        "Structural engineering",
+        "Precast concrete",
+        "Engineering",
+        "Cross laminated timber",
+        "Structural system",
+        "Seismic analysis",
+        "Beam (structure)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "seismic performance connectors timber-concrete composite structures",
+      "paper_id": "https://openalex.org/W2793535339",
+      "title": "Structural robustness and timber buildings – a review",
+      "abstract": "Timber buildings are increasing in their dimensions. Structural robustness is imperative for all buildings and specifically important for tall buildings. Lives can be saved if disproportionate collapse can be avoided after a catastrophic event (e.g. accident, terrorism). The literature about robustness is comprehensive concerning concrete and steel buildings, but is rather limited regarding timber. This paper reviews robustness in general and robustness of timber buildings in particular. Robustness is an intrinsic structural property, enhancing global tolerance to local failures, regardless of the cause. A deterministic approach to assess robustness is to remove certain loadbearing elements from the structure and compare the consequences to given limits. Design methods for robustness may be direct by assessing effects of local failure, or indirect by following guidelines. For robust timber buildings, the connections are the key aspects. Usually, metal connectors may provide the required joint ductility. For robust light timber-frame construction, rim beams may be designed. For timber posts and beams and cross laminated timber, guidance regarding robustness is scarce, but in some aspects they seem to be similar to steel frames and precast concrete. Future research should assess the capacity of connections, and evaluate the adequacy of seismic connectors for robust timber buildings.",
+      "year": 2018,
+      "venue": "Wood Material Science and Engineering",
+      "url": "https://doi.org/10.1080/17480272.2018.1446052",
+      "doi": "10.1080/17480272.2018.1446052",
+      "authors": [
+        "Johannes A. J. Huber",
+        "Mats Ekevad",
+        "Ulf Arne Girhammar",
+        "Sven Berg"
+      ],
+      "citation_count": 88,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Robustness (evolution)",
+        "Precast concrete",
+        "Engineering",
+        "Structural engineering",
+        "Structural system",
+        "Computer science",
+        "Progressive collapse",
+        "Forensic engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "seismic performance connectors timber-concrete composite structures",
+      "paper_id": "https://openalex.org/W2751499342",
+      "title": "Mass timber – the emergence of a modern construction material",
+      "abstract": "In the move towards sustainable construction, timber and wood-based products are becoming increasingly important structural materials. The introduction of mass timber products with excellent load carrying characteristics allows timber to be used in larger, more complex structures. Cross-laminated timber (CLT) panel products have developed to the stage where they can be considered as economic and more sustainable alternatives to traditional materials. In this paper, the characteristics and design of CLT structures are described. Recent developments in mid- and high-rise CLT construction are reviewed and future opportunities identified. Current and future research needs are highlighted.",
+      "year": 2017,
+      "venue": "Journal of Structural Integrity and Maintenance",
+      "url": "https://doi.org/10.1080/24705314.2017.1354156",
+      "doi": "10.1080/24705314.2017.1354156",
+      "authors": [
+        "Annette M. Harte"
+      ],
+      "citation_count": 132,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cross laminated timber",
+        "Architectural engineering",
+        "Engineering",
+        "Construction engineering",
+        "Civil engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "seismic performance connectors timber-concrete composite structures",
+      "paper_id": "https://openalex.org/W3126707924",
+      "title": "Multi-Span Composite Timber Beams with Rational Steel Reinforcements",
+      "abstract": "Wooden multi-span beams with steel reinforcement were studied experimentally on a stationary stand using an eight-point loading scheme that simulated a load uniformly distributed over the beam span. The studies were carried out on beams with a span of 4.8 m with a cross-sectional area of 40 mm × 80 mm, reinforced in the stretched zones of the cross-section with rods made of hot-rolled steel reinforcement of A400 class. The rational zones for the location of reinforcements in the tensioned and compressed zones of the beams were determined. The rational placements of reinforcement in the support and span zones was based on the numerical simulation of the volumetric stress state calculated using the finite element method. It was experimentally confirmed that the failure of wood composite beams had a plastic nature and occurred only along normal sections. This excluded the possibility of brittle fracture from shear stresses and ensured the operational reliability of structures as a whole. It was shown that the proposed rational reinforcement of wooden beams increased their bearing capacity by 175% and reduced bearing deformability by 85%. The results obtained indicated high efficiency of the application of the developed method of reinforcement in beams of roofs and floors of buildings.",
+      "year": 2021,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings11020046",
+      "doi": "10.3390/buildings11020046",
+      "authors": [
+        "Mikhail Lukin",
+        "E. S. Prusov",
+        "Светлана Рощина",
+        "M. Yu. Karelina",
+        "Nikolai Vatin"
+      ],
+      "citation_count": 65,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Reinforcement",
+        "Structural engineering",
+        "Span (engineering)",
+        "Brittleness",
+        "Materials science",
+        "Beam (structure)",
+        "Bearing capacity",
+        "Bearing (navigation)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "seismic performance connectors timber-concrete composite structures",
+      "paper_id": "https://openalex.org/W2944279011",
+      "title": "Mechanical Properties and Seismic Performance of Wood-Concrete Composite Blocks for Building Construction",
+      "abstract": "Recent catastrophes that occurred during seismic events suggest the importance of developing new seismic-resistant materials for use in building construction. Ordinary concrete is one of the most common materials in buildings. However, due to its low ductility and flexural strength, its seismic behavior can be improved upon by different additives. In this regard, wood-concrete composites exhibit desirable structural properties not achievable by either wood or concrete alone, making it an interesting material from a seismic point of view. This work analyzes and compares the performance of blocks built with ordinary concrete versus blocks built using different wood additives (sawdust and wood shavings). This includes the construction of concrete blocks in a lab, determination of their construction and seismic-resistant properties, as well as an analysis of their performance in buildings with a different number of storeys. The results show how blocks with wood aggregates comply with current regulations for structural materials in a seismic country like Chile, while also considerably outperforming traditional concrete blocks in the event of an earthquake.",
+      "year": 2019,
+      "venue": "Materials",
+      "url": "https://doi.org/10.3390/ma12091500",
+      "doi": "10.3390/ma12091500",
+      "authors": [
+        "David Dominguez-Santos",
+        "Daniel Mora-Meliá",
+        "Gonzalo Pincheira",
+        "Pablo Ballesteros‐Pérez",
+        "Cesar Retamal-Bravo"
+      ],
+      "citation_count": 29,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Ductility (Earth science)",
+        "Flexural strength",
+        "Structural engineering",
+        "Building construction",
+        "Seismic retrofit",
+        "Seismic analysis",
+        "Seismic loading",
+        "Work (physics)"
+      ],
+      "tldr": ""
+    }
+  ]
+}

@@ -1,0 +1,280 @@
+{
+  "created_at": "2026-06-26T10:13:04",
+  "items": [
+    {
+      "source": "semantic_scholar",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "3dc0ce6596aa9e3c1b589ca25c90ca41d8e64bb1",
+      "title": "Shear stiffness of notched connectors in glue laminated timber-concrete composite beams under fire conditions",
+      "abstract": "Shear connectors ensure effective interaction between wood beams and concrete slabs of composite beams, and their properties noticeably affect the fire resistance of timber-concrete composite beams. To investigate the shear stiffness of notched connectors in glued laminated timber (GLT)-concrete composite beams under fire conditions, 16 shear tests were conducted. The effects of fire duration and notch length on shear properties of the connectors for a given spacing were studied. The fire tests indicated that the reduction of the notch length from 200 mm to 150 mm remarkably affected the failure mode of the shear specimens, changing from compression failure of notched wood to shear failure of notched concrete. The increase in fire duration reduced effective width of the notched wood, negatively affected the shear stiffness and shear capacity of the connectors, and the shear stiffness decreased more rapidly. The notch length did not have a substantial effect on the shear stiffness of connectors. Based on the experimental results, an analytical model to estimate the shear stiffness of notched connectors in GLT-concrete beam under fire conditions was established.",
+      "year": 2022,
+      "venue": "BioResources",
+      "url": "https://www.semanticscholar.org/paper/3dc0ce6596aa9e3c1b589ca25c90ca41d8e64bb1",
+      "doi": "10.15376/biores.17.4.6397-6410",
+      "authors": [
+        "D. Shi",
+        "Xiamin Hu",
+        "Jing Zhang",
+        "H. Du"
+      ],
+      "citation_count": 3,
+      "influential_citation_count": 0,
+      "publication_types": [],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "8f255826097c3c7893e9ccfdf5aa9aee3b995bf3",
+      "title": "Dynamic Properties of Timber–Concrete Composite Beams with Crossed Inclined Coach Screw Connections: Experimental and Theoretical Investigations",
+      "abstract": "Due to the low density and stiffness of wood, traditional timber floor systems are prone to producing large vibration responses. By combining timber beams with concrete floors, timber–concrete composite (TCC) floor systems show stronger bearing capacity, higher bending stiffness, and better thermal and sound insulation behaviors when compared with traditional timber floor systems. In this study, the vibration performance of TCC beams with crossed inclined coach screw connectors was investigated using dynamic tests. The influence of the screw diameters and slab dimensions on the dynamic performance of the composite beams was evaluated. The test results demonstrated that TCC beams show good dynamic performance when used as a floor component and meet the preliminary requirements of floor vibration comfort for fundamental frequency. The fundamental frequency and damping ratio of TCC beams decreases with the increase in slab dimensions. The bending stiffness and natural frequency of TCC beams decrease smoothly when reducing the screw diameter from 16 to 12 mm. Additionally, two theoretical models were used to predict the natural frequencies of the TCC beams, and the predicted values show good consistency with the measured ones.",
+      "year": 2023,
+      "venue": "Buildings",
+      "url": "https://www.semanticscholar.org/paper/8f255826097c3c7893e9ccfdf5aa9aee3b995bf3",
+      "doi": "10.3390/buildings13092268",
+      "authors": [
+        "Bo Wen",
+        "Haotian Tao",
+        "Benkai Shi",
+        "Huifeng Yang"
+      ],
+      "citation_count": 10,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "6eba19c31095dbbbc56a62c0357fe0ec2c70187c",
+      "title": "Numerical study on the impact of wood characteristics on the strain state of steel–timber composite beams",
+      "abstract": "",
+      "year": 2025,
+      "venue": "Journal of Wood Science",
+      "url": "https://www.semanticscholar.org/paper/6eba19c31095dbbbc56a62c0357fe0ec2c70187c",
+      "doi": "10.1186/s10086-025-02243-8",
+      "authors": [
+        "Noah Böhm",
+        "Achim Vogelsberg",
+        "Bertram Kühn"
+      ],
+      "citation_count": 1,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "098d39a16d2cf3f10d1d4dd24536e32860b81a2a",
+      "title": "Mechanical Response of Composite Wood–Concrete Bonded Facade Under Thermal Loading",
+      "abstract": "The integration of wood and concrete in building structures is a well-established practice typically realized through mechanical connectors. However, the thermomechanical behavior of wood–concrete composite façades assembled via adhesive bonding remains underexplored. This study introduces a novel concept—the adhesive-bonded wood–concrete façade, termed “Hybrimur”—and evaluates the response of these façade panels under thermal gradients, with a focus on thermal bowing phenomena. Four full-scale façade prototypes (3 m high × 6 m wide), consisting of 7 cm thick concrete and 16 cm thick laminated timber (GL24h), were fabricated and tested both with and without insulation. Two reinforcement types were considered: fiberglass-reinforced concrete and welded mesh reinforcement. The study combines thermal analysis of temperature gradients at the adhesive interface with analytical and numerical methods to investigate thermal expansion effects. The experimental and numerical results revealed thermal strains concentrated at the wood–concrete interface without inducing panel failure. Thermal bowing (out-of-plane deflection) exhibited a nonlinear behavior influenced by the adhesive bond and the anisotropic nature of the wood. These findings highlight the importance of accounting for both interface behavior and wood anisotropy in the design of hybrid façades subjected to thermal loading. A tentative finite element model is proposed that utilizes isotropic wood with properties that limit the accuracy of the results obtained by the model.",
+      "year": 2025,
+      "venue": "Buildings",
+      "url": "https://www.semanticscholar.org/paper/098d39a16d2cf3f10d1d4dd24536e32860b81a2a",
+      "doi": "10.3390/buildings15203664",
+      "authors": [
+        "Roufaida Assal",
+        "Laurent Michel",
+        "Emmanuel Ferrier"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "47471943f7431dfa22bc1194e1af1956a9d1a861",
+      "title": "Timber-concrete composite connectors in flat-plate engineered wood products",
+      "abstract": "",
+      "year": 2016,
+      "venue": "",
+      "url": "https://www.semanticscholar.org/paper/47471943f7431dfa22bc1194e1af1956a9d1a861",
+      "doi": "10.14288/1.0300229",
+      "authors": [
+        "A. Gerber"
+      ],
+      "citation_count": 10,
+      "influential_citation_count": 1,
+      "publication_types": [],
+      "fields_of_study": [
+        "Materials Science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "60cdee02bd75f915e627ed9792c98baf2c5b67ea",
+      "title": "Flexural behavior of FRP strengthened concrete-wood composite beams",
+      "abstract": "Abstract An experimental investigation was conducted to study the structural performance of concrete-timber composite beams provided with systems of semi-rigid connectors of various configurations and stiffness. Eleven concrete-timber composite beams and one concrete-steel composite beam were tested in three-point flexure test. The construction of the beam web and the type of shear connector were the basic parameters of investigation. The feasibility of boosting the flexural performance of these beams when wrapping their webs with GFRP laminates was examined. Comparison of the flexural behavior of the proposed composite concrete-timber beams with that of both of post-stressed beams using external steel longitudinal rods and a concrete-steel composite beam was also evaluated. Test results showed that vertical glulam timber web is superior to both horizontal glulam and massive block timber webs in providing higher stiffness and load carrying capacity and larger toughness. Also, dovetail shear connector enhanced with insertion of a steel dowel at the center of the groove imparts a full composite action between concrete and timber web. Use of GFRP laminates wrapping along the full span of timber web is a highly effective method to take advantage of the use of enhanced dovetail shear connector. The behavior of the proposed concrete-timber composite beam was comparable to that of the concrete-steel web beam.",
+      "year": 2018,
+      "venue": "Ain Shams Engineering Journal",
+      "url": "https://www.semanticscholar.org/paper/60cdee02bd75f915e627ed9792c98baf2c5b67ea",
+      "doi": "10.1016/J.ASEJ.2018.06.003",
+      "authors": [
+        "Y. A. Ali"
+      ],
+      "citation_count": 19,
+      "influential_citation_count": 0,
+      "publication_types": [],
+      "fields_of_study": [
+        "Materials Science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "3bd30d0b6e6ff9b7c9f82ea4f73713bb97fbae28",
+      "title": "Bonding of timber and high-performance concrete",
+      "abstract": "Timber-concrete composite systems have emerged as a promising building technique, leveraging the strengths of both materials to improve load capacity, stiffness, and overall performance. In the presented study, high-performance concrete with perfect mechanical performance and durability is used in timber-concrete composite systems to further reduce the environmental footprint and optimize structural efficiency. The weakest point in general of these constructions is the interface between the concrete material and the wood. The focus in this study is on shear strength, specifically examining the combination of adhesive bonding with notch shear connections. Experimental results, by a push-off test, reveal that the inclusion of shear connectors is essential for effective and secure bonding, with adhesive application methods significantly influencing shear strength. The findings highlight the potential of timber-concrete composite systems high-performance concrete to achieve high shear strength and structural integrity through optimized adhesive and rib configurations. The goal is to make maximum use of the material’s mechanical potential and significantly reduce the primary sources of raw materials. The presented article is based on the diploma thesis of Nick Vanheeswijck.",
+      "year": 2025,
+      "venue": "Acta Polytechnica CTU Proceedings",
+      "url": "https://www.semanticscholar.org/paper/3bd30d0b6e6ff9b7c9f82ea4f73713bb97fbae28",
+      "doi": "10.14311/app.2025.53.0092",
+      "authors": [
+        "Tomáš Vlach",
+        "Nick Vanheeswijck",
+        "Jan Macháček",
+        "Eliška Kafková",
+        "Věra Kabíčková",
+        "J. Hájek"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "3514400ce203ac6a6e922e72b0d71a8cdf685ed5",
+      "title": "Circular Hollow Section Connectors in Timber-Concrete Composite Structural Elements",
+      "abstract": "This paper presents results of the laboratory tests of timber-concrete structural connectors applicable (but not limited to) road/pedestrian bridges. The tested elements are discrete circular hollow section connectors installed in the pre-drilled slots of a glulam. Symmetrical push-out tests are conducted for two groups of connectors: 1) with wood core not removed; no interlayer between wood and concrete; 2) concrete in-fill core instead of the wood core; waterproofing membrane interlayer between concrete and timber elements. Main structural parameters of the connectors are established including ultimate shear capacity and slip modulus. Relationship between the connector’s stiffness and ultimate shear capacity is established and failure mechanisms are briefly discussed.",
+      "year": 2016,
+      "venue": "",
+      "url": "https://www.semanticscholar.org/paper/3514400ce203ac6a6e922e72b0d71a8cdf685ed5",
+      "doi": "10.3846/BJRBE.2016.08",
+      "authors": [
+        "Raitis Lācis"
+      ],
+      "citation_count": 2,
+      "influential_citation_count": 0,
+      "publication_types": [],
+      "fields_of_study": [
+        "Engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "bd141213ede1cc1e81cef5cbb584fdfb5a9e930d",
+      "title": "Fatigue behaviour of composite timber-concrete beams",
+      "abstract": "Abstract Refurbishment of existing buildings often claims for strengthening and stiffening of timber floors. To avoid too heavy interventions, this need is particularly relevant in seismic zones and/or for historical buildings, not only to preserve historical value, but also to contain the masses. A solution commonly adopted is to substitute the screed with a thin reinforced concrete or lightweight reinforced concrete slab duly connected to the timber beams, in such a way that a composite timber-concrete floor is obtained, granting also a sufficient rigidity in the horizontal plane. Moreover, this solution has also the advantage to improve the acoustic performance. Of course, the behavior of the composite structure depends on the rigidity of the shear connections. Since several type of shear connectors are available, the experimental assessment of its static and fatigue behavior is a prerequisite for a suitable design of the intervention. Aiming to compare their performances, an ad hoc experimental study has been carried out on three different types of shear connectors. The fatigue tests have been performed on a composite wood-concrete beam. During each test, 15000 loading-unloading cycles have been applied, recording the deformations and the relative slip. After completion of the load cycles, static load has been applied till to collapse. In the paper, the experimental tests and results are widely discussed, also in comparison with commonly used theoretical models, and relevant conclusions are drawn",
+      "year": 2018,
+      "venue": "",
+      "url": "https://www.semanticscholar.org/paper/bd141213ede1cc1e81cef5cbb584fdfb5a9e930d",
+      "doi": "10.1016/J.PROSTR.2018.11.047",
+      "authors": [
+        "P. Croce",
+        "M. L. Beconcini",
+        "P. Formichi",
+        "F. Landi",
+        "D. Cardella"
+      ],
+      "citation_count": 5,
+      "influential_citation_count": 0,
+      "publication_types": [],
+      "fields_of_study": [
+        "Computer Science"
+      ],
+      "tldr": "An ad hoc experimental study has been carried out on three different types of shear connectors, aiming to compare their performances, and the experimental tests and results are widely discussed, in comparison with commonly used theoretical models."
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "656d034400b18fb9c01361bb7d331d0c59e632dd",
+      "title": "Experimental analysis of glued-in steel plates used as shear connectors in Timber-Concrete-Composites",
+      "abstract": "Abstract This paper describes experimental research into timber-concrete composite (TCC) connections made with discrete perforated steel plates glued in timber with epoxy adhesive. Continuous steel meshes have proven to be very strong and rigid elements in TCC structural members. This paper studies the strength and stiffness of these connectors when used in a discrete way, alone and in combination with reinforcing bars. Six types of connector were subjected to experimental tests, analysing two connection lengths and three configuration systems of the connector elements (in which bars are added longitudinally or transversally). The experimental results show that the connections made with discrete steel meshes are very strong and rigid, and that it is possible to design them for ductile failure. Comparison of the results for plates of different lengths indicates that failure occurs in the longest connections in the wood at lower average shear stresses. No significant behavioural differences were detected between connectors made only of plate and those that were reinforced with additional bars. The high slip moduli values indicate that it would be possible to design structural elements with a composite action close to 100% using this type of connection.",
+      "year": 2018,
+      "venue": "Engineering structures",
+      "url": "https://www.semanticscholar.org/paper/656d034400b18fb9c01361bb7d331d0c59e632dd",
+      "doi": "10.1016/J.ENGSTRUCT.2018.05.062",
+      "authors": [
+        "D. Otero-Chans",
+        "J. Estévez-Cimadevila",
+        "F. Suárez-Riestra",
+        "E. Martín-Gutiérrez"
+      ],
+      "citation_count": 60,
+      "influential_citation_count": 0,
+      "publication_types": [],
+      "fields_of_study": [
+        "Engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "a4f5168d9206de9d2fb3c79c682a4a05df643ea6",
+      "title": "Innovative Timber-Concrete Composite Structures with Prefabricated FRC Slabs",
+      "abstract": "",
+      "year": 2015,
+      "venue": "",
+      "url": "https://www.semanticscholar.org/paper/a4f5168d9206de9d2fb3c79c682a4a05df643ea6",
+      "doi": "10.1061/(ASCE)ST.1943-541X.0001203",
+      "authors": [
+        "R. Crocetti",
+        "T. Sartori",
+        "R. Tomasi"
+      ],
+      "citation_count": 66,
+      "influential_citation_count": 3,
+      "publication_types": [],
+      "fields_of_study": [
+        "Materials Science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "8c3a95cd44a1d506e4309c68f3c46986332545b1",
+      "title": "Timber-Concrete Composite Systems with Ductile Connections",
+      "abstract": "",
+      "year": 2015,
+      "venue": "",
+      "url": "https://www.semanticscholar.org/paper/8c3a95cd44a1d506e4309c68f3c46986332545b1",
+      "doi": "10.1061/(ASCE)ST.1943-541X.0001144",
+      "authors": [
+        "Chao Zhang",
+        "P. Gauvreau"
+      ],
+      "citation_count": 30,
+      "influential_citation_count": 0,
+      "publication_types": [],
+      "fields_of_study": [
+        "Materials Science"
+      ],
+      "tldr": ""
+    }
+  ]
+}

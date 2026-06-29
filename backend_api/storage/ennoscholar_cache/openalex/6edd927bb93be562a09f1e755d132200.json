@@ -1,0 +1,418 @@
+{
+  "created_at": "2026-06-26T10:05:34",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "bio-based wall thermal mass overheating summer comfort",
+      "paper_id": "https://openalex.org/W2109400650",
+      "title": "An investigation into future performance and overheating risks in Passivhaus dwellings",
+      "abstract": "",
+      "year": 2013,
+      "venue": "Building and Environment",
+      "url": "https://doi.org/10.1016/j.buildenv.2013.08.024",
+      "doi": "10.1016/j.buildenv.2013.08.024",
+      "authors": [
+        "Robert S. McLeod",
+        "Christina J. Hopfe",
+        "Alan Kwan"
+      ],
+      "citation_count": 233,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Overheating (electricity)",
+        "Thermal comfort",
+        "Fuel poverty",
+        "Climate change",
+        "Environmental science",
+        "Passive house",
+        "Notional amount",
+        "Architectural engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based wall thermal mass overheating summer comfort",
+      "paper_id": "https://openalex.org/W3094812015",
+      "title": "Urban Overheating and Cooling Potential in Australia: An Evidence-Based Review",
+      "abstract": "Cities in Australia are experiencing unprecedented levels of urban overheating, which has caused a significant impact on the country’s socioeconomic environment. This article provides a comprehensive review on urban overheating, its impact on health, energy, economy, and the heat mitigation potential of a series of strategies in Australia. Existing studies show that the average urban heat island (UHI) intensity ranges from 1.0 °C to 13.0 °C. The magnitude of urban overheating phenomenon in Australia is determined by a combination of UHI effects and dualistic atmospheric circulation systems (cool sea breeze and hot desert winds). The strong relation between multiple characteristics contribute to dramatic fluctuations and high spatiotemporal variabilities in urban overheating. In addition, urban overheating contributes to serious impacts on human health, energy costs, thermal comfort, labour productivity, and social behaviour. Evidence suggest that cool materials, green roofs, vertical gardens, urban greenery, and water-based technologies can significantly alleviate the UHI effect, cool the ambient air, and create thermally balanced cities. Urban greenery, especially trees, has a high potential for mitigation. Trees and hedges can reduce the average maximum UHI by 1.0 °C. The average maximum mitigation performance values of green roofs and green walls are 0.2 °C and 0.1 °C, respectively. Reflective roofs and pavements can reduce the average maximum UHI by 0.3 °C. In dry areas, water has a high cooling potential. The average maximum cooling potential using only one technology is 0.4 °C. When two or more technologies are used at the same time, the average maximum UHI drop is 1.5 °C. The mitigation strategies identified in this article can help the governments and other stakeholders manage urban heating in the natural and built environment, and save health, energy, and economic costs.",
+      "year": 2020,
+      "venue": "Climate",
+      "url": "https://doi.org/10.3390/cli8110126",
+      "doi": "10.3390/cli8110126",
+      "authors": [
+        "Komali Yenneti",
+        "Lan Ding",
+        "Deo Prasad",
+        "Giulia Ulpiani",
+        "Riccardo Paolini",
+        "Shamila Haddad",
+        "M. Santamouris"
+      ],
+      "citation_count": 76,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Overheating (electricity)",
+        "Urban heat island",
+        "Environmental science",
+        "Sea breeze",
+        "Meteorology",
+        "Atmospheric sciences",
+        "Climatology",
+        "Geography"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based wall thermal mass overheating summer comfort",
+      "paper_id": "https://openalex.org/W3047571800",
+      "title": "A new methodology of evaluation of overheating in buildings",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Energy and Buildings",
+      "url": "https://doi.org/10.1016/j.enbuild.2020.110360",
+      "doi": "10.1016/j.enbuild.2020.110360",
+      "authors": [
+        "Abdelaziz Laouadi",
+        "Michal Bartko",
+        "Michael Lacasse"
+      ],
+      "citation_count": 81,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Overheating (electricity)",
+        "Extreme heat",
+        "Environmental science",
+        "Natural ventilation",
+        "Core temperature",
+        "Thermal comfort",
+        "Cold climate",
+        "Risk analysis (engineering)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based wall thermal mass overheating summer comfort",
+      "paper_id": "https://openalex.org/W4383506037",
+      "title": "Phase change material (PCM) integrations into buildings in hot climates with simulation access for energy performance and thermal comfort: A review",
+      "abstract": "",
+      "year": 2023,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2023.132312",
+      "doi": "10.1016/j.conbuildmat.2023.132312",
+      "authors": [
+        "Haoxiang Zhan",
+        "Norhayati Mahyuddin",
+        "Raha Sulaiman",
+        "Fazel Khayatian"
+      ],
+      "citation_count": 120,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Architectural engineering",
+        "Building envelope",
+        "Thermal comfort",
+        "Climate change",
+        "Phase-change material",
+        "Environmental science",
+        "Passive cooling",
+        "Solar gain"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based wall thermal mass overheating summer comfort",
+      "paper_id": "https://openalex.org/W4376620167",
+      "title": "Overheating calculation methods, criteria, and indicators in European regulation for residential buildings",
+      "abstract": "With the ongoing significance of overheating calculations in the residential building sector, building codes such as the European Energy Performance of Building Directive (EPBD) are essential for harmonizing the indicators and performance thresholds. This paper investigates Europe's overheating calculation methods, indicators, and thresholds and evaluates their ability to address climate change and heat events. e study aims to identify the suitability of existing overheating calculation methods and propose recommendations for the EPBD. The study results provide a cross-sectional overview of twenty-six European countries. The most influential overheating calculation criteria are listed the best approaches are ranked. The paper provides a thorough comparative assessment and recommendations to align current calculations with climate-sensitive metrics. The results suggest a framework and key performance indicators that are comfort-based, multi-zonal, and time-integrated to calculate overheating and modify the EU's next building energy efficiency regulations. The results can help policymakers and building professionals to develop the next overheating calculation framework and approach for the future development of climate-proof and resilient residential buildings.",
+      "year": 2023,
+      "venue": "Energy and Buildings",
+      "url": "https://doi.org/10.1016/j.enbuild.2023.113170",
+      "doi": "10.1016/j.enbuild.2023.113170",
+      "authors": [
+        "Shady Attia",
+        "Caroline Benzidane",
+        "Ramin Rahif",
+        "Deepak Amaripadath",
+        "Mohamed Hamdy",
+        "Peter Holzer",
+        "Annekatrin Koch",
+        "Anton Maas",
+        "Sven Moosberger",
+        "Steffen Petersen",
+        "Anna Mavrogianni",
+        "Juan María Hidalgo-Betanzos",
+        "Manuela Guedes de Almeida",
+        "Jan Akander",
+        "Hossein Bakhtiari",
+        "Oliver Kinnane",
+        "Risto Kosonen",
+        "Salvatore Carlucci"
+      ],
+      "citation_count": 98,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Overheating (electricity)",
+        "Directive",
+        "Energy performance",
+        "Efficient energy use",
+        "Climate change",
+        "Environmental economics",
+        "Environmental science",
+        "Architectural engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based wall thermal mass overheating summer comfort",
+      "paper_id": "https://openalex.org/W2944840727",
+      "title": "A review of microencapsulated and composite phase change materials: Alteration of strength and thermal properties of cement-based materials",
+      "abstract": "Due to the population growth and the increased reliance on cooling and heating systems, buildings have become the largest energy consumer worldwide. The use of phase change material (PCM) has shown great potential to reduce the annual cooling and heating load by up to 50%. Nowadays, the direct incorporation of PCM in cement-based materials (CBM) is creating a considerable debate in the research community with regards to the proper selection and the beneficial utilization of PCM (microencapsulated or composite) in CBM. Therefore, this paper reviews the pros and cons of using microencapsulated and composite PCM in CBM by highlighting the mechanisms involved in the mechanical strength loss and thermal properties enhancement. Generally, a high thermal energy storage CBM was obtained. However, PCM exhibited a negative effect on the compressive strength of CBM. In view of the literature review, the compressive strength reduction varies considerably with no clear trend which is understandable in view of the differences in mix designs as well as the variety of materials used in each study. Finally, an up-to-date PCM case studies, gaps and future directions are also presented to provide a reliable basis and helpful reference for the future development of eco-friendly and energy-efficient building materials containing PCM.",
+      "year": 2019,
+      "venue": "Renewable and Sustainable Energy Reviews",
+      "url": "https://doi.org/10.1016/j.rser.2019.04.072",
+      "doi": "10.1016/j.rser.2019.04.072",
+      "authors": [
+        "Sarra Drissi",
+        "Tung‐Chai Ling",
+        "Kim Hung Mo",
+        "Anissa Eddhahak"
+      ],
+      "citation_count": 223,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Phase-change material",
+        "Phase change",
+        "Compressive strength",
+        "Cement",
+        "Materials science",
+        "Composite number",
+        "Process engineering",
+        "Environmental science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based wall thermal mass overheating summer comfort",
+      "paper_id": "https://openalex.org/W4223567519",
+      "title": "Understanding thermal comfort in vernacular dwellings in Alentejo, Portugal: A mixed-methods adaptive comfort approach",
+      "abstract": "",
+      "year": 2022,
+      "venue": "Building and Environment",
+      "url": "https://doi.org/10.1016/j.buildenv.2022.109084",
+      "doi": "10.1016/j.buildenv.2022.109084",
+      "authors": [
+        "Inês Costa-Carrapiço",
+        "Javier Neila González",
+        "Rokia Raslan",
+        "Carmen Sánchez-Guevara Sánchez",
+        "Ma Dolores Redondas Marrero"
+      ],
+      "citation_count": 51,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Thermal comfort",
+        "Architectural engineering",
+        "Vernacular",
+        "Environmental science",
+        "Geography",
+        "Vernacular architecture",
+        "Civil engineering",
+        "Meteorology"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based wall thermal mass overheating summer comfort",
+      "paper_id": "https://openalex.org/W4376139372",
+      "title": "A review on recent research on bio-based building materials and their applications",
+      "abstract": "Abstract Bio-based materials represent a promising alternative in building envelope applications, with the aim of improving in-use energy efficiency. They have the advantage of being renewable, low embodied energy and CO 2 neutral or negative. In addition, they are excellent thermal regulators. This paper presents an overview of the state-of-the-art of bio-based materials used in building construction and their applications. The materials outlined include hemp, wood, date palm wood, cork, alfa and straw. Through this literature study we want to get a broad overview of the current state of theoretical and experimental studies of their hygrothermal characteristics and their thermal and energy performances. The aim is not to be exhaustive but to summarise the most important research results on these materials. This is the first part of a research work that deals with the contribution to the development of a new bio-based construction material to be used in building.",
+      "year": 2023,
+      "venue": "Materials for Renewable and Sustainable Energy",
+      "url": "https://doi.org/10.1007/s40243-023-00234-7",
+      "doi": "10.1007/s40243-023-00234-7",
+      "authors": [
+        "S. Bourbia",
+        "H. Kazeoui",
+        "Rafik Belarbi"
+      ],
+      "citation_count": 109,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Cork",
+        "Architectural engineering",
+        "Building envelope",
+        "Renewable energy",
+        "Embodied energy",
+        "Building material",
+        "Work (physics)",
+        "Natural materials"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based wall thermal mass overheating summer comfort",
+      "paper_id": "https://openalex.org/W4211175804",
+      "title": "Bio-based Building Skin",
+      "abstract": "",
+      "year": 2019,
+      "venue": "Directory of Open access Books (OAPEN Foundation)",
+      "url": "https://www.doabooks.org/doab?func=search&query=rid:43479",
+      "doi": "10.1007/978-981-13-3747-5",
+      "authors": [
+        "Andreja Kutnar",
+        "Marcin Brzezicki",
+        "Jakub Sandak",
+        "Anna Sandak"
+      ],
+      "citation_count": 103,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "book"
+      ],
+      "fields_of_study": [
+        "Architectural engineering",
+        "Perspective (graphical)",
+        "Selection (genetic algorithm)",
+        "Engineering",
+        "Computer science",
+        "Engineering drawing",
+        "Construction engineering",
+        "Artificial intelligence"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based wall thermal mass overheating summer comfort",
+      "paper_id": "https://openalex.org/W4200201201",
+      "title": "Thermal and mechanical behavior of straw-based construction: A review",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2021.125915",
+      "doi": "10.1016/j.conbuildmat.2021.125915",
+      "authors": [
+        "Ghadie Tlaiji",
+        "Salah-Eddine Ouldboukhitine",
+        "Fabienne Pennec",
+        "Pascal Henry Biwolé"
+      ],
+      "citation_count": 70,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Context (archaeology)",
+        "Embodied energy",
+        "Environmental science",
+        "Life-cycle assessment",
+        "Work (physics)",
+        "Relative humidity",
+        "Carbon footprint"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based wall thermal mass overheating summer comfort",
+      "paper_id": "https://openalex.org/W2899634717",
+      "title": "Polymeric composites for powder-based additive manufacturing: Materials and applications",
+      "abstract": "",
+      "year": 2018,
+      "venue": "Progress in Polymer Science",
+      "url": "https://doi.org/10.1016/j.progpolymsci.2018.11.001",
+      "doi": "10.1016/j.progpolymsci.2018.11.001",
+      "authors": [
+        "Shangqin Yuan",
+        "Fei Shen",
+        "Chee Kai Chua",
+        "Kun Zhou"
+      ],
+      "citation_count": 514,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Ceramic",
+        "3D printing",
+        "Aerospace",
+        "Composite number",
+        "Composite material",
+        "Selective laser sintering",
+        "Compounding"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based wall thermal mass overheating summer comfort",
+      "paper_id": "https://openalex.org/W4214646276",
+      "title": "Thermal and mechanical characterization of adobes bio-sourced with Pennisetum setaceum fibers and an application for modern buildings",
+      "abstract": "",
+      "year": 2022,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2022.126809",
+      "doi": "10.1016/j.conbuildmat.2022.126809",
+      "authors": [
+        "Mouatassim Charai",
+        "Morad Salhi",
+        "Othmane Horma",
+        "Ahmed Mezrhab",
+        "Mustapha Karkri",
+        "Samir Amraqui"
+      ],
+      "citation_count": 61,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Composite material",
+        "Absorption of water",
+        "Compressive strength",
+        "Ultimate tensile strength",
+        "Thermal insulation",
+        "Adobe",
+        "Cohesion (chemistry)"
+      ],
+      "tldr": ""
+    }
+  ]
+}

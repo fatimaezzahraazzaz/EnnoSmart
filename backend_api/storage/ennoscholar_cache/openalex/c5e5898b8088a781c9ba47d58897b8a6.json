@@ -1,0 +1,400 @@
+{
+  "created_at": "2026-06-26T10:11:50",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "timber-concrete composite floor shear connectors cyclic loading",
+      "paper_id": "https://openalex.org/W2060364123",
+      "title": "Fatigue behaviour of timber–concrete composite connections and floor beams",
+      "abstract": "",
+      "year": 2013,
+      "venue": "Engineering Structures",
+      "url": "https://doi.org/10.1016/j.engstruct.2013.08.042",
+      "doi": "10.1016/j.engstruct.2013.08.042",
+      "authors": [
+        "David Yeoh",
+        "Massimo Fragiacomo",
+        "David Carradine"
+      ],
+      "citation_count": 34,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Laminated veneer lumber",
+        "Cable gland",
+        "Structural engineering",
+        "Composite number",
+        "Stiffness",
+        "Materials science",
+        "Ultimate tensile strength",
+        "Beam (structure)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber-concrete composite floor shear connectors cyclic loading",
+      "paper_id": "https://openalex.org/W3183956963",
+      "title": "In-Plane Shear Cyclic Performance of Spline Cross-Laminated Timber-Concrete Composite Diaphragms",
+      "abstract": "Over the past decade, cross-laminated timber (CLT) panels have gained popularity worldwide. To achieve larger spans and to increase the resistance to diaphragm seismic and wind forces to be transferred through CLT floor or roof systems, CLT-concrete composite (CCC) floors have been developed as an alternative. While significant testing has been performed under gravity loading, limited experimental data exist on the in-plane performance of CCC systems. This study presents results from an experimental program designed to characterize the in-plane shear behavior of CCC diaphragm connections using different CLT to concrete screw connector orientations in a test setup that simulates the expected seismic load path in diaphragms for platform-type construction. Tested variables include concrete slab thickness, composite screw angle, and single spline connection systems consisting of nails or screws. Experimental results and observed damage progression from cyclic testing are presented and discussed. Results indicate that CCC systems achieved increased stiffness and strength values when compared to bare-CLT systems, but slab thickness did not influence the strength and stiffness of the system for the load paths simulated. Additionally, CCC floor systems with 45° composite screw connectors displayed increased strength but overall similar stiffness values when compared to the CCC systems with 90° composite screws. The results provide useful engineering parameters, such as elastic stiffness, peak load, displacement capacity, and ductility ratios that can be used in the development of codified design parameters or in performance-based designs.",
+      "year": 2021,
+      "venue": "Journal of Structural Engineering",
+      "url": "https://doi.org/10.1061/(asce)st.1943-541x.0003127",
+      "doi": "10.1061/(asce)st.1943-541x.0003127",
+      "authors": [
+        "Bradly Taylor",
+        "André R. Barbosa",
+        "Arijit Sinha"
+      ],
+      "citation_count": 16,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cross laminated timber",
+        "Structural engineering",
+        "Stiffness",
+        "Composite number",
+        "Slab",
+        "Cable gland",
+        "Shear (geology)",
+        "Fastener"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber-concrete composite floor shear connectors cyclic loading",
+      "paper_id": "https://openalex.org/W2071441925",
+      "title": "Timber-Concrete Composite Bridges: State-of-the-Art Review",
+      "abstract": "This review article presents a state-of-the-art survey on timber-concrete composite (TCC) bridges. It starts with a presentation of a sample of relevant TCC bridges, offering a global perspective on the use of this type of bridge. The number of TCC bridges has clearly increased in the past few years, and some of the reasons for this trend are explored. Next, an extensive literature review is presented regarding the most significant technological innovations and recent developments in the application of TCC structures to bridge construction. Firstly, the engineering specificities and the advantages of TCC bridge structural systems are enumerated. Afterwards, the importance of proper mechanical connection for optimal performance of TCC structures is explained, and a thorough description of the connection systems suitable for bridge construction is provided. Some research into the structural behavior of TCC bridges under service conditions is then presented and discussed. Finally, possible areas of future research regarding the development of TCC bridges are suggested.",
+      "year": 2013,
+      "venue": "BioResources",
+      "url": "https://doi.org/10.15376/biores.8.4.6630-6649",
+      "doi": "10.15376/biores.8.4.6630-6649",
+      "authors": [
+        "João N. Rodrigues",
+        "Alfredo M. P. G. Dias",
+        "Paulo Providência"
+      ],
+      "citation_count": 64,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Bridge (graph theory)",
+        "Construction engineering",
+        "Engineering",
+        "Perspective (graphical)",
+        "Forensic engineering",
+        "Structural type",
+        "Civil engineering",
+        "Computer science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber-concrete composite floor shear connectors cyclic loading",
+      "paper_id": "https://openalex.org/W2200695490",
+      "title": "Connections for steel–timber hybrid prefabricated buildings. Part I: Experimental tests",
+      "abstract": "",
+      "year": 2015,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2015.12.002",
+      "doi": "10.1016/j.conbuildmat.2015.12.002",
+      "authors": [
+        "Cristiano Loss",
+        "Maurizio Piazza",
+        "Riccardo Zandonini"
+      ],
+      "citation_count": 179,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cross laminated timber",
+        "Prefabrication",
+        "Engineering",
+        "Structural engineering",
+        "Shear wall",
+        "Engineered wood",
+        "Civil engineering",
+        "Construction engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber-concrete composite floor shear connectors cyclic loading",
+      "paper_id": "https://openalex.org/W2891932396",
+      "title": "Numerical analysis of timber-to-timber joints and composite beams with inclined self-tapping screws",
+      "abstract": "",
+      "year": 2018,
+      "venue": "Composite Structures",
+      "url": "https://doi.org/10.1016/j.compstruct.2018.09.008",
+      "doi": "10.1016/j.compstruct.2018.09.008",
+      "authors": [
+        "Chiara Bedon",
+        "Massimo Fragiacomo"
+      ],
+      "citation_count": 104,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Structural engineering",
+        "Finite element method",
+        "Beam (structure)",
+        "Composite number",
+        "Bending",
+        "Span (engineering)",
+        "Engineering",
+        "Materials science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber-concrete composite floor shear connectors cyclic loading",
+      "paper_id": "https://openalex.org/W1888106601",
+      "title": "FRP reinforcement of timber structures",
+      "abstract": "",
+      "year": 2015,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2015.06.020",
+      "doi": "10.1016/j.conbuildmat.2015.06.020",
+      "authors": [
+        "Kay‐Uwe Schober",
+        "Annette M. Harte",
+        "Robert Kliger",
+        "Robert Jockwer",
+        "Qingfeng Xu",
+        "J.F. Chen"
+      ],
+      "citation_count": 187,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Fibre-reinforced plastic",
+        "Reinforcement",
+        "Construction engineering",
+        "Quality (philosophy)",
+        "Engineering",
+        "Forensic engineering",
+        "Computer science",
+        "Civil engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber-concrete composite floor shear connectors cyclic loading",
+      "paper_id": "https://openalex.org/W2127664933",
+      "title": "Strengthening of timber structures with glued-in rods",
+      "abstract": "",
+      "year": 2015,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2015.03.097",
+      "doi": "10.1016/j.conbuildmat.2015.03.097",
+      "authors": [
+        "René Steiger",
+        "Erik Serrano",
+        "Mislav Stepinac",
+        "Vlatka Rajčić",
+        "Caoimhe O’Neill",
+        "Daniel McPolin",
+        "Robert Widmann"
+      ],
+      "citation_count": 154,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Reinforcement",
+        "Load bearing",
+        "Rod",
+        "Bearing capacity",
+        "Engineering",
+        "Structural engineering",
+        "Construction engineering",
+        "Forensic engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber-concrete composite floor shear connectors cyclic loading",
+      "paper_id": "https://openalex.org/W2026005265",
+      "title": "In-Plane Orthotropic Behavior of Timber Floor Diaphragms in Unreinforced Masonry Buildings",
+      "abstract": "A full-scale experimental program consisting of testing four as-built diaphragms and four retrofitted diaphragms in both principal loading directions is presented. As-built configurations were typical of those found in historic unreinforced masonry buildings in North America and Australasia, whereas retrofitted diaphragms consisted of plywood panel overlays with stapled sheet metal blocking systems (SMBS). Test results were characterized using bilinear representations to establish recognizable performance parameters such as shear strength, shear stiffness, and ductility capacity, which were then used for comparative analysis. The nonlinear and low stiffness behavior of as-built diaphragms was confirmed in each principal loading direction. The plywood overlay and SMBS dramatically improved as-built diaphragm shear strength and shear stiffness and were shown to perform satisfactorily from a serviceability perspective. The orthotropic nature of as-built diaphragms was proven, with perpendicular-to-joist shear stiffness being as low as 68% of the corresponding orthogonal value. A typical duly framed stairwell penetration and discontinuous joists with two-bolt lapped connections were shown to have no detrimental impact on tested diaphragm performance. Predicted diaphragm performance using state-of-art assessment documents was shown to be inconsistent with corresponding values established from testing. It is recommended that these assessment procedures be updated with revised performance parameters and provisions to address diaphragm orthotropic behavior.",
+      "year": 2013,
+      "venue": "Journal of Structural Engineering",
+      "url": "https://doi.org/10.1061/(asce)st.1943-541x.0000819",
+      "doi": "10.1061/(asce)st.1943-541x.0000819",
+      "authors": [
+        "Aaron Wilson",
+        "Pierre Quenneville",
+        "Jason Ingham"
+      ],
+      "citation_count": 69,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Orthotropic material",
+        "Structural engineering",
+        "Stiffness",
+        "Unreinforced masonry building",
+        "Masonry",
+        "Joist",
+        "Deck",
+        "Shear (geology)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber-concrete composite floor shear connectors cyclic loading",
+      "paper_id": "https://openalex.org/W2787948238",
+      "title": "Modelling the mechanical behaviour of typical wall-to-floor connection systems for cross-laminated timber structures",
+      "abstract": "",
+      "year": 2018,
+      "venue": "Engineering Structures",
+      "url": "https://doi.org/10.1016/j.engstruct.2018.02.045",
+      "doi": "10.1016/j.engstruct.2018.02.045",
+      "authors": [
+        "Matteo Izzi",
+        "Andrea Polastri",
+        "Massimo Fragiacomo"
+      ],
+      "citation_count": 53,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cable gland",
+        "Structural engineering",
+        "Dissipation",
+        "Stiffness",
+        "Cross laminated timber",
+        "Connection (principal bundle)",
+        "Shear wall",
+        "Tension (geology)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber-concrete composite floor shear connectors cyclic loading",
+      "paper_id": "https://openalex.org/W2793535339",
+      "title": "Structural robustness and timber buildings – a review",
+      "abstract": "Timber buildings are increasing in their dimensions. Structural robustness is imperative for all buildings and specifically important for tall buildings. Lives can be saved if disproportionate collapse can be avoided after a catastrophic event (e.g. accident, terrorism). The literature about robustness is comprehensive concerning concrete and steel buildings, but is rather limited regarding timber. This paper reviews robustness in general and robustness of timber buildings in particular. Robustness is an intrinsic structural property, enhancing global tolerance to local failures, regardless of the cause. A deterministic approach to assess robustness is to remove certain loadbearing elements from the structure and compare the consequences to given limits. Design methods for robustness may be direct by assessing effects of local failure, or indirect by following guidelines. For robust timber buildings, the connections are the key aspects. Usually, metal connectors may provide the required joint ductility. For robust light timber-frame construction, rim beams may be designed. For timber posts and beams and cross laminated timber, guidance regarding robustness is scarce, but in some aspects they seem to be similar to steel frames and precast concrete. Future research should assess the capacity of connections, and evaluate the adequacy of seismic connectors for robust timber buildings.",
+      "year": 2018,
+      "venue": "Wood Material Science and Engineering",
+      "url": "https://doi.org/10.1080/17480272.2018.1446052",
+      "doi": "10.1080/17480272.2018.1446052",
+      "authors": [
+        "Johannes A. J. Huber",
+        "Mats Ekevad",
+        "Ulf Arne Girhammar",
+        "Sven Berg"
+      ],
+      "citation_count": 88,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Robustness (evolution)",
+        "Precast concrete",
+        "Engineering",
+        "Structural engineering",
+        "Structural system",
+        "Computer science",
+        "Progressive collapse",
+        "Forensic engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber-concrete composite floor shear connectors cyclic loading",
+      "paper_id": "https://openalex.org/W4229014616",
+      "title": "Shear performances of shallow notch-screw connections for timber-concrete composite (TCC) floors",
+      "abstract": "Shallow notch-screw connections, which showed potential superior slip moduli and load-carrying capacity compared with the traditional screwed connections and can be employed in the timber-concrete composite (TCC) floors were examined in this study. Eight groups of shallow notch-screw connections were designed to perform the push-out tests, in which the arrangement of screws, the heavy timber types, and the width of the shallow notch were considered. The depth of the notch was uniformly 15 mm. The vertical screws and the cross inclined screws were separately selected as the reinforcement for the shallow notch connections. The common heavy timber panels, including nail laminated timber (NLT), glulam, and cross laminated timber (CLT), were adopted. The width of the shallow notch tested included 100 and 200 mm. The experimental results showed that the shallow notch connections underwent ductile failure. The effects of testing factors on the shear strength, slip moduli, and ductility were discussed. The design proposals about the slip moduli of the shallow notches using each timber panel types were proposed, aiming to provide guidance for the application of the TCC floors with shallow notches.",
+      "year": 2022,
+      "venue": "BioResources",
+      "url": "https://doi.org/10.15376/biores.17.2.3278-3290",
+      "doi": "10.15376/biores.17.2.3278-3290",
+      "authors": [
+        "Qingguo Ben",
+        "Yongqing Dai",
+        "Sijian Chen",
+        "Benkai Shi",
+        "Huifeng Yang"
+      ],
+      "citation_count": 14,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Structural engineering",
+        "Slip (aerodynamics)",
+        "Composite number",
+        "Materials science",
+        "Shear (geology)",
+        "Geotechnical engineering",
+        "Reinforcement",
+        "Composite material"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber-concrete composite floor shear connectors cyclic loading",
+      "paper_id": "https://openalex.org/W2790618714",
+      "title": "Testing of timber-to-timber screw-connections in hybrid configurations",
+      "abstract": "",
+      "year": 2018,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2018.03.078",
+      "doi": "10.1016/j.conbuildmat.2018.03.078",
+      "authors": [
+        "Gianni Schiro",
+        "Ivan Giongo",
+        "Wendel Sebastian",
+        "Daniele Riccadonna",
+        "Maurizio Piazza"
+      ],
+      "citation_count": 69,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Veneer",
+        "Laminated veneer lumber",
+        "Hardwood",
+        "Structural engineering",
+        "Softwood",
+        "Stiffness",
+        "Ductility (Earth science)",
+        "Engineering"
+      ],
+      "tldr": ""
+    }
+  ]
+}

@@ -1,70 +1,33 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-"""
-services/scholar_state_of_art_service.py — V44
-
-Alignement React/Backend avec l'Agent 2 EnnoScholar :
-- Le consultant garde/rejette les articles côté frontend.
-- Seuls les articles consultant_status='garde' servent à rédiger.
-- Rédaction par verrou, citations contrôlées [A1], [A2].
-- Garde-fou : si aucun Direct/Connexe sélectionné, on bloque sauf force=True.
-"""
-
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import json
 
 from sqlalchemy.orm import Session
 
-from db.models import Article, ScholarRun, Project
+from db.models import Article, Project, ScholarRun
+from services.diagnostic_service import sanitize_json_value, ensure_ennosmart_imports
+from services.scholar_service import scholar_paths, read_json, write_json
 
 
-def _safe_float(x: Any) -> float:
+def _clean(value: Any, max_chars: int = 4000) -> str:
+    text = str(value or "").strip()
+    if max_chars and len(text) > max_chars:
+        return text[:max_chars].rsplit(" ", 1)[0] + "..."
+    return text
+
+
+def _safe_float(value: Any) -> Optional[float]:
     try:
-        return float(x or 0.0)
+        return float(value)
     except Exception:
-        return 0.0
+        return None
 
 
-def _sanitize(value: Any) -> Any:
-    # évite les NaN/objets non sérialisables dans les réponses API
-    try:
-        import math
-        if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
-            return None
-    except Exception:
-        pass
-    if isinstance(value, dict):
-        return {str(k): _sanitize(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_sanitize(v) for v in value]
-    if isinstance(value, tuple):
-        return [_sanitize(v) for v in value]
-    if isinstance(value, Path):
-        return str(value)
-    return value
-
-
-def _read_json(path: str | Path, default: Any = None) -> Any:
-    p = Path(path)
-    if not p.exists():
-        return default
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        return default
-
-
-def _write_json(path: str | Path, data: Any) -> Path:
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(_sanitize(data), ensure_ascii=False, indent=2), encoding="utf-8")
-    return p
-
-
-def latest_scholar_run(db: Session, project: Project) -> ScholarRun | None:
+def _latest_scholar_run(db: Session, project: Project) -> Optional[ScholarRun]:
     return (
         db.query(ScholarRun)
         .filter(ScholarRun.project_id == project.id)
@@ -73,134 +36,283 @@ def latest_scholar_run(db: Session, project: Project) -> ScholarRun | None:
     )
 
 
-def _report_from_run(run: ScholarRun | None) -> Dict[str, Any]:
+def _report_from_run(run: Optional[ScholarRun]) -> Dict[str, Any]:
     if not run:
         return {}
-    data = run.raw_result_json or {}
-    if isinstance(data, dict):
-        if isinstance(data.get("report"), dict):
-            return data["report"]
-        if isinstance(data.get("bundle"), dict) and isinstance(data["bundle"].get("report"), dict):
-            return data["bundle"]["report"]
-        if isinstance(data.get("results"), list):
-            return data
+    raw = run.raw_result_json or {}
+    if isinstance(raw, dict) and isinstance(raw.get("report"), dict):
+        return raw["report"]
     if run.report_path:
-        return _read_json(run.report_path, {}) or {}
-    return {}
+        data = read_json(run.report_path, {})
+        if isinstance(data, dict):
+            return data
+    return raw if isinstance(raw, dict) else {}
 
 
-def _project_scholar_dir(project: Project) -> Path:
-    # On réutilise le service existant si disponible, sinon fallback storage local.
-    try:
-        from services.scholar_service import scholar_paths
-        return scholar_paths(project)["scholar_dir"]
-    except Exception:
-        base = Path("storage") / "organismes" / str(project.organisme) / "projects" / str(project.project_name) / "years" / str(project.year) / "ennoscholar"
-        base.mkdir(parents=True, exist_ok=True)
-        return base
-
-
-def _article_original(article: Article) -> Dict[str, Any]:
-    src = article.source_json if isinstance(article.source_json, dict) else {}
-    out = dict(src)
-    out.update({
-        "db_article_id": article.id,
-        "title": article.title,
-        "year": article.year,
-        "source": article.source,
-        "tag": article.tag_article or src.get("tag"),
-        "tag_article": article.tag_article or src.get("tag_article"),
-        "relevance_score": article.score if article.score is not None else src.get("relevance_score"),
-        "score": article.score if article.score is not None else src.get("score"),
-        "url": article.url or src.get("url"),
-        "doi": article.doi or src.get("doi"),
-        "consultant_status": article.consultant_status,
-    })
+def _result_by_verrou_id(report: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    out: Dict[str, Dict[str, Any]] = {}
+    for r in report.get("results") or []:
+        if not isinstance(r, dict):
+            continue
+        vid = r.get("verrou_id")
+        if vid is not None:
+            out[str(vid)] = r
     return out
 
 
-def build_state_of_art_selection_payload(db: Session, project: Project) -> Dict[str, Any]:
-    run = latest_scholar_run(db, project)
-    report = _report_from_run(run)
-    results = report.get("results") or []
+def _article_to_selected_payload(article: Article) -> Dict[str, Any]:
+    src = article.source_json if isinstance(article.source_json, dict) else {}
 
-    if not run or not results:
-        return {
-            "ok": False,
-            "reason": "Aucun rapport EnnoScholar trouvé. Lance d'abord EnnoScholar sur les verrous gardés.",
-            "organisme": project.organisme,
-            "project": project.project_name,
-            "year": str(project.year),
-            "verrous": [],
-        }
+    # On conserve au maximum le JSON original d'EnnoScholar, car il contient
+    # abstract, reason, fields_of_study, source, DOI, etc.
+    item = dict(src)
+    item.update({
+        "db_article_id": article.id,
+        "article_id": article.id,
+        "consultant_selected": True,
+        "selected": True,
+        "consultant_status": article.consultant_status,
+        "title": item.get("title") or article.title,
+        "year": item.get("year") or article.year,
+        "source": item.get("source") or article.source,
+        "tag": item.get("tag") or item.get("tag_article") or article.tag_article,
+        "relevance_score": (
+            item.get("relevance_score")
+            if item.get("relevance_score") is not None
+            else article.score
+        ),
+        "url": item.get("url") or article.url,
+        "doi": item.get("doi") or article.doi,
+    })
 
-    kept_articles = (
+    return sanitize_json_value(item)
+
+
+def _kept_articles_by_verrou(db: Session, run: Optional[ScholarRun]) -> Dict[str, List[Article]]:
+    if not run:
+        return {}
+
+    articles = (
         db.query(Article)
         .filter(Article.scholar_run_id == run.id)
         .filter(Article.consultant_status == "garde")
+        .order_by(Article.verrou_id.asc().nullslast(), Article.score.desc().nullslast(), Article.year.desc().nullslast())
         .all()
     )
 
-    by_verrou: Dict[int | None, List[Article]] = {}
-    for a in kept_articles:
-        by_verrou.setdefault(a.verrou_id, []).append(a)
+    grouped: Dict[str, List[Article]] = {}
+    for a in articles:
+        key = str(a.verrou_id or "unknown")
+        grouped.setdefault(key, []).append(a)
+    return grouped
+
+
+def _has_direct_or_connexe(articles: List[Dict[str, Any]]) -> bool:
+    for a in articles:
+        tag = str(a.get("tag") or a.get("tag_article") or "").strip().lower()
+        if tag in {"direct", "connexe"}:
+            return True
+    return False
+
+
+def _is_technical_catalog_article(article: Dict[str, Any]) -> bool:
+    """
+    Les entrées HAL / ISO / ASTM / Zenodo / ASME sont des catalogues ou sources
+    techniques à consulter. Elles ne doivent pas être envoyées au writer comme
+    articles scientifiques, sinon le LLM rédige sur des portails au lieu des papiers.
+    """
+    source = str(article.get("source") or "").strip().lower()
+    source_type = str(article.get("source_type") or "").strip().lower()
+    paper_id = str(article.get("paper_id") or "").strip().lower()
+    tag = str(article.get("tag") or article.get("tag_article") or "").strip().lower()
+
+    return (
+        source == "technical_catalog"
+        or source_type == "technical_reference"
+        or paper_id.startswith("tech:")
+        or tag == "technique"
+    )
+
+
+def _is_scientific_selected_article(article: Dict[str, Any]) -> bool:
+    if not isinstance(article, dict):
+        return False
+    if _is_technical_catalog_article(article):
+        return False
+    title = _clean(article.get("title"), 500)
+    if not title:
+        return False
+    tag = str(article.get("tag") or article.get("tag_article") or article.get("classification") or "").strip().lower()
+    # On accepte aussi les Fondamentaux gardés volontairement par le consultant.
+    return tag in {"direct", "connexe", "fondamental"}
+
+
+def _article_sort_key(article: Dict[str, Any]) -> tuple:
+    tag = str(article.get("tag") or article.get("tag_article") or "").strip().lower()
+    tag_order = {"direct": 0, "connexe": 1, "fondamental": 2}.get(tag, 9)
+    try:
+        score = float(article.get("relevance_score") or article.get("score") or 0)
+    except Exception:
+        score = 0.0
+    try:
+        year = int(article.get("year") or 0)
+    except Exception:
+        year = 0
+    return (tag_order, -score, -year, _clean(article.get("title"), 300).lower())
+
+
+def _normalize_frontend_payload(payload: Dict[str, Any], project: Project) -> Dict[str, Any]:
+    """
+    Le frontend peut envoyer :
+    {
+      organisme, project, year,
+      verrous: [{verrou_id, verrou_title, scientific_intent, selected_articles: [...]}]
+    }
+
+    On normalise juste les statuts pour que scholar_agent._select_articles_from_verrou_item
+    les considère comme sélectionnés.
+    """
+    payload = dict(payload or {})
+    payload.setdefault("organisme", project.organisme)
+    payload.setdefault("project", project.project_name)
+    payload.setdefault("year", str(project.year))
+    payload.setdefault("payload_type", "selected_articles_for_state_of_art")
 
     verrous = []
-    for result in results:
-        if not isinstance(result, dict):
+    for v in payload.get("verrous") or []:
+        if not isinstance(v, dict):
             continue
-        raw_vid = result.get("verrou_id")
-        try:
-            vid = int(raw_vid) if raw_vid is not None and str(raw_vid).isdigit() else None
-        except Exception:
-            vid = None
 
-        selected = [_article_original(a) for a in by_verrou.get(vid, [])]
-        tags = [str(a.get("tag") or a.get("tag_article") or "") for a in selected]
-        direct_connexe_count = sum(1 for t in tags if t in {"Direct", "Connexe"})
+        selected = []
+        technical_sources = []
+        for a in v.get("selected_articles") or v.get("articles") or []:
+            if not isinstance(a, dict):
+                continue
+            item = dict(a)
+            item["consultant_selected"] = True
+            item["selected"] = True
 
-        ready = bool(selected) and direct_connexe_count > 0
-        if not selected:
-            readiness_reason = "Aucun article gardé par le consultant pour ce verrou."
-        elif direct_connexe_count == 0:
-            readiness_reason = "Les articles gardés sont uniquement Fondamentaux : rédaction CIR automatique déconseillée."
-        else:
-            readiness_reason = "Sélection suffisante pour une rédaction contrôlée."
+            if _is_technical_catalog_article(item):
+                technical_sources.append(item)
+                continue
+
+            if _is_scientific_selected_article(item):
+                selected.append(item)
+
+        selected = sorted(selected, key=_article_sort_key)
+
+        vv = dict(v)
+        vv["selected_articles"] = selected
+        vv["technical_sources_excluded_from_writer"] = technical_sources
+        vv["selected_articles_count"] = len(selected)
+        vv["technical_sources_excluded_count"] = len(technical_sources)
+        vv["has_direct_or_connexe"] = _has_direct_or_connexe(selected)
+        verrous.append(vv)
+
+    payload["verrous"] = verrous
+    return sanitize_json_value(payload)
+
+
+def build_state_of_art_selection_payload(db: Session, project: Project) -> Dict[str, Any]:
+    """
+    Construit le payload de rédaction à partir des articles réellement gardés
+    par le consultant dans la base.
+
+    Important :
+    - on garde aussi les Fondamentaux sélectionnés ;
+    - on bloque seulement si aucun Direct/Connexe n'est présent, sauf force=True
+      dans la fonction de rédaction.
+    """
+    run = _latest_scholar_run(db, project)
+    report = _report_from_run(run)
+    result_map = _result_by_verrou_id(report)
+    grouped_articles = _kept_articles_by_verrou(db, run)
+
+    verrous: List[Dict[str, Any]] = []
+    total_selected = 0
+    total_direct_connexe = 0
+
+    for verrou_id, articles in grouped_articles.items():
+        selected_articles_raw = [_article_to_selected_payload(a) for a in articles]
+        selected_articles = sorted(
+            [a for a in selected_articles_raw if _is_scientific_selected_article(a)],
+            key=_article_sort_key,
+        )
+        technical_sources_excluded = [a for a in selected_articles_raw if _is_technical_catalog_article(a)]
+
+        total_selected += len(selected_articles)
+        total_direct_connexe += sum(
+            1 for a in selected_articles
+            if str(a.get("tag") or a.get("tag_article") or "").lower() in {"direct", "connexe"}
+        )
+
+        report_item = result_map.get(verrou_id, {})
+        first_validation = {}
+        if selected_articles:
+            sj = selected_articles[0].get("verrou_scientific_validation")
+            if isinstance(sj, dict):
+                first_validation = sj
+
+        title = (
+            report_item.get("verrou_title")
+            or first_validation.get("verrou_title")
+            or f"Verrou scientifique {verrou_id}"
+        )
 
         verrous.append({
-            "verrou_id": result.get("verrou_id"),
-            "verrou_title": result.get("verrou_title"),
-            "verrou_text": result.get("verrou_text"),
-            "scientific_intent": result.get("scientific_intent") or {},
-            "decision": result.get("decision"),
-            "scientific_support_score": result.get("scientific_support_score"),
-            "gap_analysis": result.get("gap_analysis"),
-            "selected_articles": selected,
-            "selected_articles_count": len(selected),
-            "direct_connexe_count": direct_connexe_count,
-            "state_of_art_ready": ready,
-            "readiness_reason": readiness_reason,
+            "verrou_id": verrou_id,
+            "verrou_title": title,
+            "verrou_text": report_item.get("verrou_text") or "",
+            "scientific_intent": report_item.get("scientific_intent") or {"verrou_title": title},
+            "decision": report_item.get("decision") or first_validation.get("scientific_decision"),
+            "scientific_support_score": report_item.get("scientific_support_score"),
+            "gap_analysis": report_item.get("gap_analysis") or first_validation.get("gap_analysis"),
+            "selected_articles": selected_articles,
+            "selected_articles_count": len(selected_articles),
+            "technical_sources_excluded_from_writer": technical_sources_excluded,
+            "technical_sources_excluded_count": len(technical_sources_excluded),
+            "has_direct_or_connexe": _has_direct_or_connexe(selected_articles),
         })
 
     payload = {
-        "ok": True,
         "agent": "EnnoScholar",
         "payload_type": "selected_articles_for_state_of_art",
         "generated_at": datetime.utcnow().isoformat(timespec="seconds"),
         "organisme": project.organisme,
         "project": project.project_name,
         "year": str(project.year),
-        "scholar_run_id": run.id,
+        "project_id": project.id,
+        "latest_scholar_run_id": run.id if run else None,
         "domain_detection": report.get("domain_detection") or {},
         "diagnostic_context": report.get("diagnostic_context") or {},
         "verrous": verrous,
         "summary": {
-            "verrous_total": len(verrous),
-            "verrous_ready": sum(1 for v in verrous if v.get("state_of_art_ready")),
-            "selected_articles_total": sum(int(v.get("selected_articles_count") or 0) for v in verrous),
+            "verrous_with_selection": len(verrous),
+            "selected_articles_count": total_selected,
+            "direct_connexe_selected_count": total_direct_connexe,
         },
+        "ok": True,
     }
-    return _sanitize(payload)
+
+    return sanitize_json_value(payload)
+
+
+def _write_markdown_report(path: Path, report: Dict[str, Any]) -> None:
+    parts: List[str] = []
+    for r in report.get("results") or []:
+        if not isinstance(r, dict):
+            continue
+        title = _clean(r.get("verrou_title"), 800)
+        soa = r.get("state_of_art") if isinstance(r.get("state_of_art"), dict) else {}
+        draft = _clean(soa.get("draft") or r.get("draft"), 50000)
+        if title:
+            parts.append(f"# {title}\n")
+        if draft:
+            parts.append(draft)
+        parts.append("\n\n---\n")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(parts).strip(), encoding="utf-8")
 
 
 def write_state_of_art_from_kept_articles(
@@ -208,61 +320,138 @@ def write_state_of_art_from_kept_articles(
     project: Project,
     writer_mode: str = "auto",
     force: bool = False,
+    frontend_payload: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    payload = build_state_of_art_selection_payload(db, project)
-    if not payload.get("ok"):
-        return payload
+    """
+    Lance la rédaction EnnoScholar V134 depuis :
+    - le payload frontend si fourni ;
+    - sinon les articles consultant_status='garde' stockés en base.
 
-    if not force:
-        ready_count = payload.get("summary", {}).get("verrous_ready", 0)
-        if ready_count <= 0:
-            return {
-                "ok": False,
-                "reason": "Aucun verrou prêt pour rédaction. Garde au moins un article Direct ou Connexe par verrou, ou utilise force=true pour générer un brouillon de contrôle.",
-                "selection_payload": payload,
-            }
+    Sauvegarde les résultats dans le dossier officiel du projet :
+    .../ennoscholar/selected_articles_payload.json
+    .../ennoscholar/ennoscholar_state_of_art_report.json
+    .../ennoscholar/ennoscholar_state_of_art.md
+    """
+    ensure_ennosmart_imports()
 
-        # on ne rédige que les verrous prêts
-        payload["verrous"] = [v for v in payload.get("verrous") or [] if v.get("state_of_art_ready")]
+    paths = scholar_paths(project)
+    scholar_dir = paths["scholar_dir"]
 
-    scholar_dir = _project_scholar_dir(project)
-    selection_path = scholar_dir / "selected_articles_consultant.json"
-    output_path = scholar_dir / "ennoscholar_state_of_art_report.json"
-    _write_json(selection_path, payload)
+    if frontend_payload:
+        selection_payload = _normalize_frontend_payload(frontend_payload, project)
+    else:
+        selection_payload = build_state_of_art_selection_payload(db, project)
 
-    try:
-        try:
-            from agents.EnnoScholar.scholar_agent import run_state_of_art_writer_from_selection
-        except Exception:
-            from modules.EnnoScholar.scholar_agent import run_state_of_art_writer_from_selection
-
-        report = run_state_of_art_writer_from_selection(
-            selection_payload_path=selection_path,
-            out_dir=scholar_dir,
-            writer_mode=writer_mode,
-        )
-        report["ok"] = True
-        report["selection_summary"] = payload.get("summary")
-        report["outputs"] = report.get("outputs") or {}
-        report["outputs"]["selection_payload"] = str(selection_path)
-        report["outputs"]["state_of_art_report"] = str(output_path)
-        _write_json(output_path, report)
-        return _sanitize(report)
-
-    except Exception as exc:
+    verrous = [v for v in selection_payload.get("verrous") or [] if isinstance(v, dict)]
+    if not verrous:
         return {
             "ok": False,
-            "reason": f"Erreur rédaction état de l'art : {exc}",
-            "selection_payload_path": str(selection_path),
+            "reason": (
+                "Aucun article scientifique sélectionné pour la rédaction. "
+                "Les sources technical_catalog comme HAL, ISO, ASTM, Zenodo ou ASME sont exclues du writer. "
+                "Garde au moins un vrai article Direct, Connexe ou Fondamental."
+            ),
+            "selection_payload": selection_payload,
         }
+
+    if not force:
+        blocked = [
+            v.get("verrou_title") or v.get("verrou_id")
+            for v in verrous
+            if not _has_direct_or_connexe(v.get("selected_articles") or [])
+        ]
+        if blocked:
+            return {
+                "ok": False,
+                "reason": (
+                    "Certains verrous n'ont aucun article Direct ou Connexe gardé. "
+                    "Ajoute au moins un Direct/Connexe ou relance avec force=true."
+                ),
+                "blocked_verrous": blocked,
+                "selection_payload": selection_payload,
+            }
+
+    selection_path = scholar_dir / "selected_articles_payload.json"
+    report_path = scholar_dir / "ennoscholar_state_of_art_report.json"
+    md_path = scholar_dir / "ennoscholar_state_of_art.md"
+
+    write_json(selection_path, selection_payload)
+
+    try:
+        from agents.EnnoScholar.scholar_agent import EnnoScholarAgent
+    except Exception:
+        from agents.EnnoScholar.scholar_agent import EnnoScholarAgent
+
+    agent = EnnoScholarAgent(
+        use_semantic_scholar=False,
+        use_openalex=False,
+        use_arxiv=False,
+        offline_dry_run=True,
+    )
+
+    report = agent.run_writer_from_selection(
+        selection_payload=selection_payload,
+        writer_mode=writer_mode,
+    )
+
+    report["ok"] = True
+    report["project_id"] = project.id
+    report["outputs"] = {
+        "selection_payload": str(selection_path),
+        "state_of_art_report": str(report_path),
+        "state_of_art_markdown": str(md_path),
+    }
+
+    write_json(report_path, report)
+    _write_markdown_report(md_path, report)
+
+    # Compatibilité frontend : certains composants lisent response.results /
+    # response.verrous_written directement, d'autres lisent response.report.results.
+    # On renvoie donc les deux formes.
+    return sanitize_json_value({
+        "ok": True,
+        "message": "État de l'art généré.",
+        "agent": report.get("agent"),
+        "version": report.get("version"),
+        "mode": report.get("mode"),
+        "writer_mode": report.get("writer_mode"),
+        "verrous_written": report.get("verrous_written", 0),
+        "results": report.get("results") or [],
+        "selection_payload": selection_payload,
+        "report": report,
+        "outputs": report["outputs"],
+    })
 
 
 def read_latest_state_of_art(project: Project) -> Dict[str, Any]:
-    scholar_dir = _project_scholar_dir(project)
-    path = scholar_dir / "ennoscholar_state_of_art_report.json"
-    data = _read_json(path, {}) or {}
-    return {
-        "ok": bool(data),
-        "path": str(path),
-        "report": data,
-    }
+    paths = scholar_paths(project)
+    scholar_dir = paths["scholar_dir"]
+    report_path = scholar_dir / "ennoscholar_state_of_art_report.json"
+    selection_path = scholar_dir / "selected_articles_payload.json"
+    md_path = scholar_dir / "ennoscholar_state_of_art.md"
+
+    report = read_json(report_path, {})
+    selection = read_json(selection_path, {})
+    markdown = ""
+    if md_path.exists():
+        try:
+            markdown = md_path.read_text(encoding="utf-8")
+        except Exception:
+            markdown = ""
+
+    return sanitize_json_value({
+        "ok": bool(report),
+        "files_found": {
+            "state_of_art_report": report_path.exists(),
+            "selection_payload": selection_path.exists(),
+            "state_of_art_markdown": md_path.exists(),
+        },
+        "paths": {
+            "state_of_art_report": str(report_path),
+            "selection_payload": str(selection_path),
+            "state_of_art_markdown": str(md_path),
+        },
+        "report": report,
+        "selection_payload": selection,
+        "markdown": markdown,
+    })

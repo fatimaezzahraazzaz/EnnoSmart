@@ -1,0 +1,101 @@
+{
+  "created_at": "2026-06-26T09:40:24",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "lightweight timber frame wall summer comfort phase shift bio-based insulation",
+      "paper_id": "https://openalex.org/W4211175804",
+      "title": "Bio-based Building Skin",
+      "abstract": "",
+      "year": 2019,
+      "venue": "Directory of Open access Books (OAPEN Foundation)",
+      "url": "https://www.doabooks.org/doab?func=search&query=rid:43479",
+      "doi": "10.1007/978-981-13-3747-5",
+      "authors": [
+        "Andreja Kutnar",
+        "Marcin Brzezicki",
+        "Jakub Sandak",
+        "Anna Sandak"
+      ],
+      "citation_count": 103,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "book"
+      ],
+      "fields_of_study": [
+        "Architectural engineering",
+        "Perspective (graphical)",
+        "Selection (genetic algorithm)",
+        "Engineering",
+        "Computer science",
+        "Engineering drawing",
+        "Construction engineering",
+        "Artificial intelligence"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "lightweight timber frame wall summer comfort phase shift bio-based insulation",
+      "paper_id": "https://openalex.org/W4383506037",
+      "title": "Phase change material (PCM) integrations into buildings in hot climates with simulation access for energy performance and thermal comfort: A review",
+      "abstract": "",
+      "year": 2023,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2023.132312",
+      "doi": "10.1016/j.conbuildmat.2023.132312",
+      "authors": [
+        "Haoxiang Zhan",
+        "Norhayati Mahyuddin",
+        "Raha Sulaiman",
+        "Fazel Khayatian"
+      ],
+      "citation_count": 120,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Architectural engineering",
+        "Building envelope",
+        "Thermal comfort",
+        "Climate change",
+        "Phase-change material",
+        "Environmental science",
+        "Passive cooling",
+        "Solar gain"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "lightweight timber frame wall summer comfort phase shift bio-based insulation",
+      "paper_id": "https://openalex.org/W4410208000",
+      "title": "A Comprehensive Comparison of Insulation Materials for Timber Building Systems",
+      "abstract": "The key objectives of both European Union and Portuguese policies are energy efficiency and carbon neutrality in the building sector. Timber construction offers unique advantages in achieving these goals, such as increased productivity through faster and more efficient building processes, using renewable resources with lower carbon emissions during production and throughout the lifecycle, and contributions to forest conservation. However, in many countries, timber construction remains underutilised due to concerns about its thermal and acoustic performance, fire safety, and limited availability of raw materials. This study addresses these challenges by evaluating the potential of various insulation materials, including polystyrenes, mineral wools, natural fibres, composites, and acoustic mats, for incorporation into prefabricated timber components. Key performance criteria included thermal insulation, sound absorption, fire reaction, environmental impact, and local availability. Among the materials analysed, glass wool, rock wool, and cork emerged as the most favourable options, offering excellent thermal and acoustic performance and presenting strong results in other key parameters. These findings underscore the potential of incorporating these materials into timber construction systems, contributing to developing sustainable and high-performance building solutions.",
+      "year": 2025,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en18102420",
+      "doi": "10.3390/en18102420",
+      "authors": [
+        "B. Rocha",
+        "Marina Tenório",
+        "Jorge M. Branco",
+        "Sandra Monteiro Silva"
+      ],
+      "citation_count": 13,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Architectural engineering",
+        "Engineering",
+        "Forensic engineering",
+        "Construction engineering",
+        "Civil engineering"
+      ],
+      "tldr": ""
+    }
+  ]
+}

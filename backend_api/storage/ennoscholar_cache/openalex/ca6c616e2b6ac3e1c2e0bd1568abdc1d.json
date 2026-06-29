@@ -1,0 +1,400 @@
+{
+  "created_at": "2026-06-26T10:03:36",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "https://openalex.org/W3122875397",
+      "title": "Thermal insulation potential of non-industrial hemp (Moroccan cannabis sativa L.) fibers for green plaster-based building materials",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Journal of Cleaner Production",
+      "url": "https://doi.org/10.1016/j.jclepro.2021.126064",
+      "doi": "10.1016/j.jclepro.2021.126064",
+      "authors": [
+        "Mouatassim Charai",
+        "Haitham Sghiouri",
+        "Ahmed Mezrhab",
+        "Mustapha Karkri"
+      ],
+      "citation_count": 111,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Thermogravimetric analysis",
+        "Composite material",
+        "Fiber",
+        "Cannabis sativa",
+        "Chemistry",
+        "Botany",
+        "Organic chemistry"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "https://openalex.org/W4380536677",
+      "title": "A Review of Natural Bio-Based Insulation Materials",
+      "abstract": "Within the context of climate change and the environmental impact of the building industry, insulation materials contribute to improving the thermal performance of buildings, thus reducing energy demand and carbon emissions during the operation phase. Although most of them are responsible for significant carbon emissions during their production, bio-based insulation materials can provide good performance with low carbon emissions. This paper aims to investigate natural insulation materials’ properties and environmental impacts through a literature review. Due to the growing importance of Environmental Product Declarations (EPDs) on specification requirements, many manufacturers already disclose environmental data related to their products, allowing for a comparison between thermal insulation solutions. In academic research, embodied environmental impacts are not as explored as physical properties. In addition, from the analysis of results, it is possible to conclude that the characterization of the physical properties of this type of material is normally focused on thermal conductivity. Nevertheless, most studies overlook other important parameters of these materials, such as the thermal capacity, lifetime, and environmental impacts. This is something that is necessary to overcome in future developments to allow for a comprehensive comparison between the properties of different (conventional and bio-based) insulation materials.",
+      "year": 2023,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en16124676",
+      "doi": "10.3390/en16124676",
+      "authors": [
+        "Lívia Cosentino",
+        "Jorge Fernandes",
+        "Ricardo Mateus"
+      ],
+      "citation_count": 89,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Context (archaeology)",
+        "Thermal insulation",
+        "Environmental science",
+        "Embodied energy",
+        "Environmental impact assessment",
+        "Carbon neutrality",
+        "Natural materials",
+        "Greenhouse gas"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "https://openalex.org/W4200201201",
+      "title": "Thermal and mechanical behavior of straw-based construction: A review",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2021.125915",
+      "doi": "10.1016/j.conbuildmat.2021.125915",
+      "authors": [
+        "Ghadie Tlaiji",
+        "Salah-Eddine Ouldboukhitine",
+        "Fabienne Pennec",
+        "Pascal Henry Biwolé"
+      ],
+      "citation_count": 70,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Context (archaeology)",
+        "Embodied energy",
+        "Environmental science",
+        "Life-cycle assessment",
+        "Work (physics)",
+        "Relative humidity",
+        "Carbon footprint"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "https://openalex.org/W4295766677",
+      "title": "Novel Thermal Insulation Materials for Buildings",
+      "abstract": "Using thermal insulation materials to reduce energy loss in buildings is a key action. For reducing the building’s energy use, firstly, the internal unheated spaces (attics, cellars) should be insulated, followed by the insulation of the external walls, and changing the doors and windows. Finally, the building can be completed with the renovation/maintenance of its service systems. Newly designed and constructed buildings are subject to increasingly strict regulations, which highlight the minimization and elimination of wasteful energy use and the resulting emissions of harmful substances. Therefore, the use of thermal insulation is the first step in making buildings more energy efficient. In this editorial, seven articles covering thermal insulation possibilities and topics are highlighted. This paper reflected on the use of thermal insulations both for internal and external applications. This editorial also promotes the use of super insulation materials such as aerogels and vacuum insulation panels; furthermore, the possible applications of bio-based insulations are also endorsed. In this paper, the sound insulation capabilities of some materials are also emphasized, and they will be presented from the point of view of cost.",
+      "year": 2022,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en15186713",
+      "doi": "10.3390/en15186713",
+      "authors": [
+        "Ákos Lakatos"
+      ],
+      "citation_count": 25,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Doors",
+        "Vacuum insulated panel",
+        "Thermal insulation",
+        "Architectural engineering",
+        "Attic",
+        "Dynamic insulation",
+        "Engineering",
+        "Building insulation"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "https://openalex.org/W4280632756",
+      "title": "Mechanical and Thermal Properties of 3D Printed Polycarbonate",
+      "abstract": "This study aims at showing the potential of additive manufacturing as a new processing route for designing future insulators in the building sector. Polycarbonate (PC) is studied as a possible candidate for designing these new insulators. This polymer offers several advantages, among them fire resistance and stability of its physical properties at high temperatures. The 3D printing of PC is attempted using fused deposition modelling technology. The printing temperature and infill rate are varied to achieve optimal mechanical and thermal characteristics. The results show that an optimal printing temperature of 280 °C is needed to achieve high tensile performance. In addition, thermal properties including thermal conductivity and effusivity increase with the increase of the infill rate in opposition to the thermal diffusivity decrease.",
+      "year": 2022,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en15103686",
+      "doi": "10.3390/en15103686",
+      "authors": [
+        "Anis Bahar",
+        "Sofiane Belhabib",
+        "Sofiane Guessasma",
+        "Ferhat Benmahiddine",
+        "Ameur El Amine Hamami",
+        "Rafik Belarbi"
+      ],
+      "citation_count": 55,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Polycarbonate",
+        "Materials science",
+        "Composite material",
+        "Thermal diffusivity",
+        "Thermal",
+        "Thermal effusivity",
+        "3D printing",
+        "Thermal conductivity"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "https://openalex.org/W2991089967",
+      "title": "Building incorporated bio-based materials: Experimental and numerical study",
+      "abstract": "",
+      "year": 2019,
+      "venue": "Journal of Building Engineering",
+      "url": "https://doi.org/10.1016/j.jobe.2019.101088",
+      "doi": "10.1016/j.jobe.2019.101088",
+      "authors": [
+        "Faiza Mnasri",
+        "Sofiane Bahria",
+        "Mohamed El‐Amine Slimani",
+        "Lahoucine Ouhsaine",
+        "Mohammed El Ganaoui"
+      ],
+      "citation_count": 44,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "TRNSYS",
+        "Moisture",
+        "Environmental science",
+        "Energy consumption",
+        "Materials science",
+        "Process engineering",
+        "Composite material",
+        "Thermal"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "https://openalex.org/W2976512860",
+      "title": "Hygrothermal Properties of Raw Earth Materials: A Literature Review",
+      "abstract": "Raw earth historic and contemporary architectures are renowned for their good environmental properties of recyclability and low embodied energy along the production process. Earth massive walls are universally known to be able to regulate indoor thermal and hygroscopic conditions containing energy consumptions, creating comfortable interior spaces with a low carbon footprint. Therefore, earth buildings are de facto green buildings. As a result of this, some earthen technologies have been rediscovered and implemented to be adapted to the contemporary building production sector. Nevertheless, the diffusion of contemporary earthen architecture is decelerated by the lack of broadly accepted standards on its anti-seismic and thermal performance. Indeed, the former issue has been solved using high-tensile materials inside the walls or surface reinforcements on their sides to improve their flexural strength. The latter issue is related to the penalization of earth walls thermal behavior in current regulations, which tent to evaluate only the steady-state performance of building components, neglecting the benefit of heat storage and hygrothermal buffering effect provided by massive and porous envelopes as raw earth ones. In this paper, we show the results of a paper review concerning the hygrothermal performance of earthen materials for contemporary housing: great attention is given to the base materials which are used (inorganic soils, natural fibers, and mineral or recycled aggregates, chemical stabilizers), manufacturing procedures (when described), performed tests and final performances. Different earth techniques (adobe, cob, extruded bricks, rammed earth, compressed earth blocks, light earth) have been considered in order to highlight that earth material can act both as a conductive and insulating meterial depending on how it is implemented, adapting to several climate contests. The paper aims to summarize current progress in the improvement of thermal performance of raw earth traditional mixes, discuss the suitability of existing measurement protocols for hygroscopic and natural materials and provide guidance for further researches.",
+      "year": 2019,
+      "venue": "Sustainability",
+      "url": "https://doi.org/10.3390/su11195342",
+      "doi": "10.3390/su11195342",
+      "authors": [
+        "Giada Giuffrida",
+        "Rosa Caponetto",
+        "Francesco Nocera"
+      ],
+      "citation_count": 131,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Rammed earth",
+        "Adobe",
+        "Embodied energy",
+        "Earth (classical element)",
+        "Raw material",
+        "Earth materials",
+        "Environmental science",
+        "Brick"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "https://openalex.org/W3212014700",
+      "title": "Novel Dual Walling Cob Building: Dynamic Thermal Performance",
+      "abstract": "This paper emphasizes the experimental and numerical study of new cob mixes used for insulation and load bearing wall elements. The experimental study provides complete datasets of thermal properties of the new walling materials, using cob with density ranging from 1107 kg/m3 to 1583 kg/m3 for structural walls and less than 700 kg m−3 for insulation walls. Various mixes of French soils and fibres (reed, wheat straw, hemp shiv, hemp straw, and flax straw) with different water contents are studied. The lowest average thermal conductivity is obtained for the structural cob mix prepared of 5% wheat straw and 31% of water content. The insulation mix, prepared with 25% reed and 31% water content, has the lowest thermal conductivity. Investigation of diffusivity, density, and heat capacity shows that, when thermal conductivity is lower than 0.4 W m−1 K−1, the decrease in cob density leads to better insulation values and higher heat capacity. Little variation is noticed regarding the density and heat capacity for cob mixes with thermal conductivity higher than 0.4 W m−1 K−1. Furthermore, the non-uniformity of local thermal conductivity and heat losses through the samples is due mainly to the non-uniform distribution of fibres inside the mixes inducing an increase in heat loss up to 50% for structural walls and 25% for insulation walls. Cob thermal properties are used in a comparative simulation case study of a typical house under French and UK climatic conditions. The energy performance of the conventional building is compared to a dual walled cob building, showing remarkable reduction in energy consumption as the cob walls, whilst maintaining comfortable indoor conditions without additional heating.",
+      "year": 2021,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en14227663",
+      "doi": "10.3390/en14227663",
+      "authors": [
+        "K. Zeghari",
+        "Ayoub Gounni",
+        "Hasna Louahlia",
+        "Michaël Marion",
+        "Mohamed Boutouil",
+        "Steve Goodhew",
+        "François Streif"
+      ],
+      "citation_count": 19,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Thermal conductivity",
+        "Thermal diffusivity",
+        "Materials science",
+        "Straw",
+        "Thermal insulation",
+        "Composite material",
+        "Heat capacity",
+        "Thermal"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "https://openalex.org/W2890960974",
+      "title": "Hygrothermal and Acoustical Performance of Starch-Beet Pulp Composites for Building Thermal Insulation",
+      "abstract": "This article deals with the elaboration and the characterization of an innovative 100% plant-based green composite made solely of beet pulp (BP) and potato starch (S). Using this type of material in insulation applications seems a good solution to reduce the CO₂ gas emissions in building. The influence of the starch amount on composite characteristics was studied. Four mixtures were considered with different S/BP mass ratios (0.1, 0.2, 0.3 and 0.4). The physical properties of these materials were studied in terms of porosity, apparent and absolute densities, thermal conductivity, and hygric properties. The influence of humidity content on acoustical properties was studied as a function of frequency. Test results show a real impact of both starch and humidity contents on the hygrothermal and acoustical properties of the studied material due to the porosity. The composite with the lowest amount of starch (S/BP = 0.1) seems to be the optimal composition in terms of the hygrothermal and acoustical behaviors.",
+      "year": 2018,
+      "venue": "Materials",
+      "url": "https://doi.org/10.3390/ma11091622",
+      "doi": "10.3390/ma11091622",
+      "authors": [
+        "Hamzé Karaky",
+        "Chadi Maalouf",
+        "Christophe Bliard",
+        "Tala Moussa",
+        "Nadim El Wakil",
+        "Mohammed Lachi",
+        "Guillaume Polidori"
+      ],
+      "citation_count": 20,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Composite material",
+        "Materials science",
+        "Pulp (tooth)",
+        "Thermal insulation",
+        "Starch",
+        "Soundproofing",
+        "Building insulation",
+        "Thermal"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "https://openalex.org/W3005576993",
+      "title": "Thermal Diffusion in Fibrous Aerogel Blankets",
+      "abstract": "Nowadays, the usage of thermal insulation materials is widespread not only in the building sector but also in the vehicle industry. The application of fibrous or loose-fill insulation materials like glass wool or mineral wool as well as aerogel is well known. Aerogel-based materials are among the best solid materials for thermal insulation available today; they are prepared through a sol–gel process. For building walls, the glass-fiber-enhanced types are the frequently used ones. They are prepared by adding the liquid–solid solution to the fibrous batting, which is called a sol–gel process. In the present paper, the changes in the most important building physical properties of aerogel blankets after thermal annealing are presented. The samples were subjected to isochronal heat treatments from 70 to 210 °C for 24 h. The changes in the thermal conductivity were followed by Holometrix Lambda heat flow meter, and differential scanning calorimetry results were also recorded. From the measured values, together with the densities, the most important thermal properties were calculated, such as thermal resistance, diffusivity, effusivity (heat absorption), and thermal inertia. In this paper, we attempt to clarify the role played by thermal annealing in the transient thermal properties of aerogel materials. Besides presenting the measurement results, a theoretical background is given. The investigations of not only the steady-state but also the transient thermal parameters of the materials are momentous at the design stage.",
+      "year": 2020,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en13040823",
+      "doi": "10.3390/en13040823",
+      "authors": [
+        "Ákos Lakatos",
+        "Anton Trník"
+      ],
+      "citation_count": 13,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Aerogel",
+        "Thermal effusivity",
+        "Thermal diffusivity",
+        "Thermal insulation",
+        "Materials science",
+        "Composite material",
+        "Thermal conductivity",
+        "Thermal resistance"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "https://openalex.org/W2905733578",
+      "title": "Assessing the performance of earth building materials: a review of recent developments",
+      "abstract": "After being almost abandoned at the end of the Second World War, the use of raw earth is currently regaining the interest of architects, engineers and policy makers for the construction of dwellings in industrialised countries. This renaissance is driven by growing ecological awareness and the promotion of construction techniques that minimize energy consumption and carbon emissions. Raw earth displays very interesting thermo-hygro-mechanical properties, which can contribute to the reduction of the environmental impact of buildings not only during construction but also during service life. Nevertheless, one of the reasons that still prevents dissemination of raw earth into construction practice is the lack of commonly agreed procedures for assessing material performance. The RILEM technical committee TCE 274 has been established as a first step for overcoming this obstacle. The objective of the technical committee is to critically examine current testing procedures in order to propose suitable experimental standards. The results of this work will be presented in future publications while the present paper summarizes the main challenges faced by the committee and briefly describes some of the existing procedures for measuring the engineering properties of earth materials.",
+      "year": 2018,
+      "venue": "RILEM Technical Letters",
+      "url": "https://doi.org/10.21809/rilemtechlett.2018.71",
+      "doi": "10.21809/rilemtechlett.2018.71",
+      "authors": [
+        "Antonin Fabbri",
+        "Jean‐Claude Morel",
+        "Domenico Gallipoli"
+      ],
+      "citation_count": 64,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Work (physics)",
+        "Construction engineering",
+        "Architectural engineering",
+        "The Renaissance",
+        "Obstacle",
+        "Service (business)",
+        "Engineering",
+        "Risk analysis (engineering)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "https://openalex.org/W4288425166",
+      "title": "Thermal and Physico-Chemical Characteristics of Plaster Reinforced with Wheat Straw for Use as Insulating Materials in Building",
+      "abstract": "In this paper, a new material consisting of plaster and wheat straw was studied with the purpose of reducing energy consumption. The aim of this study is to test this new compound for use as an insulation material in buildings, where the samples were prepared by mixing wheat straw after grinding it in different proportions from 0% to 15%. On the other hand, the physico-chemical properties and thermal conductivity of the samples were experimentally investigated, and the time lag and energy savings for the samples were also studied. The results showed that the addition of wheat straw leads to an increase in the time lag and also to a decrease in the thermal conductivity, which leads to an improvement in the thermal resistance and energy savings. As well, fiber addition has no effect on the chemical composition of the matrix, as shown by FTIR and XRD analyses.The findings of the DSC and TGA analysis indicate that the inclusion of wheat straw fibers has an effect on the thermal characteristics of the matrix. This new biocomposite can be used as an additive to plaster to create environmentally friendly composite materials for thermal insulation in buildings.",
+      "year": 2022,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings12081119",
+      "doi": "10.3390/buildings12081119",
+      "authors": [
+        "Lokmane Saad Azzem",
+        "Nadir Bellel"
+      ],
+      "citation_count": 13,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Materials science",
+        "Composite material",
+        "Biocomposite",
+        "Thermal conductivity",
+        "Grinding",
+        "Fiber",
+        "Composite number"
+      ],
+      "tldr": ""
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 """
-scholar_agent.py — EnnoScholar V3
+scholar_agent.py — EnnoScholar V133
 
 Agent 2 complet :
 1) Récupère les verrous depuis nlp_result.json.
@@ -20,14 +20,16 @@ Modes :
 - write-selection
 
 Auteur  : EnnoSmart
-Version : 3.0.0
+Version : 3.2.0
 """
 
 import argparse
+import importlib
 import json
 import os
 import re
 import socket
+import sys
 import time
 import urllib.request
 from datetime import datetime
@@ -37,10 +39,11 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from .arxiv_client import ArxivClient
 from .openalex_client import OpenAlexClient
 from .paper_ranker import rank_papers_for_intent
-from .query_builder import attach_queries_to_intent
+from .query_builder import attach_queries_to_intent, is_query_safe_for_intent, detect_scholar_profile
 from .scientific_intent_builder import build_scientific_intent
 from .semantic_scholar_client import SemanticScholarClient
-from .state_of_art_writer import build_state_of_art_section
+from .technical_source_catalog import get_technical_sources_for_intent
+from .state_of_art_writer import build_state_of_art_section, build_consultant_state_of_art_context, build_consultant_template_state_of_art
 from .utils import clean_text, flatten_text, read_json, write_json
 from .verrou_scientific_validator import validate_verrou_scientifically
 from .verrou_selector import select_scholar_verrous_from_nlp
@@ -67,6 +70,39 @@ DEFAULT_LLM_TIMEOUT = 60
 
 ARTICLE_MAX_ABSTRACT_CHARS = 1800
 MAX_SELECTED_ARTICLES_PER_VERROU = 8
+MAX_ARTICLES_PER_VERROU = int(os.getenv("ENNOSCHOLAR_MAX_ARTICLES_PER_VERROU", "100"))
+MIN_LIMIT_PER_QUERY = int(os.getenv("ENNOSCHOLAR_MIN_LIMIT_PER_QUERY", "10"))
+
+
+ARXIV_ALLOWED_PROFILES = {
+    # ArXiv est très utile pour numérique, IA, maths, physique, électronique.
+    "software_ai_data_cyber",
+    "signal_image_vision",
+    "mathematics_modeling_simulation",
+    "automation_robotics_embedded",
+    "electronics_telecom_networks",
+    "electrical_power_energy",
+    "physics_instrumentation",
+}
+
+
+def _scholar_profile(intent: Dict[str, Any] | None) -> str:
+    intent = intent or {}
+    if isinstance(intent.get("cir_domain_profile"), dict) and intent["cir_domain_profile"].get("profile_id"):
+        return str(intent["cir_domain_profile"].get("profile_id"))
+    return str(
+        intent.get("backend_enrichment_profile")
+        or intent.get("enrichment_profile")
+        or intent.get("profile")
+        or ""
+    )
+
+
+def _use_arxiv_for_profile(profile: str) -> bool:
+    # ArXiv génère beaucoup de faux positifs pour bâtiment, santé réglementaire,
+    # chimie appliquée, agronomie et SHS. On l'active seulement quand son corpus
+    # est naturellement pertinent.
+    return profile in ARXIV_ALLOWED_PROFILES
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -440,11 +476,164 @@ def validate_state_of_art_citations(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# LLM OpenRouter
+# LLM EnnoSmart centralisé
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _load_env_for_scholar_writer() -> None:
+    """
+    Charge le .env pour que le writer EnnoScholar utilise exactement la même
+    configuration LLM que le reste du backend EnnoSmart.
+
+    Important : cette fonction ne casse pas si python-dotenv n'est pas installé.
+    """
+    try:
+        from dotenv import load_dotenv
+    except Exception:
+        return
+
+    candidates = [
+        Path.cwd() / ".env",
+        Path(r"C:\EnnoSmart\backend_api\.env"),
+        Path(r"C:\EnnoSmart\.env"),
+        Path(__file__).resolve().parents[2] / ".env",
+        Path(__file__).resolve().parents[3] / ".env" if len(Path(__file__).resolve().parents) > 3 else None,
+    ]
+
+    seen = set()
+    for p in candidates:
+        if p is None:
+            continue
+        try:
+            p = p.resolve()
+        except Exception:
+            pass
+        key = str(p)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            if Path(p).exists():
+                load_dotenv(Path(p), override=True)
+        except Exception:
+            # Ne jamais bloquer EnnoScholar à cause d'un .env secondaire.
+            pass
+
+
+def _ensure_llm_import_paths() -> None:
+    """
+    Rend le module LLM central importable, quelle que soit la manière dont
+    EnnoScholar est lancé : FastAPI, CLI, script direct ou test.
+    """
+    candidates = [
+        Path.cwd(),
+        Path(r"C:\EnnoSmart\backend_api"),
+        Path(r"C:\EnnoSmart"),
+        Path(__file__).resolve().parents[2],  # backend_api si fichier dans agents/EnnoScholar
+        Path(__file__).resolve().parents[3] if len(Path(__file__).resolve().parents) > 3 else None,
+    ]
+
+    for p in candidates:
+        if p is None:
+            continue
+        try:
+            sp = str(Path(p).resolve())
+            if sp and sp not in sys.path:
+                sys.path.insert(0, sp)
+        except Exception:
+            pass
+
+
+def _env(name: str, default: str = "") -> str:
+    _load_env_for_scholar_writer()
+    return str(os.getenv(name, default) or "").strip()
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(_env(name, str(default)))
+    except Exception:
+        return default
+
+
 def _openrouter_api_key() -> str:
-    return os.getenv("OPENROUTER_API_KEY", "").strip()
+    """
+    Conservé pour compatibilité avec build_llm_state_of_art_from_selection().
+    La clé est maintenant chargée depuis le .env central.
+    """
+    return _env("OPENROUTER_API_KEY", "")
+
+
+def _effective_llm_model(model: str | None = None) -> str:
+    """
+    Évite de forcer openai/gpt-4o-mini si le .env contient un modèle différent.
+    """
+    env_model = _env("OPENROUTER_MODEL", "")
+    requested = str(model or "").strip()
+
+    if requested and requested != "openai/gpt-4o-mini":
+        return requested
+
+    if env_model:
+        return env_model
+
+    return requested or DEFAULT_LLM_MODEL
+
+
+def _load_ennosmart_llm_client():
+    """
+    Charge le client LLM central du projet.
+
+    Le fichier attendu est généralement :
+        backend_api/modules/LLM/llm_client.py
+
+    On teste plusieurs chemins pour rester compatible avec les versions
+    précédentes du projet.
+    """
+    _load_env_for_scholar_writer()
+    _ensure_llm_import_paths()
+
+    errors = []
+
+    for module_name in [
+        "modules.LLM.llm_client",
+        "modules.LLM",
+        "modules.llm.llm_client",
+        "modules.llm",
+        "agents.llm.llm_client",
+        "agents.LLM.llm_client",
+        "llm.llm_client",
+        "llm_client",
+    ]:
+        try:
+            mod = importlib.import_module(module_name)
+            client_cls = getattr(mod, "LLMClient")
+            return client_cls
+        except Exception as exc:
+            errors.append(f"{module_name}: {exc}")
+
+    raise RuntimeError(
+        "LLMClient EnnoSmart introuvable. Modules testés : "
+        + " | ".join(errors)
+    )
+
+
+def _messages_to_single_prompt(messages: List[Dict[str, str]]) -> str:
+    """
+    Convertit le format chat en prompt unique, car le LLMClient central expose
+    generate(prompt=...).
+    """
+    parts = []
+
+    for msg in messages or []:
+        if not isinstance(msg, dict):
+            continue
+        role = str(msg.get("role") or "user").strip().upper()
+        content = str(msg.get("content") or "").strip()
+        if not content:
+            continue
+        parts.append(f"[{role}]\n{content}")
+
+    return "\n\n".join(parts).strip()
 
 
 def call_openrouter_chat(
@@ -454,70 +643,69 @@ def call_openrouter_chat(
     timeout: int = DEFAULT_LLM_TIMEOUT,
 ) -> Dict[str, Any]:
     """
-    Appel OpenRouter minimal sans dépendance externe.
+    Appel LLM centralisé pour EnnoScholar.
 
-    Requiert :
-      OPENROUTER_API_KEY
+    Ancien comportement : appel OpenRouter direct avec urllib.
+    Nouveau comportement : passage obligatoire par modules.LLM.llm_client.LLMClient.
+
+    Avantages :
+    - réutilise ENNOSMART_LLM_PROVIDER ;
+    - réutilise OPENROUTER_MODEL ;
+    - réutilise OPENROUTER_FALLBACK_MODELS ;
+    - réutilise les timeouts ENNOSMART_LLM_CONNECT_TIMEOUT / READ_TIMEOUT ;
+    - évite les fallback template alors qu'un module LLM existe déjà.
     """
-    api_key = _openrouter_api_key()
+    _load_env_for_scholar_writer()
+    _ensure_llm_import_paths()
 
-    if not api_key:
+    prompt = _messages_to_single_prompt(messages)
+    if not prompt:
         return {
             "ok": False,
-            "error": "OPENROUTER_API_KEY manquante",
+            "error": "Prompt LLM vide.",
             "content": "",
             "model": model,
+            "raw_usage": None,
         }
 
-    payload = {
-        "model": model,
-        "messages": messages,
-        "temperature": temperature,
-    }
-
-    raw = json.dumps(payload).encode("utf-8")
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "HTTP-Referer": "http://localhost/ennosmart",
-        "X-Title": "EnnoSmart EnnoScholar",
-    }
+    effective_model = _effective_llm_model(model)
 
     try:
-        socket.setdefaulttimeout(timeout)
+        Client = _load_ennosmart_llm_client()
+        client = Client(model=effective_model)
 
-        req = urllib.request.Request(
-            "https://openrouter.ai/api/v1/chat/completions",
-            data=raw,
-            headers=headers,
-            method="POST",
+        content = client.generate(
+            prompt=prompt,
+            temperature=temperature,
+            max_output_tokens=_env_int("ENNOSCHOLAR_STATE_ART_MAX_OUTPUT_TOKENS", 4200),
+            retries=_env_int("ENNOSCHOLAR_STATE_ART_LLM_RETRIES", 1),
         )
 
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8", errors="replace"))
-
-        content = (
-            data.get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "")
-        )
+        content = str(content or "").strip()
+        if not content:
+            return {
+                "ok": False,
+                "error": "Réponse LLM vide.",
+                "content": "",
+                "model": effective_model,
+                "raw_usage": None,
+            }
 
         return {
             "ok": True,
             "error": "",
             "content": content,
-            "model": model,
-            "raw_usage": data.get("usage"),
+            "model": effective_model,
+            "raw_usage": None,
         }
 
     except Exception as exc:
         return {
             "ok": False,
-            "error": str(exc),
+            "error": repr(exc),
             "content": "",
-            "model": model,
+            "model": effective_model,
+            "raw_usage": None,
         }
 
 
@@ -530,125 +718,14 @@ def build_template_state_of_art_from_selection(
     citation_articles: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     """
-    Fallback sans LLM.
-    Rédaction simple, non-hallucinatoire.
+    Fallback sans LLM, mais avec logique consultant CIR V134.
+    Il ne résume pas article par article : il fusionne connaissances, limites et gap.
     """
-    title = (
-        verrou_item.get("verrou_title")
-        or verrou_item.get("title")
-        or verrou_item.get("scientific_intent", {}).get("verrou_title")
-        or "Verrou scientifique"
+    return build_consultant_template_state_of_art(
+        verrou_item=verrou_item,
+        citation_articles=citation_articles,
+        project_context=verrou_item.get("diagnostic_context") or {},
     )
-
-    intent = verrou_item.get("scientific_intent") or {}
-
-    scientific_problem = clean_text(intent.get("scientific_problem"), 600)
-    technical_object = clean_text(intent.get("technical_object"), 400)
-    phenomenon = clean_text(intent.get("phenomenon"), 400)
-
-    if not citation_articles:
-        draft = (
-            f"### État de l’art — {title}\n\n"
-            "Aucun article n’a été sélectionné par le consultant pour ce verrou. "
-            "Il n’est donc pas possible de rédiger un état de l’art fiable sans risque d’hallucination."
-        )
-
-        return {
-            "mode": "template_no_selection",
-            "draft": draft,
-            "references": [],
-            "citation_guard": {
-                "ok": True,
-                "warning_count": 0,
-                "unknown_citations": [],
-            },
-            "warnings": ["Aucun article sélectionné."],
-        }
-
-    lines = []
-
-    lines.append(f"### État de l’art — {title}")
-    lines.append("")
-
-    intro = (
-        "Le verrou étudié concerne un problème technique devant être situé "
-        "par rapport aux connaissances scientifiques et techniques existantes."
-    )
-
-    if scientific_problem:
-        intro += f" Le problème scientifique peut être formulé ainsi : {scientific_problem}."
-
-    if technical_object:
-        intro += f" L’objet technique concerné est : {technical_object}."
-
-    if phenomenon:
-        intro += f" Le phénomène étudié porte notamment sur : {phenomenon}."
-
-    intro += f" {citation_articles[0]['citation_token']}"
-
-    lines.append(intro)
-    lines.append("")
-
-    direct = [a for a in citation_articles if a.get("tag") == "Direct"]
-    connexe = [a for a in citation_articles if a.get("tag") == "Connexe"]
-    fondamental = [a for a in citation_articles if a.get("tag") == "Fondamental"]
-
-    if direct:
-        lines.append("#### Travaux directement liés")
-        for a in direct:
-            lines.append(
-                f"- {a['citation_token']} {a['label']} — {a['title']}. "
-                f"Cet article est classé comme Direct car il traite un objet ou un phénomène proche du verrou."
-            )
-        lines.append("")
-
-    if connexe:
-        lines.append("#### Travaux connexes")
-        for a in connexe:
-            lines.append(
-                f"- {a['citation_token']} {a['label']} — {a['title']}. "
-                f"Cet article apporte un éclairage connexe utile pour positionner le verrou."
-            )
-        lines.append("")
-
-    if fondamental:
-        lines.append("#### Travaux fondamentaux")
-        for a in fondamental:
-            lines.append(
-                f"- {a['citation_token']} {a['label']} — {a['title']}. "
-                f"Cette source peut servir à rappeler un principe scientifique ou technique général."
-            )
-        lines.append("")
-
-    lines.append("#### Limites identifiées dans l’état de l’art")
-    lines.append(
-        "Les sources sélectionnées permettent de situer le problème dans la littérature, "
-        "mais elles ne suffisent pas nécessairement à démontrer que le cas spécifique du projet "
-        "est entièrement résolu par les solutions existantes. Cette différence doit être vérifiée "
-        "par le consultant à partir des contraintes propres au dossier."
-    )
-    lines.append("")
-
-    lines.append("#### Gap scientifique pour le dossier CIR")
-    lines.append(
-        "Au regard des articles sélectionnés, le verrou peut être présenté comme une incertitude "
-        "portant sur l’adaptation, la maîtrise ou la validation d’un phénomène technique dans les "
-        "conditions spécifiques du projet. La justification finale doit montrer en quoi les solutions "
-        "connues ne répondent pas complètement aux contraintes du dossier."
-    )
-
-    draft = "\n".join(lines)
-
-    refs = build_references_from_citation_articles(citation_articles)
-    guard = validate_state_of_art_citations(draft, citation_articles)
-
-    return {
-        "mode": "template",
-        "draft": draft,
-        "references": refs,
-        "citation_guard": guard,
-        "warnings": [],
-    }
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -660,105 +737,86 @@ def build_llm_prompt_for_state_of_art(
     citation_articles: List[Dict[str, Any]],
     project_context: Dict[str, Any] | None = None,
 ) -> List[Dict[str, str]]:
-    title = (
-        verrou_item.get("verrou_title")
-        or verrou_item.get("title")
-        or verrou_item.get("scientific_intent", {}).get("verrou_title")
-        or "Verrou scientifique"
+    """
+    V134 : prompt style consultant CIR.
+    Le LLM reçoit une matrice structurée : connaissances, limites, gaps.
+    Il ne reçoit pas seulement une liste d'articles à résumer.
+    """
+    writer_context = build_consultant_state_of_art_context(
+        verrou_item=verrou_item,
+        citation_articles=citation_articles,
+        project_context=project_context,
     )
 
-    intent = verrou_item.get("scientific_intent") or {}
-    context = project_context or verrou_item.get("diagnostic_context") or {}
-
-    context_text = flatten_text(context, max_chars=3000)
-
-    articles_text_parts = []
-
+    articles_payload = []
     for a in citation_articles:
-        article_text = (
-            f"{a['citation_token']} {a['label']}\n"
-            f"Titre : {a['title']}\n"
-            f"Année : {a.get('year')}\n"
-            f"Tag : {a.get('tag')}\n"
-            f"Score : {a.get('relevance_score')}\n"
-            f"Résumé : {a.get('abstract') or 'Résumé non disponible.'}\n"
-        )
-
-        if a.get("consultant_note"):
-            article_text += f"Note consultant : {a['consultant_note']}\n"
-
-        articles_text_parts.append(article_text)
-
-    articles_text = "\n---\n".join(articles_text_parts)
+        articles_payload.append({
+            "citation_token": a.get("citation_token"),
+            "label": a.get("label"),
+            "title": a.get("title"),
+            "year": a.get("year"),
+            "tag": a.get("tag"),
+            "relevance_score": a.get("relevance_score"),
+            "abstract": clean_text(a.get("abstract"), ARTICLE_MAX_ABSTRACT_CHARS),
+            "consultant_note": clean_text(a.get("consultant_note"), 600),
+            "reason": clean_text(a.get("reason"), 600),
+        })
 
     system = (
-        "Tu es un consultant scientifique spécialisé dans la rédaction d'états de l'art "
-        "pour des dossiers de Crédit d'Impôt Recherche (CIR).\n\n"
+        "Tu es un consultant scientifique senior spécialisé dans la rédaction de dossiers CIR.\n"
+        "Tu dois rédiger comme un consultant : synthèse progressive, pas résumé article par article.\n\n"
         "Règles obligatoires :\n"
-        "1. Tu dois rédiger en français professionnel.\n"
-        "2. Tu dois utiliser uniquement les articles fournis par l'utilisateur.\n"
-        "3. Tu n'as pas le droit d'inventer une source, un auteur, un DOI, une année ou un résultat.\n"
-        "4. Tu dois citer uniquement avec les identifiants fournis : [A1], [A2], [A3], etc.\n"
-        "5. Toute affirmation scientifique importante doit être accompagnée d'au moins une citation.\n"
-        "6. Si les sources ne permettent pas de conclure, tu dois l'écrire clairement.\n"
-        "7. Tu dois distinguer : état de l'art, limites des travaux existants, gap pour le projet.\n"
-        "8. Tu ne dois pas écrire que le verrou est définitivement éligible CIR ; tu peux seulement aider à le défendre.\n"
+        "1. Rédiger en français professionnel, style rapport CIR.\n"
+        "2. Ne jamais inventer une source, un auteur, une année, un résultat ou une donnée.\n"
+        "3. Utiliser uniquement les citations autorisées : [A1], [A2], [A3], etc.\n"
+        "4. Toute affirmation scientifique issue d'un article doit être citée.\n"
+        "5. Ne pas écrire une liste 'Article A dit... Article B dit...' ; fusionner les connaissances.\n"
+        "6. Montrer d'abord ce que l'état de l'art établit, puis ses insuffisances.\n"
+        "7. Conclure par le gap scientifique du projet, sans décider de l'éligibilité CIR finale.\n"
+        "8. Si les sources ne permettent pas de conclure, l'indiquer clairement.\n"
     )
 
     user = f"""
-Rédige un état de l'art contrôlé pour le verrou suivant.
+Rédige l'état de l'art CIR à partir du contexte structuré ci-dessous.
 
-# Verrou
-{title}
-
-# Intention scientifique
-Problème scientifique :
-{clean_text(intent.get("scientific_problem"), 900)}
-
-Objet technique :
-{clean_text(intent.get("technical_object"), 500)}
-
-Phénomène :
-{clean_text(intent.get("phenomenon"), 500)}
-
-Contraintes :
-{json.dumps(intent.get("constraints") or [], ensure_ascii=False)}
-
-Méthodes :
-{json.dumps(intent.get("methods") or [], ensure_ascii=False)}
-
-# Contexte projet
-{context_text or "Contexte projet non fourni."}
+# Contexte structuré produit par EnnoScholarWriter
+{json.dumps(writer_context, ensure_ascii=False, indent=2)}
 
 # Articles sélectionnés par le consultant
-{articles_text}
+{json.dumps(articles_payload, ensure_ascii=False, indent=2)}
+
+# Style attendu
+Le style doit ressembler à un rapport consultant CIR :
+- introduction du domaine et du verrou ;
+- présentation synthétique des connaissances existantes ;
+- références intégrées naturellement ;
+- transition vers les insuffisances ;
+- formulation claire des lacunes scientifiques/techniques ;
+- conclusion reliant ces lacunes au verrou du projet.
 
 # Format demandé
+Rédige en Markdown avec exactement ces sections :
 
-Rédige en Markdown avec exactement les sections suivantes :
+### 1. Analyse de l’état de l’art
+Texte rédigé en paragraphes, sans liste article par article.
 
-### 1. Introduction du verrou scientifique
-Présenter le problème et son importance scientifique/technique.
+### 2. Apports des travaux existants
+Synthèse fusionnée des connaissances, avec citations.
 
-### 2. Travaux directement liés
-Synthétiser les articles Direct. Citer chaque idée avec [A1], [A2], etc.
+### 3. Insuffisances identifiées dans la littérature
+Présenter les limites et non-couvertures, en lien avec le verrou.
 
-### 3. Travaux connexes et principes utiles
-Synthétiser les articles Connexe/Fondamental.
+### 4. Écart avec le cas spécifique du projet
+Expliquer pourquoi les travaux existants ne suffisent pas à couvrir complètement le cas projet.
 
-### 4. Limites de l’état de l’art
-Dire ce que les articles ne couvrent pas ou ne permettent pas de conclure.
+### 5. Conclusion pour la justification CIR
+Conclusion prudente : le verrou est scientifiquement défendable ou à confirmer, mais la décision finale reste humaine.
 
-### 5. Gap scientifique pour le projet
-Expliquer pourquoi un écart peut subsister entre les connaissances existantes et le cas spécifique du projet.
-
-### 6. Conclusion pour la justification CIR
-Formuler une conclusion prudente, sans surpromettre.
-
-Important :
-- N'utilise aucune source non listée.
-- Ne cite jamais un article absent.
-- Utilise les citations sous la forme [A1], [A2].
+Contraintes :
+- Pas de sources non listées.
+- Pas de citation inconnue.
+- Pas de promesse du type "l'entreprise a résolu" si ce n'est pas dans les sources.
+- Pas de formulations absolues comme "aucune étude au monde" ; préférer "les sources sélectionnées ne montrent pas".
 """
 
     return [
@@ -916,7 +974,8 @@ def build_llm_state_of_art_from_selection(
         )
 
     return {
-        "mode": "llm",
+        "mode": "llm_consultant_cir_v134",
+        "writer_context": build_consultant_state_of_art_context(verrou_item, citation_articles, project_context),
         "model": llm_result.get("model"),
         "draft": draft,
         "references": refs,
@@ -1025,14 +1084,19 @@ class EnnoScholarAgent:
         use_semantic_scholar: bool = True,
         use_openalex: bool = True,
         use_arxiv: bool = True,
-        limit_per_query: int = 4,
+        limit_per_query: int = 12,
         offline_dry_run: bool = False,
+        max_articles_per_verrou: int | None = None,
     ):
         self.use_semantic_scholar = use_semantic_scholar
         self.use_openalex = use_openalex
         self.use_arxiv = use_arxiv
-        self.limit_per_query = limit_per_query
+        # V133 : même si le backend/front envoie encore 3, on force un minimum
+        # pour réellement viser jusqu'à 100 articles par verrou.
+        requested_limit = int(os.getenv("ENNOSCHOLAR_LIMIT_PER_QUERY", str(limit_per_query or 12)))
+        self.limit_per_query = max(MIN_LIMIT_PER_QUERY, min(requested_limit, 100))
         self.offline_dry_run = offline_dry_run
+        self.max_articles_per_verrou = max(1, min(int(max_articles_per_verrou or MAX_ARTICLES_PER_VERROU), 100))
 
         self.semantic_client = SemanticScholarClient()
         self.openalex_client = OpenAlexClient()
@@ -1071,8 +1135,11 @@ class EnnoScholarAgent:
             raw_item.get("enrichment_profile")
             or enrichment.get("profile")
             or verrou.get("enrichment_profile")
+            or intent.get("backend_enrichment_profile")
+            or intent.get("enrichment_profile")
             or ""
         )
+        intent["enrichment_profile"] = intent.get("enrichment_profile") or intent["backend_enrichment_profile"]
 
         intent["original_title"] = (
             verrou.get("original_title")
@@ -1080,48 +1147,81 @@ class EnnoScholarAgent:
             or ""
         )
 
-        suggested_queries = verrou.get("suggested_queries") or []
+        # V130 : après ajout du contexte backend/source_json, on redétecte le profil et on reconstruit les requêtes.
+        intent["backend_enrichment_profile"] = detect_scholar_profile(intent)
+        intent["enrichment_profile"] = intent["backend_enrichment_profile"]
+        intent = attach_queries_to_intent(intent)
 
+        # V130 : les requêtes générées par profil scientifique restent prioritaires.
+        # Les suggested_queries issues des preuves projet sont gardées seulement si elles sont sûres.
+        suggested_queries = verrou.get("suggested_queries") or []
+        existing = intent.get("search_queries") or []
+        merged_queries = []
+
+        def _add_query_item(query_obj: Any, kind: str = "auto", max_items: int = 10):
+            query = query_obj.get("query") if isinstance(query_obj, dict) else str(query_obj)
+            query = clean_text(query, 220)
+            if not query:
+                return
+            if not is_query_safe_for_intent(query, intent):
+                return
+            if query.lower() in {
+                x.get("query", "").lower()
+                for x in merged_queries
+                if isinstance(x, dict)
+            }:
+                return
+            if isinstance(query_obj, dict):
+                item = dict(query_obj)
+                item["query"] = query
+                item.setdefault("kind", kind)
+            else:
+                item = {"query": query, "kind": kind}
+            merged_queries.append(item)
+            if len(merged_queries) > max_items:
+                del merged_queries[max_items:]
+
+        for q in existing:
+            _add_query_item(q, kind="domain_profile_query", max_items=12)
+
+        safe_suggested_count = 0
         if isinstance(suggested_queries, list) and suggested_queries:
             intent["suggested_queries"] = suggested_queries
-            existing = intent.get("search_queries") or []
-            merged_queries = []
-
             for q in suggested_queries:
-                query = q.get("query") if isinstance(q, dict) else str(q)
-                query = clean_text(query, 220)
+                before = len(merged_queries)
+                _add_query_item(q, kind="backend_enriched_source_query_safe", max_items=12)
+                if len(merged_queries) > before:
+                    safe_suggested_count += 1
+                if safe_suggested_count >= 2:
+                    break
 
-                if query and query.lower() not in {
-                    x.get("query", "").lower()
-                    for x in merged_queries
-                    if isinstance(x, dict)
-                }:
-                    merged_queries.append({
-                        "query": query,
-                        "kind": "backend_enriched_source_query",
-                    })
-
-            for q in existing:
-                query = q.get("query") if isinstance(q, dict) else str(q)
-                query = clean_text(query, 220)
-
-                if query and query.lower() not in {
-                    x.get("query", "").lower()
-                    for x in merged_queries
-                    if isinstance(x, dict)
-                }:
-                    merged_queries.append(
-                        q if isinstance(q, dict) else {
-                            "query": query,
-                            "kind": "auto",
-                        }
-                    )
-
-            intent["search_queries"] = merged_queries[:8]
+        intent["search_queries"] = merged_queries[:12]
 
         queries = intent.get("search_queries") or []
         all_papers = []
         errors = []
+        profile = _scholar_profile(intent)
+        technical_sources = get_technical_sources_for_intent(intent, max_sources=5)
+        # V131 : sources techniques séparées. Elles ne sont plus mélangées aux articles,
+        # ne sont plus taguées Direct/Connexe, et ne gonflent plus le score scientifique.
+        use_arxiv_for_this_verrou = bool(self.use_arxiv and _use_arxiv_for_profile(profile))
+
+        source_status = {
+            "semantic_scholar": {"enabled": bool(self.use_semantic_scholar), "success": 0, "errors": 0, "api_limited": 0},
+            "openalex": {"enabled": bool(self.use_openalex), "success": 0, "errors": 0, "api_limited": 0},
+            "arxiv": {"enabled": bool(use_arxiv_for_this_verrou), "success": 0, "errors": 0, "api_limited": 0},
+        }
+
+        def _record_results(source_name: str, res: List[Dict[str, Any]]) -> None:
+            for p in res:
+                if p.get("normalized_error"):
+                    errors.append(p)
+                    source_status[source_name]["errors"] += 1
+                    if p.get("api_limited") or p.get("http_status") == 429 or "429" in str(p.get("error") or ""):
+                        source_status[source_name]["api_limited"] += 1
+                else:
+                    all_papers.append(p)
+                    source_status[source_name]["success"] += 1
 
         if not self.offline_dry_run:
             for q in queries:
@@ -1136,45 +1236,53 @@ class EnnoScholarAgent:
                         query,
                         limit=self.limit_per_query,
                     )
-                    for p in res:
-                        if p.get("normalized_error"):
-                            errors.append(p)
-                        else:
-                            all_papers.append(p)
+                    _record_results("semantic_scholar", res)
 
                 if self.use_openalex:
                     res = self.openalex_client.search_works(
                         query,
                         limit=self.limit_per_query,
                     )
-                    for p in res:
-                        if p.get("normalized_error"):
-                            errors.append(p)
-                        else:
-                            all_papers.append(p)
+                    _record_results("openalex", res)
 
-                if self.use_arxiv:
+                if use_arxiv_for_this_verrou:
                     res = self.arxiv_client.search_papers(
                         query,
                         limit=self.limit_per_query,
                     )
-                    for p in res:
-                        if p.get("normalized_error"):
-                            errors.append(p)
-                        else:
-                            all_papers.append(p)
+                    _record_results("arxiv", res)
 
-                time.sleep(0.05)
+                # petite pause entre requêtes pour limiter les 429
+                time.sleep(float(os.getenv("ENNOSCHOLAR_QUERY_SLEEP", "0.8")))
+
+        enabled_sources = [k for k, v in source_status.items() if v.get("enabled")]
+        successful_sources = [k for k in enabled_sources if source_status[k].get("success", 0) > 0]
+        limited_sources = [k for k in enabled_sources if source_status[k].get("api_limited", 0) > 0]
+        search_status = {
+            "queries_count": len(queries),
+            "limit_per_query": self.limit_per_query,
+            "max_articles_per_verrou": self.max_articles_per_verrou,
+            "raw_papers_retrieved": len(all_papers),
+            "enabled_sources": enabled_sources,
+            "successful_sources": successful_sources,
+            "limited_sources": limited_sources,
+            "api_limited": bool(limited_sources),
+            "all_sources_failed": bool(enabled_sources and not successful_sources and errors),
+            "source_status": source_status,
+        }
 
         ranked = rank_papers_for_intent(
             all_papers,
             intent,
-            top_n=12,
+            top_n=self.max_articles_per_verrou,
         )
 
         validation = validate_verrou_scientifically(
             intent,
             ranked,
+            technical_sources=technical_sources,
+            errors=errors,
+            search_status=search_status,
         )
 
         result = {
@@ -1185,8 +1293,13 @@ class EnnoScholarAgent:
             "scientific_intent": intent,
             "queries": queries,
             "articles_found": len(ranked),
+            "raw_articles_retrieved": len(all_papers),
+            "technical_sources_added": len(technical_sources),
+            "articles_limit": self.max_articles_per_verrou,
             "articles": ranked,
-            "errors": errors[:10],
+            "technical_sources": technical_sources,
+            "search_status": search_status,
+            "errors": errors[:40],
             "offline_dry_run": bool(self.offline_dry_run),
             **validation,
         }
@@ -1220,7 +1333,7 @@ class EnnoScholarAgent:
 
         return {
             "agent": "EnnoScholar",
-            "version": "v3_search_and_llm_writer",
+            "version": "v133_title_abstract_strict_direct_force_100",
             "mode": "search",
             "generated_at": _now_iso(),
             "project": payload.get("project"),
@@ -1328,7 +1441,7 @@ class EnnoScholarAgent:
 
         return {
             "agent": "EnnoScholar",
-            "version": "v3_search_and_llm_writer",
+            "version": "v134_consultant_cir_writer_internal_pipeline",
             "mode": "write-selection",
             "generated_at": _now_iso(),
             "organisme": selection_payload.get("organisme"),
@@ -1359,7 +1472,7 @@ def run_ennoscholar_from_nlp(
     out_dir: str | Path | None = None,
     diagnostic_report_path: str | Path | None = None,
     max_verrous: int = 5,
-    limit_per_query: int = 4,
+    limit_per_query: int = 12,
     use_semantic_scholar: bool = True,
     use_openalex: bool = True,
     use_arxiv: bool = True,
@@ -1558,7 +1671,7 @@ def main():
     parser.add_argument("--diagnostic-report", default="")
     parser.add_argument("--out-dir", default="")
     parser.add_argument("--max-verrous", type=int, default=5)
-    parser.add_argument("--limit-per-query", type=int, default=4)
+    parser.add_argument("--limit-per-query", type=int, default=12)
 
     parser.add_argument("--no-semantic-scholar", action="store_true")
     parser.add_argument("--no-openalex", action="store_true")

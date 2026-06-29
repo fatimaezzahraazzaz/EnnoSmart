@@ -1,0 +1,102 @@
+{
+  "created_at": "2026-06-26T09:40:46",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "earth hemp composite thermal inertia building envelope hygrothermal",
+      "paper_id": "https://openalex.org/W2976512860",
+      "title": "Hygrothermal Properties of Raw Earth Materials: A Literature Review",
+      "abstract": "Raw earth historic and contemporary architectures are renowned for their good environmental properties of recyclability and low embodied energy along the production process. Earth massive walls are universally known to be able to regulate indoor thermal and hygroscopic conditions containing energy consumptions, creating comfortable interior spaces with a low carbon footprint. Therefore, earth buildings are de facto green buildings. As a result of this, some earthen technologies have been rediscovered and implemented to be adapted to the contemporary building production sector. Nevertheless, the diffusion of contemporary earthen architecture is decelerated by the lack of broadly accepted standards on its anti-seismic and thermal performance. Indeed, the former issue has been solved using high-tensile materials inside the walls or surface reinforcements on their sides to improve their flexural strength. The latter issue is related to the penalization of earth walls thermal behavior in current regulations, which tent to evaluate only the steady-state performance of building components, neglecting the benefit of heat storage and hygrothermal buffering effect provided by massive and porous envelopes as raw earth ones. In this paper, we show the results of a paper review concerning the hygrothermal performance of earthen materials for contemporary housing: great attention is given to the base materials which are used (inorganic soils, natural fibers, and mineral or recycled aggregates, chemical stabilizers), manufacturing procedures (when described), performed tests and final performances. Different earth techniques (adobe, cob, extruded bricks, rammed earth, compressed earth blocks, light earth) have been considered in order to highlight that earth material can act both as a conductive and insulating meterial depending on how it is implemented, adapting to several climate contests. The paper aims to summarize current progress in the improvement of thermal performance of raw earth traditional mixes, discuss the suitability of existing measurement protocols for hygroscopic and natural materials and provide guidance for further researches.",
+      "year": 2019,
+      "venue": "Sustainability",
+      "url": "https://doi.org/10.3390/su11195342",
+      "doi": "10.3390/su11195342",
+      "authors": [
+        "Giada Giuffrida",
+        "Rosa Caponetto",
+        "Francesco Nocera"
+      ],
+      "citation_count": 131,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Rammed earth",
+        "Adobe",
+        "Embodied energy",
+        "Earth (classical element)",
+        "Raw material",
+        "Earth materials",
+        "Environmental science",
+        "Brick"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "earth hemp composite thermal inertia building envelope hygrothermal",
+      "paper_id": "https://openalex.org/W3122875397",
+      "title": "Thermal insulation potential of non-industrial hemp (Moroccan cannabis sativa L.) fibers for green plaster-based building materials",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Journal of Cleaner Production",
+      "url": "https://doi.org/10.1016/j.jclepro.2021.126064",
+      "doi": "10.1016/j.jclepro.2021.126064",
+      "authors": [
+        "Mouatassim Charai",
+        "Haitham Sghiouri",
+        "Ahmed Mezrhab",
+        "Mustapha Karkri"
+      ],
+      "citation_count": 111,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Thermogravimetric analysis",
+        "Composite material",
+        "Fiber",
+        "Cannabis sativa",
+        "Chemistry",
+        "Botany",
+        "Organic chemistry"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "earth hemp composite thermal inertia building envelope hygrothermal",
+      "paper_id": "https://openalex.org/W4393987487",
+      "title": "Hygrothermal Performance of the Hemp Concrete Building Envelope",
+      "abstract": "The search for environmentally friendly and low-carbon-footprint construction materials continues progressively. Researchers are now interested in innovative materials that connect with the principles of sustainable construction, and materials such as hemp concrete prove to be promising. This article presents the results of a study that aimed to evaluate the hygrothermal performance of hemp concrete integrated into the building envelope using the hygrothermal tool WUFI Pro 6.2. The simulation model was compared and verified with existing models before its utilization for this study. The results of this verification were in good agreement, which gave us more confidence in its application for further parametric studies of building envelopes in hot climate zones. Three wall systems were simulated: (i) a wall system with hemp concrete, (ii) a compressed earth block wall, and (iii) a cement block wall. The most important variables used in the simulations were the hygrothermal properties of the materials or wall components and the incident solar radiation. The simulation results showed that hemp concrete has good thermal performance and temperature and humidity regulation capabilities of the building envelope. The interior surface temperatures of the hemp concrete walls were between 22.1 °C and 24.6 °C compared to the compressed earth block and cement block walls, where the surface temperatures were between 22.0 °C and 27 °C and between 21.2 °C and 28.7 °C, respectively, and between 23 °C and 45 °C for the exterior temperatures. These values remain the same with the increase in exterior temperatures for hemp concrete walls. In conclusion, hemp concrete could be a great alternative material for use in construction for hot climate zones.",
+      "year": 2024,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en17071740",
+      "doi": "10.3390/en17071740",
+      "authors": [
+        "Aguerata Kaboré",
+        "Wahid Maref",
+        "Claudiane Ouellet‐Plamondon"
+      ],
+      "citation_count": 11,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Building envelope",
+        "Envelope (radar)",
+        "Architectural engineering",
+        "Structural engineering",
+        "Civil engineering",
+        "Engineering",
+        "Forensic engineering",
+        "Telecommunications"
+      ],
+      "tldr": ""
+    }
+  ]
+}

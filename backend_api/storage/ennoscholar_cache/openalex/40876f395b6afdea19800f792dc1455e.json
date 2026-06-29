@@ -1,0 +1,394 @@
+{
+  "created_at": "2026-06-26T10:12:13",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "wood concrete composite diaphragm shear connection earthquake",
+      "paper_id": "https://openalex.org/W2200695490",
+      "title": "Connections for steel–timber hybrid prefabricated buildings. Part I: Experimental tests",
+      "abstract": "",
+      "year": 2015,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2015.12.002",
+      "doi": "10.1016/j.conbuildmat.2015.12.002",
+      "authors": [
+        "Cristiano Loss",
+        "Maurizio Piazza",
+        "Riccardo Zandonini"
+      ],
+      "citation_count": 179,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cross laminated timber",
+        "Prefabrication",
+        "Engineering",
+        "Structural engineering",
+        "Shear wall",
+        "Engineered wood",
+        "Civil engineering",
+        "Construction engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "wood concrete composite diaphragm shear connection earthquake",
+      "paper_id": "https://openalex.org/W3000006056",
+      "title": "Bulletin of the  New Zealand Society for Earthquake Engineering",
+      "abstract": "",
+      "year": 1997,
+      "venue": "Bulletin of the New Zealand Society for Earthquake Engineering",
+      "url": "https://doi.org/10.5459/bnzsee.30.1.65-112",
+      "doi": "10.5459/bnzsee.30.1.65-112",
+      "authors": [
+        "Andrew Bartlett"
+      ],
+      "citation_count": 110,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Seismology",
+        "Geography",
+        "Engineering",
+        "Political science",
+        "Geology"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "wood concrete composite diaphragm shear connection earthquake",
+      "paper_id": "https://openalex.org/W2792264152",
+      "title": "1994 Northridge earthquake",
+      "abstract": "A magnitude 6.8 (Mg) earthquake centered under the community of Northridge in the San Fernando Valley shook the entire Los Angeles metropolitan area at 4:31 a.m. local time on Monday, January 17, 1994. Moderate damage to the built environment was widespread; severe damage included collapsed buildings and highway overpasses.",
+      "year": 1994,
+      "venue": "",
+      "url": "https://doi.org/10.6028/nist.sp.862",
+      "doi": "10.6028/nist.sp.862",
+      "authors": [
+        "Diana Todd",
+        "Diana Todd",
+        "Nicholas J. Carino",
+        "Riley M Chung",
+        "H. S. Lew",
+        "Andrew Taylor",
+        "William D. Walton",
+        "James D. Cooper",
+        "Roland Nimis"
+      ],
+      "citation_count": 86,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "report"
+      ],
+      "fields_of_study": [
+        "Seismology",
+        "Geology"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "wood concrete composite diaphragm shear connection earthquake",
+      "paper_id": "https://openalex.org/W2026005265",
+      "title": "In-Plane Orthotropic Behavior of Timber Floor Diaphragms in Unreinforced Masonry Buildings",
+      "abstract": "A full-scale experimental program consisting of testing four as-built diaphragms and four retrofitted diaphragms in both principal loading directions is presented. As-built configurations were typical of those found in historic unreinforced masonry buildings in North America and Australasia, whereas retrofitted diaphragms consisted of plywood panel overlays with stapled sheet metal blocking systems (SMBS). Test results were characterized using bilinear representations to establish recognizable performance parameters such as shear strength, shear stiffness, and ductility capacity, which were then used for comparative analysis. The nonlinear and low stiffness behavior of as-built diaphragms was confirmed in each principal loading direction. The plywood overlay and SMBS dramatically improved as-built diaphragm shear strength and shear stiffness and were shown to perform satisfactorily from a serviceability perspective. The orthotropic nature of as-built diaphragms was proven, with perpendicular-to-joist shear stiffness being as low as 68% of the corresponding orthogonal value. A typical duly framed stairwell penetration and discontinuous joists with two-bolt lapped connections were shown to have no detrimental impact on tested diaphragm performance. Predicted diaphragm performance using state-of-art assessment documents was shown to be inconsistent with corresponding values established from testing. It is recommended that these assessment procedures be updated with revised performance parameters and provisions to address diaphragm orthotropic behavior.",
+      "year": 2013,
+      "venue": "Journal of Structural Engineering",
+      "url": "https://doi.org/10.1061/(asce)st.1943-541x.0000819",
+      "doi": "10.1061/(asce)st.1943-541x.0000819",
+      "authors": [
+        "Aaron Wilson",
+        "Pierre Quenneville",
+        "Jason Ingham"
+      ],
+      "citation_count": 69,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Orthotropic material",
+        "Structural engineering",
+        "Stiffness",
+        "Unreinforced masonry building",
+        "Masonry",
+        "Joist",
+        "Deck",
+        "Shear (geology)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "wood concrete composite diaphragm shear connection earthquake",
+      "paper_id": "https://openalex.org/W2292570903",
+      "title": "Horizontal Stiffness of Wood Diaphragms",
+      "abstract": "An experimental investigation was conducted to study the stiffness of wood diaphragms. Currently there is no method to calculate wood diaphragm stiffness that can reliably account for all of the various framing configurations. Diaphragm stiffness is important in the design of wood framed structures to calculate the predicted deflection and thereby determine if a diaphragm may be classified as rigid or flexible. This classification controls the method by which load is transferred from the diaphragm to the supporting structure below. Multiple nondestructive experimental tests were performed on six full-scale wood diaphragms of varying sizes, aspect ratios, and load-orientations. Each test of each specimen involved a different combination of construction parameters. The construction parameters investigated were blocking, foam adhesive, presence of designated chord members, corner and center sheathing openings, and presence of walls on top of the diaphragm. The experimental results are analyzed and compared in terms of equivalent viscous damping, global stiffness, shear stiffness, and flexural stiffness in order to evaluate the characteristics of each construction parameter and combinations thereof. Recommendations are presented at the end of this study as to the next steps toward development of an empirical method for calculating wood diaphragm stiffness.",
+      "year": 2005,
+      "venue": "VTechWorks (Virginia Tech)",
+      "url": "http://hdl.handle.net/10919/32641",
+      "doi": "",
+      "authors": [
+        "James Wescott Bott"
+      ],
+      "citation_count": 16,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "dissertation"
+      ],
+      "fields_of_study": [
+        "Stiffness",
+        "Structural engineering",
+        "Flexural rigidity",
+        "Deflection (physics)",
+        "Diaphragm (acoustics)",
+        "Chord (peer-to-peer)",
+        "Materials science",
+        "Framing (construction)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "wood concrete composite diaphragm shear connection earthquake",
+      "paper_id": "https://openalex.org/W2940131787",
+      "title": "Experimental shear testing of timber-masonry dry connections for the seismic retrofit of unreinforced masonry shear walls",
+      "abstract": "",
+      "year": 2019,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2019.03.145",
+      "doi": "10.1016/j.conbuildmat.2019.03.145",
+      "authors": [
+        "Daniele Riccadonna",
+        "Ivan Giongo",
+        "Gianni Schiro",
+        "Ermes Rizzi",
+        "Maria Adelaide Parisi"
+      ],
+      "citation_count": 36,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Unreinforced masonry building",
+        "Masonry",
+        "Structural engineering",
+        "Stiffness",
+        "Shear wall",
+        "Geotechnical engineering",
+        "Residual strength",
+        "Slip (aerodynamics)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "wood concrete composite diaphragm shear connection earthquake",
+      "paper_id": "https://openalex.org/W2886955132",
+      "title": "Feasibility Study of Mass-Timber Cores for the UBC Tall Wood Building",
+      "abstract": "The UBC Brock Commons building in Vancouver, which comprises of 18 stories and stands 53 m in height, was at the time of completion in 2016 the world’s tallest hybrid wood-based building. The building’s 17 stories of mass-timber superstructure, carrying all gravity loads, rest on a concrete podium with two concrete cores that act as both the wind and seismic lateral load-resisting systems. Whereas the construction of the concrete cores took fourteen weeks in time, the mass-timber superstructure took only ten weeks from initiation to completion. A substantial reduction in the project timeline could have been achieved if mass-timber had been used for the cores, leading to a further reduction of the building’s environmental footprint and potential cost savings. The objective of this research was to evaluate the possibility of designing the UBC Brock Commons building using mass-timber cores. The results from a validated numerical structural model indicate that applying a series of structural adjustments, that is, configuration and thickness of cores, solutions with mass-timber cores can meet the seismic and wind performance criteria as per the current National Building Code of Canada. Specifically, the findings suggest the adoption of laminated-veneer lumber cores with supplementary ‘C-shaped’ walls to reduce torsion and optimize section’s mechanical properties. Furthermore, a life cycle analysis showed the environmental benefit of these all-wood solutions.",
+      "year": 2018,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings8080098",
+      "doi": "10.3390/buildings8080098",
+      "authors": [
+        "Thomas Connolly",
+        "Cristiano Loss",
+        "Asif Iqbal",
+        "Thomas Tannert"
+      ],
+      "citation_count": 82,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Timeline",
+        "Engineering",
+        "Structural engineering",
+        "Architectural engineering",
+        "Mass concrete",
+        "Civil engineering",
+        "Mathematics",
+        "Statistics"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "wood concrete composite diaphragm shear connection earthquake",
+      "paper_id": "https://openalex.org/W4292402371",
+      "title": "State of the Art of Precast/Prestressed Concrete Sandwich Wall Panels, 2nd ed.",
+      "abstract": "This report is an update of the original state-of-the-art report published in the March–April and May–June 1997 issues of the PCI Journal. The purpose of this report is to present to the architect, engineer, contractor, precast/prestressed concrete producer, and owner the current [2011] North American practices concerning uses, design, detailing, manufacturing, and thermal performance of sandwich panels. An additional purpose is to share experience gained over the past decades for the benefit of specifiers, suppliers, and users.",
+      "year": 2011,
+      "venue": "PCI Journal",
+      "url": "https://doi.org/10.15554/pcij56.2-06",
+      "doi": "10.15554/pcij56.2-06",
+      "authors": [
+        "PCI Committee on Precast Sandwich Wall Panels"
+      ],
+      "citation_count": 115,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Precast concrete",
+        "Prestressed concrete",
+        "Engineering",
+        "State (computer science)",
+        "Forensic engineering",
+        "Structural engineering",
+        "Architectural engineering",
+        "Civil engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "wood concrete composite diaphragm shear connection earthquake",
+      "paper_id": "https://openalex.org/W2481735570",
+      "title": "The Loma Prieta, California, earthquake of October 17, 1989",
+      "abstract": "This report on the Loma Preita earthquake of October 1989 describes the earthquake itself, its effects on the surrounding region, and San Francisco in particular, and reports on the resulting damage along with the effect on local communities.",
+      "year": 1990,
+      "venue": "Bulletin of the New Zealand Society for Earthquake Engineering",
+      "url": "https://doi.org/10.5459/bnzsee.23.1.1-78",
+      "doi": "10.5459/bnzsee.23.1.1-78",
+      "authors": [
+        "R. B. Shephard",
+        "Peter Wood",
+        "J. B. Berrill",
+        "N. R. Gillon",
+        "Philip North",
+        "A. K. Perry",
+        "D. P. Bent"
+      ],
+      "citation_count": 65,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Seismology",
+        "Geology",
+        "Intraplate earthquake",
+        "Foreshock",
+        "Geography",
+        "Aftershock",
+        "Tectonics"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "wood concrete composite diaphragm shear connection earthquake",
+      "paper_id": "https://openalex.org/W2112286401",
+      "title": "The value of multiple earthquake missions: the EEFIT L’Aquila Earthquake experience",
+      "abstract": "In November 2012 EEFIT launched its first ever return mission to an earthquake affected site. The L’Aquila Earthquake site was chosen as this is a recent European event of interest to the UK and European earthquake engineering community. The main aims of this return mission were to document the earthquake recovery process and this paper presents an overview of the post-disaster emergency phase and transition to reconstruction in the Aquila area after the earthquake. It takes an earthquake engineering perspective, highlighting areas mainly of interest to the fields of structural/seismic engineering and reconstruction management. Within the paper, reference is made to published literature, but also to data collected in the field during the return mission that would not otherwise have been available. The paper presents some specific observations and lessons learned from the L’Aquila return mission. However, in light of current international efforts in conducting return missions, the paper ends with some reflections on the value that return missions can provide to the field of earthquake engineering in general, based on the EEFIT L’Aquila experience.",
+      "year": 2014,
+      "venue": "Bulletin of Earthquake Engineering",
+      "url": "https://doi.org/10.1007/s10518-014-9588-y",
+      "doi": "10.1007/s10518-014-9588-y",
+      "authors": [
+        "Tiziana Rossetto",
+        "Dina D’Ayala",
+        "Federico Gori",
+        "R. Persio",
+        "J. P. Han",
+        "Viviana Novelli",
+        "Sean M. Wilkinson",
+        "David Alexander",
+        "Matt Hill",
+        "Sutton F. Stephens",
+        "Stavroula Kontoe",
+        "Gaetano Elia",
+        "Enrica Verrucci",
+        "A. Vicini",
+        "Wayne Shelley",
+        "Roxane Foulser‐Piggott"
+      ],
+      "citation_count": 35,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Seismology",
+        "Urban seismic risk",
+        "Earthquake prediction",
+        "Earthquake scenario",
+        "Earthquake engineering",
+        "Geology",
+        "Seismic hazard"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "wood concrete composite diaphragm shear connection earthquake",
+      "paper_id": "https://openalex.org/W363890625",
+      "title": "Engineering aspects of the 1971 San Fernando earthquake",
+      "abstract": "In recognition of the position of the USA as a signatory to the General Conference of Weights and Measures,",
+      "year": 1971,
+      "venue": "",
+      "url": "https://doi.org/10.6028/nbs.bss.40",
+      "doi": "10.6028/nbs.bss.40",
+      "authors": [
+        "H. S. Lew",
+        "E. V. Leyendecker",
+        "R D Dikkers"
+      ],
+      "citation_count": 44,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "report"
+      ],
+      "fields_of_study": [
+        "Seismology",
+        "Geology",
+        "Geography",
+        "History"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "wood concrete composite diaphragm shear connection earthquake",
+      "paper_id": "https://openalex.org/W2147851459",
+      "title": "Component-Based Mechanical Models for Concrete-Filled RHS Connections with Diaphragms under Bending Moment",
+      "abstract": "One component-based mechanical model is presented in this paper to predict the flexural strength of through-diaphragm connections between concrete-filled RHS columns and H-beams. Three parts are contributed to the overall flexural strength of the connections: the failure of the through-diaphragm, the bending action of the column tube, and the tensile membrane action of the column tube. The component-based strength model is based upon defining a rigid plate deformation pattern for the connection under bending moment and then applying the virtual work principle. The proposed model is capable of predicting the ultimate flexural strength of the connections. The developed model is validated against a series of experiments with varied dimensions of column tubes and diaphragms. The results showed that the derived strength equation provided a reasonable prediction.",
+      "year": 2015,
+      "venue": "Advances in Structural Engineering",
+      "url": "https://doi.org/10.1260/1369-4332.18.8.1241",
+      "doi": "10.1260/1369-4332.18.8.1241",
+      "authors": [
+        "Ying Qin",
+        "Zhihua Chen",
+        "Bin Rong"
+      ],
+      "citation_count": 13,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Flexural strength",
+        "Structural engineering",
+        "Ultimate tensile strength",
+        "Bending",
+        "Bending moment",
+        "Diaphragm (acoustics)",
+        "Materials science",
+        "Tube (container)"
+      ],
+      "tldr": ""
+    }
+  ]
+}

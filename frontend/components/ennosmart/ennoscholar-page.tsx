@@ -193,13 +193,17 @@ function ArticleCard({
 }) {
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [decisionError, setDecisionError] = useState("")
 
   const updateDecision = async (decision: ArticleDecision) => {
     setLoading(true)
+    setDecisionError("")
 
     try {
       const updated = await updateArticleDecision(projectId, article.id, decision)
       onUpdated(updated)
+    } catch (error: any) {
+      setDecisionError(error?.message || "Impossible de mettre à jour la décision consultant.")
     } finally {
       setLoading(false)
     }
@@ -288,6 +292,12 @@ function ArticleCard({
             <p className="text-sm text-foreground whitespace-pre-wrap">
               {getArticleAbstract(article)}
             </p>
+          </div>
+        )}
+
+        {decisionError && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
+            {decisionError}
           </div>
         )}
 
@@ -750,6 +760,250 @@ function isArticleSelectedForStateOfArt(article: ArticleRead): boolean {
   ].some((word) => decision.includes(v46Norm(word)))
 }
 
+
+function isTechnicalCatalogArticle(article: ArticleRead | any): boolean {
+  const a: any = article || {}
+  const sj: any = a.source_json || {}
+
+  const source = v46Norm(a.source || sj.source || "")
+  const sourceType = v46Norm(a.source_type || sj.source_type || "")
+  const sourceKind = v46Norm(a.source_kind || sj.source_kind || "")
+  const paperId = v46Norm(a.paper_id || sj.paper_id || "")
+  const tag = normalizeTag(a.tag_article || sj.tag || sj.tag_article)
+
+  return (
+    source === "technical catalog" ||
+    source === "technical_catalog" ||
+    sourceType === "technical reference" ||
+    sourceType === "technical_reference" ||
+    sourceKind.includes("source technique") ||
+    paperId.startsWith("tech ") ||
+    paperId.startsWith("tech:") ||
+    tag === "Technique"
+  )
+}
+
+function isKeptForStateOfArt(article: ArticleRead | any): boolean {
+  const a: any = article || {}
+  const sj: any = a.source_json || {}
+
+  const status = v46Norm(
+    a.consultant_status ||
+      a.consultantStatus ||
+      a.status ||
+      sj.consultant_status ||
+      sj.consultantStatus ||
+      ""
+  )
+
+  if (["garde", "gardee", "gardé", "gardée", "keep", "kept", "selected", "retenu", "valide", "validé"].some((x) => status.includes(v46Norm(x)))) {
+    return true
+  }
+
+  return isArticleSelectedForStateOfArt(article)
+}
+
+function isUsableArticleForStateOfArtWriting(article: ArticleRead | any): boolean {
+  const a: any = article || {}
+  const sj: any = a.source_json || {}
+  const tag = normalizeTag(a.tag_article || sj.tag || sj.tag_article)
+
+  if (isTechnicalCatalogArticle(article)) return false
+  if (!["Direct", "Connexe", "Fondamental"].includes(tag)) return false
+
+  return isKeptForStateOfArt(article)
+}
+
+function getWriterResults(report: any): any[] {
+  if (!report) return []
+  if (Array.isArray(report?.results)) return report.results
+  if (Array.isArray(report?.report?.results)) return report.report.results
+  if (Array.isArray(report?.latest?.report?.results)) return report.latest.report.results
+  if (Array.isArray(report?.state_of_art_report?.results)) return report.state_of_art_report.results
+  if (Array.isArray(report?.data?.results)) return report.data.results
+  return []
+}
+
+function getWriterDraft(result: any): string {
+  return (
+    v46Text(result?.state_of_art?.draft) ||
+    v46Text(result?.draft) ||
+    v46Text(result?.state_of_art?.text) ||
+    v46Text(result?.state_of_art?.markdown) ||
+    ""
+  )
+}
+
+function getWriterStructured(result: any): any {
+  return (
+    result?.state_of_art?.structured ||
+    result?.state_of_art?.structured_state_of_art ||
+    result?.structured_state_of_art ||
+    result?.structured ||
+    null
+  )
+}
+
+function renderStructuredStateOfArtText(structured: any): string {
+  if (!structured || typeof structured !== "object") return ""
+
+  const lines: string[] = []
+  const title = v46Text(structured.verrou_title)
+  if (title) {
+    lines.push(`État de l’art — ${title}`)
+    lines.push("")
+  }
+
+  if (structured.positionnement) {
+    lines.push("1. Positionnement du verrou")
+    lines.push(v46Text(structured.positionnement))
+    lines.push("")
+  }
+
+  const direct = Array.isArray(structured.travaux_directs) ? structured.travaux_directs : []
+  if (direct.length) {
+    lines.push("2. Travaux directement liés")
+    for (const item of direct) {
+      if (!item || typeof item !== "object") continue
+      const ref = v46Text(item.article_ref)
+      const title = v46Text(item.article_title)
+      lines.push(`${ref ? ref + " — " : ""}${title}`)
+      if (item.synthesis) lines.push(`Synthèse : ${v46Text(item.synthesis)}`)
+      if (item.limits_for_project) lines.push(`Limite / transposition : ${v46Text(item.limits_for_project)}`)
+      lines.push("")
+    }
+  }
+
+  const connexe = Array.isArray(structured.travaux_connexes) ? structured.travaux_connexes : []
+  if (connexe.length) {
+    lines.push("3. Travaux connexes utiles")
+    for (const item of connexe) {
+      if (!item || typeof item !== "object") continue
+      const ref = v46Text(item.article_ref)
+      const title = v46Text(item.article_title)
+      lines.push(`${ref ? ref + " — " : ""}${title}`)
+      if (item.synthesis) lines.push(`Synthèse : ${v46Text(item.synthesis)}`)
+      if (item.limits_for_project) lines.push(`Limite / transposition : ${v46Text(item.limits_for_project)}`)
+      lines.push("")
+    }
+  }
+
+  const limits = Array.isArray(structured.limites_etat_art) ? structured.limites_etat_art : []
+  if (limits.length) {
+    lines.push("4. Limites de l’état de l’art")
+    for (const item of limits) lines.push(`- ${v46Text(item)}`)
+    lines.push("")
+  }
+
+  if (structured.gap_scientifique) {
+    lines.push("5. Gap scientifique pour le dossier CIR")
+    lines.push(v46Text(structured.gap_scientifique))
+    lines.push("")
+  }
+
+  const hypotheses = Array.isArray(structured.hypotheses_a_valider) ? structured.hypotheses_a_valider : []
+  if (hypotheses.length) {
+    lines.push("6. Hypothèses à valider consultant")
+    for (const item of hypotheses) lines.push(`- ${v46Text(item)}`)
+    lines.push("")
+  }
+
+  const refs = Array.isArray(structured.references) ? structured.references : []
+  if (refs.length) {
+    lines.push("7. Références mobilisées")
+    for (const ref of refs) {
+      if (typeof ref === "string") {
+        lines.push(`- ${ref}`)
+      } else if (ref && typeof ref === "object") {
+        lines.push(`- [${v46Text(ref.article_ref)}] ${v46Text(ref.reference || ref.title)}`)
+      }
+    }
+  }
+
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim()
+}
+
+function StateOfArtInlineGeneratedPanel({ report }: { report: any }) {
+  const results = getWriterResults(report)
+
+  if (!results.length) {
+    return (
+      <Card className="border-warning/30 bg-warning/5">
+        <CardContent className="p-4 text-sm text-warning">
+          La génération a répondu, mais aucun résultat exploitable n’a été trouvé dans le JSON retourné.
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {results.map((result: any, index: number) => {
+        const structured = getWriterStructured(result)
+        const draft = getWriterDraft(result) || renderStructuredStateOfArtText(structured)
+        const refs =
+          result?.state_of_art?.references ||
+          result?.citation_articles ||
+          structured?.references ||
+          []
+        const guard = result?.state_of_art?.citation_guard || {}
+
+        return (
+          <Card key={String(result?.verrou_id || index)} className="border-brand/20">
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <FileText className="size-4 text-brand" />
+                {result?.verrou_title || structured?.verrou_title || `Verrou ${index + 1}`}
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Articles utilisés : {result?.selected_articles_count ?? result?.citation_articles?.length ?? refs?.length ?? "—"}
+                {result?.state_of_art?.mode ? ` · Mode : ${result.state_of_art.mode}` : ""}
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              {draft ? (
+                <div className="rounded-md border bg-white p-4">
+                  <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-7 text-foreground">
+                    {v51MarkdownText(draft)}
+                  </pre>
+                </div>
+              ) : (
+                <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
+                  Aucun texte rédigé reçu pour ce verrou. Vérifie le champ <code>state_of_art.draft</code> dans la réponse API.
+                </div>
+              )}
+
+              {Array.isArray(refs) && refs.length > 0 && (
+                <div className="rounded-md border bg-muted/30 p-3">
+                  <p className="text-xs font-semibold text-foreground mb-2">Références utilisées</p>
+                  <div className="space-y-1">
+                    {refs.map((ref: any, idx: number) => (
+                      <p key={idx} className="text-xs text-muted-foreground break-words">
+                        <span className="font-medium text-foreground">
+                          {ref?.citation_id ? `[${ref.citation_id}]` : ref?.token || ref?.label || `R${idx + 1}`}
+                        </span>{" "}
+                        {ref?.title || ref?.reference || ref?.label || ""}
+                        {ref?.year ? ` — ${ref.year}` : ""}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {guard?.unknown_citations?.length > 0 && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                  Citations inconnues à vérifier : {guard.unknown_citations.join(", ")}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )
+      })}
+    </div>
+  )
+}
+
 function articleToStateOfArtPayload(article: ArticleRead) {
   const a: any = article
   const sj: any = a.source_json || {}
@@ -805,22 +1059,28 @@ function EnnoScholarByVerrouSection({
 
   const writableGroups = filteredGroups
     .map((group) => {
-      // V48.1 :
-      // Pour le test etat de l'art, on utilise les articles Direct/Connexe du verrou affiche.
-      // La selection "Garde" existe deja dans l'onglet Selection consultant, mais selon le backend
-      // elle peut etre stockee sous plusieurs champs differents. Ici on evite de bloquer la redaction
-      // a 0 alors que les articles sont bien gardes visuellement.
-      const selectedArticles = group.articles.filter((article) => {
-        const tag = normalizeTag(article.tag_article)
-        return tag === "Direct" || tag === "Connexe"
-      })
+      // V135 :
+      // La rédaction doit utiliser uniquement les articles réellement gardés par le consultant.
+      // Les catalogues techniques (HAL, ISO, ASTM, Zenodo...) restent des pistes à consulter,
+      // mais ne doivent pas entrer dans le payload de rédaction comme articles scientifiques.
+      const selectedArticles = group.articles.filter(isUsableArticleForStateOfArtWriting)
 
       return { group, selectedArticles }
     })
     .filter((item) => item.selectedArticles.length > 0)
 
-  const selectedDirectConnexeCount = writableGroups.reduce(
+  const selectedArticlesForWritingCount = writableGroups.reduce(
     (total, item) => total + item.selectedArticles.length,
+    0
+  )
+
+  const autoDirectConnexeCount = filteredGroups.reduce(
+    (total, group) =>
+      total +
+      group.articles.filter((article) => {
+        const tag = normalizeTag(article.tag_article)
+        return !isTechnicalCatalogArticle(article) && (tag === "Direct" || tag === "Connexe")
+      }).length,
     0
   )
 
@@ -832,7 +1092,7 @@ function EnnoScholarByVerrouSection({
 
     try {
       if (writableGroups.length === 0) {
-        throw new Error("Aucun article Direct/Connexe sélectionné pour la rédaction.")
+        throw new Error("Aucun article gardé exploitable pour la rédaction. Garde au moins un article académique Direct, Connexe ou Fondamental, hors technical_catalog.")
       }
 
       const payload = {
@@ -1015,7 +1275,7 @@ function EnnoScholarByVerrouSection({
                   Rédaction de l’état de l’art
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Articles Direct/Connexe trouvés automatiquement pour le verrou affiché : {selectedDirectConnexeCount}
+                  Articles gardés exploitables pour la rédaction : {selectedArticlesForWritingCount} · Direct/Connexe disponibles : {autoDirectConnexeCount}
                 </p>
               </div>
 
@@ -1033,7 +1293,7 @@ function EnnoScholarByVerrouSection({
                 <button
                   type="button"
                   onClick={launchStateOfArtWriting}
-                  disabled={writing || selectedDirectConnexeCount === 0}
+                  disabled={writing || selectedArticlesForWritingCount === 0}
                   className="rounded-md bg-brand px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
                 >
                   {writing ? "Rédaction..." : "Lancer la rédaction"}
@@ -1052,6 +1312,8 @@ function EnnoScholarByVerrouSection({
                 <div className="rounded-md border border-success/30 bg-success/10 p-2 text-xs text-success">
                   État de l’art généré : {writerResult.verrous_written || writerResult.results?.length || 0} verrou(s).
                 </div>
+
+                <StateOfArtInlineGeneratedPanel report={writerResult} />
 
                 <EnnoScholarStructuredStateArtPanel
                   projectId={projectId}
@@ -1336,12 +1598,16 @@ function StateOfArtHistorySection({
       </Card>
 
       {report ? (
-        <EnnoScholarStructuredStateArtPanel
-          key={String(selectedEntry?.run_id || "state-art")}
-          projectId={projectId}
-          initialReport={report}
-          selectionPayload={selectionPayload}
-        />
+        <div className="space-y-4">
+          <StateOfArtInlineGeneratedPanel report={report} />
+
+          <EnnoScholarStructuredStateArtPanel
+            key={String(selectedEntry?.run_id || "state-art")}
+            projectId={projectId}
+            initialReport={report}
+            selectionPayload={selectionPayload}
+          />
+        </div>
       ) : (
         <Card>
           <CardContent className="p-5 text-sm text-muted-foreground">

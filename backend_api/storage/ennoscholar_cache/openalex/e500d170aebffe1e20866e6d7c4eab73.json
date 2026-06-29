@@ -1,0 +1,103 @@
+{
+  "created_at": "2026-06-26T09:50:15",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "https://openalex.org/W7128994746",
+      "title": "Mould susceptibility of bio-based insulation materials in modern construction",
+      "abstract": "Abstract This review compares the mould susceptibility of bio-based and conventional insulation. Mould growth poses a risk to building durability and occupant health, with bio-based materials being more susceptible due to their organic composition. However, testing practices limit meaningful comparisons, and laboratory studies often fail to replicate real-world conditions. Recommendations include standardised testing, in-situ monitoring and field studies, and development of antifungal strategies to understand and address mould risk across insulation options.",
+      "year": 2026,
+      "venue": "npj Materials Degradation",
+      "url": "https://doi.org/10.1038/s41529-026-00742-7",
+      "doi": "10.1038/s41529-026-00742-7",
+      "authors": [
+        "Joni Wildman",
+        "Andrew Shea",
+        "Valeria Cascione",
+        "Daniel A. Henk"
+      ],
+      "citation_count": 5,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Durability",
+        "Engineering",
+        "Forensic engineering",
+        "Materials testing",
+        "Construction engineering",
+        "Replicate",
+        "Limit (mathematics)",
+        "Environmental science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "https://openalex.org/W3179418608",
+      "title": "Critical Review of Polymeric Building Envelope Materials: Degradation, Durability and Service Life Prediction",
+      "abstract": "This paper provides a critical review of the degradation, durability and service life prediction (SLP) of polymeric building envelope materials (BEMs), namely, claddings, air/vapour barriers, insulations, sealants, gaskets and fenestration. The rate of material deterioration and properties determine the usefulness of a product; therefore, knowledge of the significant degradation mechanisms in play for BEMs is key to the design of proper SLP methods. SLP seeks to estimate the life expectancy of a material/component exposed to in-service conditions. This topic is especially important with respect to the potential impacts of climate change. The surrounding environment of a building dictates the degradation mechanisms in play, and as climate change progresses, material aging conditions become more unpredictable. This can result in unexpected changes and/or damages to BEMs, and shorter than expected SL. The development of more comprehensive SLP methods is economically and environmentally sound, and it will provide more confidence, comfort and safety to all building users. The goal of this paper is to review the existing literature in order to identify the knowledge gaps and provide suggestions to address these gaps in light of the rapidly evolving climate.",
+      "year": 2021,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings11070299",
+      "doi": "10.3390/buildings11070299",
+      "authors": [
+        "Marzieh Riahinezhad",
+        "Madeleine Hallman",
+        "J-F. Masson"
+      ],
+      "citation_count": 64,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Durability",
+        "Building envelope",
+        "Service life",
+        "Damages",
+        "Computer science",
+        "Life-cycle assessment",
+        "Risk analysis (engineering)",
+        "Forensic engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "https://openalex.org/W3168395769",
+      "title": "An Innovative System for the Treatment of Rising Dampness in Buildings Located in Cold Climates",
+      "abstract": "Signs of wetness in housing are a significant obstacle to the renovation and energy rehabilitation of old and energy-intensive heritage buildings, especially in cold climates. Thus, in order to avoid the numerous possibilities of degradation caused by the moisture transfer phenomena in the building envelope, the a disruptive aeraulic process, which focuses on the ventilation of an air gap between the thermal insulation and the wet wall, has been designed and its assessed. This system avoids the presence of liquid water at the wall surface by maintaining the hygrothermal balance within the wet wall. This enables the mechanical durability of the supporting structure, the absence of biological activity and/or frost and, hence, the durability of the thermal insulation. These issues are investigated through a case study based on a real site. Over a year of measurements, the wet wall was constantly maintained in hygroscopic balance, around 90% RH, guaranteeing the preservation of its mechanical performance, while the insulation layer was kept moisture free. In addition, the proposed model for predicting the appearance and development of biological activity demonstrated its validity, confirming experimental results.These initial results will now lead to the optimization of the aeraulic device, as well as possible use in a summer cooling context to achieve hygrothermal comfort for housing occupants.",
+      "year": 2021,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en14123421",
+      "doi": "10.3390/en14123421",
+      "authors": [
+        "Geoffrey Promis",
+        "Omar Douzane",
+        "Daniel R. Rousse",
+        "Thierry Langlet"
+      ],
+      "citation_count": 3,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Durability",
+        "Context (archaeology)",
+        "Environmental science",
+        "Moisture",
+        "Frost (temperature)",
+        "Building envelope",
+        "Thermal insulation",
+        "Obstacle"
+      ],
+      "tldr": ""
+    }
+  ]
+}

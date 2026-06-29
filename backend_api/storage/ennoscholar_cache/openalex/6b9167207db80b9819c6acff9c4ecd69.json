@@ -1,0 +1,99 @@
+{
+  "created_at": "2026-06-26T09:47:49",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "hygrothermal behaviour bio-based insulation mould growth",
+      "paper_id": "https://openalex.org/W2790827377",
+      "title": "Wood waste as an alternative thermal insulation for buildings",
+      "abstract": "",
+      "year": 2018,
+      "venue": "Energy and Buildings",
+      "url": "https://doi.org/10.1016/j.enbuild.2018.03.019",
+      "doi": "10.1016/j.enbuild.2018.03.019",
+      "authors": [
+        "İkbal Çetiner",
+        "Andrew Shea"
+      ],
+      "citation_count": 232,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Building insulation",
+        "Thermal insulation",
+        "Cork",
+        "Environmental science",
+        "Building material",
+        "Materials science",
+        "Thermal conductivity",
+        "Waste management"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal behaviour bio-based insulation mould growth",
+      "paper_id": "https://openalex.org/W1998325134",
+      "title": "Hygrothermal performance of bio-based insulation materials",
+      "abstract": "Bio-based insulation materials have the potential to make a significant contribution to the reduction in the global warming potential of the construction industry world-wide. They contribute in two ways. First they provide the opportunity to reduce the embodied energy in the fabric of buildings. They do this because they are renewable and recyclable. Plant-based insulation materials also sequester carbon dioxide through photosynthesis, sealing up atmospheric carbon dioxide for the life-time of the building. Second they are able to reduce the in-use energy consumption of buildings in more ways than by simply reducing energy transmission. They have the ability to buffer heat and moisture, which is most evident in dynamic situations. This paper discusses the hygrothermal performance of bio-based insulation materials, examining the hygrothermal effects associated with their vapour activity. The incremental performance offered by these materials is not allowed for in building regulations, nor is it readily accounted for in many commercially available building physics models. The paper discusses the reasons for this and identifies the need for the transient performance of bio-based insulation materials to be taken into account, because this will better reflect their actual contribution to the energy performance of a building.",
+      "year": 2013,
+      "venue": "Proceedings of the Institution of Civil Engineers - Construction Materials",
+      "url": "https://doi.org/10.1680/coma.12.00031",
+      "doi": "10.1680/coma.12.00031",
+      "authors": [
+        "Mike Lawrence",
+        "Andy Shea",
+        "Peter Walker",
+        "Pieter de Wilde"
+      ],
+      "citation_count": 35,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Embodied energy",
+        "Architectural engineering",
+        "Renewable energy",
+        "Environmental science",
+        "Energy consumption",
+        "Moisture",
+        "Global warming",
+        "Global-warming potential"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal behaviour bio-based insulation mould growth",
+      "paper_id": "https://openalex.org/W1458577565",
+      "title": "A review of recent developments in natural fibre composites and their mechanical performance",
+      "abstract": "Recently, there has been a rapid growth in research and innovation in the natural fibre composite (NFC) area. Interest is warranted due to the advantages of these materials compared to others, such as synthetic fibre composites, including low environmental impact and low cost and support their potential across a wide range of applications. Much effort has gone into increasing their mechanical performance to extend the capabilities and applications of this group of materials. This review aims to provide an overview of the factors that affect the mechanical performance of NFCs and details achievements made with them.",
+      "year": 2015,
+      "venue": "Composites Part A Applied Science and Manufacturing",
+      "url": "https://doi.org/10.1016/j.compositesa.2015.08.038",
+      "doi": "10.1016/j.compositesa.2015.08.038",
+      "authors": [
+        "K.L. Pickering",
+        "M.G. Aruan Efendy",
+        "T.M. Le"
+      ],
+      "citation_count": 3289,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Composite material",
+        "Composite number",
+        "Mechanical strength",
+        "Mechanical engineering",
+        "Engineering"
+      ],
+      "tldr": ""
+    }
+  ]
+}

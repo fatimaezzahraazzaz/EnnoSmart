@@ -1,0 +1,79 @@
+{
+  "created_at": "2026-06-26T09:50:12",
+  "items": [
+    {
+      "source": "semantic_scholar",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "f1a76afe3bd29062443d0d43e89401aad62d9f12",
+      "title": "Hygrothermal Performance of Bio-Based Exterior Wall Constructions and Their Resilience under Air Leakage and Moisture Load",
+      "abstract": "The use of renewable building materials in construction is crucial to minimising the environmental impact of new buildings. Bio-based building materials have a wide range of positive properties, many of which are due to their hygroscopic behaviour. The purpose of this study is to investigate the hygrothermal performance of chopped straw, sheep’s wool, and cellulose insulated timber frame external wall assemblies in the presence of air leakage and high indoor relative humidity. For this purpose, tests with different moisture contents, overpressures, and defects in the airtight layer were carried out in an outdoor test stand over a period of 18 months. The results were compared with a conventional mineral wool insulated construction. Both sheep’s wool and cellulose are particularly fault-tolerant insulation materials in combination with timber frame constructions. All three bio-based insulations, despite defects in the airtight layer, showed no mould-prone moisture content. An installation level insulated with sheep’s wool can increase the fault tolerance of constructions with insulation made of hygric and more sensitive building materials. For chopped straw and cellulose, the measured U-value was lower than expected. Further in situ measurements of bio-based structures are important to gain confidence in their hygrothermal behaviour and to increase their use in multi-storey construction.",
+      "year": 2023,
+      "venue": "Buildings",
+      "url": "https://www.semanticscholar.org/paper/f1a76afe3bd29062443d0d43e89401aad62d9f12",
+      "doi": "10.3390/buildings13102650",
+      "authors": [
+        "Henriette Fischer",
+        "A. Korjenic"
+      ],
+      "citation_count": 7,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "e8e7f9fb427759002e070c83006a92674cd0089f",
+      "title": "Durability assessment of alkyl ketene dimer hydrophobic treatment of bio-based thermal insulation materials",
+      "abstract": "Bio-based composites are increasingly used as thermal insulation materials in construction due to sustainability and low thermal conductivity. However, their high moisture absorption can negatively affect performance and mould growth risk, shortening product lifespan. This study introduces alkyl ketene dimer (AKD) as an eco-friendly and economical solution for the hydrophobic treatment of two bio-based composites, mycelium and grass, to enhance their durability. We compare the physicochemical properties, hygrothermal performance, and mould growth resistance of bio-based composites before and after hydrophobic modification while evaluating their durability in simulated building envelopes across different climates. Results showed that the modified bio-based composites were well-grafted with AKD. The water absorption of bio-based composites significantly decreased after modification, and the mould growth resistance capacity of modified composites was significantly improved. Moreover, hygrothermal simulations reveal that AKD modification effectively enhances their suitability under different climate profiles, particularly when modified grass composites are applied.",
+      "year": 2025,
+      "venue": "Resources, Conservation and Recycling",
+      "url": "https://www.semanticscholar.org/paper/e8e7f9fb427759002e070c83006a92674cd0089f",
+      "doi": "10.1016/j.resconrec.2024.107983",
+      "authors": [
+        "Helong Song",
+        "Koh Chuen Hon",
+        "F. Gauvin",
+        "Samuel Pantaleo",
+        "F. Berger",
+        "Wei Chen",
+        "H.J.H. Brouwers"
+      ],
+      "citation_count": 6,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "08b5aff5819903c048cff1a1316bd175f2526d15",
+      "title": "A Rapid Review of Hygrothermal Performance Metrics for Innovative Materials in Building Envelope Retrofits",
+      "abstract": "With government, industry, and public pressure to decarbonize the building sector through reducing embodied and operational emissions, there have been a wide range of innovative materials used in building envelope retrofits. Although these innovative materials, such as super insulating materials, bio-based insulation, and many others, are assessed on thermal performance and code requirements before use in retrofits, there is no unified standard assessment metric for hygrothermal performance of innovative materials in building envelope retrofits. This paper performs a rapid review of the available literature from January 2013 to March 2025 on hygrothermal performance assessment metrics used in retrofits. Using rapid review methods to search for records in Scopus, Web of Science, and Google Scholar, fifty-nine publications were selected for bibliometric and qualitative analysis. Most selected publications include discussions and analysis of relative humidity in the wall assembly post retrofit, moisture content, and mould index within the envelope. There is a research gap in publications considering hygrothermal damage functions such as freeze–thaw index, relative humidity and temperature (RHT) index, or condensation prediction. There is also a research gap in country and climate studies and analyses of in situ retrofits with innovative materials, and occupant comfort post retrofit.",
+      "year": 2025,
+      "venue": "Energies",
+      "url": "https://www.semanticscholar.org/paper/08b5aff5819903c048cff1a1316bd175f2526d15",
+      "doi": "10.3390/en18185016",
+      "authors": [
+        "Robin Hilbrecht",
+        "C. Cruickshank",
+        "C. Baldwin",
+        "Nicholas Scharf"
+      ],
+      "citation_count": 1,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle",
+        "Review"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    }
+  ]
+}

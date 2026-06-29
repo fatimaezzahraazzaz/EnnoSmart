@@ -168,6 +168,12 @@ function formatScore(score: number | string | null | undefined) {
   return `${Math.round(normalized)}%`
 }
 
+function formatVerrouScoreV124(score: number | string | null | undefined) {
+  const normalized = normalizeVerrouScoreV124(score)
+  if (normalized === null) return "—"
+  return formatScore(normalized)
+}
+
 function riskClass(risk: string | null | undefined) {
   const value = (risk || "").toLowerCase()
 
@@ -231,31 +237,197 @@ function decisionLabel(status: string) {
 }
 
 function getSourceText(verrou: VerrouRead) {
+  const sourceJson = verrou.source_json || {}
+
   return (
-    verrou.source_json?.manual_scholar_text ||
-    verrou.source_json?.text ||
-    verrou.source_json?.source_text ||
-    verrou.source_json?.description ||
+    sourceJson.manual_scholar_text ||
+    sourceJson.evidence_summary ||
+    sourceJson.scientific_lock ||
+    sourceJson.why_not_simple_engineering ||
+    sourceJson.text ||
+    sourceJson.source_text ||
+    sourceJson.description ||
     verrou.justification ||
     "Aucun extrait source disponible."
   )
 }
 
 function getSources(verrou: VerrouRead) {
-  const sources = verrou.source_json?.sources
+  const sourceJson = verrou.source_json || {}
+  const sources =
+    sourceJson.sources ||
+    sourceJson.evidence_sources ||
+    sourceJson.source_documents ||
+    sourceJson.source_ids
 
   if (Array.isArray(sources)) {
     return sources
       .map((source: any) => {
         if (typeof source === "string") return source
-        return source?.filename || source?.source || source?.document || source?.name
+        return (
+          source?.filename ||
+          source?.source ||
+          source?.document ||
+          source?.name ||
+          source?.id ||
+          source?.source_id
+        )
       })
       .filter(Boolean)
-      .slice(0, 4)
+      .slice(0, 6)
   }
 
-  const document = verrou.source_json?.document || verrou.source_json?.source_document
+  const document =
+    sourceJson.document ||
+    sourceJson.source_document ||
+    sourceJson.filename ||
+    sourceJson.document_name
+
   return document ? [document] : []
+}
+
+function getConsultantContextExplanation(verrou: VerrouRead) {
+  const sourceJson = verrou.source_json || {}
+
+  const direct = cleanDisplayText(
+    sourceJson.consultant_explanation ||
+      sourceJson.agent_reasoning ||
+      sourceJson.why_agent_found_verrou ||
+      (verrou as any).consultant_explanation ||
+      (verrou as any).agent_reasoning ||
+      (verrou as any).why_agent_found_verrou ||
+      ""
+  )
+
+  if (direct) return sanitizeVerrouExplanation(direct)
+
+  const scientificLock = cleanDisplayText(sourceJson.scientific_lock || "")
+  const whyNotSimple = cleanDisplayText(sourceJson.why_not_simple_engineering || "")
+  const evidenceSummary = cleanDisplayText(sourceJson.evidence_summary || "")
+  const sources = getSources(verrou)
+
+  const parts: string[] = []
+
+  parts.push(
+    `EnnoDiagnostic identifie ce point comme un verrou car les sources du projet font apparaître une incertitude technique autour de : ${verrou.title}.`
+  )
+
+  if (sources.length > 0) {
+    parts.push(`Les indices proviennent notamment de : ${sources.slice(0, 3).join(" ; ")}.`)
+  }
+
+  if (scientificLock) {
+    parts.push(`Incertitude détectée : ${scientificLock}`)
+  }
+
+  if (whyNotSimple) {
+    parts.push(`Ce n’est pas seulement de l’ingénierie standard car : ${whyNotSimple}`)
+  }
+
+  if (evidenceSummary) {
+    parts.push(`Preuves utilisées : ${evidenceSummary}`)
+  }
+
+  return sanitizeVerrouExplanation(parts.join(" "))
+}
+
+function sanitizeVerrouExplanation(value: string) {
+  return cleanDisplayText(value || "")
+    .replace(/\bAucun procédé existant ne garantit\b/gi, "Les documents fournis ne montrent pas de solution directement applicable garantissant")
+    .replace(/\bAucune solution existante ne garantit\b/gi, "Les documents fournis ne montrent pas de solution directement applicable garantissant")
+    .replace(/\baucun procédé existant ne garantit\b/gi, "les documents fournis ne montrent pas de solution directement applicable garantissant")
+    .replace(/\baucune solution existante ne garantit\b/gi, "les documents fournis ne montrent pas de solution directement applicable garantissant")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function firstUsefulSentence(value: string, limit = 260) {
+  const clean = sanitizeVerrouExplanation(value)
+  if (!clean) return ""
+
+  const cutMarkers = [
+    " Comment ",
+    " Pourquoi ",
+    " La simple ",
+    " Les sources ",
+    " Les documents ",
+    " Les preuves ",
+    " Ce point ",
+    " Aucun procédé ",
+    " Aucune solution ",
+  ]
+
+  let candidate = clean
+  for (const marker of cutMarkers) {
+    const idx = candidate.indexOf(marker)
+    if (idx > 80) {
+      candidate = candidate.slice(0, idx).trim()
+      break
+    }
+  }
+
+  const firstSentence = candidate.match(/^(.{80,}?[.!?])\s+/)
+  if (firstSentence?.[1]) candidate = firstSentence[1].trim()
+
+  if (candidate.length > limit) return `${candidate.slice(0, limit).trim()}…`
+  return candidate
+}
+
+type VerrouExplanationSections = {
+  detection: string
+  uncertainty: string
+  notSimpleEngineering: string
+  evidence: string
+}
+
+function getVerrouExplanationSections(verrou: VerrouRead): VerrouExplanationSections {
+  const sourceJson = verrou.source_json || {}
+  const sources = getSources(verrou)
+
+  const direct = sanitizeVerrouExplanation(
+    sourceJson.consultant_explanation ||
+      sourceJson.agent_reasoning ||
+      sourceJson.why_agent_found_verrou ||
+      (verrou as any).consultant_explanation ||
+      (verrou as any).agent_reasoning ||
+      (verrou as any).why_agent_found_verrou ||
+      ""
+  )
+
+  const scientificLock = sanitizeVerrouExplanation(
+    sourceJson.scientific_lock ||
+      (verrou as any).scientific_lock ||
+      ""
+  )
+
+  const whyNotSimple = sanitizeVerrouExplanation(
+    sourceJson.why_not_simple_engineering ||
+      (verrou as any).why_not_simple_engineering ||
+      ""
+  )
+
+  const evidenceSummary = sanitizeVerrouExplanation(
+    sourceJson.evidence_summary ||
+      (verrou as any).evidence_summary ||
+      ""
+  )
+
+  const detection = firstUsefulSentence(direct, 420) ||
+    `EnnoDiagnostic a détecté ce verrou parce que les sources du projet font apparaître une incertitude technique autour de « ${verrou.title} ».${
+      sources.length ? ` Les indices proviennent notamment de ${sources.slice(0, 2).join(" ; ")}.` : ""
+    }`
+
+  return {
+    detection,
+    uncertainty: scientificLock,
+    notSimpleEngineering: whyNotSimple,
+    evidence: evidenceSummary,
+  }
+}
+
+function getShortVerrouRationale(verrou: VerrouRead) {
+  const sections = getVerrouExplanationSections(verrou)
+  return sections.detection || "Verrou à confirmer à partir des preuves sources."
 }
 
 function normalizeForConsultant(value: string) {
@@ -278,100 +450,77 @@ function shortSourceText(verrou: VerrouRead, limit = 650) {
 }
 
 function consultantSignalTitle(verrou: VerrouRead) {
-  const title = verrou.title || ""
-  const text = normalizeForConsultant(`${title} ${getSourceText(verrou)} ${verrou.justification || ""}`)
+  const title = cleanDisplayText(verrou.title || "")
+  const source = cleanDisplayText(getSourceText(verrou))
+  const justification = cleanDisplayText(verrou.justification || "")
+  const candidate = title || source.split(/[.!?\n]/).find((line) => line.trim().length > 12) || justification
 
-  if (text.includes("soufflage") || text.includes("carter") || text.includes("segments") || text.includes("reniflard")) {
-    return "Maîtrise du soufflage carter et de l’étanchéité des segments"
+  if (candidate) {
+    return candidate
+      .replace(/^Verrou\s*[:\-]\s*/i, "")
+      .replace(/^Signal\s*R&D\s*[:\-]\s*/i, "")
+      .slice(0, 140)
+      .trim()
   }
 
-  if (text.includes("thermique") || text.includes("refroidissement") || text.includes("refrigerant") || text.includes("debit d'eau") || text.includes("temperature")) {
-    return "Maîtrise thermique et refroidissement du compresseur"
-  }
-
-  if (text.includes("acoustique") || text.includes("bruit") || text.includes("aspiration deportee") || text.includes("vibration")) {
-    return "Maîtrise vibro-acoustique du compresseur"
-  }
-
-  if (text.includes("contrepoids") || text.includes("equilibrage") || text.includes("plomb") || text.includes("poulie")) {
-    return "Équilibrage dynamique et contrepoids sans plomb"
-  }
-
-  if (text.includes("air sec") || text.includes("condensat") || text.includes("point de rosee") || text.includes("secheur")) {
-    return "Production d’un air sec conforme en sortie de compresseur"
-  }
-
-  if (text.includes("non-transferabilite") || text.includes("solutions existantes") || text.includes("non transferabilite")) {
-    return "Adaptation des solutions existantes au contexte TGM100"
-  }
-
-  if (text.includes("cause racine")) {
-    return "Analyse de la cause technique principale"
-  }
-
-  if (text.includes("performance")) {
-    return "Atteinte des performances sous contraintes système"
-  }
-
-  return title || "Signal R&D détecté"
+  return "Signal R&D détecté"
 }
 
 function proposedCirVerrou(verrou: VerrouRead) {
-  const title = verrou.title || ""
-  const text = normalizeForConsultant(`${title} ${getSourceText(verrou)} ${verrou.justification || ""}`)
+  const title = consultantSignalTitle(verrou)
+  const source = cleanDisplayText(getSourceText(verrou))
+  const justification = cleanDisplayText(verrou.justification || "")
+  const evidence = source || justification
 
-  if (text.includes("soufflage") || text.includes("carter") || text.includes("segments") || text.includes("reniflard")) {
-    return "Maîtrise du soufflage carter lié à l’usure des segments et à l’étanchéité du compresseur haute pression TGM100."
+  if (title && title !== "Signal R&D détecté") {
+    return `${title}. À confirmer et reformuler en verrou CIR par le consultant à partir des preuves sources.`
   }
 
-  if (text.includes("thermique") || text.includes("refroidissement") || text.includes("refrigerant") || text.includes("debit d'eau") || text.includes("temperature")) {
-    return "Maîtrise du refroidissement du premier étage d’un compresseur haute pression TGM100 sous variation du débit d’eau."
+  if (evidence) {
+    return "Piste R&D à rattacher au verrou CIR le plus proche après validation consultant."
   }
 
-  if (text.includes("acoustique") || text.includes("bruit") || text.includes("aspiration deportee") || text.includes("vibration")) {
-    return "Maîtrise du comportement vibro-acoustique du compresseur TGM100 à haute vitesse de rotation."
-  }
-
-  if (text.includes("contrepoids") || text.includes("equilibrage") || text.includes("plomb") || text.includes("poulie")) {
-    return "Définition d’un contrepoids sans plomb compatible avec les exigences d’équilibrage dynamique du TGM100."
-  }
-
-  if (text.includes("air sec") || text.includes("condensat") || text.includes("point de rosee") || text.includes("secheur")) {
-    return "Production d’un air sec conforme aux exigences en sortie de compresseur."
-  }
-
-  if (text.includes("cause racine")) {
-    return "Analyse et confirmation de la cause technique principale à rattacher au verrou concerné."
-  }
-
-  return "Piste R&D à rattacher au verrou CIR le plus proche après validation consultant."
+  return "Verrou R&D à reformuler et valider par le consultant à partir des preuves sources."
 }
 
 function consultantInterpretation(verrou: VerrouRead) {
-  const text = normalizeForConsultant(`${verrou.title || ""} ${getSourceText(verrou)} ${verrou.justification || ""}`)
+  const sections = getVerrouExplanationSections(verrou)
+  const source = cleanDisplayText(getSourceText(verrou))
+  const justification = cleanDisplayText(verrou.justification || "")
 
-  if (text.includes("soufflage") || text.includes("carter") || text.includes("segments") || text.includes("reniflard")) {
-    return "EnnoDiagnostic a rapproché plusieurs indices documentaires autour des remontées d’air et d’huile, du comportement des segments et de la perte d’étanchéité. Ce signal oriente le consultant vers une difficulté de fiabilité en fonctionnement réel."
+  if (sections.detection) {
+    return sections.detection
   }
 
-  if (text.includes("thermique") || text.includes("refroidissement") || text.includes("refrigerant") || text.includes("temperature") || text.includes("debit d'eau")) {
-    return "EnnoDiagnostic a identifié une difficulté liée à la maîtrise des températures, au débit d’eau et à la performance du réfrigérant. Ce signal permet d’orienter l’analyse vers l’architecture de refroidissement du compresseur."
+  if (justification) {
+    return sanitizeVerrouExplanation(justification)
   }
 
-  if (text.includes("acoustique") || text.includes("bruit") || text.includes("aspiration deportee") || text.includes("vibration")) {
-    return "EnnoDiagnostic a regroupé des indices portant sur les niveaux acoustiques, les vibrations et l’influence de l’architecture d’aspiration. Ce signal aide à qualifier la difficulté vibro-acoustique du système."
+  if (source && source !== "Aucun extrait source disponible.") {
+    return "EnnoDiagnostic a identifié cette piste à partir des preuves présentes dans les documents bruts. Le consultant doit vérifier si elle correspond à une incertitude technique réelle, si elle n’est pas déjà résolue par les solutions connues, et si elle peut être reliée à une démarche expérimentale."
   }
 
-  if (text.includes("contrepoids") || text.includes("equilibrage") || text.includes("plomb") || text.includes("poulie")) {
-    return "EnnoDiagnostic a détecté une piste liée à l’équilibrage du compresseur et à la substitution du contrepoids au plomb. Ce point peut alimenter le verrou vibro-acoustique et les preuves de redéfinition mécanique."
-  }
-
-  if (text.includes("air sec") || text.includes("condensat") || text.includes("point de rosee") || text.includes("secheur")) {
-    return "EnnoDiagnostic a identifié des éléments liés à la qualité de l’air comprimé, à la séparation des condensats et au point de rosée. Ce signal peut être utilisé pour qualifier la conformité de l’air en sortie."
-  }
-
-  return "EnnoDiagnostic a identifié une piste R&D à partir de plusieurs indices présents dans les documents bruts. Le consultant peut la retenir, la consolider ou la rattacher à un verrou plus structurant du dossier."
+  return "EnnoDiagnostic a identifié une piste R&D. Le consultant peut la retenir, la consolider ou la rattacher à un verrou plus structurant du dossier."
 }
+
+function getConsultantCheckText(verrou: VerrouRead) {
+  const sourceJson = verrou.source_json || {}
+  const scientificLock = cleanDisplayText(sourceJson.scientific_lock || "")
+  const evidenceSummary = cleanDisplayText(sourceJson.evidence_summary || "")
+
+  if (scientificLock || evidenceSummary) {
+    return [
+      scientificLock ? `Confirmer l’incertitude technique suivante : ${scientificLock}` : "",
+      evidenceSummary ? `Vérifier les preuves sources associées : ${evidenceSummary}` : "",
+      "Contrôler si les essais, calculs, simulations ou résultats disponibles suffisent pour justifier ce verrou CIR avant EnnoScholar.",
+    ]
+      .filter(Boolean)
+      .join(" ")
+  }
+
+  return "Vérifier que les preuves montrent une difficulté technique réelle, non résolue directement par les solutions connues, et que les essais ou analyses apportent une réponse expérimentale."
+}
+
 
 function consultantAction(verrou: VerrouRead) {
   const status = verrou.consultant_status
@@ -509,7 +658,16 @@ function unwrapBackendDiagnosticReportV93(payload: any): any {
       obj.display?.report_sections ||
       obj.diagnostic?.sections ||
       obj.diagnostic?.content ||
-      obj.display?.report_markdown
+      obj.display?.report_markdown ||
+      obj.llm_reformulated_verrous ||
+      obj.chroma_sections ||
+      obj.frascati_summary ||
+      obj.frascati_justification ||
+      obj.ai_detection_report ||
+      obj.raw_result?.evidence_pack_before_frascati ||
+      obj.raw_result?.evidence_pack_for_ennodiagnostic ||
+      obj.merged_evidence_pack_for_ennodiagnostic ||
+      obj.multi_document_evidence_pack_for_ennodiagnostic
     ) {
       return obj
     }
@@ -654,6 +812,501 @@ function pickBackendSectionV93(
   return fixFrenchMojibakeV93(fallback || "").trim()
 }
 
+
+
+// ===============================
+// V107 - Verrous JSON directs, sans codage dur projet
+// Objectif : afficher les verrous réellement présents dans les JSON NLP/RAG/agent
+// au lieu de se limiter aux catégories Frascati génériques synchronisées en base.
+// ===============================
+type JsonVerrouCandidateV107 = {
+  item: any
+  sourceKey: string
+  path: string
+}
+
+function isObjectV107(value: any) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value))
+}
+
+function normalizePathKeyV107(value: string) {
+  return normalizeKeyV93(value).replace(/\s+/g, "_")
+}
+
+function collectNamedArraysV107(
+  root: any,
+  wantedKeys: string[],
+  path = "root",
+  depth = 0,
+  visited = new WeakSet<object>()
+): JsonVerrouCandidateV107[] {
+  if (!root || depth > 9) return []
+
+  const parsed = typeof root === "string" ? parseJsonMaybeV93(root) : root
+  if (!parsed || typeof parsed !== "object") return []
+
+  if (visited.has(parsed)) return []
+  visited.add(parsed)
+
+  const wanted = new Set(wantedKeys.map(normalizePathKeyV107))
+  const found: JsonVerrouCandidateV107[] = []
+
+  if (Array.isArray(parsed)) {
+    parsed.forEach((entry, index) => {
+      found.push(
+        ...collectNamedArraysV107(entry, wantedKeys, `${path}[${index}]`, depth + 1, visited)
+      )
+    })
+    return found
+  }
+
+  Object.entries(parsed).forEach(([key, value]) => {
+    const normalizedKey = normalizePathKeyV107(key)
+
+    if (wanted.has(normalizedKey) && Array.isArray(value)) {
+      value.forEach((item, index) => {
+        if (item !== null && item !== undefined) {
+          found.push({
+            item,
+            sourceKey: key,
+            path: `${path}.${key}[${index}]`,
+          })
+        }
+      })
+    }
+
+    if (value && typeof value === "object") {
+      found.push(
+        ...collectNamedArraysV107(value, wantedKeys, `${path}.${key}`, depth + 1, visited)
+      )
+    }
+  })
+
+  return found
+}
+
+function itemTextV107(item: any) {
+  const sourceJson = isObjectV107(item?.source_json) ? item.source_json : {}
+
+  return cleanDisplayText(
+    item?.text ||
+      item?.source_text ||
+      item?.description ||
+      item?.justification ||
+      item?.scientific_lock ||
+      item?.why_not_simple_engineering ||
+      item?.evidence_summary ||
+      item?.llm_block ||
+      sourceJson?.text ||
+      sourceJson?.source_text ||
+      sourceJson?.description ||
+      sourceJson?.justification ||
+      sourceJson?.scientific_lock ||
+      sourceJson?.why_not_simple_engineering ||
+      sourceJson?.evidence_summary ||
+      sourceJson?.llm_block ||
+      ""
+  )
+}
+
+function itemTitleV107(item: any) {
+  const sourceJson = isObjectV107(item?.source_json) ? item.source_json : {}
+
+  return cleanDisplayText(
+    item?.title ||
+      item?.titre ||
+      item?.llm_title ||
+      item?.verrou_title ||
+      item?.scientific_title ||
+      item?.consolidated_title ||
+      item?.theme_label ||
+      item?.label ||
+      sourceJson?.title ||
+      sourceJson?.titre ||
+      sourceJson?.llm_title ||
+      sourceJson?.verrou_title ||
+      sourceJson?.scientific_title ||
+      sourceJson?.consolidated_title ||
+      sourceJson?.theme_label ||
+      sourceJson?.label ||
+      ""
+  )
+}
+
+function isTableHeaderLikeV107(value: string) {
+  const key = normalizeKeyV93(value)
+  if (!key) return true
+
+  const weakSchemaWords = new Set([
+    "id verrou",
+    "id",
+    "verrou",
+    "description",
+    "impact r d",
+    "impact rd",
+    "question de qualification",
+    "documents concernes",
+  ])
+
+  return weakSchemaWords.has(key) || key.length < 6
+}
+
+function extractSpecificTitleFromVerrouTextV107(text: string) {
+  const clean = cleanDisplayText(text || "")
+  if (!clean) return ""
+
+  const tableMatch = clean.match(/\bV\d+\s*\|\s*([^|:\n.]{4,180})(?:\s*:\s*([^|\n.]{0,220}))?/i)
+  if (tableMatch) {
+    const part1 = cleanDisplayText(tableMatch[1] || "")
+    const part2 = cleanDisplayText(tableMatch[2] || "")
+    const title = part2 && part2.length > 4 ? `${part1} : ${part2}` : part1
+    if (!isTableHeaderLikeV107(title)) return title.slice(0, 180).trim()
+  }
+
+  const explicitMatch = clean.match(/\bVerrou\s*(?:R&D|scientifique|technique)?\s*\d*\s*[:\-–—]\s*([^\n.]{8,220})/i)
+  if (explicitMatch) {
+    const title = cleanDisplayText(explicitMatch[1] || "")
+    if (!isTableHeaderLikeV107(title)) return title.slice(0, 180).trim()
+  }
+
+  const firstUsefulLine = clean
+    .split(/[\n.!?]+/)
+    .map((line) => cleanDisplayText(line))
+    .find((line) => line.length >= 12 && !isTableHeaderLikeV107(line))
+
+  return firstUsefulLine ? firstUsefulLine.slice(0, 180).trim() : ""
+}
+
+function isUniversalReconstructionV107(candidate: JsonVerrouCandidateV107) {
+  const item = candidate.item || {}
+  const sourceJson = isObjectV107(item?.source_json) ? item.source_json : item
+  const metadata = isObjectV107(sourceJson?.metadata) ? sourceJson.metadata : {}
+
+  const joined = [
+    candidate.sourceKey,
+    candidate.path,
+    item?.passage_id,
+    item?.parent_passage_id,
+    item?.verrou_source,
+    sourceJson?.verrou_source,
+    metadata?.verrou_source,
+    item?.source,
+    sourceJson?.source,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+
+  const text = itemTextV107(item).toLowerCase()
+
+  return (
+    joined.includes("universal") ||
+    joined.includes("verrou_implicit") ||
+    text.startsWith("verrou implicite possible")
+  )
+}
+
+
+function isFallbackSynthesizedVerrouV124(candidate: JsonVerrouCandidateV107, item: any, title = "", text = "") {
+  const sourceJson = isObjectV107(item?.source_json) ? item.source_json : item
+
+  const joined = cleanDisplayText([
+    candidate.sourceKey,
+    candidate.path,
+    title,
+    text,
+    item?.justification,
+    item?.source,
+    sourceJson?.source,
+    sourceJson?.llm_block,
+  ].filter(Boolean).join(" ")).toLowerCase()
+
+  return (
+    joined.includes("fallback_grouped_rag_verrou_synthesis") ||
+    joined.includes("signal technique candidat extrait des preuves rag/nlp") ||
+    joined.includes("la reformulation llm dédiée n'a pas produit de json exploitable") ||
+    joined.includes("la reformulation llm dediee n'a pas produit de json exploitable")
+  )
+}
+
+function normalizeVerrouScoreV124(value: any): number | null {
+  if (value === null || value === undefined || value === "") return null
+
+  const n = Number(value)
+  if (!Number.isFinite(n) || n < 0) return null
+
+  // Cas normal : score déjà entre 0 et 1.
+  if (n <= 1) return n
+
+  // Cas V122 : score agrégé des preuves sur une échelle proche de 0..2.
+  // Ex. 1.86 doit être affiché comme 93%, pas 2%.
+  if (n <= 2.5) return n / 2
+
+  // Cas score déjà stocké en pourcentage.
+  if (n <= 100) return n
+
+  return null
+}
+
+function getNormalizedVerrouScoreV124(item: any, sourceJson: any): number | null {
+  const candidates = [
+    item?.verrou_score,
+    item?.score,
+    item?.frascati_score,
+    item?.confidence,
+    sourceJson?.verrou_score,
+    sourceJson?.score,
+    sourceJson?.frascati_score,
+    sourceJson?.confidence,
+  ]
+
+  for (const candidate of candidates) {
+    const normalized = normalizeVerrouScoreV124(candidate)
+    if (normalized !== null) return normalized
+  }
+
+  return null
+}
+
+function hasVerrouShapeV107(candidate: JsonVerrouCandidateV107) {
+  const item = candidate.item
+  if (typeof item === "string") return cleanDisplayText(item).length > 8
+  if (!isObjectV107(item)) return false
+
+  const sourceKey = normalizeKeyV93(candidate.sourceKey)
+  const role = normalizeKeyV93(String(item?.role || item?.source_json?.role || ""))
+  const title = itemTitleV107(item)
+  const text = itemTextV107(item)
+
+  return (
+    sourceKey.includes("verrou") ||
+    role === "verrou" ||
+    Boolean(title) ||
+    /\bV\d+\s*\|/.test(text) ||
+    /\bverrou\b/i.test(text)
+  )
+}
+
+function candidatePriorityV107(candidate: JsonVerrouCandidateV107, title: string) {
+  const item = candidate.item || {}
+  const sourceJson = isObjectV107(item?.source_json) ? item.source_json : {}
+  const sourceKey = normalizeKeyV93(candidate.sourceKey)
+  const path = normalizeKeyV93(candidate.path)
+  const text = itemTextV107(item)
+  const universal = isUniversalReconstructionV107(candidate)
+  let priority = 0
+
+  // V123 : priorité absolue aux verrous reformulés par EnnoDiagnostic V122.
+  if (sourceKey.includes("llm reformulated")) priority += 200
+  if (sourceKey.includes("consultant verrous cir")) priority += 195
+  if (path.includes("llm reformulated verrous")) priority += 190
+  if (path.includes("consultant verrous cir")) priority += 185
+
+  // Fallbacks seulement si aucune reformulation LLM n'existe.
+  if (sourceKey.includes("verrous rnd locaux")) priority += 80
+  if (path.includes("evidence pack before frascati")) priority += 70
+  if (path.includes("evidence pack for ennodiagnostic")) priority += 70
+  if (path.includes("chroma sections")) priority += 65
+  if (String(item?.verrou_source || sourceJson?.verrou_source || "").includes("direct")) priority += 50
+  if (/\bV\d+\s*\|/.test(text)) priority += 35
+  if (item?.document || sourceJson?.document || sourceJson?.source_document) priority += 15
+  if (title && !isTableHeaderLikeV107(title)) priority += 15
+  if (universal) priority -= 120
+
+  return priority
+}
+
+function stableNegativeIdV107(value: string, index: number) {
+  const key = `${value || "verrou"}-${index}`
+  let hash = 0
+  for (let i = 0; i < key.length; i += 1) {
+    hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0
+  }
+  return -Math.abs(hash || index + 1)
+}
+
+function toJsonVerrouReadV107(candidate: JsonVerrouCandidateV107, index: number): (VerrouRead & { _json_priority?: number }) | null {
+  const rawItem = candidate.item
+  const item = typeof rawItem === "string" ? { text: rawItem } : rawItem
+  if (!isObjectV107(item)) return null
+
+  const text = itemTextV107(item)
+  const structuredTitle = itemTitleV107(item)
+  const extractedTitle = extractSpecificTitleFromVerrouTextV107(text)
+  const title = cleanDisplayText(structuredTitle || extractedTitle)
+
+  if (!title || isTableHeaderLikeV107(title)) return null
+
+  const sourceJson = isObjectV107(item?.source_json) ? item.source_json : item
+
+  // V124 : ne pas afficher les pseudo-verrous fallback produits quand le LLM n'a pas réussi
+  // à générer un JSON exploitable. Ces éléments restent des preuves/chunks, pas des verrous CIR.
+  if (isFallbackSynthesizedVerrouV124(candidate, item, title, text)) return null
+
+  const scoreValue = getNormalizedVerrouScoreV124(item, sourceJson)
+
+  const sourceDocument =
+    item?.document ||
+    item?.source_document ||
+    item?.filename ||
+    sourceJson?.document ||
+    sourceJson?.source_document ||
+    sourceJson?.filename ||
+    ""
+
+  const rawSources =
+    item?.sources ||
+    item?.evidence_sources ||
+    item?.source_documents ||
+    item?.source_ids ||
+    sourceJson?.sources ||
+    sourceJson?.evidence_sources ||
+    sourceJson?.source_documents ||
+    sourceJson?.source_ids
+
+  const normalizedSources = Array.isArray(rawSources)
+    ? rawSources
+    : sourceDocument
+      ? [{ document: sourceDocument }]
+      : []
+
+  const justification = cleanDisplayText(
+    item?.justification ||
+      item?.scientific_lock ||
+      item?.why_not_simple_engineering ||
+      item?.evidence_summary ||
+      sourceJson?.justification ||
+      sourceJson?.scientific_lock ||
+      sourceJson?.why_not_simple_engineering ||
+      sourceJson?.evidence_summary ||
+      text ||
+      "Verrou reformulé par EnnoDiagnostic à partir des preuves RAG/NLP."
+  )
+
+  const priority = candidatePriorityV107(candidate, title)
+
+  return {
+    id: Number(item?.id || item?.verrou_id || 0) || stableNegativeIdV107(title, index),
+    diagnostic_run_id: Number(item?.diagnostic_run_id || 0),
+    title,
+    tag_cir: item?.tag_cir || item?.decision || item?.status || "À valider",
+    score: scoreValue,
+    consultant_status: item?.consultant_status || "en_attente",
+    justification,
+    source_json: {
+      ...sourceJson,
+      sources: normalizedSources.length > 0 ? normalizedSources : sourceJson?.sources,
+      text: text || sourceJson?.text || justification,
+      evidence_summary: item?.evidence_summary || sourceJson?.evidence_summary,
+      scientific_lock: item?.scientific_lock || sourceJson?.scientific_lock,
+      why_not_simple_engineering: item?.why_not_simple_engineering || sourceJson?.why_not_simple_engineering,
+      source_ids: item?.source_ids || sourceJson?.source_ids,
+      frontend_json_only: Number(item?.id || item?.verrou_id || 0) ? false : true,
+      frontend_source_key: candidate.sourceKey,
+      frontend_source_path: candidate.path,
+      frontend_universal_reconstruction: isUniversalReconstructionV107(candidate),
+    },
+    created_at: item?.created_at || "",
+    _json_priority: priority,
+  }
+}
+
+function uniqueVerrousForDisplayV107(items: Array<VerrouRead & { _json_priority?: number }>, limit = 8) {
+  const seen = new Set<string>()
+
+  return items
+    .sort((a, b) => Number(b._json_priority || 0) - Number(a._json_priority || 0))
+    .filter((item) => {
+      const key = normalizeKeyV93(item.title)
+      if (!key || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .slice(0, limit)
+}
+
+function collectJsonVerrousV107(...roots: any[]) {
+  // V123 : priorité stricte aux verrous reformulés par EnnoDiagnostic V122.
+  // Les chunks RAG/NLP bruts ne sont lus qu'en fallback si aucune reformulation n'existe.
+  const primaryWantedKeys = [
+    "llm_reformulated_verrous",
+    "consultant_verrous_cir",
+  ]
+
+  const primaryCandidates = roots.flatMap((root, rootIndex) =>
+    collectNamedArraysV107(root, primaryWantedKeys, `primary${rootIndex}`)
+  )
+
+  const primaryNormalized = primaryCandidates
+    .filter(hasVerrouShapeV107)
+    .map(toJsonVerrouReadV107)
+    .filter(Boolean) as Array<VerrouRead & { _json_priority?: number }>
+
+  if (primaryNormalized.length > 0) {
+    return uniqueVerrousForDisplayV107(primaryNormalized, 8)
+  }
+
+  const fallbackWantedKeys = [
+    "verrous_rnd_locaux",
+    "verrous",
+    "chroma_verrous",
+  ]
+
+  const fallbackCandidates = roots.flatMap((root, rootIndex) =>
+    collectNamedArraysV107(root, fallbackWantedKeys, `fallback${rootIndex}`)
+  )
+
+  const fallbackNormalized = fallbackCandidates
+    .filter(hasVerrouShapeV107)
+    .map(toJsonVerrouReadV107)
+    .filter(Boolean) as Array<VerrouRead & { _json_priority?: number }>
+
+  if (fallbackNormalized.length === 0) return []
+
+  return uniqueVerrousForDisplayV107(fallbackNormalized, 8)
+}
+
+function verrousToMarkdownV107(verrous: VerrouRead[]) {
+  if (!verrous.length) return ""
+
+  return verrous
+    .map((verrou, index) => {
+      const sources = getSources(verrou)
+      const sourceLabel = sources.length ? `\nSource : ${sources.slice(0, 2).join(" ; ")}` : ""
+      const explanation = cleanDisplayText(getConsultantContextExplanation(verrou))
+      const justification = cleanDisplayText(verrou.justification || getSourceText(verrou))
+      const preferredText = explanation || justification
+      const shortJustification = preferredText.length > 500 ? `${preferredText.slice(0, 500).trim()}…` : preferredText
+      const reasonLabel = explanation ? "Pourquoi EnnoDiagnostic le détecte comme verrou :" : ""
+
+      return `${index + 1}. ${verrou.title}${sourceLabel}${shortJustification ? `\n${reasonLabel ? `${reasonLabel} ` : ""}${shortJustification}` : ""}`
+    })
+    .join("\n\n")
+}
+
+function isJsonOnlyVerrouV107(verrou: VerrouRead) {
+  return Number(verrou.id) < 0 || Boolean(verrou.source_json?.frontend_json_only)
+}
+
+function isFallbackVerrouReadV124(verrou: VerrouRead) {
+  const sourceJson = verrou.source_json || {}
+  const joined = cleanDisplayText([
+    verrou.title,
+    verrou.justification,
+    sourceJson?.text,
+    sourceJson?.source,
+    sourceJson?.llm_block,
+    sourceJson?.frontend_source_key,
+    sourceJson?.frontend_source_path,
+  ].filter(Boolean).join(" ")).toLowerCase()
+
+  return (
+    joined.includes("fallback_grouped_rag_verrou_synthesis") ||
+    joined.includes("signal technique candidat extrait des preuves rag/nlp") ||
+    joined.includes("la reformulation llm dédiée n'a pas produit de json exploitable") ||
+    joined.includes("la reformulation llm dediee n'a pas produit de json exploitable")
+  )
+}
 
 function getBackendFrascatiJustificationV94(
   payload: any,
@@ -1079,7 +1732,7 @@ function cleanPreviousCirMatch(item: any, limit = 260) {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
-    .filter((line) => !/^PROJET TGM/i.test(line))
+    .filter((line) => !/^PROJET\s+/i.test(line))
     .filter((line) => !/^Fiche descriptive/i.test(line))
     .filter((line) => !/^Intitulé du projet$/i.test(line))
     .filter((line) => !/^Objectifs du projet$/i.test(line))
@@ -1097,11 +1750,11 @@ function cirConsultantReading(summary: any, explanation: any, noveltyScore: any)
   const continuityCount = Number(summary?.continuity_verrou_count ?? 0)
 
   if (evolutionCount > 0 && newCount === 0 && continuityCount === 0) {
-    return "Le projet courant s’inscrit dans la continuité du CIR précédent, mais avec des évolutions techniques à documenter. Le point important pour le consultant est de montrer ce qui a changé : nouvelles configurations, nouveaux essais, nouvelles mesures ou nouvelles solutions testées."
+    return "Le projet courant s’inscrit dans la continuité du CIR précédent, mais avec des évolutions techniques à documenter. Le consultant doit expliciter les nouveaux essais, les nouvelles configurations, les nouvelles mesures ou les nouvelles solutions testées."
   }
 
   if (newCount > 0) {
-    return "Le projet contient des éléments potentiellement nouveaux par rapport au CIR précédent. Le consultant doit vérifier que ces nouveautés sont bien soutenues par des preuves techniques et qu’elles ne reprennent pas simplement des travaux déjà déclarés."
+    return "Le projet contient des éléments potentiellement nouveaux par rapport au CIR précédent. Le consultant doit vérifier que ces nouveautés sont bien soutenues par des preuves techniques de l’année courante."
   }
 
   if (Number.isFinite(novelty) && novelty >= 0.5) {
@@ -1113,10 +1766,9 @@ function cirConsultantReading(summary: any, explanation: any, noveltyScore: any)
 
 function cirConsultantRisk(summary: any) {
   const evolutionCount = Number(summary?.evolution_verrou_count ?? 0)
-  const newCount = Number(summary?.new_verrou_count ?? 0)
   const continuityCount = Number(summary?.continuity_verrou_count ?? 0)
 
-  if (evolutionCount > 0 && newCount === 0) {
+  if (evolutionCount > 0) {
     return "Risque principal : présenter des travaux en continuité comme s’ils étaient totalement nouveaux. À sécuriser en expliquant précisément les nouvelles expérimentations, les nouvelles configurations et les résultats obtenus sur l’année courante."
   }
 
@@ -1137,7 +1789,7 @@ function previousReferenceLabel(item: any) {
 
   const firstLine = previous.split("\n").find(Boolean) || previous
   const cleaned = firstLine
-    .replace(/^PROJET TGM\s*\d+.*$/i, "")
+    .replace(/^PROJET\s+.*$/i, "")
     .replace(/^Fiche descriptive.*$/i, "")
     .trim()
 
@@ -1149,61 +1801,40 @@ function previousReferenceLabel(item: any) {
 }
 
 function previousReferenceMeaning(item: any) {
-  const title = normalizeForConsultant(cleanComparisonCurrentTitle(item))
   const previousYear = getComparisonPreviousYear(item)
+  const previous = cleanPreviousCirMatch(item, 420)
 
-  if (title.includes("thermique") || title.includes("refroidissement")) {
-    return `Le CIR ${previousYear || "précédent"} couvrait déjà les problématiques de montée en température et de refroidissement. La valeur du dossier courant est donc de montrer les nouvelles configurations testées, les nouveaux réfrigérants ou l’impact mesuré du débit d’eau.`
+  if (previous) {
+    return `Le CIR ${previousYear || "précédent"} contient un passage proche. Le consultant doit l’utiliser comme repère historique, puis expliquer précisément ce que le dossier courant apporte de nouveau ou de plus avancé.`
   }
 
-  if (title.includes("vibr") || title.includes("instable") || title.includes("acoustique")) {
-    return `Le CIR ${previousYear || "précédent"} contenait déjà un axe vibro-acoustique. Le dossier courant doit mettre en avant les nouvelles mesures, l’aspiration déportée, l’équilibrage ou les corrections réalisées cette année.`
-  }
-
-  if (title.includes("contrepoids") || title.includes("plomb") || title.includes("equilibrage")) {
-    return `Le CIR ${previousYear || "précédent"} mentionnait déjà les enjeux mécaniques et d’équilibrage. Ici, l’intérêt est de valoriser la concrétisation du contrepoids sans plomb, les essais et les ajustements associés.`
-  }
-
-  if (title.includes("usure") || title.includes("fiabilite") || title.includes("cause racine") || title.includes("segment")) {
-    return `Le CIR ${previousYear || "précédent"} portait déjà sur la fiabilité du compresseur. Le dossier courant doit préciser les constats nouveaux : usure, perte d’étanchéité, conditions de montage ou analyses permettant d’orienter la cause technique.`
-  }
-
-  if (title.includes("sortie") || title.includes("air sec") || title.includes("condensat")) {
-    return `Le CIR ${previousYear || "précédent"} traitait déjà la qualité de l’air en sortie. La justification attendue porte sur ce qui a évolué dans la séparation, le séchage ou la maîtrise de l’humidité.`
-  }
-
-  return `Le CIR ${previousYear || "précédent"} contient un axe proche. Le consultant doit utiliser cette correspondance comme repère historique, puis expliquer la progression technique du dossier courant.`
+  return `Le CIR ${previousYear || "précédent"} contient un axe proche. Le consultant doit comparer les preuves courantes avec ce repère pour distinguer continuité, évolution et nouveauté.`
 }
 
 function currentEvolutionMeaning(item: any) {
-  const title = normalizeForConsultant(cleanComparisonCurrentTitle(item))
   const evidence = cleanComparisonEvidence(item, 420)
+  const decision = normalizeComparisonStatus(item?.decision?.status)
 
-  if (title.includes("thermique") || title.includes("refroidissement")) {
-    return "Les documents courants apportent des éléments sur les essais thermiques, le débit d’eau, les réfrigérants et la maîtrise de température. Cela permet de montrer une progression expérimentale par rapport au CIR précédent."
+  if (decision === "Continuité forte") {
+    return "Le dossier courant semble proche du CIR précédent. L’intérêt CIR dépend donc de la capacité à démontrer une progression technique réelle à partir des preuves de l’année courante."
   }
 
-  if (title.includes("vibr") || title.includes("instable") || title.includes("acoustique")) {
-    return "Les documents courants apportent des mesures de bruit, de vibration ou des changements de configuration. L’intérêt CIR est de démontrer comment le comportement vibro-acoustique est analysé et amélioré."
+  if (decision === "Évolution à valoriser") {
+    return "Les documents courants apportent des éléments techniques nouveaux ou plus précis. Le consultant doit les rattacher à la progression du verrou par rapport au CIR précédent."
   }
 
-  if (title.includes("contrepoids") || title.includes("plomb") || title.includes("equilibrage")) {
-    return "Les documents courants montrent une redéfinition mécanique autour du contrepoids sans plomb et de l’équilibrage. C’est une évolution valorisable si les essais confirment l’impact sur la stabilité du compresseur."
-  }
-
-  if (title.includes("usure") || title.includes("fiabilite") || title.includes("cause racine") || title.includes("segment")) {
-    return "Les documents courants apportent des observations sur l’usure, l’étanchéité ou la cause technique. Ce point est utile pour justifier une investigation R&D en conditions réelles de fonctionnement."
+  if (decision === "Nouveauté à examiner") {
+    return "Les documents courants contiennent un signal potentiellement nouveau. Le consultant doit confirmer qu’il s’agit bien d’un verrou ou d’un apport technique utile, et non d’un passage isolé ou mal classé."
   }
 
   if (evidence && evidence !== "Preuve documentaire à vérifier.") {
-    return "Les documents courants apportent des éléments techniques nouveaux ou plus précis. Le consultant doit les rattacher à la progression du verrou par rapport au CIR précédent."
+    return "Les documents courants apportent des éléments techniques exploitables. Le consultant doit vérifier leur rôle exact dans la justification CIR."
   }
 
   return "La progression technique doit être confirmée à partir des preuves documentaires de l’année courante."
 }
 
 function consultantJustificationNeeded(item: any) {
-  const title = normalizeForConsultant(cleanComparisonCurrentTitle(item))
   const decision = normalizeComparisonStatus(item?.decision?.status)
 
   if (decision === "Continuité forte") {
@@ -1214,20 +1845,8 @@ function consultantJustificationNeeded(item: any) {
     return "Vérifier si ce point est réellement nouveau ou s’il correspond à un passage mal classé. Le conserver seulement s’il apporte une preuve technique utile."
   }
 
-  if (title.includes("thermique") || title.includes("refroidissement")) {
-    return "Mettre en avant les nouveaux essais, la nouvelle configuration de refroidissement, les valeurs mesurées et l’impact sur la maîtrise thermique."
-  }
-
-  if (title.includes("vibr") || title.includes("instable") || title.includes("acoustique")) {
-    return "Mettre en avant les nouvelles mesures, la configuration testée et l’effet observé sur le bruit ou les vibrations."
-  }
-
-  if (title.includes("contrepoids") || title.includes("plomb") || title.includes("equilibrage")) {
-    return "Mettre en avant la substitution du plomb, les contraintes de masse/CDG et les résultats ou besoins d’équilibrage dynamique."
-  }
-
-  if (title.includes("usure") || title.includes("fiabilite") || title.includes("cause racine") || title.includes("segment")) {
-    return "Mettre en avant les analyses de segments, les hypothèses de cause et les essais ou observations qui permettent d’orienter la résolution."
+  if (decision === "Évolution à valoriser") {
+    return "Mettre en avant les nouveaux essais, les nouvelles configurations, les valeurs mesurées et l’impact observé par rapport au CIR précédent."
   }
 
   return "Expliquer la différence avec le CIR précédent et citer les preuves de l’année courante."
@@ -2119,14 +2738,60 @@ export function DiagnosisPage() {
     )
   }, [diagnosticBundle, backendSectionsV93, backendMarkdownV93])
 
+  const diagnosticReportJsonV107 = useMemo(() => {
+    return unwrapBackendDiagnosticReportV93(diagnosticBundle)
+  }, [diagnosticBundle])
+
+  const jsonVerrousV107 = useMemo(() => {
+    return collectJsonVerrousV107(
+      diagnosticReportJsonV107,
+      diagnosticBundle,
+      display,
+      prepareReport
+    )
+  }, [diagnosticReportJsonV107, diagnosticBundle, display, prepareReport])
+
+  const verrousForDisplay = useMemo(() => {
+    // V123 : quand syncVerrous a enregistré les verrous reformulés en base,
+    // on privilégie la base pour garder les décisions consultant actives.
+    const syncedLlmVerrous = verrous
+      .filter((verrou) => {
+        const sourceJson = verrou.source_json || {}
+        const source = String(sourceJson.source || sourceJson.source_name || "").toLowerCase()
+        const frontendSourceKey = String(sourceJson.frontend_source_key || "").toLowerCase()
+        const displayTitleSource = String(sourceJson.display_title_source || "").toLowerCase()
+        const synthesisVersion = String(sourceJson.verrou_synthesis_version || sourceJson.version || "").toLowerCase()
+
+        return (
+          source.includes("llm_reformulated") ||
+          source.includes("consultant_verrous_cir") ||
+          source.includes("grouped_rag") ||
+          frontendSourceKey.includes("llm_reformulated") ||
+          frontendSourceKey.includes("consultant_verrous_cir") ||
+          displayTitleSource.includes("llm") ||
+          synthesisVersion.includes("v122") ||
+          synthesisVersion.includes("v123")
+        )
+      })
+      .filter((verrou) => !isFallbackVerrouReadV124(verrou))
+
+    if (syncedLlmVerrous.length > 0) return syncedLlmVerrous
+    if (jsonVerrousV107.length > 0) return jsonVerrousV107
+
+    return verrous.filter((verrou) => !isFallbackVerrouReadV124(verrou))
+  }, [jsonVerrousV107, verrous])
+
   const verrousText = useMemo(() => {
+    const fromDisplay = verrousToMarkdownV107(verrousForDisplay)
+    if (fromDisplay) return fromDisplay
+
     return pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
       "Verrous R&D / signaux de verrous",
       "Verrous CIR consolidés",
       "Verrous R&D",
       "Verrous",
     ])
-  }, [backendSectionsV93, backendMarkdownV93])
+  }, [verrousForDisplay, backendSectionsV93, backendMarkdownV93])
 
   const demarcheText = useMemo(() => {
     return pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
@@ -2191,7 +2856,7 @@ export function DiagnosisPage() {
         ]
   }, [validationText, display])
 
-  const hasDiagnostic = Boolean(backendMarkdownV93 || latestRun || verrous.length > 0 || reportMarkdown)
+  const hasDiagnostic = Boolean(backendMarkdownV93 || latestRun || verrousForDisplay.length > 0 || reportMarkdown)
 
   const loadData = async () => {
     setLoading(true)
@@ -3002,7 +3667,7 @@ export function DiagnosisPage() {
 
           <BackendSectionCardV93
             title="Verrous CIR consolidés"
-            description="Verrous reformulés par EnnoDiagnostic à partir des sources RAG. Les décisions restent à prendre dans les signaux NLP synchronisés ci-dessous."
+            description="Affichage prioritaire des verrous reformulés par EnnoDiagnostic V122. Les chunks RAG/NLP bruts ne sont utilisés qu’en fallback."
             icon={Lock}
             text={verrousText}
             emptyText="Aucun verrou CIR consolidé généré. Lance EnnoDiagnostic pour générer les verrous reformulés."
@@ -3019,12 +3684,12 @@ export function DiagnosisPage() {
                 Verrous synchronisés pour validation
               </CardTitle>
               <CardDescription className="text-xs">
-Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourquoi chaque point peut constituer un verrou R&D et laisse la décision au consultant.
+Les verrous reformulés par EnnoDiagnostic sont affichés en priorité. Les décisions restent actives uniquement pour les verrous synchronisés en base.
               </CardDescription>
             </CardHeader>
 
             <CardContent>
-              {verrous.length === 0 ? (
+              {verrousForDisplay.length === 0 ? (
                 <div className="p-6 text-center border border-dashed rounded-lg">
                   <p className="text-sm font-medium text-foreground">
                     Aucun verrou synchronisé pour ce projet.
@@ -3035,10 +3700,12 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                 </div>
               ) : (
                 <Accordion type="single" className="w-full space-y-3">
-                  {verrous.map((verrou) => {
+                  {verrousForDisplay.map((verrou) => {
                     const sources = getSources(verrou)
                     const isLoading = actionLoadingId === verrou.id
-                    const whyVerrou = consultantInterpretation(verrou)
+                    const isJsonOnly = isJsonOnlyVerrouV107(verrou)
+                    const explanationSections = getVerrouExplanationSections(verrou)
+                    const whyVerrou = getShortVerrouRationale(verrou)
                     const action = consultantAction(verrou)
                     const excerpt = shortSourceText(verrou)
                     const sourceTextForDocs = `${verrou.title || ""} ${verrou.justification || ""} ${excerpt || ""} ${JSON.stringify(verrou.source_json || {})}`
@@ -3063,7 +3730,7 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                                   {decisionLabel(verrou.consultant_status)}
                                 </Badge>
                                 <Badge variant="outline" className="text-xs">
-                                  Score {formatScore(verrou.score)}
+                                  Score {formatVerrouScoreV124(verrou.score)}
                                 </Badge>
                               </div>
 
@@ -3072,7 +3739,7 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                               </p>
 
                               <p className="text-xs text-muted-foreground leading-relaxed">
-                                Pourquoi c’est un verrou : difficulté technique détectée dans les documents sources, à confirmer par le consultant.
+                                {cleanDisplayText(whyVerrou).slice(0, 220) || "Verrou à confirmer à partir des preuves sources."}
                               </p>
                             </div>
                           </div>
@@ -3081,13 +3748,46 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                         <AccordionContent className="px-4 pb-4 bg-muted/20">
                           <div className="space-y-4">
                             <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                              <div className="rounded-lg border bg-white p-4 space-y-2">
+                              <div className="rounded-lg border bg-white p-4 space-y-3">
                                 <p className="text-xs font-semibold text-brand uppercase tracking-wide">
-                                  Pourquoi c’est un verrou R&D
+                                  Pourquoi EnnoDiagnostic le détecte comme verrou
                                 </p>
                                 <p className="text-sm leading-7 text-foreground">
-                                  {whyVerrou}
+                                  {explanationSections.detection}
                                 </p>
+
+                                {explanationSections.uncertainty && (
+                                  <div className="rounded-md bg-muted/40 p-3 space-y-1">
+                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                      Incertitude technique formulée
+                                    </p>
+                                    <p className="text-sm leading-7 text-foreground">
+                                      {explanationSections.uncertainty}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {explanationSections.notSimpleEngineering && (
+                                  <div className="rounded-md bg-muted/40 p-3 space-y-1">
+                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                      Pourquoi ce n’est pas une simple ingénierie
+                                    </p>
+                                    <p className="text-sm leading-7 text-foreground">
+                                      {explanationSections.notSimpleEngineering}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {explanationSections.evidence && (
+                                  <div className="rounded-md bg-muted/40 p-3 space-y-1">
+                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                      Preuves sources utilisées
+                                    </p>
+                                    <p className="text-sm leading-7 text-foreground">
+                                      {explanationSections.evidence}
+                                    </p>
+                                  </div>
+                                )}
                               </div>
 
                               <div className="rounded-lg border bg-white p-4 space-y-2">
@@ -3095,7 +3795,7 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                                   Ce que le consultant doit vérifier
                                 </p>
                                 <p className="text-sm leading-7 text-foreground">
-                                  Vérifier que les preuves montrent une difficulté technique réelle, non résolue directement par les solutions connues, et que les essais ou analyses apportent une réponse expérimentale.
+                                  {getConsultantCheckText(verrou)}
                                 </p>
                               </div>
                             </div>
@@ -3168,18 +3868,28 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                                     {verrou.tag_cir || "Verrou à vérifier"}
                                   </Badge>
                                   <Badge variant="outline" className="text-xs">
-                                    Score Frascati {formatScore(verrou.score)}
+                                    Score Frascati {formatVerrouScoreV124(verrou.score)}
                                   </Badge>
                                 </div>
                               </div>
                             </details>
 
+                            {isJsonOnly && (
+                              <div className="rounded-lg border border-warning/20 bg-warning/5 p-3">
+                                <p className="text-xs text-warning font-medium">
+                                  Ce verrou vient directement du JSON diagnostic. Pour activer les décisions consultant, lance ou vérifie la synchronisation backend des verrous reformulés.
+                                </p>
+                              </div>
+                            )}
+
                             <div className="flex flex-wrap gap-2 pt-1">
                               <Button
                                 size="sm"
                                 className="text-xs h-8 bg-brand hover:bg-brand/90"
-                                disabled={isLoading}
-                                onClick={() => updateDecision(verrou.id, "garde")}
+                                disabled={isLoading || isJsonOnly}
+                                onClick={() => {
+                                  if (!isJsonOnly) updateDecision(verrou.id, "garde")
+                                }}
                               >
                                 <CheckCircle2 className="size-3 mr-1" />
                                 Retenir
@@ -3189,8 +3899,10 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                                 size="sm"
                                 variant="outline"
                                 className="text-xs h-8"
-                                disabled={isLoading}
-                                onClick={() => updateDecision(verrou.id, "reformuler")}
+                                disabled={isLoading || isJsonOnly}
+                                onClick={() => {
+                                  if (!isJsonOnly) updateDecision(verrou.id, "reformuler")
+                                }}
                               >
                                 <RefreshCw className="size-3 mr-1" />
                                 À consolider
@@ -3200,8 +3912,10 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                                 size="sm"
                                 variant="outline"
                                 className="text-xs h-8 text-muted-foreground border-border hover:bg-muted"
-                                disabled={isLoading}
-                                onClick={() => updateDecision(verrou.id, "rejete")}
+                                disabled={isLoading || isJsonOnly}
+                                onClick={() => {
+                                  if (!isJsonOnly) updateDecision(verrou.id, "rejete")
+                                }}
                               >
                                 <XCircle className="size-3 mr-1" />
                                 Non retenir
@@ -3946,7 +4660,7 @@ Les verrous détectés sont conservés tels quels. EnnoDiagnostic explique pourq
                             {decisionLabel(verrou.consultant_status)}
                           </Badge>
                           <Badge variant="outline" className="text-xs">
-                            Score {formatScore(verrou.score)}
+                            Score {formatVerrouScoreV124(verrou.score)}
                           </Badge>
                         </div>
                         <p className="text-sm font-medium text-foreground">

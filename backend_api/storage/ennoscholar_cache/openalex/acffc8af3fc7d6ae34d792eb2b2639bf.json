@@ -1,0 +1,106 @@
+{
+  "created_at": "2026-06-26T09:45:29",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "seismic performance connectors timber-concrete composite structures",
+      "paper_id": "https://openalex.org/W2127664933",
+      "title": "Strengthening of timber structures with glued-in rods",
+      "abstract": "",
+      "year": 2015,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2015.03.097",
+      "doi": "10.1016/j.conbuildmat.2015.03.097",
+      "authors": [
+        "René Steiger",
+        "Erik Serrano",
+        "Mislav Stepinac",
+        "Vlatka Rajčić",
+        "Caoimhe O’Neill",
+        "Daniel McPolin",
+        "Robert Widmann"
+      ],
+      "citation_count": 154,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Reinforcement",
+        "Load bearing",
+        "Rod",
+        "Bearing capacity",
+        "Engineering",
+        "Structural engineering",
+        "Construction engineering",
+        "Forensic engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "seismic performance connectors timber-concrete composite structures",
+      "paper_id": "https://openalex.org/W2999077158",
+      "title": "Experimental study on seismic performance of glulam-concrete composite beam-to-column joints",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Composite Structures",
+      "url": "https://doi.org/10.1016/j.compstruct.2020.111864",
+      "doi": "10.1016/j.compstruct.2020.111864",
+      "authors": [
+        "Jing Zhang",
+        "Xiamin Hu",
+        "Qimeng Sun",
+        "Yijie Zhang",
+        "Wenwen Zhu",
+        "Lin Li"
+      ],
+      "citation_count": 31,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Structural engineering",
+        "Composite number",
+        "Dissipation",
+        "Beam (structure)",
+        "Stiffness",
+        "Joint (building)",
+        "Slab",
+        "Materials science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "seismic performance connectors timber-concrete composite structures",
+      "paper_id": "https://openalex.org/W4413779509",
+      "title": "Experimental and Design Research on Seismic Performance of Connectors in Timber–Concrete Composite Structures",
+      "abstract": "To evaluate the mechanical properties of connectors in timber–concrete composite (TCC) structures under low-cycle reversed loading, eighteen push-out specimens were designed and fabricated following the standard push-out test method. This study presents the first comparative analysis of the seismic performance between notch-bolted and ordinary bolted connections across three bolt diameters (12 mm, 16 mm, and 20 mm), addressing a gap in systematic experimental data for different connection types. Key performance indices under cyclic loading—including stiffness degradation, strength degradation, energy dissipation capacity, and ductility—were investigated. Furthermore, cumulative damage analysis elucidated the damage accumulation process, establishing a damage index (Dw) based on an energy method and proposing Dw = 0.6 as a critical early-warning threshold for failure. Practical recommendations for seismic design and engineering applications are provided. The results demonstrate that compared to ordinary bolted connections, notch-bolted connections achieve a 15–30% increase in ultimate bearing capacity and exhibit superior stiffness. Specimens with 16 mm bolts exhibited optimal ductility (ductility coefficient ξ = 3.6), while notch-bolted connections maintained stable ductility within the range of ξ = 2–3. Finally, a numerical model was developed using ANSYS finite element software. Validation against experimental results confirmed the model’s accuracy in simulating structural behavior. This research elucidates the cumulative damage mechanisms in TCC structures under cyclic loading, providing a theoretical basis for design optimization and valuable insights for promoting the seismic application of these composite systems.",
+      "year": 2025,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings15173084",
+      "doi": "10.3390/buildings15173084",
+      "authors": [
+        "Zuen Zheng",
+        "Shuai Yuan",
+        "Guojing He"
+      ],
+      "citation_count": 1,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Structural engineering",
+        "Composite number",
+        "Seismic analysis",
+        "Engineering",
+        "Materials science",
+        "Composite material"
+      ],
+      "tldr": ""
+    }
+  ]
+}

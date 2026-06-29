@@ -1,0 +1,103 @@
+{
+  "created_at": "2026-06-26T09:39:35",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "https://openalex.org/W3122875397",
+      "title": "Thermal insulation potential of non-industrial hemp (Moroccan cannabis sativa L.) fibers for green plaster-based building materials",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Journal of Cleaner Production",
+      "url": "https://doi.org/10.1016/j.jclepro.2021.126064",
+      "doi": "10.1016/j.jclepro.2021.126064",
+      "authors": [
+        "Mouatassim Charai",
+        "Haitham Sghiouri",
+        "Ahmed Mezrhab",
+        "Mustapha Karkri"
+      ],
+      "citation_count": 111,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Thermogravimetric analysis",
+        "Composite material",
+        "Fiber",
+        "Cannabis sativa",
+        "Chemistry",
+        "Botany",
+        "Organic chemistry"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "https://openalex.org/W4380536677",
+      "title": "A Review of Natural Bio-Based Insulation Materials",
+      "abstract": "Within the context of climate change and the environmental impact of the building industry, insulation materials contribute to improving the thermal performance of buildings, thus reducing energy demand and carbon emissions during the operation phase. Although most of them are responsible for significant carbon emissions during their production, bio-based insulation materials can provide good performance with low carbon emissions. This paper aims to investigate natural insulation materials’ properties and environmental impacts through a literature review. Due to the growing importance of Environmental Product Declarations (EPDs) on specification requirements, many manufacturers already disclose environmental data related to their products, allowing for a comparison between thermal insulation solutions. In academic research, embodied environmental impacts are not as explored as physical properties. In addition, from the analysis of results, it is possible to conclude that the characterization of the physical properties of this type of material is normally focused on thermal conductivity. Nevertheless, most studies overlook other important parameters of these materials, such as the thermal capacity, lifetime, and environmental impacts. This is something that is necessary to overcome in future developments to allow for a comprehensive comparison between the properties of different (conventional and bio-based) insulation materials.",
+      "year": 2023,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en16124676",
+      "doi": "10.3390/en16124676",
+      "authors": [
+        "Lívia Cosentino",
+        "Jorge Fernandes",
+        "Ricardo Mateus"
+      ],
+      "citation_count": 89,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Context (archaeology)",
+        "Thermal insulation",
+        "Environmental science",
+        "Embodied energy",
+        "Environmental impact assessment",
+        "Carbon neutrality",
+        "Natural materials",
+        "Greenhouse gas"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "https://openalex.org/W4200201201",
+      "title": "Thermal and mechanical behavior of straw-based construction: A review",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2021.125915",
+      "doi": "10.1016/j.conbuildmat.2021.125915",
+      "authors": [
+        "Ghadie Tlaiji",
+        "Salah-Eddine Ouldboukhitine",
+        "Fabienne Pennec",
+        "Pascal Henry Biwolé"
+      ],
+      "citation_count": 70,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Context (archaeology)",
+        "Embodied energy",
+        "Environmental science",
+        "Life-cycle assessment",
+        "Work (physics)",
+        "Relative humidity",
+        "Carbon footprint"
+      ],
+      "tldr": ""
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "created_at": "2026-06-26T09:42:49",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "straw bale wall fire resistance building insulation",
+      "paper_id": "https://openalex.org/W4221079725",
+      "title": "A review on the properties of straw insulation for buildings",
+      "abstract": "",
+      "year": 2022,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2022.127215",
+      "doi": "10.1016/j.conbuildmat.2022.127215",
+      "authors": [
+        "Yaping Zhou",
+        "Abdelkrim Trabelsi",
+        "Mohamed El Mankibi"
+      ],
+      "citation_count": 70,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Life-cycle assessment",
+        "Thermal insulation",
+        "Reuse",
+        "Durability",
+        "Carbon footprint",
+        "Building envelope",
+        "Moisture"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw bale wall fire resistance building insulation",
+      "paper_id": "https://openalex.org/W2040996434",
+      "title": "Determining moisture levels in straw bale construction",
+      "abstract": "",
+      "year": 2009,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2009.03.011",
+      "doi": "10.1016/j.conbuildmat.2009.03.011",
+      "authors": [
+        "Mike Lawrence",
+        "Andrew Heath",
+        "Peter Walker"
+      ],
+      "citation_count": 86,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Moisture",
+        "Microclimate",
+        "Environmental science",
+        "Relative humidity",
+        "Durability",
+        "Work (physics)",
+        "Water content"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw bale wall fire resistance building insulation",
+      "paper_id": "https://openalex.org/W4251565017",
+      "title": "Straw bale construction",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Elsevier eBooks",
+      "url": "https://doi.org/10.1016/b978-0-08-102704-2.00009-3",
+      "doi": "10.1016/b978-0-08-102704-2.00009-3",
+      "authors": [
+        "Pete Walker",
+        "Andrew Thomson",
+        "Daniel Maskell"
+      ],
+      "citation_count": 22,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "book-chapter"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Load bearing",
+        "Engineering",
+        "Work (physics)",
+        "Durability",
+        "Product (mathematics)",
+        "Architectural engineering",
+        "Agricultural engineering"
+      ],
+      "tldr": ""
+    }
+  ]
+}

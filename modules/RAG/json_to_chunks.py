@@ -61,15 +61,89 @@ def _unique_id(base_id: str, used_ids: Set[str], *hash_parts: Any) -> str:
     return candidate2
 
 
+def _dedupe_key_for_pack_item(item: Dict[str, Any], pack_key: str) -> str:
+    """Clé stable pour éviter les doublons sans perdre les vrais signaux NLP."""
+    if not isinstance(item, dict):
+        return ""
+    passage_id = _safe_text(item.get("passage_id") or item.get("id"))
+    if passage_id:
+        return f"{pack_key}|pid|{passage_id}"
+    document = _safe_text(item.get("document"))
+    text = _safe_text(item.get("text"))
+    return f"{pack_key}|txt|{document}|{text[:360]}"
+
+
+def _merge_pack_into(target: Dict[str, Any], pack: Any) -> None:
+    """
+    Fusionne un evidence_pack NLP dans le pack RAG final.
+
+    Point important : on ne doit pas remplacer les vrais verrous NLP par le
+    seul pack Frascati qualifié. Le pack Frascati peut contenir uniquement des
+    catégories transverses reconstruites, alors que les preuves NLP détaillées
+    portent les verrous métier précis.
+    """
+    if not isinstance(pack, dict):
+        return
+
+    for pack_key in PACK_KEYS:
+        items = pack.get(pack_key) or []
+        if not isinstance(items, list):
+            continue
+
+        bucket = target.setdefault(pack_key, [])
+        seen = target.setdefault("_seen_keys", {}).setdefault(pack_key, set())
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            key = _dedupe_key_for_pack_item(item, pack_key)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            bucket.append(item)
+
+
 def get_pack(nlp_result: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Retourne le pack utilisé pour construire les chunks RAG.
+
+    Correction V31 : avant, si frascati_guard.qualified_pack_for_ennodiagnostic
+    existait, il remplaçait tout le reste. Dans certains dossiers, ce pack ne
+    contient que 1 ou 2 verrous génériques reconstruits, ce qui fait perdre les
+    vrais verrous NLP avant l'arrivée dans Chroma/RAG.
+
+    Maintenant on fusionne les packs détaillés NLP + le pack Frascati.
+    Le score Frascati reste une métadonnée ; il ne décide plus seul de ce qui
+    entre dans le RAG.
+    """
     if not isinstance(nlp_result, dict):
         return {}
+
+    merged: Dict[str, Any] = {}
+
+    candidate_packs = [
+        nlp_result.get("multi_document_evidence_pack_for_ennodiagnostic"),
+        nlp_result.get("merged_evidence_pack_for_ennodiagnostic"),
+        nlp_result.get("evidence_pack_for_ennodiagnostic"),
+        nlp_result.get("merged_evidence_pack_before_frascati"),
+        nlp_result.get("raw_evidence_pack_before_frascati"),
+    ]
+
     fg = nlp_result.get("frascati_guard") or {}
     if isinstance(fg, dict):
-        pack = fg.get("qualified_pack_for_ennodiagnostic")
-        if isinstance(pack, dict) and pack:
-            return pack
-    return nlp_result.get("multi_document_evidence_pack_for_ennodiagnostic") or nlp_result.get("merged_evidence_pack_for_ennodiagnostic") or nlp_result.get("evidence_pack_for_ennodiagnostic") or {}
+        candidate_packs.append(fg.get("qualified_pack_for_ennodiagnostic"))
+
+    for pack in candidate_packs:
+        _merge_pack_into(merged, pack)
+
+    merged.pop("_seen_keys", None)
+
+    # Dernier fallback ancien format.
+    if not any(isinstance(merged.get(k), list) and merged.get(k) for k in PACK_KEYS):
+        fallback = nlp_result.get("multi_document_evidence_pack_for_ennodiagnostic") or nlp_result.get("merged_evidence_pack_for_ennodiagnostic") or nlp_result.get("evidence_pack_for_ennodiagnostic") or {}
+        return fallback if isinstance(fallback, dict) else {}
+
+    return merged
 
 
 def _make_base_id(project_id: str, year: Optional[str], pack_key: str, role: str, item: Dict[str, Any], index: int) -> str:

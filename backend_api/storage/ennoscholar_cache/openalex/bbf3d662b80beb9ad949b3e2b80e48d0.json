@@ -1,0 +1,400 @@
+{
+  "created_at": "2026-06-26T10:07:26",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "fire resistance timber frame wall bio-based insulation",
+      "paper_id": "https://openalex.org/W2023555815",
+      "title": "A Comparative Cradle-to-Gate Life Cycle Assessment of Mid-Rise Office Building Construction Alternatives: Laminated Timber or Reinforced Concrete",
+      "abstract": "The objective of this project was to quantify and compare the environmental impacts associated with alternative designs for a typical North American mid-rise office building. Two scenarios were considered; a traditional cast-in-place, reinforced concrete frame and a laminated timber hybrid design, which utilized engineered wood products (cross-laminated timber (CLT) and glulam). The boundary of the quantitative analysis was cradle-to-construction site gate and encompassed the structural support system and the building enclosure. Floor plans, elevations, material quantities, and structural loads associated with a five-storey concrete-framed building design were obtained from issued-for-construction drawings. A functionally equivalent, laminated timber hybrid design was conceived, based on Canadian Building Code requirements. Design values for locally produced CLT panels were established from in-house material testing. Primary data collected from a pilot-scale manufacturing facility was used to develop the life cycle inventory for CLT, whereas secondary sources were referenced for other construction materials. The TRACI characterization methodology was employed to translate inventory flows into impact indicators. The results indicated that the laminated timber building design offered a lower environmental impact in 10 of 11 assessment categories. The cradle-to-gate process energy was found to be nearly identical in both design scenarios (3.5 GJ/m2), whereas the cumulative embodied energy (feedstock plus process) of construction materials was estimated to be 8.2 and 4.6 GJ/m2 for the timber and concrete designs, respectively; which indicated an increased availability of readily accessible potential energy stored within the building materials of the timber alternative.",
+      "year": 2012,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings2030245",
+      "doi": "10.3390/buildings2030245",
+      "authors": [
+        "Adam Blake Robertson",
+        "Frank Lam",
+        "Raymond J. Cole"
+      ],
+      "citation_count": 238,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cross laminated timber",
+        "Engineering",
+        "Embodied energy",
+        "Life-cycle assessment",
+        "Civil engineering",
+        "Building design",
+        "Enclosure",
+        "Reinforced concrete"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fire resistance timber frame wall bio-based insulation",
+      "paper_id": "https://openalex.org/W4214594915",
+      "title": "Integration of life cycle assessments (LCA) in circular bio-based wall panel design",
+      "abstract": "",
+      "year": 2022,
+      "venue": "Journal of Cleaner Production",
+      "url": "https://doi.org/10.1016/j.jclepro.2022.130938",
+      "doi": "10.1016/j.jclepro.2022.130938",
+      "authors": [
+        "Valeria Cascione",
+        "Matt Roberts",
+        "Stephen Allen",
+        "Barrie Dams",
+        "Daniel Maskell",
+        "Andy Shea",
+        "Pete Walker",
+        "Stephen Emmitt"
+      ],
+      "citation_count": 60,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Life-cycle assessment",
+        "Circular economy",
+        "Cladding (metalworking)",
+        "Flat panel",
+        "Engineering",
+        "Environmental impact assessment",
+        "Structural engineering",
+        "Computer science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fire resistance timber frame wall bio-based insulation",
+      "paper_id": "https://openalex.org/W4211175804",
+      "title": "Bio-based Building Skin",
+      "abstract": "",
+      "year": 2019,
+      "venue": "Directory of Open access Books (OAPEN Foundation)",
+      "url": "https://www.doabooks.org/doab?func=search&query=rid:43479",
+      "doi": "10.1007/978-981-13-3747-5",
+      "authors": [
+        "Andreja Kutnar",
+        "Marcin Brzezicki",
+        "Jakub Sandak",
+        "Anna Sandak"
+      ],
+      "citation_count": 103,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "book"
+      ],
+      "fields_of_study": [
+        "Architectural engineering",
+        "Perspective (graphical)",
+        "Selection (genetic algorithm)",
+        "Engineering",
+        "Computer science",
+        "Engineering drawing",
+        "Construction engineering",
+        "Artificial intelligence"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fire resistance timber frame wall bio-based insulation",
+      "paper_id": "https://openalex.org/W4221079725",
+      "title": "A review on the properties of straw insulation for buildings",
+      "abstract": "",
+      "year": 2022,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2022.127215",
+      "doi": "10.1016/j.conbuildmat.2022.127215",
+      "authors": [
+        "Yaping Zhou",
+        "Abdelkrim Trabelsi",
+        "Mohamed El Mankibi"
+      ],
+      "citation_count": 70,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Life-cycle assessment",
+        "Thermal insulation",
+        "Reuse",
+        "Durability",
+        "Carbon footprint",
+        "Building envelope",
+        "Moisture"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fire resistance timber frame wall bio-based insulation",
+      "paper_id": "https://openalex.org/W3035571789",
+      "title": "Applications of hemp in textiles, paper industry, insulation and building materials, horticulture, animal nutrition, food and beverages, nutraceuticals, cosmetics and hygiene, medicine, agrochemistry, energy production and environment: a review",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Environmental Chemistry Letters",
+      "url": "https://doi.org/10.1007/s10311-020-01029-2",
+      "doi": "10.1007/s10311-020-01029-2",
+      "authors": [
+        "Grégorio Crini",
+        "Éric Lichtfouse",
+        "Gilles Chanet",
+        "Nadia Morin‐Crini"
+      ],
+      "citation_count": 386,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Cosmetics",
+        "Cannabis sativa",
+        "Nutraceutical",
+        "Automotive industry",
+        "Agriculture",
+        "Engineering",
+        "Business",
+        "Waste management"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fire resistance timber frame wall bio-based insulation",
+      "paper_id": "https://openalex.org/W3049387441",
+      "title": "Enhanced Resistance to Fire of the Bark-Based Panels Bonded with Clay",
+      "abstract": "The aim of this study was to investigate the flammability of ecologically friendly, 100% natural larch and poplar bark-based panels bonded with clay. The clay acted as a fire retardant, and it improved the fire resistance of the boards by 12–15% for the surface and 27–39% for the edge of the testing specimens. The thermal conductivity was also analyzed. Although the panels had a density ranging from 600 to 900 kg/m3, thermal conductivity for the panel with a density of 600 kg/m3 was excellent, and it was comparable to lightweight insulation panels with much lower densities. Besides that, the advantage of the bark clay boards, as an insulation material, is mostly in an accumulative capacity similar to wood cement boards, and it can significantly improve the climatic stability of indoor spaces that have low ventilation rates. Bark boards with clay, similar to wood cement composites (wood wool cement composites and wood particle cement composites), have low mechanical properties and elasticity. Therefore, there their use is limited to non-structural paneling applications. These ecologically friendly, 100% natural and recyclable composites can be mostly used with respect to their thermal insulation, acoustics and fire resistance properties.",
+      "year": 2020,
+      "venue": "Applied Sciences",
+      "url": "https://doi.org/10.3390/app10165594",
+      "doi": "10.3390/app10165594",
+      "authors": [
+        "Eugenia Mariana Tudor",
+        "Christoph Scheriau",
+        "Marius Cătălin Barbu",
+        "Roman Réh",
+        "Ľuboš Krišťák",
+        "Thomas Schnabel"
+      ],
+      "citation_count": 41,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Composite material",
+        "Thermal insulation",
+        "Cement",
+        "Fire resistance",
+        "Flammability",
+        "Fire retardant",
+        "Layer (electronics)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fire resistance timber frame wall bio-based insulation",
+      "paper_id": "https://openalex.org/W2979363123",
+      "title": "Fiber-Reinforced Polymer Composites: Manufacturing, Properties, and Applications",
+      "abstract": "Composites have been found to be the most promising and discerning material available in this century. Presently, composites reinforced with fibers of synthetic or natural materials are gaining more importance as demands for lightweight materials with high strength for specific applications are growing in the market. Fiber-reinforced polymer composite offers not only high strength to weight ratio, but also reveals exceptional properties such as high durability; stiffness; damping property; flexural strength; and resistance to corrosion, wear, impact, and fire. These wide ranges of diverse features have led composite materials to find applications in mechanical, construction, aerospace, automobile, biomedical, marine, and many other manufacturing industries. Performance of composite materials predominantly depends on their constituent elements and manufacturing techniques, therefore, functional properties of various fibers available worldwide, their classifications, and the manufacturing techniques used to fabricate the composite materials need to be studied in order to figure out the optimized characteristic of the material for the desired application. An overview of a diverse range of fibers, their properties, functionality, classification, and various fiber composite manufacturing techniques is presented to discover the optimized fiber-reinforced composite material for significant applications. Their exceptional performance in the numerous fields of applications have made fiber-reinforced composite materials a promising alternative over solitary metals or alloys.",
+      "year": 2019,
+      "venue": "Polymers",
+      "url": "https://doi.org/10.3390/polym11101667",
+      "doi": "10.3390/polym11101667",
+      "authors": [
+        "Dipen Kumar Rajak",
+        "Durgesh D. Pagar",
+        "Pradeep L. Menezes",
+        "Emanoil Linul"
+      ],
+      "citation_count": 1615,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Specific strength",
+        "Materials science",
+        "Composite material",
+        "Flexural strength",
+        "Aerospace",
+        "Composite number",
+        "Specific modulus",
+        "Durability"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fire resistance timber frame wall bio-based insulation",
+      "paper_id": "https://openalex.org/W2804387026",
+      "title": "Fire Resistance of Partially Protected Cross-Laminated Timber Rooms",
+      "abstract": "This thesis studies the fire behaviour of Cross Laminated Timber (CLT) panels in partially protected rooms. A one-dimensional heat transfer model was developed to determine the fire resistance of CLT floor and wall panels. During this study, three room fire tests were conducted at Carleton University Fire Research Laboratory to determine the maximum percentage of unprotected CLT surface area that will yield similar results to that of a fully protected room. The rooms had a single opening and were constructed entirely using 3-ply, 105 mm thick CLT panels. A non-standard, parametric fire using furniture and clothing as fuel was used and 2 layers of gypsum board were used to cover the ceiling and the protected walls. The Heat Release Rate, temperature, charring rate and gypsum falloff time of each test was collected.",
+      "year": 2015,
+      "venue": "",
+      "url": "https://doi.org/10.22215/etd/2015-10728",
+      "doi": "10.22215/etd/2015-10728",
+      "authors": [
+        "Alejandro Medina Hevia"
+      ],
+      "citation_count": 23,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "dissertation"
+      ],
+      "fields_of_study": [
+        "Charring",
+        "Ceiling (cloud)",
+        "Cross laminated timber",
+        "Gypsum",
+        "Fire test",
+        "Glazing",
+        "Fire resistance",
+        "Structural engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fire resistance timber frame wall bio-based insulation",
+      "paper_id": "https://openalex.org/W2899678744",
+      "title": "Performance of Wood-Based Panels Integrated with a Bio-Based Phase Change Material: A Full-Scale Experiment in a Cold Climate with Timber-Frame Huts",
+      "abstract": "The relatively low thermal mass of timber frame buildings is a limiting factor for their energy efficiency and for the thermal comfort. The aim of this study is to assess the performance of wood-based wallboards integrated with PCM (Phase Change Materials) in a cold climate (Québec, Canada), from the heating season to the summer. Two timber-frame test huts, of 2 × 2.5 × 3 m, were built following the National Building Code of Canada and placed in the LAVAL University Campus. The first hut was equipped with wood-based panels integrated with the commercial bio-based PCM Puretemp®23 with a 23 °C melting point. The second hut was equipped with standard interior wood panels. Large double glaze windows were installed facing south. Dry indoor air temperatures were recorded for both huts and for the heating season, heating consumptions were monitored. The behaviour of the two huts was compared and PCM panels efficiency was evaluated over several seasons. A reduction of heating consumption was observed for cold months. For the heating season, panels were found to be more efficient as the months were getting milder. By gathering solar energy during the day, they allowed to reduce the test-hut heating consumption, by a maximum of 41% in May. In summer, the PCM panels had a positive impact in order to reduce the hut overheating. However their efficiency was found limited by a poor ability of discharge during the night. The solidification of the PCM was often impossible to achieve due to unsuitable night conditions. The results presented in this study will improve the knowledge concerning wood/PCM composites performance and concerning PCMs issues in cold climates. This study exposes the potential of wood-based panels integrated with PCM to achieve winter energy savings and enhance the summer thermal comfort of a timber-frame building, for a cold Canadian climate.",
+      "year": 2018,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en11113093",
+      "doi": "10.3390/en11113093",
+      "authors": [
+        "Damien Mathis",
+        "Pierre Blanchet",
+        "Philippe Lagière",
+        "Véronic Landry"
+      ],
+      "citation_count": 40,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Overheating (electricity)",
+        "Environmental science",
+        "Phase-change material",
+        "TRNSYS",
+        "Thermal mass",
+        "Cold climate",
+        "Energy consumption",
+        "Limiting"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fire resistance timber frame wall bio-based insulation",
+      "paper_id": "https://openalex.org/W4376139372",
+      "title": "A review on recent research on bio-based building materials and their applications",
+      "abstract": "Abstract Bio-based materials represent a promising alternative in building envelope applications, with the aim of improving in-use energy efficiency. They have the advantage of being renewable, low embodied energy and CO 2 neutral or negative. In addition, they are excellent thermal regulators. This paper presents an overview of the state-of-the-art of bio-based materials used in building construction and their applications. The materials outlined include hemp, wood, date palm wood, cork, alfa and straw. Through this literature study we want to get a broad overview of the current state of theoretical and experimental studies of their hygrothermal characteristics and their thermal and energy performances. The aim is not to be exhaustive but to summarise the most important research results on these materials. This is the first part of a research work that deals with the contribution to the development of a new bio-based construction material to be used in building.",
+      "year": 2023,
+      "venue": "Materials for Renewable and Sustainable Energy",
+      "url": "https://doi.org/10.1007/s40243-023-00234-7",
+      "doi": "10.1007/s40243-023-00234-7",
+      "authors": [
+        "S. Bourbia",
+        "H. Kazeoui",
+        "Rafik Belarbi"
+      ],
+      "citation_count": 109,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Cork",
+        "Architectural engineering",
+        "Building envelope",
+        "Renewable energy",
+        "Embodied energy",
+        "Building material",
+        "Work (physics)",
+        "Natural materials"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fire resistance timber frame wall bio-based insulation",
+      "paper_id": "https://openalex.org/W3152826700",
+      "title": "Land availability in Europe for a radical shift toward bio-based construction",
+      "abstract": "The renovation and construction of buildings presents an opportunity for climate change mitigation in urban environments. Bio-based construction is particularly promising since the plant’s sequestered carbon offsets the building’s carbon emissions. However, the required land to cultivate suitable biomass and the feasibility of environmentally sustainable materials for resilient cities should be understood. This study analyzes timber, straw, hemp and cork construction and renovation in Europe. A prediction-based model, tuned-up on four systems (built environment, natural environment, carbon balance, industrial processing), converts construction activities until 2050 into required material, embodied land and carbon storage. A novel material-land nexus concept analyzes the required land for bio-based construction. Land transformation is not analyzed. The aim is to evaluate the biomass supply considering the current cross-sectoral use of land in Europe. The results indicate that current forests and wheat plantations are more than sufficient for supplying construction materials. Straw seems better than timber, in terms of resource availability and carbon storage potential. Cork is only favorable locally in southern dry countries. The current legal limitations hinder hemp’s potential at a large scale. A wider application of bio-based materials remains unrealistic until an appropriate legal framework is provided.",
+      "year": 2021,
+      "venue": "Sustainable Cities and Society",
+      "url": "https://doi.org/10.1016/j.scs.2021.102929",
+      "doi": "10.1016/j.scs.2021.102929",
+      "authors": [
+        "Verena Göswein",
+        "Jana Reichmann",
+        "Guillaume Habert",
+        "Francesco Pittau"
+      ],
+      "citation_count": 89,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Environmental science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fire resistance timber frame wall bio-based insulation",
+      "paper_id": "https://openalex.org/W2888593255",
+      "title": "DURABILITY OF MASS TIMBER STRUCTURES: A REVIEW OF THE BIOLOGICAL RISKS",
+      "abstract": "Mass timber structures have the potential to change wooden construction on a global scale. Numerous mass timber high-rise buildings are in planning, under development or already built and their performance will alter how architects and engineers view wood as a material. To date, the discussion of material durability and biodegradation in these structures has been limited. While all materials can be degraded by wetting, the potential for biodegradation of wood in a mass timber building requires special consideration. Identifying and eliminating the conditions that might lead to this degradation will be critical for ensuring proper performance of wood in these structures. This article reviews and contrasts potential sources of biodegradation that exist for traditional wood construction with those in mass timber construction and identifies methods for limiting the degradation risk. Finally, future research needs are outlined.",
+      "year": 2018,
+      "venue": "Wood and Fiber Science",
+      "url": "https://doi.org/10.22382/wfs-2018-045",
+      "doi": "10.22382/wfs-2018-045",
+      "authors": [
+        "J Y Wang",
+        "Rod Stirling",
+        "Paul Morris",
+        "Adam Taylor",
+        "James R. Lloyd",
+        "Grant T. Kirker",
+        "S. Lebow",
+        "Mark E. Mankowski",
+        "H. M. Barnes",
+        "Jeffrey J. Morrell"
+      ],
+      "citation_count": 102,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Durability",
+        "Limiting",
+        "Biodegradation",
+        "Engineering",
+        "Construction engineering",
+        "Forensic engineering",
+        "Architectural engineering",
+        "Environmental science"
+      ],
+      "tldr": ""
+    }
+  ]
+}

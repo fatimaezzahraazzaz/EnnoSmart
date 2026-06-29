@@ -1,0 +1,401 @@
+{
+  "created_at": "2026-06-26T10:05:10",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "earth hemp composite thermal inertia building envelope hygrothermal",
+      "paper_id": "https://openalex.org/W2976512860",
+      "title": "Hygrothermal Properties of Raw Earth Materials: A Literature Review",
+      "abstract": "Raw earth historic and contemporary architectures are renowned for their good environmental properties of recyclability and low embodied energy along the production process. Earth massive walls are universally known to be able to regulate indoor thermal and hygroscopic conditions containing energy consumptions, creating comfortable interior spaces with a low carbon footprint. Therefore, earth buildings are de facto green buildings. As a result of this, some earthen technologies have been rediscovered and implemented to be adapted to the contemporary building production sector. Nevertheless, the diffusion of contemporary earthen architecture is decelerated by the lack of broadly accepted standards on its anti-seismic and thermal performance. Indeed, the former issue has been solved using high-tensile materials inside the walls or surface reinforcements on their sides to improve their flexural strength. The latter issue is related to the penalization of earth walls thermal behavior in current regulations, which tent to evaluate only the steady-state performance of building components, neglecting the benefit of heat storage and hygrothermal buffering effect provided by massive and porous envelopes as raw earth ones. In this paper, we show the results of a paper review concerning the hygrothermal performance of earthen materials for contemporary housing: great attention is given to the base materials which are used (inorganic soils, natural fibers, and mineral or recycled aggregates, chemical stabilizers), manufacturing procedures (when described), performed tests and final performances. Different earth techniques (adobe, cob, extruded bricks, rammed earth, compressed earth blocks, light earth) have been considered in order to highlight that earth material can act both as a conductive and insulating meterial depending on how it is implemented, adapting to several climate contests. The paper aims to summarize current progress in the improvement of thermal performance of raw earth traditional mixes, discuss the suitability of existing measurement protocols for hygroscopic and natural materials and provide guidance for further researches.",
+      "year": 2019,
+      "venue": "Sustainability",
+      "url": "https://doi.org/10.3390/su11195342",
+      "doi": "10.3390/su11195342",
+      "authors": [
+        "Giada Giuffrida",
+        "Rosa Caponetto",
+        "Francesco Nocera"
+      ],
+      "citation_count": 131,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Rammed earth",
+        "Adobe",
+        "Embodied energy",
+        "Earth (classical element)",
+        "Raw material",
+        "Earth materials",
+        "Environmental science",
+        "Brick"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "earth hemp composite thermal inertia building envelope hygrothermal",
+      "paper_id": "https://openalex.org/W3122875397",
+      "title": "Thermal insulation potential of non-industrial hemp (Moroccan cannabis sativa L.) fibers for green plaster-based building materials",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Journal of Cleaner Production",
+      "url": "https://doi.org/10.1016/j.jclepro.2021.126064",
+      "doi": "10.1016/j.jclepro.2021.126064",
+      "authors": [
+        "Mouatassim Charai",
+        "Haitham Sghiouri",
+        "Ahmed Mezrhab",
+        "Mustapha Karkri"
+      ],
+      "citation_count": 111,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Thermogravimetric analysis",
+        "Composite material",
+        "Fiber",
+        "Cannabis sativa",
+        "Chemistry",
+        "Botany",
+        "Organic chemistry"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "earth hemp composite thermal inertia building envelope hygrothermal",
+      "paper_id": "https://openalex.org/W4393987487",
+      "title": "Hygrothermal Performance of the Hemp Concrete Building Envelope",
+      "abstract": "The search for environmentally friendly and low-carbon-footprint construction materials continues progressively. Researchers are now interested in innovative materials that connect with the principles of sustainable construction, and materials such as hemp concrete prove to be promising. This article presents the results of a study that aimed to evaluate the hygrothermal performance of hemp concrete integrated into the building envelope using the hygrothermal tool WUFI Pro 6.2. The simulation model was compared and verified with existing models before its utilization for this study. The results of this verification were in good agreement, which gave us more confidence in its application for further parametric studies of building envelopes in hot climate zones. Three wall systems were simulated: (i) a wall system with hemp concrete, (ii) a compressed earth block wall, and (iii) a cement block wall. The most important variables used in the simulations were the hygrothermal properties of the materials or wall components and the incident solar radiation. The simulation results showed that hemp concrete has good thermal performance and temperature and humidity regulation capabilities of the building envelope. The interior surface temperatures of the hemp concrete walls were between 22.1 °C and 24.6 °C compared to the compressed earth block and cement block walls, where the surface temperatures were between 22.0 °C and 27 °C and between 21.2 °C and 28.7 °C, respectively, and between 23 °C and 45 °C for the exterior temperatures. These values remain the same with the increase in exterior temperatures for hemp concrete walls. In conclusion, hemp concrete could be a great alternative material for use in construction for hot climate zones.",
+      "year": 2024,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en17071740",
+      "doi": "10.3390/en17071740",
+      "authors": [
+        "Aguerata Kaboré",
+        "Wahid Maref",
+        "Claudiane Ouellet‐Plamondon"
+      ],
+      "citation_count": 11,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Building envelope",
+        "Envelope (radar)",
+        "Architectural engineering",
+        "Structural engineering",
+        "Civil engineering",
+        "Engineering",
+        "Forensic engineering",
+        "Telecommunications"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "earth hemp composite thermal inertia building envelope hygrothermal",
+      "paper_id": "https://openalex.org/W887900696",
+      "title": "Moisture buffer potential of experimental wall assemblies incorporating formulated hemp-lime",
+      "abstract": "Experiments were carried out according to the Nordtest protocol to study the moisture buffer potential of hemp-lime walls with a range of different internal linings and surface treatments. It was observed that the moisture buffer value was ‘Excellent’ when the inner surface of hemp-lime was exposed. ‘Excellent’ moisture buffer values were also obtained for hemp-lime with lime plaster. All other assemblies demonstrated ‘Good’ moisture buffer value. Moisture buffer values of the assemblies, after application of paint on the upper surfaces, were also determined. It was observed that application of synthetic pigment based trade paint could reduce the moisture buffer performance of the assembly consisting of hemp-lime and lime-plaster from ‘Excellent’ to ‘Good’ while between 61 and 69% reduction of moisture buffer value was observed for the other assemblies. However, the reduced buffer values of the assemblies are still comparable with other moisture buffering building materials. It was further observed that moisture buffer performance was improved when clay based organic paint was used instead of trade paint.",
+      "year": 2015,
+      "venue": "Building and Environment",
+      "url": "https://doi.org/10.1016/j.buildenv.2015.07.011",
+      "doi": "10.1016/j.buildenv.2015.07.011",
+      "authors": [
+        "Eshrar Latif",
+        "Mike Lawrence",
+        "Andy Shea",
+        "Peter Walker"
+      ],
+      "citation_count": 147,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Lime",
+        "Moisture",
+        "Buffer (optical fiber)",
+        "Materials science",
+        "Water content",
+        "Composite material",
+        "Geotechnical engineering",
+        "Metallurgy"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "earth hemp composite thermal inertia building envelope hygrothermal",
+      "paper_id": "https://openalex.org/W4376139372",
+      "title": "A review on recent research on bio-based building materials and their applications",
+      "abstract": "Abstract Bio-based materials represent a promising alternative in building envelope applications, with the aim of improving in-use energy efficiency. They have the advantage of being renewable, low embodied energy and CO 2 neutral or negative. In addition, they are excellent thermal regulators. This paper presents an overview of the state-of-the-art of bio-based materials used in building construction and their applications. The materials outlined include hemp, wood, date palm wood, cork, alfa and straw. Through this literature study we want to get a broad overview of the current state of theoretical and experimental studies of their hygrothermal characteristics and their thermal and energy performances. The aim is not to be exhaustive but to summarise the most important research results on these materials. This is the first part of a research work that deals with the contribution to the development of a new bio-based construction material to be used in building.",
+      "year": 2023,
+      "venue": "Materials for Renewable and Sustainable Energy",
+      "url": "https://doi.org/10.1007/s40243-023-00234-7",
+      "doi": "10.1007/s40243-023-00234-7",
+      "authors": [
+        "S. Bourbia",
+        "H. Kazeoui",
+        "Rafik Belarbi"
+      ],
+      "citation_count": 109,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Cork",
+        "Architectural engineering",
+        "Building envelope",
+        "Renewable energy",
+        "Embodied energy",
+        "Building material",
+        "Work (physics)",
+        "Natural materials"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "earth hemp composite thermal inertia building envelope hygrothermal",
+      "paper_id": "https://openalex.org/W4229038665",
+      "title": "Effect of moisture content on hygrothermal properties: Comparison between pith and hemp shiv composites and other construction materials",
+      "abstract": "",
+      "year": 2022,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2022.127731",
+      "doi": "10.1016/j.conbuildmat.2022.127731",
+      "authors": [
+        "Mohamed Said Abbas",
+        "Fionn McGregor",
+        "Antonin Fabbri",
+        "Mohammed Yacine Ferroukhi",
+        "Céline Perlot"
+      ],
+      "citation_count": 22,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Composite material",
+        "Water content",
+        "Pith",
+        "Moisture",
+        "Relative humidity",
+        "Thermal conductivity",
+        "Porosity"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "earth hemp composite thermal inertia building envelope hygrothermal",
+      "paper_id": "https://openalex.org/W4406400071",
+      "title": "Optimizing Thermal Efficiency of Building Envelopes with Sustainable Composite Materials",
+      "abstract": "The growing global energy demand, particularly in India, calls for innovative strategies to improve building energy efficiency. With buildings contributing significantly to energy consumption, especially in cooling-dominated climates, sustainable insulation materials are essential in minimizing energy usage. This study explores the potential of bamboo biochar, fly ash, and lime as sustainable insulation materials for building envelopes. This study also addresses the critical issue of energy efficiency in building construction, specifically focusing on the comparative analysis of three materials for their thermal performance, environmental impact, and economic viability. This research aims to identify the most sustainable material choice by assessing each material’s life cycle energy consumption, thermal resistance, and associated costs. The research methodology involves an extensive review of 125 relevant studies to assess the thermal performance of these materials. U-values were computed from the reported thermal conductivity data and systematically arranged in chronological order to evaluate and compare their insulation effectiveness over time. Additionally, these materials were analyzed under sustainability criteria, incorporating life cycle analysis and a carbon footprint assessment. This study identifies existing research gaps and offers recommendations for future research, creating structure for the development of sustainable insulation system.",
+      "year": 2025,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings15020230",
+      "doi": "10.3390/buildings15020230",
+      "authors": [
+        "Manoj Deshmukh",
+        "Madhura Yadav"
+      ],
+      "citation_count": 24,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Composite number",
+        "Materials science",
+        "Thermal",
+        "Building envelope",
+        "Composite material",
+        "Structural engineering",
+        "Architectural engineering",
+        "Environmental science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "earth hemp composite thermal inertia building envelope hygrothermal",
+      "paper_id": "https://openalex.org/W4362579019",
+      "title": "Earth-Based Building Incorporating Sargassum muticum Seaweed: Mechanical and Hygrothermal Performances",
+      "abstract": "Once the tide recedes and leaves a significant amount of stranded seaweed on the coast, marine macroalgae pose a serious threat to the surrounding area. Through this work, we considered a large-scale application of stranded macroalgae in building construction. For the first time we studied the impact of incorporating Sargassum mitucum seaweed fiber in replacement of flax fiber used for a standard structural cob. Thus, cob specimens were elaborated and analyzed to evaluate their compressive and hygrothermal performances. It was found that the compressive strength and water vapor resistance factors of cob decreased with the algae content. Additionally, the obtained results showed that a cob made with Sargassum muticum algae presented better thermal (insulation and inertia) and hygroscopic properties than those of a cob made with a flax fiber. Indeed, the replacement of flax straw by algae lead to a reduction in the thermal conductivity by 38% when compared to the standard cob with 2.5% of flax straw fiber. Consequently, numerical simulation showed a reduction in the energy needs in buildings made with an algae-based cob when compared to those made with a flax-based cob. This study can contribute to a global environmental and economic issue, i.e., the valorization of brown algae on a large scale. Indeed, the worldwide knows the largest sea of sargassum algae extent measures over 8850 km2. This huge mass of brownish algae is expanding every year, which now covers an area from Africa to the Caribbean. It weighs more than 20 million tons and extends from the Gulf of Mexico to the west coast of Africa. We show that stranded algae, which are considered as wastes, have the ability to improve the mechanical and hygrothermal performance of cob-based material.",
+      "year": 2023,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings13040932",
+      "doi": "10.3390/buildings13040932",
+      "authors": [
+        "Houssam Affan",
+        "Karim Touati",
+        "Mohammed-Hichem Benzaama",
+        "Daniel Chateigner",
+        "Yassine El Mendili"
+      ],
+      "citation_count": 26,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Sargassum",
+        "Algae",
+        "Environmental science",
+        "Environmental engineering",
+        "Pulp and paper industry",
+        "Biology",
+        "Botany",
+        "Engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "earth hemp composite thermal inertia building envelope hygrothermal",
+      "paper_id": "https://openalex.org/W4391575733",
+      "title": "Compared Environmental Lifecycle Performances of Earth-Based Walls to Drive Building Envelope Design",
+      "abstract": "Raw earth has useful applications in contemporary buildings as a sustainable and circular construction material. The present study aims to assess the environmental performance of several earth-based wall systems with similar thermal performance, through a life cycle thinking approach. In particular, a life cycle assessment is developed for (a) unstabilized rammed earth (produced in situ), (b) compressed earth blocks (prefabricated in the factory), (c) stabilized rammed earth and (d) light earth, all combined with biobased (natural fibers, e.g., lime hemp, cork) and/or conventional materials for building insulation. Results show benefits in terms of avoided carbon emission, water footprint and embodied energy throughout the production chain and highlight limits and potential improvements. In addition, the CO2 offset by crops is also estimated based on carbon embedded in natural fibers. In particular, light earth wall systems are the most suitable to minimize environmental impacts, while massive constructive technologies (as unstabilized rammed earth) show a higher dynamic thermal performance for intended use in Mediterranean climates.",
+      "year": 2024,
+      "venue": "Sustainability",
+      "url": "https://doi.org/10.3390/su16041367",
+      "doi": "10.3390/su16041367",
+      "authors": [
+        "Giada Giuffrida",
+        "Letizia Dipasquale",
+        "Riccardo Maria Pulselli",
+        "Rosa Caponetto"
+      ],
+      "citation_count": 25,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Rammed earth",
+        "Embodied energy",
+        "Carbon footprint",
+        "Life-cycle assessment",
+        "Environmental science",
+        "Sustainability",
+        "Building envelope",
+        "Earth (classical element)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "earth hemp composite thermal inertia building envelope hygrothermal",
+      "paper_id": "https://openalex.org/W4214646276",
+      "title": "Thermal and mechanical characterization of adobes bio-sourced with Pennisetum setaceum fibers and an application for modern buildings",
+      "abstract": "",
+      "year": 2022,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2022.126809",
+      "doi": "10.1016/j.conbuildmat.2022.126809",
+      "authors": [
+        "Mouatassim Charai",
+        "Morad Salhi",
+        "Othmane Horma",
+        "Ahmed Mezrhab",
+        "Mustapha Karkri",
+        "Samir Amraqui"
+      ],
+      "citation_count": 61,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Composite material",
+        "Absorption of water",
+        "Compressive strength",
+        "Ultimate tensile strength",
+        "Thermal insulation",
+        "Adobe",
+        "Cohesion (chemistry)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "earth hemp composite thermal inertia building envelope hygrothermal",
+      "paper_id": "https://openalex.org/W4389616698",
+      "title": "A Review on Numerical Modeling of the Hygrothermal Behavior of Building Envelopes Incorporating Phase Change Materials",
+      "abstract": "Buildings are submitted to various external and internal solicitations that could affect its energy performance. Among these solicitations, temperature and moisture play a crucial role and could irrevocably affect the comfort of the occupants and the indoor air quality of the living environment. To assess the impact of the solicitation on building performance, a precise modeling of the heat, air, and moisture transfer phenomenon is necessary. This work proposes an extensive review of the hygrothermal models for building envelopes. The different models are divided into nodal and HAM techniques for heat, air, and moisture (HAM) transfer models. The HAM approach has been classified based on four driving potentials: moisture content, relative humidity, capillary pressure, and vapor pressure. Phase change materials (PCMs), alongside hygroscopic materials, enhance building thermal capacity and energy efficiency. There are various approaches to studying phase changes, with enthalpy-based and heat capacity approaches being the most popular. Building performance can be improved by combining PCM thermal inertia with hygroscopic moisture management. This review has exhibited the need for numerical models that address phase change and moisture behavior in these hybrid materials, capable of controlling temperature and humidity.",
+      "year": 2023,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings13123086",
+      "doi": "10.3390/buildings13123086",
+      "authors": [
+        "M Sawadogo",
+        "Alexandre Godin",
+        "Marie Duquesne",
+        "Ameur El Amine Hamami",
+        "Rafik Belarbi"
+      ],
+      "citation_count": 10,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Moisture",
+        "Humidity",
+        "Environmental science",
+        "Relative humidity",
+        "Building envelope",
+        "Materials science",
+        "Phase change",
+        "Work (physics)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "earth hemp composite thermal inertia building envelope hygrothermal",
+      "paper_id": "https://openalex.org/W4200201201",
+      "title": "Thermal and mechanical behavior of straw-based construction: A review",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2021.125915",
+      "doi": "10.1016/j.conbuildmat.2021.125915",
+      "authors": [
+        "Ghadie Tlaiji",
+        "Salah-Eddine Ouldboukhitine",
+        "Fabienne Pennec",
+        "Pascal Henry Biwolé"
+      ],
+      "citation_count": 70,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Context (archaeology)",
+        "Embodied energy",
+        "Environmental science",
+        "Life-cycle assessment",
+        "Work (physics)",
+        "Relative humidity",
+        "Carbon footprint"
+      ],
+      "tldr": ""
+    }
+  ]
+}

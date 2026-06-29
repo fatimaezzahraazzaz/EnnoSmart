@@ -1,0 +1,400 @@
+{
+  "created_at": "2026-06-26T10:11:06",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "https://openalex.org/W2888446048",
+      "title": "Forward and Reverse shear transfer in beech LVL-concrete composites with singly inclined coach screw connectors",
+      "abstract": "",
+      "year": 2018,
+      "venue": "Engineering Structures",
+      "url": "https://doi.org/10.1016/j.engstruct.2018.06.070",
+      "doi": "10.1016/j.engstruct.2018.06.070",
+      "authors": [
+        "Wendel Sebastian",
+        "Maurizio Piazza",
+        "Tristan Harvey",
+        "Tom Webster"
+      ],
+      "citation_count": 40,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Laminated veneer lumber",
+        "Structural engineering",
+        "Slip (aerodynamics)",
+        "Composite material",
+        "Shear (geology)",
+        "Deflection (physics)",
+        "Geotechnical engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "https://openalex.org/W3183956963",
+      "title": "In-Plane Shear Cyclic Performance of Spline Cross-Laminated Timber-Concrete Composite Diaphragms",
+      "abstract": "Over the past decade, cross-laminated timber (CLT) panels have gained popularity worldwide. To achieve larger spans and to increase the resistance to diaphragm seismic and wind forces to be transferred through CLT floor or roof systems, CLT-concrete composite (CCC) floors have been developed as an alternative. While significant testing has been performed under gravity loading, limited experimental data exist on the in-plane performance of CCC systems. This study presents results from an experimental program designed to characterize the in-plane shear behavior of CCC diaphragm connections using different CLT to concrete screw connector orientations in a test setup that simulates the expected seismic load path in diaphragms for platform-type construction. Tested variables include concrete slab thickness, composite screw angle, and single spline connection systems consisting of nails or screws. Experimental results and observed damage progression from cyclic testing are presented and discussed. Results indicate that CCC systems achieved increased stiffness and strength values when compared to bare-CLT systems, but slab thickness did not influence the strength and stiffness of the system for the load paths simulated. Additionally, CCC floor systems with 45° composite screw connectors displayed increased strength but overall similar stiffness values when compared to the CCC systems with 90° composite screws. The results provide useful engineering parameters, such as elastic stiffness, peak load, displacement capacity, and ductility ratios that can be used in the development of codified design parameters or in performance-based designs.",
+      "year": 2021,
+      "venue": "Journal of Structural Engineering",
+      "url": "https://doi.org/10.1061/(asce)st.1943-541x.0003127",
+      "doi": "10.1061/(asce)st.1943-541x.0003127",
+      "authors": [
+        "Bradly Taylor",
+        "André R. Barbosa",
+        "Arijit Sinha"
+      ],
+      "citation_count": 16,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cross laminated timber",
+        "Structural engineering",
+        "Stiffness",
+        "Composite number",
+        "Slab",
+        "Cable gland",
+        "Shear (geology)",
+        "Fastener"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "https://openalex.org/W2200695490",
+      "title": "Connections for steel–timber hybrid prefabricated buildings. Part I: Experimental tests",
+      "abstract": "",
+      "year": 2015,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2015.12.002",
+      "doi": "10.1016/j.conbuildmat.2015.12.002",
+      "authors": [
+        "Cristiano Loss",
+        "Maurizio Piazza",
+        "Riccardo Zandonini"
+      ],
+      "citation_count": 179,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cross laminated timber",
+        "Prefabrication",
+        "Engineering",
+        "Structural engineering",
+        "Shear wall",
+        "Engineered wood",
+        "Civil engineering",
+        "Construction engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "https://openalex.org/W2127664933",
+      "title": "Strengthening of timber structures with glued-in rods",
+      "abstract": "",
+      "year": 2015,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2015.03.097",
+      "doi": "10.1016/j.conbuildmat.2015.03.097",
+      "authors": [
+        "René Steiger",
+        "Erik Serrano",
+        "Mislav Stepinac",
+        "Vlatka Rajčić",
+        "Caoimhe O’Neill",
+        "Daniel McPolin",
+        "Robert Widmann"
+      ],
+      "citation_count": 154,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Reinforcement",
+        "Load bearing",
+        "Rod",
+        "Bearing capacity",
+        "Engineering",
+        "Structural engineering",
+        "Construction engineering",
+        "Forensic engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "https://openalex.org/W1498427013",
+      "title": "Seismic design of multi-storey buildings using Laminated Veneer Lumber (LVL)",
+      "abstract": "The recent development of laminated veneer lumber (LVL) as an&#13;\\nalternative to solid timber or glue-laminated timber has greatly improved the viability of&#13;\\nstructural timber for the seismic design of certain types of buildings. The low mass,&#13;\\nflexibility of design and rapidity of construction all create the potential for increased use&#13;\\nof LVL timber in low-rise multi-storey buildings. Based on recent developments in the&#13;\\nseismic design of precast concrete for multi-storey buildings, proposals are made for&#13;\\ninnovative types of jointed ductile connections in LVL timber buildings, based on post-tensioning&#13;\\ntechniques to assemble structural members for both frame and wall systems.&#13;\\nThis contribution gives an overview of an going comprehensive research project&#13;\\ninvolving both numerical and experimental investigations. The extremely satisfactory&#13;\\npreliminary results of quasi-static cyclic tests of exterior beam-column joint&#13;\\nsubassemblies are presented as a confirmation of the expected high seismic performance&#13;\\nof the proposed solutions for LVL seismic resisting systems.",
+      "year": 2005,
+      "venue": "University of Canterbury Research Repository (University of Canterbury)",
+      "url": "http://hdl.handle.net/10092/266",
+      "doi": "",
+      "authors": [
+        "Alessandro Palermo",
+        "Stefano Pampanin",
+        "Andy Buchanan",
+        "Michael P. Newcombe"
+      ],
+      "citation_count": 135,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Laminated veneer lumber",
+        "Structural engineering",
+        "Precast concrete",
+        "Engineering",
+        "Cross laminated timber",
+        "Structural system",
+        "Seismic analysis",
+        "Beam (structure)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "https://openalex.org/W3183300999",
+      "title": "Lightweight and slender timber-concrete composite floors made of CLT-HPC and CLT-UHPC with ductile notch connectors",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Engineering Structures",
+      "url": "https://doi.org/10.1016/j.engstruct.2021.112409",
+      "doi": "10.1016/j.engstruct.2021.112409",
+      "authors": [
+        "Serge Lamothe",
+        "Luca Sorelli",
+        "Pierre Blanchet",
+        "Philippe Galimard"
+      ],
+      "citation_count": 25,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Structural engineering",
+        "Slab",
+        "Composite number",
+        "Deflection (physics)",
+        "Stiffness",
+        "Waterproofing",
+        "Ductility (Earth science)",
+        "Shear (geology)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "https://openalex.org/W2793535339",
+      "title": "Structural robustness and timber buildings – a review",
+      "abstract": "Timber buildings are increasing in their dimensions. Structural robustness is imperative for all buildings and specifically important for tall buildings. Lives can be saved if disproportionate collapse can be avoided after a catastrophic event (e.g. accident, terrorism). The literature about robustness is comprehensive concerning concrete and steel buildings, but is rather limited regarding timber. This paper reviews robustness in general and robustness of timber buildings in particular. Robustness is an intrinsic structural property, enhancing global tolerance to local failures, regardless of the cause. A deterministic approach to assess robustness is to remove certain loadbearing elements from the structure and compare the consequences to given limits. Design methods for robustness may be direct by assessing effects of local failure, or indirect by following guidelines. For robust timber buildings, the connections are the key aspects. Usually, metal connectors may provide the required joint ductility. For robust light timber-frame construction, rim beams may be designed. For timber posts and beams and cross laminated timber, guidance regarding robustness is scarce, but in some aspects they seem to be similar to steel frames and precast concrete. Future research should assess the capacity of connections, and evaluate the adequacy of seismic connectors for robust timber buildings.",
+      "year": 2018,
+      "venue": "Wood Material Science and Engineering",
+      "url": "https://doi.org/10.1080/17480272.2018.1446052",
+      "doi": "10.1080/17480272.2018.1446052",
+      "authors": [
+        "Johannes A. J. Huber",
+        "Mats Ekevad",
+        "Ulf Arne Girhammar",
+        "Sven Berg"
+      ],
+      "citation_count": 88,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Robustness (evolution)",
+        "Precast concrete",
+        "Engineering",
+        "Structural engineering",
+        "Structural system",
+        "Computer science",
+        "Progressive collapse",
+        "Forensic engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "https://openalex.org/W2736958540",
+      "title": "Seismic Base Shear Modification Factors for Timber-Steel Hybrid Structure: Collapse Risk Assessment Approach",
+      "abstract": "In this paper, to supplement the Canadian building code for a timber-steel hybrid structure, over-strength, and ductility-related force modification factors are developed and validated using a collapse risk assessment approach. The hybrid structure incorporates cross-laminated timber (CLT) infill walls within steel moment resisting frames. Following the FEMA P695 procedure, archetype buildings of 3-story, 6-story, and 9-story height with middle bay infilled with CLT were developed. Subsequently, a nonlinear static pushover analysis was performed to quantify the actual over-strength factors of the hybrid archetype buildings. To check the FEMA P695 acceptable collapse probabilities and adjusted collapse margin ratios (ACMRs), incremental dynamic analysis was carried out using 60 ground motion records that were selected to regional seismic hazard characteristics in southwestern British Columbia, Canada. Considering the total system uncertainty, comparison of the calculated ACMRs with the FEMA P695 requirement indicates the acceptability of the proposed over-strength and ductility factors.",
+      "year": 2017,
+      "venue": "Journal of Structural Engineering",
+      "url": "https://doi.org/10.1061/(asce)st.1943-541x.0001869",
+      "doi": "10.1061/(asce)st.1943-541x.0001869",
+      "authors": [
+        "Matiyas A. Bezabeh",
+        "Solomon Tesfamariam",
+        "Marjan Popovski",
+        "Katsuichiro Goda",
+        "S. F. Stiemer"
+      ],
+      "citation_count": 46,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Infill",
+        "Structural engineering",
+        "OpenSees",
+        "Ductility (Earth science)",
+        "Seismic hazard",
+        "Engineering",
+        "Geotechnical engineering",
+        "Reinforced concrete"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "https://openalex.org/W3126707924",
+      "title": "Multi-Span Composite Timber Beams with Rational Steel Reinforcements",
+      "abstract": "Wooden multi-span beams with steel reinforcement were studied experimentally on a stationary stand using an eight-point loading scheme that simulated a load uniformly distributed over the beam span. The studies were carried out on beams with a span of 4.8 m with a cross-sectional area of 40 mm × 80 mm, reinforced in the stretched zones of the cross-section with rods made of hot-rolled steel reinforcement of A400 class. The rational zones for the location of reinforcements in the tensioned and compressed zones of the beams were determined. The rational placements of reinforcement in the support and span zones was based on the numerical simulation of the volumetric stress state calculated using the finite element method. It was experimentally confirmed that the failure of wood composite beams had a plastic nature and occurred only along normal sections. This excluded the possibility of brittle fracture from shear stresses and ensured the operational reliability of structures as a whole. It was shown that the proposed rational reinforcement of wooden beams increased their bearing capacity by 175% and reduced bearing deformability by 85%. The results obtained indicated high efficiency of the application of the developed method of reinforcement in beams of roofs and floors of buildings.",
+      "year": 2021,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings11020046",
+      "doi": "10.3390/buildings11020046",
+      "authors": [
+        "Mikhail Lukin",
+        "E. S. Prusov",
+        "Светлана Рощина",
+        "M. Yu. Karelina",
+        "Nikolai Vatin"
+      ],
+      "citation_count": 65,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Reinforcement",
+        "Structural engineering",
+        "Span (engineering)",
+        "Brittleness",
+        "Materials science",
+        "Beam (structure)",
+        "Bearing capacity",
+        "Bearing (navigation)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "https://openalex.org/W2751499342",
+      "title": "Mass timber – the emergence of a modern construction material",
+      "abstract": "In the move towards sustainable construction, timber and wood-based products are becoming increasingly important structural materials. The introduction of mass timber products with excellent load carrying characteristics allows timber to be used in larger, more complex structures. Cross-laminated timber (CLT) panel products have developed to the stage where they can be considered as economic and more sustainable alternatives to traditional materials. In this paper, the characteristics and design of CLT structures are described. Recent developments in mid- and high-rise CLT construction are reviewed and future opportunities identified. Current and future research needs are highlighted.",
+      "year": 2017,
+      "venue": "Journal of Structural Integrity and Maintenance",
+      "url": "https://doi.org/10.1080/24705314.2017.1354156",
+      "doi": "10.1080/24705314.2017.1354156",
+      "authors": [
+        "Annette M. Harte"
+      ],
+      "citation_count": 132,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cross laminated timber",
+        "Architectural engineering",
+        "Engineering",
+        "Construction engineering",
+        "Civil engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "https://openalex.org/W2790618714",
+      "title": "Testing of timber-to-timber screw-connections in hybrid configurations",
+      "abstract": "",
+      "year": 2018,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2018.03.078",
+      "doi": "10.1016/j.conbuildmat.2018.03.078",
+      "authors": [
+        "Gianni Schiro",
+        "Ivan Giongo",
+        "Wendel Sebastian",
+        "Daniele Riccadonna",
+        "Maurizio Piazza"
+      ],
+      "citation_count": 69,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Veneer",
+        "Laminated veneer lumber",
+        "Hardwood",
+        "Structural engineering",
+        "Softwood",
+        "Stiffness",
+        "Ductility (Earth science)",
+        "Engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "https://openalex.org/W4393203431",
+      "title": "Application of High-Performance Cementitious Composites in Steel-Concrete Composite Bridge Deck Systems: A Review",
+      "abstract": "The orthotropic steel bridge deck (OSBD) has been widely used in recent decades, benefiting from its advantages of lightweight and easy assembly. However, the longitudinal and transversal stiffeners of OSBDs are connected to the top flange plate through dense welds, which will easily introduce fatigue cracks. Hence, the composite bridge deck (CBD) system was proposed, adding a concrete layer over a steel plate to increase the sectional stiffness of OSBDs and reduce the fatigue stress amplitude. Furthermore, some new materials with extraordinary properties such as ultra-high-performance concrete (UHPC) and engineering cementitious composites (ECC) were used to replace the normal concrete, to improve the bearing capacity and crack resistance of CBDs. In this review, four kinds of bridge deck systems with different structural types including OSBD, steel–concrete, steel–UHPC, and steel–ECC CBDs were discussed. The flexural performance of four systems under sagging and hogging moments was reviewed, and close attention was paid to the crack resistance of the CBD system. In addition, the shear connection used in the CBDs was concentrated, and the shear behavior of some connectors including studs, perforated rib (PBL), and modified clothoid (MCL) shape shear connectors was investigated. The CBD structure assembled by duplicate profile steel parts proposed recently was introduced and discussed.",
+      "year": 2024,
+      "venue": "Journal of Intelligent Construction",
+      "url": "https://doi.org/10.26599/jic.2024.9180012",
+      "doi": "10.26599/jic.2024.9180012",
+      "authors": [
+        "Yunlong Chen",
+        "Jing‐Zhong Tong",
+        "Qinghua Li",
+        "Shilang Xu",
+        "Luming Shen"
+      ],
+      "citation_count": 64,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Flange",
+        "Structural engineering",
+        "Deck",
+        "Materials science",
+        "Composite number",
+        "Stiffness",
+        "Composite material",
+        "Shear (geology)"
+      ],
+      "tldr": ""
+    }
+  ]
+}

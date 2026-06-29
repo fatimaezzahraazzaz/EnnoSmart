@@ -1,0 +1,418 @@
+{
+  "created_at": "2026-06-26T10:14:45",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "fungal growth risk straw insulation timber frame wall moisture",
+      "paper_id": "https://openalex.org/W4382067201",
+      "title": "Risk of Fungal Growth in Nearly Zero-Energy Buildings (nZEB)",
+      "abstract": "Research on nearly zero-energy buildings has addressed mainly the aspects of energy saving or technical and economic optimization, while some studies have been conducted on comfort and indoor air quality. However, the potential problems that may arise in low-energy buildings during the operational phase, and especially the risk of fungal growth, which can deteriorate the indoor environment and pose a health risk to the occupants, are yet to be extensively investigated. The present work intends to analyze previous research on microbial contamination in zero-energy buildings in order to identify the possible risks that may lead to fungal formation and the possible strategies to prevent the proliferation of molds. The methodology is based on a systematic literature review and subsequent critical analysis to outline perspectives on this topic. The main results indicate that high envelope insulation and inadequate ventilation are the leading causes of fungal growth in energy-efficient buildings. The need for more detailed regulation in this area is also highlighted. The study’s outcomes underline the need for more attention to be paid to the design and management of zero-energy buildings, aiming to achieve the reduction in energy demands while ensuring the occupants’ well-being.",
+      "year": 2023,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings13071600",
+      "doi": "10.3390/buildings13071600",
+      "authors": [
+        "Cristina Carpino",
+        "Evangelia Loukou",
+        "Miguel Chen Austin",
+        "Birgitte Andersen",
+        "Dafni Mora",
+        "Natale Arcuri"
+      ],
+      "citation_count": 18,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Zero-energy building",
+        "Architectural engineering",
+        "Work (physics)",
+        "Energy (signal processing)",
+        "Energy consumption",
+        "Indoor air quality",
+        "Building envelope",
+        "Quality (philosophy)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fungal growth risk straw insulation timber frame wall moisture",
+      "paper_id": "https://openalex.org/W4401324247",
+      "title": "Climate mitigation potential of biobased insulation materials: A comprehensive review and categorization",
+      "abstract": "Insulation materials in the construction industry play a crucial role in improving the thermal performance of buildings, reducing energy demands, and reducing carbon emissions. With the growing emphasis on decarbonization, the construction sector is increasingly adopting bio-based insulation materials from renewable and eco-friendly sources as a more sustainable circular economy (CE) strategy to replace mineral and plastic insulation materials. However, due to limited environmental data availability, their efficacy and environmental sustainability in climate mitigation relative to their conventional counterparts remain unclear. This study fills this critical knowledge gap by conducting a literature review and mapping the key physical and environmental properties of bio-based insulation materials, thereby assessing their potential for climate mitigation. Specific definitions and criteria established in this study for biobased insulation materials facilitated the mapping of 174 emerging materials and products at the lab-scale. These include 39 distinct bio-based materials, either in their raw form or combined with 40 binders from various material groups such as minerals, polymers, biopolymers, and other innovative solutions. Most mapped products show favorable performance in cradle-to-gate embodied carbon (EC), benefiting from biomaterials’ carbon storage. However, significant variations in physical and environmental properties among these products highlight areas for improvement, particularly in embodied energy (EE) and thermal conductivity compared to glass wool. This paper attempts, for the first time, a comprehensive categorization of these products based on three criteria: thermal performance, climate mitigation, and environmental sustainability, grounded in critical physical and environmental properties. Cellulose and straw bale emerge as competitive options for thermal performance and environmental sustainability in climate mitigation, with potential for scalable adoption. However, further research on the physical and environmental properties of bio-based insulation materials is crucial to improve their assessment and categorization, and consequent recommendation for broader adoption in sustainable construction practices.",
+      "year": 2024,
+      "venue": "Journal of Cleaner Production",
+      "url": "https://doi.org/10.1016/j.jclepro.2024.143356",
+      "doi": "10.1016/j.jclepro.2024.143356",
+      "authors": [
+        "Zheng Lu",
+        "Michael Zwicky Hauschild",
+        "Lisbeth M. Ottosen",
+        "Teklit Gebregiorgis Ambaye",
+        "Pierluigi Zerbino",
+        "Davide Aloini",
+        "Ana T. Lima"
+      ],
+      "citation_count": 32,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Categorization",
+        "Environmental science",
+        "Engineering",
+        "Biochemical engineering",
+        "Risk analysis (engineering)",
+        "Computer science",
+        "Business",
+        "Artificial intelligence"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fungal growth risk straw insulation timber frame wall moisture",
+      "paper_id": "https://openalex.org/W4407644120",
+      "title": "Mycelium–coir-based composites for sustainable building insulation",
+      "abstract": "We synthesized and characterized the advanced multifunctional features of mycelium–coir-based composites as a replacement for fossil-based foams used in building insulation.",
+      "year": 2025,
+      "venue": "Journal of Materials Chemistry A",
+      "url": "https://doi.org/10.1039/d4ta07869a",
+      "doi": "10.1039/d4ta07869a",
+      "authors": [
+        "Gargi De",
+        "Libin Yang",
+        "Jaejun Lee",
+        "Yu-Han Wu",
+        "Zhiting Tian",
+        "Zhao Qin"
+      ],
+      "citation_count": 21,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Coir",
+        "Composite material",
+        "Materials science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fungal growth risk straw insulation timber frame wall moisture",
+      "paper_id": "https://openalex.org/W4391320605",
+      "title": "Biomaterials technology and policies in the building sector: a review",
+      "abstract": "Abstract Traditional building materials have some drawbacks in the construction industry, particularly in terms of greenhouse gas emissions and energy consumption. Biomaterials derived from renewable sources are a promising alternative, significantly reducing the greenhouse effect and enhancing energy efficiency. However, traditional materials still dominate the construction sector, and there is a lack of understanding among some policymakers and developers regarding biomaterials. Here, we review building biomaterials and their policies and life cycle assessment through case studies. Bio-based materials have the potential to reduce over 320,000 tons of carbon dioxide emissions by 2050. They also exhibit advantages like decreasing water absorption by 40%, reducing energy consumption by 8.7%, enhancing acoustic absorption by 6.7%, and improving mechanical properties. We summarize recent advancements in mycelial materials, bioconcrete, natural fibers, and fiber-reinforced composites. We also explore the contributions of nanotechnology and microalgae technology in enhancing biomaterials' thermal insulation and eco-friendliness.",
+      "year": 2024,
+      "venue": "Environmental Chemistry Letters",
+      "url": "https://doi.org/10.1007/s10311-023-01689-w",
+      "doi": "10.1007/s10311-023-01689-w",
+      "authors": [
+        "Lin Chen",
+        "Yubing Zhang",
+        "Zhonghao Chen",
+        "Yitong Dong",
+        "Yushan Jiang",
+        "Jianmin Hua",
+        "Yunfei Liu",
+        "Ahmed I. Osman",
+        "Mohamed Farghali",
+        "Lepeng Huang",
+        "David W. Rooney",
+        "Pow‐Seng Yap"
+      ],
+      "citation_count": 167,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Greenhouse gas",
+        "Renewable energy",
+        "Energy consumption",
+        "Life-cycle assessment",
+        "Architectural engineering",
+        "Environmental science",
+        "Nanotechnology",
+        "Materials science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fungal growth risk straw insulation timber frame wall moisture",
+      "paper_id": "https://openalex.org/W2991502927",
+      "title": "Study of moisture conditions in a multi-story mass timber building through the use of sensors and WUFI hygrothermal modeling",
+      "abstract": "Mass timber products have shown promise as an innovative alternative to conventional framing systems for use in tall wood buildings, but this new trend in design and construction poses concerns for the long-term durability of the products.A major challenge that classically faces timber products is the threat of moisture-induced mold and decay fungi, which are a heightened concern in mass timber buildings exposed to the environment for extended durations during construction.Consequently, it is important to understand the hygric and thermal (hygrothermal) conditions that mass timber products can experience in multi-story constructions and to be able to quantify the behavior of the products for their suitable design and implementation.An eight-story mass timber building located in Portland, Oregon was chosen for this study and was instrumented for moisture content monitoring through its production, construction, and in-situ use.Record breaking precipitation levels occurred during the building's TABLE OF CONTENTS",
+      "year": 2017,
+      "venue": "Digital Collections of Colorado (Colorado State University)",
+      "url": "https://hdl.handle.net/11124/172342",
+      "doi": "",
+      "authors": [
+        "Steven Kordziel"
+      ],
+      "citation_count": 8,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Moisture",
+        "Environmental science",
+        "Architectural engineering",
+        "Engineering",
+        "Materials science",
+        "Composite material"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fungal growth risk straw insulation timber frame wall moisture",
+      "paper_id": "https://openalex.org/W4412712642",
+      "title": "Evaluating long-term durability of a novel straw bale wall in a temperate oceanic climate",
+      "abstract": "Straw bales are a type of bio-sourced insulation materials commonly used in construction nowadays. However, their organic composition makes them vulnerable to mold growth which can raise concerns relating the long-term durability. The aim of this research is to investigate the degradation and fungal activity potential in novel timber frame wall insulated by wheat straw bales located in a structure that was built in Le Wast, north of France. Over the course of 41 months, temperature and relative humidity probes were inserted into the sealed wall to track the material's hygrothermal activity and identify any adverse circumstances it may encounter over time. Additionally, sensors were positioned on the earth plaster and on the outside wood cladding to monitor the microclimates both indoors and outside. Then, a systematic review was made to identify suggestions and methods to qualify any durability issues. Alongside, the measurements were evaluated by a biodeterioration model to detect fungal growth and were compared to the previous research recommendations. Variations in hygrothermal parameters were within the permitted limits and respected the thresholds suggested by the standards, and the results have demonstrated the absence of condensation and microorganisms that condition the durability of this type of material and structure overall. The findings contribute to encourage and insure the use of this novel wall composition by the building industry, engineers and architects in regions with oceanic temperate climates.",
+      "year": 2025,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2025.142876",
+      "doi": "10.1016/j.conbuildmat.2025.142876",
+      "authors": [
+        "Marwan Assaf",
+        "Franck Brachelet",
+        "Pierre Tittelein",
+        "Didier Defer",
+        "Emmanuel Antczak"
+      ],
+      "citation_count": 3,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Durability",
+        "Temperate climate",
+        "Straw",
+        "Term (time)",
+        "Environmental science",
+        "Forensic engineering",
+        "Geotechnical engineering",
+        "Materials science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fungal growth risk straw insulation timber frame wall moisture",
+      "paper_id": "https://openalex.org/W2473057030",
+      "title": "Overview on Biobased Building Material made with plant aggregate",
+      "abstract": "Global warming, energy savings, and life cycle analysis issues are factors that have contributed to the rapid expansion of plant-based materials for buildings, which can be qualified as environmental-friendly, sustainable and efficient multifunctional materials. This review presents an overview on the several possibilities developed worldwide about the use of plant aggregate to design bio-based building materials. The use of crushed vegetal aggregates such as hemp (shiv), flax, coconut shells and other plants associated to mineral binder represents the most popular solution adopted in the beginning of this revolution in building materials. Vegetal aggregates are generally highly porous with a low apparent density and a complex architecture marked by a multi-scale porosity. These geometrical characteristics result in a high capacity to absorb sounds and have hygro-thermal transfer ability. This is one of the essential characteristics which differ of vegetal concrete compared to the tradition mineral-based concretes. In addition, the high flexibility of the aggregates leads to a non-fragile elasto-plastic behavior and a high deformability under stress, lack of fracturing and marked ductility with absorbance of the strains ever after having reached the maximum mechanical strength. Due to the sensitivity to moisture, the assessment of the durability of vegetal concrete constitutes one of the next scientific challenging of bio-based building materials.",
+      "year": 2016,
+      "venue": "RILEM Technical Letters",
+      "url": "https://doi.org/10.21809/rilemtechlett.2016.9",
+      "doi": "10.21809/rilemtechlett.2016.9",
+      "authors": [
+        "Sofiane Amziane",
+        "Mohammed Sonebi"
+      ],
+      "citation_count": 144,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Aggregate (composite)",
+        "Durability",
+        "Building material",
+        "Flexibility (engineering)",
+        "Porosity",
+        "Environmental science",
+        "Ductility (Earth science)",
+        "Materials science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fungal growth risk straw insulation timber frame wall moisture",
+      "paper_id": "https://openalex.org/W4366219115",
+      "title": "The Role of Straw Materials in Energy-Efficient Buildings: Current Perspectives and Future Trends",
+      "abstract": "The need to effectively control and reduce energy consumption in buildings has become a global concern, prompting an increasing number of studies on the energy efficiency of straw buildings. However, previous review articles on straw research have primarily focused on fragmented material properties such as thermal insulation and mechanical strength and have lacked a comprehensive review of straw materials in building energy efficiency, as well as a thorough analysis of the development lineage of straw building materials. To fill this research gap, this study conducted a bibliometric analysis of 338 papers on the energy efficiency of straw materials published in the WOS core database between 1992 and 2022. The study constructed and visualized multifaceted co-occurrence networks representing the research literature on the energy efficiency of straw building materials, providing a comprehensive understanding of current research efforts, development trends, hot research directions, and the development lineage of this field since 1992. The study’s conclusions suggest that the next research hotspots in this area will be the whole life-cycle of straw materials and their compounding, performance, and application to construction. By tracing the development lineage and clarifying the relationship between the macroscopic building environment and microscopic straw materials, this study offers better predictions of the future development prospects of straw buildings. These findings provide researchers with valuable insights into current research efforts and future research directions in this field, while also serving as a reference for governments seeking to formulate relevant policies for the energy-efficient design of buildings made of straw materials.",
+      "year": 2023,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en16083480",
+      "doi": "10.3390/en16083480",
+      "authors": [
+        "Qing Yin",
+        "Muhan Yu",
+        "Xueliang Ma",
+        "Ying Liu",
+        "Xunzhi Yin"
+      ],
+      "citation_count": 11,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Architectural engineering",
+        "Efficient energy use",
+        "Environmental science",
+        "Construction engineering",
+        "Computer science",
+        "Environmental economics",
+        "Engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fungal growth risk straw insulation timber frame wall moisture",
+      "paper_id": "https://openalex.org/W4223918226",
+      "title": "Challenges and Opportunities in Scaling up Architectural Applications of Mycelium-Based Materials with Digital Fabrication",
+      "abstract": "In an increasing effort to address the environmental challenges caused by the currently linear economic paradigm of \"produce, use, and discard\", the construction industry has been shifting towards a more circular model. A circular economy requires closing of the loops, where the end-of-life of a building is considered more carefully, and waste is used as a resource. In comparison to traditional building materials such as timber, steel and concrete, mycelium-based materials are renewable alternatives that use organic agricultural and industrial waste as a key ingredient for production, and do not rely on mass extraction or exploitation of valuable finite or non-finite resources. Mycelium-based materials have shown their potential as a more circular and economically competitive alternative to conventional synthetic materials in numerous industries ranging from packaging, electronic prototyping, furniture, fashion to architecture. However, application of mycelium-based materials in the construction industry has been limited to small-scale prototypes and architectural installations due to low mechanical properties, lack of standardisation in production methods and material characterisation. This paper aims to review the current state of the art in research and applications of mycelium-based materials across disciplines, with a particular focus on digital methods of fabrication, production, and design. The information gathered from this review will be synthesised to identify key challenges in scaling up applications of mycelium-based materials as load-bearing structural elements in architecture and suggest opportunities and directions for future research.",
+      "year": 2022,
+      "venue": "Biomimetics",
+      "url": "https://doi.org/10.3390/biomimetics7020044",
+      "doi": "10.3390/biomimetics7020044",
+      "authors": [
+        "Selina Bitting",
+        "Tiziano Derme",
+        "Juney Lee",
+        "Tom Van Mele",
+        "Benjamin Dillenburger",
+        "Philippe Block"
+      ],
+      "citation_count": 110,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Circular economy",
+        "Architectural engineering",
+        "Computer science",
+        "Engineering",
+        "Architecture",
+        "Mycelium",
+        "Mechanical engineering",
+        "Construction engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fungal growth risk straw insulation timber frame wall moisture",
+      "paper_id": "https://openalex.org/W4211175804",
+      "title": "Bio-based Building Skin",
+      "abstract": "",
+      "year": 2019,
+      "venue": "Directory of Open access Books (OAPEN Foundation)",
+      "url": "https://www.doabooks.org/doab?func=search&query=rid:43479",
+      "doi": "10.1007/978-981-13-3747-5",
+      "authors": [
+        "Andreja Kutnar",
+        "Marcin Brzezicki",
+        "Jakub Sandak",
+        "Anna Sandak"
+      ],
+      "citation_count": 103,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "book"
+      ],
+      "fields_of_study": [
+        "Architectural engineering",
+        "Perspective (graphical)",
+        "Selection (genetic algorithm)",
+        "Engineering",
+        "Computer science",
+        "Engineering drawing",
+        "Construction engineering",
+        "Artificial intelligence"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fungal growth risk straw insulation timber frame wall moisture",
+      "paper_id": "https://openalex.org/W4401015446",
+      "title": "Conversion of waste into sustainable construction materials: A review of recent developments and prospects",
+      "abstract": "The production and use of traditional building materials contribute to environmental pollution and natural resource depletion. Besides, disposal of agricultural, industrial, and construction waste and other solid wastes is a significant contemporary for both developing and developed countries. Consequently, this study comprehensively examines sustainable construction materials (SCMs) sourced from waste materials. It analyzes 190 peer-reviewed papers, evaluating their properties, engineering suitability, and their impacts on the environment, economy, and society. Findings reveal that most SCMs have good engineering performance, yet improvements are needed in demonstrating their environmental (33.3%), economic (40%), and social sustainability (73.3%). Also, most SCMs are in experimental stages, requiring further research on human toxicity, long-term savings, maintenance costs, and other vital indicators. This review highlights some of the current challenges facing SCMs to promote their further studies, reduce non-renewable energy consumption and solid waste recycling, and facilitate their application in green buildings.",
+      "year": 2024,
+      "venue": "Materials Today Sustainability",
+      "url": "https://doi.org/10.1016/j.mtsust.2024.100930",
+      "doi": "10.1016/j.mtsust.2024.100930",
+      "authors": [
+        "Lin Chen",
+        "Mingyu Yang",
+        "Zhonghao Chen",
+        "Zhuolin Xie",
+        "Lepeng Huang",
+        "Ahmed I. Osman",
+        "Mohamed Farghali",
+        "Malindu Sandanayake",
+        "Engui Liu",
+        "Yonghan Ahn",
+        "Ala’a H. Al‐Muhtaseb",
+        "David W. Rooney",
+        "Pow‐Seng Yap"
+      ],
+      "citation_count": 125,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Sustainability",
+        "Resource depletion",
+        "Renewable energy",
+        "Environmental pollution",
+        "Natural resource",
+        "Municipal solid waste",
+        "Environmental planning",
+        "Business"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "fungal growth risk straw insulation timber frame wall moisture",
+      "paper_id": "https://openalex.org/W4388333444",
+      "title": "Comprehensive Review of Innovative Materials for Sustainable Buildings’ Energy Performance",
+      "abstract": "The building sector, one of the most energy-consuming, is among the most current topics due to the maturing concerns about the anthropogenic factor’s impact on CO2 quantities in the atmosphere and its association with global temperature rise. Using sustainable building materials is a promising alternative in building envelope applications to improve in-use energy efficiency. These materials, having a low environmental impact, the advantage of being renewable, and low embodied energy, contribute to global sustainability. This comprehensive literature review presents a broad overview of these materials’ hygrothermal characteristics, thermal performance, and energy use. The main goal is to compile the most important research findings on these materials’ capabilities for building construction and their contributions and effects on energy performance and thermal insulation.",
+      "year": 2023,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en16217440",
+      "doi": "10.3390/en16217440",
+      "authors": [
+        "Yara Nasr",
+        "Henri El Zakhem",
+        "Ameur El Amine Hamami",
+        "Makram El Bachawati",
+        "Rafik Belarbi"
+      ],
+      "citation_count": 51,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Embodied energy",
+        "Building envelope",
+        "Sustainability",
+        "Renewable energy",
+        "Architectural engineering",
+        "Efficient energy use",
+        "Thermal insulation",
+        "Energy performance"
+      ],
+      "tldr": ""
+    }
+  ]
+}

@@ -1,0 +1,291 @@
+{
+  "created_at": "2026-06-26T10:11:03",
+  "items": [
+    {
+      "source": "semantic_scholar",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "61e5520025ca908def2a3a65838eb0bf9c15972c",
+      "title": "State-of-the-art review on the seismic performance of concrete-filled composite shear walls (CF-CSWs)",
+      "abstract": "",
+      "year": 2026,
+      "venue": "Innovative Infrastructure Solutions",
+      "url": "https://www.semanticscholar.org/paper/61e5520025ca908def2a3a65838eb0bf9c15972c",
+      "doi": "10.1007/s41062-025-02397-w",
+      "authors": [
+        "Shahrzad Zabetian",
+        "Alireza Rahai"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle",
+        "Review"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "abe28cfc00c6e0db2ff888ad4b1dadfa44f17817",
+      "title": "Experimental and Design Research on Seismic Performance of Connectors in Timber–Concrete Composite Structures",
+      "abstract": "To evaluate the mechanical properties of connectors in timber–concrete composite (TCC) structures under low-cycle reversed loading, eighteen push-out specimens were designed and fabricated following the standard push-out test method. This study presents the first comparative analysis of the seismic performance between notch-bolted and ordinary bolted connections across three bolt diameters (12 mm, 16 mm, and 20 mm), addressing a gap in systematic experimental data for different connection types. Key performance indices under cyclic loading—including stiffness degradation, strength degradation, energy dissipation capacity, and ductility—were investigated. Furthermore, cumulative damage analysis elucidated the damage accumulation process, establishing a damage index (Dw) based on an energy method and proposing Dw = 0.6 as a critical early-warning threshold for failure. Practical recommendations for seismic design and engineering applications are provided. The results demonstrate that compared to ordinary bolted connections, notch-bolted connections achieve a 15–30% increase in ultimate bearing capacity and exhibit superior stiffness. Specimens with 16 mm bolts exhibited optimal ductility (ductility coefficient ξ = 3.6), while notch-bolted connections maintained stable ductility within the range of ξ = 2–3. Finally, a numerical model was developed using ANSYS finite element software. Validation against experimental results confirmed the model’s accuracy in simulating structural behavior. This research elucidates the cumulative damage mechanisms in TCC structures under cyclic loading, providing a theoretical basis for design optimization and valuable insights for promoting the seismic application of these composite systems.",
+      "year": 2025,
+      "venue": "Buildings",
+      "url": "https://www.semanticscholar.org/paper/abe28cfc00c6e0db2ff888ad4b1dadfa44f17817",
+      "doi": "10.3390/buildings15173084",
+      "authors": [
+        "Zuen Zheng",
+        "Shuai Yuan",
+        "Guojing He"
+      ],
+      "citation_count": 1,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "73f6218d0454c3263e2910ad1c37ea3c8008036f",
+      "title": "Fatigue Design Research on Notch–Stud Connectors of Timber–Concrete Composite Structures",
+      "abstract": "To investigate the mechanical behavior and damage mechanism of notch–stud connectors in timber–concrete composites under fatigue loading, fifteen push-out specimens in five groups were designed with load cycles as the key variable. Fatigue failure modes and mechanisms were analyzed to examine fatigue life, stiffness degradation, and cumulative damage laws of connectors. Numerical simulations with up to 100 load cycles explored timber/concrete damage effects on stud fatigue performance. Based on the results, an S-N curve was established, a fatigue damage model developed, and a fatigue design method proposed for such connectors. Primary failure modes were stud fracture and local concrete crushing in notches. Stiffness degradation followed an inverted “S”-shaped “fast–slow–fast” pattern. Using residual slip as the damage variable, a two-stage fatigue damage evolution model was constructed from the damage–cycle ratio relationship, offering a new method for shear connector fatigue damage calculation in timber–concrete composites and enabling remaining life prediction for similar composite beam connectors. Finite element simulations of push-out specimens showed high consistency between calculated and experimental fatigue life/damage results, validating the conclusions.",
+      "year": 2025,
+      "venue": "Buildings",
+      "url": "https://www.semanticscholar.org/paper/73f6218d0454c3263e2910ad1c37ea3c8008036f",
+      "doi": "10.3390/buildings15122033",
+      "authors": [
+        "Zuen Zheng",
+        "Shuai Yuan",
+        "Guojing He"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "800160431cdd80915255c22d97f462a29fb0c204",
+      "title": "Load-Dependent Non-Uniform Bending Stiffness and Curvature-Based Deflection Calculation in Timber–Concrete Composite Beams",
+      "abstract": "The effective bending stiffness formula for cross-sections of timber–concrete composite (TCC) beams was derived under semi-sinusoidal loading condition in Eurocode 5; however, this formula does not account for the non-uniform distribution of bending stiffness along the span. This limitation prevents it from characterizing the mechanical behavior under real loading conditions, which could potentially compromise the safety and serviceability of the structural design. To investigate the distribution pattern of bending stiffness, differential segment analysis was conducted, incorporating interfacial slip effects. A governing differential equation for curvature was established, and the resulting curvature distribution was used to compute deflections by means of the conjugate beam method. The results demonstrate that the bending stiffness distribution depends critically on shear connector arrangement and loading conditions. Under third-point loading, the bending stiffness monotonically decreases from the mid-span to the load application points and increases toward the supports. Under uniform loads, bending stiffness peaks at the mid-span and declines gradually toward the supports. Reducing shear connector spacing enhances composite action while amplifying bending stiffness non-uniformity. Experimental validation confirms that both the conjugate beam method (using analytical curvature solutions) and the simplified approach in Eurocode 5 achieve 99% average accuracy in predicting the mid-span deflection of TCC beams. In addition, careful attention must be paid to the deflection values at loading points, particularly when the loading position is close to the supports.",
+      "year": 2026,
+      "venue": "Buildings",
+      "url": "https://www.semanticscholar.org/paper/800160431cdd80915255c22d97f462a29fb0c204",
+      "doi": "10.3390/buildings16050989",
+      "authors": [
+        "Yuchen Jiang",
+        "Xiamin Hu"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "2f33cb8730221a44901422b186d05adf4d0e7539",
+      "title": "Numerical modelling and theoretical analysis of timber-concrete glued-in threaded rod shear connectors with and without notches",
+      "abstract": "Timber-concrete composite (TCC) structures offer superior bending stiffness, load capacity, and environmental benefits, but shear connector performance—critical for timber-concrete integration—remains a challenge. This study investigated TCC structures using notched shear connectors and glued-in threaded rods (GiRs) via push-out tests, finite element (FE) modelling, and parametric analyses. Twenty-seven specimens were tested, and the validated FE model simulated material nonlinearities and contact. The results showed increased GiR diameter and embedment length enhance load capacity and stiffness (GL series), with diminishing returns beyond a certain embedment. A 100 mm notch size optimized stiffness and load capacity for notched connectors (RG series). Parametric studies highlighted the influence of notch size, GiR embedment length, and diameter on load capacity, stiffness, and ductility. The FE model accurately predicted structural behavior, and theoretical models for load capacity prediction showed 1 to 32% error. This study provides valuable insights for optimizing TCC shear connector design and enhancing structural performance.",
+      "year": 2025,
+      "venue": "BioResources",
+      "url": "https://www.semanticscholar.org/paper/2f33cb8730221a44901422b186d05adf4d0e7539",
+      "doi": "10.15376/biores.20.4.10460-10486",
+      "authors": [
+        "Chao Yang",
+        "Zhibin Ling",
+        "Zheng Li",
+        "Zhiqiang Qin",
+        "Jie Shen"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "3e3450464ca8ea828cf5ad90683d1022073494d1",
+      "title": "Experimental behaviour of notched timber-concrete connections with glued-in rod under different test configurations and loading protocols",
+      "abstract": "",
+      "year": 2025,
+      "venue": "Materials Structure",
+      "url": "https://www.semanticscholar.org/paper/3e3450464ca8ea828cf5ad90683d1022073494d1",
+      "doi": "10.1617/s11527-025-02908-2",
+      "authors": [
+        "Zhibin Ling",
+        "Hao Wang",
+        "Xiuqiang Rong",
+        "Zheng Li",
+        "Lingfeng Zhang",
+        "Wei Zheng"
+      ],
+      "citation_count": 1,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "391333b2a5688940cb28b85952a98660cc138970",
+      "title": "Experimental Performance of Timber–Concrete Slab-to-Concrete Wall Connections Under Gravitational and Lateral In-Plane Loading",
+      "abstract": "In this research, the lateral and gravitational behaviors of four timber–concrete composite (TCC) slab-to-wall connections were tested to study their lateral and gravitational behaviors. Results showed that the lateral behavior of the connections was mainly controlled by the concrete slab, since the timber sections and connections remained mostly unaffected. The experimental results were contrasted with a linear finite element model built in ETABS, thus explaining why the experimental lateral strength was six times larger than that analytically obtained via ACI 318-19. As for the gravitational tests, results showed a higher shear capacity in connections with screws as the wall-to-slab connector than those with bars. In general, all the connections showed much higher strength and stiffness than those typically required by design code standards.",
+      "year": 2025,
+      "venue": "Buildings",
+      "url": "https://www.semanticscholar.org/paper/391333b2a5688940cb28b85952a98660cc138970",
+      "doi": "10.3390/buildings15224161",
+      "authors": [
+        "Valentina Maldonado",
+        "H. Santa María",
+        "P. Guindos"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "cbe1a41a589a911061d5c4c6ae9a48d62c68f213",
+      "title": "Seismic Performance and Flexural Capacity Analysis of Embedded Steel Plate Composite Shear Wall Structure with Fiber-Reinforced Concrete in the Plastic Hinge Zone",
+      "abstract": "Due to its high axial bearing capacity and good ductility, the embedded steel plate composite shear wall structure has become one of the most widely used lateral force-resisting structural members in building construction. However, bending failure is prone to occur during strong earthquakes, and the single energy dissipation mechanism of the plastic hinge zone at the bottom leads to the concentration of local wall damage. To improve the embedded steel plate composite shear wall structure, the plastic hinge zone of the composite shear wall is replaced by fiber-reinforced concrete (FRC) and analyzed by ABAQUS finite element simulation analysis. Firstly, the structural model of the embedded steel plate composite shear wall structure with FRC in the plastic hinge zone is established and the accuracy of the model is verified. Secondly, the effects of steel ratio, longitudinal reinforcement ratio, and FRC strength on the bearing capacity of composite shear walls are analyzed by numerical simulation. Finally, a method for calculating the embedded steel plate composite shear wall structure with FRC in the plastic hinge zone is proposed. It is shown that the displacement and load curves and failure modes of the model are basically consistent with the experimental results, and the model has high accuracy. The axial compression ratio and FRC strength have a great influence on the bearing capacity of composite shear walls. The calculation formula of the normal section bending capacity of the embedded steel plate composite shear wall structure with FRC in the plastic hinge zone is proposed. The calculated values of the bending capacity are in good agreement with the simulated values, which can provide a reference for its engineering application.",
+      "year": 2025,
+      "venue": "Buildings",
+      "url": "https://www.semanticscholar.org/paper/cbe1a41a589a911061d5c4c6ae9a48d62c68f213",
+      "doi": "10.3390/buildings15020291",
+      "authors": [
+        "Junlong Li",
+        "Guoqiang He",
+        "Jianbo Tian"
+      ],
+      "citation_count": 3,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "48a5ee3b7f5b033c043783b72298c9ecaff9566a",
+      "title": "Seismic performance study of a novel modular concrete building with infill walls in composite shear walls",
+      "abstract": "Modular integrated construction (MIC) is an innovative prefabricated building system that involves connecting precast concrete modular units with cast‐in‐place concrete. In this system, MIC composite shear walls and infill walls serve as the primary vertical components. However, due to the fundamental differences in the coordinated deformation mechanisms between infill walls and the main structure, as opposed to those in traditional cast‐in‐place structures, the influence of infill walls on MIC composite shear walls remains unclear. To address this issue, three composite shear wall specimens with varying structural configurations were designed for this study. Quasi‐static loading tests were conducted to analyze the complete mechanical response, failure mechanisms, hysteretic behavior, strength degradation, stiffness degradation, and energy dissipation capacity of the specimens. The test results indicated that all three specimens experienced flexure‐shear failure. Their hysteresis loops were well developed, stiffness gradually degraded, and energy dissipation capacities were favorable. The infill wall significantly influenced the failure mode of the MIC composite shear wall. Compared to the bare specimen DZ‐1, specimen DZ‐2 with infill walls exhibited a 40.8% enhancement in ultimate load‐bearing capacity and a 26% increase in cumulative energy dissipation capacity. However, this configuration also induced accelerated strength degradation and a reduction in structural ductility. By incorporating a flexible isolation panel connection, specimen DZ‐3 demonstrated a 7.7% reduction in ultimate load‐bearing capacity and a 9% decrease in cumulative energy dissipation compared to DZ‐2. Nonetheless, this design effectively enhanced structural ductility and mitigated stiffness degradation. Based on experimental findings, a refined finite element model of the wall was developed using ABAQUS software to further investigate the collaborative load‐bearing mechanisms between MIC composite shear walls and infill walls of varying dimensions and material types. Corresponding design recommendations were subsequently proposed. This study clarifies the coordination mechanism of infill walls and their previously underexplored seismic performance, thereby establishing a theoretical foundation for MIC composite shear walls. Based on these findings, corresponding design recommendations are proposed to advance the development of prefabricated modular construction.",
+      "year": 2025,
+      "venue": "Structural Concrete",
+      "url": "https://www.semanticscholar.org/paper/48a5ee3b7f5b033c043783b72298c9ecaff9566a",
+      "doi": "10.1002/suco.70401",
+      "authors": [
+        "Dong Chen",
+        "Rui Wu",
+        "Yu Zhou",
+        "Leiyu Chen",
+        "Baoquan Cheng",
+        "Weichen Wang"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "ee7af58bc88aeb4b0e6166f84ed6a38f1e1454af",
+      "title": "Study on seismic performance of the CFST-framed aeolian sand concrete composite shear wall",
+      "abstract": "This study examined the seismic performance of composite shear walls framed with concrete-filled steel tubes (CFST) utilizing aeolian sand concrete. Six specimens were designed and tested under low cyclic load with a constant axial compression ratio. The research aimed to analyze how CFST frame affects the seismic behavior of shear walls made from aeolian sand concrete and understand the underlying influence mechanism. The results showed significant differences in failure modes between CFST-framed and conventional aeolian sand concrete shear walls, with the former exhibiting a lower degree of failure and instances of plastic hinge failure. The hysteretic curve of CFST-framed walls displayed noticeable pinching, indicating enhanced seismic energy dissipation capacity and ductility. The damage analysis model based on the energy damage principle was found to be suitable for conducting seismic damage analysis of these walls. A shear capacity model was also established to accurately depict the variation in bearing capacity under low cyclic loading, providing valuable insights for engineering applications.",
+      "year": 2024,
+      "venue": "Canadian journal of civil engineering (Print)",
+      "url": "https://www.semanticscholar.org/paper/ee7af58bc88aeb4b0e6166f84ed6a38f1e1454af",
+      "doi": "10.1139/cjce-2023-0565",
+      "authors": [
+        "Kangjie Chen",
+        "Chi Wang",
+        "Yaohong Wang",
+        "Zhiqiang Li",
+        "Wei Dong",
+        "Xiaokai Lu"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "8fba734898b899e73aca0dabb494afc0d17658e2",
+      "title": "Hybrid machine learning algorithms for estimating shear strength of steel-reinforced concrete composite shear walls",
+      "abstract": "",
+      "year": 2025,
+      "venue": "Multiscale and Multidisciplinary Modeling Experiments and Design",
+      "url": "https://www.semanticscholar.org/paper/8fba734898b899e73aca0dabb494afc0d17658e2",
+      "doi": "10.1007/s41939-025-00750-1",
+      "authors": [
+        "M. S. Barkhordari",
+        "Shekufe Khoshnazar"
+      ],
+      "citation_count": 3,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": "This research contributes to the field by providing a more accurate and reliable method for predicting SRCCSW shear strength, potentially facilitating wider adoption of these structural elements in seismic-resistant construction."
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "timber concrete composite shear connector ductility seismic loading",
+      "paper_id": "ee3ba2fa417c51b7cc29f1b5d3785bd8462645c9",
+      "title": "Development and Validation of a Theoretical Model for Flexural Behavior in Timber-Concrete and Bamboo-Concrete Composite Beams",
+      "abstract": "The growing demand for sustainable construction has encouraged the use of composite beams combining timber or bamboo with concrete to optimize structural performance and reduce environmental impact. These hybrid systems, widely used in new constructions and retrofits, present modeling challenges due to the nonlinear interaction between materials and their mechanical connections. This study aims to develop and validate a finite element model to simulate the nonlinear flexural behavior of these composite beams. The model is based on an exact solution for two-layer elastic systems and incorporates nonlinear constitutive laws for concrete and timber/bamboo, along with a trilinear shear–slip law to represent interface behavior. Unlike most models, it is applicable to different connector types and a range of materials—including bamboo, timber, and both conventional and lightweight concrete. An incremental–iterative solution captures progressive deformations and failure mechanisms. Validation against 16 experimental beams showed accurate predictions of linear load capacity, mid-span deflection, and initial stiffness. Over 80% of the results showed deviations below 30%, and 50% were within 20%. The model also correctly captured the experimental failure mode in all cases. This approach provides a reliable and versatile tool for the structural analysis and design of composite beams.",
+      "year": 2025,
+      "venue": "Buildings",
+      "url": "https://www.semanticscholar.org/paper/ee3ba2fa417c51b7cc29f1b5d3785bd8462645c9",
+      "doi": "10.3390/buildings15122021",
+      "authors": [
+        "T. Siqueira",
+        "M’hamed Y. R. da Glória",
+        "E. Martinelli",
+        "R. T. Tolêdo Filho"
+      ],
+      "citation_count": 2,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    }
+  ]
+}

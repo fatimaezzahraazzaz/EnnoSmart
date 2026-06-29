@@ -1,0 +1,101 @@
+{
+  "created_at": "2026-06-26T09:44:19",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "bio-based building materials seismic chopped straw fire resistance reaction timber",
+      "paper_id": "https://openalex.org/W4200201201",
+      "title": "Thermal and mechanical behavior of straw-based construction: A review",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2021.125915",
+      "doi": "10.1016/j.conbuildmat.2021.125915",
+      "authors": [
+        "Ghadie Tlaiji",
+        "Salah-Eddine Ouldboukhitine",
+        "Fabienne Pennec",
+        "Pascal Henry Biwolé"
+      ],
+      "citation_count": 70,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Context (archaeology)",
+        "Embodied energy",
+        "Environmental science",
+        "Life-cycle assessment",
+        "Work (physics)",
+        "Relative humidity",
+        "Carbon footprint"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based building materials seismic chopped straw fire resistance reaction timber",
+      "paper_id": "https://openalex.org/W3006198766",
+      "title": "Selected Aspects Regarding the Restoration/Conservation of Traditional Wood and Masonry Building Materials: A Short Overview of the Last Decade Findings",
+      "abstract": "Vernacular buildings are usually constructed using materials at hand, including wood, natural stone and bricks (either clay or mud bricks). All those materials are exposed to a series of environmental factors, affecting their structure and integrity. The literature review was conducted using different databases (Scopus, Web of Science, ScienceDirect, SpringerLink) using as keywords the historical material, “heritage” and the terms regarding the desired effect, within the envisaged time period (2010–2019). The assessment of the results was performed by manual inspection (reading the entire article) and the selection of the works to be inserted in the current review was made by evaluating the contribution to the field. This review summarizes different aspects related to the restoration and conservation of wooden and masonry elements of traditional buildings, including materials used for biocidal interventions, protection against abiotic factors, cleaning and consolidation agents. Finally, a critical discussion regarding the current limitations and future perspectives concludes the review work, envisaging the role of researchers specialized in materials science in the context of cultural heritage conservation.",
+      "year": 2020,
+      "venue": "Applied Sciences",
+      "url": "https://doi.org/10.3390/app10031164",
+      "doi": "10.3390/app10031164",
+      "authors": [
+        "Radu Claudiu Fierăscu",
+        "Mihaela Doni",
+        "Irina Fierăscu"
+      ],
+      "citation_count": 48,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Masonry",
+        "Cultural heritage",
+        "Architectural engineering",
+        "Natural materials",
+        "Engineering",
+        "Context (archaeology)",
+        "Construction engineering",
+        "Civil engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based building materials seismic chopped straw fire resistance reaction timber",
+      "paper_id": "https://openalex.org/W4296614489",
+      "title": "A Review on Flexural Properties of Wood-Plastic Composites",
+      "abstract": "Wood-plastic composite (WPC) is a kind of composite material that is made of plastic and wood fiber or wood powder. Because it is mothproof, is resistant to corrosion, and has plasticity, among other advantages, it has been researched and used increasingly in building materials. The flexural property of WPC is an important subject in evaluating its mechanical properties. In this paper, wood-plastic raw materials and processing technology are introduced; the internal and external factors of WPC which affect the flexural properties are analyzed; the different ways of enhancing the bending capacity, including the surface pretreatment, addition of different modifiers (compatibility agent and coupling agent) etc. are summarized; and the methods of operation and strengthening effect are analyzed. This work provides a reference for further research in related fields.",
+      "year": 2022,
+      "venue": "Polymers",
+      "url": "https://doi.org/10.3390/polym14193942",
+      "doi": "10.3390/polym14193942",
+      "authors": [
+        "Bingyu Jian",
+        "Sarah Mohrmann",
+        "Haitao Li",
+        "Yuanjie Li",
+        "Mahmud Ashraf",
+        "Jun Zhou",
+        "Xiaoyan Zheng"
+      ],
+      "citation_count": 55,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Composite material",
+        "Materials science",
+        "Flexural strength"
+      ],
+      "tldr": ""
+    }
+  ]
+}

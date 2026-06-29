@@ -1,0 +1,118 @@
+{
+  "created_at": "2026-06-26T09:43:36",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "bio-based insulation reaction to fire building materials",
+      "paper_id": "https://openalex.org/W2008894151",
+      "title": "Progress in bio-based plastics and plasticizing modifications",
+      "abstract": "Over the coming few decades bioplastic materials are expected to complement and gradually replace some of the fossil oil based materials. Multidisciplinary research efforts have generated a significant level of technical and commercial success towards these bio-based materials. However, extensive application of these bio-based plastics is still challenged by one or more of their possible inherent limitations, such as poor processability, brittleness, hydrophilicity, poor moisture and gas barrier, inferior compatibility, poor electrical, thermal and physical properties. The incorporation of additives such as plasticizers into the biopolymers is a common practice to improve these inherent limitations. Generally, plasticizers are added to both synthetic and bio-based polymeric materials to impart flexibility, improve toughness, and lower the glass transition temperature. This review introduces the most common bio-based plastics and provides an overview of recent advances in the selection and use of plasticizers, and their effect on the performance of these materials. In addition to plasticizers, we also present a perspective of other emerging techniques of improving the overall performance of bio-based plastics. Although a wide variety of bio-based plastics are under development, this review focuses on plasticizers utilized for the most extensively studied bioplastics including poly(lactic acid), polyhydroxyalkanoates, thermoplastic starch, proteinaceous plastics and cellulose acetates. The ongoing challenge and future potentials of plasticizers for bio-based plastics are also discussed.",
+      "year": 2013,
+      "venue": "Journal of Materials Chemistry A",
+      "url": "https://doi.org/10.1039/c3ta12555f",
+      "doi": "10.1039/c3ta12555f",
+      "authors": [
+        "Tizazu H. Mekonnen",
+        "Paolo Mussone",
+        "Hamdy Khalil",
+        "David C. Bressler"
+      ],
+      "citation_count": 811,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Plasticizer",
+        "Bioplastic",
+        "Materials science",
+        "Thermoplastic",
+        "Plastics industry",
+        "Polymer science",
+        "Composite material",
+        "Waste management"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based insulation reaction to fire building materials",
+      "paper_id": "https://openalex.org/W4378627842",
+      "title": "A Review of Sustainable Bio‐Based Insulation Materials for Energy‐Efficient Buildings",
+      "abstract": "Abstract The surge towards a sustainable future in the construction industry requires the use of bio‐based insulation materials as an alternative to conventional ones for improving energy efficiency in structures. In this article, the features of bio‐based insulation materials, including their thermal conductivities, moisture buffering value, fire performance, and life cycle evaluations are examined. It is clear from the review that pre‐ and post‐treatment of the bio‐based materials used for insulation materials optimize their properties. The life cycle analysis reveals a significant reduction in global warming potential (GWP) compared to conventional foams. In addition, it is envisaged that producing bio‐based insulation materials on a larger scale will further decrease the net GWP. The article, therefore, proposes the implementation of policies that will promote the commercialization of bio‐based insulation materials.",
+      "year": 2023,
+      "venue": "Macromolecular Materials and Engineering",
+      "url": "https://doi.org/10.1002/mame.202300086",
+      "doi": "10.1002/mame.202300086",
+      "authors": [
+        "Pradeep Raja",
+        "Vignesh Murugan",
+        "Sindhu Ravichandran",
+        "Laxmidhar Behera",
+        "Rhoda Afriyie Mensah",
+        "M. Satthiyaraju",
+        "Ananthakumar Kasi",
+        "Karthik Babu Nilagiri Balasubramanian",
+        "Gabriel Sas",
+        "Henri Vahabi",
+        "Oisik Das"
+      ],
+      "citation_count": 87,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Commercialization",
+        "Materials science",
+        "Thermal insulation",
+        "Life-cycle assessment",
+        "Global-warming potential",
+        "Efficient energy use",
+        "Scale (ratio)",
+        "Moisture"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based insulation reaction to fire building materials",
+      "paper_id": "https://openalex.org/W3126489566",
+      "title": "Developing fibrillated cellulose as a sustainable technological material",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Nature",
+      "url": "https://doi.org/10.1038/s41586-020-03167-7",
+      "doi": "10.1038/s41586-020-03167-7",
+      "authors": [
+        "Tian Li",
+        "Chaoji Chen",
+        "Alexandra H. Brozena",
+        "J. Y. Zhu",
+        "Lixian Xu",
+        "Carlos Driemeier",
+        "Jiaqi Dai",
+        "Orlando J. Rojas",
+        "Akira Isogai",
+        "Lars Wågberg",
+        "Liangbing Hu"
+      ],
+      "citation_count": 1593,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Cellulose",
+        "Materials science",
+        "Nanocellulose",
+        "Renewable resource",
+        "Biopolymer",
+        "Cellulosic ethanol",
+        "Biomass (ecology)",
+        "Sustainability"
+      ],
+      "tldr": ""
+    }
+  ]
+}

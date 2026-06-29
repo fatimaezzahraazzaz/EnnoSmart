@@ -1,0 +1,396 @@
+{
+  "created_at": "2026-06-26T10:13:07",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "https://openalex.org/W4381510083",
+      "title": "Vibration issues in timber structures: A state-of-the-art review",
+      "abstract": "This paper comprehensively reviews recent research on vibration issues in timber structures. The increasing use of timber structures worldwide has brought attention to the challenges posed by their lightweight nature, making them more prone to vibrations than more massive structures. Consequently, significant research efforts have been dedicated to understanding and mitigating vibrations in timber structures, while scientific committees strive to establish suitable design regulations. This study aims to classify and identify the main research themes related to timber structure vibrations and highlight future research needs and directions. A bibliometric-based selection process briefly introduces each research topic, presenting the latest findings and proposals for vibration design in timber structures. The paper emphasizes the key outcomes and significant contributions to understanding and addressing vibration issues in timber structures. These findings serve as valuable guidance for researchers, designers, and regulatory bodies involved in designing and assessing timber structures subjected to vibrations.",
+      "year": 2023,
+      "venue": "Journal of Building Engineering",
+      "url": "https://doi.org/10.1016/j.jobe.2023.107098",
+      "doi": "10.1016/j.jobe.2023.107098",
+      "authors": [
+        "Angelo Aloisio",
+        "Dag Pasquale Pasca",
+        "Yuri De Santis",
+        "Thomas Hillberger",
+        "Pier Francesco Giordano",
+        "Marco Martino Rosso",
+        "Roberto Tomasi",
+        "Maria Pina Limongelli",
+        "Chiara Bedon"
+      ],
+      "citation_count": 66,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Engineering",
+        "Process (computing)",
+        "Architectural engineering",
+        "Construction engineering",
+        "Computer science",
+        "Operating system"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "https://openalex.org/W4388942794",
+      "title": "High-performance timber-concrete-composites with polymer concrete and beech wood",
+      "abstract": "The performance of adhesive-bonded timber-concrete-composites (TCC) can be enhanced by using beech wood and polymer concrete (PC). In this work, two different PCs with an epoxy- and a polyurethane (PUR)-based matrix were investigated for application in TCCs. The mechanical performances were tested in dry and wet state by small-scale shear tests and flexural tests. Epoxy-PC showed high bond strength to beech with a shear strength of 16.7 ± 3.0 MPa compared to 3.2 ± 1.7 MPa observed with PUR-PC. Characterization of the swelling strain with digital image correlation (DIC) showed superior water stability of the epoxy-PC compared to PUR-PC. The results indicate that PCs, especially epoxy-PC, could be viable replacements for cement-based concrete in TCCs.",
+      "year": 2023,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2023.134069",
+      "doi": "10.1016/j.conbuildmat.2023.134069",
+      "authors": [
+        "Sandro Stucki",
+        "Steffen Kelch",
+        "Tim Mamie",
+        "Urs Burckhardt",
+        "Philippe Grönquist",
+        "Roman Elsener",
+        "Mark Schubert",
+        "Andréa Frangi",
+        "Ingo Burgert"
+      ],
+      "citation_count": 4,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Composite material",
+        "Materials science",
+        "Epoxy",
+        "Beech",
+        "Flexural strength",
+        "Adhesive",
+        "Shear strength (soil)",
+        "Polymer concrete"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "https://openalex.org/W4206142467",
+      "title": "State of the Art Review of Reinforcement Strategies and Technologies for 3D Printing of Concrete",
+      "abstract": "This state of the art review paper aims to discuss the results of a literature survey on possible ways to reinforce printed concrete based on existing reinforcement strategies. Just as conventional concrete, for 3D printed concrete to be suitable for large-scale construction, reinforcement is needed to increase the tensile capacity of concrete members and reduce temperature and shrinkage cracking. Despite efforts that are currently underway, the development of proper reinforcement suitable for printed concrete is still very active on the research agenda. As an initial step for designing suitable reinforcement for printed concrete, the existing reinforcement methods for printed concrete as well as conventional cast concrete from the literature are reviewed and summarized. Through the preliminary evaluation of the suitability and effectiveness of various reinforcement methods, guidelines are proposed to better understand possible solutions to reinforce printed concrete and inspire new practical ideas to fill the current technology void. The conclusions also include the possible improvements of the existing reinforcement methods to be considered in future applications.",
+      "year": 2022,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en15010360",
+      "doi": "10.3390/en15010360",
+      "authors": [
+        "Zhengyu Wu",
+        "Ali M. Memari",
+        "José Duarte"
+      ],
+      "citation_count": 62,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Reinforcement",
+        "Computer science",
+        "Construction engineering",
+        "Engineering",
+        "Structural engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "https://openalex.org/W1986351907",
+      "title": "Multi-Storey Residential Timber Construction: Current Developments in Europe",
+      "abstract": "Abstract This is a research paper with a focus on technical aspects of timber and on recent case studies, discussing the use of timber as multi-frame for multi-level residential buildings in Europe. The authors see this as a relevant topic within the context of the current environmental debate and the use of sustainable materials and construction methods. The conclusion suggests that timber is a high performance construction material adequate for multi-storey residential buildings, even in an urban context.",
+      "year": 2007,
+      "venue": "Journal of Green Building",
+      "url": "https://doi.org/10.3992/jgb.2.1.119",
+      "doi": "10.3992/jgb.2.1.119",
+      "authors": [
+        "Frank Lattke",
+        "Steffen Lehmann"
+      ],
+      "citation_count": 30,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Architectural engineering",
+        "Context (archaeology)",
+        "Engineering",
+        "Frame (networking)",
+        "Civil engineering",
+        "Geography",
+        "Archaeology",
+        "Telecommunications"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "https://openalex.org/W4401894911",
+      "title": "Behaviour Analysis of Beam-Type Timber and Timber-Concrete Composite Panels",
+      "abstract": "This study addresses the enhancement of material efficiency and reduction in brittleness in timber-to-concrete adhesive connections for beam-type timber and timber-concrete composite panels. The research explores the potential benefits of adding longitudinal timber ribs to cross-laminated timber (CLT) beam-type panels. Three groups of flexure-tested specimens were analysed as follows: (1) timber panels (1400 mm × 400 mm) with two 100 mm thick CLT panels and two 60 mm thick CLT panels reinforced with 150 × 80 mm timber ribs; (2) eight specimens (600 mm × 100 mm × 150 mm) with CLT members (600 mm × 100 mm × 100 mm) connected to a 50 mm concrete layer using granite chips and Sikadur-31 (AB) epoxy adhesive; (3) six CLT panels (1400 mm × 400 mm × 50 mm) bonded to a 50 mm concrete layer, with two panels containing polypropylene microfibres and two panels incorporating polyethene dowels for mechanical connection. Specimens were subjected to three-point bending tests and analysed using the transformed section method, γ-method, and finite element method with ANSYS 2023R2 software. Results indicated a 53% increase in load-carrying capacity for ribbed CLT panels with no additional material consumption, a 24.8–41.1% increase for CLT panels strengthened with a concrete layer, and improved ductility and prevention of disintegration in timber-concrete composites with polypropylene microfibres.",
+      "year": 2024,
+      "venue": "Applied Sciences",
+      "url": "https://doi.org/10.3390/app14167403",
+      "doi": "10.3390/app14167403",
+      "authors": [
+        "Elza Briuka",
+        "Dmitrijs Serdjuks",
+        "Pavel Akishin",
+        "Genādijs Šahmenko",
+        "Andrejs Podkoritovs",
+        "Raimonds Ozoliņš"
+      ],
+      "citation_count": 3,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Structural engineering",
+        "Architectural engineering",
+        "Forensic engineering",
+        "Engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "https://openalex.org/W4288926403",
+      "title": "Energy performance of a prefabricated timber-based retrofit solution applied to a pilot building in Southern Europe",
+      "abstract": "This paper advances the current knowledge on the use of prefabricated timber-based panels in building renovation by analyzing in detail the thermal performance achieved by two different renovation solutions developed in the framework of the ongoing e-SAFE H2020 project. In particular, these solutions apply to the external walls of a pilot building located in Catania (Italy) as a double-skin façade that increases also the seismic performance of the building. The dynamic energy simulations reveal that the proposed solutions allow reducing the energy need for space heating and space cooling by 66% and 25%, respectively. One further finding is that, although the proposed timber-based renovation solutions are not affected by mould growth and surface condensation risk, the impact of thermal bridges cannot be neglected after renovation. Indeed, despite the strong reduction in the magnitude of heat losses due to thermal bridges (from 667 W·K−1 down to 213.1 W·K−1), they still account for about 21% of total heat losses after the renovation. This suggests that more complex and expensive technological solutions should be introduced to further reduce heat losses in some thermal bridges, but a cost-benefit analysis should justify their adoption. Finally, overlooking these thermal bridges in dynamic energy simulations can lead to an average underestimation of the heating and cooling energy demand after the renovation, by about 16% and 5% respectively. In this regard, the paper proposes a simplified yet reliable approach to include heat transfer through thermal bridges in the post-processing stage of dynamic energy simulations under thermostatic control.",
+      "year": 2022,
+      "venue": "Building and Environment",
+      "url": "https://doi.org/10.1016/j.buildenv.2022.109442",
+      "doi": "10.1016/j.buildenv.2022.109442",
+      "authors": [
+        "Gianpiero Evola",
+        "Vincenzo Costanzo",
+        "Alessandra Urso",
+        "Carola Tardo",
+        "Giuseppe Margani"
+      ],
+      "citation_count": 30,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Thermal",
+        "Civil engineering",
+        "Architectural engineering",
+        "Environmental science",
+        "Efficient energy use",
+        "Heat transfer",
+        "Thermal comfort",
+        "Engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "https://openalex.org/W4392470416",
+      "title": "Bibliometric Review of Prefabricated and Modular Timber Construction from 1990 to 2023: Evolution, Trends, and Current Challenges",
+      "abstract": "Due to its inherent characteristics, such as a light weight and ease of workability, timber is ideal for prefabricated and modular construction. However, since the research in this field covers a wide range of niches such as structural engineering, building physics, design for assembly and disassembly, and life cycle analysis, among others, and since there has been considerable development of the field in past years—boosted by new mass timber products and tall timber construction—it is difficult to critically analyze the current state of the art, current trends, and research challenges. Therefore, this research aimed to cover a systematic review of 409 articles to assess the field of prefabricated and modular timber construction critically. The methodology comprised a co-word network approach using the Science Mapping Analysis Software Tool (SciMAT, Version 3) to illustrate their evolution from 1990 to 2023. The findings show that the circular economy and digital technologies significantly impact the development of these technologies, which can potentially provide practical solutions for designing buildings with a circular approach and improving productivity and efficiency in the construction process. However, it is essential to acknowledge a notable deficiency in the research and understanding of these subjects. Therefore, various sectors must take the lead in conducting a thorough reassessment to enhance research and development in the field. Finally, the findings from this research can significantly contribute to existing knowledge and serve as a comprehensive platform for the further exploration of prefabricated and modular timber construction.",
+      "year": 2024,
+      "venue": "Sustainability",
+      "url": "https://doi.org/10.3390/su16052134",
+      "doi": "10.3390/su16052134",
+      "authors": [
+        "Carmen Gutiérrez",
+        "João Negrão",
+        "Alfredo M. P. G. Dias",
+        "Pablo Guindos"
+      ],
+      "citation_count": 36,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Modular design",
+        "Current (fluid)",
+        "Architectural engineering",
+        "Modular construction",
+        "Engineering",
+        "Construction engineering",
+        "Civil engineering",
+        "Computer science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "https://openalex.org/W4401589002",
+      "title": "Behaviour Analysis of Beam-type Timber and Timber-concrete Composite Panels",
+      "abstract": "This study addresses the enhancement of material efficiency and reduction of brittleness in timber-to-concrete adhesive connections for beam-type timber and timber-concrete composite panels. The research explores the potential benefits of adding longitudinal timber ribs to Cross-Laminated Timber (CLT) beam-type panels. Three groups of flexure-tested specimens were analysed: (1) timber panels (1400 mm × 400 mm) with two 100 mm thick CLT panels and two 60 mm thick CLT panels reinforced with 150x80 mm timber ribs; (2) eight specimens (600 mm × 100 mm × 150 mm) with CLT members (600 mm × 100 mm × 100 mm) connected to a 50 mm concrete layer using granite chips and Sikadur-31 (AB) epoxy adhesive; (3) six CLT panels (1400 mm × 400 mm × 50 mm) bonded to a 50 mm concrete layer, with two panels containing polypropylene microfibers and two panels incorporating polyethene dowels for mechanical connection. Specimens were subjected to three-point bending tests and analysed using the transformed section method, γ-method, and finite element method with ANSYS 2023R2 software. Results indicated a 53% increase in load-carrying capacity for ribbed CLT panels with no additional material consumption, a 24.8%-41.1% increase for CLT panels strengthened with a concrete layer, and improved ductility and prevention of disintegration in timber-concrete composites with polypropylene microfibers.",
+      "year": 2024,
+      "venue": "Preprints.org",
+      "url": "https://doi.org/10.20944/preprints202407.2224.v1",
+      "doi": "10.20944/preprints202407.2224.v1",
+      "authors": [
+        "Elza Briuka",
+        "Dmitrijs Serdjuks",
+        "Pavel Akishin",
+        "Genādijs Šahmenko",
+        "Andrejs Podkoritovs",
+        "Raimonds Ozoliņš"
+      ],
+      "citation_count": 2,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "preprint"
+      ],
+      "fields_of_study": [
+        "Composite number",
+        "Structural engineering",
+        "Beam (structure)",
+        "Type (biology)",
+        "Composite material",
+        "Materials science",
+        "Engineering",
+        "Geology"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "https://openalex.org/W3042140147",
+      "title": "Timber Concrete Composite floors with Cross Laminated Timber - Structural behavior & Design",
+      "abstract": "På grund av den ökade miljö- och klimatmedvetenheten har övergången till förnybara material påskyndats, och detsamma gäller intresset för träbyggande. Med att bygga högt i trä kommer dock ett flertal konstruktionsmässiga utmaningar, där en av utmaningarna är dynamik på grund av träets låga egenvikt jämfört med andra mer konventionella byggnadsmaterial. Vissa av dessa utmaningar kan avhjälpas med införandet av samverkansbjälklag, där ett betongskikt appliceras ovanpå och kopplas samman med trätvärsnittet, vilket ökar böjstyvheten och förbättrar bjälklagets dynamiska egenskaper. Trots att samverkansbjälklag är vanligt förekommande i Europa är kunskapen kring samverkansbjälklag begränsad inom svensk byggindustri. Detta faktum ligger till grund för detta examensarbete, som undersöker beräkningsmetodik och strukturellt verkningssätt hos samverkansbjälklag bestående av betong och korslimmat trä (KL-trä) där både analytiska beräknings-metoder samt FE-modellering behandlas. Fokus kommer att ligga på samverkanstvärsnitt med KL-trä bestående av fem lamellskikt och med skuvförbindare i form av skruv och grovnot. Gamma-metoden är en vanligt förekommande dimensioneringsmetod för KL-trä upp till och med fem lamellskikt. Denna metod kan modifieras så att den är tillämpbar även för samverkanstvärsnitt med 5-skikts KL-trä, där betongskiktet ses som ett sjätte skikt med en eftergivlig koppling till KL-trätvärsnittet. Två sådana modifierade beräkningsmetoder som kan hantera samverkanstvärsnitt med ett 5-skikts KL-trä är den ekvivalenta gamma-metoden och den utökade gamma-metoden. Båda metodernas beräkning av böjstyvheten hos ett samverkansbjälklag har visat sig överensstämma väl mot FE-modellering och labbtester. Den utökade gamma-metoden har en mer stabil teoretisk grund jämfört med den ekvivalenta gamma-metoden, och är därför den rekommenderade analytiska beräkningsmetoden. Den förenklade beräkningsmetoden i den ekvivalenta gamma-metoden kan teoretiskt ifrågasättas, och därav rekommenderas denna metod endast användas till preliminära beräkningar i tidiga skeden. Följande slutsatser kan dras gällande det strukturella verkningssättet hos ett samverkansbjälklag: - Skjuvförbindarna ska koncentreras till områden där skjuvflödet är stort, d.v.s. nära upplagen för optimal prestanda. - Ökande andel bärande trä i den longitudinella riktingen av KL-träbjälklaget ökar böjstyvheten hos samverkansbjälklaget som helhet. - Betongskiktets E-modul ökar samverkansbjälklagets böjstyvhet. Betongens egentyngd är dock hög och därmed ska tjockleken på betongskiktet med fördel hållas nere för att uppnå ett optimalt förhållande mellan låg egentyngd och hög böjstyvhet.",
+      "year": 2020,
+      "venue": "Lund University Publications Student Papers (Lund University)",
+      "url": "http://lup.lub.lu.se/student-papers/record/9016949",
+      "doi": "",
+      "authors": [
+        "Albin Forsberg",
+        "Filip Farbäck"
+      ],
+      "citation_count": 2,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cross laminated timber",
+        "Structural engineering",
+        "Stiffness",
+        "Scope (computer science)",
+        "Bending",
+        "Engineering",
+        "Civil engineering",
+        "Computer science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "https://openalex.org/W4308969610",
+      "title": "A Comparison of Life Cycle Impact of Mass Timber and Concrete in Building Construction",
+      "abstract": "Life cycle assessment, LCA is one of the tools that is used to measure the environmental impacts of a process or an operation. Various studies have mentioned the benefits of mass timber in building construction. This study presents an evaluation of the LCA of certain mass timber in relation to concrete-based materials. Using Athena impact estimator for buildings, the study compared the results of an LCA study for a house that is designed with concrete beams, concrete columns, and concrete walls with brick in the envelope category (Material group 1) with those that are made with glulam beams, glulam columns, CLT walls with spruce wood bevel siding (Material group 2), and another building with LVL columns, LVL beams, CLT walls with spruce wood bevel siding (Material group 3). The results are in line with those that were reported by the majority of previous researchers. For the location that is being reviewed (Calgary, Alberta), the designs showed that construction with wood materials having mass timber components will have a better environmental performance than that for a building design with more concrete-based materials. The building design with more concrete-based material (group 1) showed 242% and 60% higher global warming and acidification potential respectively than the building with glulam beams and columns (material group 2). Except for ozone depletion potential, material group 2 (with glulam beams and columns) has a lower impact than material group 3 (with LVL/PSL beams and columns). The differences in impacts are more pronounced when the comparison is with design with more concrete-based products. This report further shows that LCA can be helpful during the preliminary design to evaluate the expected environmental impacts of the choice of different materials. This study recommends that material manufacturers and building contractors pay attention to LCA results to evaluate areas for continuous improvement.",
+      "year": 2022,
+      "venue": "Trends journal of sciences research",
+      "url": "https://doi.org/10.31586/wjcea.2022.449",
+      "doi": "10.31586/wjcea.2022.449",
+      "authors": [
+        "Adekunle Mofolasayo"
+      ],
+      "citation_count": 6,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Laminated veneer lumber",
+        "Life-cycle assessment",
+        "Building material",
+        "Structural engineering",
+        "Reinforced concrete",
+        "Engineering",
+        "Green building",
+        "Building envelope"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "https://openalex.org/W3081674035",
+      "title": "The use of pith in the formulation of lightweight bio-based composites: Impact on mechanical and hygrothermal properties",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2020.120573",
+      "doi": "10.1016/j.conbuildmat.2020.120573",
+      "authors": [
+        "Mohamed Said Abbas",
+        "Fionn McGregor",
+        "Antonin Fabbri",
+        "Mohammed Yacine Ferroukhi"
+      ],
+      "citation_count": 39,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Pith",
+        "Materials science",
+        "Composite material",
+        "Compressive strength",
+        "Moisture",
+        "Porosity",
+        "Hydraulic conductivity",
+        "Aggregate (composite)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "connectors mould growth timber concrete composite timber concrete wood composite",
+      "paper_id": "https://openalex.org/W2524955344",
+      "title": "Fundamental Behavior of Steel-Concrete Composite Beams Strengthened with High Modulus Carbon Fiber Reinforced Polymer (CFRP) Materials",
+      "abstract": "There is a growing need for a cost-effective, durable repair system that can be used for the repair and strengthening of steel bridges. Recently, high modulus carbon fiber reinforced polymers (CFRP) have been developed with a modulus of elasticity approximately two times greater than that of steel. Externally bonded high modulus CFRP materials have successfully been used to increase the elastic stiffness and ultimate capacity of steel-concrete composite beams However, since the technology is relatively new, the detailed behavior of steel bridge members strengthened with high modulus CFRP is not yet well understood. The current research investigates three aspects of the behavior of steel-concrete composite beams in detail. An experimental program was conducted to investigate the behavior of steel-concrete composite beams strengthened with high modulus CFRP materials. In the first phase of the study the behavior under overloading conditions was investigated. In the second phase of the research, the fatigue durability of the system was examined. In the third phase, the possible presence of shear-lag between the steel beam and the CFRP materials was investigated in detail. An analytical model was developed which can be used to determine the ultimate capacity and elastic stiffness increase for steel beams strengthened with high modulus CFRP materials. Additionally, a set of criteria are proposed which can be used to determine the allowable increase in the live load level for steel beams strengthened with high modulus CFRP materials.",
+      "year": 2005,
+      "venue": "NCSU Libraries Repository (North Carolina State University Libraries)",
+      "url": "http://www.lib.ncsu.edu/resolver/1840.16/1959",
+      "doi": "",
+      "authors": [
+        "Mina Magdy Riad Dawood"
+      ],
+      "citation_count": 20,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Composite material",
+        "Carbon fiber reinforced polymer",
+        "Composite number",
+        "Modulus",
+        "Fibre-reinforced plastic",
+        "Structural engineering",
+        "Engineering"
+      ],
+      "tldr": ""
+    }
+  ]
+}

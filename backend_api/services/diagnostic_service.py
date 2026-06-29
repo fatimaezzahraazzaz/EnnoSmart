@@ -182,6 +182,84 @@ def copy_uploaded_docs_to_project_store(db: Session, project: Project) -> List[s
     return copied
 
 # ============================================================
+# Extensions supportées par le router d'extraction
+# ============================================================
+
+def _supported_raw_extensions_from_extraction_router() -> set[str]:
+    """
+    Liste officielle des extensions acceptées par EnnoDiagnostic.
+
+    Important :
+    - le backend ne doit pas avoir une petite liste manuelle (.pdf/.docx seulement) ;
+    - il lit directement ce que modules/extraction/router.py expose ;
+    - fallback complet si l'import du router échoue.
+    """
+    ensure_ennosmart_imports()
+
+    fallback = {
+        # PDF
+        ".pdf",
+
+        # Office / documents
+        ".docx", ".doc", ".docm",
+        ".pptx", ".ppt", ".pptm",
+        ".xlsx", ".xls", ".xlsm", ".csv",
+
+        # Texte / données
+        ".txt", ".md", ".json",
+
+        # Emails
+        ".eml", ".msg",
+
+        # Images
+        ".png", ".jpg", ".jpeg", ".tiff", ".tif",
+        ".bmp", ".gif", ".webp", ".svg",
+
+        # Audio
+        ".mp3", ".wav", ".m4a", ".aac", ".flac",
+        ".ogg", ".opus", ".wma",
+
+        # Vidéo
+        ".mp4", ".mov", ".avi", ".mkv", ".webm",
+        ".mpeg", ".mpg", ".3gp",
+    }
+
+    try:
+        from modules.extraction.router import EXTENSION_MAP, AUDIO_VIDEO_EXTENSIONS
+
+        exts = set(EXTENSION_MAP.keys()) | set(AUDIO_VIDEO_EXTENSIONS)
+
+        # Extensions utiles pour debug / exports texte.
+        exts |= {".txt", ".md", ".json"}
+
+        # Formats Office macro. Même si le router les détecte parfois par magic bytes,
+        # on les accepte explicitement côté backend.
+        exts |= {".docm", ".pptm"}
+
+        return {str(ext).lower() for ext in exts if str(ext).startswith(".")}
+
+    except Exception:
+        return fallback
+
+
+def _is_supported_raw_document(path: Path, allowed_ext: set[str]) -> bool:
+    """Filtre robuste des fichiers bruts avant load_documents()."""
+    if not path.is_file():
+        return False
+
+    name = path.name.strip()
+    low = name.lower()
+
+    # Fichiers temporaires Office / OS.
+    if name.startswith("~$"):
+        return False
+
+    if low in {"thumbs.db", ".ds_store", "desktop.ini"}:
+        return False
+
+    return path.suffix.lower() in allowed_ext
+
+# ============================================================
 # Diagnostic paths
 # ============================================================
 
@@ -316,33 +394,45 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
     copied_from_db = copy_uploaded_docs_to_project_store(db, project)
 
     # 2) Mais la source principale devient le dossier raw complet du projet.
-    allowed_ext = {
-        ".pdf", ".docx", ".doc", ".pptx", ".ppt",
-        ".xlsx", ".xls", ".txt", ".png", ".jpg", ".jpeg",
-    }
+    # La liste vient du router d'extraction EnnoSmart pour accepter les mêmes types :
+    # PDF, Office, Excel, emails, images, audio, vidéo, etc.
+    allowed_ext = _supported_raw_extensions_from_extraction_router()
 
     raw_paths: List[str] = []
+    skipped_paths: List[str] = []
+
     if ps.documents_raw_dir.exists():
         for path in ps.documents_raw_dir.rglob("*"):
-            if path.is_file() and path.suffix.lower() in allowed_ext:
+            if _is_supported_raw_document(path, allowed_ext):
                 raw_paths.append(str(path))
+            elif path.is_file():
+                skipped_paths.append(str(path))
 
     # 3) Dédoublonnage + tri stable.
     raw_paths = sorted(list(dict.fromkeys(raw_paths)))
 
     if not raw_paths:
         raise RuntimeError(
-            f"Aucun document brut trouvé dans : {ps.documents_raw_dir}. "
-            "Ajoute d'abord les PDF/DOCX/XLSX/PPTX dans ce dossier ou via l'upload."
+            f"Aucun document brut supporté trouvé dans : {ps.documents_raw_dir}. "
+            f"Extensions acceptées : {sorted(allowed_ext)}"
         )
 
     print("=" * 80)
     print(f"📄 EnnoDiagnostic - documents bruts utilisés : {len(raw_paths)}")
     print(f"📁 Dossier raw : {ps.documents_raw_dir}")
-    for p in raw_paths[:15]:
+    print(f"✅ Extensions acceptées par extraction router : {', '.join(sorted(allowed_ext))}")
+
+    for p in raw_paths[:30]:
         print(f"   - {p}")
-    if len(raw_paths) > 15:
-        print(f"   ... +{len(raw_paths) - 15} autres fichiers")
+
+    if len(raw_paths) > 30:
+        print(f"   ... +{len(raw_paths) - 30} autres fichiers")
+
+    if skipped_paths:
+        print(f"⚠️ Fichiers ignorés car extension non supportée : {len(skipped_paths)}")
+        for p in skipped_paths[:10]:
+            print(f"   - {p}")
+
     print("=" * 80)
 
     # 4) Extraction documents.
@@ -393,6 +483,9 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
         "documents_used_paths": raw_paths,
         "documents_used_count": len(raw_paths),
         "documents_loaded_count": len(documents),
+        "documents_skipped_paths": skipped_paths,
+        "documents_skipped_count": len(skipped_paths),
+        "allowed_extensions": sorted(allowed_ext),
         "nlp_result": nlp_result,
         "index_report": index_report,
     })
@@ -810,12 +903,32 @@ def _to_float(value: Any) -> Optional[float]:
     return number
 
 
-def _score_percent(score: Optional[float]) -> Optional[float]:
-    if score is None:
+def _normalize_verrou_score(value: Any) -> Optional[float]:
+    """
+    Normalise le score d'un verrou sur 0..1.
+
+    Cas rencontrés :
+    - 0.68  -> 0.68  (déjà normalisé)
+    - 1.86  -> 0.93  (score agrégé V122 sur échelle ~0..2)
+    - 93    -> 0.93  (pourcentage déjà calculé)
+    """
+    score = _to_float(value)
+    if score is None or score < 0:
         return None
     if score <= 1:
-        return round(score * 100, 2)
-    return round(score, 2)
+        return score
+    if score <= 2.5:
+        return round(score / 2.0, 4)
+    if score <= 100:
+        return round(score / 100.0, 4)
+    return None
+
+
+def _score_percent(score: Optional[float]) -> Optional[float]:
+    normalized = _normalize_verrou_score(score)
+    if normalized is None:
+        return None
+    return round(normalized * 100, 2)
 
 
 def _tag_from_score(score: Optional[float], decision: Optional[str] = None) -> str:
@@ -849,6 +962,28 @@ def _pick_report_from_run_data(data: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _is_fallback_llm_verrou_item(item: Dict[str, Any]) -> bool:
+    source_json = item.get("source_json") if isinstance(item.get("source_json"), dict) else {}
+    joined = " ".join(
+        str(value or "")
+        for value in [
+            item.get("title"),
+            item.get("justification"),
+            item.get("text"),
+            item.get("source"),
+            source_json.get("source"),
+            source_json.get("llm_block"),
+        ]
+    ).lower()
+
+    return (
+        "fallback_grouped_rag_verrou_synthesis" in joined
+        or "signal technique candidat extrait des preuves rag/nlp" in joined
+        or "la reformulation llm dédiée n'a pas produit de json exploitable" in joined
+        or "la reformulation llm dediee n'a pas produit de json exploitable" in joined
+    )
+
+
 def _collect_clean_chroma_verrous_from_report(report: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Source prioritaire pour la validation consultant :
@@ -874,11 +1009,21 @@ def _collect_clean_chroma_verrous_from_report(report: Dict[str, Any]) -> List[Di
         if not title:
             return None
 
-        score = _to_float(item.get("score") or item.get("frascati_score"))
+        if _is_fallback_llm_verrou_item(item):
+            return None
+
+        source_json = item.get("source_json") if isinstance(item.get("source_json"), dict) else dict(item)
+        score = _normalize_verrou_score(
+            item.get("verrou_score")
+            or item.get("score")
+            or item.get("frascati_score")
+            or source_json.get("verrou_score")
+            or source_json.get("score")
+            or source_json.get("frascati_score")
+        )
         decision = _clean_text(item.get("frascati_decision") or item.get("decision") or "verrou_a_verifier", 100)
         tag = item.get("tag_cir") or _tag_from_score(score, decision)
 
-        source_json = item.get("source_json") if isinstance(item.get("source_json"), dict) else dict(item)
         source_json["validation_source"] = source_name
         source_json["display_title_source"] = "LLM reformulation" if source_name == "report.llm_reformulated_verrous" else "Chroma fallback"
 
@@ -894,8 +1039,9 @@ def _collect_clean_chroma_verrous_from_report(report: Dict[str, Any]) -> List[Di
             "source_json": sanitize_json_value(source_json),
         })
 
-    # 1) Nouveau flux V120 : titres reformulés par LLM + preuves Chroma.
-    llm_items = report.get("llm_reformulated_verrous")
+    # 1) Nouveau flux V122 : titres reformulés par l'agent EnnoDiagnostic.
+    # Priorité absolue : les chunks RAG ne doivent pas remplacer ces verrous.
+    llm_items = report.get("llm_reformulated_verrous") or report.get("consultant_verrous_cir")
     if isinstance(llm_items, list) and llm_items:
         clean: List[Dict[str, Any]] = []
         seen: set[str] = set()
@@ -948,7 +1094,7 @@ def _collect_clean_chroma_verrous_from_report(report: Dict[str, Any]) -> List[Di
         text = _clean_text(item.get("text") or item.get("source_text"), 2000)
         document = _clean_text(meta.get("document") or item.get("document") or "Document non précisé", 500)
         decision = _clean_text(meta.get("frascati_decision") or meta.get("verrou_candidate_level"), 100)
-        score = _to_float(meta.get("frascati_score") or meta.get("score") or meta.get("rank_score"))
+        score = _normalize_verrou_score(meta.get("frascati_score") or meta.get("score") or meta.get("rank_score"))
         tag = _tag_from_score(score, decision)
 
         theme_question = _clean_text(meta.get("theme_question"), 1000)
@@ -998,7 +1144,8 @@ def sync_verrous_from_diagnostic(db: Session, run: DiagnosticRun) -> List[Verrou
     Correction :
     - avant : collectait report + nlp_result + selected_verrous + candidates,
       donc passages bruts et doublons entraient en base;
-    - maintenant : prend uniquement report.chroma_sections.verrous;
+    - maintenant : prend en priorité report.llm_reformulated_verrous ;
+    - fallback seulement si l'ancien agent ne fournit aucun verrou reformulé ;
     - supprime les anciens verrous du même run avant de recréer la liste propre.
     """
     data = sanitize_json_value(run.raw_result_json or {})

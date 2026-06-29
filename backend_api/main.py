@@ -12,12 +12,12 @@ from routers import diagnostic
 from routers import scholar
 from routers import scholar_state_of_art_direct
 from routers import cir_final_consultant
+from routers import cir_memory
 
 from routers.source_preview import router as source_preview_router
 from routers.source_highlight_preview import router as source_highlight_preview_router
 from routers.cir_source_view import router as cir_source_view_router
 
-# Nouveau router : ouverture des documents stockés directement en PostgreSQL
 from routers.document_binary import router as document_binary_router
 from routers.document_db_source import router as document_db_source_router
 
@@ -26,7 +26,10 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.APP_NAME,
         version="1.0.0",
-        description="Backend API EnnoSmart : auth, projets, documents, EnnoDiagnostic, EnnoScholar.",
+        description=(
+            "Backend API EnnoSmart : auth, projets, documents, "
+            "EnnoDiagnostic, EnnoScholar, mémoire CIR."
+        ),
     )
 
     app.add_middleware(
@@ -46,10 +49,15 @@ def create_app() -> FastAPI:
     app.include_router(documents.router)
     app.include_router(diagnostic.router)
     app.include_router(scholar.router)
+
+    # EnnoScholar — rédaction état de l’art depuis sélection frontend
     app.include_router(scholar_state_of_art_direct.router)
 
     # CIR final consultant
     app.include_router(cir_final_consultant.router)
+
+    # CIR Memory Builder V1
+    app.include_router(cir_memory.router)
 
     # Prévisualisation / sources / surlignage
     app.include_router(source_preview_router)
@@ -58,7 +66,6 @@ def create_app() -> FastAPI:
 
     # Documents stockés en base PostgreSQL BYTEA
     app.include_router(document_binary_router)
-
     app.include_router(document_db_source_router)
 
     @app.get("/health", tags=["health"])

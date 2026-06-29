@@ -1,0 +1,396 @@
+{
+  "created_at": "2026-06-26T10:14:22",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "hygrothermal behaviour bio-based insulation mould growth",
+      "paper_id": "https://openalex.org/W2790827377",
+      "title": "Wood waste as an alternative thermal insulation for buildings",
+      "abstract": "",
+      "year": 2018,
+      "venue": "Energy and Buildings",
+      "url": "https://doi.org/10.1016/j.enbuild.2018.03.019",
+      "doi": "10.1016/j.enbuild.2018.03.019",
+      "authors": [
+        "İkbal Çetiner",
+        "Andrew Shea"
+      ],
+      "citation_count": 232,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Building insulation",
+        "Thermal insulation",
+        "Cork",
+        "Environmental science",
+        "Building material",
+        "Materials science",
+        "Thermal conductivity",
+        "Waste management"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal behaviour bio-based insulation mould growth",
+      "paper_id": "https://openalex.org/W1998325134",
+      "title": "Hygrothermal performance of bio-based insulation materials",
+      "abstract": "Bio-based insulation materials have the potential to make a significant contribution to the reduction in the global warming potential of the construction industry world-wide. They contribute in two ways. First they provide the opportunity to reduce the embodied energy in the fabric of buildings. They do this because they are renewable and recyclable. Plant-based insulation materials also sequester carbon dioxide through photosynthesis, sealing up atmospheric carbon dioxide for the life-time of the building. Second they are able to reduce the in-use energy consumption of buildings in more ways than by simply reducing energy transmission. They have the ability to buffer heat and moisture, which is most evident in dynamic situations. This paper discusses the hygrothermal performance of bio-based insulation materials, examining the hygrothermal effects associated with their vapour activity. The incremental performance offered by these materials is not allowed for in building regulations, nor is it readily accounted for in many commercially available building physics models. The paper discusses the reasons for this and identifies the need for the transient performance of bio-based insulation materials to be taken into account, because this will better reflect their actual contribution to the energy performance of a building.",
+      "year": 2013,
+      "venue": "Proceedings of the Institution of Civil Engineers - Construction Materials",
+      "url": "https://doi.org/10.1680/coma.12.00031",
+      "doi": "10.1680/coma.12.00031",
+      "authors": [
+        "Mike Lawrence",
+        "Andy Shea",
+        "Peter Walker",
+        "Pieter de Wilde"
+      ],
+      "citation_count": 35,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Embodied energy",
+        "Architectural engineering",
+        "Renewable energy",
+        "Environmental science",
+        "Energy consumption",
+        "Moisture",
+        "Global warming",
+        "Global-warming potential"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal behaviour bio-based insulation mould growth",
+      "paper_id": "https://openalex.org/W1458577565",
+      "title": "A review of recent developments in natural fibre composites and their mechanical performance",
+      "abstract": "Recently, there has been a rapid growth in research and innovation in the natural fibre composite (NFC) area. Interest is warranted due to the advantages of these materials compared to others, such as synthetic fibre composites, including low environmental impact and low cost and support their potential across a wide range of applications. Much effort has gone into increasing their mechanical performance to extend the capabilities and applications of this group of materials. This review aims to provide an overview of the factors that affect the mechanical performance of NFCs and details achievements made with them.",
+      "year": 2015,
+      "venue": "Composites Part A Applied Science and Manufacturing",
+      "url": "https://doi.org/10.1016/j.compositesa.2015.08.038",
+      "doi": "10.1016/j.compositesa.2015.08.038",
+      "authors": [
+        "K.L. Pickering",
+        "M.G. Aruan Efendy",
+        "T.M. Le"
+      ],
+      "citation_count": 3289,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Composite material",
+        "Composite number",
+        "Mechanical strength",
+        "Mechanical engineering",
+        "Engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal behaviour bio-based insulation mould growth",
+      "paper_id": "https://openalex.org/W1971496684",
+      "title": "Hygric properties of hemp bio-insulations with differing compositions",
+      "abstract": "",
+      "year": 2014,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2014.06.021",
+      "doi": "10.1016/j.conbuildmat.2014.06.021",
+      "authors": [
+        "Eshrar Latif",
+        "Simon Tucker",
+        "Mihaela Anca Ciupala",
+        "Devapriya Chitral Wijeyesekera",
+        "Darryl Newport"
+      ],
+      "citation_count": 78,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Composite material",
+        "Thermal insulation",
+        "Moisture",
+        "Desorption",
+        "Water content",
+        "Absorption of water",
+        "Adsorption"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal behaviour bio-based insulation mould growth",
+      "paper_id": "https://openalex.org/W2976512860",
+      "title": "Hygrothermal Properties of Raw Earth Materials: A Literature Review",
+      "abstract": "Raw earth historic and contemporary architectures are renowned for their good environmental properties of recyclability and low embodied energy along the production process. Earth massive walls are universally known to be able to regulate indoor thermal and hygroscopic conditions containing energy consumptions, creating comfortable interior spaces with a low carbon footprint. Therefore, earth buildings are de facto green buildings. As a result of this, some earthen technologies have been rediscovered and implemented to be adapted to the contemporary building production sector. Nevertheless, the diffusion of contemporary earthen architecture is decelerated by the lack of broadly accepted standards on its anti-seismic and thermal performance. Indeed, the former issue has been solved using high-tensile materials inside the walls or surface reinforcements on their sides to improve their flexural strength. The latter issue is related to the penalization of earth walls thermal behavior in current regulations, which tent to evaluate only the steady-state performance of building components, neglecting the benefit of heat storage and hygrothermal buffering effect provided by massive and porous envelopes as raw earth ones. In this paper, we show the results of a paper review concerning the hygrothermal performance of earthen materials for contemporary housing: great attention is given to the base materials which are used (inorganic soils, natural fibers, and mineral or recycled aggregates, chemical stabilizers), manufacturing procedures (when described), performed tests and final performances. Different earth techniques (adobe, cob, extruded bricks, rammed earth, compressed earth blocks, light earth) have been considered in order to highlight that earth material can act both as a conductive and insulating meterial depending on how it is implemented, adapting to several climate contests. The paper aims to summarize current progress in the improvement of thermal performance of raw earth traditional mixes, discuss the suitability of existing measurement protocols for hygroscopic and natural materials and provide guidance for further researches.",
+      "year": 2019,
+      "venue": "Sustainability",
+      "url": "https://doi.org/10.3390/su11195342",
+      "doi": "10.3390/su11195342",
+      "authors": [
+        "Giada Giuffrida",
+        "Rosa Caponetto",
+        "Francesco Nocera"
+      ],
+      "citation_count": 131,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Rammed earth",
+        "Adobe",
+        "Embodied energy",
+        "Earth (classical element)",
+        "Raw material",
+        "Earth materials",
+        "Environmental science",
+        "Brick"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal behaviour bio-based insulation mould growth",
+      "paper_id": "https://openalex.org/W3185061030",
+      "title": "Effects of hygrothermal, UV and SO2 accelerated ageing on the durability of ETICS in urban environments",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Building and Environment",
+      "url": "https://doi.org/10.1016/j.buildenv.2021.108151",
+      "doi": "10.1016/j.buildenv.2021.108151",
+      "authors": [
+        "João L. Parracha",
+        "Giovanni Borsoi",
+        "Rosário Veiga",
+        "Inês Flores‐Colen",
+        "Lina Nunes",
+        "Ana R. García",
+        "Laura M. Ilharco",
+        "Amélia Dionísio",
+        "Paulina Faria"
+      ],
+      "citation_count": 40,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Durability",
+        "Gloss (optics)",
+        "Composite material",
+        "Materials science",
+        "Ageing",
+        "Life-cycle assessment",
+        "Environmental science",
+        "Coating"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal behaviour bio-based insulation mould growth",
+      "paper_id": "https://openalex.org/W2198920676",
+      "title": "Contribution to the development of new bio-based thermal insulation materials made from vegetal pith and natural binders : hygrothermal performance, fire reaction and mould growth resistance",
+      "abstract": "The building sector is moving towards new approaches to energy efficient design, which includes not only the improvement of the thermal performance of the building envelope but also the reduction of the embodied energy. The development of bio-based thermal insulation materiaIs contribute to such approaches as their use may result in a reduction of both energy demand and embodied energy, together with other beneficial environmental aspects such as the reduction of non-renewable resources depletion and waste generation. Currently there are several commercial examples of bio-based materiaIs , most based on industrial fibres (flax, hemp, kenaf, etc.), wood or sheep's wool. The use of food-crop by-products is less common, but might be an interesting alternative for countries such as Spain where industrial fibre production is very marginal. These by-products, especially cereal straw, have been used and are increasingly used in building as reinforcement in composites , deck finishes , interior partitions or structural closures. In this research their use in building thermal insulation is proposed. On a first stage of the research, the aim is to explore the possibility of using some crop by-products available in Spain for the development of rigid thermal insulation boards. The availability of the raw materiaIs is evaluated and contrasted to two different forecast scenarios of demand. As a result, three widely available crop by-products (barley straw, corn pith and rice husks) are chosen to develop experimental composites using two natural binders (corn starch and sodium alginate). Both the raw materials and the composites made from them are characterised. Attention is focused on the physical, thermal and hygroscopic properties of the materiaIs, specially their porous structure, density, thermal conductivity and diffusivity, water vapour sorption and water vapour diffusivity. Results are evaluated against commercially available bio-based materials and other conventional insulation materials. Moreover, the fire reaction of the composites is investigated. The composite based on corn pith and alginate presented several favourable properties such as low density and low thermal conductivity, significant moisture adsorption and low fire contribution and it was therefore subject of a further investigation. Thus, on a second stage, the corn pith alginate composite is investigated. The dependence of the main thermal and hygroscopic properties to moisture content is analysed together with its hygrothermal performance. Moreover, its formulation is optimised in two different aspects: fire reaction and resistance to mould growth. In the case of fire, the analysis was mainly focused on the smouldering process. lt is found that the incorporation of boric acid results in a speed reduction of the combustion process, while ammonium polyphosphate increases the onset temperature. Lime has shown to effectively protect the corn pith granulates from mould growth. Finally, the hygrothermal performance of ETIC -like Systems incorporating the new material is evaluated and compared to mainstream materials. El sector de la construcció s'interessa cada vegada més per l'eficiència energètica de l'edificació, cosa que inclou no només la millora del comportament tèrmic dels tancaments, sinó també la reducció de l'energia incorporada en els materials. El desenvolupament d'eco-materials aïllants tèrmics pot suposar una bona contribució a aquest fi, ja que el seu ús pot comportar tant una reducció de la demanda energètica com de l'energia incorporada, a més d'altres beneficis com la reducció de l'ús de recursos no renovables i de la generació de residus. Actualment existeixen diversos eco-materials disponibles al mercat, la majoria a base de fibres vegetals industrials (lli, cànem, kenaf, etc.), fusta o llana d'ovella. L'ús de subproductes agrícoles és menys comú, però podria ser una alternativa interessant per a països com Espanya, on la producció de fibra industrial és molt marginal. Aquests subproductes, especialment la palla de cereals, s'han utilitzat i s'utilitzen cada vegada més en la construcció com a reforç en materials compostos, acabats de coberta, façana o tancaments estructurals. En aquesta investigació es proposa el seu ús en aïllaments tèrmics. En una primera etapa de la investigació, l'objectiu és explorar la possibilitat d'utilitzar alguns dels subproductes agrícoles disponibles a Espanya per al desenvolupament de panells aïllants rígids. S'ha avaluat la disponibilitat de les matèries primeres contrastant-la amb dos possibles escenaris de demanda. Tres dels subproductes disponibles (palla d'ordi, medul·la de blat de moro i clofolla d'arròs) s’han seleccionat per al desenvolupament de materials compostos experimentals, aglutinats amb dos tipus de polímers naturals (midó de blat de moro i alginat de sodi). Tant les matèries primeres com els materials compostos han estat caracteritzats analitzant les seves propietats físiques, tèrmiques i higroscòpiques, en concret la seva estructura porosa, la seva densitat, la seva conductivitat i difusivitat tèrmiques, la sorció i la difusivitat al vapor d'aigua. Els resultats s’han contrastat amb els d'altres materials convencionals. D'altra banda, s’ha analitzat la reacció al foc dels materials compostos. El compost basat en la medul·la de blat de moro i alginat ha presentat diverses propietats favorables com ara una baixa densitat i una baixa conductivitat tèrmica, una capacitat d'adsorció de vapor d'aigua significativa i una baixa contribució a la propagació del foc, pel que ha estat objecte d'una investigació ulterior. Per tant, en una segona etapa, s'ha estudiat en més profunditat el compost a base de medul·la de blat de moro i alginat. S'ha analitzat la dependència de les principals propietats tèrmiques i higroscòpiques amb el contingut d'humitat del material, així com el seu comportament higrotèrmic. D'altra banda, s'ha tractat de millorar el seu comportament en dos aspectes importants: la seva reacció al foc i la seva resistència a l'atac biòtic. Per avaluar el primer aspecte s’ha analitzat principalment el procés de smouldering. S’observa que la incorporació d'àcid bòric redueix la velocitat de propagació del front de combustió, mentre que el polifosfat d'amoni és capaç d'impedir l’smouldering fins a certes temperatures. Per a l'avaluació del segon aspecte s’ha analitzat l'afectació dels materials exposats a diferents nivells d'humitat i temperatura, i s’ha comprovat que la calç és capaç d'incrementar significativament la resistència a l'atac biòtic dels materials. Finalment, s'ha avaluat el rendiment higrotèrmic de Sistemes SATE que incorporen el nou material comparant-lo amb el d'altres materials convencionals. El sector de la construcción se interesa cada vez más por la eficiencia energética de la edificación, lo que incluye no sólo la mejora del comportamiento térmico de los cerramientos, sino también la reducción de la energía incorporada en los materiales. El desarrollo de eco-materiales aislantes térmicos puede contribuir a este fin, ya que su uso puede conllevar tanto una reducción de la demanda energética corno de la energía incorporada, además de otros beneficios como la reducción del uso de recursos no renovables y de la generación de residuos. Actualmente existen diversos eco-materiales disponibles en el mercado, la mayoría a base de fibras vegetales industriales (lino, cáñamo. kenaf, etc.), madera o lana de oveja. El uso de subproductos agrícolas es menos común, pero podría ser una alternativa interesante para países como España, donde la producción de fibra industrial es muy margínal. Estos subproductos, especialmente la paja de cereales, se han utilizado y se utilizan cada vez más en la construcción como refuerzo en materiales compuestos, acabados de cubierta, particiones interiores o cerramientos estructurales. En esta investigación se propone su uso como aislamiento térmico. En una primera etapa de la investigación, el objetivo es explorar la posibilidad de utilizar algunos de los subproductos agrícolas disponibles en España para el desarrollo de paneles aislantes rígidos . Se ha evaluado la disponibilidad de las materias primas contrastándola con dos posibles escenarios de demanda. Tres de los subproductos disponibles (paja de cebada, médula de maíz y cascarilla de arroz) se seleccionaron para el desarrollo de materiales compuestos experimentales que se aglutinaron con dos tipos de polímeros naturales (almidón de maíz y alginato de sodio). Tanto las materias primas como los materiales compuestos fueron caracterizados analizándose sus propiedades físicas, térmicas e higroscópicas, en concreto su estructura porosa, su densidad, su conductividad y difusividad térmicas, la sorción y la dífusividad al vapor de agua de los materiales. Los resultados se contrastaron con los de otros materiales convencionales. Por otra parte, se analizó la reacción al fuego de los materiales compuestos . El compuesto basado en la médula de maíz y alginato presentó diversas propiedades favorables tales como una baja densidad y una baja conductividad térmica, una capacidad de adsorción de vapor de agua significativa y una baja contribución a la propagación del fuego, por lo que ha sido objeto de una investigación ulterior. Por lo tanto, en una segunda etapa, se ha estudiado en más profundidad el compuesto a base de médula de maíz y alginato. Se ha analizado la dependencia de las principales propiedades térmicas e higroscópicas con el contenido de humedad del material, así como su comportamiento higrotérmico. Por otra parte, se ha tratado de mejorar su comportamiento en dos aspectos importantes: su reacción al fuego y su resistencia al ataque biótico. Para evaluar el primer aspecto se analizó principalmente el proceso de smouldering. Se observó que la incorporación de ácido bórico reduce la velocidad de avance del frente d",
+      "year": 2015,
+      "venue": "",
+      "url": "https://doi.org/10.5821/dissertation-2117-95754",
+      "doi": "10.5821/dissertation-2117-95754",
+      "authors": [
+        "Mariana Palumbo"
+      ],
+      "citation_count": 32,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "dissertation"
+      ],
+      "fields_of_study": [
+        "Embodied energy",
+        "Thermal insulation",
+        "Husk",
+        "Straw",
+        "Renewable energy",
+        "Raw material",
+        "Engineered wood",
+        "SISAL"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal behaviour bio-based insulation mould growth",
+      "paper_id": "https://openalex.org/W2955294001",
+      "title": "Influence of types of binder and plant aggregates on hygrothermal and mechanical properties of vegetal concretes",
+      "abstract": "",
+      "year": 2019,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2019.06.004",
+      "doi": "10.1016/j.conbuildmat.2019.06.004",
+      "authors": [
+        "Méryl Lagouin",
+        "Camille Magniont",
+        "Pascale Sénéchal",
+        "Peter Moonen",
+        "Jean‐Emmanuel Aubert",
+        "Aurélie Laborel-Préneron"
+      ],
+      "citation_count": 92,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Metakaolin",
+        "Materials science",
+        "Porosity",
+        "Composite material",
+        "Compressive strength",
+        "Aggregate (composite)",
+        "Sorption",
+        "Lime"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal behaviour bio-based insulation mould growth",
+      "paper_id": "https://openalex.org/W4395685802",
+      "title": "Hygrothermal Properties and Performance of Bio-Based Insulation Materials Locally Sourced in Sweden",
+      "abstract": "In recent years, there has been a paradigm shift in the building sector towards more sustainable, resource efficient, and renewable materials. Bio-based insulation derived from renewable resources, such as plant or animal fibres, is one promising group of such materials. Compared to mineral wool and polystyrene-based insulation materials, these bio-based insulation materials generally have a slightly higher thermal conductivity, and they are significantly more hygroscopic, two factors that need to be considered when using these bio-based insulation materials. This study assesses the hygrothermal properties of three bio-based insulation materials: eelgrass, grass, and wood fibre. All three have the potential to be locally sourced in Sweden. Mineral wool (stone wool) was used as a reference material. Hygrothermal material properties were measured with dynamic vapour sorption (DVS), transient plane source (TPS), and sorption calorimetry. Moisture buffering of the insulation materials was assessed, and their thermal insulation capacity was tested on a building component level in a hot box that exposed the materials to a steady-state climate, simulating in-use conditions in, e.g., an external wall. The tested bio-based insulation materials have significantly different sorption properties to stone wool and have higher thermal conductivity than what the manufacturers declared. The hot-box experiments showed that the insulating capacity of the bio-based insulators cannot be reliably calculated from the measured thermal conductivity alone. The results of this study could be used as input data for numerical simulations and analyses of the thermal and hygroscopic behaviour of these bio-based insulation materials.",
+      "year": 2024,
+      "venue": "Materials",
+      "url": "https://doi.org/10.3390/ma17092021",
+      "doi": "10.3390/ma17092021",
+      "authors": [
+        "Oskar Ranefjärd",
+        "Paulien Strandberg-de Bruijn",
+        "Lars Wadsö"
+      ],
+      "citation_count": 21,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Mineral wool",
+        "Thermal insulation",
+        "Materials science",
+        "Thermal conductivity",
+        "Building insulation",
+        "Composite material",
+        "Sorption",
+        "Biocomposite"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal behaviour bio-based insulation mould growth",
+      "paper_id": "https://openalex.org/W3018027865",
+      "title": "Technical Performance Overview of Bio-Based Insulation Materials Compared to Expanded Polystyrene",
+      "abstract": "The energy efficiency of buildings is well documented. However, to improve standards of energy efficiency, the embodied energy of materials included in the envelope is also increasing. Natural fibers like wood and hemp are used to make low environmental impact insulation products. Technical characterizations of five bio-based materials are described and compared to a common, traditional, synthetic-based insulation material, i.e., expanded polystyrene. The study tests the thermal conductivity and the vapor transmission performance, as well as the combustibility of the material. Achieving densities below 60 kg/m3, wood and hemp batt insulation products show thermal conductivity in the same range as expanded polystyrene (0.036 kW/mK). The vapor permeability depends on the geometry of the internal structure of the material. With long fibers are intertwined with interstices, vapor can diffuse and flow through the natural insulation up to three times more than with cellular synthetic (polymer) -based insulation. Having a short ignition times, natural insulation materials are highly combustible. On the other hand, they release a significantly lower amount of smoke and heat during combustion, making them safer than the expanded polystyrene. The behavior of a bio-based building envelopes needs to be assessed to understand the hygrothermal characteristics of these nontraditional materials which are currently being used in building systems.",
+      "year": 2020,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings10050081",
+      "doi": "10.3390/buildings10050081",
+      "authors": [
+        "Cassandra Lafond",
+        "Pierre Blanchet"
+      ],
+      "citation_count": 52,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Polystyrene",
+        "Combustibility",
+        "Thermal insulation",
+        "Composite material",
+        "Thermal conductivity",
+        "Expanded polystyrene",
+        "Combustion"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal behaviour bio-based insulation mould growth",
+      "paper_id": "https://openalex.org/W3081604045",
+      "title": "Experimental investigation on the influence of immersion/drying cycles on the hygrothermal and mechanical properties of hemp concrete",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Journal of Building Engineering",
+      "url": "https://doi.org/10.1016/j.jobe.2020.101758",
+      "doi": "10.1016/j.jobe.2020.101758",
+      "authors": [
+        "Ferhat Benmahiddine",
+        "Farès Bennai",
+        "Rachid Cherif",
+        "Rafik Belarbi",
+        "Abdelkader Tahakourt",
+        "Kamilia Abahri"
+      ],
+      "citation_count": 82,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Durability",
+        "Shrinkage",
+        "Materials science",
+        "Composite material",
+        "Compressive strength",
+        "Porosity",
+        "Thermogravimetric analysis",
+        "Swelling"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal behaviour bio-based insulation mould growth",
+      "paper_id": "https://openalex.org/W2889480446",
+      "title": "Applying internal insulation in post-war prefab housing: Understanding and mitigating the hygrothermal risks",
+      "abstract": "The ‘Airey-system’ is a post-war prefab construction system which has recently gained heritage significance recognition. As a result, recent refurbishments have shifted from applying exterior insulation to applying internal insulation in dwellings constructed with this system. Applying internal insulation to existing buildings is known to pose a challenge in relation to hygrothermal risks, as this can lead to high relative humidity levels, condensation, and ultimately, mould growth and decay. The aim of the paper is to assess the hygrothermal risk associated with applying internal insulation in dwellings constructed with the Airey-system, as this remains absent in literature. The assessment is conducted on a proposed refurbishment design of 144 dwellings and evaluates the relative humidity near surfaces in combination with an advanced mould growth prediction model. A simulation of a reference year indicates long periods of continuous condensation, and large amounts of mould growth. The results show that a typical application of internal insulation, although it does meet standard building regulations, is not sufficient to prevent mould growth and condensation in this type of construction. Therefore, a subsequent sensitivity analysis of key parameters is carried out, evaluating the impact of increased airtightness, increased ventilation rates and increased surface temperatures on the hygrothermal risk. All individual parameters have a significant impact, however, none of the parameters provides an easily achieved stand-alone solution to the hygrothermal risk. A final assessment of the combination of parameters shows that only a combination of far reaching improvements could mitigate the risk of mould growth and condensation.",
+      "year": 2018,
+      "venue": "Building and Environment",
+      "url": "https://doi.org/10.1016/j.buildenv.2018.08.035",
+      "doi": "10.1016/j.buildenv.2018.08.035",
+      "authors": [
+        "Lisanne Havinga",
+        "H.L. Schellen"
+      ],
+      "citation_count": 31,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Relative humidity",
+        "Engineering",
+        "Environmental science",
+        "Civil engineering",
+        "Forensic engineering",
+        "Geography",
+        "Meteorology"
+      ],
+      "tldr": ""
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+{
+  "created_at": "2026-06-26T09:46:45",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "https://openalex.org/W2109861890",
+      "title": "Shear and Bending Performance of a Novel Wood–Concrete Composite System",
+      "abstract": "This paper introduces a new, structural wood–concrete composite system. The system is formed by joining a wood component, such as a floor beam or laminated plate, to a concrete slab utilizing a continuous steel mesh of which one half is glued into a slot in the wood while the other half is embedded into the concrete. Two series of tests were performed and are presented: static push-out tests (to establish shear properties of the connector) and a full scale bending test with a span of approximately 10m. Test results reveal that the steel mesh performs favorably—as a stiff yet ductile shear connector between the wood and the concrete. Design equations, per European standards (in absence of North American standards) are described and used to predict the failure load of the bending test. Calculations indicate that the tested beam performs with near full composite action—specifically, 97% effective stiffness and 99% strength of that of a beam with full composite action. This is a marked improvement in the efficiency of wood–concrete systems developed to date. The system shows itself to be superior to alternative systems in its high structural efficiency as well as being relatively easy to install and economic.",
+      "year": 2005,
+      "venue": "Journal of Structural Engineering",
+      "url": "https://doi.org/10.1061/(asce)0733-9445(2005)131:9(1404)",
+      "doi": "10.1061/(asce)0733-9445(2005)131:9(1404)",
+      "authors": [
+        "Peggi L. Clouston",
+        "Leander Bathon",
+        "Alexander C. Schreyer"
+      ],
+      "citation_count": 158,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cable gland",
+        "Structural engineering",
+        "Composite number",
+        "Beam (structure)",
+        "Shear (geology)",
+        "Slab",
+        "Stiffness",
+        "Bending"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "https://openalex.org/W3014127731",
+      "title": "Engineering ductile notch connections for composite floors made of laminated timber and high or ultra-high performance fiber reinforced concrete",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Engineering Structures",
+      "url": "https://doi.org/10.1016/j.engstruct.2020.110415",
+      "doi": "10.1016/j.engstruct.2020.110415",
+      "authors": [
+        "Serge Lamothe",
+        "Luca Sorelli",
+        "Pierre Blanchet",
+        "Philippe Galimard"
+      ],
+      "citation_count": 36,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Structural engineering",
+        "Ductility (Earth science)",
+        "Cable gland",
+        "Materials science",
+        "Stiffness",
+        "Slab",
+        "Composite number",
+        "Shear (geology)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "https://openalex.org/W4386609203",
+      "title": "Experimental study of innovative bolted shear connectors in demountable cold-formed steel–concrete composite beams",
+      "abstract": "",
+      "year": 2023,
+      "venue": "Thin-Walled Structures",
+      "url": "https://doi.org/10.1016/j.tws.2023.111116",
+      "doi": "10.1016/j.tws.2023.111116",
+      "authors": [
+        "Abdolreza Ataei",
+        "Seyed Ali Mahmoudy",
+        "Mehran Zeynalian",
+        "Alireza A. Chiniforush",
+        "Tuan Ngo"
+      ],
+      "citation_count": 33,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Precast concrete",
+        "Structural engineering",
+        "Shear (geology)",
+        "Materials science",
+        "Stiffness",
+        "Cold-formed steel",
+        "Ductility (Earth science)",
+        "Composite number"
+      ],
+      "tldr": ""
+    }
+  ]
+}

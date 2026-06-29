@@ -1,0 +1,105 @@
+{
+  "created_at": "2026-06-26T09:41:07",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "bio-based wall thermal mass overheating summer comfort",
+      "paper_id": "https://openalex.org/W2109400650",
+      "title": "An investigation into future performance and overheating risks in Passivhaus dwellings",
+      "abstract": "",
+      "year": 2013,
+      "venue": "Building and Environment",
+      "url": "https://doi.org/10.1016/j.buildenv.2013.08.024",
+      "doi": "10.1016/j.buildenv.2013.08.024",
+      "authors": [
+        "Robert S. McLeod",
+        "Christina J. Hopfe",
+        "Alan Kwan"
+      ],
+      "citation_count": 233,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Overheating (electricity)",
+        "Thermal comfort",
+        "Fuel poverty",
+        "Climate change",
+        "Environmental science",
+        "Passive house",
+        "Notional amount",
+        "Architectural engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based wall thermal mass overheating summer comfort",
+      "paper_id": "https://openalex.org/W3094812015",
+      "title": "Urban Overheating and Cooling Potential in Australia: An Evidence-Based Review",
+      "abstract": "Cities in Australia are experiencing unprecedented levels of urban overheating, which has caused a significant impact on the country’s socioeconomic environment. This article provides a comprehensive review on urban overheating, its impact on health, energy, economy, and the heat mitigation potential of a series of strategies in Australia. Existing studies show that the average urban heat island (UHI) intensity ranges from 1.0 °C to 13.0 °C. The magnitude of urban overheating phenomenon in Australia is determined by a combination of UHI effects and dualistic atmospheric circulation systems (cool sea breeze and hot desert winds). The strong relation between multiple characteristics contribute to dramatic fluctuations and high spatiotemporal variabilities in urban overheating. In addition, urban overheating contributes to serious impacts on human health, energy costs, thermal comfort, labour productivity, and social behaviour. Evidence suggest that cool materials, green roofs, vertical gardens, urban greenery, and water-based technologies can significantly alleviate the UHI effect, cool the ambient air, and create thermally balanced cities. Urban greenery, especially trees, has a high potential for mitigation. Trees and hedges can reduce the average maximum UHI by 1.0 °C. The average maximum mitigation performance values of green roofs and green walls are 0.2 °C and 0.1 °C, respectively. Reflective roofs and pavements can reduce the average maximum UHI by 0.3 °C. In dry areas, water has a high cooling potential. The average maximum cooling potential using only one technology is 0.4 °C. When two or more technologies are used at the same time, the average maximum UHI drop is 1.5 °C. The mitigation strategies identified in this article can help the governments and other stakeholders manage urban heating in the natural and built environment, and save health, energy, and economic costs.",
+      "year": 2020,
+      "venue": "Climate",
+      "url": "https://doi.org/10.3390/cli8110126",
+      "doi": "10.3390/cli8110126",
+      "authors": [
+        "Komali Yenneti",
+        "Lan Ding",
+        "Deo Prasad",
+        "Giulia Ulpiani",
+        "Riccardo Paolini",
+        "Shamila Haddad",
+        "M. Santamouris"
+      ],
+      "citation_count": 76,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Overheating (electricity)",
+        "Urban heat island",
+        "Environmental science",
+        "Sea breeze",
+        "Meteorology",
+        "Atmospheric sciences",
+        "Climatology",
+        "Geography"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based wall thermal mass overheating summer comfort",
+      "paper_id": "https://openalex.org/W3047571800",
+      "title": "A new methodology of evaluation of overheating in buildings",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Energy and Buildings",
+      "url": "https://doi.org/10.1016/j.enbuild.2020.110360",
+      "doi": "10.1016/j.enbuild.2020.110360",
+      "authors": [
+        "Abdelaziz Laouadi",
+        "Michal Bartko",
+        "Michael Lacasse"
+      ],
+      "citation_count": 81,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Overheating (electricity)",
+        "Extreme heat",
+        "Environmental science",
+        "Natural ventilation",
+        "Core temperature",
+        "Thermal comfort",
+        "Cold climate",
+        "Risk analysis (engineering)"
+      ],
+      "tldr": ""
+    }
+  ]
+}

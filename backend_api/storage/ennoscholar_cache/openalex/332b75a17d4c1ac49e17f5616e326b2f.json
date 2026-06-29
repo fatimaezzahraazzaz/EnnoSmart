@@ -1,0 +1,410 @@
+{
+  "created_at": "2026-06-26T10:08:54",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "bio-based insulation reaction to fire building materials",
+      "paper_id": "https://openalex.org/W2008894151",
+      "title": "Progress in bio-based plastics and plasticizing modifications",
+      "abstract": "Over the coming few decades bioplastic materials are expected to complement and gradually replace some of the fossil oil based materials. Multidisciplinary research efforts have generated a significant level of technical and commercial success towards these bio-based materials. However, extensive application of these bio-based plastics is still challenged by one or more of their possible inherent limitations, such as poor processability, brittleness, hydrophilicity, poor moisture and gas barrier, inferior compatibility, poor electrical, thermal and physical properties. The incorporation of additives such as plasticizers into the biopolymers is a common practice to improve these inherent limitations. Generally, plasticizers are added to both synthetic and bio-based polymeric materials to impart flexibility, improve toughness, and lower the glass transition temperature. This review introduces the most common bio-based plastics and provides an overview of recent advances in the selection and use of plasticizers, and their effect on the performance of these materials. In addition to plasticizers, we also present a perspective of other emerging techniques of improving the overall performance of bio-based plastics. Although a wide variety of bio-based plastics are under development, this review focuses on plasticizers utilized for the most extensively studied bioplastics including poly(lactic acid), polyhydroxyalkanoates, thermoplastic starch, proteinaceous plastics and cellulose acetates. The ongoing challenge and future potentials of plasticizers for bio-based plastics are also discussed.",
+      "year": 2013,
+      "venue": "Journal of Materials Chemistry A",
+      "url": "https://doi.org/10.1039/c3ta12555f",
+      "doi": "10.1039/c3ta12555f",
+      "authors": [
+        "Tizazu H. Mekonnen",
+        "Paolo Mussone",
+        "Hamdy Khalil",
+        "David C. Bressler"
+      ],
+      "citation_count": 811,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Plasticizer",
+        "Bioplastic",
+        "Materials science",
+        "Thermoplastic",
+        "Plastics industry",
+        "Polymer science",
+        "Composite material",
+        "Waste management"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based insulation reaction to fire building materials",
+      "paper_id": "https://openalex.org/W4378627842",
+      "title": "A Review of Sustainable Bio‐Based Insulation Materials for Energy‐Efficient Buildings",
+      "abstract": "Abstract The surge towards a sustainable future in the construction industry requires the use of bio‐based insulation materials as an alternative to conventional ones for improving energy efficiency in structures. In this article, the features of bio‐based insulation materials, including their thermal conductivities, moisture buffering value, fire performance, and life cycle evaluations are examined. It is clear from the review that pre‐ and post‐treatment of the bio‐based materials used for insulation materials optimize their properties. The life cycle analysis reveals a significant reduction in global warming potential (GWP) compared to conventional foams. In addition, it is envisaged that producing bio‐based insulation materials on a larger scale will further decrease the net GWP. The article, therefore, proposes the implementation of policies that will promote the commercialization of bio‐based insulation materials.",
+      "year": 2023,
+      "venue": "Macromolecular Materials and Engineering",
+      "url": "https://doi.org/10.1002/mame.202300086",
+      "doi": "10.1002/mame.202300086",
+      "authors": [
+        "Pradeep Raja",
+        "Vignesh Murugan",
+        "Sindhu Ravichandran",
+        "Laxmidhar Behera",
+        "Rhoda Afriyie Mensah",
+        "M. Satthiyaraju",
+        "Ananthakumar Kasi",
+        "Karthik Babu Nilagiri Balasubramanian",
+        "Gabriel Sas",
+        "Henri Vahabi",
+        "Oisik Das"
+      ],
+      "citation_count": 87,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Commercialization",
+        "Materials science",
+        "Thermal insulation",
+        "Life-cycle assessment",
+        "Global-warming potential",
+        "Efficient energy use",
+        "Scale (ratio)",
+        "Moisture"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based insulation reaction to fire building materials",
+      "paper_id": "https://openalex.org/W3126489566",
+      "title": "Developing fibrillated cellulose as a sustainable technological material",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Nature",
+      "url": "https://doi.org/10.1038/s41586-020-03167-7",
+      "doi": "10.1038/s41586-020-03167-7",
+      "authors": [
+        "Tian Li",
+        "Chaoji Chen",
+        "Alexandra H. Brozena",
+        "J. Y. Zhu",
+        "Lixian Xu",
+        "Carlos Driemeier",
+        "Jiaqi Dai",
+        "Orlando J. Rojas",
+        "Akira Isogai",
+        "Lars Wågberg",
+        "Liangbing Hu"
+      ],
+      "citation_count": 1593,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Cellulose",
+        "Materials science",
+        "Nanocellulose",
+        "Renewable resource",
+        "Biopolymer",
+        "Cellulosic ethanol",
+        "Biomass (ecology)",
+        "Sustainability"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based insulation reaction to fire building materials",
+      "paper_id": "https://openalex.org/W3035571789",
+      "title": "Applications of hemp in textiles, paper industry, insulation and building materials, horticulture, animal nutrition, food and beverages, nutraceuticals, cosmetics and hygiene, medicine, agrochemistry, energy production and environment: a review",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Environmental Chemistry Letters",
+      "url": "https://doi.org/10.1007/s10311-020-01029-2",
+      "doi": "10.1007/s10311-020-01029-2",
+      "authors": [
+        "Grégorio Crini",
+        "Éric Lichtfouse",
+        "Gilles Chanet",
+        "Nadia Morin‐Crini"
+      ],
+      "citation_count": 386,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Cosmetics",
+        "Cannabis sativa",
+        "Nutraceutical",
+        "Automotive industry",
+        "Agriculture",
+        "Engineering",
+        "Business",
+        "Waste management"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based insulation reaction to fire building materials",
+      "paper_id": "https://openalex.org/W3202568350",
+      "title": "Material Function of Mycelium-Based Bio-Composite: A Review",
+      "abstract": "Mycelium-based bio-composite materials have been invented and widely applied to different areas, including construction, manufacturing, agriculture, and biomedical. As the vegetative part of a fungus, mycelium has the unique capability to utilize agricultural crop waste (e.g., sugarcane bagasse, rice husks, cotton stalks, straw, and stover) as substrates for the growth of its network, which integrates the wastes from pieces to continuous composites without energy input or generating extra waste. Their low-cost and environmentally friendly features attract interest in their research and commercialization. For example, mycelium-based foam and sandwich composites have been actively developed for construction structures. It can be used as synthetic planar materials (e.g., plastic films and sheets), larger low-density objects (e.g., synthetic foams and plastics), and semi-structural materials (e.g., paneling, flooring, furniture, decking). It is shown that the material function of these composites can be further tuned by controlling the species of fungus, the growing conditions, and the post-growth processing method to meet a specific mechanical requirement in applications (e.g., structural support, acoustic and thermal insulation). Moreover, mycelium can be used to produce chitin and chitosan, which have been applied to clinical trials for wound healing, showing the potential for biomedical applications. Given the strong potential and multiple advantages of such a material, we are interested in studying it in-depth and reviewing the current progress of its related study in this review paper.",
+      "year": 2021,
+      "venue": "Frontiers in Materials",
+      "url": "https://doi.org/10.3389/fmats.2021.737377",
+      "doi": "10.3389/fmats.2021.737377",
+      "authors": [
+        "Libin Yang",
+        "Daekwon Park",
+        "Zhao Qin"
+      ],
+      "citation_count": 202,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Mycelium",
+        "Bagasse",
+        "Materials science",
+        "Composite material",
+        "Environmentally friendly",
+        "Raw material",
+        "Composite number",
+        "Pulp and paper industry"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based insulation reaction to fire building materials",
+      "paper_id": "https://openalex.org/W4211175804",
+      "title": "Bio-based Building Skin",
+      "abstract": "",
+      "year": 2019,
+      "venue": "Directory of Open access Books (OAPEN Foundation)",
+      "url": "https://www.doabooks.org/doab?func=search&query=rid:43479",
+      "doi": "10.1007/978-981-13-3747-5",
+      "authors": [
+        "Andreja Kutnar",
+        "Marcin Brzezicki",
+        "Jakub Sandak",
+        "Anna Sandak"
+      ],
+      "citation_count": 103,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "book"
+      ],
+      "fields_of_study": [
+        "Architectural engineering",
+        "Perspective (graphical)",
+        "Selection (genetic algorithm)",
+        "Engineering",
+        "Computer science",
+        "Engineering drawing",
+        "Construction engineering",
+        "Artificial intelligence"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based insulation reaction to fire building materials",
+      "paper_id": "https://openalex.org/W2986056682",
+      "title": "Treatments and modification to improve the reaction to fire of wood and wood based products—An overview",
+      "abstract": "SUMMARY Wood and wood‐based products are widely used for structural building elements, but due to their composition, they are susceptible of combusting if exposed to fire. Fire safety is an important issue of building safety, especially when the building's fire load contents enhance the risks of fire spread. Therefore, the involved materials are very important to address the fire safety requirements. When existing timber structures are involved, the most usual way to improve its reaction to fire is to treat wood with fire retardant materials. The idea of this paper is to give an overall overview, on the existing fire‐retardant and intumescent coating materials, modification, and treatments that can be applied to wood and wood‐based products in order to improve their reaction to fire.",
+      "year": 2019,
+      "venue": "Fire and Materials",
+      "url": "https://doi.org/10.1002/fam.2779",
+      "doi": "10.1002/fam.2779",
+      "authors": [
+        "Carmen‐Mihaela Popescu",
+        "Alexander Pfriem"
+      ],
+      "citation_count": 153,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Fire retardant",
+        "Intumescent",
+        "Fire safety",
+        "Fire protection",
+        "Fire performance",
+        "Fire prevention",
+        "Combustibility",
+        "Combustion"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based insulation reaction to fire building materials",
+      "paper_id": "https://openalex.org/W3157443992",
+      "title": "Polysaccharide-based aerogels for thermal insulation and superinsulation: An overview",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Carbohydrate Polymers",
+      "url": "https://doi.org/10.1016/j.carbpol.2021.118130",
+      "doi": "10.1016/j.carbpol.2021.118130",
+      "authors": [
+        "Fangxin Zou",
+        "Tatiana Budtova"
+      ],
+      "citation_count": 146,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Thermal conductivity",
+        "Aerogel",
+        "Thermal insulation",
+        "Materials science",
+        "Polymer",
+        "Thermal",
+        "Composite material",
+        "Porosity"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based insulation reaction to fire building materials",
+      "paper_id": "https://openalex.org/W2899634717",
+      "title": "Polymeric composites for powder-based additive manufacturing: Materials and applications",
+      "abstract": "",
+      "year": 2018,
+      "venue": "Progress in Polymer Science",
+      "url": "https://doi.org/10.1016/j.progpolymsci.2018.11.001",
+      "doi": "10.1016/j.progpolymsci.2018.11.001",
+      "authors": [
+        "Shangqin Yuan",
+        "Fei Shen",
+        "Chee Kai Chua",
+        "Kun Zhou"
+      ],
+      "citation_count": 514,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Ceramic",
+        "3D printing",
+        "Aerospace",
+        "Composite number",
+        "Composite material",
+        "Selective laser sintering",
+        "Compounding"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based insulation reaction to fire building materials",
+      "paper_id": "https://openalex.org/W3088213951",
+      "title": "Bio-Based Alternatives to Phenol and Formaldehyde for the Production of Resins",
+      "abstract": "Phenol-formaldehyde (PF) resin continues to dominate the resin industry more than 100 years after its first synthesis. Its versatile properties such as thermal stability, chemical resistance, fire resistance, and dimensional stability make it a suitable material for a wide range of applications. PF resins have been used in the wood industry as adhesives, in paints and coatings, and in the aerospace, construction, and building industries as composites and foams. Currently, petroleum is the key source of raw materials used in manufacturing PF resin. However, increasing environmental pollution and fossil fuel depletion have driven industries to seek sustainable alternatives to petroleum based raw materials. Over the past decade, researchers have replaced phenol and formaldehyde with sustainable materials such as lignin, tannin, cardanol, hydroxymethylfurfural, and glyoxal to produce bio-based PF resin. Several synthesis modifications are currently under investigation towards improving the properties of bio-based phenolic resin. This review discusses recent developments in the synthesis of PF resins, particularly those created from sustainable raw material substitutes, and modifications applied to the synthetic route in order to improve the mechanical properties.",
+      "year": 2020,
+      "venue": "Polymers",
+      "url": "https://doi.org/10.3390/polym12102237",
+      "doi": "10.3390/polym12102237",
+      "authors": [
+        "P.R. Sarika",
+        "Paul Nancarrow",
+        "Abdulrahman Khansaheb",
+        "Taleb Ibrahim"
+      ],
+      "citation_count": 235,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Raw material",
+        "Petrochemical",
+        "Phenol",
+        "Cardanol",
+        "Adhesive",
+        "Formaldehyde",
+        "Synthetic resin",
+        "Materials science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based insulation reaction to fire building materials",
+      "paper_id": "https://openalex.org/W3042300176",
+      "title": "Gypsum, Geopolymers, and Starch—Alternative Binders for Bio-Based Building Materials: A Review and Life-Cycle Assessment",
+      "abstract": "To decrease the environmental impact of the construction industry, energy-efficient insulation materials with low embodied production energy are needed. Lime-hemp concrete is traditionally recognized as such a material; however, the drawbacks of this type of material are associated with low strength gain, high initial moisture content, and limited application. Therefore, this review article discusses alternatives to lime-hemp concrete that would achieve similar thermal properties with an equivalent or lower environmental impact. Binders such as gypsum, geopolymers, and starch are proposed as alternatives, due to their performance and low environmental impact, and available research is summarized and discussed in this paper. The summarized results show that low-density thermal insulation bio-composites with a density of 200–400 kg/m3 and thermal conductivity (λ) of 0.06–0.09 W/(m × K) can be obtained with gypsum and geopolymer binders. However, by using a starch binder it is possible to produce ecological building materials with a density of approximately 100 kg/m3 and thermal conductivity (λ) as low as 0.04 W/(m × K). In addition, a preliminary life cycle assessment was carried out to evaluate the environmental impact of reviewed bio-composites. The results indicate that such bio-composites have a low environmental impact, similar to lime-hemp concrete.",
+      "year": 2020,
+      "venue": "Sustainability",
+      "url": "https://doi.org/10.3390/su12145666",
+      "doi": "10.3390/su12145666",
+      "authors": [
+        "Ģirts Būmanis",
+        "Laura Vītola",
+        "Ina Pundienė",
+        "Māris Šinka",
+        "Diāna Bajāre"
+      ],
+      "citation_count": 105,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Gypsum",
+        "Life-cycle assessment",
+        "Lime",
+        "Materials science",
+        "Embodied energy",
+        "Geopolymer",
+        "Thermal insulation",
+        "Thermal conductivity"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "bio-based insulation reaction to fire building materials",
+      "paper_id": "https://openalex.org/W1991250810",
+      "title": "Thermal degradation and fire behaviour of thermal insulation materials based on food crop by-products",
+      "abstract": "",
+      "year": 2015,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2015.01.028",
+      "doi": "10.1016/j.conbuildmat.2015.01.028",
+      "authors": [
+        "Mariana Palumbo",
+        "J. Formosa",
+        "A.M. Lacasta"
+      ],
+      "citation_count": 61,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Husk",
+        "Materials science",
+        "Pyrolysis",
+        "Straw",
+        "Renewable energy",
+        "Combustion",
+        "Waste management",
+        "Thermal insulation"
+      ],
+      "tldr": ""
+    }
+  ]
+}

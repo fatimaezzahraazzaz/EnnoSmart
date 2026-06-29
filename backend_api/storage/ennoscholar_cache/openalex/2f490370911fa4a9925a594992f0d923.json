@@ -1,0 +1,104 @@
+{
+  "created_at": "2026-06-26T09:49:42",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "vapour open timber frame wall bio-based insulation mould risk",
+      "paper_id": "https://openalex.org/W2046795677",
+      "title": "Hygrothermal performance of wood-hemp insulation in timber frame wall panels with and without a vapour barrier",
+      "abstract": "",
+      "year": 2015,
+      "venue": "Building and Environment",
+      "url": "https://doi.org/10.1016/j.buildenv.2015.04.025",
+      "doi": "10.1016/j.buildenv.2015.04.025",
+      "authors": [
+        "Eshrar Latif",
+        "Mihaela Anca Ciupala",
+        "Simon Tucker",
+        "Devapriya Chitral Wijeyesekera",
+        "Darryl Newport"
+      ],
+      "citation_count": 77,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Composite material",
+        "Relative humidity",
+        "Materials science",
+        "Oriented strand board",
+        "Moisture",
+        "Humidity",
+        "Thermal insulation",
+        "Dynamic insulation"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "vapour open timber frame wall bio-based insulation mould risk",
+      "paper_id": "https://openalex.org/W1982409757",
+      "title": "The comparative in situ hygrothermal performance of Hemp and Stone Wool insulations in vapour open timber frame wall panels",
+      "abstract": "",
+      "year": 2014,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2014.09.060",
+      "doi": "10.1016/j.conbuildmat.2014.09.060",
+      "authors": [
+        "Eshrar Latif",
+        "Mihaela Anca Ciupala",
+        "Devapriya Chitral Wijeyesekera"
+      ],
+      "citation_count": 50,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Composite material",
+        "Materials science",
+        "Relative humidity",
+        "Wool",
+        "Moisture",
+        "Glass wool",
+        "Thermal insulation",
+        "Humidity"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "vapour open timber frame wall bio-based insulation mould risk",
+      "paper_id": "https://openalex.org/W4211175804",
+      "title": "Bio-based Building Skin",
+      "abstract": "",
+      "year": 2019,
+      "venue": "Directory of Open access Books (OAPEN Foundation)",
+      "url": "https://www.doabooks.org/doab?func=search&query=rid:43479",
+      "doi": "10.1007/978-981-13-3747-5",
+      "authors": [
+        "Andreja Kutnar",
+        "Marcin Brzezicki",
+        "Jakub Sandak",
+        "Anna Sandak"
+      ],
+      "citation_count": 103,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "book"
+      ],
+      "fields_of_study": [
+        "Architectural engineering",
+        "Perspective (graphical)",
+        "Selection (genetic algorithm)",
+        "Engineering",
+        "Computer science",
+        "Engineering drawing",
+        "Construction engineering",
+        "Artificial intelligence"
+      ],
+      "tldr": ""
+    }
+  ]
+}

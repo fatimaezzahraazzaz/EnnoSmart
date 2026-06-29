@@ -132,13 +132,22 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
     display["summary"] = sections.get("synthese_strategique_du_projet", display.get("summary", ""))
     display["objective"] = sections.get("objectif_global_reformule", display.get("objective", ""))
     display["frascati_text"] = sections.get("lecture_frascati_du_dossier", display.get("frascati_text", ""))
-    display["verrous_text"] = sections.get("verrous_r_d_signaux_de_verrous", display.get("verrous_text", ""))
+    verrous_section = (
+        sections.get("signaux_de_verrous_r_d_candidats")
+        or sections.get("verrous_r_d_signaux_de_verrous")
+        or sections.get("verrous_cir_consolides")
+        or sections.get("verrous_r_d")
+        or sections.get("verrous")
+        or display.get("verrous_text", "")
+    )
+    display["verrous_text"] = verrous_section
 
     display["report_sections"] = {
         "lecture_frascati": sections.get("lecture_frascati_du_dossier", ""),
         "synthese": sections.get("synthese_strategique_du_projet", ""),
         "objectif": sections.get("objectif_global_reformule", ""),
-        "verrous": sections.get("verrous_r_d_signaux_de_verrous", ""),
+        "verrous": verrous_section,
+        "signaux_de_verrous": verrous_section,
         "demarche": sections.get("demarche_experimentale_detectee", ""),
         "resultats": sections.get("resultats_et_metriques_disponibles", ""),
         "parametres": sections.get("parametres_et_contraintes_techniques", ""),
@@ -150,6 +159,10 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
         display["frascati_summary"] = report.get("frascati_summary") or display.get("frascati_summary") or {}
         display["inputs_status"] = report.get("inputs_status") or display.get("inputs_status") or {}
         display["chroma_sections"] = report.get("chroma_sections") or display.get("chroma_sections") or {}
+        display["llm_reformulated_verrous"] = report.get("llm_reformulated_verrous") or report.get("consultant_verrous_cir") or display.get("llm_reformulated_verrous") or []
+        display["consultant_verrous_cir"] = report.get("consultant_verrous_cir") or report.get("llm_reformulated_verrous") or display.get("consultant_verrous_cir") or []
+        display["verrou_synthesis_report"] = report.get("verrou_synthesis_report") or display.get("verrou_synthesis_report") or {}
+        display["consultant_validation_source"] = report.get("consultant_validation_source") or display.get("consultant_validation_source") or "validation_verrous"
 
         pipeline = _as_dict(report.get("pipeline_before_agent"))
         nlp_stats = _as_dict(pipeline.get("nlp_stats"))

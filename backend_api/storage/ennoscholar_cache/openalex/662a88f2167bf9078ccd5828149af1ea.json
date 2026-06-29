@@ -1,0 +1,391 @@
+{
+  "created_at": "2026-06-26T10:08:11",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "straw bale wall fire resistance building insulation",
+      "paper_id": "https://openalex.org/W4221079725",
+      "title": "A review on the properties of straw insulation for buildings",
+      "abstract": "",
+      "year": 2022,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2022.127215",
+      "doi": "10.1016/j.conbuildmat.2022.127215",
+      "authors": [
+        "Yaping Zhou",
+        "Abdelkrim Trabelsi",
+        "Mohamed El Mankibi"
+      ],
+      "citation_count": 70,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Life-cycle assessment",
+        "Thermal insulation",
+        "Reuse",
+        "Durability",
+        "Carbon footprint",
+        "Building envelope",
+        "Moisture"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw bale wall fire resistance building insulation",
+      "paper_id": "https://openalex.org/W2040996434",
+      "title": "Determining moisture levels in straw bale construction",
+      "abstract": "",
+      "year": 2009,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2009.03.011",
+      "doi": "10.1016/j.conbuildmat.2009.03.011",
+      "authors": [
+        "Mike Lawrence",
+        "Andrew Heath",
+        "Peter Walker"
+      ],
+      "citation_count": 86,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Moisture",
+        "Microclimate",
+        "Environmental science",
+        "Relative humidity",
+        "Durability",
+        "Work (physics)",
+        "Water content"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw bale wall fire resistance building insulation",
+      "paper_id": "https://openalex.org/W4251565017",
+      "title": "Straw bale construction",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Elsevier eBooks",
+      "url": "https://doi.org/10.1016/b978-0-08-102704-2.00009-3",
+      "doi": "10.1016/b978-0-08-102704-2.00009-3",
+      "authors": [
+        "Pete Walker",
+        "Andrew Thomson",
+        "Daniel Maskell"
+      ],
+      "citation_count": 22,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "book-chapter"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Load bearing",
+        "Engineering",
+        "Work (physics)",
+        "Durability",
+        "Product (mathematics)",
+        "Architectural engineering",
+        "Agricultural engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw bale wall fire resistance building insulation",
+      "paper_id": "https://openalex.org/W2138999107",
+      "title": "Design of A Sustainable Building: A Conceptual Framework for Implementing Sustainability in the Building Sector",
+      "abstract": "This paper presents a conceptual framework aimed at implementing sustainability principles in the building industry. The proposed framework based on the sustainable triple bottom line principle, includes resource conservation, cost efficiency and design for human adaptation. Following a thorough literature review, each principle involving strategies and methods to be applied during the life cycle of building projects is explained and a few case studies are presented for clarity on the methods. The framework will allow design teams to have an appropriate balance between economic, social and environmental issues, changing the way construction practitioners think about the information they use when assessing building projects, thereby facilitating the sustainability of building industry.",
+      "year": 2012,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings2020126",
+      "doi": "10.3390/buildings2020126",
+      "authors": [
+        "Peter Oluwole Akadiri",
+        "Ezekiel Chinyio",
+        "Paul Olomolaiye"
+      ],
+      "citation_count": 615,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Sustainability",
+        "CLARITY",
+        "Triple bottom line",
+        "Conceptual framework",
+        "Building design",
+        "Engineering",
+        "Adaptation (eye)",
+        "Sustainable design"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw bale wall fire resistance building insulation",
+      "paper_id": "https://openalex.org/W4385790257",
+      "title": "Are straw bales better insulation materials for constructions? A review",
+      "abstract": "The construction industry significantly impacts climate change, highlighting the urgent need for exploring sustainable building solutions. Among the potential candidates, straw bale constructions have emerged as a promising alternative with low environmental impact and commendable thermal performance. This paper aims to investigate the thermal performance of straw bale constructions and assess the benefits of utilizing straw bales as a sustainable building solution. The findings demonstrate the outstanding thermal performance of straw bales, emphasizing their significant potential as a viable alternative to conventional insulation materials. Nevertheless, the extensive integration of straw bale constructions into the mainstream market is facing challenges from various aspects of the construction industry.",
+      "year": 2023,
+      "venue": "Developments in the Built Environment",
+      "url": "https://doi.org/10.1016/j.dibe.2023.100209",
+      "doi": "10.1016/j.dibe.2023.100209",
+      "authors": [
+        "C. T. Sun",
+        "Jian Gu",
+        "Qi Dong",
+        "Dagang Qu",
+        "Wen‐Shao Chang",
+        "Xunzhi Yin"
+      ],
+      "citation_count": 35,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Mainstream",
+        "Thermal insulation",
+        "Environmental science",
+        "Waste management",
+        "Engineering",
+        "Architectural engineering",
+        "Agricultural engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw bale wall fire resistance building insulation",
+      "paper_id": "https://openalex.org/W4210529799",
+      "title": "The Fire Resistance and Heat Conductivity of Natural Construction Material Based on Straw and Numerical Simulation of Building Energy Demand",
+      "abstract": "The motivation for research to help address climate change is a continuous process of searching for eco-friendly materials in the building industry, which will allow minimizing the negative impact of this sector on the environment. The main objective of the paper is to assess the properties of a natural resource such as straw as an eco-friendly material in various variants for use in low-energy demand construction. The research results will fill the knowledge gap in the field of numerical analyses of the energy demand of straw material buildings based on the results of the conducted laboratory tests. A test of a heat transfer coefficient was conducted with different orientation of straw stalks. Then, samples were subject to a fire resistance test to determine material behavior at 1000 °C. During the fire resistance test, the clay-based plaster was ‘burnt out’, which hardened its structure, effectively preventing flames from reaching the insulation layers in the form of straw stalks. As a result of shrinkage (no plaster mesh), the plaster cracked and turned brick-red in color. The insulation layer of straw under the plaster was charred to a depth of 3.0 mm due to the high temperature. However, when the torch was turned off, no fire spread was observed in any layer of the sample. The 3D models of the buildings were created for different eco-friendly materials applied to make external walls. The results of numerical simulation allowed determining the amount of final energy needed to heat the designed building at the level of 26.38 (kWh/m2·year). Conclusions of the above-mentioned tests indicate very good thermal insulating properties determined using the lambda coefficient of 0.069 (W/m·K) and the possible application of straw bales as an alternative for conventional construction. Research has proven that it is possible to construct a building with low energy requirements using natural, easily available waste and completely biodegradable material.",
+      "year": 2022,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en15031155",
+      "doi": "10.3390/en15031155",
+      "authors": [
+        "Elżbieta Janowska-Renkas",
+        "Anna Król",
+        "Sławomir Pochwała",
+        "Dawid Pałubski",
+        "Małgorzata Adamska",
+        "Igor Klementowski"
+      ],
+      "citation_count": 24,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Environmentally friendly",
+        "Shrinkage",
+        "Building material",
+        "Environmental science",
+        "Materials science",
+        "Composite material",
+        "Waste management"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw bale wall fire resistance building insulation",
+      "paper_id": "https://openalex.org/W2288827701",
+      "title": "Straw bale construction",
+      "abstract": "",
+      "year": 2016,
+      "venue": "Elsevier eBooks",
+      "url": "https://doi.org/10.1016/b978-0-08-100038-0.00006-8",
+      "doi": "10.1016/b978-0-08-100038-0.00006-8",
+      "authors": [
+        "Pete Walker",
+        "Andrew Thomson",
+        "Daniel Maskell"
+      ],
+      "citation_count": 17,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "book-chapter"
+      ],
+      "fields_of_study": [
+        "Computer science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw bale wall fire resistance building insulation",
+      "paper_id": "https://openalex.org/W3035571789",
+      "title": "Applications of hemp in textiles, paper industry, insulation and building materials, horticulture, animal nutrition, food and beverages, nutraceuticals, cosmetics and hygiene, medicine, agrochemistry, energy production and environment: a review",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Environmental Chemistry Letters",
+      "url": "https://doi.org/10.1007/s10311-020-01029-2",
+      "doi": "10.1007/s10311-020-01029-2",
+      "authors": [
+        "Grégorio Crini",
+        "Éric Lichtfouse",
+        "Gilles Chanet",
+        "Nadia Morin‐Crini"
+      ],
+      "citation_count": 386,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Cosmetics",
+        "Cannabis sativa",
+        "Nutraceutical",
+        "Automotive industry",
+        "Agriculture",
+        "Engineering",
+        "Business",
+        "Waste management"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw bale wall fire resistance building insulation",
+      "paper_id": "https://openalex.org/W2586862960",
+      "title": "Thermal Conductivity of Straw Bales: Full Size Measurements Considering the Direction of the Heat Flow",
+      "abstract": "The thermal conductivity of straw bales is an intensively discussed topic in the international straw bale community. Straw bales are, by nature, highly heterogeneous and porous. They can have a relatively large range of density and the baling process can influence the way the fibres are organised within the bale. In addition, straw bales have a larger thickness than most of the insulating materials that can be found in the building industry. Measurement apparatus is usually not designed for such thicknesses, and most of the thermal conductivity values that can be found in the literature are defined based on samples in which the straw bales are resized. During this operation, the orientation of the fibres and the density may not be preserved. This paper starts with a literature review of straw bale thermal conductivity measurements and presents a measuring campaign performed with a specific Guarded Hot Plate, designed to measure samples up to 50 cm thick. The influence of the density is discussed thoroughly. Representative values are proposed for a large range of straw bales to support straw-bale development in the building industry.",
+      "year": 2017,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings7010011",
+      "doi": "10.3390/buildings7010011",
+      "authors": [
+        "Jean-Philippe Costes",
+        "Arnaud Evrard",
+        "Benjamin Biot",
+        "Gauthier Keutgen",
+        "Amaury Daras",
+        "Samuel Dubois",
+        "Frédéric Lebeau",
+        "Luc Courard"
+      ],
+      "citation_count": 84,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Thermal conductivity",
+        "Porosity",
+        "Materials science",
+        "Thermal",
+        "Range (aeronautics)",
+        "Composite material",
+        "Mechanical engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw bale wall fire resistance building insulation",
+      "paper_id": "https://openalex.org/W1984461193",
+      "title": "Energy and carbon embodied in straw and clay wall blocks produced locally in the Andean Patagonia",
+      "abstract": "",
+      "year": 2013,
+      "venue": "Energy and Buildings",
+      "url": "https://doi.org/10.1016/j.enbuild.2013.11.003",
+      "doi": "10.1016/j.enbuild.2013.11.003",
+      "authors": [
+        "Alejandro D. González"
+      ],
+      "citation_count": 65,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Greenhouse gas",
+        "Environmental science",
+        "Embodied energy",
+        "Renewable energy",
+        "Thermal conductivity",
+        "Agriculture",
+        "Waste management"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw bale wall fire resistance building insulation",
+      "paper_id": "https://openalex.org/W4200201201",
+      "title": "Thermal and mechanical behavior of straw-based construction: A review",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2021.125915",
+      "doi": "10.1016/j.conbuildmat.2021.125915",
+      "authors": [
+        "Ghadie Tlaiji",
+        "Salah-Eddine Ouldboukhitine",
+        "Fabienne Pennec",
+        "Pascal Henry Biwolé"
+      ],
+      "citation_count": 70,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Context (archaeology)",
+        "Embodied energy",
+        "Environmental science",
+        "Life-cycle assessment",
+        "Work (physics)",
+        "Relative humidity",
+        "Carbon footprint"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "straw bale wall fire resistance building insulation",
+      "paper_id": "https://openalex.org/W1975977685",
+      "title": "Applied Research on Straw Bale in Northwest Rural Residential Building",
+      "abstract": "The straw bale is a kind of eco-energy saving building material. Straw bale construction is a building which it use straw bales as the wall materials. Based on the investigation of rural residential buildings status, climatic characteristics and energy consumption status in northwest rural areas, raw material supply, construction cost and construction technology of straw bale building, thermal insulation and fire resistance properties of straw bale, environmental protection characteristic and so on were analyzed, it could make people aware of the straw bale can be used as an ideal material instead of solid clay brick in northwest rural residential building, and it could be extensive used and popularized in rural residential building.",
+      "year": 2012,
+      "venue": "Applied Mechanics and Materials",
+      "url": "https://doi.org/10.4028/www.scientific.net/amm.204-208.3815",
+      "doi": "10.4028/www.scientific.net/amm.204-208.3815",
+      "authors": [
+        "Xue Ping Li"
+      ],
+      "citation_count": 7,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Brick",
+        "Rural area",
+        "Building material",
+        "Environmental science",
+        "Raw material",
+        "Thermal insulation",
+        "Architectural engineering"
+      ],
+      "tldr": ""
+    }
+  ]
+}

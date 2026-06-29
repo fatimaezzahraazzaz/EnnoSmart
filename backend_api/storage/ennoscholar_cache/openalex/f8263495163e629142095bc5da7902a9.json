@@ -1,0 +1,101 @@
+{
+  "created_at": "2026-06-26T09:45:50",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "timber-concrete composite floor shear connectors cyclic loading",
+      "paper_id": "https://openalex.org/W2060364123",
+      "title": "Fatigue behaviour of timber–concrete composite connections and floor beams",
+      "abstract": "",
+      "year": 2013,
+      "venue": "Engineering Structures",
+      "url": "https://doi.org/10.1016/j.engstruct.2013.08.042",
+      "doi": "10.1016/j.engstruct.2013.08.042",
+      "authors": [
+        "David Yeoh",
+        "Massimo Fragiacomo",
+        "David Carradine"
+      ],
+      "citation_count": 34,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Laminated veneer lumber",
+        "Cable gland",
+        "Structural engineering",
+        "Composite number",
+        "Stiffness",
+        "Materials science",
+        "Ultimate tensile strength",
+        "Beam (structure)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber-concrete composite floor shear connectors cyclic loading",
+      "paper_id": "https://openalex.org/W3183956963",
+      "title": "In-Plane Shear Cyclic Performance of Spline Cross-Laminated Timber-Concrete Composite Diaphragms",
+      "abstract": "Over the past decade, cross-laminated timber (CLT) panels have gained popularity worldwide. To achieve larger spans and to increase the resistance to diaphragm seismic and wind forces to be transferred through CLT floor or roof systems, CLT-concrete composite (CCC) floors have been developed as an alternative. While significant testing has been performed under gravity loading, limited experimental data exist on the in-plane performance of CCC systems. This study presents results from an experimental program designed to characterize the in-plane shear behavior of CCC diaphragm connections using different CLT to concrete screw connector orientations in a test setup that simulates the expected seismic load path in diaphragms for platform-type construction. Tested variables include concrete slab thickness, composite screw angle, and single spline connection systems consisting of nails or screws. Experimental results and observed damage progression from cyclic testing are presented and discussed. Results indicate that CCC systems achieved increased stiffness and strength values when compared to bare-CLT systems, but slab thickness did not influence the strength and stiffness of the system for the load paths simulated. Additionally, CCC floor systems with 45° composite screw connectors displayed increased strength but overall similar stiffness values when compared to the CCC systems with 90° composite screws. The results provide useful engineering parameters, such as elastic stiffness, peak load, displacement capacity, and ductility ratios that can be used in the development of codified design parameters or in performance-based designs.",
+      "year": 2021,
+      "venue": "Journal of Structural Engineering",
+      "url": "https://doi.org/10.1061/(asce)st.1943-541x.0003127",
+      "doi": "10.1061/(asce)st.1943-541x.0003127",
+      "authors": [
+        "Bradly Taylor",
+        "André R. Barbosa",
+        "Arijit Sinha"
+      ],
+      "citation_count": 16,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cross laminated timber",
+        "Structural engineering",
+        "Stiffness",
+        "Composite number",
+        "Slab",
+        "Cable gland",
+        "Shear (geology)",
+        "Fastener"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber-concrete composite floor shear connectors cyclic loading",
+      "paper_id": "https://openalex.org/W2071441925",
+      "title": "Timber-Concrete Composite Bridges: State-of-the-Art Review",
+      "abstract": "This review article presents a state-of-the-art survey on timber-concrete composite (TCC) bridges. It starts with a presentation of a sample of relevant TCC bridges, offering a global perspective on the use of this type of bridge. The number of TCC bridges has clearly increased in the past few years, and some of the reasons for this trend are explored. Next, an extensive literature review is presented regarding the most significant technological innovations and recent developments in the application of TCC structures to bridge construction. Firstly, the engineering specificities and the advantages of TCC bridge structural systems are enumerated. Afterwards, the importance of proper mechanical connection for optimal performance of TCC structures is explained, and a thorough description of the connection systems suitable for bridge construction is provided. Some research into the structural behavior of TCC bridges under service conditions is then presented and discussed. Finally, possible areas of future research regarding the development of TCC bridges are suggested.",
+      "year": 2013,
+      "venue": "BioResources",
+      "url": "https://doi.org/10.15376/biores.8.4.6630-6649",
+      "doi": "10.15376/biores.8.4.6630-6649",
+      "authors": [
+        "João N. Rodrigues",
+        "Alfredo M. P. G. Dias",
+        "Paulo Providência"
+      ],
+      "citation_count": 64,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Bridge (graph theory)",
+        "Construction engineering",
+        "Engineering",
+        "Perspective (graphical)",
+        "Forensic engineering",
+        "Structural type",
+        "Civil engineering",
+        "Computer science"
+      ],
+      "tldr": ""
+    }
+  ]
+}

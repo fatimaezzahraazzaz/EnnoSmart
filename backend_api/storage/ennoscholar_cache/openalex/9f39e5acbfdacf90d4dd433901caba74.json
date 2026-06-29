@@ -1,0 +1,221 @@
+{
+  "created_at": "2026-06-26T10:13:50",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "niveau connecteurs sous zone atteint calcul calculatoires confort",
+      "paper_id": "https://openalex.org/W90497427",
+      "title": "Conception d'un outil de prototypage rapide sur le FPGA pour des applications de traitement d'images",
+      "abstract": "This manuscript presents work to propose a development cycle to establish RISP processors in a reprogrammable chip (FPGA). After a description of the various possible solutions to produce image processing prototypes, this document describes a method which consists in generating hardware models of processor target to image processing, with operators just for a given application. Test with a set of common algorithm makes evaluate the performances of the design cycle proposed. Rapid prototyping of a contact less biometric system, based on palmprint recognition, is also realized on the test platform.",
+      "year": 2011,
+      "venue": "HAL (Le Centre pour la Communication Scientifique Directe)",
+      "url": "https://theses.hal.science/tel-00708233",
+      "doi": "",
+      "authors": [
+        "Debyo Saptono"
+      ],
+      "citation_count": 1,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "dissertation"
+      ],
+      "fields_of_study": [
+        "Humanities",
+        "Art",
+        "Physics"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "niveau connecteurs sous zone atteint calcul calculatoires confort",
+      "paper_id": "https://openalex.org/W4394065186",
+      "title": "Robustness in Multicore Automotive Embedded Real-Time Systems",
+      "abstract": "",
+      "year": 2013,
+      "venue": "HAL (Le Centre pour la Communication Scientifique Directe)",
+      "url": "https://theses.hal.science/tel-00936548",
+      "doi": "",
+      "authors": [
+        "Sylvain Cotard"
+      ],
+      "citation_count": 1,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "preprint"
+      ],
+      "fields_of_study": [
+        "Robustness (evolution)",
+        "Automotive industry",
+        "Multi-core processor",
+        "Computer science",
+        "Embedded system",
+        "Engineering",
+        "Parallel computing",
+        "Aerospace engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "niveau connecteurs sous zone atteint calcul calculatoires confort",
+      "paper_id": "https://openalex.org/W2160847972",
+      "title": "Analyse de signaux vibrotactiles et modèles flous de la perception : application aux interfaces tactiles pour l'automobile et l'aéronautique",
+      "abstract": "Dans les secteurs de l’automobile et l’aéronautique, l’interaction avec les écrans tactiles peut être rendue plus fiable par l’ajout d’un retour vibratoire (effet haptique) envoyé directement au doigt de l’utilisateur au moment du contact avec l’écran. Des patterns vibratoires complexes peuvent ainsi être créés afin d’améliorer la qualité de la sensation perçue et le plaisir de l’utilisation. Dans ce contexte, notre première contribution concerne l’analyse de patterns vibratoires à l’aide de la transformée en ondelettes continue du signal délivré par la dalle, afin d’extraire les caractéristiques les plus saillantes, choisies d’après une étude psychophysique du sens tactile, et qui sont en liaison avec la perception. A partir de ces caractéristiques, notre deuxième contribution s’articule autour d’un modèle psychophysique de la perception vibrotactile élaboré en utilisant des règles floues générées par une méthode originale étendant l’approche classique de Wang-Mendel. Le modèle prédit le niveau de confort induit par un pattern vibratoire en fonction de ses paramètres psychophysiques. Il présente de bonnes performances quantitatives. La connaissance ainsi obtenue a permis l’identification de plusieurs tendances comportementales importantes pour la perception vibrotactile comme l’effet de l’énergie et de la texture vibrotactile. La troisième contribution porte sur la conception d’un modèle ergonomique de la perception vibrotactile, en s’appuyant sur les évaluations d’un expert du domaine automobile. Suite aux bonnes performances obtenues, le modèle a été adapté avec succès pour le domaine aéronautique. Les résultats de cette thèse permettent ainsi d’aider les équipementiers en simplifiant la conception des effets haptiques adéquats, destinés à améliorer l’interaction avec les écrans tactiles",
+      "year": 2015,
+      "venue": "",
+      "url": "https://doi.org/10.70675/84009667z01f7z4111z86ddz59bfa2382368",
+      "doi": "10.70675/84009667z01f7z4111z86ddz59bfa2382368",
+      "authors": [
+        "Liviu-Cristian Dutu"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "dissertation"
+      ],
+      "fields_of_study": [
+        "Humanities",
+        "Physics",
+        "Philosophy"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "niveau connecteurs sous zone atteint calcul calculatoires confort",
+      "paper_id": "https://openalex.org/W4392227606",
+      "title": "Design of tools for rapid prototyping onto FPGA for applications in image processing",
+      "abstract": "Ce manuscrit présente les travaux menés pour proposer un flot de conception permettant d implanter des processeurs RISP dans un circuit reprogrammable (FPGA). Après une description des différentes solutions envisageables pour réaliser des prototypes dans le domaine du traitement d image, ce document décrit une méthode qui consiste à générer des modèles matériels de processeurs destinés au traitement d images, avec des opérateurs taillés sur une application donnée. Un ensemble d expérimentations utilisant des algorithmes courants permet d évaluer les performances du flot de conception proposé. Le prototypage rapide d un système biométrique sans contact, basé sur la reconnaissance de paumes a été aussi réalisé sur la plateforme de test.",
+      "year": 2011,
+      "venue": "theses.fr (ABES)",
+      "url": "http://www.theses.fr/2011DIJOS079/document",
+      "doi": "",
+      "authors": [
+        "Debyo Saptono",
+        "YANG SONG, Fan",
+        "BROST, Vincent"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "preprint"
+      ],
+      "fields_of_study": [
+        "Field-programmable gate array",
+        "Rapid prototyping",
+        "Computer science",
+        "Image processing",
+        "Embedded system",
+        "Computer architecture",
+        "Image (mathematics)",
+        "Engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "niveau connecteurs sous zone atteint calcul calculatoires confort",
+      "paper_id": "https://openalex.org/W2598174754",
+      "title": "Contribution a la robustesse des systemes temps reel embarques multicœur automobile",
+      "abstract": "The feature content of new cars is increasing dramatically, which involves more demanding requirements. AUTOSAR (AUTomotive Open System ARchi- tecture) - an open and standardized automotive soft- ware architecture jointly developed by vehicle makers, suppliers and tool developers - enables to benefit from new hardware technology by considering multicore architectures. Despite their undeniable advantages in terms of performance, multicore architectures bring a set of problems that may jeopardize the dependability of embedded applications (ISO 26262 is the dependability standard for automotive). For example, multicore scheduling requires to cope with task dependencies constraints, and data consistency must be ensured for inter core communication. First, to meet the task dependencies, safety requirements on data flows are used to generate monitors. The tool Enforcer has been built in order to do that. A service based on runtime verification uses these monitors (injected in the kernel of the operating system) checks if the system behaves as expected. Finally, we propose an alternative locking mechanism for inter core data sharing. The wait-free protocol STM- HRT (Software Transactional Memory for Hard Real- Time systems), based on transactional memory, aims at increasing the robustness of multicore applications.",
+      "year": 2013,
+      "venue": "HAL (Le Centre pour la Communication Scientifique Directe)",
+      "url": "https://theses.hal.science/tel-00936548",
+      "doi": "",
+      "authors": [
+        "Sylvain Cotard"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "dissertation"
+      ],
+      "fields_of_study": [
+        "Humanities",
+        "Political science",
+        "Philosophy"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "niveau connecteurs sous zone atteint calcul calculatoires confort",
+      "paper_id": "https://openalex.org/W3161067939",
+      "title": "Optimisation de l’utilisation des énergies renouvelables : Un Jumeau Numérique pour les microgrilles",
+      "abstract": "Energy management is a major economic concern for industrials and microgrids in general. These actors have multiple choices to act on that. They can install local renewable energy sources, energy storage or they can act on their consumption to better match the production, that is Demand Response. Multiple methods have emerged to evaluated the interest of various configuration through simulation. These tools are mostly specific to a particular type of energy source and require knowledge in numerical computing. In this thesis, we defend a methodology for experts in the energy sector based around Digital Twin. We propose a Digital Twin to simulate the behavior of a microgrid, evaluate the impact of hardware or habits changes and to act on real devices. Our approach aims to be modular to address the heterogeniety of the real world, extensible to follow the industrial sites evolution and accessible to experts through a Domain Specific Language. We valide our proposal through 4 case studies in collaboration with industrial actors.",
+      "year": 2021,
+      "venue": "HAL (Le Centre pour la Communication Scientifique Directe)",
+      "url": "https://theses.hal.science/tel-03512793",
+      "doi": "",
+      "authors": [
+        "Alexandre Rio"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "dissertation"
+      ],
+      "fields_of_study": [
+        "Humanities",
+        "Political science",
+        "Philosophy"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "niveau connecteurs sous zone atteint calcul calculatoires confort",
+      "paper_id": "https://openalex.org/W3184692895",
+      "title": "Prédiction d'alarmes dans les réseaux via la recherche de motifs spatio-temporels et l'apprentissage automatique",
+      "abstract": "Nowadays, telecommunication networks occupy a central position in our world. Indeed, they allow to share worldwide a huge amount of information. Networks are however complex systems, both in size and technological diversity. Therefore, it makes their management and reparation more difficult. In order to limit the negative impact of such failures, some tools have to be developed to detect a failure whenever it occurs, analyse its root causes to solve it efficiently, or even predict this failure as prevention is better than cure. In this thesis, we mainly focus on these two last problems. To do so, we use files, called alarm logs, storing all the alarms that have been emitted by the system. However, these files are generally noisy and verbose: an operator managing a network needs tools able to extract and handle in an interpretable manner the causal relationships inside a log. In this thesis, we followed two directions. First, we have inspired from pattern matching techniques: similarly to the Ukkonen’s algorithm, we build online a structure, called DIG-DAG, that stores all the potential causal relationships between the events of a log. Moreover, we introduce a query system to exploit our DIG-DAG structure. Finally, we show how our solution can be used for root cause analysis. The second approach is a generative approach for the prediction of time series. In particular, we compare two well-known models for this task: recurrent neural nets on the one hand, hidden Markov models on the other hand. Here, we compare analytically the expressivity of these models by encompassing them into a probabilistic model, called GUM.",
+      "year": 2021,
+      "venue": "HAL (Le Centre pour la Communication Scientifique Directe)",
+      "url": "https://theses.hal.science/tel-03288810",
+      "doi": "",
+      "authors": [
+        "Achille Salaün"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "dissertation"
+      ],
+      "fields_of_study": [
+        "Humanities",
+        "Philosophy"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "niveau connecteurs sous zone atteint calcul calculatoires confort",
+      "paper_id": "https://openalex.org/W4396535065",
+      "title": "Representation of the French language's temporality in Vietnamese learners of French",
+      "abstract": "L’objectif de cette recherche est double : sur le plan linguistique, établir des parallélismes entre le français et le vietnamien en matière de l’expression de la temporalité et réfléchir, à la lumière des analyses contrastives, à comment faire maîtriser l’emploi des temps verbaux français aux apprenants vietnamiens.Dans un premier temps, l’approche aspectuo-temporelle sur laquelle cette étude se base a montré que le système temporel dans les deux langues est analysable sur le plan du temps (temps-époque) et de l’aspect (déroulement interne du procès). Aussi, l’étude a éclairé la manière dont l’une et l’autre langue marquent la temporalité. Dans un second temps, à partir de ce travail d’analyse contrastive, un dispositif expérimental a été mis en place pour enseigner les temps verbaux aux étudiants vietnamiens dans une perspective contrastive selon l’approche aspectuo-temporelle. Enfin, par l’analyse de l’interlangue de ces derniers (au moyen des tests écrits et entretiens de verbalisation), nous avons pu jeter un regard critique sur le processus d’intériorisation des connaissances et savoir-faire en matière de la temporalité enseignée.Les résultats de l’expérimentation ont permis d’une part de comprendre la représentation de la temporalité chez les étudiants vietnamiens ainsi que les profils d’emploi des temps verbaux, parfois stéréotypés, de ces derniers. Il a été noté que certains temps verbaux posent relativement peu de difficultés aux étudiants quant à leur emploi et qu’en revanche d’autres suscitent beaucoup plus d’emplois erronés que nous ne le pensions.D’autre part, la démarche expérimentale a révélé des signes de (r)évolution dans l’interlangue des étudiants ayant suivi des enseignements sur les temps verbaux selon l’approche aspectuo-temporelle. En effet, les étudiants semblent avoir intégré différents paramètres aspectuo-temporels dans leur choix de temps verbal. Par ailleurs, l’étude a réussi à identifier certains facteurs entravant la bonne maîtrise de l’emploi des temps verbaux par des étudiants vietnamiens.",
+      "year": 2023,
+      "venue": "theses.fr (ABES)",
+      "url": "http://www.theses.fr/2023GRALL029/document",
+      "doi": "",
+      "authors": [
+        "Triet Minh Vu"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "dissertation"
+      ],
+      "fields_of_study": [
+        "Temporality",
+        "Vietnamese",
+        "Linguistics",
+        "Representation (politics)",
+        "French",
+        "Philosophy",
+        "Political science",
+        "Epistemology"
+      ],
+      "tldr": ""
+    }
+  ]
+}

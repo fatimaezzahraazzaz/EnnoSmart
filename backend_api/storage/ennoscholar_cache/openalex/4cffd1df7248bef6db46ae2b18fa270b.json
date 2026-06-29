@@ -1,0 +1,402 @@
+{
+  "created_at": "2026-06-26T10:12:57",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "https://openalex.org/W2109861890",
+      "title": "Shear and Bending Performance of a Novel Wood–Concrete Composite System",
+      "abstract": "This paper introduces a new, structural wood–concrete composite system. The system is formed by joining a wood component, such as a floor beam or laminated plate, to a concrete slab utilizing a continuous steel mesh of which one half is glued into a slot in the wood while the other half is embedded into the concrete. Two series of tests were performed and are presented: static push-out tests (to establish shear properties of the connector) and a full scale bending test with a span of approximately 10m. Test results reveal that the steel mesh performs favorably—as a stiff yet ductile shear connector between the wood and the concrete. Design equations, per European standards (in absence of North American standards) are described and used to predict the failure load of the bending test. Calculations indicate that the tested beam performs with near full composite action—specifically, 97% effective stiffness and 99% strength of that of a beam with full composite action. This is a marked improvement in the efficiency of wood–concrete systems developed to date. The system shows itself to be superior to alternative systems in its high structural efficiency as well as being relatively easy to install and economic.",
+      "year": 2005,
+      "venue": "Journal of Structural Engineering",
+      "url": "https://doi.org/10.1061/(asce)0733-9445(2005)131:9(1404)",
+      "doi": "10.1061/(asce)0733-9445(2005)131:9(1404)",
+      "authors": [
+        "Peggi L. Clouston",
+        "Leander Bathon",
+        "Alexander C. Schreyer"
+      ],
+      "citation_count": 158,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cable gland",
+        "Structural engineering",
+        "Composite number",
+        "Beam (structure)",
+        "Shear (geology)",
+        "Slab",
+        "Stiffness",
+        "Bending"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "https://openalex.org/W3014127731",
+      "title": "Engineering ductile notch connections for composite floors made of laminated timber and high or ultra-high performance fiber reinforced concrete",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Engineering Structures",
+      "url": "https://doi.org/10.1016/j.engstruct.2020.110415",
+      "doi": "10.1016/j.engstruct.2020.110415",
+      "authors": [
+        "Serge Lamothe",
+        "Luca Sorelli",
+        "Pierre Blanchet",
+        "Philippe Galimard"
+      ],
+      "citation_count": 36,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Structural engineering",
+        "Ductility (Earth science)",
+        "Cable gland",
+        "Materials science",
+        "Stiffness",
+        "Slab",
+        "Composite number",
+        "Shear (geology)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "https://openalex.org/W4386609203",
+      "title": "Experimental study of innovative bolted shear connectors in demountable cold-formed steel–concrete composite beams",
+      "abstract": "",
+      "year": 2023,
+      "venue": "Thin-Walled Structures",
+      "url": "https://doi.org/10.1016/j.tws.2023.111116",
+      "doi": "10.1016/j.tws.2023.111116",
+      "authors": [
+        "Abdolreza Ataei",
+        "Seyed Ali Mahmoudy",
+        "Mehran Zeynalian",
+        "Alireza A. Chiniforush",
+        "Tuan Ngo"
+      ],
+      "citation_count": 33,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Precast concrete",
+        "Structural engineering",
+        "Shear (geology)",
+        "Materials science",
+        "Stiffness",
+        "Cold-formed steel",
+        "Ductility (Earth science)",
+        "Composite number"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "https://openalex.org/W2200695490",
+      "title": "Connections for steel–timber hybrid prefabricated buildings. Part I: Experimental tests",
+      "abstract": "",
+      "year": 2015,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2015.12.002",
+      "doi": "10.1016/j.conbuildmat.2015.12.002",
+      "authors": [
+        "Cristiano Loss",
+        "Maurizio Piazza",
+        "Riccardo Zandonini"
+      ],
+      "citation_count": 179,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cross laminated timber",
+        "Prefabrication",
+        "Engineering",
+        "Structural engineering",
+        "Shear wall",
+        "Engineered wood",
+        "Civil engineering",
+        "Construction engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "https://openalex.org/W2071441925",
+      "title": "Timber-Concrete Composite Bridges: State-of-the-Art Review",
+      "abstract": "This review article presents a state-of-the-art survey on timber-concrete composite (TCC) bridges. It starts with a presentation of a sample of relevant TCC bridges, offering a global perspective on the use of this type of bridge. The number of TCC bridges has clearly increased in the past few years, and some of the reasons for this trend are explored. Next, an extensive literature review is presented regarding the most significant technological innovations and recent developments in the application of TCC structures to bridge construction. Firstly, the engineering specificities and the advantages of TCC bridge structural systems are enumerated. Afterwards, the importance of proper mechanical connection for optimal performance of TCC structures is explained, and a thorough description of the connection systems suitable for bridge construction is provided. Some research into the structural behavior of TCC bridges under service conditions is then presented and discussed. Finally, possible areas of future research regarding the development of TCC bridges are suggested.",
+      "year": 2013,
+      "venue": "BioResources",
+      "url": "https://doi.org/10.15376/biores.8.4.6630-6649",
+      "doi": "10.15376/biores.8.4.6630-6649",
+      "authors": [
+        "João N. Rodrigues",
+        "Alfredo M. P. G. Dias",
+        "Paulo Providência"
+      ],
+      "citation_count": 64,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Bridge (graph theory)",
+        "Construction engineering",
+        "Engineering",
+        "Perspective (graphical)",
+        "Forensic engineering",
+        "Structural type",
+        "Civil engineering",
+        "Computer science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "https://openalex.org/W3183956963",
+      "title": "In-Plane Shear Cyclic Performance of Spline Cross-Laminated Timber-Concrete Composite Diaphragms",
+      "abstract": "Over the past decade, cross-laminated timber (CLT) panels have gained popularity worldwide. To achieve larger spans and to increase the resistance to diaphragm seismic and wind forces to be transferred through CLT floor or roof systems, CLT-concrete composite (CCC) floors have been developed as an alternative. While significant testing has been performed under gravity loading, limited experimental data exist on the in-plane performance of CCC systems. This study presents results from an experimental program designed to characterize the in-plane shear behavior of CCC diaphragm connections using different CLT to concrete screw connector orientations in a test setup that simulates the expected seismic load path in diaphragms for platform-type construction. Tested variables include concrete slab thickness, composite screw angle, and single spline connection systems consisting of nails or screws. Experimental results and observed damage progression from cyclic testing are presented and discussed. Results indicate that CCC systems achieved increased stiffness and strength values when compared to bare-CLT systems, but slab thickness did not influence the strength and stiffness of the system for the load paths simulated. Additionally, CCC floor systems with 45° composite screw connectors displayed increased strength but overall similar stiffness values when compared to the CCC systems with 90° composite screws. The results provide useful engineering parameters, such as elastic stiffness, peak load, displacement capacity, and ductility ratios that can be used in the development of codified design parameters or in performance-based designs.",
+      "year": 2021,
+      "venue": "Journal of Structural Engineering",
+      "url": "https://doi.org/10.1061/(asce)st.1943-541x.0003127",
+      "doi": "10.1061/(asce)st.1943-541x.0003127",
+      "authors": [
+        "Bradly Taylor",
+        "André R. Barbosa",
+        "Arijit Sinha"
+      ],
+      "citation_count": 16,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Cross laminated timber",
+        "Structural engineering",
+        "Stiffness",
+        "Composite number",
+        "Slab",
+        "Cable gland",
+        "Shear (geology)",
+        "Fastener"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "https://openalex.org/W3011118123",
+      "title": "Experimental study on notched connectors for glulam-lightweight concrete composite beams",
+      "abstract": "A new type of structural element, the timber-concrete composite beam, exhibited excellent structural performance. The notched connector is widely used in timber-concrete composite systems as a result of its considerable shear capacity and stiffness. Six groups of push-out tests were performed to investigate the shear performance of the notched connectors for the timber-concrete composite beams, with consideration to the varying concrete types, the shear length of the timber, and whether the notch was reinforced. From the test results, the notched connectors that corresponded to the shear fracture of concrete or timber had a low shear capacity and poor ductility. Notched connectors that simultaneously failed at the concrete slab (via shear force), as well as at the lag screw reinforcement point during bending presented the greatest shear capacity. This was followed by the notched connectors that exhibited diagonal-compression failure at the concrete slab. Screw fasteners in the notch were shown to improve the strength, ductility, and post-peak behavior of the notched connectors. In addition, the concrete type, the shear length of the timber, and whether the notch was reinforced were found to have no major influence on the slip modulus of the notched connectors.",
+      "year": 2020,
+      "venue": "BioResources",
+      "url": "https://doi.org/10.15376/biores.15.2.2171-2180",
+      "doi": "10.15376/biores.15.2.2171-2180",
+      "authors": [
+        "Yuchen Jiang",
+        "Xiamin Hu",
+        "Wan Hong",
+        "Jun Zhang",
+        "Fangqian He"
+      ],
+      "citation_count": 28,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Shear (geology)",
+        "Composite material",
+        "Structural engineering",
+        "Cable gland",
+        "Composite number",
+        "Stiffness",
+        "Ductility (Earth science)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "https://openalex.org/W3183300999",
+      "title": "Lightweight and slender timber-concrete composite floors made of CLT-HPC and CLT-UHPC with ductile notch connectors",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Engineering Structures",
+      "url": "https://doi.org/10.1016/j.engstruct.2021.112409",
+      "doi": "10.1016/j.engstruct.2021.112409",
+      "authors": [
+        "Serge Lamothe",
+        "Luca Sorelli",
+        "Pierre Blanchet",
+        "Philippe Galimard"
+      ],
+      "citation_count": 25,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Structural engineering",
+        "Slab",
+        "Composite number",
+        "Deflection (physics)",
+        "Stiffness",
+        "Waterproofing",
+        "Ductility (Earth science)",
+        "Shear (geology)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "https://openalex.org/W4207056767",
+      "title": "Timber-concrete composite structural flooring system",
+      "abstract": "An integrated solution is presented for the execution of building structures using timber-concrete composite (TCC) sections that make efficient use of the mechanical properties of both materials. The system integrates flooring and shaped prefabricated beams composed of a lower flange of glued laminated timber (GLT) glued to one or more plywood or laminated veneer lumber (LVL) ribs and linked to an upper concrete slab poured in situ. The parts may be prefabricated in T shape (only one rib), in π shape (two ribs), or with multiple ribs to create wider pieces, thereby reducing installation operations. The basis of the system is the timber-concrete shear connection in the form of holes through the ribs, which are filled by the in situ-poured concrete. The connection is complemented with the arrangement of reinforcement bars through the holes. Three test campaigns were undertaken. Shear tests of the timber-concrete connection in 12 test pieces. Shear test along the wood-wood glue line (72 planes tested) and wood -plywood (24 planes tested). Delamination test of the glued planes (24 wood-wood planes and 8 wood-plywood planes). The results indicate a high strength joint, with ductile failure and high composite effect. Likewise, the shear test results along the glue line and the delamination tests show section integrity under demanding hygrothermal conditions. Preliminary sizing curves were developed considering the Gamma Method to evaluate the performance of the system. The results show the possibilities of the system, as pouring the upper slab concrete in situ makes it possible to create continuous semi-rigid joints between the elements. This gives rise to slender flooring structures, light and with high stiffness plane against horizontal forces.",
+      "year": 2022,
+      "venue": "Journal of Building Engineering",
+      "url": "https://doi.org/10.1016/j.jobe.2022.104078",
+      "doi": "10.1016/j.jobe.2022.104078",
+      "authors": [
+        "Javier Estévez‐Cimadevila",
+        "Emilio Martín Gutiérrez",
+        "Félix Suárez-Riestra",
+        "Dolores Otero-Chans",
+        "Pepe Vázquez-Rodríguez"
+      ],
+      "citation_count": 29,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Laminated veneer lumber",
+        "Flange",
+        "Structural engineering",
+        "Engineered wood",
+        "Slab",
+        "Composite number",
+        "Veneer",
+        "Shear (geology)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "https://openalex.org/W2888446048",
+      "title": "Forward and Reverse shear transfer in beech LVL-concrete composites with singly inclined coach screw connectors",
+      "abstract": "",
+      "year": 2018,
+      "venue": "Engineering Structures",
+      "url": "https://doi.org/10.1016/j.engstruct.2018.06.070",
+      "doi": "10.1016/j.engstruct.2018.06.070",
+      "authors": [
+        "Wendel Sebastian",
+        "Maurizio Piazza",
+        "Tristan Harvey",
+        "Tom Webster"
+      ],
+      "citation_count": 40,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Laminated veneer lumber",
+        "Structural engineering",
+        "Slip (aerodynamics)",
+        "Composite material",
+        "Shear (geology)",
+        "Deflection (physics)",
+        "Geotechnical engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "https://openalex.org/W4366980159",
+      "title": "Development and investigation of an innovative, light-weight, two-way spanning timber-concrete composite slab",
+      "abstract": "Timber-concrete composite (TCC) slabs play an essential role in modern timber construction. Consisting of a timber member in the tension zone, a concrete layer in the compression zone and a shear connection between the two parts, TCC slabs feature a number of advantages that make them ideally suitable for use in both office and residential buildings. However, currently used TCC slab systems carry loads only in one direction. In the frame of a large research project in cooperation with the industry, an innovative, light-weight, two-way spanning timber-concrete composite slab using beech laminated veneer lumber with steel tubes as connectors was developed. This paper presents the main results of the research project. First, the structural behaviour of the connection is characterised and discussed based on extensive experimental and analytical analysis. Second, the load-bearing behaviour of the TCC slab investigated in uniaxial bending tests is presented. The uniaxial bending tests showed a remarkably ductile global load-bearing behaviour due to the ductile failure mode in the connectors. A developed analytical model can describe the observed load-bearing behaviour of the tested TCC members accurately. Finally, the biaxial load-bearing behaviour of the TCC slab is characterised and discussed based on a large-scale experiment that allowed to perform static and dynamic tests on the same specimen in different support conditions. A substantial increase in stiffness and fundamental frequency in biaxial versus uniaxial support conditions was observed and accurately modelled, showing the great potential of the novel TCC slab.",
+      "year": 2023,
+      "venue": "Engineering Structures",
+      "url": "https://doi.org/10.1016/j.engstruct.2023.116087",
+      "doi": "10.1016/j.engstruct.2023.116087",
+      "authors": [
+        "Benjamin Kreis",
+        "Wolfram Kübler",
+        "Andréa Frangi"
+      ],
+      "citation_count": 12,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Slab",
+        "Structural engineering",
+        "Stiffness",
+        "Failure mode and effects analysis",
+        "Load bearing",
+        "Bending",
+        "Tension (geology)",
+        "Bearing capacity"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "https://openalex.org/W2127664933",
+      "title": "Strengthening of timber structures with glued-in rods",
+      "abstract": "",
+      "year": 2015,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2015.03.097",
+      "doi": "10.1016/j.conbuildmat.2015.03.097",
+      "authors": [
+        "René Steiger",
+        "Erik Serrano",
+        "Mislav Stepinac",
+        "Vlatka Rajčić",
+        "Caoimhe O’Neill",
+        "Daniel McPolin",
+        "Robert Widmann"
+      ],
+      "citation_count": 154,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Reinforcement",
+        "Load bearing",
+        "Rod",
+        "Bearing capacity",
+        "Engineering",
+        "Structural engineering",
+        "Construction engineering",
+        "Forensic engineering"
+      ],
+      "tldr": ""
+    }
+  ]
+}

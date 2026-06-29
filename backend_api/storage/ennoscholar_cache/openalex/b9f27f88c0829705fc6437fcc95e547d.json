@@ -1,0 +1,404 @@
+{
+  "created_at": "2026-06-26T10:08:33",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "hemp concrete fire resistance building wall",
+      "paper_id": "https://openalex.org/W2077837386",
+      "title": "Novel sustainable hemp-based composites for application in the building industry: Physical, thermal and mechanical characterization",
+      "abstract": "",
+      "year": 2014,
+      "venue": "Energy and Buildings",
+      "url": "https://doi.org/10.1016/j.enbuild.2014.03.033",
+      "doi": "10.1016/j.enbuild.2014.03.033",
+      "authors": [
+        "Enrico Sassoni",
+        "Stefania Manzi",
+        "A. Motori",
+        "Matteo Montecchi",
+        "Max Canti"
+      ],
+      "citation_count": 232,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Composite material",
+        "Flexural strength",
+        "Durability",
+        "Ultimate tensile strength",
+        "Compressive strength",
+        "Composite number",
+        "Scanning electron microscope"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hemp concrete fire resistance building wall",
+      "paper_id": "https://openalex.org/W2335156131",
+      "title": "Life Cycle Assessment of Hemp Cultivation and Use of Hemp-Based Thermal Insulator Materials in Buildings",
+      "abstract": "The aim of this research is to assess the sustainability of a natural fiber, such as hemp (Cannabis sativa), and its use as thermal insulator for building applications. The sustainability of hemp was quantified by life cycle assessment (LCA) and particular attention was given to the amount of CO2eq of the whole process, and the indicator greenhouse gas protocol (GGP) was selected to quantify CO2eq emissions. In this study also CO2 uptake of hemp was considered. Two different allocation procedures (i.e., mass and economic) were adopted. Other indicators, such as Cumulative Energy Demand (CED) and EcoIndicator99 H were calculated. The production of 1 ha yielded 15 ton of hemp, whose global warming potential (GWP100) was equal to about -26.01 ton CO2eq: the amount allocated to the technical fiber (20% of the total amount of hemp biomass) was -5.52 ton CO2eq when mass allocation was used, and -5.54 ton CO2eq when economic allocation was applied. The sustainability for building applications was quantified by considering an insulation panel made by hemp fiber (85%) and polyester fiber (15%) in 1 m(2) of wall having a thermal transmittance (U) equal to 0.2 W/m(2)_K. The environmental performances of the hemp-based panel were compared to those of a rockwool-based one.",
+      "year": 2013,
+      "venue": "Environmental Science & Technology",
+      "url": "https://doi.org/10.1021/es401326a",
+      "doi": "10.1021/es401326a",
+      "authors": [
+        "Luca Zampori",
+        "Giovanni Dotelli",
+        "Valeria Vernelli"
+      ],
+      "citation_count": 185,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Life-cycle assessment",
+        "Environmental science",
+        "Greenhouse gas",
+        "Pulp and paper industry",
+        "Global-warming potential",
+        "Ton",
+        "Waste management",
+        "Production (economics)"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hemp concrete fire resistance building wall",
+      "paper_id": "https://openalex.org/W2990883936",
+      "title": "Industrial Hemp Fibers: An Overview",
+      "abstract": "Industrial hemp (Cannabis sativa) is one of the most available and widely produced bast fibers with high cellulose content. Interest in these fibers is warranted due to environmental protection challenges as well as their inherent properties such as low density, high specific strength, and stiffness. In addition, advanced research and progress have gone into increasing their mechanical performance through surface treatments and in the development of new materials. The most promising application for hemp fibers is as reinforcement in polymeric composites or through hybridization. Nonetheless, more research is needed to improve their properties and expand their range of applications. The biodegradability issue is one problem that must be addressed when considering long life-cycle applications as the reproducibility of these composites’ final properties. This review is a comprehensive literature review on hemp fibers. It includes hemp fibers’ chemical and mechanical properties, surface modifications, hybrid composites, as well as current and future applications.",
+      "year": 2019,
+      "venue": "Fibers",
+      "url": "https://doi.org/10.3390/fib7120106",
+      "doi": "10.3390/fib7120106",
+      "authors": [
+        "João P. Manaia",
+        "A. Manaia",
+        "Lúcia Rodriges"
+      ],
+      "citation_count": 307,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Bast fibre",
+        "Cannabis sativa",
+        "Materials science",
+        "Composite material",
+        "Cellulose fiber",
+        "Cellulose",
+        "Synthetic fiber",
+        "Fiber"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hemp concrete fire resistance building wall",
+      "paper_id": "https://openalex.org/W3035571789",
+      "title": "Applications of hemp in textiles, paper industry, insulation and building materials, horticulture, animal nutrition, food and beverages, nutraceuticals, cosmetics and hygiene, medicine, agrochemistry, energy production and environment: a review",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Environmental Chemistry Letters",
+      "url": "https://doi.org/10.1007/s10311-020-01029-2",
+      "doi": "10.1007/s10311-020-01029-2",
+      "authors": [
+        "Grégorio Crini",
+        "Éric Lichtfouse",
+        "Gilles Chanet",
+        "Nadia Morin‐Crini"
+      ],
+      "citation_count": 386,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Cosmetics",
+        "Cannabis sativa",
+        "Nutraceutical",
+        "Automotive industry",
+        "Agriculture",
+        "Engineering",
+        "Business",
+        "Waste management"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hemp concrete fire resistance building wall",
+      "paper_id": "https://openalex.org/W2468161282",
+      "title": "Acoustic absorption of hemp-lime construction",
+      "abstract": "",
+      "year": 2016,
+      "venue": "Construction and Building Materials",
+      "url": "https://doi.org/10.1016/j.conbuildmat.2016.06.106",
+      "doi": "10.1016/j.conbuildmat.2016.06.106",
+      "authors": [
+        "Oliver Kinnane",
+        "Aidan Reilly",
+        "John Grimes",
+        "Sara Pavía",
+        "Rosanne Walker"
+      ],
+      "citation_count": 136,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Lime",
+        "Pozzolan",
+        "Materials science",
+        "Absorption of water",
+        "Porosity",
+        "Composite material",
+        "Cement",
+        "Metallurgy"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hemp concrete fire resistance building wall",
+      "paper_id": "https://openalex.org/W4353069566",
+      "title": "Industrial Hemp (Cannabis sativa L.) Agronomy and Utilization: A Review",
+      "abstract": "Currently, there are increased interests in growing grain and fiber hemp (Cannabis sativa L.) as well as in large-scale hemp products. Cannabis has been grown/utilized for thousands of years as a fiber, grain, and drug/medicinal plant. However, the strict control of cannabis cultivation to combat illegal use, the spread of new yarns and oilseeds, and the advent of cheap synthetic fibers caused a decreased/eliminated hemp production. Hemp has been banned in most of the world for more than seven decades; it missed out on the Green Revolution and the adoption of new technologies and varieties, creating a knowledge gap. After the 2014 and 2018 Farm Bill in the USA, hemp became legal and the land grand universities launched research programs. The ability to utilize the entire plant for multiple purposes creates opportunity for the market to value hemp products. Hemp production technology varies depending on the type of hemp cultivated (grain, fiber, or cannabinoids), soil characteristics, and environmental factors. Hemp has the potential to be a very sustainable and ecologically benign crop. Hemp roots have a significant potential for absorbing and storing heavy metals such as lead, nickel, cadmium, and other harmful substances. In addition, hemp has been proven to be an excellent carbon trap and biofuel crop. Hemp has the ability to successfully suppress weeds, and it is generally regarded a pesticide-free crop. The purpose of this paper is to examine historic and recent industrial hemp (grain and fiber) literature, with a focus on hemp agronomy and utilization.",
+      "year": 2023,
+      "venue": "Agronomy",
+      "url": "https://doi.org/10.3390/agronomy13030931",
+      "doi": "10.3390/agronomy13030931",
+      "authors": [
+        "Jelena Visković",
+        "Valtcho D. Zheljazkov",
+        "Vladimir Sikora",
+        "Jay S. Noller",
+        "Dragana Latković",
+        "Cynthia M. Ocamb",
+        "Anamarija Koren"
+      ],
+      "citation_count": 171,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Cannabis sativa",
+        "Crop",
+        "Biofuel",
+        "Cannabis",
+        "Business",
+        "Agronomy",
+        "Environmental science",
+        "Biotechnology"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hemp concrete fire resistance building wall",
+      "paper_id": "https://openalex.org/W1932552562",
+      "title": "A Review on Natural Fiber Reinforced Polymer Composite and Its Applications",
+      "abstract": "Natural fibers are getting attention from researchers and academician to utilize in polymer composites due to their ecofriendly nature and sustainability. The aim of this review article is to provide a comprehensive review of the foremost appropriate as well as widely used natural fiber reinforced polymer composites (NFPCs) and their applications. In addition, it presents summary of various surface treatments applied to natural fibers and their effect on NFPCs properties. The properties of NFPCs vary with fiber type and fiber source as well as fiber structure. The effects of various chemical treatments on the mechanical and thermal properties of natural fibers reinforcements thermosetting and thermoplastics composites were studied. A number of drawbacks of NFPCs like higher water absorption, inferior fire resistance, and lower mechanical properties limited its applications. Impacts of chemical treatment on the water absorption, tribology, viscoelastic behavior, relaxation behavior, energy absorption flames retardancy, and biodegradability properties of NFPCs were also highlighted. The applications of NFPCs in automobile and construction industry and other applications are demonstrated. It concluded that chemical treatment of the natural fiber improved adhesion between the fiber surface and the polymer matrix which ultimately enhanced physicomechanical and thermochemical properties of the NFPCs.",
+      "year": 2015,
+      "venue": "International Journal of Polymer Science",
+      "url": "https://doi.org/10.1155/2015/243947",
+      "doi": "10.1155/2015/243947",
+      "authors": [
+        "Layth Mohammed",
+        "M.N.M. Ansari",
+        "Grace Pua",
+        "Mohammad Jawaid",
+        "Md. Saiful Islam"
+      ],
+      "citation_count": 1625,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Materials science",
+        "Composite material",
+        "Thermosetting polymer",
+        "Natural fiber",
+        "Absorption of water",
+        "Viscoelasticity",
+        "Polymer",
+        "Fiber"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hemp concrete fire resistance building wall",
+      "paper_id": "https://openalex.org/W3158628385",
+      "title": "Thermal and hygroscopic study of hemp concrete in real ambient conditions",
+      "abstract": "",
+      "year": 2021,
+      "venue": "Journal of Building Engineering",
+      "url": "https://doi.org/10.1016/j.jobe.2021.102612",
+      "doi": "10.1016/j.jobe.2021.102612",
+      "authors": [
+        "Mounir Asli",
+        "Franck Brachelet",
+        "Emilio Sassine",
+        "Emmanuel Antczak"
+      ],
+      "citation_count": 46,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Thermal",
+        "Relative humidity",
+        "Materials science",
+        "Environmental science",
+        "Humidity",
+        "Moisture",
+        "Thermal mass",
+        "Material properties"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hemp concrete fire resistance building wall",
+      "paper_id": "https://openalex.org/W4393320738",
+      "title": "A holistic sustainability overview of hemp as building and highway construction materials",
+      "abstract": "The construction sector, responsible for over one-third of global carbon emissions, is increasingly focusing on hemp-based construction materials to alleviate the environmental impact in the built environment; however, the lack of information and streamlined processes hinder widespread adoption. By conducting a comprehensive review of state-of-the-art research, this study explores the vast potential of hemp-based materials across the built environment, encompassing building and transportation applications. In this study, the material properties and application of hemp lime concrete for buildings, along with hemp fibre in asphalt for highways, are discussed, and crucial research gaps and technical challenges are identified. Employing a holistic sustainability approach, the material evaluation considers economic, social, and environmental factors. Notable hemp construction projects are presented as case studies, emphasising their environmental carbon credentials. Furthermore, technoeconomic challenges are scrutinised, and effective solutions are proposed. Beyond its role as a wall material, hempcrete's significant application as building insulation material is highlighted due to its exceptional hygrothermal properties. The material also shows promise in enhancing asphalt mix for pavement construction. Evidence from life cycle analysis supports the claim that hempcrete can be considered a carbon-negative material. Moreover, the findings indicate that the hempcrete industry has the potential to yield various macroeconomic and socio-economic advantages, including job creation, enhancing energy access, alleviating cost of energy, and improved societal health and well-being.",
+      "year": 2024,
+      "venue": "Building and Environment",
+      "url": "https://doi.org/10.1016/j.buildenv.2024.111470",
+      "doi": "10.1016/j.buildenv.2024.111470",
+      "authors": [
+        "Imrose B. Muhit",
+        "Eman L. Omairey",
+        "Vahid Ghorbani Pashakolaie"
+      ],
+      "citation_count": 57,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Sustainability",
+        "Life-cycle assessment",
+        "Engineering",
+        "Architectural engineering",
+        "Asphalt",
+        "Carbon footprint",
+        "Civil engineering",
+        "Construction engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hemp concrete fire resistance building wall",
+      "paper_id": "https://openalex.org/W2979363123",
+      "title": "Fiber-Reinforced Polymer Composites: Manufacturing, Properties, and Applications",
+      "abstract": "Composites have been found to be the most promising and discerning material available in this century. Presently, composites reinforced with fibers of synthetic or natural materials are gaining more importance as demands for lightweight materials with high strength for specific applications are growing in the market. Fiber-reinforced polymer composite offers not only high strength to weight ratio, but also reveals exceptional properties such as high durability; stiffness; damping property; flexural strength; and resistance to corrosion, wear, impact, and fire. These wide ranges of diverse features have led composite materials to find applications in mechanical, construction, aerospace, automobile, biomedical, marine, and many other manufacturing industries. Performance of composite materials predominantly depends on their constituent elements and manufacturing techniques, therefore, functional properties of various fibers available worldwide, their classifications, and the manufacturing techniques used to fabricate the composite materials need to be studied in order to figure out the optimized characteristic of the material for the desired application. An overview of a diverse range of fibers, their properties, functionality, classification, and various fiber composite manufacturing techniques is presented to discover the optimized fiber-reinforced composite material for significant applications. Their exceptional performance in the numerous fields of applications have made fiber-reinforced composite materials a promising alternative over solitary metals or alloys.",
+      "year": 2019,
+      "venue": "Polymers",
+      "url": "https://doi.org/10.3390/polym11101667",
+      "doi": "10.3390/polym11101667",
+      "authors": [
+        "Dipen Kumar Rajak",
+        "Durgesh D. Pagar",
+        "Pradeep L. Menezes",
+        "Emanoil Linul"
+      ],
+      "citation_count": 1615,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "review"
+      ],
+      "fields_of_study": [
+        "Specific strength",
+        "Materials science",
+        "Composite material",
+        "Flexural strength",
+        "Aerospace",
+        "Composite number",
+        "Specific modulus",
+        "Durability"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hemp concrete fire resistance building wall",
+      "paper_id": "https://openalex.org/W3033843236",
+      "title": "Design of a soil concrete as a new building material – Effect of clay and hemp proportions",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Journal of Building Engineering",
+      "url": "https://doi.org/10.1016/j.jobe.2020.101553",
+      "doi": "10.1016/j.jobe.2020.101553",
+      "authors": [
+        "Duc Chinh Ngo",
+        "Jacqueline Saliba",
+        "Nadia Saiyouri",
+        "Zoubir Mehdi Sbartaï"
+      ],
+      "citation_count": 31,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Compressive strength",
+        "Shrinkage",
+        "Materials science",
+        "Cement",
+        "Durability",
+        "Absorption of water",
+        "Porosity",
+        "Geotechnical engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hemp concrete fire resistance building wall",
+      "paper_id": "https://openalex.org/W3007754526",
+      "title": "The effect of long term weathering on hemp and rapeseed concrete",
+      "abstract": "",
+      "year": 2020,
+      "venue": "Cement and Concrete Research",
+      "url": "https://doi.org/10.1016/j.cemconres.2020.106014",
+      "doi": "10.1016/j.cemconres.2020.106014",
+      "authors": [
+        "Joseph Sheridan",
+        "Mohammed Sonebi",
+        "Susan Taylor",
+        "Sofiane Amziane"
+      ],
+      "citation_count": 38,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Rapeseed",
+        "Aggregate (composite)",
+        "Leaching (pedology)",
+        "Weathering",
+        "Vicat softening point",
+        "Cement",
+        "Materials science",
+        "Pulp and paper industry"
+      ],
+      "tldr": ""
+    }
+  ]
+}

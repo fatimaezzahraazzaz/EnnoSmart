@@ -1,0 +1,361 @@
+{
+  "created_at": "2026-06-26T10:17:00",
+  "items": [
+    {
+      "source": "openalex",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "https://openalex.org/W7128994746",
+      "title": "Mould susceptibility of bio-based insulation materials in modern construction",
+      "abstract": "Abstract This review compares the mould susceptibility of bio-based and conventional insulation. Mould growth poses a risk to building durability and occupant health, with bio-based materials being more susceptible due to their organic composition. However, testing practices limit meaningful comparisons, and laboratory studies often fail to replicate real-world conditions. Recommendations include standardised testing, in-situ monitoring and field studies, and development of antifungal strategies to understand and address mould risk across insulation options.",
+      "year": 2026,
+      "venue": "npj Materials Degradation",
+      "url": "https://doi.org/10.1038/s41529-026-00742-7",
+      "doi": "10.1038/s41529-026-00742-7",
+      "authors": [
+        "Joni Wildman",
+        "Andrew Shea",
+        "Valeria Cascione",
+        "Daniel A. Henk"
+      ],
+      "citation_count": 5,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Durability",
+        "Engineering",
+        "Forensic engineering",
+        "Materials testing",
+        "Construction engineering",
+        "Replicate",
+        "Limit (mathematics)",
+        "Environmental science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "https://openalex.org/W3179418608",
+      "title": "Critical Review of Polymeric Building Envelope Materials: Degradation, Durability and Service Life Prediction",
+      "abstract": "This paper provides a critical review of the degradation, durability and service life prediction (SLP) of polymeric building envelope materials (BEMs), namely, claddings, air/vapour barriers, insulations, sealants, gaskets and fenestration. The rate of material deterioration and properties determine the usefulness of a product; therefore, knowledge of the significant degradation mechanisms in play for BEMs is key to the design of proper SLP methods. SLP seeks to estimate the life expectancy of a material/component exposed to in-service conditions. This topic is especially important with respect to the potential impacts of climate change. The surrounding environment of a building dictates the degradation mechanisms in play, and as climate change progresses, material aging conditions become more unpredictable. This can result in unexpected changes and/or damages to BEMs, and shorter than expected SL. The development of more comprehensive SLP methods is economically and environmentally sound, and it will provide more confidence, comfort and safety to all building users. The goal of this paper is to review the existing literature in order to identify the knowledge gaps and provide suggestions to address these gaps in light of the rapidly evolving climate.",
+      "year": 2021,
+      "venue": "Buildings",
+      "url": "https://doi.org/10.3390/buildings11070299",
+      "doi": "10.3390/buildings11070299",
+      "authors": [
+        "Marzieh Riahinezhad",
+        "Madeleine Hallman",
+        "J-F. Masson"
+      ],
+      "citation_count": 64,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Durability",
+        "Building envelope",
+        "Service life",
+        "Damages",
+        "Computer science",
+        "Life-cycle assessment",
+        "Risk analysis (engineering)",
+        "Forensic engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "https://openalex.org/W3168395769",
+      "title": "An Innovative System for the Treatment of Rising Dampness in Buildings Located in Cold Climates",
+      "abstract": "Signs of wetness in housing are a significant obstacle to the renovation and energy rehabilitation of old and energy-intensive heritage buildings, especially in cold climates. Thus, in order to avoid the numerous possibilities of degradation caused by the moisture transfer phenomena in the building envelope, the a disruptive aeraulic process, which focuses on the ventilation of an air gap between the thermal insulation and the wet wall, has been designed and its assessed. This system avoids the presence of liquid water at the wall surface by maintaining the hygrothermal balance within the wet wall. This enables the mechanical durability of the supporting structure, the absence of biological activity and/or frost and, hence, the durability of the thermal insulation. These issues are investigated through a case study based on a real site. Over a year of measurements, the wet wall was constantly maintained in hygroscopic balance, around 90% RH, guaranteeing the preservation of its mechanical performance, while the insulation layer was kept moisture free. In addition, the proposed model for predicting the appearance and development of biological activity demonstrated its validity, confirming experimental results.These initial results will now lead to the optimization of the aeraulic device, as well as possible use in a summer cooling context to achieve hygrothermal comfort for housing occupants.",
+      "year": 2021,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en14123421",
+      "doi": "10.3390/en14123421",
+      "authors": [
+        "Geoffrey Promis",
+        "Omar Douzane",
+        "Daniel R. Rousse",
+        "Thierry Langlet"
+      ],
+      "citation_count": 3,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Durability",
+        "Context (archaeology)",
+        "Environmental science",
+        "Moisture",
+        "Frost (temperature)",
+        "Building envelope",
+        "Thermal insulation",
+        "Obstacle"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "https://openalex.org/W4366219115",
+      "title": "The Role of Straw Materials in Energy-Efficient Buildings: Current Perspectives and Future Trends",
+      "abstract": "The need to effectively control and reduce energy consumption in buildings has become a global concern, prompting an increasing number of studies on the energy efficiency of straw buildings. However, previous review articles on straw research have primarily focused on fragmented material properties such as thermal insulation and mechanical strength and have lacked a comprehensive review of straw materials in building energy efficiency, as well as a thorough analysis of the development lineage of straw building materials. To fill this research gap, this study conducted a bibliometric analysis of 338 papers on the energy efficiency of straw materials published in the WOS core database between 1992 and 2022. The study constructed and visualized multifaceted co-occurrence networks representing the research literature on the energy efficiency of straw building materials, providing a comprehensive understanding of current research efforts, development trends, hot research directions, and the development lineage of this field since 1992. The study’s conclusions suggest that the next research hotspots in this area will be the whole life-cycle of straw materials and their compounding, performance, and application to construction. By tracing the development lineage and clarifying the relationship between the macroscopic building environment and microscopic straw materials, this study offers better predictions of the future development prospects of straw buildings. These findings provide researchers with valuable insights into current research efforts and future research directions in this field, while also serving as a reference for governments seeking to formulate relevant policies for the energy-efficient design of buildings made of straw materials.",
+      "year": 2023,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en16083480",
+      "doi": "10.3390/en16083480",
+      "authors": [
+        "Qing Yin",
+        "Muhan Yu",
+        "Xueliang Ma",
+        "Ying Liu",
+        "Xunzhi Yin"
+      ],
+      "citation_count": 11,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Straw",
+        "Architectural engineering",
+        "Efficient energy use",
+        "Environmental science",
+        "Construction engineering",
+        "Computer science",
+        "Environmental economics",
+        "Engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "https://openalex.org/W2791396584",
+      "title": "Formulation and characterization of unfired clay bricks with plant aggregates",
+      "abstract": "La construction est l'un des secteurs de l'industrie les plus polluants. C'est la raison pour laquelle développer l'usage de matériaux de construction durables est un intérêt &#13;\\nmajeur. La terre crue est de plus en plus étudiée en tant que matériau de construction pour son faible impact environnemental, son abondance ou ses capacités à réguler l'humidité intérieure, améliorant ainsi le confort de l'occupant. Pour optimiser certaines de ses performances, des fibres ou granulats végétaux sont incorporés à la terre depuis des millénaires. Toutefois, les études scientifiques n'ont débuté qu'il y a une trentaine d'années, laissant une marge importante de compréhension du matériau. Actuellement, l'ajout de matière végétale peut s'effectuer par le biais de la valorisation d'agroressources, qui permet par ailleurs de piéger du dioxyde de carbone au sein des briques. Cette thèse, qui s'inscrit dans le cadre du projet Bioterra financé par l'Agence Nationale de la Recherche (ANR), a pour objectif de contribuer au développement d'un matériau à base de terre crue et de granulats végétaux, pour une utilisation sous forme de briques. Après une caractérisation approfondie de différentes ressources végétales (paille d'orge, chènevotte et rafle de maïs), une approche comparative des propriétés d'usage et de la durabilité des matériaux composites est réalisée. Une étude sur la disponibilité des bio-ressources en France a montré que les coproduits de l'agriculture utilisés dans ce travail de recherche sont disponibles en quantités importantes, bien que leur utilisation pour l'alimentation humaine ou animale soit prioritaire. Les résultats des essais expérimentaux ont montré que les résistances mécaniques sont diminuées avec l'ajout de végétaux, mais que la ductilité est améliorée. La paille, grâce à sa forme allongée, donne toutefois de meilleurs résultats que les autres agroressources. En ce qui concerne les propriétés hygrothermiques, la conductivité thermique est améliorée et la capacité de sorption de vapeur est légèrement augmentée. Toutefois, la terre seule étant très perméable à l'eau, l'ajout de particules végétales n'a pas d'effet bénéfique sur la perméabilité apparente des composites à la vapeur d'eau. Finalement, les granulats végétaux améliorent certains critères de durabilité comme la résistance à l'impact ou l'érosion à l'eau, mais limitent la résistance à l'abrasion. Vis-à-vis de la résistance au feu, les bio-composites, bien que contenant une quantité importante de matière ligno-cellulosique, sont toujours incombustibles. Ils sont toutefois transformés avec la cuisson de la terre et la consumation des végétaux. Enfin, l'étude de la prolifération de micro-organismes a abouti à la mise en place d'une méthodologie expérimentale. L'incorporation de paille semble faciliter l'apparition de moisissures par rapport à la terre seule. Néanmoins, la prolifération apparaît uniquement dans des conditions optimales de 30°C et 93% d'humidité relative après inoculation de souche d'Aspergillus brasiliensis. L'addition de différentes ressources végétales dans une matrice de terre améliorera donc certaines propriétés d'usage mais en dégradera d'autres. La formulation du matériau composite (nature et dosage en granulats végétaux notamment) sera donc conditionnée par sa destination dans le bâtiment. Un compromis devra être trouvé entre les différentes propriétés.",
+      "year": 2017,
+      "venue": "Thèses en ligne de l'Université Toulouse III (Université Toulouse III)",
+      "url": "https://openalex.org/W2791396584",
+      "doi": "",
+      "authors": [
+        "Aurélie Laborel-Préneron"
+      ],
+      "citation_count": 6,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "dissertation"
+      ],
+      "fields_of_study": [
+        "Humanities",
+        "Forestry",
+        "Art",
+        "Geography"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "https://openalex.org/W4390774306",
+      "title": "Thermal Transmittance in Roof–Wall Structural Junction Areas Insulated with a Hemp–Lime Mixture",
+      "abstract": "The junction between the roof and the external wall is a sensitive area within the building envelope; here, increased heat flow often takes place. In the case of partitions insulated with materials based on plant ingredients, thermal bridges are particularly dangerous due to the possibility of condensation and, consequently, mold. The present article analyzed the connection of the roof with the knee wall made of a hemp–lime composite and the ridge in terms of the occurrence of thermal bridges. The following factors that may affect heat transfer in the junction were taken into account: the location of the load-bearing wooden frame, the roof slope, and the presence of internal plaster in the junction. Two-dimensional heat transfer analysis was performed based on the finite element method using THERM 7.4 software. All of the studied thermal bridges had ψ values below 0.10 W/(m·K). Calculations of heat losses through a roof with different slopes were also presented, taking into account the considered thermal bridges. As the roof slope decreases, the heat flow through the roof decreases, despite the increasing value of the linear thermal transmittance. The share of the considered thermal bridges in the total heat loss from the roof reached up to 15%. To verify the obtained results, in further analysis, it would be necessary to calculate the impact of the roof–knee wall bridge variants on heat losses throughout the entire building.",
+      "year": 2024,
+      "venue": "Energies",
+      "url": "https://doi.org/10.3390/en17020316",
+      "doi": "10.3390/en17020316",
+      "authors": [
+        "Magdalena Grudzińska",
+        "Krystian Patyna",
+        "Wojciech Jabłoński",
+        "Przemysław Brzyski"
+      ],
+      "citation_count": 2,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Roof",
+        "Heat transfer",
+        "Thermal bridge",
+        "Building envelope",
+        "Thermal transmittance",
+        "Thermal",
+        "Materials science",
+        "Heat exchanger"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "https://openalex.org/W4226059927",
+      "title": "Health Effects and Exposure Assessment to Bioaerosols in Indoor and Outdoor Environments",
+      "abstract": "Air pollution, due to natural and anthropogenic sources,&nbsp;incurs&nbsp;enormous environmental costs. The issue of healthy living spaces and good air quality is a global concern, because each individual inhales 15,000 L of air every 24 h. Thus, contemporary monitoring and reducing exposure to air pollutants presents a particular challenge. One of the crucial indicators of indoor and outdoor air quality is bioaerosols. They play an instrumental role as risk factors when it comes to adverse health outcome. These indicators, also known as primary biological airborne particles (PBAPs), have been linked to various health effects such as infectious diseases, toxic effects, allergies, and even cancer. PBAPs include all particles with a biological source in suspension in the air (bacteria, fungi, viruses, and pollen), as well as biomolecules (toxins, and debris from membranes). To foster our current scientific knowledge on bioaerosols, research related to the characteristics of biological aerosols in indoor and outdoor environments, the methods used to improve air quality, as well as the health effects of and exposure assessments to bioaerosols, have been collected in this book.",
+      "year": 2021,
+      "venue": "",
+      "url": "https://doi.org/10.3390/books978-3-0365-2263-0",
+      "doi": "10.3390/books978-3-0365-2263-0",
+      "authors": [
+        "Ewa Brągoszewska"
+      ],
+      "citation_count": 4,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "book"
+      ],
+      "fields_of_study": [
+        "Indoor bioaerosol",
+        "Environmental science",
+        "Indoor air quality",
+        "Environmental health",
+        "Air quality index",
+        "Pollutant",
+        "Air pollution",
+        "Health risk"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "https://openalex.org/W7125122453",
+      "title": "Properties of Loose-Fill Insulation Made of Leaves",
+      "abstract": "Urban leaf litter represents an underutilized biomass resource with potential applications in sustainable building materials. This study investigates the suitability of dried, comminuted leaves collected from municipal green areas as a loose-fill thermal insulation material. The material was characterized in terms of thermal conductivity, settlement behavior, fire reaction, resistance to mold growth, water vapor diffusion, hygroscopic sorption, and short-term water absorption. Tests were conducted following relevant DIN and ISO standards, with both untreated and flame-retardant-treated samples examined. Results indicate that the thermal conductivity of leaf-based insulation (λ = 0.041-0.046 W/m·K) is comparable to other bio-based loose-fill materials such as cellulose and wood fiber. Optimal performance was achieved for particles sized 2-16 mm, showing settlement below 1%. All variants, including untreated material, fulfilled the fire resistance requirements of class E, while selected treatments further improved fire resistance. The material exhibited moderate vapor permeability (μ ≈ 4-5), low water absorption, and moisture buffering behavior similar to that of other bio-based insulation materials. Resistance to mold growth was satisfactory under standardized conditions. Overall, the results demonstrate that leaf litter can serve as an effective and environmentally favorable loose-fill insulation material, offering an innovative recycling pathway for urban green waste.",
+      "year": 2026,
+      "venue": "Materials",
+      "url": "https://doi.org/10.3390/ma19020425",
+      "doi": "10.3390/ma19020425",
+      "authors": [
+        "Christina Zwanger",
+        "Marcus Müller"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Thermal insulation",
+        "Materials science",
+        "Moisture",
+        "Environmental science",
+        "Composite material",
+        "Fire resistance",
+        "Thermal resistance",
+        "Waste management"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "https://openalex.org/W7112626405",
+      "title": "Robust Internal Thermal Insulation of HistoricBuildings - Threshold values for failure, linked to types of building structures and failure modes",
+      "abstract": "This report comprises a study of material threshold values, failure modes and related failure prediction models to enable an evaluation of adding internal insulation in historic brick buildings. Threshold values and prediction models have been investigated both within literature and through laboratory study, by for instance comparing prediction models to real field results and by testing threshold values in laboratory. The aim of this report is to find threshold values and suitable and reliable prediction models to be included in the decision guidelines and the web tool, which are the final outcomes of the RIBuild project. Failure modes included in the report are mould growth on building materials, rot and wood decay, frost damage and discoloration of facades.",
+      "year": 2019,
+      "venue": "Lirias (KU Leuven)",
+      "url": "https://lirias.kuleuven.be/handle/123456789/668647",
+      "doi": "",
+      "authors": [
+        "Johansson, Pernilla",
+        "Lång, Lukas",
+        "Capener, Carl-Magnus",
+        "Møller, Eva",
+        "Quagliarini, Enrico",
+        "D’Orazio, Marco",
+        "Gianangel, Andrea",
+        "Janssen, Hans",
+        "Feng, Chi",
+        "Langmans, Jelle",
+        "Jensen, Nickolaj Feldt",
+        "de Place Hansen, Ernst Jan",
+        "Peuhkuri, Ruut",
+        "Hansen, Tessa Kvist"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Structural engineering",
+        "Engineering",
+        "Failure mode and effects analysis",
+        "Field (mathematics)",
+        "Predictive modelling",
+        "Reliability engineering",
+        "Frost (temperature)",
+        "Forensic engineering"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "https://openalex.org/W4405098762",
+      "title": "Development of Panelized Exterior Retrofit Solutions for Commercial and Institutional Buildings",
+      "abstract": "The total energy used by commercial and institutional buildings in Canada is equivalent to over 10.7 million households.Exterior energy retrofits are over-cladding assemblies that are applied to the building envelope.These retrofits can drastically improve energy efficiency without the time consumption and disruptions of a conventional interior retrofit.This thesis evaluated two potential building envelope solutions for commercial and institutional buildings.One solution used primarily biogenic materials, and the other is based around an all-in-one building enclosure system.Test assemblies of both retrofits were built full-scale for long-term experimental testing.Both solutions provided significant improvements of thermal resistance compared to the original building assembly with little risk for failure at all measured locations.Similarly, modelled and experimental data showed overwhelming evidence that neither solution has potential for moisture damage and mould growth.The results indicate that either solution is viable for commercial and institutional building retrofits. Ile-Bizard South Ile-Bizard North Ile-Bizard West RSI-Value (m 2 K/W) 2.52 0.09 1.46 0.05 1.99 0.07 Convergence Test Duration (hr) 96 96 42 Test Date Range",
+      "year": 2024,
+      "venue": "",
+      "url": "https://doi.org/10.22215/etd/2024-16217",
+      "doi": "10.22215/etd/2024-16217",
+      "authors": [
+        "Thomas Michael Dalkowski"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "dissertation"
+      ],
+      "fields_of_study": [
+        "Building envelope",
+        "Cladding (metalworking)",
+        "Enclosure",
+        "Envelope (radar)",
+        "Civil engineering",
+        "Engineering",
+        "Architectural engineering",
+        "Environmental science"
+      ],
+      "tldr": ""
+    },
+    {
+      "source": "openalex",
+      "query": "hygrothermal moisture mould mold fungal moisture blown insulation bio-based building",
+      "paper_id": "https://openalex.org/W7135706260",
+      "title": "Bio-based materials to reduce non-renewable resources use in construction: a products’ analysis",
+      "abstract": "Considering the high quantities of raw materials consumed by the European construction sector, it becomes increasingly important to implement the Circular Economy Action Plan as proposed in 2020. Within this EU context, the Italian case is an important one as it is estimated to extract 317 million tonnes of raw materials each year, which are mostly used in the construction sector. Starting from these premises, this contribution wants to explore new ways of avoiding raw materials exploitation by considering the actual benefits of using renewable ones as alternatives to more consolidated construction components. To reach this aim, at first renewable and bio-based materials are defined and framed in order to understand their differences and set the basis of the research. Based on this framing the focus of the research is mainly on bio-based materials, and this allows to deeper analyse the Italian product market to search for the available products. Secondly, the searched products are systematised in a database that gathers all their characteristics, and four bio-based materials were chosen for deeper analysis. These materials are hemp, wood fibre, cork and rice waste, and a total of 256 building products are presented. The collected data show that the four bio-based materials examined are usually combined with other components of other origin, in particular mineral – the most frequent elements are hydraulic and aerial lime and Portland cement, synthetic – like resins and polyester fibres, or natural ones – such as natural additives, jute and cellulose. This means that only 56 out of 256 products are made from bio-based material alone, while 78% of them consist of more than one component other than bio-based ones. Certainly, the percentages and use of non-renewable materials in these bio-based products is more limited than in fully non-bio ones, but the aggregation of different elements – both bio-based and non-bio-based ones – leads to issues linked to the use of exhaustible resources and difficulties in recycling the products at their end-of-life. This research wants to find ways both to move towards the substitution of non-renewable materials within bio-based products to further implement and change the building material production chain, and to find ways of better designing the end-of-life of these products, trying to foresee their reuse.",
+      "year": 2025,
+      "venue": "AirIuav (Università Iuav di Venezia)",
+      "url": "https://hdl.handle.net/11578/375549",
+      "doi": "",
+      "authors": [
+        "Martina Bortolotti",
+        "Chiara Scanagatta"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "article"
+      ],
+      "fields_of_study": [
+        "Raw material",
+        "Renewable energy",
+        "Engineering",
+        "Renewable resource",
+        "Product (mathematics)",
+        "Natural resource",
+        "Cork",
+        "Lime"
+      ],
+      "tldr": ""
+    }
+  ]
+}

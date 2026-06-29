@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import logging
 import re
+import zipfile
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -90,7 +92,9 @@ _RD_SECTION_RE = re.compile(
 
 class OfficeFileType(str, Enum):
     DOCX = "docx"
+    DOCM = "docm"
     PPTX = "pptx"
+    PPTM = "pptm"
 
 
 # ── Dataclasses ───────────────────────────────────────────────────────────────
@@ -147,7 +151,7 @@ class OfficeResult:
     """
     file_name: str
     source_path: str
-    file_type: str              # "docx" | "pptx"
+    file_type: str              # "docx" | "docm" | "pptx" | "pptm"
 
     # ── Sortie principale pour le RAG ──────────────────────────────────────
     text_chunks: list[str] = field(default_factory=list)
@@ -371,12 +375,279 @@ def _build_docx_chunks(
     return chunks, outline
 
 
-def _extract_docx(path: Path) -> OfficeResult:
-    """Pipeline complet d'extraction DOCX."""
+
+def _xml_collect_text(element, ns: dict[str, str]) -> str:
+    """
+    Collecte le texte Word XML en respectant l'ordre des runs.
+    Gère w:t, w:tab et w:br.
+    """
+    parts: list[str] = []
+
+    for node in element.iter():
+        tag = node.tag.split("}")[-1] if "}" in node.tag else node.tag
+
+        if tag == "t" and node.text:
+            parts.append(node.text)
+
+        elif tag == "tab":
+            parts.append("\t")
+
+        elif tag in {"br", "cr"}:
+            parts.append("\n")
+
+    text = "".join(parts)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _extract_docx_xml_style_name(paragraph, ns: dict[str, str]) -> str:
+    """
+    Récupère le style XML d'un paragraphe Word.
+    Exemple : Heading1, Titre1, Normal...
+    """
+    try:
+        p_style = paragraph.find("./w:pPr/w:pStyle", ns)
+        if p_style is None:
+            return ""
+
+        val = (
+            p_style.attrib.get(f"{{{ns['w']}}}val")
+            or p_style.attrib.get("w:val")
+            or p_style.attrib.get("val")
+            or ""
+        )
+        return str(val or "").lower().strip()
+
+    except Exception:
+        return ""
+
+
+def _xml_table_to_rows(table_el, ns: dict[str, str]) -> list[list[str]]:
+    """
+    Extrait un tableau Word depuis le XML brut.
+    """
+    rows: list[list[str]] = []
+
+    for tr in table_el.findall(".//w:tr", ns):
+        row: list[str] = []
+
+        for tc in tr.findall("./w:tc", ns):
+            cell_text = _xml_collect_text(tc, ns)
+            row.append(cell_text.replace("\n", " ").strip())
+
+        if any(c.strip() for c in row):
+            rows.append(row)
+
+    return rows
+
+
+def _extract_docx_xml_comments(zf: zipfile.ZipFile, ns: dict[str, str]) -> list[str]:
+    """
+    Extrait les commentaires Word depuis word/comments.xml si présent.
+    """
+    comments: list[str] = []
+
+    try:
+        if "word/comments.xml" not in zf.namelist():
+            return comments
+
+        root = ET.fromstring(zf.read("word/comments.xml"))
+
+        for comment_el in root.findall(".//w:comment", ns):
+            txt = _xml_collect_text(comment_el, ns)
+            if txt:
+                comments.append(txt)
+
+    except Exception:
+        pass
+
+    return comments
+
+
+def _extract_docm_xml_fallback(path: Path, file_type: str = OfficeFileType.DOCM.value) -> OfficeResult:
+    """
+    Fallback robuste pour DOCM/DOCX lorsque python-docx refuse le content type.
+    Cas observé :
+      application/vnd.ms-word.document.macroEnabled.main+xml
+
+    Principe :
+      - le .docm est un ZIP Office Open XML ;
+      - on lit directement word/document.xml ;
+      - on extrait paragraphes + tableaux dans l'ordre ;
+      - on ignore les macros VBA.
+    """
     result = OfficeResult(
         file_name=path.name,
         source_path=str(path.resolve()),
-        file_type=OfficeFileType.DOCX.value,
+        file_type=file_type,
+    )
+
+    ns = {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    }
+
+    try:
+        if not zipfile.is_zipfile(str(path)):
+            result.extraction_errors.append("Fallback XML impossible : fichier Office non ZIP")
+            result.confidence_score = 0.10
+            return result
+
+        all_text_parts: list[str] = []
+        block_index = 0
+
+        with zipfile.ZipFile(str(path), "r") as zf:
+            names = set(zf.namelist())
+
+            xml_files: list[tuple[str, str]] = []
+
+            if "word/document.xml" in names:
+                xml_files.append(("document", "word/document.xml"))
+
+            # Les en-têtes/pieds de page peuvent contenir des infos utiles.
+            for n in sorted(names):
+                if n.startswith("word/header") and n.endswith(".xml"):
+                    xml_files.append(("header", n))
+
+            for n in sorted(names):
+                if n.startswith("word/footer") and n.endswith(".xml"):
+                    xml_files.append(("footer", n))
+
+            if not xml_files:
+                result.extraction_errors.append(
+                    "Fallback XML impossible : word/document.xml introuvable"
+                )
+                result.confidence_score = 0.10
+                return result
+
+            comments = _extract_docx_xml_comments(zf, ns)
+
+            for xml_kind, xml_name in xml_files:
+                try:
+                    root = ET.fromstring(zf.read(xml_name))
+                except Exception as exc:
+                    result.extraction_errors.append(f"XML ignoré {xml_name}: {exc}")
+                    continue
+
+                body = root.find(".//w:body", ns)
+                children = list(body) if body is not None else list(root)
+
+                for child in children:
+                    tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+
+                    if tag == "p":
+                        raw_text = _xml_collect_text(child, ns)
+
+                        if not raw_text or len(raw_text) < MIN_CHARS_PARA:
+                            continue
+
+                        style_name = _extract_docx_xml_style_name(child, ns)
+
+                        if _is_word_toc_or_field(raw_text, style_name):
+                            continue
+
+                        style_low = style_name.lower()
+                        is_heading = (
+                            any(h.replace(" ", "") in style_low.replace(" ", "") for h in DOCX_HEADING_STYLES)
+                            or style_low.startswith("heading")
+                            or style_low.startswith("titre")
+                        )
+
+                        level = 0
+                        if is_heading:
+                            m = re.search(r"(\d+)", style_low)
+                            level = int(m.group(1)) if m else 1
+
+                        block = DocxBlockResult(
+                            block_index=block_index,
+                            block_type="heading" if is_heading else "paragraph",
+                            style_name=style_name or f"xml_{xml_kind}",
+                            raw_text=raw_text,
+                            level=level,
+                            is_rd_section=bool(_detect_rd_sections(raw_text)),
+                            char_count=len(raw_text),
+                        )
+
+                        result.blocks.append(block)
+                        all_text_parts.append(raw_text)
+                        block_index += 1
+
+                    elif tag == "tbl":
+                        rows = _xml_table_to_rows(child, ns)
+                        md = _table_to_markdown(rows)
+
+                        if md:
+                            block = DocxBlockResult(
+                                block_index=block_index,
+                                block_type="table",
+                                style_name=f"xml_table_{xml_kind}",
+                                raw_text=f"[TABLEAU]\n{md}",
+                                level=0,
+                                is_rd_section=False,
+                                char_count=len(md),
+                            )
+
+                            result.blocks.append(block)
+                            all_text_parts.append(f"[TABLEAU]\n{md}")
+                            block_index += 1
+
+        result.metadata = DocumentMetadata(
+            title=None,
+            author=None,
+            word_count=sum(len(b.raw_text.split()) for b in result.blocks),
+            has_comments=bool(comments),
+        )
+
+        result.text_chunks, result.outline = _build_docx_chunks(
+            result.blocks,
+            comments,
+        )
+
+        full_text = " ".join(all_text_parts)
+        result.detected_rd_sections = _detect_rd_sections(full_text)
+
+        result.tags = [
+            file_type.upper(),
+            "XML_FALLBACK",
+        ]
+
+        if file_type == OfficeFileType.DOCM.value:
+            result.tags.append("MACRO_ENABLED_DOCM")
+
+        if any(b.block_type == "table" for b in result.blocks):
+            result.tags.append("HAS_TABLES")
+
+        if comments:
+            result.tags.append("HAS_COMMENTS")
+
+        if result.outline:
+            result.tags.append("HAS_STRUCTURE")
+
+        if result.detected_rd_sections:
+            result.tags.append("CIR_SECTIONS")
+
+        if not result.text_chunks:
+            result.extraction_errors.append(
+                "Fallback XML : aucun texte exploitable extrait"
+            )
+            result.confidence_score = 0.20
+        else:
+            result.confidence_score = 0.75
+
+        return result
+
+    except Exception as exc:
+        result.extraction_errors.append(f"Fallback XML impossible : {exc}")
+        result.confidence_score = 0.10
+        return result
+
+
+def _extract_docx(path: Path, file_type: str = OfficeFileType.DOCX.value) -> OfficeResult:
+    """Pipeline complet d'extraction DOCX/DOCM."""
+    result = OfficeResult(
+        file_name=path.name,
+        source_path=str(path.resolve()),
+        file_type=file_type,
     )
 
     if not DOCX_AVAILABLE:
@@ -388,6 +659,26 @@ def _extract_docx(path: Path) -> OfficeResult:
     try:
         doc = DocxDocument(str(path))
     except Exception as exc:
+        msg = str(exc)
+
+        # Certains .docm macro-enabled sont refusés par python-docx
+        # à cause du content type interne :
+        # application/vnd.ms-word.document.macroEnabled.main+xml
+        if path.suffix.lower() == ".docm" or "macroEnabled" in msg or "macroEnabled.main+xml" in msg:
+            fallback = _extract_docm_xml_fallback(path, file_type=file_type)
+
+            # Si le fallback XML a réussi, ce n'est pas une erreur bloquante.
+            # On garde la trace en tag, pas dans extraction_errors.
+            if fallback.text_chunks:
+                fallback.tags.append("PYTHON_DOCX_FALLBACK_USED")
+                fallback.tags.append("DOCM_CONTENT_TYPE_FALLBACK")
+            else:
+                fallback.extraction_errors.append(
+                    f"python-docx a refusé le document et le fallback XML n'a pas extrait de chunks : {exc}"
+                )
+
+            return fallback
+
         result.extraction_errors.append(f"Impossible d'ouvrir le DOCX : {exc}")
         return result
 
@@ -735,9 +1026,17 @@ def _extract_pptx(path: Path) -> OfficeResult:
 # ── Tags & Confiance ──────────────────────────────────────────────────────────
 
 def _build_tags(result: OfficeResult) -> list[str]:
-    tags: list[str] = [result.file_type.upper()]
+    """
+    Construit les tags sans écraser les tags déjà posés par les fallback.
+    Exemple important : XML_FALLBACK / MACRO_ENABLED_DOCM / PYTHON_DOCX_FALLBACK_USED.
+    """
+    tags: list[str] = list(result.tags or [])
 
-    if result.file_type == OfficeFileType.PPTX.value:
+    main_type = str(result.file_type or "").upper()
+    if main_type and main_type not in tags:
+        tags.insert(0, main_type)
+
+    if result.file_type in {OfficeFileType.PPTX.value, OfficeFileType.PPTM.value}:
         if result.visual_candidates:
             tags.append("HAS_VISUAL_SLIDES")
         if any(s.notes_text for s in result.slides):
@@ -745,7 +1044,7 @@ def _build_tags(result: OfficeResult) -> list[str]:
         if any(s.tables_as_text for s in result.slides):
             tags.append("HAS_TABLES")
 
-    elif result.file_type == OfficeFileType.DOCX.value:
+    elif result.file_type in {OfficeFileType.DOCX.value, OfficeFileType.DOCM.value}:
         if any(b.block_type == "table" for b in result.blocks):
             tags.append("HAS_TABLES")
         if result.metadata.has_comments:
@@ -756,10 +1055,11 @@ def _build_tags(result: OfficeResult) -> list[str]:
     if result.detected_rd_sections:
         tags.append("CIR_SECTIONS")
 
+    # PARTIAL_EXTRACTION doit seulement représenter une vraie erreur restante.
     if result.extraction_errors:
         tags.append("PARTIAL_EXTRACTION")
 
-    return tags
+    return list(dict.fromkeys(tags))
 
 
 def _compute_confidence(result: OfficeResult) -> float:
@@ -774,7 +1074,7 @@ def _compute_confidence(result: OfficeResult) -> float:
 
     error_penalty = min(len(result.extraction_errors) * 0.10, 0.30)
 
-    if result.file_type == OfficeFileType.PPTX.value and result.slides:
+    if result.file_type in {OfficeFileType.PPTX.value, OfficeFileType.PPTM.value} and result.slides:
         poor_ratio = sum(1 for s in result.slides if s.is_text_poor) / len(result.slides)
         score = 1.0 - (poor_ratio * 0.40) - error_penalty
     else:
@@ -787,12 +1087,12 @@ def _compute_confidence(result: OfficeResult) -> float:
 
 def extract_office(file_path: str | Path) -> OfficeResult:
     """
-    Extrait le contenu d'un document Office (DOCX ou PPTX) pour le RAG EnnoSmart.
+    Extrait le contenu d'un document Office (DOCX/DOCM ou PPTX/PPTM) pour le RAG EnnoSmart.
 
     Paramètres
     ----------
     file_path : str | Path
-        Chemin vers le fichier .docx ou .pptx
+        Chemin vers le fichier .docx, .docm, .pptx ou .pptm
 
     Retourne
     --------
@@ -808,7 +1108,7 @@ def extract_office(file_path: str | Path) -> OfficeResult:
     Raises
     ------
     FileNotFoundError : fichier introuvable
-    ValueError        : extension non supportée (.doc, .ppt non supportés)
+    ValueError        : extension non supportée (.doc, .ppt non supportés sans conversion)
     """
     path = Path(file_path)
 
@@ -816,19 +1116,28 @@ def extract_office(file_path: str | Path) -> OfficeResult:
         raise FileNotFoundError(f"Fichier introuvable : {path}")
 
     ext = path.suffix.lower()
-    if ext not in (".docx", ".pptx"):
+
+    # .docm et .pptm sont des formats Office Open XML macro-enabled.
+    # Ils ont une structure ZIP proche de .docx/.pptx et peuvent être lus
+    # par python-docx / python-pptx dans la majorité des cas.
+    supported_word = {".docx", ".docm"}
+    supported_powerpoint = {".pptx", ".pptm"}
+    supported = supported_word | supported_powerpoint
+
+    if ext not in supported:
         raise ValueError(
             f"Extension '{ext}' non supportée par office.py. "
-            f"Formats acceptés : .docx, .pptx\n"
+            f"Formats acceptés : .docx, .docm, .pptx, .pptm\n"
             f"Note : les anciens formats .doc/.ppt nécessitent une conversion préalable."
         )
 
     logger.info("Extraction Office [%s] → %s", ext.upper(), path.name)
 
-    if ext == ".docx":
-        result = _extract_docx(path)
+    if ext in supported_word:
+        result = _extract_docx(path, file_type=ext.lstrip("."))
     else:
         result = _extract_pptx(path)
+        result.file_type = ext.lstrip(".")
 
     result.tags = _build_tags(result)
     result.confidence_score = _compute_confidence(result)
@@ -854,7 +1163,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
     if len(sys.argv) < 2:
-        print("Usage : python office.py <chemin_vers_fichier.docx|.pptx>")
+        print("Usage : python office.py <chemin_vers_fichier.docx|.docm|.pptx|.pptm>")
         sys.exit(1)
 
     res = extract_office(sys.argv[1])

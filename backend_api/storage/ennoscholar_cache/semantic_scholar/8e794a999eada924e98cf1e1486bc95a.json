@@ -1,0 +1,75 @@
+{
+  "created_at": "2026-06-26T09:46:42",
+  "items": [
+    {
+      "source": "semantic_scholar",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "8e6d5acd16889badcbfcdccbc5fa45dfde327798",
+      "title": "The effect of slip stiffness on the behavior of timber-concrete composite slabs",
+      "abstract": "Timber-concrete composite systems offer improved structural performance compared to bare cross-laminated timber slabs, but their effectiveness strongly depends on the stiffness of the shear connectors between both materials. This paper examines how varying the slip stiffness influences the mechanical response of the composite slabs. Three primary analytical models are compared against a two-layer finite element model. Parametric analyses reveal a critical range of connector stiffness, roughly between 104 and 106 kN m−1 m−2, in which deflections are sensitive to changes in slip stiffness. Beyond this range, either full or minimal composite action is effectively reached. The study proposes a practical approach to selecting upper and lower thresholds for connection stiffness (kmax and kmin).",
+      "year": 2025,
+      "venue": "Pollack Periodica",
+      "url": "https://www.semanticscholar.org/paper/8e6d5acd16889badcbfcdccbc5fa45dfde327798",
+      "doi": "10.1556/606.2025.01353",
+      "authors": [
+        "Mokhtar Tantawi",
+        "D. B. Merczel",
+        "János Lógó"
+      ],
+      "citation_count": 1,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "d6f69f2730dbf78c8a30857ce35b54a8949c2c4b",
+      "title": "An experimental investigation on the dovetail notched connection for cross-laminated-timber-concrete composite slabs",
+      "abstract": "Abstract This paper presents an experimental study on the behaviour of notched connectors with a dovetail shape. A series of three symmetrical push-out tests on connection specimens and a series of two full-scale flexural tests on slab specimens were carried out. The test results of the push-out tests showed high shear resistance and stiffness of the connectors. However, the ductility of the connectors was low, as the failure mode was governed by the shear failure of the cross layer of the CLT. In addition, it was shown in the flexural test results that the design of the composite slab is not limited by the flexural bearing capacity as a high value of the maximum bending moment was obtained in the tests. It is instead governed by the deflection of the composite slab. Besides, a modified gamma method was used to estimate the mid-span deflections and compared with the ones obtained from the flexural tests. A good agreement was obtained, validating the use of the method to estimate the stiffness of the CLT-concrete slab with Dovetail notched connection. In addition, a beam grid model was also employed in order to take into account the stiffness of the slab in the transversal direction.",
+      "year": 2023,
+      "venue": "European Journal of Environmental and Civil Engineering",
+      "url": "https://www.semanticscholar.org/paper/d6f69f2730dbf78c8a30857ce35b54a8949c2c4b",
+      "doi": "10.1080/19648189.2023.2194351",
+      "authors": [
+        "Vanthet Ouch",
+        "P. Heng",
+        "Quang-Huy Nguyen",
+        "H. Somja",
+        "Thierry Soquet"
+      ],
+      "citation_count": 4,
+      "influential_citation_count": 0,
+      "publication_types": [],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "timber concrete composite slabs shear connector experimental ductility",
+      "paper_id": "122b883cf6371ccd00e20df4ecbb7696d075d187",
+      "title": "Influence of Interlayer in Timber-Concrete Composite Structures with Threaded Rebar as Shear Connector-Experimental Study",
+      "abstract": "The influence of interlayer on mechanical properties of timber-concrete composite structures using threaded rebar as shear connector is studied. Push-out tests are performed with two configurations of connection between timber and concrete with and without plywood interlayer: one threaded rebar and two cross-threaded rebars. The experimental study consists of push-out tests to characterize the failure modes, the load carrying capacity, and the stiffness for serviceability and ultimate limit states of the connections. The responses of the configurations with interlayer are compared with those without interlayer. The comparisons show that the presence of interlayer reduces the shear strength and the stiffness of the timber-concrete connection with threaded reinforcing bar as connector. Furthermore, based on the experimental results and using nonlinear regression, a mathematical model of each one of configurations of connection is derived which can be easily used with nonlinear FE analyses of Timber-Concrete Connection (TCC) beams.",
+      "year": 2018,
+      "venue": "",
+      "url": "https://www.semanticscholar.org/paper/122b883cf6371ccd00e20df4ecbb7696d075d187",
+      "doi": "10.12691/ajcea-6-1-5",
+      "authors": [
+        "Décroly Djoubissie Denouwe",
+        "A. Messan",
+        "E. Fournely",
+        "A. Bouchaïr"
+      ],
+      "citation_count": 5,
+      "influential_citation_count": 1,
+      "publication_types": [],
+      "fields_of_study": [
+        "Materials Science"
+      ],
+      "tldr": ""
+    }
+  ]
+}

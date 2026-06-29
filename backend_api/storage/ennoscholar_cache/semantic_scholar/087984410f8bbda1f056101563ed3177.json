@@ -1,0 +1,76 @@
+{
+  "created_at": "2026-06-26T09:39:32",
+  "items": [
+    {
+      "source": "semantic_scholar",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "503dcbc526b26161fac725de07eafdea6ace7eb1",
+      "title": "Assessment of Bio-Based Composite Building Envelopes for Thermal Inertia and Energy Efficiency",
+      "abstract": "Building envelopes are a challenge in enhancing their thermal efficiency as well as minimizing construction impact to increase their sustainability. The research study aims to evaluate the thermal, energy, and environmental analysis capabilities of bio-based composite materials in wall systems, which serve as alternative material barriers to traditional mortar and plaster. The evaluated configurations are a 2 wt.% Ferula communis mortar and 3 plaster-based coating materials with 8 wt.% Ferula communis, 4 wt.% alfa fibers, and 6 wt.% spent coffee grounds. In the case of these solutions, they had been chosen from existing experimental methods for thermo-mechanical studies and were incorporated on several representative wall assemblies. Dynamic simulation with TRNSYS was carried out based on the climate characteristics of Fez (Morocco) under various façade orientations and seasonal variations. The findings demonstrated that bio-based composites, in particular, can efficiently mitigate the summer temperature variations and improve winter thermal stability. This enhanced behavior is also apparent in the lower values of the decrement factor for the components, which indicate increased thermal inertia. These reinforced walls can significantly decrease heating and cooling energy requirements with energy savings compared to older construction of the best design of over 26%, and decrease CO\n 2\n -equivalent emissions.",
+      "year": 2026,
+      "venue": "EPJ Web of Conferences",
+      "url": "https://www.semanticscholar.org/paper/503dcbc526b26161fac725de07eafdea6ace7eb1",
+      "doi": "10.1051/epjconf/202637103007",
+      "authors": [
+        "Maryam Amlaf",
+        "Mohamed Touil",
+        "R. Saadani",
+        "M. Rahmoune"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle",
+        "Conference"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "322d57e9f29c1dc0e0c9066f6b134bbb92e9d30d",
+      "title": "Bio-Based Plaster Composites Reinforced with Typha Angustifolia Fibers: Mechanical and Thermal Behavior for Energy-Efficient Building Envelopes",
+      "abstract": "ABSTRACT This study presents the development of sustainable plaster-based composite materials reinforced with Typha angustifolia fibers (TAF), aiming to improve thermal insulation and mechanical performance for lightweight wall systems in hot-arid climates. TAF is a regionally abundant wetland plant in Algeria, characterized by low density and high cellulose content, making it a promising natural reinforcement. Composites were prepared by partially replacing sand with 0–2% TAF by weight. Experimental results revealed that TAF incorporation reduced dry density and thermal conductivity, enhancing insulation properties while moderately decreasing compressive strength. Despite this reduction, the composites maintained adequate structural integrity for use in non-load-bearing walls and building partitions. Thermal simulations comparing TAF-based wall assemblies with conventional hollow concrete block systems under the climatic conditions of M’sila, Algeria, demonstrated improved thermal inertia, reduced heat flux, and more stable indoor temperatures. Annual energy analysis showed a relative improvement (reduction) of 21.1% in overall energy performance. These findings suggest that Typha-reinforced plaster composites can serve as effective bio-based building materials, supporting sustainable design and construction in arid and semi-arid environments.",
+      "year": 2025,
+      "venue": "Journal of Natural Fibers",
+      "url": "https://www.semanticscholar.org/paper/322d57e9f29c1dc0e0c9066f6b134bbb92e9d30d",
+      "doi": "10.1080/15440478.2025.2581934",
+      "authors": [
+        "H. Laoubi",
+        "A. Meddah",
+        "Lysandros Pantelidis"
+      ],
+      "citation_count": 0,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    },
+    {
+      "source": "semantic_scholar",
+      "query": "bio-based building materials thermal inertia thermal diffusivity effusivity",
+      "paper_id": "b5f428a505738fe51879fa5b717548eef5f9f63d",
+      "title": "Building brick thermal analysis containing a new bio-based phase change material",
+      "abstract": "",
+      "year": 2024,
+      "venue": "Journal of Thermal Analysis and Calorimetry",
+      "url": "https://www.semanticscholar.org/paper/b5f428a505738fe51879fa5b717548eef5f9f63d",
+      "doi": "10.1007/s10973-024-13626-2",
+      "authors": [
+        "Z. Guermat",
+        "T. Boukelia",
+        "Y. Kabar"
+      ],
+      "citation_count": 3,
+      "influential_citation_count": 0,
+      "publication_types": [
+        "JournalArticle"
+      ],
+      "fields_of_study": [],
+      "tldr": ""
+    }
+  ]
+}
