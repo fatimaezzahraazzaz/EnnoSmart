@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
@@ -15,6 +15,8 @@ import {
   Menu,
   Bell,
   PlusCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -38,6 +40,15 @@ export type AppPage =
   | "diagnosis"
   | "scholar"
   | "chat"
+
+export type NewProjectPreset = {
+  organisme?: string
+  lockOrganisme?: boolean
+}
+
+export type NavigateOptions = {
+  newProjectPreset?: NewProjectPreset | null
+}
 
 interface AppShellProps {
   user: UserRead
@@ -66,8 +77,23 @@ function getInitials(fullName: string) {
 export default function AppShell({ user, onLogout }: AppShellProps) {
   const [activePage, setActivePage] = useState<AppPage>("dashboard")
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [scholarImmersive, setScholarImmersive] = useState(false)
+  const [newProjectPreset, setNewProjectPreset] =
+    useState<NewProjectPreset | null>(null)
 
-  const navigateTo = (page: AppPage) => {
+  const handleScholarImmersiveMode = useCallback((immersive: boolean) => {
+    setScholarImmersive(immersive)
+    if (immersive) setSidebarCollapsed(true)
+  }, [])
+
+  const navigateTo = (page: AppPage, options?: NavigateOptions) => {
+    if (page === "new-project") {
+      setNewProjectPreset(options?.newProjectPreset ?? null)
+    } else {
+      setNewProjectPreset(null)
+    }
+
     setActivePage(page)
     setSidebarOpen(false)
   }
@@ -81,13 +107,22 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       case "project-detail":
         return <ProjectDetailPage navigateTo={navigateTo} />
       case "new-project":
-        return <NewProjectPage navigateTo={navigateTo} />
+        return (
+          <NewProjectPage
+            navigateTo={navigateTo}
+            preset={newProjectPreset}
+          />
+        )
       case "upload":
         return <UploadPage navigateTo={navigateTo} />
       case "diagnosis":
         return <DiagnosisPage />
       case "scholar":
-        return <EnnoScholarPage />
+        return (
+          <EnnoScholarPage
+            onImmersiveModeChange={handleScholarImmersiveMode}
+          />
+        )
       case "chat":
         return <ChatPage />
       default:
@@ -97,20 +132,42 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
   const initials = getInitials(user.full_name)
 
-  const SidebarContent = () => (
+  const SidebarContent = ({ collapsed = false }: { collapsed?: boolean }) => (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-border">
-        <div className="size-8 rounded-lg bg-brand flex items-center justify-center flex-shrink-0">
-          <BrainCircuit className="size-4 text-primary-foreground" />
-        </div>
-        <div>
-          <p className="text-sm font-bold text-foreground tracking-tight">
-            EnnoSmart
-          </p>
-          <p className="text-[10px] text-muted-foreground leading-none mt-0.5">
-            Plateforme CIR IA
-          </p>
-        </div>
+      <div
+        className={cn(
+          "flex items-center border-b border-border py-5",
+          collapsed ? "justify-center px-2" : "gap-3 px-5",
+        )}
+      >
+        {!collapsed && (
+          <>
+            <div className="size-8 rounded-lg bg-brand flex items-center justify-center flex-shrink-0">
+              <BrainCircuit className="size-4 text-primary-foreground" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-foreground tracking-tight">
+                EnnoSmart
+              </p>
+              <p className="text-[10px] text-muted-foreground leading-none mt-0.5">
+                Plateforme CIR IA
+              </p>
+            </div>
+          </>
+        )}
+        <button
+          type="button"
+          onClick={() => setSidebarCollapsed((current) => !current)}
+          className="hidden size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground lg:inline-flex"
+          title={collapsed ? "Ouvrir le menu principal" : "Fermer le menu principal"}
+          aria-label={collapsed ? "Ouvrir le menu principal" : "Fermer le menu principal"}
+        >
+          {collapsed ? (
+            <PanelLeftOpen className="size-4" />
+          ) : (
+            <PanelLeftClose className="size-4" />
+          )}
+        </button>
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
@@ -122,16 +179,22 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             <button
               key={item.id}
               onClick={() => navigateTo(item.id)}
+              title={collapsed ? item.label : undefined}
               className={cn(
                 "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                collapsed && "justify-center px-2",
                 isActive
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-accent"
               )}
             >
               <Icon className="size-4 flex-shrink-0" />
-              <span className="flex-1 text-left">{item.label}</span>
-              {isActive && <ChevronRight className="size-3 opacity-60" />}
+              {!collapsed && (
+                <>
+                  <span className="flex-1 text-left">{item.label}</span>
+                  {isActive && <ChevronRight className="size-3 opacity-60" />}
+                </>
+              )}
             </button>
           )
         })}
@@ -140,34 +203,46 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       <Separator />
 
       <div className="px-3 py-4 space-y-1">
-        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all">
+        <button
+          title={collapsed ? "Paramètres" : undefined}
+          className={cn(
+            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all",
+            collapsed && "justify-center px-2",
+          )}
+        >
           <Settings className="size-4" />
-          <span>Paramètres</span>
+          {!collapsed && <span>Paramètres</span>}
         </button>
         <button
           onClick={onLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-all"
+          title={collapsed ? "Déconnexion" : undefined}
+          className={cn(
+            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-all",
+            collapsed && "justify-center px-2",
+          )}
         >
           <LogOut className="size-4" />
-          <span>Déconnexion</span>
+          {!collapsed && <span>Déconnexion</span>}
         </button>
       </div>
 
       <div className="px-4 py-4 border-t border-border">
-        <div className="flex items-center gap-3">
+        <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
           <Avatar className="size-8">
             <AvatarFallback className="bg-brand text-brand-foreground text-xs font-semibold">
               {initials}
             </AvatarFallback>
           </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-foreground truncate">
-              {user.full_name}
-            </p>
-            <p className="text-xs text-muted-foreground truncate">
-              {user.role}
-            </p>
-          </div>
+          {!collapsed && (
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate">
+                {user.full_name}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                {user.role}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -175,8 +250,13 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <aside className="hidden lg:flex w-60 flex-col border-r border-border bg-card flex-shrink-0">
-        <SidebarContent />
+      <aside
+        className={cn(
+          "hidden lg:flex flex-col border-r border-border bg-card flex-shrink-0 transition-[width] duration-200",
+          sidebarCollapsed ? "w-[72px]" : "w-60",
+        )}
+      >
+        <SidebarContent collapsed={sidebarCollapsed} />
       </aside>
 
       {sidebarOpen && (
@@ -192,7 +272,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       )}
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-4 flex-shrink-0">
+        <header
+          className={cn(
+            "h-14 border-b border-border bg-card flex items-center px-4 gap-4 flex-shrink-0",
+            scholarImmersive && "lg:hidden",
+          )}
+        >
           <Button
             variant="ghost"
             size="sm"
@@ -223,7 +308,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto bg-background">
+        <main
+          className={cn(
+            "flex-1 bg-background",
+            scholarImmersive ? "overflow-hidden" : "overflow-y-auto",
+          )}
+        >
           {renderPage()}
         </main>
       </div>

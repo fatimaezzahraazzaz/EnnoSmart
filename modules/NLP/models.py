@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
-"""
-models.py — V20 FIX
-Charge les 2 modèles .pkl/.joblib et applique :
-1) FastJudge : rôle objectif/verrou/methode/parametre/resultat/limite/contribution/bruit
-2) VerrouDetector : score binaire verrou_evidence / not_verrou
+"""Chargement et inférence des deux classifieurs NLP.
 
-Correction : évite l'erreur numpy array truth value ambiguous.
+FastJudge propose un rôle de section. VerrouDetector produit une dimension
+parallèle : il ne doit jamais écraser ce rôle. La décision de conserver le
+passage comme candidat verrou est prise ensuite dans :mod:`filter`.
 """
 from __future__ import annotations
 
@@ -26,19 +24,23 @@ except Exception:  # pragma: no cover
     np = None
 
 
+_APP_ROOT = Path(os.getenv("ENNOSMART_ROOT", Path(__file__).resolve().parents[2]))
+
 DEFAULT_FASTJUDGE_PATHS = [
-    r"C:\EnnoSmart\models\fastjudge\fastjudge_role_classifier.pkl",
-    r"C:\EnnoSmart\models\adapte\fastjudge_role_classifier.pkl",
+    str(_APP_ROOT / "models" / "fastjudge" / "fastjudge_role_classifier.pkl"),
+    str(_APP_ROOT / "models" / "adapte" / "fastjudge_role_classifier.pkl"),
 ]
 
 DEFAULT_VERROU_PATHS = [
-    r"C:\EnnoSmart\models\fastjudge\verrou_detector_gold_v2.pkl",
-    r"C:\EnnoSmart\models\adapte\verrou_detector_gold_v2.pkl",
+    str(_APP_ROOT / "models" / "fastjudge" / "verrou_detector_gold_v2.pkl"),
+    str(_APP_ROOT / "models" / "adapte" / "verrou_detector_gold_v2.pkl"),
 ]
 
 ROLE_LABELS = [
     "objectif", "verrou", "methode", "parametre", "resultat", "limite", "contribution", "bruit"
 ]
+
+INCLUDE_MODEL_PATHS_IN_ITEMS = os.getenv("ENNOSMART_NLP_INCLUDE_MODEL_PATHS", "0").strip().lower() in {"1", "true", "yes", "on"}
 
 
 # ============================================================
@@ -339,12 +341,20 @@ def run_fastjudge(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for c, p in zip(candidates, preds):
         item = dict(c)
+        # Le préfixe de contexte est utile uniquement pendant l'inférence. Le
+        # conserver doublait presque le texte dans chaque JSON de sortie.
+        item.pop("model_input", None)
         role = p.get("label") or p.get("role") or "bruit"
-        item["role"] = str(role)
+        # Valeur brute du classifieur. filter.py choisira le rôle sémantique
+        # définitif en tenant aussi compte du titre de section.
+        item["original_model_role"] = str(role)
+        item["role"] = str(role)  # alias historique, corrigé ensuite par le filtre
         item["model_confidence"] = float(p.get("score") or p.get("confidence") or 0.0)
         item["confidence"] = item["model_confidence"]
-        item["scores"] = p.get("scores", {}) or {}
-        item["fastjudge_model_path"] = p.get("fastjudge_model_path")
+        item["role_scores"] = p.get("scores", {}) or {}
+        item["scores"] = dict(item["role_scores"])  # compatibilité
+        if INCLUDE_MODEL_PATHS_IN_ITEMS:
+            item["fastjudge_model_path"] = p.get("fastjudge_model_path")
         out.append(item)
     return out
 
@@ -357,7 +367,12 @@ def run_verrou_detector(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     # Correction : on ne filtre plus par rôle
     target_items = items  # tous les passages
 
-    preds = detect_verrous_batch([str(x.get("text", "")) for x in target_items])
+    # Le verrou est souvent formulé dans la phrase voisine ou dans le titre de
+    # section. ``analysis_text`` contient ce contexte local, sans nom de fichier.
+    preds = detect_verrous_batch([
+        str(x.get("analysis_text") or x.get("text") or "")
+        for x in target_items
+    ])
     by_id: Dict[str, Dict[str, Any]] = {}
     for x, p in zip(target_items, preds):
         by_id[str(x.get("passage_id"))] = p
@@ -366,9 +381,14 @@ def run_verrou_detector(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         p = by_id.get(str(x.get("passage_id")))
         if p:
             x["verrou_score"] = float(p.get("score") or p.get("confidence") or 0.0)
-            x["verrou_model_path"] = p.get("verrou_model_path")
+            x["lock_candidate_score"] = x["verrou_score"]
+            x["lock_model_label"] = p.get("label")
+            x["lock_model_scores"] = p.get("scores", {}) or {}
+            if INCLUDE_MODEL_PATHS_IN_ITEMS:
+                x["verrou_model_path"] = p.get("verrou_model_path")
         else:
             x.setdefault("verrou_score", 0.0)
+            x.setdefault("lock_candidate_score", 0.0)
     return items
 
 

@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
+"""Normalisation légère commune aux modules NLP."""
 from __future__ import annotations
-import re
 
-def normalize_text(text: str) -> str:
-    if not text:
-        return ''
-    text = str(text)
-    replacements = {'’':"'", '“':'"', '”':'"', '–':'-', '—':'-', '…':'...', ' ':' ', ' ':' '}
-    for a,b in replacements.items(): text = text.replace(a,b)
-    text = re.sub(r'(?<=[a-zA-ZÀ-ÿ])\.(?=[A-ZÀ-ÿ])', '. ', text)
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'\.{2,}', '.', text)
+import re
+import unicodedata
+from typing import Any
+
+
+def normalize_text(value: Any) -> str:
+    text = unicodedata.normalize("NFKC", str(value or ""))
+    text = text.replace("\xa0", " ").replace("\u202f", " ").replace("\ufeff", "")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\s*\n\s*", "\n", text)
     return text.strip()

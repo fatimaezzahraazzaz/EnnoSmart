@@ -1,0 +1,67 @@
+Je veux enregistrer et exécuter le plan de rédaction suivant pour un état de l’art scientifique consacré à MOCEM dans le projet AI-RADAR.
+
+Le terme scientifique central demandé par le consultant est : MOCEM.
+
+Les nouvelles sources MOCEM ont déjà été recherchées, validées par le consultant, récupérées lorsque leur texte intégral est légalement accessible et transformées en Article Cards. Pour cette session guidée, ne lance aucune nouvelle recherche externe et utilise uniquement la sélection Phase 1 et les Article Cards Phase 2 désormais disponibles.
+
+Pour les sections 2 à 8, une preuve n’est pertinente que si elle mentionne explicitement MOCEM dans une Article Card, dans un extrait du texte intégral ou dans une preuve scientifique directement rattachée à cette Article Card. Une preuve portant seulement sur MSTAR, SAMPLE, DSIAC, CNN, DCGAN, MLFMA, MoM, FDTD, PMCHWT, FEKO, SARCASTIC, Salsa ou une autre méthode ne suffit pas pour présenter MOCEM.
+
+Respecte exactement les titres et l’ordre suivants. N’ajoute aucune autre section.
+
+1. Contexte des données synthétiques pour les systèmes SAR ATR/ATD
+
+Objectif : présenter le besoin de données synthétiques pour l’apprentissage et l’évaluation des systèmes ATR/ATD appliqués aux images SAR lorsque les données réelles annotées sont limitées.
+
+2. Présentation scientifique de MOCEM
+
+Objectif : présenter la nature, le rôle, les entrées et les sorties de MOCEM. Les preuves de cette section doivent mentionner explicitement MOCEM.
+
+3. Principe de modélisation de MOCEM
+
+Objectif : décrire le mécanisme scientifique utilisé par MOCEM pour représenter une cible et produire une réponse SAR synthétique. Les preuves doivent mentionner explicitement MOCEM et décrire le mécanisme concerné.
+
+4. Paramètres de génération SAR avec MOCEM
+
+Objectif : présenter les paramètres de simulation, les configurations d’acquisition, les angles, les cibles et les conditions d’environnement utilisés avec MOCEM. Les preuves doivent mentionner explicitement MOCEM.
+
+5. Constitution de jeux de données ATR/ATD avec MOCEM
+
+Objectif : présenter la création des ensembles d’apprentissage, de validation et de test à partir de données générées avec MOCEM. Les preuves doivent relier explicitement MOCEM à un protocole de données ATR/ATD.
+
+6. Entraînement de modèles Deep Learning avec des données MOCEM
+
+Objectif : présenter les architectures, les stratégies d’apprentissage, la randomisation de domaine, l’apprentissage adversarial et les protocoles utilisant des données générées par MOCEM. Les preuves doivent mentionner explicitement MOCEM.
+
+7. Comparaison entre les données MOCEM et les mesures SAR réelles
+
+Objectif : comparer les données générées par MOCEM avec des données SAR mesurées, notamment MSTAR lorsque cela est documenté, et analyser les écarts de représentativité. Les preuves doivent mentionner explicitement MOCEM.
+
+8. Limites scientifiques et généralisation des données MOCEM
+
+Objectif : présenter les limites documentées de MOCEM, le passage simulation-réalité, les hypothèses physiques et les incertitudes de généralisation. Les preuves doivent mentionner explicitement MOCEM.
+
+9. Positionnement interne de MOCEM dans le projet AI-RADAR
+
+Objectif : présenter le rôle interne de MOCEM uniquement lorsqu’une preuve interne validée du projet ou une source scientifique explicitement rattachée à Scalian le permet. Une publication externe ne doit jamais être présentée comme un travail interne sans preuve.
+
+10. Synthèse de la couverture scientifique disponible sur MOCEM
+
+Objectif : résumer les informations réellement couvertes, signaler les éléments non documentés et conserver les limites de preuve sans remplacer MOCEM par une autre méthode.
+
+Avant toute rédaction, construis le mapping sémantique strict entre chaque section et les claims disponibles.
+
+Pour chaque section, affiche :
+
+- le profil sémantique détecté ;
+- les claims autorisés ;
+- les citations autorisées ;
+- le niveau de couverture ;
+- les principaux claims rejetés ;
+- la raison de chaque rejet ;
+- l’autorisation ou le blocage de la rédaction.
+
+La présence des mots SAR, ATR, Deep Learning, simulation ou données synthétiques ne suffit pas pour couvrir une section MOCEM.
+
+Ne lance pas la Phase 5 tant que je n’ai pas écrit exactement :
+
+tu peux rédiger

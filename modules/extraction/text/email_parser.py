@@ -102,13 +102,45 @@ _QUOTE_LINE_RE = re.compile(
     flags=re.IGNORECASE | re.MULTILINE,
 )
 
-# Extensions de pièces jointes pertinentes R&D
+# Extensions de pièces jointes pertinentes R&D.
+# Important : les formats macro-enabled Office (.docm, .pptm, .xlsm)
+# doivent être conservés pour le routeur d'extraction.
 RD_ATTACHMENT_EXTENSIONS = {
-    ".pdf", ".docx", ".doc", ".pptx", ".ppt",
-    ".xlsx", ".xls", ".csv",
-    ".png", ".jpg", ".jpeg", ".tiff", ".bmp",
-    ".zip", ".rar", ".7z",
+    ".pdf",
+
+    ".doc",
+    ".docx",
+    ".docm",
+
+    ".ppt",
+    ".pptx",
+    ".pptm",
+
+    ".xls",
+    ".xlsx",
+    ".xlsm",
+
+    ".csv",
+    ".txt",
+    ".md",
+    ".json",
+
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".tif",
+    ".tiff",
+    ".bmp",
+    ".gif",
+    ".webp",
+
+    ".zip",
+    ".rar",
+    ".7z",
 }
+
+# Limites de sécurité pour éviter d'embarquer des pièces jointes énormes en mémoire.
+MAX_ATTACHMENT_BYTES = 80 * 1024 * 1024  # 80 MB
 
 # Sections R&D standards
 RD_SECTION_PATTERNS: list[str] = [
@@ -253,6 +285,94 @@ def _decode_mime_header(value: Optional[str]) -> str:
         return " ".join(decoded_parts).strip()
     except Exception:
         return str(value).strip()
+
+
+
+def _safe_attachment_filename(filename: Optional[str], fallback: str = "attachment.bin") -> str:
+    """
+    Nettoie le nom d'une pièce jointe pour écriture temporaire côté router.
+    Ne garde pas de chemin fourni par le mail.
+    """
+    name = _decode_mime_header(filename or "").strip() or fallback
+    name = name.replace("\\", "/").split("/")[-1]
+    name = re.sub(r"[\x00-\x1f\x7f]+", "_", name)
+    name = re.sub(r"[<>:\"/\\|?*]+", "_", name)
+    name = re.sub(r"\s+", " ", name).strip()
+    return name or fallback
+
+
+def _is_rd_attachment_extension(ext: str) -> bool:
+    return str(ext or "").lower().strip() in RD_ATTACHMENT_EXTENSIONS
+
+
+def _bytes_from_msg_attachment(attachment) -> bytes:
+    """
+    Récupère le contenu binaire d'une pièce jointe Outlook .msg.
+    extract-msg varie selon les versions : data peut être bytes, property, None, etc.
+    """
+    for attr in ("data", "content", "dataBytes", "data_bytes"):
+        try:
+            value = getattr(attachment, attr, None)
+            if callable(value):
+                value = value()
+            if isinstance(value, bytes):
+                return value
+            if isinstance(value, bytearray):
+                return bytes(value)
+        except Exception:
+            continue
+
+    # Certains objets extract_msg exposent un flux OLE interne.
+    try:
+        if hasattr(attachment, "save"):
+            import tempfile
+            tmp_dir = Path(tempfile.mkdtemp(prefix="ennosmart_msg_att_read_"))
+            attachment.save(customPath=str(tmp_dir))
+            files = [p for p in tmp_dir.rglob("*") if p.is_file()]
+            if files:
+                return files[0].read_bytes()
+    except Exception:
+        pass
+
+    return b""
+
+
+def _make_attachment(
+    filename: str,
+    content_type: str,
+    payload: bytes,
+) -> EmailAttachment:
+    """
+    Construit une pièce jointe normalisée et traçable.
+    """
+    safe_name = _safe_attachment_filename(filename)
+    ext = Path(safe_name).suffix.lower()
+    payload = payload or b""
+    is_relevant = _is_rd_attachment_extension(ext)
+
+    if len(payload) > MAX_ATTACHMENT_BYTES:
+        logger.warning(
+            "Pièce jointe ignorée car trop volumineuse : %s | %.2f MB",
+            safe_name,
+            len(payload) / (1024 * 1024),
+        )
+        return EmailAttachment(
+            filename=safe_name,
+            extension=ext,
+            size_bytes=len(payload),
+            content_type=content_type or "application/octet-stream",
+            is_rd_relevant=False,
+            content=None,
+        )
+
+    return EmailAttachment(
+        filename=safe_name,
+        extension=ext,
+        size_bytes=len(payload),
+        content_type=content_type or "application/octet-stream",
+        is_rd_relevant=is_relevant,
+        content=payload if is_relevant and payload else None,
+    )
 
 
 def _parse_email_address(raw: str) -> EmailParticipant:
@@ -528,30 +648,43 @@ def _extract_body_from_eml(msg: email.message.Message) -> str:
 def _extract_attachments_eml(
     msg: email.message.Message,
 ) -> list[EmailAttachment]:
-    """Extrait les métadonnées des pièces jointes d'un .eml."""
+    """
+    Extrait les pièces jointes d'un .eml avec contenu binaire.
+    Les pièces jointes non pertinentes sont gardées en métadonnées,
+    mais leur contenu n'est pas transmis au routeur.
+    """
     attachments: list[EmailAttachment] = []
 
     for part in msg.walk():
-        disposition = str(part.get("Content-Disposition", ""))
-        if "attachment" not in disposition:
+        disposition = str(part.get("Content-Disposition", "") or "").lower()
+        filename_raw = part.get_filename()
+
+        # Certains emails mettent les fichiers en inline avec un filename.
+        if "attachment" not in disposition and not filename_raw:
             continue
 
-        filename_raw = part.get_filename()
         if not filename_raw:
             continue
 
-        filename = _decode_mime_header(filename_raw)
-        ext = Path(filename).suffix.lower()
+        filename = _safe_attachment_filename(filename_raw)
         payload = part.get_payload(decode=True) or b""
+        content_type = part.get_content_type() or "application/octet-stream"
 
-        attachments.append(EmailAttachment(
+        att = _make_attachment(
             filename=filename,
-            extension=ext,
-            size_bytes=len(payload),
-            content_type=part.get_content_type(),
-            is_rd_relevant=ext in RD_ATTACHMENT_EXTENSIONS,
-            content=payload if ext in RD_ATTACHMENT_EXTENSIONS else None,
-        ))
+            content_type=content_type,
+            payload=payload,
+        )
+
+        attachments.append(att)
+
+        logger.info(
+            "PJ EML détectée : %s | ext=%s | RD=%s | size=%d",
+            att.filename,
+            att.extension,
+            att.is_rd_relevant,
+            att.size_bytes,
+        )
 
     return attachments
 
@@ -690,19 +823,41 @@ def _extract_msg(path: Path) -> tuple["EmailResult", str]:
         # ── Pièces jointes ────────────────────────────────────────────────
         for attachment in (msg.attachments or []):
             try:
-                filename = attachment.longFilename or attachment.shortFilename or ""
+                filename = (
+                    getattr(attachment, "longFilename", None)
+                    or getattr(attachment, "shortFilename", None)
+                    or getattr(attachment, "name", None)
+                    or ""
+                )
+
+                filename = _safe_attachment_filename(filename)
+
                 if not filename:
                     continue
-                ext = Path(filename).suffix.lower()
-                data = attachment.data or b""
-                result.attachments.append(EmailAttachment(
+
+                data = _bytes_from_msg_attachment(attachment)
+                content_type = (
+                    getattr(attachment, "mimetype", None)
+                    or getattr(attachment, "contentType", None)
+                    or "application/octet-stream"
+                )
+
+                att = _make_attachment(
                     filename=filename,
-                    extension=ext,
-                    size_bytes=len(data),
-                    content_type=getattr(attachment, "mimetype", "application/octet-stream"),
-                    is_rd_relevant=ext in RD_ATTACHMENT_EXTENSIONS,
-                    content=data if ext in RD_ATTACHMENT_EXTENSIONS else None,
-                ))
+                    content_type=content_type,
+                    payload=data,
+                )
+
+                result.attachments.append(att)
+
+                logger.info(
+                    "PJ MSG détectée : %s | ext=%s | RD=%s | size=%d",
+                    att.filename,
+                    att.extension,
+                    att.is_rd_relevant,
+                    att.size_bytes,
+                )
+
             except Exception as exc:
                 logger.warning("Pièce jointe MSG ignorée : %s", exc)
 
@@ -731,6 +886,7 @@ def _postprocess(result: EmailResult, raw_body: str) -> EmailResult:
       - Sections R&D
     """
     if not raw_body.strip():
+        result.body_clean = ""
         result.text_chunks.append(
             _build_email_chunk("[CORPS VIDE]", result.metadata)
         )
@@ -872,14 +1028,37 @@ def extract_email(file_path: str | Path) -> EmailResult:
     result.tags = _build_tags(result)
     result.confidence_score = _compute_confidence(result)
 
+    rd_attachments = [a for a in result.attachments if a.is_rd_relevant and a.content]
+
     logger.info(
-        "✓ %s — %d chunks | %d pièces jointes | score=%.2f | tags=%s",
+        "✓ %s — %d chunks | %d pièces jointes | %d PJ R&D exploitables | score=%.2f | tags=%s",
         path.name,
         len(result.text_chunks),
         len(result.attachments),
+        len(rd_attachments),
         result.confidence_score,
         result.tags,
     )
+
+    logger.info("=" * 80)
+    logger.info("EMAIL EXTRACTION DEBUG : %s", result.file_name)
+    logger.info("Subject : %s", result.metadata.subject)
+    logger.info("Body chars : %d", len(result.body_clean or ""))
+    logger.info("Chunks : %d", len(result.text_chunks))
+    logger.info("Attachments : %d", len(result.attachments))
+
+    for att in result.attachments:
+        logger.info(
+            " - PJ : %s | ext=%s | RD=%s | content=%s | size=%d | type=%s",
+            att.filename,
+            att.extension,
+            att.is_rd_relevant,
+            bool(att.content),
+            att.size_bytes,
+            att.content_type,
+        )
+
+    logger.info("=" * 80)
 
     return result
 
@@ -909,7 +1088,14 @@ if __name__ == "__main__":
         "is_reply":      res.metadata.is_reply,
         "reply_chain":   len(res.reply_chain),
         "attachments":   [
-            {"name": a.filename, "rd_relevant": a.is_rd_relevant}
+            {
+                "name": a.filename,
+                "extension": a.extension,
+                "rd_relevant": a.is_rd_relevant,
+                "has_content": bool(a.content),
+                "size_bytes": a.size_bytes,
+                "content_type": a.content_type,
+            }
             for a in res.attachments
         ],
         "rd_sections":   res.detected_rd_sections,

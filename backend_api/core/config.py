@@ -5,6 +5,12 @@ from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# Chemin robuste vers le .env du backend :
+# C:\EnnoSmart\backend_api\.env
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+ENV_FILE = BACKEND_DIR / ".env"
+
+
 class Settings(BaseSettings):
     APP_NAME: str = "EnnoSmart Backend API"
     ENV: str = "dev"
@@ -27,15 +33,31 @@ class Settings(BaseSettings):
     ENNOSCHOLAR_SCRIPT: str | None = None
     AI_RUN_TIMEOUT_SECONDS: int = 3600
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    # IMPORTANT :
+    # extra="ignore" évite que Pydantic bloque les variables IA/LLM/EnnoScholar
+    # comme GEMINI_API_KEY, ENNOSCHOLAR_ENABLE_BGE_RERANKER, OLLAMA_MODEL, etc.
+    model_config = SettingsConfigDict(
+        env_file=str(ENV_FILE),
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+    )
 
     @property
     def cors_origins_list(self) -> List[str]:
-        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        return [
+            origin.strip()
+            for origin in self.CORS_ORIGINS.split(",")
+            if origin.strip()
+        ]
 
     @property
     def allowed_extensions_set(self) -> set[str]:
-        return {ext.strip().lower() for ext in self.ALLOWED_EXTENSIONS.split(",") if ext.strip()}
+        return {
+            ext.strip().lower()
+            for ext in self.ALLOWED_EXTENSIONS.split(",")
+            if ext.strip()
+        }
 
     @property
     def upload_root_path(self) -> Path:

@@ -1,6 +1,9 @@
 "use client"
 
-import { AppPage } from "@/components/ennosmart/app-shell"
+import {
+  AppPage,
+  NavigateOptions,
+} from "@/components/ennosmart/app-shell"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,13 +16,14 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
+  PlusCircle,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { getProjects, type ProjectRead } from "@/lib/api"
 import { setCurrentProjectId } from "@/lib/project-session"
 
 interface ProjectListPageProps {
-  navigateTo: (page: AppPage) => void
+  navigateTo: (page: AppPage, options?: NavigateOptions) => void
 }
 
 type OrganizationGroup = {
@@ -118,6 +122,15 @@ export default function ProjectListPage({ navigateTo }: ProjectListPageProps) {
     navigateTo("project-detail")
   }
 
+  const addProjectForOrganization = (orgName: string) => {
+    navigateTo("new-project", {
+      newProjectPreset: {
+        organisme: orgName,
+        lockOrganisme: true,
+      },
+    })
+  }
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <div className="flex items-start justify-between gap-4">
@@ -177,8 +190,16 @@ export default function ProjectListPage({ navigateTo }: ProjectListPageProps) {
               Aucun projet pour ce consultant.
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Crée un projet depuis Swagger ou depuis la future page de création.
+              Créez un nouveau dossier pour commencer.
             </p>
+
+            <Button
+              className="mt-4 bg-brand hover:bg-brand/90"
+              onClick={() => navigateTo("new-project")}
+            >
+              <PlusCircle className="size-4 mr-2" />
+              Nouveau dossier
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -187,31 +208,52 @@ export default function ProjectListPage({ navigateTo }: ProjectListPageProps) {
         <div className="space-y-6">
           {filteredOrganizations.map((org) => (
             <div key={org.id} className="space-y-3">
-              <button
-                onClick={() => toggleOrg(org.id)}
-                className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 rounded-lg border border-border transition-colors"
-              >
-                <div className="flex items-center gap-3">
+              <div className="w-full flex items-center justify-between gap-3 p-4 bg-muted/30 hover:bg-muted/50 rounded-lg border border-border transition-colors">
+                <button
+                  type="button"
+                  onClick={() => toggleOrg(org.id)}
+                  className="flex flex-1 items-center gap-3 text-left min-w-0"
+                >
                   <Building2 className="size-5 text-brand flex-shrink-0" />
-                  <div className="text-left">
-                    <p className="font-semibold text-foreground">{org.name}</p>
+                  <div className="text-left min-w-0">
+                    <p className="font-semibold text-foreground truncate">
+                      {org.name}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {org.projects.length} dossier
                       {org.projects.length > 1 ? "s" : ""}
                     </p>
                   </div>
+                </button>
+
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => addProjectForOrganization(org.name)}
+                    className="text-brand border-brand/30 hover:bg-brand/10"
+                  >
+                    <PlusCircle className="size-4 mr-2" />
+                    Ajouter un projet
+                  </Button>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleOrg(org.id)}
+                    className="size-8 rounded-md flex items-center justify-center hover:bg-background"
+                  >
+                    <ChevronDown
+                      className={`size-4 text-muted-foreground transition-transform ${
+                        expandedOrgs.includes(org.id) ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
                 </div>
-                <ChevronDown
-                  className={`size-4 text-muted-foreground transition-transform ${
-                    expandedOrgs.includes(org.id) ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
+              </div>
 
               {expandedOrgs.includes(org.id) && (
                 <div className="space-y-2 pl-2">
                   {org.projects.map((project) => {
-
                     return (
                       <Card
                         key={project.id}
@@ -260,7 +302,10 @@ export default function ProjectListPage({ navigateTo }: ProjectListPageProps) {
                                 size="sm"
                                 variant="ghost"
                                 className="text-brand hover:bg-brand/10"
-                                onClick={() => openProjectDetail(project.id)}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  openProjectDetail(project.id)
+                                }}
                               >
                                 <ArrowRight className="size-4" />
                               </Button>

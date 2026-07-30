@@ -15,7 +15,6 @@ Le scoring s'appuie uniquement sur domains.json.
 from __future__ import annotations
 
 import json
-import math
 import re
 import unicodedata
 from collections import Counter, defaultdict

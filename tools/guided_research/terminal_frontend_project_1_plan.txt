@@ -1,0 +1,225 @@
+Je veux réaliser un état de l’art scientifique complet consacré à **MOCEM** dans le cadre du projet **AI-RADAR – Scalian – année 2025**.
+
+L’objectif est d’étudier précisément l’utilisation de MOCEM pour la génération de données radar SAR synthétiques, l’entraînement de modèles ATR/ATD, la comparaison entre données simulées et données réelles, ainsi que les limites de généralisation simulation-réalité.
+
+Le terme scientifique central est **MOCEM**. Ne remplace jamais MOCEM par MLFMA, MoM, FDTD, PMCHWT, FEKO, SARCASTIC, Salsa ou une autre méthode. Ces technologies peuvent uniquement être citées comme méthodes connexes ou comparatives lorsqu’une source scientifique le justifie.
+
+Je souhaite utiliser le processus normal complet d’EnnoScholar :
+
+1. rechercher des publications scientifiques pertinentes dans les sources disponibles ;
+
+2. afficher les articles trouvés pour validation humaine ;
+
+3. conserver uniquement les articles validés par le consultant ;
+
+4. rechercher légalement les textes intégraux et les PDF accessibles ;
+
+5. utiliser le MCP de récupération légale lorsqu’un PDF direct est inaccessible ;
+
+6. télécharger et extraire le texte des PDF ;
+
+7. utiliser l’OCR lorsque le PDF est scanné ou que le texte est insuffisant ;
+
+8. créer les Article Cards avec traçabilité des sources ;
+
+9. construire un mapping sémantique strict entre les sections demandées et les claims réellement disponibles ;
+
+10. rédiger uniquement les sections suffisamment couvertes par les preuves scientifiques.
+
+Respecte exactement le plan suivant.
+
+## 1. Contexte des données synthétiques pour les systèmes SAR ATR/ATD
+
+Présenter le besoin de données synthétiques pour l’apprentissage et l’évaluation des systèmes ATR/ATD appliqués aux images SAR, notamment lorsque les données réelles annotées sont rares, coûteuses ou difficiles à acquérir.
+
+## 2. Présentation scientifique de MOCEM
+
+Présenter la nature de MOCEM, son rôle, son domaine d’application, ses entrées, ses sorties et les types de données radar qu’il permet de produire.
+
+Les preuves utilisées dans cette section doivent mentionner explicitement MOCEM.
+
+## 3. Principe de modélisation utilisé par MOCEM
+
+Décrire les mécanismes scientifiques et physiques utilisés par MOCEM pour représenter une cible, modéliser sa signature radar et générer une image ou une réponse SAR synthétique.
+
+Les preuves doivent mentionner explicitement MOCEM et décrire le mécanisme concerné.
+
+## 4. Paramètres de génération SAR avec MOCEM
+
+Présenter les paramètres de simulation utilisés avec MOCEM :
+
+* géométrie de la cible ;
+
+* modèles CAO ;
+
+* angles d’azimut et d’élévation ;
+
+* fréquence radar ;
+
+* résolution ;
+
+* polarisation ;
+
+* trajectoire du capteur ;
+
+* environnement ;
+
+* bruit ;
+
+* conditions d’acquisition ;
+
+* variabilité des signatures radar.
+
+Ne présenter un paramètre comme appartenant à MOCEM que lorsqu’une source le confirme explicitement.
+
+## 5. Constitution de jeux de données ATR/ATD avec MOCEM
+
+Présenter la création de jeux de données synthétiques destinés à l’apprentissage, à la validation et au test des modèles ATR/ATD.
+
+Analyser notamment :
+
+* les classes de cibles ;
+
+* le nombre d’images ;
+
+* les angles d’observation ;
+
+* les scénarios de simulation ;
+
+* les différences avec MSTAR ;
+
+* la diversité des données ;
+
+* la représentativité des données synthétiques.
+
+Les preuves doivent relier explicitement MOCEM à un protocole de données ATR ou ATD.
+
+## 6. Entraînement de modèles Deep Learning avec des données MOCEM
+
+Présenter les modèles et stratégies d’apprentissage utilisant des données générées par MOCEM :
+
+* réseaux convolutionnels ;
+
+* modèles ATR ;
+
+* randomisation de domaine ;
+
+* apprentissage adversarial ;
+
+* adaptation de domaine ;
+
+* augmentation de données ;
+
+* stratégies Sim2Real ;
+
+* entraînement uniquement synthétique ;
+
+* combinaison de données simulées et mesurées.
+
+Les preuves doivent mentionner explicitement l’utilisation de données MOCEM.
+
+## 7. Comparaison entre données MOCEM et mesures SAR réelles
+
+Comparer les données générées par MOCEM avec les données SAR mesurées.
+
+Analyser notamment :
+
+* les différences de signature ;
+
+* les écarts de texture ;
+
+* le speckle ;
+
+* les lobes secondaires ;
+
+* le clutter ;
+
+* les interactions cible-sol ;
+
+* les variations d’angle ;
+
+* les différences entre données synthétiques et MSTAR ;
+
+* les performances obtenues sur des données réelles.
+
+Les preuves doivent mentionner explicitement MOCEM.
+
+## 8. Limites scientifiques et généralisation des données MOCEM
+
+Présenter les limites documentées de MOCEM :
+
+* simplification des modèles physiques ;
+
+* représentativité limitée des environnements réels ;
+
+* dépendance aux modèles CAO ;
+
+* écart entre simulation et mesure ;
+
+* domain shift ;
+
+* généralisation des modèles ATR ;
+
+* manque de variabilité ;
+
+* incertitudes physiques ;
+
+* limites du passage Sim2Real.
+
+Ne déduis aucune limite sans preuve scientifique.
+
+## 9. Positionnement de MOCEM dans le projet AI-RADAR
+
+Présenter le rôle potentiel ou documenté de MOCEM dans AI-RADAR.
+
+Une publication externe ne doit jamais être présentée comme une preuve de travaux internes du projet.
+
+Pour attribuer une méthode, un développement ou un résultat à Scalian ou au projet AI-RADAR, utiliser uniquement :
+
+* une source interne validée ;
+
+* une preuve projet ;
+
+* ou une publication qui rattache explicitement le travail à Scalian.
+
+## 10. Synthèse de la couverture scientifique disponible
+
+Résumer :
+
+* les éléments bien documentés ;
+
+* les éléments partiellement couverts ;
+
+* les éléments non documentés ;
+
+* les limites des sources disponibles ;
+
+* les besoins éventuels de recherche complémentaire.
+
+Avant toute rédaction, construis un mapping sémantique strict entre chaque section et les claims disponibles.
+
+Pour chaque section, affiche :
+
+* le profil sémantique détecté ;
+
+* les articles candidats ;
+
+* les claims autorisés ;
+
+* les citations autorisées ;
+
+* le niveau de couverture ;
+
+* les claims rejetés ;
+
+* la raison de chaque rejet ;
+
+* l’autorisation ou le blocage de la rédaction.
+
+La simple présence des mots SAR, ATR, Deep Learning, simulation, MSTAR ou données synthétiques ne suffit pas pour couvrir une section consacrée spécifiquement à MOCEM.
+
+N’invente aucune information et ne complète jamais une section par des connaissances générales non présentes dans les sources validées.
+
+Ne lance pas la rédaction finale tant que je n’ai pas écrit exactement :
+
+tu peux rédiger

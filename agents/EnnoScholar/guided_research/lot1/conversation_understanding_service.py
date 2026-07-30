@@ -1,0 +1,1081 @@
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
+import json
+import logging
+import re
+from typing import Any, Literal, Mapping, TypeVar
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from modules.LLM.llm_client import LLMClient
+
+from .domain.enums import ConsultantIntent
+from .domain.models import (
+    ConversationMemory,
+    ConversationUnderstanding,
+    GuidedResearchSessionData,
+    IntentClassification,
+)
+
+logger = logging.getLogger(__name__)
+
+StructuredModel = TypeVar("StructuredModel", bound=BaseModel)
+
+_PLAN_PAYLOAD_INTENTS = {
+    ConsultantIntent.DESCRIBE_REQUIREMENTS,
+    ConsultantIntent.PROPOSE_PLAN,
+    ConsultantIntent.ADD_TOPIC,
+    ConsultantIntent.REMOVE_TOPIC,
+    ConsultantIntent.CHANGE_PLAN,
+}
+_SEARCH_PAYLOAD_INTENTS = {
+    ConsultantIntent.SEARCH_MORE,
+    ConsultantIntent.SEARCH_ALTERNATIVE,
+    ConsultantIntent.REPLACE_SOURCE,
+}
+_WRITING_INTENTS = {
+    ConsultantIntent.START_WRITING,
+    ConsultantIntent.REVISE_DRAFT,
+}
+_SUPPORTED_TURN_INTENTS = {
+    ConsultantIntent.CONVERSE,
+    ConsultantIntent.DESCRIBE_REQUIREMENTS,
+    ConsultantIntent.PROPOSE_PLAN,
+    ConsultantIntent.ADD_TOPIC,
+    ConsultantIntent.REMOVE_TOPIC,
+    ConsultantIntent.CHANGE_PLAN,
+    ConsultantIntent.SEARCH_MORE,
+    ConsultantIntent.SEARCH_ALTERNATIVE,
+    ConsultantIntent.REPLACE_SOURCE,
+    ConsultantIntent.EXPLAIN_SOURCE,
+    ConsultantIntent.ACCEPT_PLAN,
+    ConsultantIntent.START_WRITING,
+    ConsultantIntent.REVISE_DRAFT,
+    ConsultantIntent.CANCEL,
+    ConsultantIntent.UNKNOWN,
+}
+
+
+class _TurnDecision(BaseModel):
+    """Décision conversationnelle, indépendante de tout payload métier."""
+
+    model_config = ConfigDict(extra="ignore", use_enum_values=False)
+
+    classification: IntentClassification
+    plan_reference: Literal[
+        "none",
+        "current",
+        "previous",
+        "first",
+        "specific",
+    ] = "none"
+    referenced_plan_version: str = ""
+    plan_generation_mode: Literal[
+        "none",
+        "initial",
+        "alternative",
+    ] = "none"
+    plan_document_scope: Literal[
+        "none",
+        "state_of_art",
+        "full_project_document",
+        "other",
+        "unspecified",
+    ] = "none"
+    assistant_message: str = Field(min_length=1, max_length=6000)
+    memory: ConversationMemory
+
+    @field_validator("referenced_plan_version", mode="before")
+    @classmethod
+    def normalize_referenced_plan_version(cls, value: Any) -> str:
+        return "" if value is None else str(value)
+
+
+class _SearchRequestPayload(BaseModel):
+    """Contrat machine transmis au moteur de recherche, sans réinterprétation."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    query: str = Field(min_length=1, max_length=1200)
+    query_kind: Literal[
+        "scientific_evidence",
+        "direct_scientific_evidence",
+        "official_documentation",
+    ]
+    entity_name: str = Field(default="", max_length=400)
+    entity_names: list[str] = Field(default_factory=list)
+    entity_type: str = Field(default="other", max_length=120)
+    required_terms: list[str] = Field(default_factory=list)
+    excluded_terms: list[str] = Field(default_factory=list)
+    section_ids: list[str] = Field(default_factory=list)
+    section_titles: list[str] = Field(default_factory=list)
+    target_verrous: list[str] = Field(default_factory=list)
+    requested_dimensions: list[str] = Field(default_factory=list)
+    target_context_dimensions: list[str] = Field(default_factory=list)
+    require_direct_evidence: bool = False
+    source_preferences: list[str] = Field(default_factory=list)
+
+
+class _ActionPayload(BaseModel):
+    """Arguments d'action produits seulement après sélection d'une capacité."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    plan: list[dict[str, Any]] = Field(default_factory=list)
+    topics: list[dict[str, Any]] = Field(default_factory=list)
+    constraints: list[str] = Field(default_factory=list)
+    search_requests: list[_SearchRequestPayload] = Field(default_factory=list)
+
+
+def _clean(value: Any, limit: int = 16000) -> str:
+    return re.sub(r"\s+", " ", str(value or "").replace("\x00", " ")).strip()[:limit]
+
+
+def _extract_json(value: Any) -> dict[str, Any]:
+    raw = str(value or "").strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.I)
+    raw = re.sub(r"\s*```$", "", raw)
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        start, end = raw.find("{"), raw.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                parsed = json.loads(raw[start : end + 1])
+                return parsed if isinstance(parsed, dict) else {}
+            except Exception:
+                return {}
+    return {}
+
+
+def _compact_project_context(value: Mapping[str, Any]) -> dict[str, Any]:
+    project = value.get("project")
+    project_row = dict(project) if isinstance(project, Mapping) else {}
+
+    cards: list[dict[str, Any]] = []
+    for raw_card in value.get("validated_article_cards") or []:
+        if not isinstance(raw_card, Mapping):
+            continue
+        cards.append({
+            "citation_id": _clean(raw_card.get("citation_id"), 80),
+            "article_id": raw_card.get("article_id"),
+            "title": _clean(raw_card.get("title"), 360),
+            "role": _clean(raw_card.get("role"), 100),
+            "guided_research_source": bool(
+                raw_card.get("guided_research_source")
+            ),
+            "verrou_ids": [
+                _clean(value, 120)
+                for value in (raw_card.get("verrou_ids") or [])[:12]
+                if _clean(value, 120)
+            ],
+            "abstract": _clean(raw_card.get("abstract"), 360),
+            "keywords": [
+                _clean(keyword, 80)
+                for keyword in (raw_card.get("keywords") or [])[:8]
+                if _clean(keyword, 80)
+            ],
+        })
+        if len(cards) >= 24:
+            break
+
+    previous_memories = [
+        dict(memory)
+        for memory in (value.get("previous_project_memories") or [])[-2:]
+        if isinstance(memory, Mapping)
+    ]
+    raw_plan_history = [
+        history
+        for history in (value.get("plan_history") or [])
+        if isinstance(history, Mapping)
+    ]
+    selected_history = (
+        raw_plan_history
+        if len(raw_plan_history) <= 4
+        else [raw_plan_history[0], *raw_plan_history[-3:]]
+    )
+    plan_history = [
+        {
+            "version": history.get("version"),
+            "created_at": history.get("created_at"),
+            "plan": _compact_plan_snapshot(history.get("plan")),
+        }
+        for history in selected_history
+        if _compact_plan_snapshot(history.get("plan"))
+    ]
+    return {
+        "project": project_row,
+        "scientific_context": _clean(value.get("scientific_context"), 4200),
+        "validated_article_cards": cards,
+        "previous_project_memories": previous_memories,
+        "plan_history": plan_history,
+        "writing_source_policy": (
+            dict(value.get("writing_source_policy") or {})
+            if isinstance(value.get("writing_source_policy"), Mapping)
+            else {}
+        ),
+    }
+
+
+def _compact_plan(value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for raw_section in value[:40]:
+        if not isinstance(raw_section, Mapping):
+            continue
+        output.append({
+            "section_id": _clean(raw_section.get("section_id"), 120),
+            "title": _clean(raw_section.get("title"), 320),
+            "objective": _clean(raw_section.get("objective"), 420),
+            "parent_id": _clean(raw_section.get("parent_id"), 120) or None,
+            "level": raw_section.get("level"),
+        })
+    return output
+
+
+def _compact_plan_snapshot(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    output: list[dict[str, Any]] = []
+    for raw_section in value[:28]:
+        if not isinstance(raw_section, Mapping):
+            continue
+        title = _clean(raw_section.get("title"), 240)
+        if not title:
+            continue
+        output.append({
+            "section_id": _clean(raw_section.get("section_id"), 120),
+            "title": title,
+            "objective": _clean(raw_section.get("objective"), 180),
+            "parent_id": _clean(raw_section.get("parent_id"), 120) or None,
+            "level": raw_section.get("level"),
+        })
+    return output
+
+
+def _plan_snapshot_from_turn(turn: Any) -> dict[str, Any] | None:
+    metadata = turn.metadata if isinstance(turn.metadata, Mapping) else {}
+    contract = metadata.get("contract")
+    if not isinstance(contract, Mapping):
+        return None
+    for key in ("approved_plan", "consultant_edited_plan", "proposed_plan"):
+        plan = _compact_plan_snapshot(contract.get(key))
+        if plan:
+            return {
+                "plan_version": contract.get("plan_version"),
+                "plan": plan,
+            }
+    return None
+
+
+def _recent_history(session: GuidedResearchSessionData) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    snapshot_indexes: list[int] = []
+    for turn in session.messages[-10:]:
+        row: dict[str, Any] = {
+            "role": str(turn.role),
+            "content": _clean(turn.content, 900),
+            "intent": str(turn.intent) if turn.intent else None,
+        }
+        snapshot = _plan_snapshot_from_turn(turn)
+        if snapshot:
+            row["plan_snapshot"] = snapshot
+            snapshot_indexes.append(len(rows))
+        rows.append(row)
+
+    # Suffisant pour résoudre « le premier plan » et « le plan précédent »
+    # sans recopier chaque version intermédiaire dans le prompt.
+    keep_indexes = set(snapshot_indexes[:1] + snapshot_indexes[-1:])
+    for index in snapshot_indexes:
+        if index not in keep_indexes:
+            rows[index].pop("plan_snapshot", None)
+    return rows
+
+
+def _plan_reference_candidates(
+    *,
+    history: list[dict[str, Any]],
+    project_context: Mapping[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    recent: list[dict[str, Any]] = []
+    stored: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def append_candidate(
+        target: list[dict[str, Any]],
+        version: Any,
+        plan: Any,
+    ) -> None:
+        compact = _compact_plan_snapshot(plan)
+        if not compact:
+            return
+        fingerprint = json.dumps(compact, ensure_ascii=False, sort_keys=True)
+        if fingerprint in seen:
+            return
+        seen.add(fingerprint)
+        target.append({
+            "version": version,
+            "plan": compact,
+        })
+
+    for row in history:
+        if not isinstance(row, Mapping):
+            continue
+        snapshot = row.get("plan_snapshot")
+        if isinstance(snapshot, Mapping):
+            append_candidate(
+                recent,
+                snapshot.get("plan_version"),
+                snapshot.get("plan"),
+            )
+    for row in project_context.get("plan_history") or []:
+        if isinstance(row, Mapping):
+            append_candidate(stored, row.get("version"), row.get("plan"))
+    return {"recent": recent, "stored": stored}
+
+
+def _resolve_plan_reference(
+    *,
+    decision: _TurnDecision,
+    history: list[dict[str, Any]],
+    project_context: Mapping[str, Any],
+    current_plan: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    reference = decision.plan_reference
+    if reference == "current":
+        return _compact_plan_snapshot(current_plan)
+    if reference == "none":
+        return []
+
+    candidate_groups = _plan_reference_candidates(
+        history=history,
+        project_context=project_context,
+    )
+    recent = candidate_groups["recent"]
+    stored = candidate_groups["stored"]
+    if not recent and not stored:
+        return []
+    if reference == "first":
+        # « Le premier plan » est d'abord résolu dans l'épisode conversationnel
+        # visible. L'historique durable ne sert de repli que si un seul snapshot
+        # récent (le plan courant) est disponible.
+        candidates = recent if len(recent) > 1 else stored or recent
+        return list(candidates[0]["plan"])
+    if reference == "previous":
+        candidates = recent if len(recent) > 1 else stored or recent
+        return list(candidates[-2 if len(candidates) > 1 else -1]["plan"])
+
+    requested_version = _clean(decision.referenced_plan_version, 120)
+    for candidate in [*recent, *stored]:
+        if _clean(candidate.get("version"), 120) == requested_version:
+            return list(candidate["plan"])
+    return []
+
+
+def _existing_memory(session: GuidedResearchSessionData) -> ConversationMemory:
+    raw_memory = (
+        session.context.get("conversation_memory")
+        or session.context.get("project_memory")
+        or {}
+    )
+    if not isinstance(raw_memory, Mapping):
+        raw_memory = {}
+    try:
+        return ConversationMemory.model_validate(raw_memory)
+    except Exception:
+        return ConversationMemory()
+
+
+def _merge_memory_delta(
+    existing: ConversationMemory,
+    delta: ConversationMemory,
+) -> ConversationMemory:
+    """Ajoute les faits du tour sans pouvoir effacer la mémoire existante."""
+    existing_data = existing.model_dump(mode="python")
+    delta_data = delta.model_dump(mode="python")
+    merged: dict[str, Any] = {}
+    for field_name in (
+        "project_facts",
+        "consultant_preferences",
+        "validated_decisions",
+        "rejected_options",
+        "open_questions",
+    ):
+        merged[field_name] = [
+            *list(existing_data.get(field_name) or []),
+            *list(delta_data.get(field_name) or []),
+        ]
+    for field_name in ("current_focus", "last_consultant_goal"):
+        merged[field_name] = (
+            _clean(delta_data.get(field_name), 2000)
+            or _clean(existing_data.get(field_name), 2000)
+        )
+    return ConversationMemory.model_validate(merged)
+
+
+def _normalize_turn_decision(decision: _TurnDecision) -> _TurnDecision:
+    """Réconcilie les champs redondants sans réinterpréter le message."""
+    classification = decision.classification
+    intent = classification.intent
+
+    classification.requested_actions = list(
+        dict.fromkeys(classification.requested_actions or [])
+    )
+    classification.forbidden_actions = list(
+        dict.fromkeys(classification.forbidden_actions or [])
+    )
+
+    if intent in {ConsultantIntent.CONVERSE, ConsultantIntent.UNKNOWN}:
+        classification.requested_actions = []
+    elif intent not in classification.requested_actions:
+        classification.requested_actions.insert(0, intent)
+
+    classification.forbidden_actions = [
+        action for action in classification.forbidden_actions if action != intent
+    ]
+
+    if intent == ConsultantIntent.CONVERSE:
+        classification.explicit_write_command = False
+        classification.explicit_plan_approval = False
+        classification.explicit_research_command = False
+        classification.replace_current_plan = False
+        classification.use_current_sources_only = False
+        classification.writing_source_scope = "unspecified"
+        classification.writing_source_identifiers = []
+        classification.requested_source_count = None
+        classification.needs_clarification = False
+        decision.plan_reference = "none"
+        decision.plan_generation_mode = "none"
+        decision.plan_document_scope = "none"
+    elif intent == ConsultantIntent.UNKNOWN:
+        classification.explicit_write_command = False
+        classification.explicit_plan_approval = False
+        classification.explicit_research_command = False
+        classification.replace_current_plan = False
+        classification.use_current_sources_only = False
+        classification.writing_source_scope = "unspecified"
+        classification.writing_source_identifiers = []
+        classification.requested_source_count = None
+        classification.needs_clarification = True
+        decision.plan_reference = "none"
+        decision.plan_generation_mode = "none"
+        decision.plan_document_scope = "none"
+    elif intent == ConsultantIntent.ADD_TOPIC:
+        classification.replace_current_plan = False
+        decision.plan_reference = "current"
+        decision.plan_generation_mode = "none"
+        if decision.plan_document_scope == "none":
+            decision.plan_document_scope = "state_of_art"
+    elif intent in {ConsultantIntent.CHANGE_PLAN, ConsultantIntent.REMOVE_TOPIC}:
+        if decision.plan_reference == "none":
+            decision.plan_reference = "current"
+        decision.plan_generation_mode = "none"
+        if decision.plan_document_scope == "none":
+            decision.plan_document_scope = "state_of_art"
+        if decision.plan_reference in {"previous", "first", "specific"}:
+            classification.replace_current_plan = True
+    elif intent == ConsultantIntent.PROPOSE_PLAN:
+        decision.plan_reference = "none"
+        classification.replace_current_plan = True
+        if decision.plan_generation_mode == "none":
+            decision.plan_generation_mode = "alternative"
+        if decision.plan_document_scope == "none":
+            decision.plan_document_scope = "state_of_art"
+    else:
+        decision.plan_reference = "none"
+        decision.referenced_plan_version = ""
+        decision.plan_generation_mode = "none"
+        decision.plan_document_scope = "none"
+
+    if intent in _WRITING_INTENTS:
+        classification.explicit_write_command = True
+        if classification.writing_source_scope != "unspecified":
+            classification.use_current_sources_only = True
+    if intent == ConsultantIntent.ACCEPT_PLAN:
+        classification.explicit_plan_approval = True
+    if intent in _SEARCH_PAYLOAD_INTENTS:
+        classification.explicit_research_command = True
+
+    return decision
+
+
+def _decision_consistency_error(decision: _TurnDecision) -> str:
+    """Ne bloque que les contradictions réellement dangereuses."""
+    decision = _normalize_turn_decision(decision)
+    if decision.classification.intent not in _SUPPORTED_TURN_INTENTS:
+        return "Cette intention n'est pas exécutable dans ce canal conversationnel."
+    if (
+        decision.plan_reference == "specific"
+        and not _clean(decision.referenced_plan_version, 120)
+    ):
+        return "La version précise du plan doit être indiquée."
+    classification = decision.classification
+    if (
+        classification.writing_source_scope == "explicit_selection"
+        and not classification.writing_source_identifiers
+    ):
+        return "La sélection explicite doit nommer au moins une source."
+    if (
+        classification.requested_source_count is not None
+        and classification.writing_source_scope == "unspecified"
+    ):
+        return "Le nombre demandé doit être associé à une portée de sources."
+    return ""
+
+def _payload_consistency_error(
+    intent: ConsultantIntent,
+    payload: _ActionPayload,
+    *,
+    reference_plan: list[dict[str, Any]] | None = None,
+    require_reference_coverage: bool = False,
+    require_distinct_from_current: bool = False,
+    current_plan: list[dict[str, Any]] | None = None,
+) -> str:
+    if intent in _PLAN_PAYLOAD_INTENTS - {
+        ConsultantIntent.DESCRIBE_REQUIREMENTS
+    } and (payload.topics or payload.constraints or payload.search_requests):
+        return "Une action de plan ne peut contenir aucun autre payload métier."
+    if (
+        intent == ConsultantIntent.DESCRIBE_REQUIREMENTS
+        and not payload.topics
+        and not payload.constraints
+    ):
+        return (
+            "DESCRIBE_REQUIREMENTS exige au moins un sujet ou une contrainte "
+            "explicitement formulée."
+        )
+    if (
+        intent == ConsultantIntent.DESCRIBE_REQUIREMENTS
+        and (payload.plan or payload.search_requests)
+    ):
+        return "Une exigence ne peut contenir ni plan ni recherche."
+    if intent in {
+        ConsultantIntent.PROPOSE_PLAN,
+        ConsultantIntent.ADD_TOPIC,
+        ConsultantIntent.REMOVE_TOPIC,
+        ConsultantIntent.CHANGE_PLAN,
+    } and not payload.plan:
+        return "L'action de plan sélectionnée exige un tableau plan non vide."
+    if payload.plan and any(
+        not _clean(row.get("title"), 400)
+        for row in payload.plan
+        if isinstance(row, Mapping)
+    ):
+        return "Chaque section du plan exige un titre non vide."
+    if (
+        require_reference_coverage
+        and reference_plan
+        and not _plan_covers_reference(payload.plan, reference_plan)
+    ):
+        return (
+            "Le plan final doit conserver la structure de la version référencée "
+            "et lui appliquer uniquement la modification demandée."
+        )
+    if (
+        require_distinct_from_current
+        and current_plan
+        and _plans_are_effectively_identical(payload.plan, current_plan)
+    ):
+        return (
+            "Le consultant demande une autre proposition : l'organisation, "
+            "la hiérarchie ou les axes doivent réellement changer."
+        )
+    if payload.topics and any(
+        not _clean(row.get("name") or row.get("topic"), 400)
+        for row in payload.topics
+        if isinstance(row, Mapping)
+    ):
+        return "Chaque sujet exige un nom non vide."
+    if intent in _SEARCH_PAYLOAD_INTENTS and not payload.search_requests:
+        return "L'action de recherche sélectionnée exige search_requests non vide."
+    if intent in _SEARCH_PAYLOAD_INTENTS and (
+        payload.plan or payload.topics or payload.constraints
+    ):
+        return "Une recherche ne peut contenir aucun autre payload métier."
+    if payload.search_requests and any(
+        not _clean(row.query, 1000)
+        for row in payload.search_requests
+    ):
+        return "Chaque recherche exige une requête non vide."
+    if any(
+        row.query_kind == "direct_scientific_evidence"
+        and not row.require_direct_evidence
+        for row in payload.search_requests
+    ):
+        return (
+            "direct_scientific_evidence exige "
+            "require_direct_evidence=true."
+        )
+    return ""
+
+
+def _plan_covers_reference(
+    candidate: list[dict[str, Any]],
+    reference: list[dict[str, Any]],
+) -> bool:
+    reference_rows = _compact_plan_snapshot(reference)
+    if not reference_rows:
+        return True
+    candidate_rows = _compact_plan_snapshot(candidate)
+    candidate_ids = {
+        _clean(row.get("section_id"), 120)
+        for row in candidate_rows
+        if _clean(row.get("section_id"), 120)
+    }
+    candidate_titles = {
+        _clean(row.get("title"), 320).casefold()
+        for row in candidate_rows
+        if _clean(row.get("title"), 320)
+    }
+    matched = sum(
+        1
+        for row in reference_rows
+        if (
+            _clean(row.get("section_id"), 120) in candidate_ids
+            or _clean(row.get("title"), 320).casefold() in candidate_titles
+        )
+    )
+    return matched / len(reference_rows) >= 0.70
+
+
+def _plans_are_effectively_identical(
+    candidate: list[dict[str, Any]],
+    current: list[dict[str, Any]],
+) -> bool:
+    """Rejette uniquement une copie quasi exacte."""
+    left = _compact_plan_snapshot(candidate)
+    right = _compact_plan_snapshot(current)
+    if not left or not right:
+        return False
+
+    def signature(rows: list[dict[str, Any]]) -> list[tuple[str, int, str]]:
+        return [
+            (
+                _clean(row.get("title"), 320).casefold(),
+                int(row.get("level") or 1),
+                _clean(row.get("parent_id"), 120).casefold(),
+            )
+            for row in rows
+        ]
+
+    left_sig = signature(left)
+    right_sig = signature(right)
+    if left_sig == right_sig:
+        return True
+
+    left_titles = {row[0] for row in left_sig if row[0]}
+    right_titles = {row[0] for row in right_sig if row[0]}
+    overlap = len(left_titles & right_titles) / max(1, len(left_titles | right_titles))
+    same_size = abs(len(left_sig) - len(right_sig)) <= 1
+    same_levels = [row[1] for row in left_sig] == [row[1] for row in right_sig]
+    return overlap >= 0.92 and same_size and same_levels
+
+
+class ConversationUnderstandingService:
+    """Contrôleur conversationnel structuré, puis matérialiseur d'action."""
+
+    def __init__(self, llm: LLMClient | None = None) -> None:
+        self.llm = llm or LLMClient()
+        self._last_failure: dict[str, str] | None = None
+
+    def get_last_failure(self) -> dict[str, str]:
+        return dict(self._last_failure or {})
+
+    def _generation_meta(self) -> dict[str, Any]:
+        reader = getattr(self.llm, "get_last_generation_meta", None)
+        if not callable(reader):
+            return {}
+        value = reader()
+        return dict(value) if isinstance(value, Mapping) else {}
+
+    def _call_structured(
+        self,
+        *,
+        prompt: str,
+        model_type: type[StructuredModel],
+        request_name: str,
+        max_output_tokens: int,
+        consistency_check: Any = None,
+    ) -> tuple[StructuredModel, list[dict[str, Any]]]:
+        schema = model_type.model_json_schema()
+        attempts: list[dict[str, Any]] = []
+        previous_output = ""
+        previous_error = ""
+
+        for attempt in range(2):
+            current_prompt = prompt
+            if attempt:
+                current_prompt = f"""
+Répare la sortie JSON précédente pour qu'elle respecte exactement le schéma fourni
+par l'API. Ne change pas l'objectif du dernier tour et n'invente aucune action.
+
+ERREUR DE VALIDATION
+{_clean(previous_error, 3000)}
+
+SORTIE PRÉCÉDENTE
+{_clean(previous_output, 7000)}
+
+DEMANDE ORIGINALE
+{prompt}
+""".strip()
+
+            raw = self.llm.generate(
+                current_prompt,
+                temperature=0.05,
+                max_output_tokens=max_output_tokens,
+                json_mode=True,
+                response_schema=schema,
+                request_name=(
+                    request_name
+                    if attempt == 0
+                    else f"{request_name}:schema_repair"
+                ),
+            )
+            meta = self._generation_meta()
+            parsed = _extract_json(raw)
+            try:
+                if not parsed:
+                    raise ValueError(
+                        "La réponse ne contient pas d'objet JSON exploitable."
+                    )
+                result = model_type.model_validate(parsed)
+                if consistency_check is not None:
+                    consistency_error = _clean(consistency_check(result), 2000)
+                    if consistency_error:
+                        raise ValueError(consistency_error)
+                attempts.append({
+                    "attempt": attempt + 1,
+                    "valid": True,
+                    **meta,
+                })
+                return result, attempts
+            except Exception as exc:
+                previous_output = raw
+                previous_error = str(exc)
+                attempts.append({
+                    "attempt": attempt + 1,
+                    "valid": False,
+                    "validation_error": _clean(exc, 2000),
+                    **meta,
+                })
+
+        raise ValueError(previous_error or "Sortie structurée invalide.")
+
+    @staticmethod
+    def _decision_prompt(
+        *,
+        consultant_message: str,
+        history: list[dict[str, Any]],
+        memory: ConversationMemory,
+        project_context: Mapping[str, Any],
+        current_plan: list[dict[str, Any]],
+    ) -> str:
+        intent_values = [
+            intent.value
+            for intent in ConsultantIntent
+            if intent in _SUPPORTED_TURN_INTENTS
+        ]
+        return f"""
+TOUR ACTUEL DU CONSULTANT — SOURCE D'AUTORITÉ
+<current_turn>{consultant_message}</current_turn>
+
+Tu es le contrôleur conversationnel d'un agent scientifique R&D. Comprends le sens
+du tour actuel en français libre, fautif, elliptique ou familier. L'historique sert
+uniquement à résoudre les références du tour actuel ; il ne t'autorise jamais à
+continuer spontanément une ancienne tâche.
+
+CAPACITÉS AUTORISÉES
+{json.dumps(intent_values, ensure_ascii=False)}
+
+SÉMANTIQUE DE DÉCISION
+- CONVERSE : échange conversationnel, question générale, acte social ou réponse sans
+  demande d'action projet. requested_actions doit être vide et aucun effet projet
+  ne doit être annoncé.
+- DESCRIBE_REQUIREMENTS : le consultant établit une exigence durable du livrable.
+- PROPOSE_PLAN : demande d'un premier plan complet ou d'une nouvelle proposition
+  alternative. Le plan est recréé depuis le corpus et l'histoire scientifique.
+- ADD_TOPIC : ajout explicite d'une ou plusieurs sections/sous-sections sans
+  supprimer la structure existante.
+- REMOVE_TOPIC : retrait explicite d'une partie du plan.
+- CHANGE_PLAN : réécriture, réorganisation ou modification d'une partie existante.
+- SEARCH_MORE, SEARCH_ALTERNATIVE, REPLACE_SOURCE : recherche réelle de sources.
+  SEARCH_ALTERNATIVE concerne uniquement les sources, jamais un autre plan.
+- EXPLAIN_SOURCE : explication sans nouvelle recherche.
+- ACCEPT_PLAN, START_WRITING, REVISE_DRAFT et CANCEL : actions portant exactement
+  leur nom. L'acceptation de sources et de brouillons exige leurs contrôles dédiés
+  avec des identifiants explicites ; ne la simule pas dans ce canal.
+- START_WRITING couvre aussi une formulation naturelle qui constate que le plan
+  et les sources sont prêts puis demande de commencer, poursuivre ou produire
+  l'état de l'art. Ce n'est pas une simple conversation.
+- UNKNOWN : le tour ne peut pas être résolu de façon fiable ; pose une question courte.
+
+RÈGLES
+- Une correction ou un rejet dans le tour actuel remplace l'objectif antérieur concerné.
+- Une ancienne réponse assistant, un article ou une lacune du projet n'est jamais une
+  demande actuelle. N'en parle pas spontanément.
+- requested_actions contient seulement les capacités effectivement demandées maintenant,
+  dans leur ordre. intent est la première action sûre à exécuter ; les suivantes seront
+  différées jusqu'à une validation intermédiaire, et assistant_message le dit clairement.
+  Une mention, une hypothèse, une négation ou une action future n'en fait pas partie ;
+  place les actions interdites dans forbidden_actions.
+- explicit_write_command, explicit_plan_approval et explicit_research_command ne valent
+  true que si le tour actuel autorise réellement l'action correspondante.
+- replace_current_plan indique que le plan demandé remplace la structure courante.
+  Il reste false pour un ajout ou une modification locale, même si l'intention
+  principale est CHANGE_PLAN.
+- plan_reference résout la version visée sans interprétation lexicale dans le code :
+  none pour un nouveau plan indépendant, current pour le plan actif, previous pour
+  la version immédiatement antérieure, first pour la première version proposée,
+  specific pour une version explicitement nommée. Une ancienne version modifiée
+  devient le plan final : replace_current_plan vaut donc true. Un simple ajout au
+  plan actif utilise ADD_TOPIC, current et replace_current_plan=false.
+- referenced_plan_version n'est rempli que pour plan_reference=specific.
+- plan_generation_mode vaut initial pour une première proposition complète,
+  alternative quand le consultant demande un autre plan complet, et none pour les
+  modifications d'une version. Une alternative doit réellement changer
+  l'organisation et la hiérarchie, pas seulement ajouter des sections au plan actif.
+- plan_document_scope vaut state_of_art pour une revue de littérature, même si elle
+  appartient à un projet plus large ; full_project_document seulement si le tour
+  demande explicitement le plan du document projet complet.
+- use_current_sources_only indique qu'une rédaction doit utiliser le corpus déjà
+  disponible sans recherche supplémentaire.
+- writing_source_scope précise ce corpus :
+  all_validated = toutes les sources validées disponibles ;
+  baseline_verrou_corpus = corpus scientifique initial rattaché aux verrous, en
+  excluant les publications ajoutées par la recherche conversationnelle ;
+  guided_research_additions = uniquement les publications ajoutées par cette recherche ;
+  explicit_selection = uniquement les identifiants ou titres fournis dans
+  writing_source_identifiers ; unspecified = aucune restriction exprimée.
+- requested_source_count contient seulement un nombre explicitement demandé.
+  Par exemple, « les 11 articles qu'on avait pour les verrous, sans les articles
+  de recherche » signifie baseline_verrou_corpus, requested_source_count=11 et
+  use_current_sources_only=true.
+- extracted_text cite le fragment du tour actuel qui fonde l'intention.
+- assistant_message répond naturellement et proportionnellement au tour actuel. Ne récite
+  pas l'état du projet et n'annonce aucune action non sélectionnée.
+- memory est un delta : elle contient uniquement les nouveaux faits, préférences et
+  décisions établis dans le tour actuel. Laisse ses champs vides en l'absence de
+  nouveauté ; ne répète pas l'ancienne mémoire et n'inclus jamais les propositions
+  de l'assistant ni une déduction provisoire.
+
+CONTEXTE RÉCENT
+{json.dumps(history, ensure_ascii=False)}
+
+MÉMOIRE VALIDÉE
+{memory.model_dump_json()}
+
+PLAN COURANT
+{json.dumps(current_plan, ensure_ascii=False)}
+
+CONTEXTE PROJET COMPACT
+{json.dumps(dict(project_context), ensure_ascii=False)}
+
+RAPPEL — INTERPRÈTE UNIQUEMENT CE TOUR
+<current_turn>{consultant_message}</current_turn>
+""".strip()
+
+    @staticmethod
+    def _action_prompt(
+        *,
+        consultant_message: str,
+        decision: _TurnDecision,
+        history: list[dict[str, Any]],
+        project_context: Mapping[str, Any],
+        current_plan: list[dict[str, Any]],
+        reference_plan: list[dict[str, Any]],
+    ) -> str:
+        return f"""
+MATÉRIALISATION D'UNE CAPACITÉ DÉJÀ SÉLECTIONNÉE
+
+TOUR ACTUEL
+<current_turn>{consultant_message}</current_turn>
+
+INTENTION VALIDÉE
+{decision.classification.model_dump_json()}
+
+Produis uniquement les arguments nécessaires à cette intention :
+- Pour DESCRIBE_REQUIREMENTS, topics et/ou constraints matérialisent précisément
+  les exigences durables du tour actuel ; plan reste vide.
+- Pour PROPOSE_PLAN, crée une structure scientifique adaptée à ce projet précis :
+  déduis librement le nombre de sections, leur hiérarchie et leurs objectifs des
+  articles validés, de l'histoire scientifique et de la demande. Ne copie pas le
+  plan courant et n'utilise aucun gabarit fixe, sauf si le tour référence
+  explicitement une version antérieure.
+- La politique writing_source_scope de l'INTENTION VALIDÉE s'applique aussi au
+  plan proposé. Pour baseline_verrou_corpus, fonde le plan uniquement sur les
+  cartes où guided_research_source=false ; pour guided_research_additions,
+  uniquement sur celles où il vaut true ; pour explicit_selection, uniquement
+  sur les identifiants demandés. N'utilise pas une carte hors portée pour créer
+  un axe ou une sous-section.
+- Pour plan_generation_mode=alternative, propose une organisation complète
+  réellement différente : change les axes de synthèse et/ou la hiérarchie selon
+  ce que justifient les articles et l'histoire scientifique. Ne complète pas
+  simplement le plan courant.
+- PLAN DE RÉFÉRENCE RÉSOLU est la base exacte à utiliser lorsque plan_reference
+  vaut current, previous, first ou specific. Si une ancienne version est visée,
+  restitue sa structure complète puis applique seulement la modification demandée ;
+  ne pars jamais du PLAN COURANT.
+- Pour ADD_TOPIC, renvoie uniquement les ajouts. Pour CHANGE_PLAN avec
+  replace_current_plan=false, renvoie uniquement les sections ajoutées ou modifiées.
+  Pour CHANGE_PLAN avec replace_current_plan=true et pour REMOVE_TOPIC, renvoie
+  l'intégralité de la structure finale.
+- Pour plan_document_scope=state_of_art, chaque section de fond doit analyser la
+  littérature existante : familles de méthodes, données, résultats comparés,
+  limites, contradictions, insuffisances et verrous. Exclue les sections consacrées
+  aux propositions propres du projet, à sa méthodologie future ou à ses résultats
+  attendus ; elles relèvent d'un document projet complet, pas de l'état de l'art.
+- Chaque objet de plan contient section_id, title, objective, parent_id et level.
+- topics et constraints sont réservés à DESCRIBE_REQUIREMENTS. Pour une action
+  de plan ou de recherche, ces tableaux restent vides.
+- Pour une recherche, search_requests contient 2 à 5 objets avec query anglaise
+  concise, entity_name, query_kind (scientific_evidence,
+  direct_scientific_evidence ou official_documentation), required_terms,
+  excluded_terms, section_ids,
+  section_titles, target_verrous, requested_dimensions,
+  target_context_dimensions, require_direct_evidence et source_preferences.
+- Pour une méthode recherchée dans un domaine ou une application précise,
+  target_context_dimensions contient obligatoirement ce contexte cible et
+  required_terms sépare les ancrages indispensables (méthode, domaine, tâche).
+  Une publication qui emploie la méthode dans un domaine sans rapport ne doit
+  pas être rendue pertinente par la seule présence du nom de la méthode.
+- Tous les tableaux sans rapport avec l'intention restent vides.
+
+PLAN COURANT
+{json.dumps(current_plan, ensure_ascii=False)}
+
+PLAN DE RÉFÉRENCE RÉSOLU
+{json.dumps(reference_plan, ensure_ascii=False)}
+
+HISTORIQUE RÉCENT, AVEC SNAPSHOTS DE PLANS SI DISPONIBLES
+{json.dumps(history, ensure_ascii=False)}
+
+CONTEXTE PROJET COMPACT
+{json.dumps(dict(project_context), ensure_ascii=False)}
+
+Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélectionnée.
+""".strip()
+
+    def understand(
+        self,
+        *,
+        session: GuidedResearchSessionData,
+        consultant_message: str,
+        project_context: Mapping[str, Any],
+        current_plan: list[dict[str, Any]],
+    ) -> ConversationUnderstanding | None:
+        self._last_failure = None
+        memory = _existing_memory(session)
+        history = _recent_history(session)
+        compact_context = _compact_project_context(project_context)
+        compact_plan = _compact_plan(current_plan)
+
+        try:
+            decision_prompt = self._decision_prompt(
+                consultant_message=consultant_message,
+                history=history,
+                memory=memory,
+                project_context=compact_context,
+                current_plan=compact_plan,
+            )
+            decision, decision_attempts = self._call_structured(
+                prompt=decision_prompt,
+                model_type=_TurnDecision,
+                request_name=(
+                    "ennoscholar:guided_research:conversation_decision"
+                ),
+                max_output_tokens=2200,
+                consistency_check=_decision_consistency_error,
+            )
+            decision = _normalize_turn_decision(decision)
+            if decision.classification.intent in {
+                ConsultantIntent.CONVERSE,
+                ConsultantIntent.UNKNOWN,
+                ConsultantIntent.EXPLAIN_SOURCE,
+            }:
+                # Un tour sans mutation métier ne doit pas réécrire la mémoire
+                # durable à partir d'une simple réponse conversationnelle.
+                decision.memory = memory
+            else:
+                decision.memory = _merge_memory_delta(
+                    memory,
+                    decision.memory,
+                )
+
+            action = _ActionPayload()
+            action_attempts: list[dict[str, Any]] = []
+            intent = decision.classification.intent
+            if intent in _PLAN_PAYLOAD_INTENTS | _SEARCH_PAYLOAD_INTENTS:
+                reference_plan = _resolve_plan_reference(
+                    decision=decision,
+                    history=history,
+                    project_context=compact_context,
+                    current_plan=compact_plan,
+                )
+                action_prompt = self._action_prompt(
+                    consultant_message=consultant_message,
+                    decision=decision,
+                    history=history,
+                    project_context=compact_context,
+                    current_plan=compact_plan,
+                    reference_plan=reference_plan,
+                )
+                action, action_attempts = self._call_structured(
+                    prompt=action_prompt,
+                    model_type=_ActionPayload,
+                    request_name=(
+                        "ennoscholar:guided_research:action_payload"
+                    ),
+                    max_output_tokens=4200,
+                    consistency_check=lambda payload: _payload_consistency_error(
+                        intent,
+                        payload,
+                        reference_plan=reference_plan,
+                        require_reference_coverage=(
+                            decision.plan_reference
+                            in {"previous", "first", "specific"}
+                            and decision.classification.replace_current_plan
+                        ),
+                        require_distinct_from_current=(
+                            intent == ConsultantIntent.PROPOSE_PLAN
+                            and decision.plan_generation_mode == "alternative"
+                        ),
+                        current_plan=compact_plan,
+                    ),
+                )
+
+            return ConversationUnderstanding(
+                classification=decision.classification,
+                assistant_message=decision.assistant_message,
+                plan=action.plan,
+                topics=action.topics,
+                constraints=action.constraints,
+                search_requests=[
+                    request.model_dump(mode="json")
+                    for request in action.search_requests
+                ],
+                memory=decision.memory,
+                interpreter={
+                    "architecture": "decision_then_action_v1",
+                    "decision_attempts": decision_attempts,
+                    "action_attempts": action_attempts,
+                    "prompt_chars": len(decision_prompt),
+                    "prompt_truncated": any(
+                        bool(row.get("prompt_truncated"))
+                        for row in [*decision_attempts, *action_attempts]
+                    ),
+                },
+            )
+        except Exception as exc:
+            self._last_failure = {
+                "stage": "structured_conversation",
+                "error_type": type(exc).__name__,
+                "message": _clean(exc, 1800),
+            }
+            logger.exception(
+                "Échec du contrôleur conversationnel structuré; aucune action autorisée."
+            )
+            return None
+
+
+__all__ = ["ConversationUnderstandingService"]

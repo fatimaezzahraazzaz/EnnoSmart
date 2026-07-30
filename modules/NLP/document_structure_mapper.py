@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-document_structure_mapper.py — V23
+document_structure_mapper.py — V37
 
 Idée centrale : ne plus analyser une phrase seule.
 Chaque passage est rattaché à un contexte documentaire :
@@ -24,33 +24,42 @@ from .document_type_classifier import enrich_document_type
 ROLE_HINTS = {
     "objectif": [
         "objectif", "objectifs", "but", "finalite", "finalité", "performance a atteindre",
-        "performances a atteindre", "ambition", "vise", "visé", "attendu"
+        "performances a atteindre", "ambition", "vise", "visé", "attendu",
+        "objective", "objectives", "purpose", "aim", "aims", "goal", "goals", "research question"
     ],
     "verrou": [
         "verrou", "verrous", "question technique", "questions techniques", "interrogation technique",
         "incertitude", "difficulte", "difficulté", "limite", "limites", "probleme", "problème",
-        "risque", "contrainte", "contraintes", "insuffisance", "insuffisances"
+        "risque", "contrainte", "contraintes", "insuffisance", "insuffisances",
+        "limitation", "limitations", "uncertainty", "uncertainties", "challenge", "challenges",
+        "open problem", "open problems", "bottleneck", "bottlenecks"
     ],
     "etat_art": [
         "etat de l art", "état de l art", "bibliographie", "references", "références",
-        "connaissances existantes", "solutions existantes", "litterature", "littérature", "article"
+        "connaissances existantes", "solutions existantes", "litterature", "littérature", "article",
+        "related work", "related works", "literature", "literature review", "prior work",
+        "previous work", "background", "references", "bibliography", "state of the art"
     ],
     "methode": [
         "methode", "méthode", "methodologie", "méthodologie", "demarche", "démarche",
         "travaux", "protocole", "implementation", "implémentation", "architecture", "solution",
-        "experience", "expérience", "essai", "essais", "simulation", "modelisation", "modélisation"
+        "experience", "expérience", "essai", "essais", "simulation", "modelisation", "modélisation",
+        "method", "methods", "methodology", "experimental setup", "materials and methods", "approach"
     ],
     "resultat": [
         "resultat", "résultat", "resultats", "résultats", "evaluation", "évaluation",
-        "performance", "performances", "conclusion", "mesure", "mesures", "gain", "obtenu", "obtenus"
+        "performance", "performances", "conclusion", "mesure", "mesures", "gain", "obtenu", "obtenus",
+        "result", "results", "findings", "evaluation", "discussion", "experiments"
     ],
     "parametre": [
         "parametre", "paramètre", "parametres", "paramètres", "configuration", "seuil", "valeur",
-        "pression", "debit", "débit", "temperature", "température", "taille", "dimension"
+        "pression", "debit", "débit", "temperature", "température", "taille", "dimension",
+        "parameter", "parameters", "configuration", "configurations", "hyperparameter", "hyperparameters"
     ],
     "contribution": [
         "contribution", "avancee", "avancée", "innovation", "apport", "acquisition des connaissances",
-        "connaissances acquises", "verrous leves", "verrous levés"
+        "connaissances acquises", "verrous leves", "verrous levés",
+        "contribution", "contributions", "novelty", "originality", "main contributions"
     ],
 }
 
@@ -91,7 +100,11 @@ def is_heading_line(line: str) -> bool:
         return True
 
     # Titres très courts avec mots de structure
-    if len(raw) <= 90 and any(k in low for vals in ROLE_HINTS.values() for k in vals):
+    if (
+        len(raw) <= 90
+        and not re.search(r"[.!?;]$", raw)
+        and any(k in low for vals in ROLE_HINTS.values() for k in vals)
+    ):
         # éviter de prendre une phrase complète comme titre
         if raw.count(".") <= 1 and len(re.findall(r"[A-Za-zÀ-ÿ]{3,}", raw)) <= 12:
             return True
@@ -186,6 +199,11 @@ def map_document_structure(doc: Dict[str, Any]) -> Dict[str, Any]:
     for sec in sections:
         if sec.get("blocks") or sec.get("section_title") != "Document":
             s = dict(sec)
+            # Contrat consommé par candidates.py. Les alias évitent de casser
+            # les anciens consommateurs qui utilisent encore title/role_hint.
+            s["title"] = s.get("section_title")
+            s["role_hint"] = s.get("section_role_hint")
+            s["content"] = " ".join(str(x) for x in s.get("blocks", []) if x)
             s["document"] = doc.get("document")
             s["document_type"] = doc.get("document_type")
             s["content_origin"] = doc.get("content_origin")
@@ -203,6 +221,8 @@ def map_documents_structure(documents: List[Dict[str, Any]]) -> List[Dict[str, A
 def context_prefix(item: Dict[str, Any]) -> str:
     """Texte injecté au modèle pour lui donner le contexte sans changer le passage source."""
     parts = []
+    if item.get("document"):
+        parts.append(f"Document: {item.get('document')}")
     if item.get("document_type"):
         parts.append(f"Type document: {item.get('document_type')}")
     if item.get("content_origin"):

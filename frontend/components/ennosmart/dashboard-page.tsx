@@ -375,7 +375,7 @@ export default function DashboardPage({ navigateTo }: DashboardPageProps) {
 
           <Button
             className="bg-brand hover:bg-brand/90"
-            onClick={() => navigateTo("projects")}
+            onClick={() => navigateTo("new-project")}
           >
             <Sparkles className="size-4 mr-2" />
             Nouveau dossier

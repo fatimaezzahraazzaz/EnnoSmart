@@ -1,0 +1,454 @@
+{
+  "pipeline": {
+    "name": "extraction → cleaner → normalizer → ner_smart → terminology_smart → rag_ranker",
+    "version": "4.1",
+    "router": "modules.NLP.router"
+  },
+  "document_metadata": {
+    "file_name": "RE_ RA AVRIL ",
+    "file_category": "email",
+    "source_tag": "DE_DOC",
+    "title": null,
+    "author": null,
+    "page_count": 0,
+    "domaine_principal": "non_classifié",
+    "domaines_scores": {},
+    "technologies": [
+      "CIN",
+      "RIB",
+      "EMAIL",
+      "PDF",
+      "RA"
+    ],
+    "verrous_techniques": [],
+    "mots_cles_projet": {
+      "high_confidence": [],
+      "candidates": [
+        "présent courriel",
+        "obligés de bien vouloir"
+      ]
+    },
+    "axes_projet": [],
+    "objectifs_rd": [],
+    "resultats_rd": [],
+    "livrables": [],
+    "depenses_eligibles": [],
+    "brevets": [],
+    "partenaires_rd": [],
+    "personnes": [
+      "fatima-ezzahra.azzaz"
+    ],
+    "organismes": [
+      "BMCE"
+    ],
+    "materiaux": [],
+    "equipements": [],
+    "lieux": [],
+    "dates_periodes": [
+      "2026",
+      "AVRIL",
+      "2026-04-22"
+    ],
+    "indicateurs_cir": {
+      "etp": [],
+      "montants": [],
+      "jalons": []
+    },
+    "montants": []
+  },
+  "chunks": [
+    {
+      "chunk_id": "RE_ RA AVRIL _chunk_0000",
+      "index": 0,
+      "source": "text",
+      "content": "[EMAIL | 2026-04-22 10:46 | De: fatima-ezzahra.azzaz@ennodev.com | Objet: RE: RA AVRIL ]\n\nBonjour,\n\nVoici mon numéro RIB \" 011 570 0042006339 01 \" de ma banque BMCE, ainsi que le PDF de ma CIN en pièce jointe.\n\nJe reste à votre disposition pour toute information complémentaire.\n\nPeux-tu m'envoyer ton RIB et une copie de CIN.\n\nD'avance merci\n\noumayma.dahhaouy@ennodev.com\n\nHomepage :\nwww.ennodev.com\n\nLe message contenu dans le présent courriel ainsi que dans tout fichier attaché est destiné exclusivement aux personnes indiquées\ncomme destinataires. Il peut contenir des informations protégées par le secret professionnel et dont la divulgation est strictement prohibée. Si l'un des destinataires transfère le présent courriel, les droits attachés à la confidentialité de la relation entre\nle consultant et le client pourront être perdus. Toute divulgation, copie ou utilisation du présent courriel non autorisée est interdite et peut être illicite. Si vous avez reçu le présent courriel par erreur, nous vous serions obligés de bien vouloir en notifier\nimmédiatement l'expéditeur et d'en détruire le contenu dans votre système.\n\nThe information in",
+      "metadata": {
+        "file_name": "RE_ RA AVRIL ",
+        "file_category": "email",
+        "doc_type": "email",
+        "source_type": "text",
+        "chunk_source_type": "email_body",
+        "domaine_principal": "non_classifié",
+        "technologies": [
+          "CIN",
+          "RIB",
+          "EMAIL",
+          "PDF",
+          "RA"
+        ],
+        "verrous_techniques": [],
+        "mots_cles_high_confidence": [],
+        "mots_cles_candidates": [
+          "présent courriel",
+          "obligés de bien vouloir"
+        ],
+        "has_formulas": false,
+        "has_images": false,
+        "entities": [
+          {
+            "text": "2026",
+            "type": "DATE_PERIODE",
+            "confidence": 0.88
+          },
+          {
+            "text": "2026-04-22",
+            "type": "DATE_PERIODE",
+            "confidence": 0.523
+          },
+          {
+            "text": "fatima-ezzahra.azzaz",
+            "type": "PERSONNE",
+            "confidence": 0.629
+          },
+          {
+            "text": "AVRIL",
+            "type": "DATE_PERIODE",
+            "confidence": 0.88
+          },
+          {
+            "text": "BMCE",
+            "type": "ORGANISME",
+            "confidence": 0.545
+          }
+        ]
+      }
+    }
+  ],
+  "debug": {
+    "timings": {
+      "pre_strip_structural": 0.001,
+      "cleaner": 0.004,
+      "normalizer": 0.006,
+      "ner": 12.277,
+      "terminology": 0.022
+    },
+    "doc_type": "email",
+    "file_category": "email",
+    "cleaning": {
+      "text_chunks_in": 1,
+      "text_chunks_after_pre_strip": 1,
+      "text_chunks_out": 1,
+      "visual_chunks_in": 0,
+      "visual_chunks_after_pre_strip": 0,
+      "visual_chunks_out": 0,
+      "pre_strip_chars_removed": 13,
+      "chars_removed": 683,
+      "text_transformations": {
+        "unicode": 1,
+        "control_chars": 1,
+        "email_signatures": 1,
+        "repeated_chars": 1,
+        "page_markers": 1,
+        "whitespace": 1
+      },
+      "visual_transformations": {}
+    },
+    "normalization": {
+      "substitutions": 0,
+      "substitution_types": {}
+    },
+    "ner": {
+      "ner_on_visual_chunks": false,
+      "ner_scope_chunks": 1,
+      "total_entities": 5,
+      "text_entities": 5,
+      "backend_stats": {
+        "gliner": 3,
+        "spacy": 0,
+        "regex": 2
+      },
+      "entities_by_type": {
+        "DATE_PERIODE": 3,
+        "PERSONNE": 1,
+        "ORGANISME": 1
+      }
+    },
+    "terminology": {
+      "doc_type": "email",
+      "domaine_principal": "non_classifié",
+      "domaines_scores": {},
+      "entites_metier_cir": {
+        "OBJECTIF_RD": [],
+        "RESULTAT_RD": [],
+        "LIVRABLE": [],
+        "DEPENSE_ELIGIBLE": [],
+        "BREVET": [],
+        "PARTENAIRE_RD": []
+      },
+      "entites_generales": {
+        "PERSONNE": [
+          {
+            "text": "fatima-ezzahra.azzaz",
+            "type": "PERSONNE",
+            "confidence": 0.629,
+            "frequency": 1,
+            "context": null,
+            "source": "gliner"
+          }
+        ],
+        "ORGANISME": [
+          {
+            "text": "BMCE",
+            "type": "ORGANISME",
+            "confidence": 0.545,
+            "frequency": 1,
+            "context": null,
+            "source": "gliner"
+          }
+        ],
+        "LIEU": [],
+        "DATE_PERIODE": [
+          {
+            "text": "2026",
+            "type": "DATE_PERIODE",
+            "confidence": 0.88,
+            "frequency": 2,
+            "context": "[EMAIL | 2026-04-22 10:46 | De: fatima-ezzahra.azzaz@ennodev.com | Objet: RE: RA AVRIL ] Bonjour, Voi",
+            "source": "regex"
+          },
+          {
+            "text": "AVRIL",
+            "type": "DATE_PERIODE",
+            "confidence": 0.88,
+            "frequency": 2,
+            "context": "[EMAIL | 2026-04-22 10:46 | De: fatima-ezzahra.azzaz@ennodev.com | Objet: RE: RA AVRIL ] Bonjour, Voici mon numéro RIB \" 011 570 0042006339 01 \" de ma banque BMCE, ainsi que",
+            "source": "regex"
+          },
+          {
+            "text": "2026-04-22",
+            "type": "DATE_PERIODE",
+            "confidence": 0.523,
+            "frequency": 1,
+            "context": null,
+            "source": "gliner"
+          }
+        ],
+        "MATERIAU": [],
+        "EQUIPEMENT": []
+      },
+      "indicateurs_cir": {
+        "etp": [],
+        "montants": [],
+        "jalons": []
+      },
+      "rag_preparation": {
+        "entities_for_rag": {
+          "TECHNOLOGIE": [
+            {
+              "text": "CIN",
+              "type": "TECHNOLOGIE",
+              "confidence": 0.6,
+              "frequency": 2,
+              "score": 6.5,
+              "source": "acronym",
+              "original_text": null,
+              "context": "B \" 011 570 0042006339 01 \" de ma banque BMCE, ainsi que le PDF de ma CIN en pièce jointe. Je reste à votre disposition pour toute information",
+              "reasons": [
+                "acronyme_technique",
+                "confidence",
+                "type_weight:TECHNOLOGIE",
+                "acronym",
+                "confidence",
+                "type_weight:TECHNOLOGIE",
+                "acronym",
+                "frequency"
+              ]
+            },
+            {
+              "text": "RIB",
+              "type": "TECHNOLOGIE",
+              "confidence": 0.6,
+              "frequency": 2,
+              "score": 6.5,
+              "source": "acronym",
+              "original_text": null,
+              "context": "azzaz@ennodev.com | Objet: RE: RA AVRIL ] Bonjour, Voici mon numéro RIB \" 011 570 0042006339 01 \" de ma banque BMCE, ainsi que le PDF de ma C",
+              "reasons": [
+                "acronyme_technique",
+                "confidence",
+                "type_weight:TECHNOLOGIE",
+                "acronym",
+                "confidence",
+                "type_weight:TECHNOLOGIE",
+                "acronym",
+                "frequency"
+              ]
+            },
+            {
+              "text": "EMAIL",
+              "type": "TECHNOLOGIE",
+              "confidence": 0.6,
+              "frequency": 1,
+              "score": 5.8,
+              "source": "acronym",
+              "original_text": null,
+              "context": "[EMAIL | 2026-04-22 10:46 | De: fatima-ezzahra.azzaz@ennodev.com | Objet: RE",
+              "reasons": [
+                "acronyme_technique",
+                "confidence",
+                "type_weight:TECHNOLOGIE",
+                "acronym",
+                "confidence",
+                "type_weight:TECHNOLOGIE",
+                "acronym"
+              ]
+            },
+            {
+              "text": "PDF",
+              "type": "TECHNOLOGIE",
+              "confidence": 0.6,
+              "frequency": 1,
+              "score": 5.8,
+              "source": "acronym",
+              "original_text": null,
+              "context": "numéro RIB \" 011 570 0042006339 01 \" de ma banque BMCE, ainsi que le PDF de ma CIN en pièce jointe. Je reste à votre disposition pour toute i",
+              "reasons": [
+                "acronyme_technique",
+                "confidence",
+                "type_weight:TECHNOLOGIE",
+                "acronym",
+                "confidence",
+                "type_weight:TECHNOLOGIE",
+                "acronym"
+              ]
+            },
+            {
+              "text": "RA",
+              "type": "TECHNOLOGIE",
+              "confidence": 0.6,
+              "frequency": 1,
+              "score": 5.8,
+              "source": "acronym",
+              "original_text": null,
+              "context": "2026-04-22 10:46 | De: fatima-ezzahra.azzaz@ennodev.com | Objet: RE: RA AVRIL ] Bonjour, Voici mon numéro RIB \" 011 570 0042006339 01 \" de",
+              "reasons": [
+                "acronyme_technique",
+                "confidence",
+                "type_weight:TECHNOLOGIE",
+                "acronym",
+                "confidence",
+                "type_weight:TECHNOLOGIE",
+                "acronym"
+              ]
+            }
+          ],
+          "MOT_CLE_PROJET": {
+            "high_confidence": [],
+            "candidates": [
+              {
+                "text": "présent courriel",
+                "type": "MOT_CLE_PROJET",
+                "confidence": 0.62,
+                "frequency": 16,
+                "score": 8.84,
+                "source": "keyword_extractor",
+                "original_text": null,
+                "context": "présent courriel non autorisée est interdite et peut être illicite. Si vous avez reçu le présent courriel par erreur, nous vous serions obligés de bien vouloir en notifier immédiatement l'expédit",
+                "reasons": [
+                  "frequency",
+                  "rnd_context",
+                  "confidence",
+                  "multi_word",
+                  "type_weight:MOT_CLE_PROJET",
+                  "project_keyword_extractor",
+                  "confidence",
+                  "type_weight:MOT_CLE_PROJET",
+                  "multi_word",
+                  "frequency",
+                  "rnd_context"
+                ]
+              },
+              {
+                "text": "obligés de bien vouloir",
+                "type": "EXPRESSION_TECHNIQUE",
+                "confidence": 0.62,
+                "frequency": 2,
+                "score": 8.54,
+                "source": "keyword_extractor",
+                "original_text": null,
+                "context": "t peut être illicite. Si vous avez reçu le présent courriel par erreur, nous vous serions obligés de bien vouloir en notifier immédiatement l'expéditeur et d'en détruire le contenu dans votre système. Th",
+                "reasons": [
+                  "relation_technique",
+                  "type_weight:EXPRESSION_TECHNIQUE",
+                  "confidence",
+                  "multi_word",
+                  "project_keyword_extractor",
+                  "long_expression",
+                  "type_weight:MOT_CLE_PROJET",
+                  "rnd_context",
+                  "confidence",
+                  "type_weight:EXPRESSION_TECHNIQUE",
+                  "multi_word",
+                  "long_expression",
+                  "frequency",
+                  "rnd_context"
+                ]
+              }
+            ]
+          },
+          "VERROU_TECH": [],
+          "DOMAINE_RD": [],
+          "PROJET_AXE": [],
+          "AUTRES": [
+            {
+              "text": "AVRIL",
+              "type": "DATE_PERIODE",
+              "confidence": 0.88,
+              "frequency": 2,
+              "score": 4.76,
+              "source": "acronym",
+              "original_text": "AVRIL",
+              "context": "26-04-22 10:46 | De: fatima-ezzahra.azzaz@ennodev.com | Objet: RE: RA AVRIL ] Bonjour, Voici mon numéro RIB \" 011 570 0042006339 01 \" de ma ban",
+              "reasons": [
+                "ner_candidate",
+                "no_expansion",
+                "confidence",
+                "acronyme_technique",
+                "type_weight:DATE_PERIODE",
+                "acronym",
+                "type_weight:TECHNOLOGIE",
+                "confidence",
+                "type_weight:DATE_PERIODE",
+                "acronym",
+                "frequency"
+              ]
+            },
+            {
+              "text": "BMCE",
+              "type": "ORGANISME",
+              "confidence": 0.6,
+              "frequency": 2,
+              "score": 4.7,
+              "source": "acronym",
+              "original_text": "BMCE",
+              "context": "Bonjour, Voici mon numéro RIB \" 011 570 0042006339 01 \" de ma banque BMCE, ainsi que le PDF de ma CIN en pièce jointe. Je reste à votre dispos",
+              "reasons": [
+                "type_weight:ORGANISME",
+                "ner_candidate",
+                "no_expansion",
+                "confidence",
+                "acronyme_technique",
+                "acronym",
+                "type_weight:TECHNOLOGIE",
+                "confidence",
+                "type_weight:ORGANISME",
+                "acronym",
+                "frequency"
+              ]
+            }
+          ]
+        },
+        "stats": {
+          "candidates_before_filter": 54,
+          "candidates_after_filter": 9,
+          "mots_cles_high_confidence": 0,
+          "mots_cles_candidates": 2
+        }
+      },
+      "stats": {
+        "chunks_processed": 1,
+        "total_entities_structured": 5
+      }
+    }
+  }
+}

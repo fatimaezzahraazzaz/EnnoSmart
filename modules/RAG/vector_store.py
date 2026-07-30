@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import chromadb
 from sentence_transformers import SentenceTransformer
@@ -10,25 +12,29 @@ from sentence_transformers import SentenceTransformer
 from .config import EMBEDDING_MODEL_NAME, EMBEDDING_OFFLINE
 
 
-_MODEL_CACHE = None
+_MODEL_CACHE: Optional[SentenceTransformer] = None
 
 
 def get_embedding_model() -> SentenceTransformer:
-    """
-    Charge le modèle embedding une seule fois.
-    Ce n'est pas un LLM : c'est uniquement un modèle d'embedding pour la recherche vectorielle.
-    """
+    """Retourne l'unique instance du modèle sémantique pour tout le processus."""
     global _MODEL_CACHE
-
     if _MODEL_CACHE is not None:
         return _MODEL_CACHE
-
-    kwargs = {}
-    if EMBEDDING_OFFLINE:
-        kwargs["local_files_only"] = True
-
+    kwargs = {"local_files_only": True} if EMBEDDING_OFFLINE else {}
     _MODEL_CACHE = SentenceTransformer(EMBEDDING_MODEL_NAME, **kwargs)
     return _MODEL_CACHE
+
+
+def encode_texts(texts: Sequence[str]) -> List[List[float]]:
+    """Encode des textes normalisés afin que le produit scalaire = cosinus."""
+    clean = [str(text or "").strip() for text in texts]
+    if not clean:
+        return []
+    return get_embedding_model().encode(
+        clean,
+        normalize_embeddings=True,
+        show_progress_bar=False,
+    ).tolist()
 
 
 class RAGVectorStore:
@@ -48,24 +54,45 @@ class RAGVectorStore:
             pass
         return self.collection(collection_name)
 
-    def add_chunks(self, collection_name: str, chunks: List[Dict[str, Any]], reset: bool = True) -> Dict[str, Any]:
-        col = self.reset_collection(collection_name) if reset else self.collection(collection_name)
-
+    def add_chunks(
+        self,
+        collection_name: str,
+        chunks: List[Dict[str, Any]],
+        reset: bool = True,
+    ) -> Dict[str, Any]:
+        collection = self.reset_collection(collection_name) if reset else self.collection(collection_name)
         if not chunks:
             return {"added": 0, "deduplicated": 0}
 
         safe_chunks = self._dedupe_chunk_ids(chunks)
+        ids = [str(chunk["id"]) for chunk in safe_chunks]
 
-        ids = [str(c["id"]) for c in safe_chunks]
-        texts = [str(c["text"]) for c in safe_chunks]
-        metadatas = [self._clean_metadata(c.get("metadata", {})) for c in safe_chunks]
-        embeddings = self.model.encode(texts, normalize_embeddings=True, show_progress_bar=False).tolist()
-
-        col.add(ids=ids, documents=texts, metadatas=metadatas, embeddings=embeddings)
-
+        # Le document stocké reste la preuve lisible exacte. Le texte utilisé
+        # pour l'embedding peut être enrichi pour les groupes de verrous.
+        documents = [str(chunk.get("text") or "") for chunk in safe_chunks]
+        embedding_texts = [
+            str(chunk.get("embedding_text") or chunk.get("text") or "")
+            for chunk in safe_chunks
+        ]
+        metadatas = [self._clean_metadata(chunk.get("metadata", {})) for chunk in safe_chunks]
+        embeddings = self.model.encode(
+            embedding_texts,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        ).tolist()
+        collection.add(
+            ids=ids,
+            documents=documents,
+            metadatas=metadatas,
+            embeddings=embeddings,
+        )
         return {
             "added": len(safe_chunks),
             "deduplicated": len(chunks) - len(safe_chunks),
+            "embedding_model": EMBEDDING_MODEL_NAME,
+            "enriched_embedding_texts": sum(
+                1 for chunk in safe_chunks if str(chunk.get("embedding_text") or "").strip()
+            ),
         }
 
     def search(
@@ -73,24 +100,34 @@ class RAGVectorStore:
         collection_name: str,
         query: str,
         top_k: int = 8,
-        role_filter: Optional[str] = None,
+        role_filter: Optional[str | Sequence[str]] = None,
         document_type_include: Optional[List[str]] = None,
         document_type_exclude: Optional[List[str]] = None,
         source_policy_exclude: Optional[List[str]] = None,
+        chunk_level_include: Optional[List[str]] = None,
         oversample: int = 4,
     ) -> List[Dict[str, Any]]:
-        col = self.collection(collection_name)
+        collection = self.collection(collection_name)
+        count = int(collection.count())
+        if count <= 0 or not str(query or "").strip():
+            return []
 
         query_embedding = self.model.encode(
-            [query],
+            [str(query)],
             normalize_embeddings=True,
             show_progress_bar=False,
         ).tolist()[0]
 
-        where = {"role": role_filter} if role_filter else None
-        n_results = max(top_k, top_k * max(1, oversample))
+        where = None
+        if isinstance(role_filter, str) and role_filter.strip():
+            where = {"role": role_filter.strip()}
+        elif role_filter:
+            roles = [str(role).strip() for role in role_filter if str(role).strip()]
+            if roles:
+                where = {"role": {"$in": roles}}
 
-        result = col.query(
+        n_results = min(count, max(top_k, top_k * max(1, oversample)))
+        result = collection.query(
             query_embeddings=[query_embedding],
             n_results=n_results,
             where=where,
@@ -101,77 +138,75 @@ class RAGVectorStore:
         metas = result.get("metadatas", [[]])[0]
         distances = result.get("distances", [[]])[0]
         ids = result.get("ids", [[]])[0]
+        include_types = set(document_type_include or [])
+        exclude_types = set(document_type_exclude or [])
+        excluded_policies = set(source_policy_exclude or [])
+        included_levels = set(chunk_level_include or [])
 
-        out = []
-        include = set(document_type_include or [])
-        exclude = set(document_type_exclude or [])
-        policy_ex = set(source_policy_exclude or [])
-
-        for i in range(len(docs)):
-            meta = metas[i] or {}
-            dtype = str(meta.get("document_type") or "")
-            policy = str(meta.get("source_policy") or "")
-
-            if include and dtype not in include:
+        output: List[Dict[str, Any]] = []
+        seen = set()
+        for index, document in enumerate(docs):
+            meta = metas[index] or {}
+            document_type = str(meta.get("document_type") or "")
+            source_policy = str(meta.get("source_policy") or "")
+            chunk_level = str(meta.get("chunk_level") or "")
+            if include_types and document_type not in include_types:
                 continue
-            if exclude and dtype in exclude:
+            if exclude_types and document_type in exclude_types:
                 continue
-            if policy_ex and policy in policy_ex:
+            if excluded_policies and source_policy in excluded_policies:
+                continue
+            if included_levels and chunk_level not in included_levels:
                 continue
 
-            out.append({
-                "id": ids[i],
-                "text": docs[i],
+            chunk_id = str(ids[index])
+            if chunk_id in seen:
+                continue
+            seen.add(chunk_id)
+            output.append({
+                "id": chunk_id,
+                "text": document,
                 "metadata": meta,
-                "distance": distances[i],
+                "distance": distances[index],
             })
-
-            if len(out) >= top_k:
+            if len(output) >= top_k:
                 break
-
-        return out
+        return output
 
     @staticmethod
     def _clean_metadata(meta: Dict[str, Any]) -> Dict[str, Any]:
-        clean = {}
-
-        for k, v in (meta or {}).items():
-            if isinstance(v, (str, int, float, bool)) or v is None:
-                clean[k] = v
+        clean: Dict[str, Any] = {}
+        for key, value in (meta or {}).items():
+            if value is None:
+                continue
+            if isinstance(value, (str, int, float, bool)):
+                clean[key] = value
+            elif isinstance(value, (dict, list, tuple)):
+                clean[key] = json.dumps(value, ensure_ascii=False)
             else:
-                clean[k] = str(v)
-
+                clean[key] = str(value)
         return clean
 
     @staticmethod
     def _dedupe_chunk_ids(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        import hashlib
-
         seen = set()
-        out = []
-
-        for idx, c in enumerate(chunks or []):
-            item = dict(c)
-            base_id = str(item.get("id") or f"chunk_{idx}")
+        output = []
+        for index, chunk in enumerate(chunks or []):
+            item = dict(chunk)
+            base_id = str(item.get("id") or f"chunk_{index}")
             text = str(item.get("text") or "")
-
-            cid = base_id
-            if cid in seen:
-                suffix = hashlib.md5(f"{base_id}|{idx}|{text}".encode("utf-8")).hexdigest()[:8]
-                cid = f"{base_id[:200]}_dup_{suffix}"
+            chunk_id = base_id
+            if chunk_id in seen:
+                suffix = hashlib.md5(f"{base_id}|{index}|{text}".encode("utf-8")).hexdigest()[:8]
+                chunk_id = f"{base_id[:200]}_dup_{suffix}"
                 counter = 1
-
-                while cid in seen:
+                while chunk_id in seen:
                     counter += 1
-                    cid = f"{base_id[:195]}_dup_{suffix}_{counter}"
-
-            seen.add(cid)
-            item["id"] = cid
-
-            meta = dict(item.get("metadata") or {})
-            meta["rag_chunk_id"] = cid
-            item["metadata"] = meta
-
-            out.append(item)
-
-        return out
+                    chunk_id = f"{base_id[:195]}_dup_{suffix}_{counter}"
+            seen.add(chunk_id)
+            item["id"] = chunk_id
+            metadata = dict(item.get("metadata") or {})
+            metadata["rag_chunk_id"] = chunk_id
+            item["metadata"] = metadata
+            output.append(item)
+        return output

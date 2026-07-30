@@ -5,9 +5,11 @@ from __future__ import annotations
 Retriever fidèle au NLP.
 
 Objectif :
-- quand role_filter="verrou", chercher uniquement dans les chunks role="verrou".
-- ne pas mélanger avec limites/None/supporting passages.
-- comme json_to_chunks n'indexe plus supporting_passages, le résultat RAG reste aligné avec le NLP.
+- quand role_filter="verrou", chercher uniquement dans les chunks role="verrou" ;
+- conserver les supporting_passages indexés pour la traçabilité ;
+- favoriser les chunks principaux NLP dans le classement ;
+- la consolidation finale des groupes est lue dans rag/lock_clusters.json et
+  n'est pas recalculée par ce retriever.
 """
 
 from collections import defaultdict

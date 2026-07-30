@@ -1,0 +1,135 @@
+{
+  "pipeline": {
+    "name": "extraction → cleaner → normalizer → ner_smart → terminology_smart → rag_ranker",
+    "version": "4.1",
+    "router": "modules.NLP.router"
+  },
+  "document_metadata": {
+    "file_name": "Archi_V1.drawio (2)",
+    "file_category": "image",
+    "source_tag": "DE_DOC",
+    "title": null,
+    "author": null,
+    "page_count": 0,
+    "domaine_principal": "non_classifié",
+    "domaines_scores": {},
+    "technologies": [],
+    "verrous_techniques": [],
+    "mots_cles_projet": {
+      "high_confidence": [],
+      "candidates": []
+    },
+    "axes_projet": [],
+    "objectifs_rd": [],
+    "resultats_rd": [],
+    "livrables": [],
+    "depenses_eligibles": [],
+    "brevets": [],
+    "partenaires_rd": [],
+    "personnes": [],
+    "organismes": [],
+    "materiaux": [],
+    "equipements": [],
+    "lieux": [],
+    "dates_periodes": [],
+    "indicateurs_cir": {
+      "etp": [],
+      "montants": [],
+      "jalons": []
+    },
+    "montants": []
+  },
+  "chunks": [
+    {
+      "chunk_id": "Archi_V1.drawio (2)_chunk_0000",
+      "index": 0,
+      "source": "visual",
+      "content": "Ce schéma R&D représente un processus de développement technologique impliquant plusieurs composants clés. Il comprend une utilisation finale qui alimente des systèmes AI via une base de données. Les informations sont ensuite traitées par des blocs spécifiques (BLOC 1, BLOC 2, BLOC 3), qui génèrent des résultats finaux utilisables pour les agents spécialisés. Ce schéma joue un rôle crucial dans la gestion du cycle de vie d'un produit ou d'une solution technologique, en assurant l",
+      "metadata": {
+        "file_name": "Archi_V1.drawio (2)",
+        "file_category": "image",
+        "doc_type": "image",
+        "source_type": "visual",
+        "chunk_source_type": "text",
+        "domaine_principal": "non_classifié",
+        "technologies": [],
+        "verrous_techniques": [],
+        "mots_cles_high_confidence": [],
+        "mots_cles_candidates": [],
+        "has_formulas": false,
+        "has_images": false,
+        "entities": []
+      }
+    }
+  ],
+  "debug": {
+    "timings": {
+      "pre_strip_structural": 0.0,
+      "cleaner": 0.002,
+      "normalizer": 0.011,
+      "ner": 0.0,
+      "terminology": 0.0
+    },
+    "doc_type": "image",
+    "file_category": "image",
+    "cleaning": {
+      "text_chunks_in": 0,
+      "text_chunks_after_pre_strip": 0,
+      "text_chunks_out": 0,
+      "visual_chunks_in": 1,
+      "visual_chunks_after_pre_strip": 1,
+      "visual_chunks_out": 1,
+      "pre_strip_chars_removed": 44,
+      "chars_removed": 44,
+      "text_transformations": {},
+      "visual_transformations": {}
+    },
+    "normalization": {
+      "substitutions": 0,
+      "substitution_types": {}
+    },
+    "ner": {
+      "ner_on_visual_chunks": false,
+      "ner_scope_chunks": 0,
+      "total_entities": 0,
+      "text_entities": 0,
+      "backend_stats": {
+        "gliner": 0,
+        "spacy": 0,
+        "regex": 0
+      },
+      "entities_by_type": {}
+    },
+    "terminology": {
+      "doc_type": "image",
+      "domaine_principal": "non_classifié",
+      "domaines_scores": {},
+      "entites_metier_cir": {
+        "OBJECTIF_RD": [],
+        "RESULTAT_RD": [],
+        "LIVRABLE": [],
+        "DEPENSE_ELIGIBLE": [],
+        "BREVET": [],
+        "PARTENAIRE_RD": []
+      },
+      "entites_generales": {
+        "PERSONNE": [],
+        "ORGANISME": [],
+        "LIEU": [],
+        "DATE_PERIODE": [],
+        "MATERIAU": [],
+        "EQUIPEMENT": []
+      },
+      "indicateurs_cir": {
+        "etp": [],
+        "montants": [],
+        "jalons": []
+      },
+      "rag_preparation": {},
+      "stats": {
+        "chunks_processed": 0,
+        "total_entities_structured": 0
+      }
+    }
+  }
+}

@@ -1,119 +1,136 @@
 # -*- coding: utf-8 -*-
-"""grouping.py — V23 groupement par rôle + contexte de section."""
+"""Regroupement des preuves par rôle sémantique, sans décider les verrous."""
 from __future__ import annotations
-from typing import Dict, Any, List
+
 import re
+from typing import Any, Dict, List, Optional
 
-STOP = set("le la les des du de un une et ou en dans pour par avec sur au aux ce ces cette qui que quoi dont est sont ont plus moins très tres afin lors comme document section type role passage".split())
-ROLE_KEYS = {
-    "objectif": "objectifs_locaux",
-    "verrou": "verrous_rnd_locaux",
-    "methode": "methodes_locales",
-    "parametre": "parametres_locaux",
-    "resultat": "resultats_locaux",
-    "limite": "limites_locales",
-    "contribution": "contributions_locales",
-}
-
-
-def tokens(text: str) -> set:
-    return {w.lower() for w in re.findall(r"[A-Za-zÀ-ÿ0-9]{3,}", str(text or "")) if w.lower() not in STOP}
+from .evidence_contract import (
+    EVIDENCE_CATALOG_KEY,
+    LOCK_CANDIDATE_KEY,
+    QUALIFIED_LOCK_KEY,
+    ROLE_TO_PACK,
+    dedupe_items,
+    empty_pack,
+    semantic_role,
+)
 
 
-def sim(a: str, b: str) -> float:
-    A, B = tokens(a), tokens(b)
-    if not A or not B:
-        return 0.0
-    return len(A & B) / max(1, min(len(A), len(B)))
+def tokens(text: str) -> set[str]:
+    stop = {"dans", "avec", "pour", "sans", "une", "des", "les", "que", "qui", "est", "sur", "par", "plus", "moins"}
+    return {word for word in re.findall(r"[a-zà-ÿ0-9]+", str(text or "").lower()) if len(word) > 3 and word not in stop}
 
 
-def theme_text(x: Dict[str, Any]) -> str:
-    return " ".join([
-        str(x.get("section_title") or ""),
-        " ".join(str(p) for p in (x.get("section_path") or [])[-2:]),
-        str(x.get("text") or ""),
-    ])
+def sim(first: str, second: str) -> float:
+    left, right = tokens(first), tokens(second)
+    return len(left & right) / max(1, len(left | right))
 
 
-def group_items(items: List[Dict[str, Any]], threshold: float = 0.52) -> List[Dict[str, Any]]:
-    items = sorted([x for x in items if x.get("accepted_for_synthesis")], key=lambda x: x.get("rank_score", 0), reverse=True)
-    groups: List[List[Dict[str, Any]]] = []
+def theme_text(text: str, max_words: int = 12) -> str:
+    words = re.findall(r"[A-Za-zÀ-ÿ0-9%/._-]+", str(text or ""))
+    return " ".join(words[:max_words])
 
-    for it in items:
-        placed = False
-        for g in groups:
-            same_role = it.get("role") == g[0].get("role")
-            same_section = it.get("section_title") and it.get("section_title") == g[0].get("section_title")
-            related_text = sim(theme_text(it), theme_text(g[0])) >= threshold
-            if same_role and (same_section or related_text):
-                g.append(it)
-                placed = True
+
+def group_items(items: List[Dict[str, Any]], threshold: float = 0.28) -> List[Dict[str, Any]]:
+    """Regroupe uniquement dans une même section sémantique.
+
+    Le regroupement sert à limiter les répétitions d'affichage. La liste
+    parallèle des candidats verrous est construite à partir des passages bruts,
+    pas à partir de ces représentants : aucune preuve de verrou n'est perdue.
+    """
+    accepted = [dict(item) for item in items or [] if item.get("accepted_for_semantic_section", item.get("accepted_for_synthesis"))]
+    accepted.sort(key=lambda item: float(item.get("rank_score") or 0.0), reverse=True)
+    clusters: List[List[Dict[str, Any]]] = []
+
+    for item in accepted:
+        role = semantic_role(item)
+        item["semantic_role"] = role
+        item["role"] = role
+        for cluster in clusters:
+            representative = cluster[0]
+            if semantic_role(representative) == role and sim(item.get("text", ""), representative.get("text", "")) >= threshold:
+                cluster.append(item)
                 break
-        if not placed:
-            groups.append([it])
+        else:
+            clusters.append([item])
 
-    reps = []
-    counters: Dict[str, int] = {}
-    for g in groups:
-        g = sorted(g, key=lambda x: x.get("rank_score", 0), reverse=True)
-        rep = dict(g[0])
-        role = rep.get("role", "item")
-        counters[role] = counters.get(role, 0) + 1
-        rep["cluster_id"] = f"{role}_{counters[role]:03d}"
-        rep["cluster_size"] = len(g)
-        rep["theme_hint"] = rep.get("section_title") or rep.get("cluster_id")
-        rep["supporting_passages"] = [
+    groups: List[Dict[str, Any]] = []
+    for index, cluster in enumerate(clusters):
+        cluster.sort(key=lambda item: float(item.get("rank_score") or 0.0), reverse=True)
+        representative = dict(cluster[0])
+        representative["group_id"] = f"semantic_group_{index + 1}"
+        representative["cluster_size"] = len(cluster)
+        representative["theme_label"] = theme_text(representative.get("text", ""))
+        representative["supporting_passages"] = [
             {
-                "text": x.get("text"),
-                "document": x.get("document"),
-                "content_origin": x.get("content_origin"),
-                "document_type": x.get("document_type"),
-                "section_title": x.get("section_title"),
-                "section_role_hint": x.get("section_role_hint"),
-                "passage_id": x.get("passage_id"),
-                "confidence": x.get("confidence"),
-                "verrou_score": x.get("verrou_score"),
-                "quality_status": x.get("quality_status"),
-                "rank_score": x.get("rank_score"),
+                key: item.get(key)
+                for key in (
+                    "passage_id",
+                    "document",
+                    "source_path",
+                    "section_title",
+                    "text",
+                    "semantic_role",
+                    "rank_score",
+                    "lock_candidate",
+                    "lock_candidate_score",
+                )
             }
-            for x in g[:8]
+            for item in cluster
         ]
-        reps.append(rep)
-    return reps
+        groups.append(representative)
+    return groups
 
 
-def origin_priority(x: Dict[str, Any]) -> float:
-    o = x.get("content_origin")
-    dt = x.get("document_type")
-    base = {"project_core": 3.0, "unknown": 2.0, "state_of_art": 1.0, "metadata": 0.2}.get(o, 1.5)
-
-    if dt in {"concept_projet", "brevet", "preuve_depot_brevet", "rapport_test", "note_projet"}:
-        base += 0.90
-    elif dt in {"presentation_projet", "methodologie_protocole", "project_note", "project_presentation", "project_methodology"}:
-        base += 0.45
-    elif dt in {"etat_art_bibliographie", "scientific_article", "benchmark_or_state_of_art"}:
-        base -= 0.30
-    elif dt in {"notice_memoire_technique"}:
-        base -= 0.60
-    elif dt in {"norme_reglementation", "plan_schema", "administratif", "template_formulaire"}:
-        base -= 1.60
-    return base
+def origin_priority(item: Dict[str, Any]) -> int:
+    origin = str(item.get("content_origin") or "unknown")
+    if origin in {"project_core", "cir_structured", "client_pre_cir"}:
+        return 4
+    if origin == "unknown":
+        return 3
+    if origin == "state_of_art":
+        return 2
+    return 1
 
 
-def build_evidence_pack(groups: List[Dict[str, Any]], top_k=None) -> Dict[str, Any]:
-    top_k = top_k or {
-        "objectifs_locaux": 8,
-        "verrous_rnd_locaux": 14,
-        "methodes_locales": 12,
-        "parametres_locaux": 10,
-        "resultats_locaux": 10,
-        "limites_locales": 10,
-        "contributions_locales": 6,
-    }
-    pack = {v: [] for v in ROLE_KEYS.values()}
-    for role, key in ROLE_KEYS.items():
-        arr = [g for g in groups if g.get("role") == role]
-        arr = sorted(arr, key=lambda x: (origin_priority(x), x.get("rank_score", 0), x.get("cluster_size", 1)), reverse=True)
-        pack[key] = arr[:top_k.get(key, 8)]
-    pack.setdefault("etat_art_local", [])
+def build_evidence_pack(
+    groups: List[Dict[str, Any]],
+    top_k: Optional[Dict[str, int]] = None,
+    *,
+    items: Optional[List[Dict[str, Any]]] = None,
+    lock_candidates: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Construit le pack canonique V177.
+
+    ``top_k`` ne s'applique qu'aux vues sémantiques. Il ne limite jamais
+    ``candidats_verrou_nlp`` ni ``evidence_catalog``.
+    """
+    pack = empty_pack()
+    for group in groups or []:
+        key = ROLE_TO_PACK.get(semantic_role(group))
+        if key:
+            pack[key].append(dict(group))
+
+    for key in ROLE_TO_PACK.values():
+        ordered = sorted(
+            pack[key],
+            key=lambda item: (
+                origin_priority(item),
+                float(item.get("rank_score") or 0.0),
+                int(item.get("cluster_size") or 1),
+            ),
+            reverse=True,
+        )
+        limit = int((top_k or {}).get(key, 0)) if isinstance(top_k, dict) else 0
+        pack[key] = ordered[:limit] if limit > 0 else ordered
+
+    catalog = dedupe_items(items or groups or [])
+    candidates = lock_candidates
+    if candidates is None:
+        candidates = [item for item in catalog if item.get("lock_candidate")]
+
+    pack[EVIDENCE_CATALOG_KEY] = catalog
+    pack[LOCK_CANDIDATE_KEY] = dedupe_items(candidates or [])
+    pack[QUALIFIED_LOCK_KEY] = []  # rempli uniquement par FrascatiGuard
+    pack["_contract_version"] = "nlp_evidence_v177_before_lock_grouping"
     return pack

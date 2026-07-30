@@ -1,0 +1,24 @@
+Je veux préparer l’état de l’art scientifique global 2025 du projet AI_RADAR en conservant strictement le plan de l’état de l’art 2024.
+
+Le texte 2024 sert uniquement à définir la structure et le niveau de détail. Il ne doit pas être utilisé comme preuve scientifique et ne doit pas être copié.
+
+Plan exact demandé :
+1. Introduction générale : évolution du Deep Learning pour le traitement d’images, puis application aux images SAR et aux systèmes ATR/ATD.
+2. Données SAR publiquement disponibles : présenter les bases pertinentes, leurs protocoles d’apprentissage et de test, leur représentativité et leurs limites.
+3. Approches existantes de détection et de reconnaissance automatique des cibles.
+4. Application des techniques de Deep Learning pour le traitement d’images SAR.
+5. Extraction des informations des images SAR : prétraitement, région d’intérêt, cible, ombre, arrière-plan, segmentation et caractéristiques utiles.
+6. Caractérisation des images SAR et méthodes de représentation ou d’extraction de caractéristiques.
+7. Entraînement de modèles ATR/ATD avec des données simulées : protocoles, expérimentations, résultats et limites de généralisation vers les données réelles.
+8. Insuffisances des solutions existantes et gap scientifique justifiant les travaux R&D.
+9. État de l’art interne et continuité du projet : seulement à partir des documents internes validés, clairement séparés des publications scientifiques externes.
+10. Synthèse finale des insuffisances et des validations encore nécessaires.
+
+Contraintes impératives :
+- Conserver exactement ces dix sections, leurs titres et leur ordre.
+- Ne créer aucune section supplémentaire.
+- Ne créer aucune section dédiée à une méthode, un outil, un simulateur, un dataset ou un verrou qui n’est pas explicitement demandé dans le plan.
+- Les méthodes, outils ou datasets présents dans les Article Cards peuvent être utilisés uniquement à l’intérieur de la section correspondante, sans modifier le plan.
+- Si un verrou 2025 ne peut pas être rattaché à ce plan, le signaler au consultant au lieu d’ajouter automatiquement une section.
+- Utiliser les Article Cards 2025 comme seules preuves scientifiques citables.
+- Ne pas lancer la Phase 5 maintenant. Commencer par me renvoyer le plan compris, la couverture des Article Cards et les sources complémentaires éventuellement nécessaires.

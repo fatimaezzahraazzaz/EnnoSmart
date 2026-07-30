@@ -14,6 +14,46 @@ from db.models import Article, DiagnosticRun, Project, ScholarRun, Verrou
 from services.diagnostic_service import get_project_store, sanitize_json_value, ensure_ennosmart_imports
 
 
+def _load_canonical_env() -> None:
+    """Charge le .env racine avant tout import ou réglage EnnoScholar."""
+    root_dir = Path(__file__).resolve().parents[2]
+    env_paths = [root_dir / ".env", root_dir / "backend_api" / ".env"]
+    try:
+        from dotenv import load_dotenv
+
+        for env_path in env_paths:
+            load_dotenv(env_path, override=False)
+        return
+    except Exception:
+        # Le backend garde un chargeur minimal si python-dotenv n'est pas installé.
+        for env_path in env_paths:
+            try:
+                parsed: Dict[str, str] = {}
+                for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+                    line = raw_line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, value = line.split("=", 1)
+                    key = key.strip()
+                    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+                        continue
+                    value = value.strip()
+                    if (
+                        len(value) >= 2
+                        and value[0] == value[-1]
+                        and value[0] in {"'", '"'}
+                    ):
+                        value = value[1:-1]
+                    parsed[key] = value
+                for key, value in parsed.items():
+                    os.environ.setdefault(key, value)
+            except Exception:
+                continue
+
+
+_load_canonical_env()
+
+
 def read_json(path: str | Path, default=None):
     p = Path(path)
     if not p.exists():
@@ -228,20 +268,42 @@ def _has_any(text: str, terms: List[str]) -> bool:
 def _generic_title(title: str) -> bool:
     nt = _norm_scholar_text(title)
     generic = [
-        "non transférabilité",
-        "non transferabilite",
-        "cause racine",
-        "performance insuffisante",
-        "compromis entre contraintes",
-        "comportement instable",
-        "qualité de sortie",
-        "qualite sortie",
-        "fiabilité usure",
-        "fiabilite usure",
-        "maîtrise thermique",
-        "maitrise thermique",
+        "non transférabilité", "non transferabilite", "cause racine", "performance insuffisante",
+        "compromis entre contraintes", "comportement instable", "qualité de sortie", "qualite sortie",
+        "fiabilité", "fiabilite", "dégradation", "degradation",
     ]
     return any(g in nt for g in generic)
+
+
+def _top_scientific_terms(text: str, max_terms: int = 12) -> List[str]:
+    stop = {
+        "verrou", "verrous", "technique", "scientifique", "projet", "dossier", "solution", "solutions",
+        "contrainte", "contraintes", "performance", "performances", "fonctionnement", "conditions",
+        "recherche", "developpement", "développement", "etude", "étude", "analyse", "travaux",
+        "resultat", "résultat", "resultats", "résultats", "possible", "implicite", "validation",
+        "consultant", "document", "documents", "source", "sources", "indices", "maitrise", "maîtrise",
+        "systeme", "système", "processus", "methode", "méthode", "dans", "pour", "avec", "sans",
+        "par", "sur", "des", "les", "une", "the", "and", "with", "from", "that", "this",
+    }
+    toks = re.findall(r"[a-zA-ZÀ-ÿ0-9][a-zA-ZÀ-ÿ0-9%°µµ/\-.']{2,}", _norm_scholar_text(text))
+    clean = []
+    for t in toks:
+        t = t.strip("-_. '")
+        if len(t) < 3 or t in stop:
+            continue
+        clean.append(t)
+    counts = {}
+    for t in clean:
+        counts[t] = counts.get(t, 0) + 1
+    return [t for t, _ in sorted(counts.items(), key=lambda x: (-x[1], x[0]))[:max_terms]]
+
+
+def _first_informative_sentence(text: str, fallback: str = "") -> str:
+    for sentence in re.split(r"(?<=[.!?;])\s+|\n+", str(text or "")):
+        sentence = sentence.strip(" -•\t")
+        if 40 <= len(sentence) <= 220:
+            return sentence
+    return fallback or str(text or "")[:180]
 
 
 def _build_enriched_scientific_profile(
@@ -250,176 +312,58 @@ def _build_enriched_scientific_profile(
     project_name: str = "",
     domain_label: str = "",
 ) -> Dict[str, Any]:
+    """Construit un brief scientifique générique, sans fabriquer de requêtes brutes.
+
+    Le backend conserve les preuves et sépare les noms locaux. La normalisation
+    scientifique et les requêtes anglaises sont produites dans l'agent EnnoScholar.
+    Aucune règle client, projet, logiciel ou domaine n'est codée en dur ici.
     """
-    Reconstruit le vrai objet scientifique envoyé à EnnoScholar.
-    Le titre Frascati générique reste visible, mais EnnoScholar reçoit :
-    - un titre technique précis
-    - un texte scientifique enrichi
-    - des requêtes ciblées
-    """
-    combined = " ".join([title or "", source_text or "", project_name or "", domain_label or ""])
-    nt = _norm_scholar_text(combined)
+    title = str(title or "").strip()
+    source_text = str(source_text or "").strip()
+    domain_label = str(domain_label or "").strip()
+    project_name = str(project_name or "").strip()
 
-    project_hint = project_name or "TGM100"
-    base_constraints = []
-    if "300" in nt and "bar" in nt:
-        base_constraints.append("300 bar")
-    if "100" in nt and ("m3/h" in nt or "m³/h" in nt):
-        base_constraints.append("100 m³/h")
-    if "haute pression" in nt or "high pressure" in nt or "300 bar" in " ".join(base_constraints):
-        base_constraints.append("high pressure")
-    constraints_text = ", ".join(dict.fromkeys(base_constraints))
+    clean_src = source_text[:3600]
+    enriched_title = title or "Signal scientifique à analyser"
+    if _generic_title(enriched_title) and clean_src:
+        enriched_title = _first_informative_sentence(clean_src, fallback=enriched_title)
 
-    # Soufflage carter / segments
-    if _has_any(nt, ["soufflage", "carter", "reniflard", "segments", "segment", "piston", "huile", "blow-by", "étanchéité", "etancheite"]):
-        enriched_title = (
-            "Maîtrise du soufflage carter lié à l’usure des segments et à l’étanchéité "
-            f"du compresseur haute pression {project_hint}"
-        )
-        scientific_text = (
-            f"{enriched_title}. Le verrou porte sur le phénomène de blow-by dans un compresseur "
-            "alternatif haute pression : fuite d'air et d'huile vers le carter, pression carter, "
-            "remontée par le reniflard, usure des segments, étanchéité piston/cylindre, dégradation "
-            "en fonctionnement et stabilité de la segmentation sous conditions réelles. "
-            f"Contraintes projet : {constraints_text}. "
-            f"Indices sources : {source_text[:1800]}"
-        )
-        queries = [
-            "reciprocating compressor piston rings blow-by leakage crankcase pressure",
-            "high pressure compressor piston ring wear sealing oil carryover",
-            "piston rings blow-by leakage crankcase ventilation reciprocating compressor",
-            "compressor cylinder piston ring wear leakage high pressure",
-            "oil carryover crankcase blow-by piston rings compressor",
-        ]
-        return {
-            "enriched_title": enriched_title,
-            "scientific_text": scientific_text,
-            "suggested_queries": queries,
-            "profile": "blowby_segments_crankcase",
-        }
+    combined = "\n".join([enriched_title, clean_src])
+    terms = _top_scientific_terms(combined, max_terms=16)
 
-    # Thermique / refroidissement / réfrigérant
-    if _has_any(nt, ["thermique", "refroidissement", "température", "temperature", "réfrigérant", "refrigerant", "débit d'eau", "debit d eau", "eau", "cooling", "intercooler", "heat exchanger"]):
-        enriched_title = (
-            "Maîtrise du refroidissement du premier étage d’un compresseur haute pression "
-            f"{project_hint} sous variation du débit d’eau"
-        )
-        scientific_text = (
-            f"{enriched_title}. Le verrou porte sur le dimensionnement et le comportement thermique "
-            "du refroidissement/intercooler du premier étage d’un compresseur haute pression : "
-            "température de sortie, débit d’eau, échange thermique, stabilité thermique, dissipation "
-            "de chaleur, influence du sens de circulation et conditions réelles de compression. "
-            f"Contraintes projet : {constraints_text}. "
-            f"Indices sources : {source_text[:1800]}"
-        )
-        queries = [
-            "high pressure reciprocating compressor intercooler water cooling temperature",
-            "reciprocating compressor first stage cooling water flow rate outlet temperature",
-            "compressor intercooler thermal management high pressure air compression",
-            "heat transfer intercooler reciprocating compressor water flow",
-            "compressed air temperature control high pressure compressor cooling",
-        ]
-        return {
-            "enriched_title": enriched_title,
-            "scientific_text": scientific_text,
-            "suggested_queries": queries,
-            "profile": "thermal_cooling_intercooler",
-        }
+    # Les noms propres/sigles sont transmis comme contexte local, jamais comme
+    # concepts scientifiques centraux. L'agent les exclura par défaut des requêtes.
+    local_names = []
+    for token in re.findall(r"\b[A-Z][A-Z0-9_-]{1,}\b|\b[A-Z][a-zA-Z0-9_-]{3,}\b", combined):
+        if token not in local_names:
+            local_names.append(token)
+        if len(local_names) >= 12:
+            break
 
-    # Vibro-acoustique
-    if _has_any(nt, ["vibration", "vibro", "acoustique", "bruit", "noise", "aspiration", "silencieux", "déportée", "deportee"]):
-        enriched_title = (
-            "Maîtrise du comportement vibro-acoustique d’un compresseur haute pression "
-            f"{project_hint} en conditions de fonctionnement"
-        )
-        scientific_text = (
-            f"{enriched_title}. Le verrou porte sur les vibrations, le bruit d’aspiration, "
-            "l’acoustique du compresseur, l’influence de l’aspiration déportée, la propagation "
-            "du bruit et la stabilité dynamique sous vitesse/pression de fonctionnement. "
-            f"Contraintes projet : {constraints_text}. "
-            f"Indices sources : {source_text[:1800]}"
-        )
-        queries = [
-            "reciprocating compressor vibration acoustic noise suction pulsation",
-            "compressor intake noise vibration high pressure reciprocating compressor",
-            "pulsation noise suction line reciprocating compressor acoustic",
-            "vibro acoustic behavior reciprocating compressor suction",
-        ]
-        return {
-            "enriched_title": enriched_title,
-            "scientific_text": scientific_text,
-            "suggested_queries": queries,
-            "profile": "vibro_acoustic_compressor",
-        }
-
-    # Air sec / condensats
-    if _has_any(nt, ["air sec", "séchage", "sechage", "condensat", "condensats", "point de rosée", "rosee", "dew point", "séparateur", "separateur"]):
-        enriched_title = (
-            "Maîtrise de la production d’un air sec conforme en sortie de compresseur haute pression "
-            f"{project_hint}"
-        )
-        scientific_text = (
-            f"{enriched_title}. Le verrou porte sur la séparation des condensats, le séchage de l’air "
-            "comprimé, la maîtrise du point de rosée, la qualité de sortie et la conformité de l’air "
-            "produit après compression haute pression. "
-            f"Contraintes projet : {constraints_text}. "
-            f"Indices sources : {source_text[:1800]}"
-        )
-        queries = [
-            "compressed air drying dew point high pressure compressor condensate separation",
-            "high pressure compressed air moisture removal condensate separator",
-            "compressed air quality dew point condensate high pressure compressor",
-        ]
-        return {
-            "enriched_title": enriched_title,
-            "scientific_text": scientific_text,
-            "suggested_queries": queries,
-            "profile": "compressed_air_drying",
-        }
-
-    # Contrepoids / équilibrage
-    if _has_any(nt, ["contrepoids", "équilibrage", "equilibrage", "balourd", "plomb", "masse", "dynamique"]):
-        enriched_title = (
-            "Conception d’un contrepoids sans plomb compatible avec les contraintes "
-            f"d’équilibrage dynamique du compresseur {project_hint}"
-        )
-        scientific_text = (
-            f"{enriched_title}. Le verrou porte sur l’équilibrage statique et dynamique, "
-            "la substitution du plomb, la masse du contrepoids, le balourd, les contraintes "
-            "de vibration et la compatibilité mécanique en fonctionnement. "
-            f"Contraintes projet : {constraints_text}. "
-            f"Indices sources : {source_text[:1800]}"
-        )
-        queries = [
-            "dynamic balancing counterweight lead free rotating machinery vibration",
-            "counterweight mass balancing compressor vibration lead replacement",
-            "rotating machinery dynamic balancing counterweight design",
-        ]
-        return {
-            "enriched_title": enriched_title,
-            "scientific_text": scientific_text,
-            "suggested_queries": queries,
-            "profile": "counterweight_dynamic_balancing",
-        }
-
-    # Fallback générique enrichi par source
-    clean_src = source_text[:2200]
-    enriched_title = title
-    if _generic_title(title) and clean_src:
-        # prendre une phrase technique source plutôt que le thème Frascati
-        first_sentence = re.split(r"(?<=[.!?])\s+", clean_src)[0].strip()
-        if len(first_sentence) > 30:
-            enriched_title = first_sentence[:180]
+    context_bits = []
+    if domain_label:
+        context_bits.append(f"Domaine indicatif du projet : {domain_label}.")
+    if project_name:
+        context_bits.append(f"Projet : {project_name}.")
 
     scientific_text = (
-        f"{enriched_title}. Verrou scientifique reconstruit à partir des preuves techniques sources. "
-        f"Domaine : {domain_label}. Projet : {project_hint}. Indices sources : {clean_src}"
-    )
+        f"{enriched_title}. "
+        "Analyser l'incertitude scientifique à partir des preuves techniques locales, "
+        "en distinguant les phénomènes, les méthodes, les contraintes et les critères de validation. "
+        + " ".join(context_bits)
+        + f" Indices sources : {clean_src}"
+    ).strip()
+
     return {
         "enriched_title": enriched_title,
         "scientific_text": scientific_text,
+        # Important : plus de requêtes par fréquence brute côté backend.
         "suggested_queries": [],
-        "profile": "generic_source_enriched",
+        "profile": "generic_evidence_brief_v2",
+        "extracted_terms": terms,
+        "local_names": local_names,
+        "query_generation_owner": "agents.EnnoScholar.scientific_query_normalizer",
+        "project_specific_rules": False,
     }
 
 
@@ -461,6 +405,7 @@ def verrou_to_scholar_payload(
         "original_title": original_title,
         "enriched_title": enriched_title,
         "enrichment_profile": profile.get("profile"),
+        "local_names": profile.get("local_names") or [],
     }
 
     return sanitize_json_value({
@@ -500,9 +445,655 @@ def verrou_to_scholar_payload(
                 "original_title": original_title,
                 "enriched_title": enriched_title,
                 "suggested_queries": suggested_queries,
+                "local_names": profile.get("local_names") or [],
+                "query_generation_owner": profile.get("query_generation_owner"),
             },
         },
     })
+
+
+
+# ============================================================
+# V111 — Déduplication + regroupement avant EnnoScholar
+# ============================================================
+
+def _v111_norm_group_text(value: Any) -> str:
+    s = str(value or "").lower()
+    s = s.replace("œ", "oe")
+    s = re.sub(r"[^a-z0-9àâäéèêëîïôöùûüç]+", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _v111_unique_strings(values: List[Any], max_items: int = 30) -> List[str]:
+    out: List[str] = []
+    seen = set()
+    for value in values or []:
+        if isinstance(value, dict):
+            value = value.get("text") or value.get("title") or value.get("name") or ""
+        s = str(value or "").strip()
+        if not s:
+            continue
+        k = _v111_norm_group_text(s)[:260]
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(s)
+        if len(out) >= max_items:
+            break
+    return out
+
+
+def _v111_unique_sources(values: List[Any], max_items: int = 40) -> List[Any]:
+    out: List[Any] = []
+    seen = set()
+    for value in values or []:
+        if isinstance(value, dict):
+            k = _v111_norm_group_text(value.get("document") or value.get("file") or value.get("source") or value.get("name") or json.dumps(value, ensure_ascii=False, sort_keys=True))
+        else:
+            k = _v111_norm_group_text(value)
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        out.append(value)
+        if len(out) >= max_items:
+            break
+    return out
+
+
+def _v111_group_key(item: Dict[str, Any]) -> str:
+    raw_item = item.get("raw_item") if isinstance(item.get("raw_item"), dict) else {}
+    src = item.get("source_json") if isinstance(item.get("source_json"), dict) else {}
+    enrichment = src.get("scholar_enrichment") if isinstance(src.get("scholar_enrichment"), dict) else {}
+
+    profile = (
+        raw_item.get("enrichment_profile")
+        or enrichment.get("profile")
+        or item.get("enrichment_profile")
+        or ""
+    )
+    profile = str(profile or "").strip()
+
+    # Version générique : aucun profil métier ne force le regroupement.
+    title = item.get("verrou_title") or item.get("title") or ""
+    norm_title = _v111_norm_group_text(title)
+
+    # Fallback : titre enrichi normalisé.
+    if norm_title:
+        return "title::" + norm_title[:180]
+
+    return "misc::" + str(item.get("verrou_id") or item.get("db_verrou_id") or "unknown")
+
+
+def _v111_group_reason(group_key: str, items: List[Dict[str, Any]]) -> str:
+    profile = group_key.replace("profile::", "") if group_key.startswith("profile::") else ""
+    titles = [str(x.get("original_title") or x.get("title") or "").strip() for x in items]
+
+    if len(items) > 1:
+        return "titres enrichis proches après normalisation et sources techniques compatibles"
+
+    return "aucun regroupement nécessaire : verrou scientifique unique"
+
+
+def _v111_merge_group_items(items: List[Dict[str, Any]], group_key: str) -> Dict[str, Any]:
+    """
+    Fusionne plusieurs signaux retenus en un seul verrou scientifique EnnoScholar.
+    Le premier item reste le verrou porteur pour conserver un verrou_id DB compatible avec Article.verrou_id.
+    Les autres sont conservés dans grouped_source_verrou_ids / grouped_original_titles.
+    """
+    primary = dict(items[0])
+    raw_primary = dict(primary.get("raw_item") or {})
+    source_json_primary = dict(primary.get("source_json") or {})
+
+    grouped_ids = []
+    grouped_db_ids = []
+    original_titles = []
+    enriched_titles = []
+    all_sources: List[Any] = []
+    all_passages: List[str] = []
+    all_queries: List[str] = []
+    all_texts: List[str] = []
+
+    for item in items:
+        vid = item.get("verrou_id") or item.get("db_verrou_id")
+        dbid = item.get("db_verrou_id") or item.get("verrou_id")
+        if vid is not None:
+            grouped_ids.append(str(vid))
+        if dbid is not None:
+            grouped_db_ids.append(str(dbid))
+
+        ot = str(item.get("original_title") or item.get("context", {}).get("original_verrou_title") or "").strip()
+        if ot:
+            original_titles.append(ot)
+
+        et = str(item.get("verrou_title") or item.get("title") or "").strip()
+        if et:
+            enriched_titles.append(et)
+
+        all_sources.extend(item.get("sources") or [])
+        all_sources.extend((item.get("context") or {}).get("source_documents") or [])
+        all_passages.extend(item.get("source_passages") or [])
+        all_queries.extend(item.get("suggested_queries") or [])
+        txt = str(item.get("scientific_query_text") or item.get("text") or "").strip()
+        if txt:
+            all_texts.append(txt)
+
+    grouped_ids = _v111_unique_strings(grouped_ids, 50)
+    grouped_db_ids = _v111_unique_strings(grouped_db_ids, 50)
+    original_titles = _v111_unique_strings(original_titles, 30)
+    enriched_titles = _v111_unique_strings(enriched_titles, 10)
+    all_sources = _v111_unique_sources(all_sources, 60)
+    all_passages = _v111_unique_strings(all_passages, 18)
+    all_queries = _v111_unique_strings(all_queries, 12)
+    all_texts = _v111_unique_strings(all_texts, 8)
+
+    reason = _v111_group_reason(group_key, items)
+    consolidated_title = enriched_titles[0] if enriched_titles else str(primary.get("title") or "Verrou scientifique consolidé")
+
+    grouped_note = ""
+    if len(items) > 1:
+        grouped_note = (
+            "\n\nSignaux EnnoDiagnostic regroupés automatiquement avant EnnoScholar : "
+            + "; ".join(original_titles)
+            + f". Raison du regroupement : {reason}."
+        )
+
+    merged_text = str(primary.get("scientific_query_text") or primary.get("text") or consolidated_title)
+    complement_texts = [t for t in all_texts if _v111_norm_group_text(t)[:220] != _v111_norm_group_text(merged_text)[:220]]
+    if complement_texts:
+        merged_text += "\n\nIndices complémentaires issus des signaux regroupés :\n- " + "\n- ".join(t[:900] for t in complement_texts[:4])
+    merged_text += grouped_note
+
+    primary["title"] = consolidated_title
+    primary["verrou_title"] = consolidated_title
+    primary["text"] = merged_text
+    primary["scientific_query_text"] = merged_text
+    primary["suggested_queries"] = all_queries
+    primary["sources"] = all_sources
+    primary["source_passages"] = all_passages
+
+    primary["grouping"] = {
+        "active": len(items) > 1,
+        "group_key": group_key,
+        "grouped_count": len(items),
+        "grouped_source_verrou_ids": grouped_ids,
+        "grouped_db_verrou_ids": grouped_db_ids,
+        "grouped_original_titles": original_titles,
+        "consolidated_title": consolidated_title,
+        "reason": reason,
+    }
+
+    raw_primary.update({
+        "grouped_count": len(items),
+        "grouped_source_verrou_ids": grouped_ids,
+        "grouped_original_titles": original_titles,
+        "grouping_reason": reason,
+        "source_text": (raw_primary.get("source_text") or "")[:2500],
+        "supporting_passages": [{"text": p} for p in all_passages[:12]],
+    })
+    primary["raw_item"] = raw_primary
+
+    source_json_primary["scholar_grouping"] = primary["grouping"]
+    primary["source_json"] = source_json_primary
+
+    context = dict(primary.get("context") or {})
+    context.update({
+        "grouped_original_titles": original_titles,
+        "grouped_source_verrou_ids": grouped_ids,
+        "grouping_reason": reason,
+        "source_documents": all_sources,
+    })
+    primary["context"] = context
+
+    return sanitize_json_value(primary)
+
+# >>> V117_GENERIC_SCHOLAR_GROUPING_BEGIN
+# Regroupement générique EnnoScholar — sans profils techniques codés en dur.
+# Principe : regrouper les signaux gardés par le consultant uniquement à partir
+# de leur contenu textuel, des titres, des passages sources et des requêtes proposées.
+# Ce bloc ne contient aucun profil projet codé en dur : il peut fonctionner sur plusieurs domaines,
+# logiciel, biologie, électronique, matériaux, IA, etc.
+
+import copy as _v117_copy
+import hashlib as _v117_hashlib
+import math as _v117_math
+import re as _v117_re
+import unicodedata as _v117_unicodedata
+from collections import Counter as _V117Counter
+from typing import Any as _V117Any, Dict as _V117Dict, List as _V117List, Tuple as _V117Tuple
+
+
+_V117_STOPWORDS = {
+    # français général
+    "de", "des", "du", "la", "le", "les", "un", "une", "et", "ou", "a", "au", "aux", "en", "dans", "sur", "par", "pour",
+    "avec", "sans", "sous", "chez", "entre", "vers", "afin", "ainsi", "plus", "moins", "tres", "très", "etre", "être",
+    "est", "sont", "ete", "été", "ce", "cet", "cette", "ces", "son", "sa", "ses", "leur", "leurs", "nous", "vous", "ils", "elles",
+    "il", "elle", "on", "que", "qui", "dont", "comme", "mais", "donc", "or", "ni", "car", "se", "du", "d", "l",
+    # anglais général
+    "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with", "without", "by", "from", "as", "at", "is", "are",
+    "was", "were", "be", "been", "being", "this", "that", "these", "those", "it", "its", "into", "between", "within",
+    # mots CIR / pipeline trop génériques
+    "verrou", "verrous", "technologique", "technique", "scientifique", "scientifiques", "technologiques", "projet", "dossier",
+    "question", "qualification", "solution", "solutions", "existantes", "existants", "contrainte", "contraintes", "performance", "performances",
+    "fonctionnement", "conditions", "recherche", "developpement", "développement", "etude", "étude", "analyse", "travaux", "resultats", "résultats",
+    "possible", "implicite", "confirmer", "valider", "validation", "consultant", "document", "documents", "sources", "indices", "source",
+    "maitrise", "maîtrise", "amelioration", "amélioration", "optimisation", "systeme", "système", "processus", "methode", "méthode",
+}
+
+
+def _v117_strip_accents(text: str) -> str:
+    text = str(text or "")
+    text = _v117_unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in text if not _v117_unicodedata.combining(ch))
+
+
+def _v117_norm(text: str) -> str:
+    text = _v117_strip_accents(text).lower()
+    text = text.replace("’", "'")
+    text = _v117_re.sub(r"[^a-z0-9%°µµ/\-\.\s']+", " ", text)
+    text = _v117_re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _v117_tokens(text: str) -> _V117List[str]:
+    text = _v117_norm(text)
+    raw = _v117_re.findall(r"[a-z0-9][a-z0-9%°µ/\-\.']{1,}", text)
+    out = []
+    for tok in raw:
+        tok = tok.strip("-_. '")
+        if len(tok) < 3:
+            continue
+        if tok in _V117_STOPWORDS:
+            continue
+        # Retirer les tokens trop purement administratifs
+        if tok.startswith("fig") or tok.startswith("tableau"):
+            continue
+        out.append(tok)
+    return out
+
+
+def _v117_ngrams(tokens: _V117List[str]) -> _V117List[str]:
+    grams = list(tokens)
+    for n in (2, 3):
+        for i in range(0, max(0, len(tokens) - n + 1)):
+            gram_tokens = tokens[i:i+n]
+            # Éviter les n-grams trop faibles
+            if any(t in _V117_STOPWORDS for t in gram_tokens):
+                continue
+            grams.append(" ".join(gram_tokens))
+    return grams
+
+
+def _v117_counter(text: str) -> _V117Counter:
+    toks = _v117_tokens(text)
+    grams = _v117_ngrams(toks)
+    c = _V117Counter(grams)
+    # les n-grams techniques pèsent un peu plus que les mots isolés
+    for k in list(c.keys()):
+        if " " in k:
+            c[k] *= 2.0
+    return c
+
+
+def _v117_cosine(a: _V117Counter, b: _V117Counter) -> float:
+    if not a or not b:
+        return 0.0
+    common = set(a) & set(b)
+    dot = sum(float(a[k]) * float(b[k]) for k in common)
+    na = _v117_math.sqrt(sum(float(v) * float(v) for v in a.values()))
+    nb = _v117_math.sqrt(sum(float(v) * float(v) for v in b.values()))
+    if not na or not nb:
+        return 0.0
+    return dot / (na * nb)
+
+
+def _v117_jaccard(a_terms: _V117List[str], b_terms: _V117List[str]) -> float:
+    a = set(a_terms or [])
+    b = set(b_terms or [])
+    if not a or not b:
+        return 0.0
+    return len(a & b) / max(1, len(a | b))
+
+
+def _v117_top_terms(counter: _V117Counter, n: int = 12) -> _V117List[str]:
+    return [k for k, _ in counter.most_common(n)]
+
+
+def _v117_get(obj: _V117Any, *keys: str, default: _V117Any = "") -> _V117Any:
+    cur = obj
+    for key in keys:
+        if isinstance(cur, dict):
+            cur = cur.get(key, default)
+        else:
+            return default
+    return cur if cur is not None else default
+
+
+def _v117_as_list(value: _V117Any) -> _V117List[_V117Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    return [value]
+
+
+def _v117_text_from_signal(item: _V117Dict[str, _V117Any]) -> str:
+    """Construit une représentation textuelle générique du signal."""
+    parts: _V117List[str] = []
+    for key in (
+        "verrou_title", "title", "original_title", "enriched_title",
+        "text", "verrou_text", "scientific_query_text", "source_text",
+    ):
+        v = item.get(key)
+        if isinstance(v, str) and v.strip():
+            parts.append(v)
+
+    raw = item.get("raw_item") if isinstance(item.get("raw_item"), dict) else {}
+    for key in ("title", "verrou_title", "original_title", "enriched_title", "text", "source_text"):
+        v = raw.get(key)
+        if isinstance(v, str) and v.strip():
+            parts.append(v)
+
+    source_json = item.get("source_json") if isinstance(item.get("source_json"), dict) else {}
+    for key in ("text", "source_text"):
+        v = source_json.get(key)
+        if isinstance(v, str) and v.strip():
+            parts.append(v)
+
+    # Passages sources
+    for p in _v117_as_list(item.get("source_passages")):
+        if isinstance(p, str):
+            parts.append(p)
+        elif isinstance(p, dict) and p.get("text"):
+            parts.append(str(p.get("text")))
+    for p in _v117_as_list(raw.get("supporting_passages")):
+        if isinstance(p, str):
+            parts.append(p)
+        elif isinstance(p, dict) and p.get("text"):
+            parts.append(str(p.get("text")))
+
+    # Requêtes proposées par EnnoDiagnostic/EnnoScholar : utiles et génériques
+    for q in _v117_as_list(item.get("suggested_queries")) + _v117_as_list(raw.get("suggested_queries")):
+        if isinstance(q, str):
+            parts.append(q)
+        elif isinstance(q, dict) and q.get("query"):
+            parts.append(str(q.get("query")))
+
+    return "\n".join(str(p) for p in parts if str(p).strip())
+
+
+def _v117_title(item: _V117Dict[str, _V117Any]) -> str:
+    for path in (
+        ("verrou_title",), ("title",), ("enriched_title",), ("original_title",),
+        ("raw_item", "enriched_title"), ("raw_item", "verrou_title"), ("raw_item", "title"), ("raw_item", "original_title"),
+    ):
+        v = _v117_get(item, *path, default="")
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return "Signal technique à analyser"
+
+
+def _v117_original_title(item: _V117Dict[str, _V117Any]) -> str:
+    for path in (("original_title",), ("raw_item", "original_title"), ("context", "original_verrou_title"), ("title",), ("verrou_title",)):
+        v = _v117_get(item, *path, default="")
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return _v117_title(item)
+
+
+def _v117_signal_id(item: _V117Dict[str, _V117Any]) -> str:
+    for key in ("verrou_id", "db_verrou_id", "id"):
+        v = item.get(key)
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    raw = _v117_text_from_signal(item)[:500]
+    return _v117_hashlib.sha1(raw.encode("utf-8", errors="ignore")).hexdigest()[:10]
+
+
+def _v117_similarity(sig_a: _V117Dict[str, _V117Any], sig_b: _V117Dict[str, _V117Any]) -> _V117Tuple[float, _V117List[str]]:
+    ca = sig_a.get("_v117_counter") or _V117Counter()
+    cb = sig_b.get("_v117_counter") or _V117Counter()
+    ta = sig_a.get("_v117_top_terms") or []
+    tb = sig_b.get("_v117_top_terms") or []
+
+    cosine = _v117_cosine(ca, cb)
+    jacc = _v117_jaccard(ta, tb)
+
+    title_a = _v117_norm(sig_a.get("_v117_title", ""))
+    title_b = _v117_norm(sig_b.get("_v117_title", ""))
+    title_terms_a = _v117_tokens(title_a)
+    title_terms_b = _v117_tokens(title_b)
+    title_jacc = _v117_jaccard(title_terms_a, title_terms_b)
+
+    shared = [t for t in ta if t in set(tb)]
+    score = (0.62 * cosine) + (0.25 * jacc) + (0.13 * title_jacc)
+
+    # Bonus si plusieurs expressions techniques non génériques se recoupent.
+    technical_shared = [t for t in shared if len(t) >= 5 and t not in _V117_STOPWORDS]
+    if len(technical_shared) >= 4:
+        score += 0.08
+    elif len(technical_shared) >= 2:
+        score += 0.04
+
+    return min(1.0, float(score)), technical_shared[:10]
+
+
+def _v117_prepare_signal(item: _V117Dict[str, _V117Any]) -> _V117Dict[str, _V117Any]:
+    out = _v117_copy.deepcopy(item)
+    text = _v117_text_from_signal(out)
+    c = _v117_counter(text)
+    out["_v117_text"] = text
+    out["_v117_counter"] = c
+    out["_v117_top_terms"] = _v117_top_terms(c, 18)
+    out["_v117_title"] = _v117_title(out)
+    out["_v117_original_title"] = _v117_original_title(out)
+    out["_v117_id"] = _v117_signal_id(out)
+    return out
+
+
+def _v117_choose_representative(group: _V117List[_V117Dict[str, _V117Any]]) -> _V117Dict[str, _V117Any]:
+    # Choisit le signal le plus riche, sans règle métier codée en dur.
+    def score(x: _V117Dict[str, _V117Any]) -> float:
+        title = x.get("_v117_title", "")
+        text_len = len(x.get("_v117_text", ""))
+        source_count = len(_v117_as_list(x.get("source_passages")))
+        query_count = len(_v117_as_list(x.get("suggested_queries")))
+        return len(title) * 0.3 + min(text_len, 6000) * 0.002 + source_count * 2 + query_count
+    return max(group, key=score)
+
+
+def _v117_build_group(group: _V117List[_V117Dict[str, _V117Any]], index: int) -> _V117Tuple[_V117Dict[str, _V117Any], _V117Dict[str, _V117Any]]:
+    rep = _v117_choose_representative(group)
+    merged = _v117_copy.deepcopy(rep)
+
+    ids = [_v117_signal_id(x) for x in group]
+    db_ids = [str(x.get("db_verrou_id") or x.get("verrou_id") or x.get("id") or _v117_signal_id(x)) for x in group]
+    original_titles = []
+    for x in group:
+        t = x.get("_v117_original_title") or _v117_original_title(x)
+        if t and t not in original_titles:
+            original_titles.append(t)
+
+    # Termes partagés : intersection souple des top termes du groupe.
+    term_counts = _V117Counter()
+    for x in group:
+        for t in set(x.get("_v117_top_terms") or []):
+            term_counts[t] += 1
+    min_count = 2 if len(group) > 1 else 1
+    shared_terms = [t for t, n in term_counts.most_common(14) if n >= min_count and t not in _V117_STOPWORDS]
+
+    title = rep.get("_v117_title") or _v117_title(rep)
+    group_hash = _v117_hashlib.sha1(("|".join(ids) + title).encode("utf-8", errors="ignore")).hexdigest()[:10]
+    group_key = f"semantic::{group_hash}"
+
+    reason = (
+        "Regroupement générique par similarité sémantique entre les titres, passages sources, "
+        "preuves techniques et requêtes de recherche."
+    )
+    if shared_terms:
+        reason += " Termes communs détectés : " + ", ".join(shared_terms[:8]) + "."
+
+    if len(group) > 1:
+        grouped_sentence = (
+            "\n\nSignaux EnnoDiagnostic regroupés automatiquement avant EnnoScholar : "
+            + "; ".join(original_titles)
+            + ". Raison du regroupement : "
+            + reason
+        )
+        base_text = str(merged.get("text") or merged.get("verrou_text") or "")
+        merged["text"] = (base_text + grouped_sentence).strip()
+        merged["verrou_text"] = merged["text"]
+
+    merged["verrou_title"] = title
+    merged["title"] = title
+    merged["group_key"] = group_key
+    merged["grouping_method"] = "generic_semantic_similarity"
+    merged["grouped_count"] = len(group)
+    merged["grouped_source_verrou_ids"] = ids
+    merged["grouped_db_verrou_ids"] = db_ids
+    merged["grouped_original_titles"] = original_titles
+    merged["semantic_group_terms"] = shared_terms
+    merged["source_signals"] = original_titles
+
+    # Nettoyer les champs internes avant retour
+    for k in list(merged.keys()):
+        if str(k).startswith("_v117_"):
+            merged.pop(k, None)
+
+    report = {
+        "group_key": group_key,
+        "profile": "generic_semantic_similarity",
+        "consolidated_title": title,
+        "grouped_count": len(group),
+        "grouped_source_verrou_ids": ids,
+        "grouped_db_verrou_ids": db_ids,
+        "grouped_original_titles": original_titles,
+        "shared_terms": shared_terms,
+        "reason": reason,
+    }
+    return merged, report
+
+
+def consolidate_selected_verrous_for_scholar(selected_verrous: _V117Any, *args: _V117Any, **kwargs: _V117Any) -> _V117Dict[str, _V117Any]:
+    """
+    Regroupe les signaux gardés par le consultant avant EnnoScholar.
+
+    Version V119 : générique, sans profils métier codés en dur.
+    - Entrée : liste de signaux/verrous déjà gardés par le consultant.
+    - Sortie : payload compatible avec les versions précédentes :
+      verrous, grouping_summary, grouping_report, verrous_before_grouping.
+    """
+    if isinstance(selected_verrous, dict):
+        # Compatibilité si l'appelant passe déjà un payload.
+        raw_verrous = selected_verrous.get("verrous") or selected_verrous.get("selected_verrous") or []
+        base_payload = _v117_copy.deepcopy(selected_verrous)
+    else:
+        raw_verrous = selected_verrous or []
+        base_payload = {}
+
+    raw_list = [x for x in _v117_as_list(raw_verrous) if isinstance(x, dict)]
+
+    # Garder uniquement les signaux explicitement conservés si l'information existe.
+    # Si le statut n'est pas présent, on ne filtre pas pour éviter de casser les anciens flux.
+    has_status = any("consultant_status" in x or "status" in x for x in raw_list)
+    if has_status:
+        kept = []
+        for x in raw_list:
+            st = str(x.get("consultant_status") or x.get("status") or "").strip().lower()
+            if st in {"garde", "gardé", "garder", "keep", "kept", "selected", "valide", "validé", "retenu"}:
+                kept.append(x)
+        signals = kept
+    else:
+        signals = raw_list
+
+    prepared = [_v117_prepare_signal(x) for x in signals]
+
+    # Seuil générique : assez strict pour éviter de fusionner des sujets différents.
+    # Peut être ajusté sans changer le code via kwargs ou variable d'environnement si besoin.
+    try:
+        threshold = float(kwargs.get("threshold", 0.46))
+    except Exception:
+        threshold = 0.46
+
+    groups: _V117List[_V117List[_V117Dict[str, _V117Any]]] = []
+    group_terms: _V117List[_V117Counter] = []
+
+    for sig in prepared:
+        best_idx = -1
+        best_score = 0.0
+        best_shared: _V117List[str] = []
+
+        for i, group in enumerate(groups):
+            # Comparer au représentant et au centroïde textuel du groupe.
+            rep = group[0]
+            score_rep, shared_rep = _v117_similarity(sig, rep)
+
+            centroid_sig = {
+                "_v117_counter": group_terms[i],
+                "_v117_top_terms": _v117_top_terms(group_terms[i], 18),
+                "_v117_title": group[0].get("_v117_title", ""),
+            }
+            score_centroid, shared_centroid = _v117_similarity(sig, centroid_sig)
+            score = max(score_rep, score_centroid)
+            shared = shared_rep if score_rep >= score_centroid else shared_centroid
+
+            if score > best_score:
+                best_idx = i
+                best_score = score
+                best_shared = shared
+
+        # Sécurité anti-fusion : il faut au moins des termes techniques communs,
+        # sauf si les titres sont très proches.
+        title_close = False
+        if best_idx >= 0:
+            title_close = _v117_jaccard(
+                _v117_tokens(sig.get("_v117_title", "")),
+                _v117_tokens(groups[best_idx][0].get("_v117_title", "")),
+            ) >= 0.55
+
+        if best_idx >= 0 and best_score >= threshold and (len(best_shared) >= 2 or title_close):
+            groups[best_idx].append(sig)
+            group_terms[best_idx].update(sig.get("_v117_counter") or _V117Counter())
+        else:
+            groups.append([sig])
+            group_terms.append(_V117Counter(sig.get("_v117_counter") or {}))
+
+    consolidated: _V117List[_V117Dict[str, _V117Any]] = []
+    reports: _V117List[_V117Dict[str, _V117Any]] = []
+    for idx, group in enumerate(groups, start=1):
+        merged, report = _v117_build_group(group, idx)
+        consolidated.append(merged)
+        reports.append(report)
+
+    duplicates_removed = max(0, len(signals) - len(consolidated))
+    summary = {
+        "active": True,
+        "method": "generic_semantic_similarity",
+        "input_signals_count": len(signals),
+        "grouped_verrous_count": len(consolidated),
+        "duplicates_removed": duplicates_removed,
+        "hardcoded_profiles_used": False,
+        "message": "Les signaux gardés par le consultant ont été regroupés par similarité sémantique générique, sans profils métier codés en dur.",
+    }
+
+    result = _v117_copy.deepcopy(base_payload)
+    result.update({
+        "ok": True,
+        "source": "consultant_selected_verrous_from_ennodiagnostic_grouped_v117_generic",
+        "selection_rule": "Only consultant-retained signals are selected, then similar signals are grouped with a generic semantic similarity method.",
+        "selected_verrous_count": len(signals),
+        "selected_signals_count": len(signals),
+        "grouped_verrous_count": len(consolidated),
+        "grouping_applied": True,
+        "grouping_summary": summary,
+        "grouping_report": {"ok": True, "groups": reports},
+        "verrous_before_grouping": raw_list,
+        "verrous": consolidated,
+    })
+    return result
+
+# <<< V117_GENERIC_SCHOLAR_GROUPING_END
 
 def build_scholar_payload_from_selected_verrous(db: Session, project: Project, max_verrous: int = 8) -> Dict[str, Any]:
     selected = get_selected_verrous_for_scholar(db, project)
@@ -514,24 +1105,37 @@ def build_scholar_payload_from_selected_verrous(db: Session, project: Project, m
 
     diagnostic_context = extract_diagnostic_context_from_report(project)
 
+    # V111 : étape 1 — enrichir chaque signal gardé comme avant.
+    enriched_verrous = [
+        verrou_to_scholar_payload(
+            v,
+            project_name=project.project_name,
+            domain_label=project.domain_label or "",
+        )
+        for v in selected
+    ]
+
+    # V111 : étape 2 — regrouper automatiquement les signaux proches avant EnnoScholar.
+    consolidated = consolidate_selected_verrous_for_scholar(enriched_verrous, max_verrous=max_verrous)
+    scholar_verrous = consolidated.get("verrous") or []
+
     return sanitize_json_value({
         "organisme": project.organisme,
         "project": project.project_name,
         "year": str(project.year),
-        "source": "consultant_selected_verrous_from_ennodiagnostic",
-        "selection_rule": "Only verrous with consultant_status='garde' are sent to EnnoScholar.",
+        "source": "consultant_selected_verrous_from_ennodiagnostic_grouped_v111",
+        "selection_rule": "Only verrous with consultant_status='garde' are selected, then similar signals are grouped before EnnoScholar.",
         "selected_verrous_count": len(selected),
+        "selected_signals_count": len(selected),
+        "grouped_verrous_count": len(scholar_verrous),
+        "grouping_applied": True,
         "input_nlp_result": str(nlp_path) if nlp_path else "",
         "diagnostic_context": diagnostic_context,
         "domain_detection": domain_detection,
-        "verrous": [
-            verrou_to_scholar_payload(
-                v,
-                project_name=project.project_name,
-                domain_label=project.domain_label or "",
-            )
-            for v in selected
-        ],
+        "grouping_summary": consolidated.get("grouping_summary") or {},
+        "grouping_report": consolidated.get("grouping_report") or {},
+        "verrous_before_grouping": enriched_verrous,
+        "verrous": scholar_verrous,
     })
 
 
@@ -634,6 +1238,10 @@ def run_ennoscholar_from_selected_verrous(
     )
 
     report = agent.run(payload)
+    # V111 : garder la trace du regroupement dans le rapport EnnoScholar.
+    report["grouping_summary"] = payload.get("grouping_summary") or {}
+    report["grouping_report"] = payload.get("grouping_report") or {}
+    report["verrous_before_grouping"] = payload.get("verrous_before_grouping") or []
     report["input_payload"] = str(paths["payload"])
     report["outputs"] = {
         "payload": str(paths["payload"]),
@@ -644,9 +1252,14 @@ def run_ennoscholar_from_selected_verrous(
         "selected_verrou_ids": [v.id for v in selected_verrous[:max_verrous]],
         "selected_verrous_count": len(selected_verrous[:max_verrous]),
         "rule": "consultant_status == garde",
+        "grouped_verrous_count": payload.get("grouped_verrous_count"),
+        "grouping_applied": payload.get("grouping_applied"),
     }
 
     summary = build_scholar_summary(report)
+    # V111 : exposer le regroupement au frontend via bundle.summary.
+    summary["grouping_summary"] = payload.get("grouping_summary") or {}
+    summary["grouping_report"] = payload.get("grouping_report") or {}
 
     write_json(paths["report"], report)
     write_json(paths["summary"], summary)
@@ -772,12 +1385,198 @@ def _report_from_run(run: ScholarRun) -> Dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+# CONSULTANT_DECISION_MEMORY_V1
+def _consultant_decision_norm_v1(value):
+    import unicodedata
+
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def _consultant_status_v1(value):
+    normalized = _consultant_decision_norm_v1(value).replace(" ", "_")
+    if normalized in {"garde", "garder", "gardee", "keep", "kept", "selected"}:
+        return "garde"
+    if normalized in {"rejete", "rejetee", "reject", "rejected"}:
+        return "rejete"
+    return "en_attente"
+
+
+def _consultant_status_priority_v1(value):
+    status = _consultant_status_v1(value)
+    if status == "garde":
+        return 3
+    if status == "rejete":
+        return 2
+    return 1
+
+
+def _consultant_doi_v1(value):
+    text = str(value or "").strip().lower()
+    text = re.sub(
+        r"^(?:doi\s*:\s*|https?://(?:dx\.)?doi\.org/)",
+        "",
+        text,
+    )
+    return text.strip().rstrip("./")
+
+
+def _consultant_url_v1(value):
+    text = str(value or "").strip().lower()
+    text = text.split("#", 1)[0].split("?", 1)[0]
+    return text.rstrip("/")
+
+
+def _consultant_year_v1(value):
+    match = re.search(r"\b(?:19|20)\d{2}\b", str(value or ""))
+    return match.group(0) if match else ""
+
+
+def _consultant_source_json_v1(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _consultant_identity_keys_v1(
+    *,
+    title=None,
+    year=None,
+    doi=None,
+    url=None,
+    paper_id=None,
+):
+    keys = set()
+
+    normalized_doi = _consultant_doi_v1(doi)
+    if normalized_doi:
+        keys.add(f"doi:{normalized_doi}")
+
+    normalized_url = _consultant_url_v1(url)
+    if normalized_url:
+        keys.add(f"url:{normalized_url}")
+
+    normalized_paper_id = re.sub(
+        r"\s+",
+        "",
+        str(paper_id or "").strip().lower(),
+    )
+    if normalized_paper_id:
+        keys.add(f"paper:{normalized_paper_id}")
+
+    normalized_title = _consultant_decision_norm_v1(title)
+    normalized_year = _consultant_year_v1(year)
+    if normalized_title:
+        keys.add(f"title:{normalized_title}")
+        if normalized_year:
+            keys.add(f"title_year:{normalized_title}:{normalized_year}")
+
+    return keys
+
+
+def _consultant_model_identity_keys_v1(article):
+    source = _consultant_source_json_v1(article.source_json)
+    return _consultant_identity_keys_v1(
+        title=article.title or source.get("title") or source.get("article_title"),
+        year=article.year or source.get("year") or source.get("publication_year"),
+        doi=article.doi or source.get("doi"),
+        url=article.url or source.get("url") or source.get("link"),
+        paper_id=(
+            source.get("paper_id")
+            or source.get("paperId")
+            or source.get("openalex_id")
+        ),
+    )
+
+
+def _consultant_item_identity_keys_v1(item, title):
+    source = _consultant_source_json_v1(item.get("source_json"))
+    return _consultant_identity_keys_v1(
+        title=title,
+        year=(
+            item.get("year")
+            or item.get("publication_year")
+            or item.get("published_year")
+            or source.get("year")
+        ),
+        doi=item.get("doi") or source.get("doi"),
+        url=(
+            item.get("url")
+            or item.get("link")
+            or item.get("landing_page_url")
+            or source.get("url")
+        ),
+        paper_id=(
+            item.get("paper_id")
+            or item.get("paperId")
+            or item.get("openalex_id")
+            or source.get("paper_id")
+            or source.get("paperId")
+        ),
+    )
+
+
+def _consultant_item_status_v1(item):
+    source = _consultant_source_json_v1(item.get("source_json"))
+    return _consultant_status_v1(
+        item.get("consultant_status")
+        or item.get("consultant_decision")
+        or source.get("consultant_status")
+        or source.get("consultant_decision")
+    )
+
+
+def _consultant_project_decision_memory_v1(db, run):
+    rows = (
+        db.query(Article)
+        .join(ScholarRun, Article.scholar_run_id == ScholarRun.id)
+        .filter(
+            ScholarRun.project_id == run.project_id,
+            Article.scholar_run_id != run.id,
+        )
+        .all()
+    )
+
+    memory = {}
+    for article in rows:
+        status = _consultant_status_v1(article.consultant_status)
+        if status == "en_attente":
+            continue
+
+        for key in _consultant_model_identity_keys_v1(article):
+            current = memory.get(key, "en_attente")
+            if _consultant_status_priority_v1(status) > _consultant_status_priority_v1(current):
+                memory[key] = status
+
+    return memory
+
+
+def _consultant_preserved_status_v1(memory, item, title):
+    statuses = [
+        memory[key]
+        for key in _consultant_item_identity_keys_v1(item, title)
+        if key in memory
+    ]
+    item_status = _consultant_item_status_v1(item)
+    if item_status != "en_attente":
+        statuses.append(item_status)
+
+    if not statuses:
+        return "en_attente"
+    return max(statuses, key=_consultant_status_priority_v1)
+
+
 def sync_articles_from_scholar(db: Session, run: ScholarRun) -> List[Article]:
     """
-    Synchronise les articles avec lien article -> verrou_id.
+    Synchronise les articles du run courant sans perdre les décisions consultant.
+
+    La décision est mémorisée par identité scientifique (DOI, URL, paper_id ou
+    titre/année), indépendamment du run et du verrou. Ainsi, une nouvelle
+    recherche peut recréer les lignes Article sans remettre un article déjà
+    gardé ou rejeté à ``en_attente``.
     """
     report = _report_from_run(run)
     results = report.get("results") or []
+    decision_memory = _consultant_project_decision_memory_v1(db, run)
 
     changed_or_created: List[Article] = []
     existing_by_key = {
@@ -813,6 +1612,11 @@ def sync_articles_from_scholar(db: Session, run: ScholarRun) -> List[Article]:
 
             key = (title.lower().strip(), verrou_id_int)
             article = existing_by_key.get(key)
+            preserved_status = _consultant_preserved_status_v1(
+                decision_memory,
+                item,
+                title,
+            )
 
             if article is None:
                 article = Article(
@@ -825,7 +1629,11 @@ def sync_articles_from_scholar(db: Session, run: ScholarRun) -> List[Article]:
                     score=_article_score(item),
                     url=_article_url(item),
                     doi=_article_doi(item),
-                    source_json={**item, "verrou_scientific_validation": verrou_decision},
+                    consultant_status=preserved_status,
+                    source_json={
+                        **item,
+                        "verrou_scientific_validation": verrou_decision,
+                    },
                 )
                 db.add(article)
                 changed_or_created.append(article)
@@ -833,6 +1641,12 @@ def sync_articles_from_scholar(db: Session, run: ScholarRun) -> List[Article]:
             else:
                 article.source_json = article.source_json or {}
                 article.source_json["verrou_scientific_validation"] = verrou_decision
+                current_status = _consultant_status_v1(article.consultant_status)
+                if (
+                    current_status == "en_attente"
+                    and preserved_status != "en_attente"
+                ):
+                    article.consultant_status = preserved_status
                 changed_or_created.append(article)
 
     db.commit()

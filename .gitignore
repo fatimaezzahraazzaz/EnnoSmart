@@ -1,12 +1,151 @@
-# Anciennes versions / éléments à ne pas pousser
+# ---------------------------------------------------------------------------
+# Secrets and machine-specific configuration
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+!.env.*.example
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+.venv-*/
+.venv_*/
+venv/
+**/venv/
+
+# ---------------------------------------------------------------------------
+# Node / Next.js
+# ---------------------------------------------------------------------------
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---------------------------------------------------------------------------
+# Runtime data, client documents, extracted texts and local databases
+# ---------------------------------------------------------------------------
+/storage/
+/backend_api/storage/
+/data/
+/projects/
+/dataset_final/
+/models/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+*.msg
+
+# Local model checkpoints and training corpora. Training source code remains
+# versioned from train/*.py and train/notebooks/.
+train/data/
+train/models/
+train/final_gliner_cir_dataset*/
+train/ner_candidates.json
+train/**/*.pt
+train/**/*.pth
+train/**/*.bin
+train/**/*.safetensors
+train/**/*.pkl
+train/**/*.jpg
+train/**/*.jpeg
+train/**/*.png
+
+# Annotation batches may contain client text. Keep only the reusable tooling.
+llm_annotation/prompts/
+llm_annotation/responses/
+llm_annotation/stats/
+llm_annotation/*.json
+llm_annotation/*.txt
+
+# ---------------------------------------------------------------------------
+# Generated caches, reports and test outputs
+# ---------------------------------------------------------------------------
+.codex_logs/
+.streamlit/
+.tmp*/
+logs/
+_ocr_debug/
+_test_outputs/
+_tests/
+.guided_research_*
+backend_api/backend_*.json
+backend_api/backend_*.txt
+backend_api/*_results.json
+backend_api/classification_results*.json
+backend_api/test_results_batch.json
+*_result*.json
+result_*.json
+ocr_*.json
+upload_extract_*.json
+scholar_test_result*.json
+test_*_api.json
+test_modeles_*.json
+/test_*.json
+
+# ---------------------------------------------------------------------------
+# Local backups, archives and one-off repair copies
+# ---------------------------------------------------------------------------
+_backup*/
+_backups/
+_restore/
+_patches/
+archiv/
+ennoscholar_*_v*/
+agents/EnnoScholar.backup*/
+agents/EnnoScholar_backup*/
+*.zip
+*.bak
+*.bak_*
+*.backup
+*.backup_*
+*.broken_*
+*.corrected.py
+* - Copie.py
+*.v[0-9]*.py
+_rerun_*.py
+patch_*.py
+rollback_*.ps1
+requirements_*backup*.txt
+requirements_before_*.txt
+
+# Bundled third-party binaries are installed locally, not committed.
+poppler-*/
+
+# Legacy modules intentionally excluded from the active application.
 NLP_v1/
 RAGv1/
 chat/
-NLP.zip
 llm_gateway/
-
 modules/NLP_v1/
 modules/RAGv1/
 modules/chat/
-modules/NLP.zip
 modules/llm_gateway/

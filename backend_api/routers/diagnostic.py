@@ -1,3 +1,5 @@
+DIAGNOSTIC_ROUTER_VERSION = "v143_complete_db_persistence"
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import Any, Dict
@@ -7,11 +9,13 @@ import re
 import json
 import importlib.util
 import shutil
+import hashlib
 
 from core.deps import get_current_user, get_db
 from db.models import DiagnosticRun, User, Verrou
 from schemas.diagnostic import DiagnosticRead, VerrouDecisionRequest, VerrouRead
 from services.diagnostic_display_service import build_diagnostic_display
+from services import diagnostic_service as diagnostic_service_module
 from services.diagnostic_service import (
     create_diagnostic_run_from_files,
     prepare_ennodiagnostic_sources,
@@ -28,14 +32,23 @@ from services.project_service import get_project_for_user
 router = APIRouter(tags=["ennodiagnostic"])
 
 
-TGM100_OBJECTIVE_EXACT = """Développer et valider une architecture de compresseur TGM100 intégrant :
+# ============================================================
+# V147 - Prechargement des dependances RAG natives
+# ============================================================
+# Les routes FastAPI synchrones sont executees dans un thread AnyIO.
+# Sur cet environnement Windows/Python 3.12, le premier import de
+# sentence_transformers -> datasets -> pyarrow depuis ce worker peut provoquer
+# une violation d'acces native. On charge donc RAG au moment de l'import du
+# router, dans le thread principal d'Uvicorn.
+RAG_NATIVE_PRELOAD_VERSION = "v147_main_thread"
+ensure_ennosmart_imports()
+from modules.RAG.indexer import index_nlp_result as _PRELOADED_INDEX_NLP_RESULT
+print(
+    "[EnnoDiagnostic][V147] RAG / SentenceTransformers / PyArrow "
+    "precharges dans le thread principal.",
+    flush=True,
+)
 
-- une aspiration acoustique déportée optimisée pour réduire le bruit et les vibrations ;
-- un système de réfrigérant du 1ᵉʳ étage amélioré (diamètre interne, géométrie des tubes) afin de maîtriser les températures de fonctionnement ;
-- un dispositif de contrepoids sans plomb garantissant l’équilibrage dynamique du vilebrequin ;
-- une solution de réduction du soufflage carter qui préserve l’étanchéité et la puissance du compresseur.
-
-Le tout doit être démontré par essais en condition réelle et par analyses de fiabilité."""
 
 
 def _latest_run_for_project(db: Session, project_id: int) -> DiagnosticRun | None:
@@ -79,6 +92,179 @@ def _extract_sections(markdown: str) -> Dict[str, str]:
     return sections
 
 
+
+def extract_complete_diagnostic_snapshot(report: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Adaptateur robuste V143.
+
+    La version officielle se trouve dans services.diagnostic_service. Le router
+    n'importe plus cette fonction directement au chargement, afin qu'une copie
+    momentanément désynchronisée des fichiers ne fasse pas tomber Uvicorn.
+
+    Le fallback local conserve tout de même :
+    - le Markdown complet ;
+    - les sections par titre et par clé ;
+    - les sections canoniques du frontend ;
+    - les cartes et les verrous finaux ;
+    - Frascati, IA, mémoire, Chroma et traçabilité.
+    """
+    builder = getattr(
+        diagnostic_service_module,
+        "extract_complete_diagnostic_snapshot",
+        None,
+    )
+    if callable(builder):
+        return sanitize_json_value(builder(report))
+
+    report = sanitize_json_value(report if isinstance(report, dict) else {})
+    diagnostic = _as_dict(report.get("diagnostic"))
+    static = _as_dict(report.get("static_diagnostic"))
+
+    markdown = _clean(
+        diagnostic.get("content")
+        or report.get("report_markdown")
+        or report.get("content")
+        or static.get("markdown")
+        or ""
+    )
+
+    markdown_sections = _extract_sections(markdown)
+    sections_by_key: Dict[str, str] = {}
+    sections_by_title: Dict[str, str] = {}
+
+    def merge_keyed(value: Any) -> None:
+        if not isinstance(value, dict):
+            return
+        for key, body in value.items():
+            text = _clean(body)
+            normalized = _section_key(str(key))
+            if normalized and text and not sections_by_key.get(normalized):
+                sections_by_key[normalized] = text
+
+    def merge_titled(value: Any) -> None:
+        if not isinstance(value, dict):
+            return
+        for title, body in value.items():
+            text = _clean(body)
+            clean_title = _clean(title)
+            if clean_title and text and not sections_by_title.get(clean_title):
+                sections_by_title[clean_title] = text
+
+    merge_keyed(report.get("diagnostic_sections_by_key"))
+    merge_keyed(static.get("sections_by_key"))
+    merge_keyed(report.get("report_sections"))
+    merge_keyed(markdown_sections)
+
+    merge_titled(report.get("diagnostic_sections"))
+    merge_titled(static.get("sections"))
+
+    for title, body in sections_by_title.items():
+        key = _section_key(title)
+        if key and body and not sections_by_key.get(key):
+            sections_by_key[key] = body
+
+    aliases = {
+        "lecture_frascati": ["lecture_frascati", "lecture_frascati_du_dossier"],
+        "justification_frascati": [
+            "justification_frascati",
+            "justification_frascati_du_score",
+            "justification_du_score_frascati",
+        ],
+        "memoire_v2": ["memoire_v2"],
+        "synthese_strategique": [
+            "synthese_strategique",
+            "synthese_strategique_du_projet",
+            "synthese",
+        ],
+        "objectif_global": [
+            "objectif_global",
+            "objectif_global_reformule",
+            "objectif_global_du_projet",
+            "objectif",
+        ],
+        "verrous_rnd": [
+            "verrous_rnd",
+            "verrous_cir",
+            "verrous_cir_consolides",
+            "verrous_r_d_signaux_de_verrous",
+            "verrous",
+        ],
+        "demarche_detectee": [
+            "demarche_detectee",
+            "demarche_experimentale_detectee",
+            "demarche_experimentale",
+            "demarche",
+        ],
+        "resultats_metriques": [
+            "resultats_metriques",
+            "resultats_et_metriques_disponibles",
+            "resultats_metriques_disponibles",
+            "resultats",
+        ],
+        "parametres_contraintes": [
+            "parametres_contraintes",
+            "parametres_et_contraintes_techniques",
+            "parametres_techniques",
+            "parametres",
+        ],
+        "points_validation": [
+            "points_validation",
+            "points_a_valider",
+            "points_a_valider_par_le_consultant",
+            "validation",
+        ],
+    }
+
+    canonical: Dict[str, str] = {}
+    for canonical_key, candidates in aliases.items():
+        for candidate in candidates:
+            value = sections_by_key.get(candidate)
+            if isinstance(value, str) and value.strip():
+                canonical[canonical_key] = value.strip()
+                break
+
+    cards = report.get("diagnostic_cards") or static.get("cards") or []
+    if not isinstance(cards, list):
+        cards = []
+
+    final_verrous = _extract_final_accepted_verrous_from_report(report)
+
+    return sanitize_json_value({
+        "snapshot_version": "v143_complete_db_persistence_router_fallback",
+        "generated_at": report.get("generated_at") or datetime.utcnow().isoformat(),
+        "mode": report.get("mode"),
+        "status": report.get("status") or diagnostic.get("status"),
+        "report_markdown": markdown,
+        "sections_by_key": sections_by_key,
+        "sections_by_title": sections_by_title,
+        "canonical_sections": canonical,
+        "sections_count": len(sections_by_key),
+        "section_titles_count": len(sections_by_title),
+        "diagnostic_cards": cards,
+        "diagnostic_cards_count": len(cards),
+        "final_verrous": final_verrous,
+        "final_verrous_count": len(final_verrous),
+        "frascati_summary": report.get("frascati_summary") or {},
+        "frascati_justification": report.get("frascati_justification") or {},
+        "ai_detection_report": (
+            report.get("ai_detection_report_runtime")
+            or report.get("ai_detection_report")
+            or {}
+        ),
+        "style_memory_report": report.get("style_memory_report") or {},
+        "cir_memory_report": report.get("cir_memory_report") or {},
+        "inputs_status": report.get("inputs_status") or {},
+        "pipeline_before_agent": report.get("pipeline_before_agent") or {},
+        "verrou_synthesis_report": report.get("verrou_synthesis_report") or {},
+        "chroma_sections": report.get("chroma_sections") or {},
+        "source_paths": {"output_path": report.get("output_path")},
+        "fallback_reason": (
+            "services.diagnostic_service.extract_complete_diagnostic_snapshot "
+            "indisponible au chargement"
+        ),
+    })
+
+
 def _replace_section(markdown: str, section_title: str, body: str) -> str:
     """
     Remplace une section Markdown de manière robuste :
@@ -99,22 +285,23 @@ def _replace_section(markdown: str, section_title: str, body: str) -> str:
     return (markdown.rstrip() + "\n\n" + new_block).strip()
 
 
-def _force_tgm100_objective(content: str) -> str:
-    """
-    Force uniquement l'objectif global TGM100 à la forme validée type Streamlit.
-    """
-    content = _clean(content)
-    if "tgm100" not in content.lower():
-        return content
-
-    return _replace_section(
-        markdown=content,
-        section_title="Objectif global reformulé",
-        body=TGM100_OBJECTIVE_EXACT,
-    )
+def _normalize_agent_report_content(content: str) -> str:
+    """Normalisation générique du rapport agent, sans forcer d'objectif projet."""
+    return _clean(content)
 
 
 def _extract_latest_run_report(latest_run: DiagnosticRun | None) -> tuple[Dict[str, Any], str]:
+    """
+    Récupère le rapport EnnoDiagnostic depuis le dernier run.
+
+    Correction V136 :
+    selon les versions, raw_result_json peut contenir :
+    1) {"script_or_pipeline_result": {"report": ...}}
+    2) {"report": ...}
+    3) directement le rapport final avec verrou_synthesis_report au premier niveau.
+
+    Avant, seul le cas 1 était lu, donc sync-verrous pouvait ne rien trouver.
+    """
     if not latest_run or not latest_run.raw_result_json:
         return {}, ""
 
@@ -122,8 +309,28 @@ def _extract_latest_run_report(latest_run: DiagnosticRun | None) -> tuple[Dict[s
     if not isinstance(raw, dict):
         return {}, ""
 
+    report: Dict[str, Any] = {}
+
     pipeline = _as_dict(raw.get("script_or_pipeline_result"))
-    report = _as_dict(pipeline.get("report"))
+    if isinstance(pipeline.get("report"), dict):
+        report = _as_dict(pipeline.get("report"))
+
+    if not report and isinstance(raw.get("report"), dict):
+        report = _as_dict(raw.get("report"))
+
+    # Cas où raw_result_json EST déjà le rapport final.
+    if not report and any(
+        key in raw
+        for key in [
+            "verrou_synthesis_report",
+            "static_diagnostic",
+            "diagnostic_sections",
+            "diagnostic_sections_by_key",
+            "frascati_summary",
+        ]
+    ):
+        report = raw
+
     diagnostic = _as_dict(report.get("diagnostic"))
 
     content = _clean(
@@ -136,39 +343,778 @@ def _extract_latest_run_report(latest_run: DiagnosticRun | None) -> tuple[Dict[s
     return report, content
 
 
+# ============================================================
+# V139 — choix d'une seule sortie officielle pour /diagnostic/latest
+# ============================================================
+
+def _parse_report_datetime(value: Any) -> float:
+    if not value:
+        return 0.0
+
+    if isinstance(value, datetime):
+        return value.timestamp()
+
+    text = str(value).strip()
+    if not text:
+        return 0.0
+
+    try:
+        # Accepte "2026-07-10T17:34:17" et variantes ISO.
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return 0.0
+
+
+def _path_mtime(value: Any) -> float:
+    if not value:
+        return 0.0
+
+    try:
+        path = Path(str(value))
+        if path.exists() and path.is_file():
+            return path.stat().st_mtime
+    except Exception:
+        return 0.0
+
+    return 0.0
+
+
+def _report_timestamp(report: Dict[str, Any], fallback: float = 0.0) -> float:
+    if not isinstance(report, dict) or not report:
+        return fallback
+
+    candidates = [
+        report.get("generated_at"),
+        report.get("completed_at"),
+        report.get("created_at"),
+        report.get("updated_at"),
+        _as_dict(report.get("diagnostic")).get("generated_at"),
+        _as_dict(report.get("static_diagnostic")).get("generated_at"),
+    ]
+
+    for candidate in candidates:
+        ts = _parse_report_datetime(candidate)
+        if ts > 0:
+            return ts
+
+    return fallback
+
+
+def _run_timestamp(latest_run: DiagnosticRun | None, report: Dict[str, Any] | None = None) -> float:
+    if not latest_run:
+        return 0.0
+
+    values = [
+        getattr(latest_run, "completed_at", None),
+        getattr(latest_run, "updated_at", None),
+        getattr(latest_run, "created_at", None),
+    ]
+
+    for value in values:
+        ts = _parse_report_datetime(value)
+        if ts > 0:
+            return ts
+
+    return _report_timestamp(report or {}, 0.0)
+
+
+def _choose_latest_report_source(bundle: Dict[str, Any], latest_run: DiagnosticRun | None) -> Dict[str, Any]:
+    """
+    Décide quelle sortie EnnoDiagnostic est officielle pour l'affichage.
+
+    Problème corrigé :
+    - si l'agent est lancé en CLI, il écrit bien
+      storage/.../ennodiagnostic/ennodiagnostic_report.json ;
+    - mais aucun DiagnosticRun DB n'est créé ;
+    - l'ancien /diagnostic/latest reprenait alors le dernier run DB ancien
+      et écrasait l'affichage du nouveau fichier.
+
+    Règle V139 :
+    - on compare le rapport fichier et le rapport du dernier run DB ;
+    - on expose le plus récent ;
+    - le frontend ne choisit plus lui-même.
+    """
+    bundle = dict(bundle or {})
+    file_report = _as_dict(bundle.get("report"))
+    file_path = bundle.get("report_path_used")
+    file_ts = _report_timestamp(file_report, _path_mtime(file_path))
+
+    run_report, _run_content = _extract_latest_run_report(latest_run)
+    run_ts = _run_timestamp(latest_run, run_report)
+
+    use_run = bool(run_report) and (not file_report or run_ts >= file_ts)
+
+    raw_run_json = None
+    if latest_run and latest_run.raw_result_json:
+        raw_run_json = sanitize_json_value(latest_run.raw_result_json)
+        bundle["run_raw_result_json"] = raw_run_json
+
+    if use_run:
+        bundle = _merge_latest_run_into_bundle(bundle, latest_run)
+        bundle["official_report_source"] = "db_latest_run"
+        bundle["official_report_timestamp"] = run_ts
+        bundle["official_report_note"] = "Rapport DB plus récent ou aucun rapport fichier disponible."
+    else:
+        bundle["official_report_source"] = "filesystem_report"
+        bundle["official_report_timestamp"] = file_ts
+        bundle["official_report_note"] = "Rapport fichier ProjectStore plus récent que le dernier run DB, ou run DB absent."
+
+    bundle["official_report_debug"] = {
+        "file_report_path": str(file_path) if file_path else None,
+        "file_report_timestamp": file_ts,
+        "db_run_id": latest_run.id if latest_run else None,
+        "db_run_timestamp": run_ts,
+        "used": bundle["official_report_source"],
+    }
+
+    return sanitize_json_value(bundle)
+
+
+
+# ============================================================
+# V132 — extraction officielle des sorties finales EnnoDiagnostic
+# ============================================================
+
+def _extract_final_accepted_verrous_from_report(report: dict) -> list[dict[str, Any]]:
+    """
+    Source officielle pour les verrous à synchroniser en base.
+
+    Important :
+    - On prend la liste finale acceptée par EnnoDiagnostic.
+    - On ne prend pas uniquement les verrous LLM clean/intermédiaires.
+    - Les fallbacks acceptés par le garde final doivent aussi être synchronisés.
+    """
+    if not isinstance(report, dict):
+        return []
+
+    verrou_report = report.get("verrou_synthesis_report") or {}
+    if not isinstance(verrou_report, dict):
+        verrou_report = {}
+
+    candidates = (
+        verrou_report.get("llm_reformulated_verrous")
+        or verrou_report.get("final_items")
+        or verrou_report.get("accepted_items")
+        or verrou_report.get("final_verrous")
+        or report.get("llm_reformulated_verrous")
+        or report.get("consultant_verrous_cir")
+        or report.get("verrous_reformules")
+        or report.get("verrous")
+        or []
+    )
+
+    if not isinstance(candidates, list):
+        return []
+
+    final_items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+
+        title = _clean(
+            item.get("title")
+            or item.get("titre")
+            or item.get("verrou")
+            or item.get("name")
+            or item.get("lock_title")
+        )
+
+        if not title:
+            continue
+
+        key = re.sub(r"\s+", " ", title.lower()).strip()
+        if key in seen:
+            continue
+        seen.add(key)
+
+        justification = _clean(
+            item.get("consultant_explanation")
+            or item.get("why_agent_found_verrou")
+            or item.get("why_not_simple_engineering")
+            or item.get("justification")
+            or item.get("description")
+            or item.get("text")
+            or item.get("scientific_lock")
+        )
+
+        source_doc = _clean(
+            item.get("source_document")
+            or item.get("document")
+            or item.get("documents")
+            or item.get("source")
+        )
+
+        source_excerpt = _clean(
+            item.get("source_excerpt")
+            or item.get("excerpt")
+            or item.get("evidence")
+            or item.get("preuve")
+            or justification
+        )
+
+        score = (
+            item.get("score")
+            or item.get("frascati_score")
+            or item.get("confidence_score")
+            or item.get("confidence")
+            or item.get("rank_score")
+        )
+
+        try:
+            if score is not None:
+                score = float(score)
+        except Exception:
+            score = None
+
+        final_items.append({
+            **item,
+            "title": title,
+            "titre": title,
+            "verrou": title,
+            "description": justification,
+            "justification": justification,
+            "text": justification,
+            "score": score,
+            "source_document": source_doc,
+            "source_excerpt": source_excerpt,
+            "consultant_status": item.get("consultant_status") or item.get("status") or "en_attente",
+            "needs_human_validation": True,
+            "sync_source": "verrou_synthesis_report.llm_reformulated_verrous_final",
+        })
+
+    return final_items
+
+
+def _extract_final_display_sections_from_report(report: dict) -> dict:
+    """
+    Source officielle pour les sections affichées.
+    On privilégie les sections statiques V129/V132 et on évite de parser l'ancien Markdown.
+    """
+    if not isinstance(report, dict):
+        return {
+            "diagnostic_sections_by_key": {},
+            "diagnostic_sections": {},
+            "diagnostic_cards": [],
+            "static_diagnostic": {},
+        }
+
+    static_diagnostic = report.get("static_diagnostic") or {}
+    if not isinstance(static_diagnostic, dict):
+        static_diagnostic = {}
+
+    sections_by_key = (
+        report.get("diagnostic_sections_by_key")
+        or static_diagnostic.get("sections_by_key")
+        or {}
+    )
+    if not isinstance(sections_by_key, dict):
+        sections_by_key = {}
+
+    sections = (
+        report.get("diagnostic_sections")
+        or static_diagnostic.get("sections")
+        or {}
+    )
+    if not isinstance(sections, dict):
+        sections = {}
+
+    cards = (
+        report.get("diagnostic_cards")
+        or static_diagnostic.get("cards")
+        or []
+    )
+    if not isinstance(cards, list):
+        cards = []
+
+    return {
+        "diagnostic_sections_by_key": sections_by_key,
+        "diagnostic_sections": sections,
+        "diagnostic_cards": cards,
+        "static_diagnostic": static_diagnostic,
+    }
+
+
+def _set_if_has(obj: Any, names: str | list[str], value: Any) -> None:
+    if value is None:
+        return
+    if isinstance(names, str):
+        names = [names]
+    for name in names:
+        if hasattr(obj, name):
+            try:
+                setattr(obj, name, value)
+                return
+            except Exception:
+                pass
+
+
+def _model_has_attr(obj: Any, name: str) -> bool:
+    return hasattr(obj, name)
+
+
+
+def _report_fingerprint(report: Dict[str, Any]) -> str:
+    """
+    Empreinte stable du rapport réellement affiché.
+
+    Elle permet de savoir si le rapport fichier a déjà été matérialisé en
+    DiagnosticRun. On évite ainsi de créer un nouveau run à chaque GET.
+    """
+    report = _as_dict(report)
+    final_items = _extract_final_accepted_verrous_from_report(report)
+
+    payload = {
+        "generated_at": report.get("generated_at"),
+        "mode": report.get("mode"),
+        "verrou_synthesis_version": report.get("verrou_synthesis_version"),
+        "output_path": report.get("output_path"),
+        "titles": [_clean(item.get("title")) for item in final_items],
+    }
+
+    encoded = json.dumps(
+        sanitize_json_value(payload),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _dict_metadata_from_verrou(verrou: Verrou) -> Dict[str, Any]:
+    """
+    Récupère les métadonnées riches sauvegardées dans le modèle SQLAlchemy.
+
+    Les noms diffèrent selon les versions du modèle : raw_json,
+    metadata_json ou details. On ne retourne que les dictionnaires.
+    """
+    for name in ["raw_json", "metadata_json", "details", "source_json"]:
+        try:
+            value = getattr(verrou, name, None)
+        except Exception:
+            value = None
+        if isinstance(value, dict):
+            return sanitize_json_value(value)
+
+    return {}
+
+
+def _find_run_with_same_report(
+    db: Session,
+    project_id: int,
+    report: Dict[str, Any],
+    max_runs: int = 20,
+) -> DiagnosticRun | None:
+    """
+    Cherche un DiagnosticRun déjà lié exactement au même rapport fichier.
+    """
+    expected = _report_fingerprint(report)
+    if not expected:
+        return None
+
+    runs = (
+        db.query(DiagnosticRun)
+        .filter(DiagnosticRun.project_id == project_id)
+        .order_by(DiagnosticRun.created_at.desc())
+        .limit(max_runs)
+        .all()
+    )
+
+    for run in runs:
+        run_report, _content = _extract_latest_run_report(run)
+        if run_report and _report_fingerprint(run_report) == expected:
+            return run
+
+    return None
+
+
+def _materialize_filesystem_report_in_db(
+    db: Session,
+    project: Any,
+    bundle: Dict[str, Any],
+) -> tuple[DiagnosticRun | None, list[Verrou], bool]:
+    """Matérialise atomiquement le rapport fichier complet et ses verrous en DB."""
+    report = _as_dict(bundle.get("report"))
+    final_items = _extract_final_accepted_verrous_from_report(report)
+    if not report or not final_items:
+        return None, [], False
+
+    existing_run = _find_run_with_same_report(db, project.id, report)
+    if existing_run is not None:
+        current = _read_latest_run_verrous_fast(db, existing_run)
+        if not current:
+            current = sync_verrous_from_diagnostic(db, existing_run)
+        return existing_run, current, False
+
+    snapshot = extract_complete_diagnostic_snapshot(report)
+    payload = sanitize_json_value({
+        "persistence_version": "v143_complete_db_persistence",
+        "saved_at": datetime.utcnow().isoformat(),
+        "button": "auto_materialize_filesystem_report_v142",
+        "pipeline": "filesystem_report_to_complete_db",
+        "report": report,
+        "script_or_pipeline_result": {"report": report},
+        "diagnostic_snapshot": snapshot,
+        "report_markdown": snapshot.get("report_markdown"),
+        "report_sections": snapshot.get("canonical_sections") or {},
+        "diagnostic_sections_by_key": snapshot.get("sections_by_key") or {},
+        "diagnostic_sections": snapshot.get("sections_by_title") or {},
+        "diagnostic_cards": snapshot.get("diagnostic_cards") or [],
+        "final_verrous_snapshot": snapshot.get("final_verrous") or [],
+        "report_fingerprint": _report_fingerprint(report),
+        "bundle_metadata": {
+            "report_path_used": bundle.get("report_path_used"),
+            "nlp_path_used": bundle.get("nlp_path_used"),
+            "official_report_source": bundle.get("official_report_source"),
+            "official_report_timestamp": bundle.get("official_report_timestamp"),
+        },
+    })
+
+    run = DiagnosticRun(
+        project_id=project.id,
+        status="completed_from_filesystem_report_v142",
+        report_path=str(bundle.get("report_path_used") or "") or None,
+        nlp_result_path=str(bundle.get("nlp_path_used") or "") or None,
+        selected_verrous_path=None,
+        raw_result_json=payload,
+        completed_at=datetime.utcnow(),
+    )
+
+    try:
+        db.add(run)
+        db.flush()
+        synced = sync_verrous_from_diagnostic(db, run, commit=False)
+        if not synced:
+            raise RuntimeError("Aucun verrou final n'a pu être synchronisé depuis le rapport fichier.")
+        db.commit()
+        db.refresh(run)
+        for verrou in synced:
+            db.refresh(verrou)
+        return run, synced, True
+    except Exception:
+        db.rollback()
+        raise
+
+def _sync_final_verrous_from_run(db: Session, run: DiagnosticRun) -> list[Verrou]:
+    """Délègue à la persistance V142 unique du service backend."""
+    return sync_verrous_from_diagnostic(db, run)
+
+def _dump_verrous_for_frontend(verrous: list[Verrou]) -> list[dict[str, Any]]:
+    """
+    Convertit les verrous DB en objets directement utilisables par le frontend.
+
+    V140 :
+    - impose un id DB positif ;
+    - restitue les métadonnées riches dans source_json ;
+    - expose can_decide=true seulement pour un vrai verrou PostgreSQL.
+    """
+    out: list[dict[str, Any]] = []
+
+    for verrou in verrous or []:
+        try:
+            data = VerrouRead.model_validate(verrou).model_dump()
+        except Exception:
+            data = {}
+
+        verrou_id = getattr(verrou, "id", None)
+        try:
+            verrou_id_int = int(verrou_id) if verrou_id is not None else None
+        except Exception:
+            verrou_id_int = None
+
+        title = (
+            data.get("title")
+            or data.get("titre")
+            or data.get("verrou")
+            or getattr(verrou, "title", "")
+            or getattr(verrou, "titre", "")
+            or ""
+        )
+
+        description = (
+            data.get("description")
+            or data.get("justification")
+            or data.get("text")
+            or getattr(verrou, "description", "")
+            or getattr(verrou, "justification", "")
+            or getattr(verrou, "text", "")
+            or ""
+        )
+
+        consultant_status = (
+            data.get("consultant_status")
+            or getattr(verrou, "consultant_status", "")
+            or "en_attente"
+        )
+
+        rich_source_json = _dict_metadata_from_verrou(verrou)
+        existing_source_json = data.get("source_json")
+        if not isinstance(existing_source_json, dict):
+            existing_source_json = {}
+
+        source_json = {
+            **rich_source_json,
+            **existing_source_json,
+            "db_verrou_id": verrou_id_int,
+            "is_db_synced": bool(verrou_id_int and verrou_id_int > 0),
+            "can_decide": bool(verrou_id_int and verrou_id_int > 0),
+            "sync_source": "backend_v140_report_materialized_to_db",
+        }
+
+        data["id"] = verrou_id_int
+        data["title"] = title
+        data["titre"] = title
+        data["verrou"] = title
+        data["description"] = description
+        data["justification"] = data.get("justification") or description
+        data["text"] = data.get("text") or description
+        data["consultant_status"] = consultant_status
+        data["source_json"] = source_json
+        data["is_db_synced"] = bool(verrou_id_int and verrou_id_int > 0)
+        data["can_decide"] = bool(verrou_id_int and verrou_id_int > 0)
+        data["source"] = "db_synced_verrou"
+        data["sync_source"] = "backend_v140_report_materialized_to_db"
+
+        out.append(data)
+
+    return sanitize_json_value(out)
+
+
+def _js_int32(value: int) -> int:
+    value &= 0xFFFFFFFF
+    return value - 0x100000000 if value & 0x80000000 else value
+
+
+def _legacy_frontend_negative_id(title: str, index: int) -> int:
+    """Reproduit exactement stableNegativeIdV107() du frontend historique."""
+    key = f"{title or 'verrou'}-{index}"
+    hash_value = 0
+    for char in key:
+        hash_value = _js_int32(((hash_value << 5) - hash_value + ord(char)))
+    return -abs(hash_value or (index + 1))
+
+
+def _normalize_title_for_match(value: Any) -> str:
+    text = _clean(value).lower()
+    text = text.translate(str.maketrans(
+        "àâäéèêëîïôöùûüç’'",
+        "aaaeeeeiioouuuc__",
+    ))
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _resolve_negative_frontend_verrou(
+    db: Session,
+    project: Any,
+    negative_id: int,
+) -> Verrou | None:
+    """
+    Compatibilité V141 avec les anciens écrans qui ont encore un id négatif.
+
+    Le backend retrouve le titre correspondant dans le rapport officiel,
+    matérialise ce rapport en DB, puis retourne le vrai verrou PostgreSQL.
+    """
+    if negative_id >= 0:
+        return None
+
+    latest_run = _latest_run_for_project(db, project.id)
+    base_bundle = read_diagnostic_bundle(project)
+    bundle = _choose_latest_report_source(base_bundle, latest_run)
+    report = _as_dict(bundle.get("report"))
+    final_items = _extract_final_accepted_verrous_from_report(report)
+
+    matched_item: dict[str, Any] | None = None
+    for index, item in enumerate(final_items):
+        title = _clean(item.get("title") or item.get("titre") or item.get("verrou"))
+        if title and _legacy_frontend_negative_id(title, index) == negative_id:
+            matched_item = item
+            break
+
+    # Sécurité : essayer également le rapport du dernier run DB si le rapport
+    # fichier a changé entre l'affichage et le clic consultant.
+    if matched_item is None and latest_run is not None:
+        run_report, _content = _extract_latest_run_report(latest_run)
+        for index, item in enumerate(_extract_final_accepted_verrous_from_report(run_report)):
+            title = _clean(item.get("title") or item.get("titre") or item.get("verrou"))
+            if title and _legacy_frontend_negative_id(title, index) == negative_id:
+                matched_item = item
+                report = run_report
+                bundle = {
+                    **bundle,
+                    "report": run_report,
+                    "report_path_used": getattr(latest_run, "report_path", None),
+                }
+                break
+
+    if matched_item is None:
+        return None
+
+    matched_title = _clean(matched_item.get("title") or matched_item.get("titre") or matched_item.get("verrou"))
+    normalized_title = _normalize_title_for_match(matched_title)
+
+    # Chercher d'abord un verrou déjà synchronisé, quel que soit le run.
+    candidates = (
+        db.query(Verrou)
+        .join(DiagnosticRun, Verrou.diagnostic_run_id == DiagnosticRun.id)
+        .filter(DiagnosticRun.project_id == project.id)
+        .order_by(DiagnosticRun.created_at.desc(), Verrou.created_at.desc())
+        .all()
+    )
+    for verrou in candidates:
+        if _normalize_title_for_match(getattr(verrou, "title", "")) == normalized_title:
+            return verrou
+
+    # Sinon matérialiser le rapport officiel et synchroniser ses verrous.
+    materialized_run, synced, _created = _materialize_filesystem_report_in_db(
+        db=db,
+        project=project,
+        bundle=bundle,
+    )
+
+    for verrou in synced:
+        if _normalize_title_for_match(getattr(verrou, "title", "")) == normalized_title:
+            return verrou
+
+    if materialized_run is not None:
+        for verrou in _read_latest_run_verrous_fast(db, materialized_run):
+            if _normalize_title_for_match(getattr(verrou, "title", "")) == normalized_title:
+                return verrou
+
+    return None
+
+
+def _read_latest_run_verrous_fast(db: Session, latest_run: DiagnosticRun | None) -> list[Verrou]:
+    """
+    Lecture rapide pour les routes GET.
+
+    Important :
+    - aucune resynchronisation ;
+    - aucune relecture / réécriture du gros rapport JSON ;
+    - utilisé par /diagnostic/latest et /verrous.
+
+    La synchronisation des verrous doit rester dans les routes d'action :
+    - POST /diagnostic/run
+    - POST /diagnostic/run-agent
+    - POST /diagnostic/{run_id}/sync-verrous
+    """
+    if not latest_run:
+        return []
+
+    return (
+        db.query(Verrou)
+        .filter(Verrou.diagnostic_run_id == latest_run.id)
+        .order_by(Verrou.created_at.asc())
+        .all()
+    )
+
+
+def _ensure_latest_run_final_verrous_synced(db: Session, latest_run: DiagnosticRun | None) -> list[Verrou]:
+    """
+    Synchronisation volontaire des verrous finaux.
+
+    Ne pas appeler cette fonction dans une route GET de lecture simple,
+    sinon l'interface reste bloquée sur "Chargement du diagnostic".
+    """
+    if not latest_run:
+        return []
+
+    report, _content = _extract_latest_run_report(latest_run)
+    final_items = _extract_final_accepted_verrous_from_report(report)
+
+    current = _read_latest_run_verrous_fast(db, latest_run)
+
+    if final_items:
+        return _sync_final_verrous_from_run(db, latest_run)
+
+    return current
+
 def _force_display_from_latest_run(display: Dict[str, Any], latest_run: DiagnosticRun | None, project=None) -> Dict[str, Any]:
     display = dict(display or {})
     report, content = _extract_latest_run_report(latest_run)
 
-    if not content:
+    if not report and not content:
         return display
 
-    content = _force_tgm100_objective(content)
-    sections = _extract_sections(content)
+    content = _normalize_agent_report_content(content)
+    sections = _extract_sections(content) if content else {}
 
-    display["source"] = "ennodiagnostic_agent"
+    final_display = _extract_final_display_sections_from_report(report)
+    agent_sections = final_display["diagnostic_sections"]
+    agent_sections_by_key = final_display["diagnostic_sections_by_key"]
+    diagnostic_cards = final_display["diagnostic_cards"]
+    static_diagnostic = final_display["static_diagnostic"]
+    final_verrous = _extract_final_accepted_verrous_from_report(report)
+
+    def pick(key: str, title: str = "", *legacy_keys: str) -> str:
+        if key and agent_sections_by_key.get(key):
+            return _clean(agent_sections_by_key.get(key))
+        if title and agent_sections.get(title):
+            return _clean(agent_sections.get(title))
+        for lk in legacy_keys:
+            if lk and sections.get(lk):
+                return _clean(sections.get(lk))
+        return ""
+
+    lecture_frascati = pick("lecture_frascati", "Lecture Frascati du dossier", "lecture_frascati_du_dossier")
+    justification_frascati = pick("justification_frascati", "Justification Frascati du score", "justification_frascati_du_score")
+    memoire_v2 = pick("memoire_v2", "Mémoire V2", "memoire_v2")
+    synthese = pick("synthese_strategique", "Synthèse stratégique", "synthese_strategique_du_projet")
+    objectif = pick("objectif_global", "Objectif global", "objectif_global_reformule", "objectif_global_du_projet")
+    verrous_section = pick(
+        "verrous_rnd",
+        "Verrous CIR consolidés",
+        "signaux_de_verrous_r_d_candidats",
+        "verrous_r_d_signaux_de_verrous",
+        "verrous_cir_consolides",
+        "verrous_r_d",
+        "verrous",
+    ) or display.get("verrous_text", "")
+    demarche = pick("demarche_detectee", "Démarche détectée", "demarche_experimentale_detectee")
+    resultats = pick("resultats_metriques", "Résultats / métriques", "resultats_et_metriques_disponibles")
+    parametres = pick("parametres_contraintes", "Paramètres et contraintes techniques", "parametres_et_contraintes_techniques")
+    points_validation = pick("points_validation", "Points à valider", "points_a_valider_par_le_consultant")
+
+    display["source"] = "ennodiagnostic_agent_v132_final_static_display"
     display["report_markdown"] = content
-    display["summary"] = sections.get("synthese_strategique_du_projet", display.get("summary", ""))
-    display["objective"] = sections.get("objectif_global_reformule", display.get("objective", ""))
-    display["frascati_text"] = sections.get("lecture_frascati_du_dossier", display.get("frascati_text", ""))
-    display["verrous_text"] = sections.get("verrous_r_d_signaux_de_verrous", display.get("verrous_text", ""))
+    display["summary"] = synthese or display.get("summary", "")
+    display["objective"] = objectif or display.get("objective", "")
+    display["frascati_text"] = lecture_frascati or display.get("frascati_text", "")
+    display["frascati_justification_text"] = justification_frascati or display.get("frascati_justification_text", "")
+    display["verrous_text"] = verrous_section
+
+    # Sorties officielles pour le frontend : sections statiques, cartes et verrous finaux.
+    display["static_diagnostic"] = static_diagnostic
+    display["diagnostic_cards"] = diagnostic_cards
+    display["diagnostic_sections_by_key"] = agent_sections_by_key
+    display["diagnostic_sections"] = agent_sections
+    display["llm_reformulated_verrous"] = final_verrous
+    display["consultant_verrous_cir"] = final_verrous
+    display["validation_verrous_preview"] = final_verrous
 
     display["report_sections"] = {
-        "lecture_frascati": sections.get("lecture_frascati_du_dossier", ""),
-        "synthese": sections.get("synthese_strategique_du_projet", ""),
-        "objectif": sections.get("objectif_global_reformule", ""),
-        "verrous": sections.get("verrous_r_d_signaux_de_verrous", ""),
-        "demarche": sections.get("demarche_experimentale_detectee", ""),
-        "resultats": sections.get("resultats_et_metriques_disponibles", ""),
-        "parametres": sections.get("parametres_et_contraintes_techniques", ""),
+        "lecture_frascati": lecture_frascati,
+        "justification_frascati": justification_frascati,
+        "memoire_v2": memoire_v2,
+        "synthese": synthese,
+        "objectif": objectif,
+        "verrous": verrous_section,
+        "signaux_de_verrous": verrous_section,
+        "demarche": demarche,
+        "resultats": resultats,
+        "parametres": parametres,
         "comparaison_cir": sections.get("comparaison_avec_le_cir_precedent", ""),
-        "points_validation": sections.get("points_a_valider_par_le_consultant", ""),
+        "points_validation": points_validation,
     }
 
     if report:
         display["frascati_summary"] = report.get("frascati_summary") or display.get("frascati_summary") or {}
         display["inputs_status"] = report.get("inputs_status") or display.get("inputs_status") or {}
         display["chroma_sections"] = report.get("chroma_sections") or display.get("chroma_sections") or {}
+        display["verrou_synthesis_report"] = report.get("verrou_synthesis_report") or display.get("verrou_synthesis_report") or {}
+        display["consultant_validation_source"] = "verrou_synthesis_report.llm_reformulated_verrous_final"
 
         pipeline = _as_dict(report.get("pipeline_before_agent"))
         nlp_stats = _as_dict(pipeline.get("nlp_stats"))
@@ -184,9 +1130,6 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
         }
 
     display["forced_from_latest_run"] = True
-    display["forced_tgm100_objective_v22"] = True
-
-
 
     # Comparaison documentaire brute exposée au frontend.
     doc_compare_index = {}
@@ -223,9 +1166,7 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
         display["document_compare_debug_path"] = doc_compare_dir_value
 
     # Comparaison avec le CIR précédent exposée au frontend.
-    cir_memory_report = {}
-    if report:
-        cir_memory_report = report.get("cir_memory_report") or {}
+    cir_memory_report = report.get("cir_memory_report") if report else {}
 
     if isinstance(cir_memory_report, dict):
         cir_summary = cir_memory_report.get("summary") or {}
@@ -256,9 +1197,7 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
         display["cir_memory_verrou_comparisons"] = []
 
     # Mémoire rédactionnelle CIR exposée au frontend.
-    style_memory_report = {}
-    if report:
-        style_memory_report = report.get("style_memory_report") or {}
+    style_memory_report = report.get("style_memory_report") if report else {}
 
     if isinstance(style_memory_report, dict):
         display["style_memory"] = style_memory_report
@@ -274,13 +1213,11 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
         display["style_memory_stats"] = {}
 
     # Score IA documentaire exposé au frontend.
-    ai_report = {}
-    if report:
-        ai_report = (
-            report.get("ai_detection_report_runtime")
-            or report.get("ai_detection_report")
-            or {}
-        )
+    ai_report = (
+        report.get("ai_detection_report_runtime")
+        or report.get("ai_detection_report")
+        or {}
+    ) if report else {}
 
     if isinstance(ai_report, dict):
         summary = ai_report.get("summary") or {}
@@ -301,20 +1238,26 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
         display["ai_score"] = None
         display["ai_risk_level"] = None
         display["ai_suspected_passages"] = []
+
     return display
 
-
 def _merge_latest_run_into_bundle(bundle: dict, latest_run: DiagnosticRun | None) -> dict:
+    """
+    Injecte le rapport du dernier run DB dans le bundle.
+
+    V139 : cette fonction ne doit être appelée qu'après choix de source officielle,
+    sinon elle peut écraser un fichier ennodiagnostic_report.json plus récent.
+    """
     bundle = dict(bundle or {})
 
     if latest_run and latest_run.raw_result_json:
         raw = sanitize_json_value(latest_run.raw_result_json)
         bundle["run_raw_result_json"] = raw
 
-        if isinstance(raw, dict):
-            pipeline = raw.get("script_or_pipeline_result")
-            if isinstance(pipeline, dict) and isinstance(pipeline.get("report"), dict):
-                bundle["report"] = pipeline["report"]
+        report, _content = _extract_latest_run_report(latest_run)
+        if report:
+            bundle["report"] = report
+            bundle["report_source"] = "db_latest_run"
 
     return sanitize_json_value(bundle)
 
@@ -325,29 +1268,120 @@ def get_latest_diagnostic(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """
+    Retourne une seule sortie officielle au frontend.
+
+    V140 :
+    - choisit le rapport le plus récent ;
+    - si ce rapport vient du fichier JSON, il est matérialisé une seule fois en DB ;
+    - synchronise les verrous avant de les retourner ;
+    - le frontend reçoit uniquement des ids positifs et peut enregistrer les décisions.
+    """
     project = get_project_for_user(db, project_id, current_user)
     latest_run = _latest_run_for_project(db, project.id)
 
-    bundle = read_diagnostic_bundle(project)
-    bundle = _merge_latest_run_into_bundle(bundle, latest_run)
+    base_bundle = read_diagnostic_bundle(project)
+    bundle = _choose_latest_report_source(base_bundle, latest_run)
+    official_source = bundle.get("official_report_source")
 
     display = build_diagnostic_display(project, bundle)
 
-    # V22 : on force toujours depuis latest_run si le rapport existe.
-    # Comme ça on évite que display retombe sur les anciens objectifs bruts.
-    display = _force_display_from_latest_run(display, latest_run, project=project)
+    latest_verrous: list[Verrou] = []
+    auto_materialized = False
 
-    latest_run_dump = None
-    latest_verrous = []
-
-    if latest_run:
-        latest_run_dump = DiagnosticRead.model_validate(latest_run).model_dump()
-        latest_verrous = (
-            db.query(Verrou)
-            .filter(Verrou.diagnostic_run_id == latest_run.id)
-            .order_by(Verrou.created_at.asc())
-            .all()
+    if official_source == "filesystem_report":
+        materialized_run, latest_verrous, auto_materialized = _materialize_filesystem_report_in_db(
+            db=db,
+            project=project,
+            bundle=bundle,
         )
+        if materialized_run is not None:
+            latest_run = materialized_run
+            official_source = "filesystem_report_materialized_in_db"
+    elif latest_run is not None:
+        latest_verrous = _read_latest_run_verrous_fast(db, latest_run)
+        if not latest_verrous:
+            report, _content = _extract_latest_run_report(latest_run)
+            if _extract_final_accepted_verrous_from_report(report):
+                latest_verrous = _sync_final_verrous_from_run(db, latest_run)
+
+    latest_run_dump = (
+        DiagnosticRead.model_validate(latest_run).model_dump()
+        if latest_run is not None
+        else None
+    )
+
+    db_verrous_dump = _dump_verrous_for_frontend(latest_verrous)
+
+    # Conserve la version JSON pour audit, mais elle ne pilote plus les boutons.
+    json_verrous = (
+        display.get("validation_verrous")
+        or display.get("validation_verrous_preview")
+        or display.get("consultant_verrous_cir")
+        or display.get("llm_reformulated_verrous")
+        or []
+    )
+    if not isinstance(json_verrous, list):
+        json_verrous = []
+
+    if db_verrous_dump:
+        display["json_llm_reformulated_verrous"] = json_verrous
+        display["validation_verrous"] = db_verrous_dump
+        display["validation_verrous_preview"] = db_verrous_dump
+        display["consultant_verrous_cir"] = db_verrous_dump
+        display["llm_reformulated_verrous"] = db_verrous_dump
+        display["consultant_validation_source"] = "db_synced_verrous_v143"
+        display["consultant_validation_enabled"] = True
+
+        frontend_verrous = db_verrous_dump
+        sync_info = {
+            "ok": True,
+            "run_id": latest_run.id if latest_run else None,
+            "count": len(db_verrous_dump),
+            "source": "db_synced_verrous_v143",
+            "auto_materialized_from_filesystem": auto_materialized,
+            "note": "Tous les verrous affichés possèdent un id PostgreSQL positif.",
+        }
+    else:
+        # Aucun faux id négatif n'est renvoyé comme verrou décisionnel.
+        display["validation_verrous"] = []
+        display["validation_verrous_preview"] = json_verrous
+        display["consultant_verrous_cir"] = []
+        display["llm_reformulated_verrous"] = json_verrous
+        display["consultant_validation_source"] = "json_preview_without_db_id"
+        display["consultant_validation_enabled"] = False
+
+        frontend_verrous = []
+        sync_info = {
+            "ok": False,
+            "run_id": latest_run.id if latest_run else None,
+            "count": 0,
+            "preview_count": len(json_verrous),
+            "source": "json_preview_without_db_id",
+            "note": "Aucun verrou décisionnel n'est retourné sans id DB.",
+        }
+
+    display["verrous_sync"] = sync_info
+    display["official_report_debug"] = bundle.get("official_report_debug") or {}
+    display["official_report_source"] = official_source
+    display["display_source_policy"] = {
+        "single_source_of_truth": "backend",
+        "sections": "display.report_sections / display.diagnostic_sections_by_key",
+        "verrous": "display.validation_verrous",
+        "frontend_rule": "Le frontend ne doit créer aucun id négatif pour une décision consultant.",
+    }
+    persisted = _as_dict(getattr(latest_run, "raw_result_json", {}) if latest_run else {})
+    persisted_snapshot = _as_dict(persisted.get("diagnostic_snapshot"))
+    display["database_persistence"] = {
+        "ok": bool(latest_run and persisted_snapshot and db_verrous_dump),
+        "version": persisted.get("persistence_version"),
+        "run_id": latest_run.id if latest_run else None,
+        "sections_count": persisted_snapshot.get("sections_count", 0),
+        "section_titles_count": persisted_snapshot.get("section_titles_count", 0),
+        "cards_count": persisted_snapshot.get("diagnostic_cards_count", 0),
+        "verrous_count": len(db_verrous_dump),
+        "all_sections_saved_in_raw_result_json": bool(persisted_snapshot),
+    }
 
     return sanitize_json_value(
         {
@@ -362,13 +1396,12 @@ def get_latest_diagnostic(
             "latest_run": latest_run_dump,
             "bundle": bundle,
             "display": display,
-            "validation_verrous": [
-                VerrouRead.model_validate(v).model_dump() for v in latest_verrous
-            ],
+            "validation_verrous": frontend_verrous,
             "source_policy": {
-                "diagnostic_display_source": "V22 forced from latest_run.raw_result_json.script_or_pipeline_result.report.diagnostic.content",
-                "validation_source": "validation_verrous or /projects/{id}/verrous",
-                "note": "Flow simple : prepare-sources prépare extraction/NLP/RAG ; run-agent lance seulement l’agent EnnoDiagnostic. /diagnostic/run garde le mode complet en un bouton.",
+                "diagnostic_display_source": "backend_display_service_v143",
+                "official_report_source": official_source,
+                "validation_source": display.get("consultant_validation_source"),
+                "note": "Le backend matérialise le rapport officiel et renvoie des verrous DB décisionnels.",
             },
         }
     )
@@ -380,17 +1413,18 @@ def import_existing_diagnostic(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Importe le rapport complet et ses verrous dans une transaction unique."""
     project = get_project_for_user(db, project_id, current_user)
-    run = create_diagnostic_run_from_files(db, project)
-    return run
-
-
+    try:
+        return create_diagnostic_run_from_files(db, project)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
 
 
 def _load_document_compare_module():
-    """
+    r"""
     Charge DOCUMENT_COMPARE de manière robuste.
 
     Pourquoi :
@@ -773,6 +1807,101 @@ def compare_with_previous_cir(
         )
 
 
+
+
+@router.post("/projects/{project_id}/cir-previous/compare-current")
+def compare_current_with_previous_cir_independent(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Lance uniquement la comparaison CIR précédent.
+
+    Cette route ne lance pas EnnoDiagnostic, ne relance pas le LLM diagnostic,
+    ne relance pas le score IA et ne refait pas le NLP.
+    Elle compare le nlp_result.json courant déjà préparé avec la mémoire CIR N-1.
+    """
+    project = get_project_for_user(db, project_id, current_user)
+
+    try:
+        from services.diagnostic_service import get_project_store
+        from modules.CIR_MEMORY.cir_memory import compare_current_raw_with_cir_memory
+
+        ps = get_project_store(project)
+        nlp_path = ps.nlp_dir / "nlp_result.json"
+
+        if not nlp_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="nlp_result.json introuvable. Lance d'abord Préparer les sources.",
+            )
+
+        report = compare_current_raw_with_cir_memory(
+            organisme=project.organisme,
+            project=project.project_name,
+            year=str(project.year),
+            nlp_result_path=nlp_path,
+        )
+
+        return sanitize_json_value(report)
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Comparaison CIR précédent impossible : {exc}",
+        )
+
+
+@router.get("/projects/{project_id}/cir-previous/comparison-latest")
+def get_latest_previous_cir_comparison(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Lit le dernier rapport de comparaison CIR précédent sauvegardé.
+    Ne lance aucun calcul.
+    """
+    project = get_project_for_user(db, project_id, current_user)
+
+    try:
+        from modules.CIR_MEMORY.cir_memory import comparison_report_path
+
+        path = comparison_report_path(project.organisme, project.project_name, str(project.year))
+        if not path.exists():
+            return sanitize_json_value({
+                "ok": False,
+                "missing": True,
+                "has_previous_cir": False,
+                "message": "Aucune comparaison CIR précédent sauvegardée pour ce projet.",
+                "report_path": str(path),
+            })
+
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Rapport CIR précédent illisible : {exc}",
+            )
+
+        if isinstance(report, dict):
+            report["report_path"] = str(path)
+            report["loaded_from_saved_report"] = True
+
+        return sanitize_json_value(report)
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lecture comparaison CIR précédent impossible : {exc}",
+        )
+
 @router.post("/projects/{project_id}/diagnostic/prepare-sources")
 def prepare_diagnostic_sources(
     project_id: int,
@@ -796,13 +1925,14 @@ def run_diagnostic_agent_only(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Étape 2 :
-    lance seulement EnnoDiagnosticAgent.generate_diagnostic()
-    depuis les sources déjà préparées dans Chroma.
+    Lance l'agent puis sauvegarde atomiquement :
+    rapport complet, toutes les sections et verrous avec ids DB positifs.
     """
     project = get_project_for_user(db, project_id, current_user)
-    run = run_ennodiagnostic_agent_only(db, project)
-    return run
+    try:
+        return run_ennodiagnostic_agent_only(db, project)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
 @router.post("/projects/{project_id}/diagnostic/run", response_model=DiagnosticRead)
@@ -811,9 +1941,12 @@ def run_diagnostic(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Pipeline complet avec persistance DB complète et atomique V142."""
     project = get_project_for_user(db, project_id, current_user)
-    run = run_ennodiagnostic(db, project)
-    return run
+    try:
+        return run_ennodiagnostic(db, project)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
 @router.post("/projects/{project_id}/diagnostic/{run_id}/sync-verrous", response_model=list[VerrouRead])
@@ -857,9 +1990,40 @@ def list_verrous(
 
     if latest_only:
         latest_run = _latest_run_for_project(db, project.id)
+
+        # V141 : /verrous doit suivre la même sortie officielle que
+        # /diagnostic/latest. Si un rapport CLI plus récent existe, on le
+        # matérialise ici avant de lire les verrous.
+        base_bundle = read_diagnostic_bundle(project)
+        bundle = _choose_latest_report_source(base_bundle, latest_run)
+        if bundle.get("official_report_source") == "filesystem_report":
+            materialized_run, _synced, _created = _materialize_filesystem_report_in_db(
+                db=db,
+                project=project,
+                bundle=bundle,
+            )
+            if materialized_run is not None:
+                latest_run = materialized_run
+
         if not latest_run:
             return []
-        query = query.filter(Verrou.diagnostic_run_id == latest_run.id)
+
+        current = _read_latest_run_verrous_fast(db, latest_run)
+        if not current:
+            run_report, _content = _extract_latest_run_report(latest_run)
+            if _extract_final_accepted_verrous_from_report(run_report):
+                current = _sync_final_verrous_from_run(db, latest_run)
+
+        # Retour direct pour garantir les vrais ids du run officiel.
+        seen: set[str] = set()
+        clean: list[Verrou] = []
+        for verrou in current:
+            key = _normalize_title_for_match(getattr(verrou, "title", ""))
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            clean.append(verrou)
+        return clean
 
     verrous = query.order_by(Verrou.created_at.desc()).all()
 
@@ -893,10 +2057,25 @@ def update_verrou_decision(
         .first()
     )
 
+    # V141 : compatibilité avec les ids négatifs déjà présents dans un onglet
+    # frontend ouvert avant la synchronisation DB. Le backend résout cet id
+    # historique vers le titre du rapport officiel, synchronise, puis applique
+    # la décision sur le vrai verrou PostgreSQL.
+    legacy_negative_id = verrou_id if verrou_id < 0 else None
+    if verrou is None and legacy_negative_id is not None:
+        verrou = _resolve_negative_frontend_verrou(
+            db=db,
+            project=project,
+            negative_id=legacy_negative_id,
+        )
+
     if not verrou:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Verrou introuvable.",
+            detail=(
+                "Verrou introuvable après tentative de synchronisation automatique. "
+                "Recharge le diagnostic pour récupérer les ids PostgreSQL."
+            ),
         )
 
     allowed = {"garde", "rejete", "reformuler", "en_attente"}
@@ -1044,7 +2223,7 @@ def _split_cir_final_into_items(text: str, filename: str) -> Dict[str, Any]:
             current_title = first_line[:180]
 
         # On évite les pages, pieds de page et bouts trop courts.
-        p = re.sub(r"(?i)GIRODIN-SAUER\s*-\s*CONFIDENTIEL\s*PAGE\s*\d+", "", p).strip()
+        p = re.sub(r"(?i).*confidentiel\s*page\s*\d+", "", p).strip()
         p = re.sub(r"(?i)Ce document est la propriété.*", "", p).strip()
         if len(p) < 80:
             continue

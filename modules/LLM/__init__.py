@@ -1,2 +1,2 @@
 # -*- coding: utf-8 -*-
-from .llm_client import LLMClient, GeminiClient, GeminiLLM
+from .llm_client import LLMClient, GeminiClient, GeminiLLM, OpenRouterClient, OpenAIClient

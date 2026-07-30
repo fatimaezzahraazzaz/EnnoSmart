@@ -4,29 +4,35 @@ from __future__ import annotations
 import hashlib
 import math
 import re
-from typing import Dict, Any, List, Optional, Tuple
+from dataclasses import asdict, dataclass
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
-from .normalizer import normalize_text
 from .cleaner import is_noise_line
+from .document_structure_mapper import context_prefix
+from .normalizer import normalize_text
 
-SENT_SPLIT = re.compile(r'(?<=[.!?;:])\s+|\n+')
+
+SENT_SPLIT = re.compile(r"(?<=[.!?;:])\s+|\n+")
 
 
-def _slug(s: str) -> str:
-    s = re.sub(r'[^a-zA-Z0-9]+', '_', str(s or '').lower()).strip('_')
-    return s[:55] or 'doc'
+def _slug(value: str) -> str:
+    value = re.sub(r"[^a-zA-Z0-9]+", "_", str(value or "").lower()).strip("_")
+    return value[:55] or "doc"
 
 
 def split_sentences(text: str) -> List[str]:
-    text = normalize_text(text)
-    raw = [x.strip(' -|') for x in SENT_SPLIT.split(text) if x and x.strip()]
-    out = []
-    for s in raw:
-        if len(s) < 25:
+    # Conserver les sauts de ligne : ils séparent souvent un titre de section
+    # de son premier paragraphe. ``normalize_text`` appliqué au document entier
+    # les supprimait et pouvait fusionner « Related works » avec une méthode,
+    # ce qui faisait perdre le rôle ``etat_art``.
+    raw_text = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+    text = "\n".join(normalize_text(line) for line in raw_text.split("\n"))
+    out: List[str] = []
+    for raw in SENT_SPLIT.split(text):
+        sentence = str(raw or "").strip(" -|")
+        if len(sentence) < 25 or is_noise_line(sentence):
             continue
-        if is_noise_line(s):
-            continue
-        out.append(s)
+        out.append(sentence)
     return out
 
 
@@ -34,129 +40,448 @@ def is_good_candidate(text: str) -> bool:
     if not text or len(text) < 45 or len(text) > 1500:
         return False
     low = text.lower()
-    if any(x in low for x in ['tapez ici', 'nom de la présentation', 'document security', 'charte graphique']):
+    if any(marker in low for marker in ("tapez ici", "nom de la présentation", "document security", "charte graphique")):
         return False
-    words = re.findall(r'[A-Za-zÀ-ÿ]{3,}', text)
+    words = re.findall(r"[A-Za-zÀ-ÿ]{3,}", text)
     if len(words) < 6:
         return False
-    if len(set(w.lower() for w in words)) / max(len(words), 1) < 0.30:
-        return False
-    return True
+    return len({word.lower() for word in words}) / max(len(words), 1) >= 0.30
 
 
 def _candidate_key(text: str) -> str:
-    return hashlib.md5(re.sub(r'\W+', '', text.lower()).encode('utf-8')).hexdigest()
+    return hashlib.sha1(re.sub(r"\W+", "", text.lower()).encode("utf-8")).hexdigest()
 
 
-def _find_section(text: str, doc_sections: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
-    for sec in doc_sections or []:
-        content = str(sec.get("content") or "")
-        if text in content:
-            return sec.get("title"), sec.get("role_hint")
-    return None, None
+def _passage_id(doc: Dict[str, Any], text: str) -> str:
+    doc_key = str(doc.get("source_path") or doc.get("document") or "doc")
+    digest = hashlib.sha1(f"{doc_key}|{text}".encode("utf-8")).hexdigest()[:16]
+    return f"{_slug(doc.get('document', 'doc'))}_{digest}"
 
 
-def _windows_for_doc(sents_count: int, windows) -> List[int]:
-    if sents_count < 12:
-        return [w for w in (1, 2, 3) if w <= max(sents_count, 1)]
-    return list(windows)
+def _section_content(section: Dict[str, Any]) -> str:
+    content = section.get("content")
+    if content:
+        return normalize_text(str(content))
+    return normalize_text(" ".join(str(x) for x in section.get("blocks", []) if x))
+
+
+def _find_section(text: str, doc_sections: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str], List[str]]:
+    normalized = normalize_text(text)
+    best: Optional[Dict[str, Any]] = None
+    best_overlap = 0
+    text_tokens = set(re.findall(r"[a-zà-ÿ0-9]+", normalized.lower()))
+
+    for section in doc_sections or []:
+        content = _section_content(section)
+        if not content:
+            continue
+        if normalized in content or content in normalized:
+            best = section
+            break
+        section_tokens = set(re.findall(r"[a-zà-ÿ0-9]+", content.lower()))
+        overlap = len(text_tokens & section_tokens)
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best = section
+
+    if not best or best_overlap < 4 and normalized not in _section_content(best):
+        return None, None, []
+    return (
+        best.get("section_title") or best.get("title"),
+        best.get("section_role_hint") or best.get("role_hint"),
+        list(best.get("section_path") or []),
+    )
+
+
+def _windows_for_doc(sentence_count: int, windows) -> List[int]:
+    if sentence_count < 12:
+        return [w for w in (1, 2, 3) if w <= max(sentence_count, 1)]
+    return [int(w) for w in windows if int(w) > 0]
+
+
+def _build_doc_candidates(
+    doc: Dict[str, Any],
+    structure: Dict[str, Any],
+    windows,
+) -> List[Dict[str, Any]]:
+    sentences = split_sentences(doc.get("text", ""))
+    sections = structure.get("sections", []) if isinstance(structure, dict) else []
+    sentence_locations = [_find_section(sentence, sections) for sentence in sentences]
+    structure_type = structure.get("structure_type") or structure.get("document_type") if isinstance(structure, dict) else None
+    document_weight = float(doc.get("document_weight") or doc.get("source_weight") or 0.55)
+    seen = set()
+    out: List[Dict[str, Any]] = []
+
+    for window in _windows_for_doc(len(sentences), windows):
+        for index in range(0, max(0, len(sentences) - window + 1)):
+            locations = sentence_locations[index:index + window]
+            location_titles = {location[0] for location in locations if location[0]}
+
+            # Un passage ne doit pas mélanger deux sections adjacentes. Sans
+            # cette garde, la dernière phrase de « Related works » pouvait être
+            # concaténée à la première phrase de « Methodology » et devenir un
+            # faux verrou du projet.
+            if len(location_titles) > 1:
+                continue
+
+            text = " ".join(sentences[index:index + window]).strip()
+            if not is_good_candidate(text):
+                continue
+            key = _candidate_key(text)
+            if key in seen:
+                continue
+            seen.add(key)
+            if len(location_titles) == 1:
+                title = next(iter(location_titles))
+                location = next(location for location in locations if location[0] == title)
+                _, hint, path = location
+            else:
+                title, hint, path = _find_section(text, sections)
+            item = {
+                "passage_id": _passage_id(doc, text),
+                "document": doc.get("document"),
+                "source_path": doc.get("source_path"),
+                "source_type": doc.get("source_type") or "raw",
+                "content_origin": doc.get("content_origin", "unknown"),
+                "source_weight": float(doc.get("source_weight") or document_weight),
+                "text": text,
+                "window_size": window,
+                "sentence_start": index,
+                "document_type": doc.get("document_type") or "unknown_document",
+                "source_policy": doc.get("source_policy") or "secondary",
+                "document_weight": document_weight,
+                "document_type_confidence": doc.get("document_type_confidence"),
+                "structure_type": structure_type,
+                "section_title": title,
+                "section_path": path,
+                "section_role_hint": hint or "unknown",
+                # Contexte local conservé séparément : le passage source reste
+                # inchangé, mais le filtre et Frascati peuvent comprendre une
+                # phrase dont l'incertitude est formulée juste avant/après.
+                "context_before": sentences[index - 1] if index > 0 else "",
+                "context_after": sentences[index + window] if index + window < len(sentences) else "",
+            }
+            prefix = context_prefix(item)
+            local_context = " ".join(
+                part for part in (item.get("context_before"), text, item.get("context_after")) if part
+            )
+            item["analysis_text"] = local_context
+            item["model_input"] = f"{prefix}\nContexte local: {local_context}\nPassage: {text}".strip()
+            out.append(item)
+    return out
+
+
+def _coverage_order(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Ordre dont chaque préfixe couvre le début, le milieu et la fin.
+
+    L'ancienne sélection prenait les premiers candidats d'un document. Quand
+    ``max_candidates`` était atteint, les sections finales pouvaient ne jamais
+    être classifiées. Cet ordre divise récursivement les intervalles ; une
+    limite de coût ne devient donc plus une coupure du document.
+    """
+    ordered = sorted(
+        items,
+        key=lambda item: (
+            int(item.get("sentence_start") or 0),
+            int(item.get("window_size") or 0),
+        ),
+    )
+    size = len(ordered)
+    if size <= 2:
+        return ordered
+
+    indices = [0, size - 1]
+    intervals = [(0, size - 1)]
+    seen = set(indices)
+    while intervals:
+        left, right = intervals.pop(0)
+        middle = (left + right) // 2
+        if middle not in seen:
+            indices.append(middle)
+            seen.add(middle)
+        if middle - left > 1:
+            intervals.append((left, middle))
+        if right - middle > 1:
+            intervals.append((middle, right))
+
+    # Sécurité pour les petits intervalles et arrondis.
+    indices.extend(index for index in range(size) if index not in seen)
+    return [ordered[index] for index in indices]
 
 
 def make_candidates(
     documents: List[Dict[str, Any]],
-    max_candidates: int = 600,
+    max_candidates: int = 700,
     windows=(2, 3, 4),
     section_info: Optional[List[Dict[str, Any]]] = None,
     min_candidates_per_doc: int = 8,
     max_candidates_per_doc: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    """
-    Génère les candidats de manière équilibrée multi-documents.
+    """Construit une liste équilibrée sans dédupliquer entre deux documents.
 
-    Ancien comportement : un gros document en début de liste pouvait consommer tout max_candidates.
-    Nouveau comportement : chaque document reçoit un quota, puis les places restantes sont redistribuées.
+    La déduplication inter-document de l'ancienne version supprimait parfois la
+    deuxième preuve d'un même fait. Le parcours round-robin garantit la
+    couverture documentaire ; ``max_candidates`` reste uniquement une limite
+    de coût du classifieur, jamais une limite du nombre final de verrous.
     """
     documents = documents or []
-    if not documents:
+    if not documents or max_candidates <= 0:
         return []
 
-    n_docs = len(documents)
-    base_quota = max(min_candidates_per_doc, int(math.ceil(max_candidates / max(n_docs, 1))))
-    if max_candidates_per_doc is not None:
-        base_quota = min(base_quota, int(max_candidates_per_doc))
+    buckets: List[List[Dict[str, Any]]] = []
+    for index, doc in enumerate(documents):
+        structure = section_info[index] if section_info and index < len(section_info) else {}
+        bucket = _coverage_order(_build_doc_candidates(doc, structure, windows))
+        if max_candidates_per_doc is not None:
+            bucket = bucket[: max(0, int(max_candidates_per_doc))]
+        buckets.append(bucket)
 
-    all_by_doc: List[List[Dict[str, Any]]] = []
-    global_seen = set()
+    selected: List[Dict[str, Any]] = []
+    cursors = [0 for _ in buckets]
 
-    for idx_doc, doc in enumerate(documents):
-        sents = split_sentences(doc.get('text', ''))
-        did = _slug(doc.get('document', 'doc'))
-        doc_sections = []
-        structure_type = None
+    # Premier passage : couverture minimale par document.
+    for _ in range(max(0, int(min_candidates_per_doc))):
+        for bucket_index, bucket in enumerate(buckets):
+            cursor = cursors[bucket_index]
+            if cursor < len(bucket) and len(selected) < max_candidates:
+                selected.append(bucket[cursor])
+                cursors[bucket_index] += 1
 
-        if section_info and idx_doc < len(section_info):
-            structure_type = section_info[idx_doc].get("structure_type") or section_info[idx_doc].get("document_type")
-            doc_sections = section_info[idx_doc].get("sections", [])
-
-        # IMPORTANT : le vrai document_type vient du document enrichi, pas du structure_analyzer.
-        doc_type = doc.get("document_type") or "unknown_document"
-        source_policy = doc.get("source_policy") or "secondary"
-        document_weight = float(doc.get("document_weight") or doc.get("source_weight") or 0.55)
-
-        local_candidates: List[Dict[str, Any]] = []
-        local_seen = set()
-        idx = 0
-
-        for w in _windows_for_doc(len(sents), windows):
-            for i in range(0, max(0, len(sents) - w + 1)):
-                text = ' '.join(sents[i:i + w]).strip()
-                if not is_good_candidate(text):
-                    continue
-
-                key = _candidate_key(text)
-                if key in local_seen:
-                    continue
-                local_seen.add(key)
-
-                section_title, section_role_hint = _find_section(text, doc_sections)
-
-                local_candidates.append({
-                    'passage_id': f'{did}_{idx}',
-                    'document': doc.get('document'),
-                    'source_path': doc.get('source_path'),
-                    'source_type': 'raw',
-                    'content_origin': doc.get('content_origin', 'unknown'),
-                    'source_weight': float(doc.get('source_weight', document_weight)),
-                    'text': text,
-                    'window_size': w,
-                    'document_type': doc_type,
-                    'source_policy': source_policy,
-                    'document_weight': document_weight,
-                    'document_type_confidence': doc.get('document_type_confidence'),
-                    'structure_type': structure_type,
-                    'section_title': section_title,
-                    'section_role_hint': section_role_hint,
-                })
-                idx += 1
-
-        # D'abord quota par document pour garantir la couverture.
-        selected = []
-        for c in local_candidates:
-            key = _candidate_key(c.get("text", ""))
-            if key in global_seen:
+    # Redistribution équitable de toutes les places restantes.
+    progressed = True
+    while len(selected) < max_candidates and progressed:
+        progressed = False
+        for bucket_index, bucket in enumerate(buckets):
+            cursor = cursors[bucket_index]
+            if cursor >= len(bucket):
                 continue
-            selected.append(c)
-            global_seen.add(key)
-            if len(selected) >= base_quota:
+            selected.append(bucket[cursor])
+            cursors[bucket_index] += 1
+            progressed = True
+            if len(selected) >= max_candidates:
                 break
 
-        all_by_doc.append(selected)
+    return selected
 
-    # Aplatir les quotas garantis.
-    candidates: List[Dict[str, Any]] = [c for bucket in all_by_doc for c in bucket]
 
-    # Si on dépasse max_candidates, garder au moins une couverture documentaire.
-    if len(candidates) > max_candidates:
-        candidates = candidates[:max_candidates]
+# ============================================================================
+# Extension V172 : candidat direct + preuve de support
+# L'API historique make_candidates reste intégralement disponible.
+# ============================================================================
 
-    return candidates
+VERSION = "lock_candidates_v178_domain_neutral_structuring_seeds"
+
+SUPPORTING_ROLES = {
+    "objectif", "methode", "parametre", "resultat", "limite",
+    "contribution", "mixed", "verrou",
+}
+STRONG_DIRECT_FEATURES = ("uncertainty", "causal_gap", "tradeoff", "knowledge_gap")
+STRUCTURING_FEATURES = ("open_validation", "tradeoff", "knowledge_gap")
+SEED_FRIENDLY_ROLES = {"verrou", "limite", "objectif", "contribution", "mixed"}
+METHOD_PARAMETER_ROLES = {"parametre", "methode"}
+DESIGN_SUPPORT_TYPES = {"plan_schema", "conception_technique", "unknown_document"}
+SUPPORT_FEATURES = ("measurement_limit", "dependency", "technical", "open_validation")
+UNRESOLVED_PATTERNS = (
+    r"\b(?:reste|restent)\s+(?:a|à)\s+(?:determiner|déterminer|comprendre|valider|verifier|vérifier|etablir|établir)\b",
+    r"\b(?:doit|doivent|devra|devront)\s+(?:etre|être\s+)?(?:determine|déterminé|determines|déterminés|valide|validé|verifie|vérifié|etudie|étudié)\b",
+    r"\b(?:essais?|analyses?|investigations?)\s+compl[eé]mentaires?\b",
+    r"\b(?:essais?|analyses?|investigations?)\s+compl[eé]mentaires?.{0,120}\b(?:determiner|déterminer|valider|verifier|vérifier|comprendre|etablir|établir)\b",
+    r"\b(?:cause|origine|mecanisme|mécanisme)\s+(?:reste|demeure)\s+(?:inconnue|inconnu|indeterminee|indéterminée)\b",
+    r"\b(?:impossible|non\s+possible)\s+(?:a|à)\s+(?:predire|prédire|determiner|déterminer)\b",
+    r"\b(?:non|pas)\s+r[ée]alisable\b",
+    r"\b(?:ne peut|ne peuvent)\s+(?:pas\s+)?(?:etre|être\s+)?(?:garanti|garantie|pr[ée]dit|pr[ée]dite|d[ée]termin[ée])\b",
+)
+
+
+def _float(value: Any, default: float = 0.0) -> float:
+    try:
+        number = float(value if value not in (None, "") else default)
+        return default if math.isnan(number) or math.isinf(number) else number
+    except Exception:
+        return default
+
+
+def _text(item: Mapping[str, Any]) -> str:
+    # Les noms de fichiers sont des métadonnées, jamais des preuves. Les
+    # inclure ici créait de faux verrous à partir de plans et de schémas.
+    return " ".join(str(item.get(key) or "").strip() for key in (
+        "section_title", "analysis_text", "text",
+        "context_before", "context_after"
+    ) if item.get(key)).strip()
+
+
+def _role(item: Mapping[str, Any]) -> str:
+    return str(
+        item.get("semantic_role")
+        or item.get("original_model_role")
+        or item.get("role")
+        or ""
+    ).strip().lower()
+
+
+def _has_explicit_unresolved_language(text: str) -> bool:
+    normalized = str(text or "").lower()
+    return any(re.search(pattern, normalized, flags=re.I) for pattern in UNRESOLVED_PATTERNS)
+
+
+@dataclass(frozen=True)
+class CandidateDecision:
+    direct_lock_candidate: bool
+    supporting_lock_evidence: bool
+    direct_score: float
+    evidence_score: float
+    semantic_role: str
+    active_features: List[str]
+    reason: str
+    seed_reason: str
+    version: str = VERSION
+
+
+def classify_candidate(
+    item: Mapping[str, Any],
+    *,
+    direct_threshold: float = 0.60,
+    evidence_threshold: float = 0.38,
+) -> CandidateDecision:
+    """Distingue strictement une graine de verrou d'une preuve de support.
+
+    Une simple mention de validation ouverte ne crée plus un verrou. Elle ne
+    devient une graine que si le texte exprime explicitement une question non
+    résolue et si le score du détecteur est suffisamment élevé.
+    """
+    features = item.get("lock_candidate_features") or {}
+    if not isinstance(features, dict):
+        features = {}
+
+    role = _role(item)
+    text = _text(item)
+    model_score = _float(
+        item.get("lock_candidate_score")
+        or item.get("verrou_score")
+        or (item.get("lock_model_scores") or {}).get("1")
+    )
+
+    active = sorted(str(name) for name, value in features.items() if bool(value))
+    strong_feature = any(bool(features.get(name)) for name in STRONG_DIRECT_FEATURES)
+    explicit_unresolved = _has_explicit_unresolved_language(text)
+    open_validation = bool(features.get("open_validation"))
+    knowledge_gap = bool(features.get("knowledge_gap"))
+    routine_resolution = bool(features.get("routine_resolution"))
+    role_supports = role in SUPPORTING_ROLES
+    has_content = len(text) >= 30
+
+    # Graine : une vraie inconnue explicite, un gap causal ou un compromis.
+    # Une hypothèse de calcul classée paramètre/méthode ne devient jamais une
+    # graine sur le seul signal générique ``uncertainty``.
+    direct_score = model_score
+    if strong_feature:
+        direct_score += 0.12
+    if explicit_unresolved:
+        direct_score += 0.10
+    if bool(features.get("technical")):
+        direct_score += 0.03
+    if knowledge_gap or bool(features.get("tradeoff")):
+        direct_score += 0.05
+
+    explicit_lock = bool(item.get("lock_candidate_explicit")) or role == "verrou"
+    causal_or_tradeoff = bool(features.get("causal_gap") or features.get("tradeoff"))
+    uncertainty_seed = bool(features.get("uncertainty")) and role in SEED_FRIENDLY_ROLES
+    method_parameter_seed = bool(
+        role in METHOD_PARAMETER_ROLES
+        and explicit_unresolved
+        and (open_validation or causal_or_tradeoff or knowledge_gap)
+        and bool(features.get("technical"))
+        and model_score >= 0.46
+    )
+
+    structuring_signal = any(bool(features.get(name)) for name in STRUCTURING_FEATURES)
+    routine_only = bool(
+        routine_resolution
+        and not knowledge_gap
+        and not bool(features.get("tradeoff"))
+        and not open_validation
+    )
+
+    direct = bool(
+        has_content
+        and direct_score >= direct_threshold
+        and not routine_only
+        and (
+            explicit_lock
+            or causal_or_tradeoff
+            or uncertainty_seed
+            or method_parameter_seed
+            or (structuring_signal and explicit_unresolved and bool(features.get("technical")))
+        )
+    )
+
+    evidence_score = model_score
+    if role_supports:
+        evidence_score += 0.07
+    if any(bool(features.get(name)) for name in SUPPORT_FEATURES):
+        evidence_score += 0.08
+    if bool(features.get("measurement_limit")):
+        evidence_score += 0.07
+    if bool(features.get("technical")):
+        evidence_score += 0.05
+    if explicit_unresolved:
+        evidence_score += 0.04
+    document_type = str(item.get("document_type") or "").lower()
+    source_policy = str(item.get("source_policy") or "").lower()
+    if document_type in DESIGN_SUPPORT_TYPES:
+        evidence_score += 0.06
+    if source_policy == "context_only":
+        evidence_score -= 0.03
+
+    supporting = bool(
+        has_content
+        and role_supports
+        and (bool(features.get("technical")) or document_type in DESIGN_SUPPORT_TYPES)
+        and evidence_score >= evidence_threshold
+    )
+
+    if direct:
+        if causal_or_tradeoff:
+            seed_reason = "causal_gap_or_tradeoff_seed"
+        elif method_parameter_seed:
+            seed_reason = "explicit_unresolved_method_or_parameter_seed"
+        elif strong_feature:
+            seed_reason = "role_compatible_uncertainty_seed"
+        elif bool(item.get("lock_candidate_explicit")):
+            seed_reason = "explicit_lock_seed"
+        else:
+            seed_reason = "explicit_unresolved_validation_seed"
+        reason = "seed_candidate_for_technical_lock"
+    elif supporting:
+        seed_reason = "not_a_seed"
+        reason = "supporting_evidence_only"
+    else:
+        seed_reason = "not_a_seed"
+        reason = "not_relevant_for_lock_construction"
+
+    return CandidateDecision(
+        direct_lock_candidate=direct,
+        supporting_lock_evidence=supporting,
+        direct_score=round(min(max(direct_score, 0.0), 1.0), 4),
+        evidence_score=round(min(max(evidence_score, 0.0), 1.0), 4),
+        semantic_role=role,
+        active_features=active,
+        reason=reason,
+        seed_reason=seed_reason,
+    )
+
+
+def enrich_candidate(item: Mapping[str, Any]) -> Dict[str, Any]:
+    output = dict(item)
+    decision = classify_candidate(item)
+    output["lock_candidate_v173"] = asdict(decision)
+    output["lock_candidate_v172"] = asdict(decision)  # compatibilité temporaire
+    output["direct_lock_candidate"] = decision.direct_lock_candidate
+    output["supporting_lock_evidence"] = decision.supporting_lock_evidence
+    output["lock_evidence_score"] = decision.evidence_score
+    output["lock_seed_reason"] = decision.seed_reason
+    return output
+
+
+def enrich_candidates(items: Iterable[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    return [enrich_candidate(item) for item in items if isinstance(item, Mapping)]

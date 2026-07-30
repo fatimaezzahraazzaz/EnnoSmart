@@ -1,0 +1,140 @@
+Je souhaite produire un état de l’art scientifique ciblé sur la méthode MOCEM dans le contexte du projet AI-RADAR.
+
+OBJECTIF DU TEST
+
+Ce test doit vérifier que le système comprend qu’une méthode précise est demandée par le consultant.
+
+La méthode demandée est MOCEM.
+
+Le système doit rechercher uniquement dans les Article Cards déjà existantes si des preuves explicites mentionnent MOCEM.
+
+Il est strictement interdit de remplacer MOCEM par une autre méthode disponible dans les Article Cards, notamment :
+
+- MLFMA ;
+- MLFMM ;
+- MoM ;
+- FDTD ;
+- PMCHWT ;
+- FEKO ;
+- SIE-KA ;
+- UTD ;
+- GTM ;
+- toute autre méthode de calcul électromagnétique ou de simulation.
+
+Si MOCEM n’est pas explicitement présente dans les Article Cards actuelles, les sections qui nécessitent une preuve sur MOCEM doivent être signalées comme insuffisamment couvertes.
+
+Dans ce cas :
+
+- aucun contenu sur MOCEM ne doit être inventé ;
+- aucune méthode proche ne doit être utilisée à sa place ;
+- aucune publication externe non sélectionnée ne doit être ajoutée ;
+- aucune recherche d’articles ne doit être lancée ;
+- aucun PDF ne doit être téléchargé ;
+- aucun OCR ne doit être exécuté ;
+- aucune Article Card ne doit être reconstruite ;
+- la Phase 5 doit rester bloquée.
+
+Le système doit utiliser exclusivement :
+
+- la sélection Phase 1 existante en lecture seule ;
+- les Article Cards Phase 2 existantes en lecture seule ;
+- les claims produits depuis ces Article Cards ;
+- les documents internes validés lorsqu’une section exige une preuve interne.
+
+Le système doit respecter exactement le plan suivant, conserver les titres dans cet ordre et ne créer aucune section supplémentaire.
+
+1. Contexte général des données synthétiques pour les systèmes SAR ATR/ATD
+
+Objectif : présenter le besoin de données synthétiques pour l’apprentissage de systèmes de reconnaissance automatique de cibles sur images SAR lorsque les données réelles annotées sont limitées.
+
+2. Présentation scientifique de la méthode MOCEM
+
+Objectif : identifier la nature de MOCEM, son rôle scientifique, ses entrées, ses sorties et son utilisation dans un processus de génération de données SAR.
+
+Exigence de preuve : cette section accepte uniquement des claims qui mentionnent explicitement MOCEM.
+
+3. Principe de modélisation utilisé par MOCEM
+
+Objectif : décrire le principe de représentation des cibles, la modélisation de leur réponse radar et le mécanisme permettant de produire une image SAR synthétique avec MOCEM.
+
+Exigence de preuve : cette section accepte uniquement des claims qui mentionnent explicitement MOCEM et décrivent son mécanisme.
+
+4. Paramètres de génération des images SAR avec MOCEM
+
+Objectif : présenter les paramètres d’acquisition et de simulation utilisés avec MOCEM, notamment les cibles, les angles d’observation, les configurations radar et les conditions de génération.
+
+Exigence de preuve : cette section accepte uniquement des claims qui relient explicitement MOCEM à des paramètres de génération SAR.
+
+5. Constitution de jeux de données ATR/ATD avec MOCEM
+
+Objectif : expliquer comment des données générées avec MOCEM peuvent être organisées en jeux d’apprentissage, de validation et de test pour des systèmes ATR/ATD.
+
+Exigence de preuve : cette section accepte uniquement des claims qui relient explicitement MOCEM à un protocole de données ATR/ATD.
+
+6. Entraînement de modèles Deep Learning avec des données MOCEM
+
+Objectif : présenter les architectures, les stratégies d’apprentissage et les protocoles expérimentaux utilisant explicitement des données générées avec MOCEM.
+
+Exigence de preuve : cette section accepte uniquement des claims qui mentionnent à la fois MOCEM et un entraînement de modèle Deep Learning ou ATR/ATD.
+
+7. Comparaison entre les données MOCEM et les données SAR réelles
+
+Objectif : comparer les données générées avec MOCEM aux données SAR mesurées et analyser les écarts observés dans les protocoles d’évaluation.
+
+Exigence de preuve : cette section accepte uniquement des claims qui comparent explicitement MOCEM à des données SAR réelles ou mesurées.
+
+8. Incertitudes scientifiques associées à l’utilisation de MOCEM
+
+Objectif : identifier uniquement les incertitudes documentées concernant la représentativité des données MOCEM, la robustesse des modèles entraînés et la généralisation vers des conditions réelles.
+
+Exigence de preuve : cette section accepte uniquement des limitations ou résultats qui mentionnent explicitement MOCEM.
+
+9. Positionnement de MOCEM dans le projet AI-RADAR
+
+Objectif : présenter le rôle de MOCEM dans le projet uniquement si ce rôle est démontré par des documents internes validés.
+
+Exigences de preuve :
+
+- une publication scientifique externe ne doit jamais être présentée comme un travail interne ;
+- une preuve interne doit être explicitement marquée comme document interne du projet ;
+- si aucune preuve interne sur MOCEM n’existe, cette section doit être bloquée.
+
+10. Synthèse de la couverture scientifique disponible sur MOCEM
+
+Objectif : résumer uniquement les informations réellement documentées sur MOCEM et indiquer les sections insuffisamment couvertes.
+
+RÈGLES DE MAPPING AVANT RÉDACTION
+
+Avant toute rédaction, construire le mapping sémantique strict entre chaque section et les claims disponibles.
+
+Pour chaque section, afficher :
+
+- le profil sémantique détecté ;
+- les claims autorisés ;
+- les citations autorisées ;
+- le niveau de couverture ;
+- les principaux claims rejetés ;
+- la raison de chaque rejet ;
+- l’autorisation ou le blocage de la rédaction.
+
+La présence des mots SAR, ATR, Deep Learning, simulation ou données synthétiques dans un claim ne suffit pas pour couvrir une section MOCEM.
+
+Pour les sections 2 à 8, le claim doit contenir explicitement le terme MOCEM.
+
+Pour la section 9, le claim doit contenir explicitement MOCEM et provenir d’un document interne validé.
+
+Une preuve sur MSTAR, SAMPLE, DSIAC, DCGAN, CNN, MLFMA, MoM ou une autre technologie ne doit pas être automatiquement considérée comme une preuve sur MOCEM.
+
+COMPORTEMENT ATTENDU SI MOCEM EST ABSENTE
+
+Si aucune Article Card existante ne contient de preuve explicite sur MOCEM :
+
+- les sections 2 à 9 doivent être marquées insuffisamment couvertes ou bloquées ;
+- la Phase 5 doit être interdite ;
+- le système doit expliquer que les Article Cards actuelles ne permettent pas de rédiger ces sections ;
+- le système ne doit proposer aucune substitution automatique ;
+- le système ne doit lancer aucune recherche automatique.
+
+Ne pas lancer la Phase 5 tant que je n’ai pas écrit exactement :
+
+tu peux rédiger

@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 from datetime import datetime
+
 from sqlalchemy import (
     Boolean,
     Column,
@@ -9,8 +11,9 @@ from sqlalchemy import (
     String,
     Text,
     JSON,
+    LargeBinary,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, deferred
 
 from db.database import Base
 
@@ -26,7 +29,11 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    projects = relationship("Project", back_populates="consultant", cascade="all, delete-orphan")
+    projects = relationship(
+        "Project",
+        back_populates="consultant",
+        cascade="all, delete-orphan",
+    )
 
 
 class Project(Base):
@@ -45,9 +52,21 @@ class Project(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     consultant = relationship("User", back_populates="projects")
-    documents = relationship("Document", back_populates="project", cascade="all, delete-orphan")
-    diagnostic_runs = relationship("DiagnosticRun", back_populates="project", cascade="all, delete-orphan")
-    scholar_runs = relationship("ScholarRun", back_populates="project", cascade="all, delete-orphan")
+    documents = relationship(
+        "Document",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+    diagnostic_runs = relationship(
+        "DiagnosticRun",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+    scholar_runs = relationship(
+        "ScholarRun",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
 
 
 class Document(Base):
@@ -58,12 +77,23 @@ class Document(Base):
 
     filename = Column(String(500), nullable=False)
     stored_filename = Column(String(500), nullable=False)
-    file_path = Column(Text, nullable=False)
+
+    # Ancien stockage disque : maintenant optionnel.
+    # Pour les nouveaux uploads DB, on mettra un identifiant logique :
+    # db://documents/<sha256>
+    file_path = Column(Text, nullable=True)
+
     content_type = Column(String(255), nullable=True)
     file_size = Column(Integer, nullable=False)
     document_type = Column(String(100), nullable=True)
     upload_status = Column(String(100), default="importé", nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Nouveau stockage complet en PostgreSQL.
+    # deferred évite de charger les gros fichiers quand on liste les documents.
+    file_data = deferred(Column(LargeBinary, nullable=True))
+    file_sha256 = Column(String(64), nullable=True, index=True)
+    storage_mode = Column(String(30), default="database", nullable=False)
 
     project = relationship("Project", back_populates="documents")
 
@@ -84,14 +114,23 @@ class DiagnosticRun(Base):
     completed_at = Column(DateTime, nullable=True)
 
     project = relationship("Project", back_populates="diagnostic_runs")
-    verrous = relationship("Verrou", back_populates="diagnostic_run", cascade="all, delete-orphan")
+    verrous = relationship(
+        "Verrou",
+        back_populates="diagnostic_run",
+        cascade="all, delete-orphan",
+    )
 
 
 class Verrou(Base):
     __tablename__ = "verrous"
 
     id = Column(Integer, primary_key=True, index=True)
-    diagnostic_run_id = Column(Integer, ForeignKey("diagnostic_runs.id"), nullable=False, index=True)
+    diagnostic_run_id = Column(
+        Integer,
+        ForeignKey("diagnostic_runs.id"),
+        nullable=False,
+        index=True,
+    )
 
     title = Column(Text, nullable=False)
     tag_cir = Column(String(100), nullable=True)
@@ -119,14 +158,23 @@ class ScholarRun(Base):
     completed_at = Column(DateTime, nullable=True)
 
     project = relationship("Project", back_populates="scholar_runs")
-    articles = relationship("Article", back_populates="scholar_run", cascade="all, delete-orphan")
+    articles = relationship(
+        "Article",
+        back_populates="scholar_run",
+        cascade="all, delete-orphan",
+    )
 
 
 class Article(Base):
     __tablename__ = "articles"
 
     id = Column(Integer, primary_key=True, index=True)
-    scholar_run_id = Column(Integer, ForeignKey("scholar_runs.id"), nullable=False, index=True)
+    scholar_run_id = Column(
+        Integer,
+        ForeignKey("scholar_runs.id"),
+        nullable=False,
+        index=True,
+    )
     verrou_id = Column(Integer, ForeignKey("verrous.id"), nullable=True, index=True)
 
     title = Column(Text, nullable=False)

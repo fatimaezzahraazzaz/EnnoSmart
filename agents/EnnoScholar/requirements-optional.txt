@@ -1,0 +1,4 @@
+# Traduction locale, reranking BGE et lecture de fichiers .env
+python-dotenv>=1.0,<2
+torch>=2.2
+transformers>=4.40,<6

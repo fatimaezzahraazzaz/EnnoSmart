@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 """
-scientific_intent_builder.py — EnnoScholar V2.1 source evidence first
+scientific_intent_builder.py — EnnoScholar V146 scientific roles and acronym disambiguation
 
 Méthode V2.1 :
 - Ne pas partir du thème Frascati générique.
@@ -26,6 +26,8 @@ from .utils import (
     token_set,
     tokenize,
 )
+
+from .cir_domain_query_catalog import get_cir_domain_profile
 
 
 TRANSLATIONS = {
@@ -67,15 +69,7 @@ TRANSLATIONS = {
     "genie mecanique": "mechanical engineering",
     "mécanique": "mechanical",
     "mecanique": "mechanical",
-    "compresseur": "compressor",
-    "piston": "piston",
-    "segments": "piston rings",
-    "segment": "piston ring",
-    "segmentation": "piston rings",
     "cylindre": "cylinder",
-    "chemise": "cylinder liner",
-    "carter": "crankcase",
-    "soufflage": "blow-by leakage",
     "étanchéité": "sealing",
     "etancheite": "sealing",
     "fuite": "leakage",
@@ -92,8 +86,6 @@ TRANSLATIONS = {
     "pression": "pressure",
     "débit": "flow rate",
     "debit": "flow rate",
-    "réfrigérant": "refrigerant",
-    "refrigerant": "refrigerant",
 
     # autres domaines
     "chimie": "chemistry",
@@ -145,6 +137,75 @@ GENERIC_TITLE_TERMS = {
     "fonctionnement",
 }
 
+INTENT_NOISE_TERMS = {
+    "avec", "sans", "dans", "pour", "sur", "sous", "entre", "vers", "chez",
+    "sont", "est", "etre", "être", "qui", "que", "dont", "mais", "plus", "moins",
+    "grand", "grands", "grande", "grandes", "nouveau", "nouvelle", "utilise", "utiliser",
+    "projet", "dossier", "consultant", "cir", "frascati", "nlp", "rag", "llm",
+    "ennodiagnostic", "ennoscholar", "signal", "preuve", "preuves", "passage", "passages",
+    "question", "qualification", "incertitude", "verrou", "scientifique", "technique",
+    "method", "methods", "methode", "méthode", "model", "models", "modele", "modèle",
+    "system", "systems", "systeme", "système", "study", "paper", "article", "results",
+    "resultat", "résultat", "performance", "evaluation", "validation", "comparison",
+    "comparaison", "approach", "approche", "using", "based", "software", "logiciel",
+}
+
+ADMIN_ACRONYMS = {
+    "CIR", "RND", "RD", "R&D", "NLP", "RAG", "LLM", "IA", "AI", "API", "JSON",
+    "PDF", "DOCX", "HTTP", "HTTPS", "DB", "SQL", "UI", "UX",
+}
+
+
+def _clean_local_terms(values: List[str], max_terms: int = 18) -> List[str]:
+    """Conserve seulement les expressions réellement informatives du verrou courant."""
+    out: List[str] = []
+    seen = set()
+    for raw in values or []:
+        value = clean_text(raw, 100)
+        nv = norm(value)
+        if not nv:
+            continue
+        toks = [t for t in tokenize(nv) if t and t not in INTENT_NOISE_TERMS and len(t) >= 3]
+        if not toks:
+            continue
+        # Une expression longue doit contenir au moins deux termes informatifs.
+        if len(nv.split()) >= 2 and len(toks) < 2:
+            continue
+        # Évite les fragments de phrases issus des n-grammes automatiques.
+        if len(value.split()) > 5:
+            continue
+        key = " ".join(toks)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(value)
+        if len(out) >= max_terms:
+            break
+    return out
+
+
+def _extract_local_names_and_acronyms(text: str, max_items: int = 12) -> List[str]:
+    """Noms propres/sigles uniquement depuis le titre et les preuves du verrou courant."""
+    raw = str(text or "")
+    out: List[str] = []
+    seen = set()
+    for token in re.findall(r"\b[A-Z][A-Z0-9]{1,}(?:[-_/][A-Z0-9]+)?\b", raw):
+        if token.upper() in ADMIN_ACRONYMS:
+            continue
+        key = norm(token)
+        if key and key not in seen:
+            seen.add(key)
+            out.append(token)
+    for token in re.findall(r"\b[A-Z][a-zA-Z0-9_-]{3,}\b", raw):
+        if token.upper() in ADMIN_ACRONYMS:
+            continue
+        key = norm(token)
+        if key and key not in seen and key not in INTENT_NOISE_TERMS:
+            seen.add(key)
+            out.append(token)
+    return out[:max_items]
+
+
 METHOD_MARKERS = {
     "essai", "essais", "test", "tests", "experiment", "experimental",
     "simulation", "model", "modele", "modèle", "prototype", "mesure", "measurement",
@@ -166,6 +227,112 @@ PHENOMENON_MARKERS = {
     "corrosion", "degradation", "dégradation", "detection", "détection",
     "sealing", "friction", "temperature",
 }
+
+
+# V128 — vocabulaire bâtiment / matériaux biosourcés.
+# Important : ces traductions restent génériques, elles ne ciblent aucun projet particulier.
+TRANSLATIONS.update({
+    "matériaux biosourcés": "bio-based building materials",
+    "materiaux biosources": "bio-based building materials",
+    "biosourcé": "bio-based",
+    "biosource": "bio-based",
+    "bio-sourcé": "bio-based",
+    "chanvre": "hemp",
+    "chènevotte": "hemp shiv",
+    "chenevotte": "hemp shiv",
+    "paille": "straw",
+    "paille hachée": "chopped straw",
+    "paille hachee": "chopped straw",
+    "insufflation": "blown insulation",
+    "insufflé": "blown insulation",
+    "insufflee": "blown insulation",
+    "vrac": "loose-fill",
+    "tassement": "settlement",
+    "paroi": "wall",
+    "parois": "walls",
+    "façade": "facade",
+    "facade": "facade",
+    "ossature bois": "timber frame",
+    "bois": "timber",
+    "bois/béton": "timber concrete composite",
+    "bois beton": "timber concrete composite",
+    "béton": "concrete",
+    "beton": "concrete",
+    "connecteur": "connector",
+    "connecteurs": "connectors",
+    "goujon": "dowel connector",
+    "goujons": "dowel connectors",
+    "ductilité": "ductility",
+    "ductilite": "ductility",
+    "séisme": "seismic loading",
+    "seisme": "seismic loading",
+    "sismique": "seismic",
+    "vent": "wind load",
+    "diaphragme": "diaphragm",
+    "feu": "fire resistance",
+    "incendie": "fire resistance",
+    "rei": "fire resistance rating",
+    "hygrothermique": "hygrothermal",
+    "hygrométrique": "moisture",
+    "hygrometrique": "moisture",
+    "humidité": "moisture",
+    "humidite": "moisture",
+    "fongique": "fungal growth",
+    "moisissure": "mould growth",
+    "moisissures": "mould growth",
+    "perspirant": "vapour-open wall",
+    "perspirante": "vapour-open wall",
+    "diffusivité": "thermal diffusivity",
+    "diffusivite": "thermal diffusivity",
+    "effusivité": "thermal effusivity",
+    "effusivite": "thermal effusivity",
+    "déphasage": "thermal phase shift",
+    "dephasage": "thermal phase shift",
+    "inertie": "thermal inertia",
+    "confort d’été": "summer comfort",
+    "confort d'ete": "summer comfort",
+    "heures d’inconfort": "overheating hours",
+    "heures d'inconfort": "overheating hours",
+})
+
+
+def detect_enrichment_profile_from_text(*parts: Any) -> str:
+    """Profil scientifique générique utilisé par EnnoScholar pour cadrer les requêtes.
+
+    V129 corrige une confusion : un verrou hygro/fongique ne doit pas devenir
+    automatiquement un verrou tassement seulement parce que le texte contient
+    "insufflation" ou "chènevotte". Le tassement exige des marqueurs explicites
+    comme tassement, settlement, densité, vide, compaction.
+    """
+    t = norm(" ".join(str(p or "") for p in parts))
+
+    if any(x in t for x in ["connecteur", "connectors", "connector", "goujon", "goujons", "shear connector", "timber concrete", "bois beton", "bois/beton", "wood concrete"]):
+        if any(x in t for x in ["seisme", "seismic", "earthquake", "ductil", "ductility", "vent", "wind", "diaphrag", "composite", "cyclic"]):
+            return "timber_concrete_seismic_connectors"
+        return "timber_concrete_connectors"
+
+    if any(x in t for x in ["rei", "feu", "incendie", "fire", "resistance au feu", "fire resistance", "reaction to fire"]):
+        return "bio_based_fire_resistance"
+
+    # Thermique/inertie : priorité sur perspirant.
+    if any(x in t for x in ["effusiv", "diffusiv", "dephas", "déphas", "inertie", "thermal inertia", "thermal mass", "summer comfort", "confort d ete", "confort ete", "overheating"]):
+        return "bio_based_thermal_inertia"
+
+    has_hygro = any(x in t for x in ["fongique", "fungal", "moisiss", "mould", "mold", "hygro", "humid", "moisture", "perspir", "vapour", "vapor", "condensation"])
+    has_settlement = any(x in t for x in ["tassement", "settlement", "settling", "compaction", "compactage", "vide superieur", "air cavity", "cavities", "densite d insufflation", "density"])
+    if has_hygro and not has_settlement:
+        return "bio_based_hygro_fungal_moisture"
+    if has_settlement:
+        return "loose_fill_biobased_insulation_settlement"
+
+    if any(x in t for x in ["insufflation", "insuffle", "insufflee", "vrac", "loose fill", "blown insulation", "chenevotte"]):
+        return "loose_fill_biobased_insulation_settlement"
+
+    if any(x in t for x in ["acoust", "vibrat", "vibration", "multi physique", "multiphysics"]):
+        return "building_multiphysics_comfort"
+    if any(x in t for x in ["biosource", "bio based", "bio-based", "chanvre", "hemp", "paille", "straw", "construction"]):
+        return "bio_based_building_materials_general"
+    return "generic"
 
 
 def translate_terms(terms: List[str]) -> List[str]:
@@ -319,35 +486,45 @@ def extract_context_text(verrou: Dict[str, Any]) -> str:
     return remove_frascati_question_text(clean_text(" ".join(parts), 4000))
 
 
-def filter_context_by_verrou(source_text: str, context_text: str, min_similarity: float = 0.04) -> str:
-    if not context_text:
+
+def filter_context_by_verrou(source_text: str, context_text: str, min_similarity: float = 0.10) -> str:
+    """
+    Ne conserve du contexte global que les phrases réellement reliées aux preuves
+    du verrou courant. Une simple proximité thématique ne suffit plus.
+    """
+    if not context_text or not source_text:
         return ""
 
     sentences = re.split(r"(?<=[.!?;])\s+|\n+", context_text)
-    selected = []
-    src_tokens = token_set(source_text)
+    selected: List[Tuple[float, str]] = []
+    src_tokens = {
+        t for t in token_set(source_text)
+        if t not in INTENT_NOISE_TERMS and len(t) >= 3
+    }
+    if not src_tokens:
+        return ""
 
     for sent in sentences:
         sent = remove_frascati_question_text(clean_text(sent, 500))
-        if len(sent) < 30:
+        if len(sent) < 35:
             continue
 
-        stoks = token_set(sent)
-        if not stoks:
+        stoks = {
+            t for t in token_set(sent)
+            if t not in INTENT_NOISE_TERMS and len(t) >= 3
+        }
+        common = src_tokens & stoks
+        if len(common) < 2:
             continue
 
-        overlap = len(src_tokens & stoks) / max(8, min(len(src_tokens), 50))
-        jac = jaccard(source_text, sent)
+        overlap = len(common) / max(6, min(len(src_tokens), 35))
+        jac = jaccard(" ".join(sorted(src_tokens)), " ".join(sorted(stoks)))
         score = max(overlap, jac)
-
         if score >= min_similarity:
-            selected.append(sent)
+            selected.append((score, sent))
 
-        if len(selected) >= 3:
-            break
-
-    return clean_text(" ".join(selected), 1200)
-
+    selected.sort(key=lambda x: x[0], reverse=True)
+    return clean_text(" ".join(sent for _, sent in selected[:2]), 900)
 
 def split_terms_by_role(terms: List[str]) -> Tuple[List[str], List[str], List[str]]:
     object_terms, phenomenon_terms, method_terms = [], [], []
@@ -404,11 +581,13 @@ def choose_title(verrou: Dict[str, Any], source_text: str) -> str:
     return clean_text(source_text, 100) or "Verrou scientifique à analyser"
 
 
+
 def build_scientific_intent(
     verrou: Dict[str, Any],
     domain_detection: Dict[str, Any] | None = None,
     diagnostic_context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
+    """Construit une intention scientifique strictement locale au verrou courant."""
     domain_detection = domain_detection or {}
     diagnostic_context = diagnostic_context or {}
 
@@ -418,58 +597,103 @@ def build_scientific_intent(
 
     source_text = extract_source_text(v)
     context_text = extract_context_text(v)
-    context_relevant = filter_context_by_verrou(source_text, context_text)
-    domain_terms = extract_domain_terms(domain_detection)
-
+    context_relevant = filter_context_by_verrou(source_text, context_text, min_similarity=0.10)
     title = choose_title(v, source_text)
 
-    source_terms_fr = extract_keyphrases(" ".join([title, source_text]), max_terms=22)
-    context_terms_fr = extract_keyphrases(context_relevant, max_terms=8)
+    local_text = clean_text(" ".join([title, source_text]), 5000)
+    local_names = _extract_local_names_and_acronyms(local_text, max_items=12)
 
-    source_token_ref = token_set(" ".join(source_terms_fr + domain_terms))
-    context_kept = []
-    for t in context_terms_fr:
-        tt = token_set(t)
-        if tt and (tt & source_token_ref):
-            context_kept.append(t)
-        if len(context_kept) >= 4:
-            break
+    source_terms_fr = _clean_local_terms(
+        extract_keyphrases(local_text, max_terms=28),
+        max_terms=18,
+    )
+    context_terms_fr = _clean_local_terms(
+        extract_keyphrases(context_relevant, max_terms=8),
+        max_terms=4,
+    )
 
-    key_terms_fr = dedupe_keep_order(source_terms_fr + context_kept + domain_terms, 16)
-    key_terms_en = translate_terms(key_terms_fr)
+    source_token_ref = {
+        t for t in token_set(" ".join(source_terms_fr + local_names))
+        if t not in INTENT_NOISE_TERMS
+    }
+    context_kept: List[str] = []
+    for term in context_terms_fr:
+        tt = {t for t in token_set(term) if t not in INTENT_NOISE_TERMS}
+        if len(tt & source_token_ref) >= 2:
+            context_kept.append(term)
+
+    key_terms_fr = dedupe_keep_order(local_names + source_terms_fr + context_kept, 18)
+    key_terms_en = _clean_local_terms(translate_terms(key_terms_fr), max_terms=18)
 
     obj_terms, phenomenon_terms, method_terms = split_terms_by_role(key_terms_en)
 
-    # objet technique : éviter de mettre les termes génériques de qualification
-    technical_object_terms = []
-    for t in obj_terms + domain_terms:
-        nt = norm(t)
-        if any(g in nt for g in ["question", "qualification", "permet", "maitrise", "maîtrise"]):
-            continue
-        technical_object_terms.append(t)
+    technical_object_terms: List[str] = []
+    for term in obj_terms:
+        ntoks = [t for t in tokenize(norm(term)) if t not in INTENT_NOISE_TERMS]
+        if ntoks:
+            technical_object_terms.append(term)
 
-    technical_object = clean_text(" ".join(dedupe_keep_order(technical_object_terms, 6)), 180)
-    phenomenon = clean_text(" ".join(phenomenon_terms[:6] or key_terms_en[:5]), 180)
-    methods = dedupe_keep_order(method_terms, 5)
+    technical_object = clean_text(
+        " ".join(dedupe_keep_order(technical_object_terms, 6)),
+        180,
+    )
+    phenomenon = clean_text(
+        " ".join(_clean_local_terms(phenomenon_terms, 5)),
+        180,
+    )
+    methods = _clean_local_terms(method_terms, 6)
     constraints = extract_constraints(" ".join([source_text, context_relevant]))
 
     scientific_problem = clean_text(
-        " ".join([technical_object, phenomenon, " ".join(constraints[:2])]),
-        280,
+        " ".join(x for x in [technical_object, phenomenon, " ".join(constraints[:2])] if x),
+        320,
     )
     if not scientific_problem:
-        scientific_problem = clean_text(" ".join(key_terms_en[:8]), 240)
+        scientific_problem = clean_text(" ".join(key_terms_en[:8]), 260)
 
-    confidence = 0.45
+    # Profil local du verrou. Le domaine global du projet ne sert qu'en fallback.
+    local_profile = get_cir_domain_profile(
+        domain_detection={},
+        text=" ".join([title, source_text, technical_object, phenomenon]),
+    )
+    local_profile_id = str(local_profile.get("profile_id") or "generic")
+    if local_profile_id == "generic":
+        cir_profile = get_cir_domain_profile(
+            domain_detection=domain_detection,
+            text=" ".join([title, source_text, technical_object, phenomenon]),
+        )
+        profile_source = "project_domain_fallback"
+    else:
+        cir_profile = local_profile
+        profile_source = "local_verrou_evidence"
+
+    # Ancres fortes : sigles/noms + expressions multi-mots venant des preuves.
+    phrase_anchors = [
+        term for term in key_terms_en + key_terms_fr
+        if len(norm(term).split()) >= 2 and len(norm(term)) >= 7
+    ]
+    strong_anchors = dedupe_keep_order(local_names + phrase_anchors, 16)
+
+    confidence = 0.40
     if len(key_terms_en) >= 6:
         confidence += 0.20
     if technical_object:
         confidence += 0.15
-    if phenomenon:
-        confidence += 0.15
+    if phenomenon or methods:
+        confidence += 0.10
+    if strong_anchors:
+        confidence += 0.10
     if context_relevant:
         confidence += 0.05
     confidence = min(confidence, 0.95)
+
+    enrichment_profile = detect_enrichment_profile_from_text(
+        title,
+        source_text,
+        context_relevant,
+        " ".join(key_terms_fr),
+        " ".join(key_terms_en),
+    )
 
     intent = ScientificIntent(
         verrou_id=str(v.get("verrou_id") or ""),
@@ -484,12 +708,297 @@ def build_scientific_intent(
         search_queries=[],
         source_basis={
             "title": title,
-            "source_text_excerpt": clean_text(source_text, 900),
+            "source_text_excerpt": clean_text(source_text, 1400),
             "context_relevant_excerpt": clean_text(context_relevant, 700),
-            "domain_terms": domain_terms,
-            "context_filter": "source_evidence_first_similarity",
+            "domain_terms": [],
+            "context_filter": "v145_local_evidence_two_token_overlap",
         },
         confidence=round(confidence, 4),
     )
 
-    return intent.to_dict()
+    out = intent.to_dict()
+    out["strong_anchors"] = strong_anchors
+    out["local_names"] = local_names
+    out["enrichment_profile"] = enrichment_profile
+    out["backend_enrichment_profile"] = enrichment_profile
+    out["cir_domain_profile"] = cir_profile
+    out["cir_profile_source"] = profile_source
+    out["domain_detection"] = domain_detection
+    out["cir_domain_detection"] = domain_detection
+    out["intent_scope"] = "current_verrou_evidence_only"
+    out["query_builder_version"] = "v145_local_evidence_intent"
+    return out
+
+
+
+# =============================================================================
+# V146 — rôles scientifiques, désambiguïsation et concepts canoniques
+# =============================================================================
+_BUILD_SCIENTIFIC_INTENT_V145 = build_scientific_intent
+
+_V146_IMPLEMENTATION_TERMS = {
+    "cpu", "gpu", "cuda", "opencl", "parallel", "parallelisation", "parallelization",
+    "implementation", "implémentation", "runtime", "vectorization", "multithreading",
+}
+
+_V146_METHOD_ONTOLOGY = [
+    (["method of moments", "méthode des moments", "methode des moments", " mom "], "method of moments"),
+    (["multilevel fast multipole method", "multi level fast multipole", "mlfmm", "mflmm"], "multilevel fast multipole method"),
+    (["uniform theory of diffraction", "théorie uniforme de la diffraction", "theorie uniforme de la diffraction", " utd ", " tud "], "uniform theory of diffraction"),
+    (["physical optics", "optique physique", " op ", " po "], "physical optics"),
+    (["ray tracing", "ray launching", "lancer de rayon", "lancer de rayons", "tracé de rayons", "trace de rayons"], "electromagnetic ray tracing"),
+    (["finite-difference time-domain", "finite difference time domain", "différences finies dans le domaine temporel", "differences finies dans le domaine temporel", " fdtd "], "finite-difference time-domain"),
+    (["finite element method", "finite-element method", "éléments finis", "elements finis", " fem "], "finite element method"),
+    (["full-wave", "full wave", "méthodes exactes", "methodes exactes"], "full-wave electromagnetic method"),
+    (["scattering center", "scattering centre", "centre brillant", "point brillant"], "scattering-centre model"),
+]
+
+_V146_CONCEPT_ALIASES = {
+    "radar cross section": ["radar cross section", "rcs", "surface équivalente radar", "surface equivalente radar"],
+    "synthetic aperture radar": ["synthetic aperture radar"],
+    "automatic target recognition": ["automatic target recognition", "target recognition"],
+    "electromagnetic scattering": ["electromagnetic scattering", "diffusion électromagnétique", "diffusion electromagnetique"],
+    "edge diffraction": ["edge diffraction", "diffraction des arêtes", "diffraction des aretes"],
+    "electromagnetic ray tracing": ["electromagnetic ray tracing", "ray tracing", "ray launching", "lancer de rayons", "lancer de rayon"],
+    "large complex electromagnetic structures": ["large complex electromagnetic structures", "large electromagnetic structures", "structures de grande taille", "très grands systèmes", "tres grands systemes"],
+    "canonical electromagnetic targets": ["canonical electromagnetic targets", "canonical target", "objet canonique", "cible canonique", "sphere", "plaque", "dièdre", "diedre", "trièdre", "triedre"],
+    "mesh discretization": ["mesh discretization", "mesh approximation", "maillage", "objet 3d maillé", "objet 3d maille"],
+    "synthetic training data": [
+        "synthetic training data", "synthetic data", "synthetic dataset",
+        "synthetically generated data", "simulated training data", "simulation data",
+        "synthetic sar data", "synthetic sar images", "generated sar images",
+        "données synthétiques", "donnees synthetiques",
+        "jeu de données synthétique", "jeu de donnees synthetique",
+    ],
+    "sim-to-real generalization": [
+        "sim-to-real", "simulation-to-real", "synthetic-to-real",
+        "generalization to real", "generalisation to real", "domain gap",
+        "domain adaptation", "domain generalization", "domain generalisation",
+        "cross-domain transfer", "synthetic-to-measured",
+        "écart synthétique réel", "ecart synthetique reel",
+    ],
+    "domain shift": ["domain shift", "dataset shift", "distribution shift", "décalage de domaine", "decalage de domaine", "écart de distribution", "ecart de distribution"],
+    "real radar measurements": [
+        "real radar measurements", "real measurements", "measured sar data",
+        "measured sar images", "real sar data", "real-world sar data",
+        "synthetic and measured", "measured data", "mstar measurements",
+        "mstar dataset", "sample dataset", "mesures réelles", "mesures reelles",
+        "données réelles", "donnees reelles",
+    ],
+}
+
+
+def _v146_has_exact(text_norm: str, phrase: str) -> bool:
+    p = norm(phrase)
+    if not p:
+        return False
+    pattern = re.escape(p).replace(r"\ ", r"\s+")
+    return bool(re.search(rf"(?<![a-z0-9]){pattern}(?![a-z0-9])", text_norm))
+
+
+def _v146_add_unique(items: List[str], value: str, limit: int = 20) -> None:
+    value = clean_text(value, 120)
+    if value and norm(value) not in {norm(x) for x in items} and len(items) < limit:
+        items.append(value)
+
+
+def _v146_scientific_roles(local_text: str, previous: Dict[str, Any]) -> Dict[str, Any]:
+    n = " " + norm(local_text) + " "
+    methods: List[str] = []
+    concepts: List[str] = []
+    phenomena: List[str] = []
+    implementation: List[str] = []
+    project_tools: List[str] = []
+    acronym_expansions: Dict[str, str] = {}
+    ambiguous: List[str] = []
+
+    # Méthodes canoniques.
+    for aliases, canonical in _V146_METHOD_ONTOLOGY:
+        if any(_v146_has_exact(n, alias) for alias in aliases):
+            _v146_add_unique(methods, canonical)
+
+    # Termes d'implémentation : conservés comme métadonnées, jamais comme coeur scientifique.
+    for term in sorted(_V146_IMPLEMENTATION_TERMS):
+        if _v146_has_exact(n, term):
+            _v146_add_unique(implementation, term)
+
+    em_context = sum(1 for t in [
+        "feko", "method of moments", "mom", "mlfmm", "mflmm", "fdtd", "fem",
+        "utd", "tud", "physical optics", "optique physique", "ray tracing",
+        "lancer de rayon", "diffraction", "electromagnetic", "électromagnétique",
+    ] if _v146_has_exact(n, t))
+    radar_context = sum(1 for t in [
+        "radar", "mstar", "target recognition", "reconnaissance de cibles", "atr",
+        "mocem", "salsa", "scattering", "diffusion électromagnétique",
+    ] if _v146_has_exact(n, t))
+
+    # SER est ambigu : expansion seulement si le contexte électromagnétique la confirme.
+    if _v146_has_exact(n, "ser"):
+        ambiguous.append("SER")
+        if em_context >= 2 or radar_context >= 2:
+            acronym_expansions["SER"] = "radar cross section"
+            _v146_add_unique(concepts, "radar cross section")
+
+    # SAR + ATR dans le même verrou désambiguïsent mutuellement radar et reconnaissance de cibles.
+    has_sar_token = _v146_has_exact(n, "sar")
+    has_atr_token = _v146_has_exact(n, "atr")
+
+    # SAR/ATR sont eux aussi ambigus : expansion conditionnée au contexte radar/cible.
+    if has_sar_token:
+        ambiguous.append("SAR")
+        if has_atr_token or radar_context >= 2 or _v146_has_exact(n, "synthetic aperture radar"):
+            acronym_expansions["SAR"] = "synthetic aperture radar"
+            _v146_add_unique(concepts, "synthetic aperture radar")
+    if has_atr_token:
+        ambiguous.append("ATR")
+        if has_sar_token or radar_context >= 2 or _v146_has_exact(n, "automatic target recognition"):
+            acronym_expansions["ATR"] = "automatic target recognition"
+            _v146_add_unique(concepts, "automatic target recognition")
+    if _v146_has_exact(n, "rcs"):
+        acronym_expansions["RCS"] = "radar cross section"
+        _v146_add_unique(concepts, "radar cross section")
+
+    # Concepts physiques et expérimentaux locaux.
+    if em_context >= 2:
+        _v146_add_unique(concepts, "electromagnetic scattering")
+    # FEKO + diffraction/ray tracing/cibles canoniques désigne généralement un problème de RCS.
+    if (_v146_has_exact(n, "feko") and em_context >= 2
+        and any(_v146_has_exact(n, t) for t in ["diffraction", "ray tracing", "lancer de rayon", "objet canonique", "sphere", "plaque"])):
+        if "radar cross section" not in concepts:
+            concepts.insert(0, "radar cross section")
+    if any(_v146_has_exact(n, t) for t in ["diffraction des arêtes", "diffraction des aretes", "edge diffraction"]):
+        _v146_add_unique(concepts, "edge diffraction")
+        _v146_add_unique(phenomena, "omitted edge-diffraction phenomena")
+    if any(_v146_has_exact(n, t) for t in ["lancer de rayon", "lancer de rayons", "ray tracing", "ray launching"]):
+        _v146_add_unique(concepts, "electromagnetic ray tracing")
+    if any(_v146_has_exact(n, t) for t in ["très grands systèmes", "tres grands systemes", "structures de grande taille", "large structures"]):
+        if em_context >= 1:
+            _v146_add_unique(concepts, "large complex electromagnetic structures")
+    if any(_v146_has_exact(n, t) for t in ["objet canonique", "cible canonique", "sphere", "plaque", "dièdre", "diedre", "trièdre", "triedre"]):
+        if em_context >= 1:
+            _v146_add_unique(concepts, "canonical electromagnetic targets")
+    if any(_v146_has_exact(n, t) for t in ["maillage", "mesh discretization", "mesh approximation", "objet 3d maillé", "objet 3d maille"]):
+        _v146_add_unique(concepts, "mesh discretization")
+
+    if any(_v146_has_exact(n, t) for t in ["données synthétiques", "donnees synthetiques", "synthetic data", "synthetic dataset"]):
+        _v146_add_unique(concepts, "synthetic training data")
+    if any(_v146_has_exact(n, t) for t in ["conditions réelles", "conditions reelles", "mesures réelles", "mesures reelles", "real measurements", "mstar"]):
+        _v146_add_unique(concepts, "real radar measurements")
+    if any(_v146_has_exact(n, t) for t in ["généralisation", "generalisation", "generalization", "sim-to-real", "simulation-to-real", "ne peuvent pas généraliser", "ne peuvent pas generaliser"]):
+        _v146_add_unique(concepts, "sim-to-real generalization")
+        _v146_add_unique(phenomena, "limited sim-to-real generalization")
+    if any(_v146_has_exact(n, t) for t in ["dataset shift", "domain shift", "distribution shift", "décalage de domaine", "decalage de domaine", "écart de distribution", "ecart de distribution"]):
+        _v146_add_unique(concepts, "domain shift")
+        _v146_add_unique(phenomena, "synthetic-to-real distribution shift")
+
+    # Phénomènes/contraintes centrales.
+    if any(_v146_has_exact(n, t) for t in ["ressources computationnelles", "computational resources", "temps de calcul", "mémoire", "memoire", "computational cost"]):
+        _v146_add_unique(phenomena, "computational cost and memory requirements")
+    if any(_v146_has_exact(n, t) for t in ["compromis précision", "compromis precision", "accuracy trade-off", "précision mais", "precision mais"]):
+        _v146_add_unique(phenomena, "accuracy-computational cost trade-off")
+    if any(_v146_has_exact(n, t) for t in ["non modélisés", "non modelises", "non-modélisation", "non-modelisation", "simplifying assumptions"]):
+        _v146_add_unique(phenomena, "model-form error from omitted physical phenomena")
+    if any(_v146_has_exact(n, t) for t in ["niveau de représentativité", "niveau de representativite", "représentativité", "representativite", "representativeness"]):
+        _v146_add_unique(phenomena, "uncertain physical representativeness")
+    if any(_v146_has_exact(n, t) for t in ["valider", "validation", "benchmark", "comparaison aux résultats", "comparaison aux resultats"]):
+        if concepts:
+            _v146_add_unique(phenomena, "validation against reference methods or measurements")
+
+    # Noms propres : utiles seulement en complément d'un concept scientifique.
+    standardized = {norm(x) for x in methods + concepts}
+    for name in previous.get("local_names") or []:
+        nn = norm(name)
+        if (not nn or nn.startswith("verro") or name.upper() in ADMIN_ACRONYMS
+            or nn in {"incertitude", "les", "le", "la", "afin", "dans", "pour", "domaine", "projet",
+                      "this", "that", "these", "those", "dataset", "data", "acquiring", "however", "results",
+                      "method", "methods", "study", "article", "figure", "table", "using", "based", "according"}):
+            continue
+        # Un mot simplement capitalisé en début de phrase n'est pas un nom d'outil.
+        occurrences = len(re.findall(rf"(?<![a-z0-9]){re.escape(nn)}(?![a-z0-9])", n))
+        mixed_case = any(c.islower() for c in str(name)) and any(c.isupper() for c in str(name)[1:])
+        if not str(name).isupper() and not mixed_case and occurrences < 2:
+            continue
+        if nn in _V146_IMPLEMENTATION_TERMS:
+            continue
+        if nn not in standardized and name.upper() not in {"SER", "SAR", "ATR", "RCS", "FEM", "FDTD", "MOM", "MLFMM", "MFLMM", "UTD", "TUD", "OP", "PO", "RL"}:
+            _v146_add_unique(project_tools, name, 8)
+
+    # Fallback générique pour les autres domaines : deux expressions multi-mots locales.
+    if not concepts:
+        for term in previous.get("strong_anchors") or []:
+            nt = norm(term)
+            if len(nt.split()) >= 2 and not any(x in nt for x in ["technical uncertainty", "uncertainty", "validation", "performance"]):
+                _v146_add_unique(concepts, term, 4)
+
+    # Concepts primaires : objet physique/métier indispensable. Les concepts comme
+    # synthetic data, real measurements ou computational cost restent secondaires.
+    if "synthetic aperture radar" in concepts or "automatic target recognition" in concepts:
+        primary = [c for c in ["synthetic aperture radar", "automatic target recognition"] if c in concepts]
+    elif "radar cross section" in concepts:
+        primary = [c for c in ["radar cross section", "electromagnetic scattering"] if c in concepts]
+    elif any(c in concepts for c in ["edge diffraction", "electromagnetic ray tracing"]):
+        primary = [c for c in ["electromagnetic scattering", "edge diffraction", "electromagnetic ray tracing"] if c in concepts]
+    else:
+        primary = concepts[:2]
+
+    aliases = {c: list(_V146_CONCEPT_ALIASES.get(c, [c])) for c in concepts}
+    if "synthetic aperture radar" in concepts:
+        aliases["synthetic aperture radar"] = ["synthetic aperture radar", "SAR"]
+    if "automatic target recognition" in concepts:
+        aliases["automatic target recognition"] = ["automatic target recognition", "ATR"]
+    if "radar cross section" in concepts:
+        aliases["radar cross section"] = ["radar cross section", "RCS", "surface équivalente radar", "surface equivalente radar", "SER"]
+
+    return {
+        "core_concepts": concepts[:12],
+        "primary_core_concepts": primary[:4],
+        "method_anchors": methods[:10],
+        "phenomenon_anchors": phenomena[:10],
+        "implementation_terms": implementation[:10],
+        "project_tool_terms": project_tools[:8],
+        "acronym_expansions": acronym_expansions,
+        "ambiguous_acronyms": list(dict.fromkeys(ambiguous)),
+        "concept_aliases": aliases,
+    }
+
+
+def build_scientific_intent(
+    verrou: Dict[str, Any],
+    domain_detection: Dict[str, Any] | None = None,
+    diagnostic_context: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    out = _BUILD_SCIENTIFIC_INTENT_V145(verrou, domain_detection, diagnostic_context)
+    sb = out.get("source_basis") if isinstance(out.get("source_basis"), dict) else {}
+    local_text = " ".join([
+        str(out.get("verrou_title") or ""),
+        str(sb.get("source_text_excerpt") or ""),
+        " ".join(map(str, out.get("key_terms_fr") or [])),
+    ])
+    roles = _v146_scientific_roles(local_text, out)
+    out.update(roles)
+
+    core = roles["core_concepts"]
+    methods = roles["method_anchors"]
+    phenomena = roles["phenomenon_anchors"]
+    tools = roles["project_tool_terms"]
+
+    if core:
+        out["technical_object"] = clean_text(" ".join(core[:3]), 240)
+    if phenomena:
+        out["phenomenon"] = clean_text(" ".join(phenomena[:3]), 240)
+    if methods:
+        out["methods"] = methods[:8]
+
+    out["scientific_problem"] = clean_text(
+        " ".join(core[:3] + phenomena[:2] + methods[:2]),
+        420,
+    ) or out.get("scientific_problem")
+
+    # Les ancres fortes ne contiennent plus uncertainty/CPU/GPU/noms tronqués.
+    out["strong_anchors"] = dedupe_keep_order(core + methods + phenomena + tools, 24)
+    out["key_terms_en"] = dedupe_keep_order(core + methods + phenomena + list(out.get("key_terms_en") or []), 28)
+    out["intent_scope"] = "v149_current_verrou_problem_evidence_roles"
+    out["query_builder_version"] = "v149_problem_evidence_intent"
+    if isinstance(out.get("source_basis"), dict):
+        out["source_basis"]["context_filter"] = "v146_local_evidence_roles_and_acronym_disambiguation"
+    return out
