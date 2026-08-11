@@ -55,6 +55,7 @@ export type SourceEvidence = {
   passage_id?: string | null
   document_id?: string | number | null
   document?: string | null
+  document_name?: string | null
   filename?: string | null
   source_path?: string | null
   year?: string | number | null
@@ -63,8 +64,17 @@ export type SourceEvidence = {
   paragraph_index?: number | null
   char_start?: number | null
   char_end?: number | null
+  sentence_start?: number | null
   section_title?: string | null
+  section_path?: string | null
   role?: string | null
+  summary_fr?: string | null
+  source_text_original?: string | null
+  source_field?: string | null
+  source_is_original?: boolean | null
+  highlight_coordinates?: unknown
+  semantic_link?: Record<string, unknown> | null
+  justification_bridge_fr?: string | null
   excerpt?: string | null
   text?: string | null
   source_text?: string | null
@@ -155,7 +165,8 @@ function evidenceText(evidence?: SourceEvidence | null): string {
   if (!evidence) return ""
 
   return String(
-    evidence.excerpt ||
+    evidence.source_text_original ||
+      evidence.excerpt ||
       evidence.text ||
       evidence.source_text ||
       evidence.content ||
@@ -173,6 +184,7 @@ function evidenceDocumentName(evidence?: SourceEvidence | null): string {
 
   return String(
     evidence.document ||
+      evidence.document_name ||
       evidence.filename ||
       evidence.source_path ||
       metadata.document ||
@@ -612,10 +624,12 @@ function SourceDocumentButtons({
   projectId,
   resolvedDocuments,
   compact = false,
+  actionLabel,
 }: {
   projectId: number | string
   resolvedDocuments: ResolvedDocument[]
   compact?: boolean
+  actionLabel?: string
 }) {
   const [selected, setSelected] = useState<ResolvedDocument | null>(null)
 
@@ -636,11 +650,22 @@ function SourceDocumentButtons({
           >
             <span className="flex min-w-0 items-center gap-2">
               <FileText className="size-4 shrink-0 text-brand" />
-              <span className="truncate">
-                {cleanDisplayDocumentName(
-                  document.filename ||
-                    document.stored_filename ||
-                    `Document ${document.id}`,
+              <span className="min-w-0">
+                {actionLabel ? (
+                  <>
+                    <span className="block font-medium">{actionLabel}</span>
+                    <span className="block truncate text-[11px] text-muted-foreground">
+                      {cleanDisplayDocumentName(
+                        document.filename || document.stored_filename || `Document ${document.id}`,
+                      )}
+                    </span>
+                  </>
+                ) : (
+                  <span className="block truncate">
+                    {cleanDisplayDocumentName(
+                      document.filename || document.stored_filename || `Document ${document.id}`,
+                    )}
+                  </span>
                 )}
               </span>
             </span>
@@ -667,6 +692,64 @@ function SourceDocumentButtons({
   )
 }
 
+export function SourceEvidenceCitations({
+  projectId,
+  documents,
+  evidence,
+  citationNumbers,
+}: {
+  projectId: number | string
+  documents: DbSourceDocument[]
+  evidence: SourceEvidence[]
+  citationNumbers?: number[]
+}) {
+  const entries = useMemo(() => {
+    return (evidence || []).map((item, index) => {
+      const resolved = resolveEvidenceDocuments([item], documents || [])[0]
+      return { resolved: resolved || null, evidenceIndex: index }
+    })
+  }, [documents, evidence])
+  const [selected, setSelected] = useState<ResolvedDocument | null>(null)
+
+  if (!entries.length) return null
+
+  return (
+    <>
+      <span className="ml-1 inline-flex flex-wrap items-baseline gap-1 align-baseline">
+        {entries.map((entry) => {
+          const citationNumber = citationNumbers?.[entry.evidenceIndex] ?? entry.evidenceIndex + 1
+          return (
+          <button
+            key={`${entry.resolved?.document.id || "unresolved"}:${entry.evidenceIndex}`}
+            type="button"
+            className="rounded px-1 text-xs font-semibold text-brand underline decoration-brand/40 underline-offset-2 hover:bg-brand/10 disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
+            disabled={!entry.resolved}
+            onClick={() => {
+              if (entry.resolved) setSelected(entry.resolved)
+            }}
+            title={entry.resolved
+              ? `Voir la preuve ${citationNumber} dans le document`
+              : `Document de la preuve ${citationNumber} non résolu`}
+          >
+            [{citationNumber}]
+          </button>
+          )
+        })}
+      </span>
+
+      <SourceDocumentDialog
+        projectId={projectId}
+        document={selected?.document || null}
+        evidence={selected?.evidence || []}
+        open={Boolean(selected)}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null)
+        }}
+      />
+    </>
+  )
+}
+
 export function SourceTextWithDocuments({
   projectId,
   text,
@@ -674,6 +757,7 @@ export function SourceTextWithDocuments({
   evidence = [],
   compact = false,
   hideTextWhenMatched = false,
+  actionLabel,
 }: {
   projectId: number | string
   text: string
@@ -681,6 +765,7 @@ export function SourceTextWithDocuments({
   evidence?: SourceEvidence[]
   compact?: boolean
   hideTextWhenMatched?: boolean
+  actionLabel?: string
 }) {
   const resolvedDocuments = useMemo(() => {
     const fromEvidence = resolveEvidenceDocuments(evidence || [], documents || [])
@@ -717,6 +802,7 @@ export function SourceTextWithDocuments({
         projectId={projectId}
         resolvedDocuments={resolvedDocuments}
         compact={compact}
+        actionLabel={actionLabel}
       />
     </div>
   )
@@ -1203,9 +1289,11 @@ export function SourceDocumentDialog({
                 : "Le backend a généré un aperçu HTML avec le passage surligné."
               : kind === "pdf" && selectedEvidence?.page_number != null
                 ? `La visionneuse est positionnée sur ${formatEvidenceLocation(selectedEvidence)}.`
-                : kind === "text" && selectedEvidence
+                : kind === "text" && selectedEvidence && Boolean(
+                    findFlexibleTextRange(preview.text, evidenceText(selectedEvidence))
+                  )
                   ? "Le passage sélectionné est surligné dans le texte."
-                  : "La preuve sélectionnée reste visible dans le panneau latéral."}
+                  : "La localisation exacte n’a pas pu être déterminée ; le document et la preuve restent accessibles dans le panneau latéral."}
           </p>
 
           <div className="flex justify-end gap-2">

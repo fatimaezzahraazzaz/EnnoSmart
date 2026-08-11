@@ -194,9 +194,26 @@ def compact_demarche_audit(value: Any) -> Dict[str, Any]:
     audit = value if isinstance(value, dict) else {}
     keys = (
         "version",
+        "analysis_unit",
+        "direct_rnd_rule",
+        "project_status",
+        "operation_status",
+        "operations_count",
+        "operation_count",
+        "rnd_core_defendable_operations_count",
+        "rnd_core_partial_operations_count",
+        "classical_engineering_operations_count",
+        "insufficient_evidence_operations_count",
+        "all_operations_classical_engineering",
         "label",
         "readability_score",
         "readability_score_semantics",
+        "documentary_confidence",
+        "activities_count",
+        "direct_rnd_activities_count",
+        "necessary_rnd_support_activities_count",
+        "classical_engineering_activities_count",
+        "insufficient_evidence_activities_count",
         "method_steps_count",
         "research_justified_steps_count",
         "routine_engineering_steps_count",
@@ -205,6 +222,7 @@ def compact_demarche_audit(value: Any) -> Dict[str, Any]:
         "groups_with_possible_direct_final_solution_shortcut",
         "direct_final_solution_risk",
         "eligibility_impact",
+        "risk_adjustment",
         "llm_review_recommended",
         "llm_review_reasons",
         "llm_policy",
@@ -390,6 +408,1804 @@ def source_path(src: Dict[str, Any]) -> str:
         or src.get("path")
         or ""
     )
+
+
+_FRASCATI_LABELS = {
+    "novelty": "Nouveauté",
+    "creativity": "Créativité",
+    "uncertainty": "Incertitude scientifique ou technique",
+    "systematicity": "Démarche systématique",
+    "transferability": "Transférabilité ou reproductibilité",
+}
+
+_FRASCATI_STATUS_VALUE = {
+    "documented": 1.0,
+    "partial": 0.5,
+    "missing": 0.0,
+    "contradictory": 0.0,
+}
+
+_FRASCATI_PROOF_PATTERNS = {
+    "novelty": re.compile(
+        r"etat de l.?art|state of the art|existing (?:solution|method)|solution existante|"
+        r"insuffisan|limite de l.?existant|knowledge gap|not covered",
+        re.I,
+    ),
+    "creativity": re.compile(
+        r"hypoth[eè]se|hypothesis|approche originale|novel approach|prototype|"
+        r"exploration|variante|conception|architecture nouvelle",
+        re.I,
+    ),
+    "uncertainty": re.compile(
+        r"incert|uncertain|impossible [aà] pr[eé]dire|unpredict|verrou|non ma[iî]tris|"
+        r"reste [aà] comprendre|unknown|limitation",
+        re.I,
+    ),
+    "systematicity": re.compile(
+        r"protocole|protocol|campagne d.?essais|experiment|test|compar|benchmark|"
+        r"it[eé]ration|mesur|simulation|param[eè]tr",
+        re.I,
+    ),
+    "transferability": re.compile(
+        r"reproduct|reus|r[eé]utilis|g[eé]n[eé]ralis|generaliz|capitalis|"
+        r"transf[eé]r|transposable|replicab|connaissances acquises",
+        re.I,
+    ),
+}
+
+_HYPOTHESIS_EVIDENCE_PATTERN = re.compile(
+    r"\b(?:hypoth[eè]se|hypothesis|we propose|nous proposons|propos(?:er|ons)|"
+    r"new approach|nouvelle approche|combine|combinaison|union|compl[eé]mentair|"
+    r"complementary|paradigm|because|parce que|rationale|suppos(?:er|ons)|"
+    r"could|might|pourrait|expected|attendu|overlap|recouvr|influence|impact)\b",
+    re.I,
+)
+
+_HYPOTHESIS_LINK_PATTERN = re.compile(
+    r"\b(?:because|parce que|therefore|thus|donc|afin de|pour|complementary|"
+    r"compl[eé]mentair|different|diff[eé]rent|union|overlap|recouvr|combine|"
+    r"combinaison|improv|am[eé]lior|impact|influence)\b",
+    re.I,
+)
+
+_RESULT_SECTION_PATTERN = re.compile(
+    r"(?:^|[/\\>:\-])\s*(?:results?|r[eé]sultats?|findings?|conclusions?)\s*\]?$",
+    re.I,
+)
+
+_RESULT_SIGNAL_PATTERN = re.compile(
+    r"\b(?:result|r[eé]sultat|measur|mesur|metric|m[eé]trique|precision|pr[eé]cision|"
+    r"accuracy|performance|gain|gap|[eé]cart|difference|diff[eé]rence|increase|"
+    r"augmentation|decrease|diminution|improv|am[eé]lior|score|rate|taux)\b",
+    re.I,
+)
+
+_RESULT_OBSERVATION_PATTERN = re.compile(
+    r"\b(?:obtained|achieved|reached|outperform|performed better|performed worse|observed|"
+    r"shows?|showed|indicates?|demonstrates?|concludes?|found|yielded|"
+    r"obtenu|atteint|surpass|plus performant|moins performant|observ[eé]|constat[eé]|"
+    r"montr(?:e|ent)|indiqu(?:e|ent)|d[eé]montr(?:e|ent)|conclu|s’av[eè]re|"
+    r"pr[eé]cision (?:est|de|atteint)|accuracy (?:is|of|reached))\b",
+    re.I,
+)
+
+_QUANTITATIVE_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9])[-+]?\d+(?:[.,]\d+)?\s*(?:%|ms|s|m|cm|mm|km|"
+    r"db|hz|khz|mhz|ghz|bar|pa|kpa|mpa|w|kw|mw|v|a|kg|g|°c)?(?![A-Za-z0-9])",
+    re.I,
+)
+
+_METADATA_SECTION_PATTERN = re.compile(
+    r"^(?:title|titre|authors?|auteurs?|affiliations?|corresponding author|"
+    r"adresse|address|citation|to cite this version|bibliograph(?:y|ie)|references?|"
+    r"doi|copyright|acknowledg(?:e)?ments?|remerciements?|table of contents|"
+    r"table des mati[eè]res|list of figures|table des illustrations|list of tables|"
+    r"liste des tableaux)\s*:?$",
+    re.I,
+)
+
+_METADATA_TEXT_PATTERN = re.compile(
+    r"\b(?:corresponding author|author affiliations?|to cite this version|"
+    r"all rights reserved|copyright|https?://doi\.org|doi\s*:|"
+    r"university|universit[eé]|laboratory|laboratoire|postal|cedex|"
+    r"street|avenue|adresse|address|hal id)\b|"
+    r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}",
+    re.I,
+)
+
+_STATE_OF_ART_PATTERN = re.compile(
+    r"\b(?:state of the art|related work|literature review|background|bibliograph|"
+    r"[eé]tat de l.?art|travaux (?:ant[eé]rieurs|connexes)|litt[eé]rature|existing (?:work|method|solution)|"
+    r"solution existante|known (?:method|approach)|m[eé]thode connue)\b",
+    re.I,
+)
+
+_PROJECT_ACTION_PATTERN = re.compile(
+    r"\b(?:we (?:use|used|develop|developed|implement|implemented|train|trained|evaluate|evaluated|"
+    r"measure|measured|compare|compared|conduct|conducted|perform|performed|propose|proposed)|"
+    r"nous (?:utilisons|avons|d[eé]veloppons|d[eé]velopp[eé]|mettons|avons mis|entra[iî]nons|"
+    r"avons entra[iî]n[eé]|[eé]valuons|avons [eé]valu[eé]|mesurons|avons mesur[eé]|comparons|"
+    r"avons compar[eé]|proposons)|l.?[eé]quipe (?:a|met|utilise|d[eé]veloppe|teste|mesure|compare)|"
+    r"dans (?:ce|le) projet|au cours (?:de|du) projet|our (?:method|approach|experiment|study|work))\b",
+    re.I,
+)
+
+_EXPERIMENT_PATTERN = re.compile(
+    r"\b(?:experiment|experimental|exp[eé]rien|protocole|protocol|test(?:ed|ing)?|essai|"
+    r"training|train(?:ed|ing)?|entra[iî]n|dataset|data set|jeu de donn[eé]es|sample|[eé]chantillon|"
+    r"parameter|param[eè]tr|configuration|condition|benchmark|comparison|comparaison|compare|"
+    r"mesur|measure|evaluation|[eé]valuation|validation|simulation|simulator|simulateur|"
+    r"cross-validation|validation crois[eé]e|ablation|baseline|t[eé]moin)\b",
+    re.I,
+)
+
+_LEARNING_PATTERN = re.compile(
+    r"\b(?:we (?:observe|observed|conclude|concluded|show|showed|found|learned)|"
+    r"nous (?:observons|avons observ[eé]|concluons|avons conclu|constatons|avons constat[eé])|"
+    r"the results? (?:show|indicate|demonstrate|suggest)|les r[eé]sultats? (?:montrent|indiquent|"
+    r"d[eé]montrent|sugg[eè]rent)|observation|conclusion|finding|enseignement|connaissance acquise|"
+    r"permet de conclure|supports? the hypothesis|soutient l.?hypoth[eè]se)\b",
+    re.I,
+)
+
+_LIMITATION_PATTERN = re.compile(
+    r"\b(?:limit(?:ation|ed|s)?|shortcoming|drawback|fails? to|cannot|unable|insufficient|"
+    r"knowledge gap|open problem|limite|lacune|insuffisan|ne permet pas|impossible|reste [aà]|"
+    r"non r[eé]solu|probl[eè]me ouvert)\b",
+    re.I,
+)
+
+_CONTRIBUTION_PATTERN = re.compile(
+    r"\b(?:contribution|we propose|nous proposons|novel|new (?:method|approach|design|combination)|"
+    r"nouve(?:au|lle) (?:m[eé]thode|approche|conception|combinaison)|original|architecture|"
+    r"combine|combinaison|hybrid|hybride|prototype|conception)\b",
+    re.I,
+)
+
+_REPRODUCIBILITY_PATTERN = re.compile(
+    r"\b(?:reproduc|replicab|reusab|re-utilis|r[eé]utilis|transferab|transf[eé]r|"
+    r"generaliz|g[eé]n[eé]ralis|different conditions|diff[eé]rentes conditions|"
+    r"parameter settings|param[eè]tres document[eé]s|procedure|proc[eé]dure|workflow|"
+    r"knowledge gained|connaissances? acquises?|capitalis)\b",
+    re.I,
+)
+
+
+# Signaux génériques de qualité documentaire. Ils ne contiennent aucun nom de
+# projet, de technologie ou de dataset. Leur rôle est d'éviter qu'une citation
+# bibliographique ou une phrase de contexte soit promue comme expérience du projet.
+_REFERENCE_CITATION_PATTERN = re.compile(
+    r"(?:\bet\s+al\.\b|\bdoi\s*:\s*|https?://doi\.org|"
+    r"\b(?:journal|proceedings|conference|transactions|letters)\b|"
+    r"\bvol\.?\s*\d+\b|\bpp?\.?\s*\d+(?:\s*[-–]\s*\d+)?\b|"
+    r"[“\"]{1}[^”\"]{12,220}[”\"]{1}|"
+    r"\b[A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ'’.-]+\s*,\s*(?:[A-Z]\.?\s*){1,3}(?:,|\band\b|\bet\b))",
+    re.I,
+)
+
+_REFERENCE_SECTION_FRAGMENT_PATTERN = re.compile(
+    r"(?:\bet\s+al\.\b|\bdoi\b|\bvol\.?\b|\bpp?\.?\b|"
+    r"[“\"][^”\"]{8,180}$|"
+    r"^[A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ'’.-]+(?:\s+[A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ'’.-]+){0,3}\s*,\s*"
+    r"(?:and|et|&|[A-Z]\.)\s*)",
+    re.I,
+)
+
+_EXPLICIT_HYPOTHESIS_PATTERN = re.compile(
+    r"\b(?:our (?:main |working )?(?:assumption|hypothesis)|main assumption|"
+    r"we hypothesi[sz]e|we assume|we propose|we investigate whether|we study whether|"
+    r"nous (?:faisons l['’]hypoth[eè]se|supposons|proposons|cherchons [aà] d[eé]terminer si|"
+    r"[eé]tudions si)|l['’]hypoth[eè]se (?:est|selon laquelle)|hypoth[eè]se centrale|"
+    r"proposition centrale|new approach|nouvelle approche)\b",
+    re.I,
+)
+
+_DESIGN_PROPOSAL_PATTERN = re.compile(
+    r"\b(?:new approach|novel approach|nouvelle approche|approche originale|"
+    r"we propose (?:a|an) (?:new|novel)|nous proposons (?:une|un) (?:nouvelle?|originale?)|"
+    r"combine|combinaison|complementary|compl[eé]mentair|hybrid|hybride|new design|nouvelle conception)\b",
+    re.I,
+)
+
+_REJECTED_OR_COUNTERFACTUAL_PATTERN = re.compile(
+    r"\b(?:rather than|instead of|we do not|we don['’]?t|not intended to|not aim(?:ed)? to|"
+    r"avoid(?:ing)?|without trying to|au lieu de|plut[oô]t que|nous ne\s+\w+(?:\s+\w+){0,5}\s+pas|"
+    r"sans chercher [aà]|sans tenter de)\b",
+    re.I,
+)
+
+_COMPARATIVE_RESULT_PATTERN = re.compile(
+    r"\b(?:compared (?:with|to)|comparison with|versus|vs\.?|whereas|while|against|"
+    r"contre|par rapport [aà]|tandis que|compar[eé] [aà]|gap of|[eé]cart de|difference of|"
+    r"diff[eé]rence de|increas(?:e|ed|es|ing)(?: this result)? by|augmentation de|gain de|improvement of|"
+    r"am[eé]lioration de|higher than|lower than|sup[eé]rieur [aà]|inf[eé]rieur [aà])\b",
+    re.I,
+)
+
+_PAIRWISE_COMPARISON_PATTERN = re.compile(
+    r"\b(?:compared (?:with|to)|versus|vs\.?|against|contre|par rapport [aà]|tandis que|whereas|"
+    r"gap (?:of )?.*? between|[eé]cart (?:de )?.*? entre|difference .*? between|diff[eé]rence .*? entre|"
+    r"higher than|lower than|sup[eé]rieur [aà]|inf[eé]rieur [aà])\b",
+    re.I,
+)
+
+_OBSERVED_GAIN_PATTERN = re.compile(
+    r"\b(?:increas(?:e|ed|es|ing)(?: this result)? by|improv(?:e|ed|es|ement) (?:by|of)|"
+    r"augmentation de|gain de|am[eé]lioration de)\b",
+    re.I,
+)
+
+_CONTROLLED_PROTOCOL_PATTERN = re.compile(
+    r"\b(?:using either|two groups?|deux groupes?|same (?:algorithm|model|models|dataset|conditions|parameters)|"
+    r"m[eê]me(?:s)? (?:algorithme|mod[eè]le|mod[eè]les|jeu de donn[eé]es|conditions|param[eè]tres)|"
+    r"performances? .*? measured on|performances? .*? mesur[eé]es? sur|"
+    r"compared under the same|compar[eé]s? dans les m[eê]mes conditions|control(?:led)? comparison|comparaison contr[oô]l[eé]e)\b",
+    re.I,
+)
+
+_GLOBAL_RESULT_PATTERN = re.compile(
+    r"\b(?:overall|global|average|mean|moyenn?e|total|across (?:all|the)|"
+    r"sur l['’]ensemble|toutes les (?:classes|cibles|configurations))\b",
+    re.I,
+)
+
+_PER_ITEM_RESULT_PATTERN = re.compile(
+    r"\b(?:confusion matrix|matrice de confusion|for (?:the|class)|pour (?:la|le|les) (?:classe|cible)|"
+    r"class[- ]wise|per[- ]class|par classe|par cible|confused with|confondu(?:e)? avec)\b",
+    re.I,
+)
+
+_HEADROOM_OR_BOUND_PATTERN = re.compile(
+    r"\b(?:remains? possible|remaining improvement|reste .*?(?:possible|avant d['’]atteindre)|"
+    r"upper bound|maximum possible|theoretical maximum|marge d['’]am[eé]lioration|"
+    r"pour atteindre\s+100\s*%|to reach\s+100\s*%)\b",
+    re.I,
+)
+
+_STRONG_PROTOCOL_PATTERN = re.compile(
+    r"\b(?:we (?:generated|produced|trained|evaluated|compared|measured|used|considered)|"
+    r"nous (?:avons g[eé]n[eé]r[eé]|avons produit|avons entra[iî]n[eé]|avons [eé]valu[eé]|"
+    r"avons compar[eé]|avons mesur[eé]|avons utilis[eé]|consid[eé]rons)|"
+    r"same (?:dataset|model|models|conditions|parameters)|m[eê]mes? (?:jeu de donn[eé]es|mod[eè]les|conditions|param[eè]tres)|"
+    r"training set|test set|jeu d['’]entra[iî]nement|jeu de test|"
+    r"depression angles?|angles? de d[eé]pression|configurations? d['’]acquisition|"
+    r"ablation study|[eé]tude d['’]ablation)\b",
+    re.I,
+)
+
+_THIRD_PARTY_WORK_PATTERN = re.compile(
+    r"\b(?:the authors?|their (?:classifier|method|model|approach|results?)|previous work|prior work|"
+    r"a previous study|another study|reported by|according to|les auteurs?|leur (?:classifieur|m[eé]thode|mod[eè]le|approche)|"
+    r"travaux ant[eé]rieurs|une [eé]tude ant[eé]rieure|rapport[eé] par)\b|\[[0-9]{1,3}\]",
+    re.I,
+)
+
+_RESEARCH_OBJECTIVE_ONLY_PATTERN = re.compile(
+    r"\b(?:we propose to study|we aim to study|we investigate (?:the|whether)|we study the impact|"
+    r"nous proposons d['’][eé]tudier|nous visons [aà] [eé]tudier|nous [eé]tudions l['’]impact|"
+    r"pour r[eé]pondre [aà] ces questions|to answer these questions)\b",
+    re.I,
+)
+
+_FUNCTION_PATTERNS = {
+    "uncertainty": _FRASCATI_PROOF_PATTERNS["uncertainty"],
+    "hypothesis": _HYPOTHESIS_EVIDENCE_PATTERN,
+    "experiment": _EXPERIMENT_PATTERN,
+    "result": _RESULT_SIGNAL_PATTERN,
+    "learning": _LEARNING_PATTERN,
+}
+
+_ROLE_HINTS = {
+    "uncertainty": {"verrou", "objectif", "parametre"},
+    "hypothesis": {"objectif", "contribution", "parametre", "verrou", "methode", "resultat"},
+    "experiment": {"methode", "parametre", "contribution"},
+    "result": {"resultat"},
+    "learning": {"resultat", "contribution"},
+    "novelty": {"etat_art", "verrou", "objectif"},
+    "creativity": {"contribution", "objectif", "methode"},
+    "systematicity": {"methode", "parametre", "resultat"},
+    "transferability": {"methode", "parametre", "contribution", "resultat"},
+}
+
+
+def _passage_evidence_id(passage: Dict[str, Any]) -> str:
+    metadata = passage.get("metadata") if isinstance(passage.get("metadata"), dict) else {}
+    return clean_text(
+        passage.get("passage_id") or passage.get("id")
+        or metadata.get("passage_id") or metadata.get("original_passage_id")
+        or metadata.get("rag_chunk_id")
+    )
+
+
+def _passage_position(passage: Dict[str, Any], default: int = 0) -> int:
+    metadata = passage.get("metadata") if isinstance(passage.get("metadata"), dict) else {}
+    for key in ("sentence_start", "paragraph_index", "char_start"):
+        try:
+            value = passage.get(key) if passage.get(key) not in (None, "") else metadata.get(key)
+            if value not in (None, ""):
+                return int(value)
+        except Exception:
+            continue
+    return default
+
+
+def _passage_has_position(passage: Dict[str, Any]) -> bool:
+    metadata = passage.get("metadata") if isinstance(passage.get("metadata"), dict) else {}
+    return any(
+        passage.get(key) not in (None, "") or metadata.get(key) not in (None, "")
+        for key in ("sentence_start", "paragraph_index", "char_start")
+    )
+
+
+def _passage_document_key(passage: Dict[str, Any]) -> str:
+    metadata = passage.get("metadata") if isinstance(passage.get("metadata"), dict) else {}
+    document_id = clean_text(
+        passage.get("document_id")
+        or passage.get("source_document_id")
+        or passage.get("doc_id")
+        or metadata.get("document_id")
+        or metadata.get("source_document_id")
+    )
+    if document_id:
+        return f"id:{document_id}"
+    return _path_match_key(
+        passage.get("document")
+        or passage.get("document_name")
+        or passage.get("source_path")
+        or metadata.get("document")
+        or metadata.get("document_name")
+        or metadata.get("source_path")
+    )
+
+
+def _passage_section_text(passage: Dict[str, Any]) -> str:
+    metadata = passage.get("metadata") if isinstance(passage.get("metadata"), dict) else {}
+    return " / ".join(
+        value for value in (
+            clean_text(passage.get("section_path") or metadata.get("section_path")),
+            clean_text(passage.get("section_title") or metadata.get("section_title")),
+        )
+        if value
+    )
+
+
+def _passage_full_text(passage: Dict[str, Any]) -> str:
+    fragments: List[Tuple[str, str]] = []
+    for key in ("analysis_text", "context_before", "text", "context_after"):
+        value = re.sub(r"\s+", " ", clean_text(passage.get(key))).strip()
+        signature = _diag_norm(value)
+        if not value or not signature:
+            continue
+        if any(signature in existing_signature for _, existing_signature in fragments):
+            continue
+        fragments = [
+            (existing_value, existing_signature)
+            for existing_value, existing_signature in fragments
+            if existing_signature not in signature
+        ]
+        fragments.append((value, signature))
+    return " ".join(value for value, _ in fragments)
+
+
+def _is_result_metadata(passage: Dict[str, Any]) -> bool:
+    """Rejette les vraies métadonnées sans jeter un contenu scientifique mal sectionné.
+
+    Certains parseurs PDF conservent un ancien titre de section comme « To cite this
+    version » alors que le chunk contient ensuite l'abstract ou les contributions.
+    La décision regarde donc d'abord le contenu réel du passage.
+    """
+    metadata = passage.get("metadata") if isinstance(passage.get("metadata"), dict) else {}
+    origin = clean_text(passage.get("content_origin") or metadata.get("content_origin")).lower()
+    text = clean_text(passage.get("text"))
+    section = _passage_section_text(passage).strip()
+    primary = " ".join((section, text))
+
+    substantive = bool(
+        len(text) >= 70
+        and (
+            _EXPLICIT_HYPOTHESIS_PATTERN.search(text)
+            or _CONTRIBUTION_PATTERN.search(text)
+            or _LIMITATION_PATTERN.search(text)
+            or _EXPERIMENT_PATTERN.search(text)
+            or _RESULT_OBSERVATION_PATTERN.search(text)
+            or _PROJECT_ACTION_PATTERN.search(text)
+        )
+    )
+    if origin == "metadata" and not substantive:
+        return True
+
+    section_parts = [part.strip() for part in re.split(r"[/\\>]", section) if part.strip()]
+    if any(_METADATA_SECTION_PATTERN.fullmatch(part) for part in section_parts) and not substantive:
+        return True
+
+    metadata_like = bool(_METADATA_TEXT_PATTERN.search(primary))
+    result_like = bool(_RESULT_SIGNAL_PATTERN.search(text) and _QUANTITATIVE_PATTERN.search(text))
+    return metadata_like and not substantive and not result_like
+
+
+
+def _is_reference_like_passage(passage: Dict[str, Any]) -> bool:
+    """Détecte les fragments bibliographiques/citations sans les confondre avec l'état de l'art.
+
+    Une référence peut servir à la nouveauté/état de l'art, mais ne doit pas devenir
+    une preuve d'expérience ou de résultat du projet sauf si le même passage décrit
+    explicitement une action menée par l'équipe.
+    """
+    if _is_result_metadata(passage):
+        return True
+    section = _passage_section_text(passage)
+    text = clean_text(passage.get("text"))
+    full = _passage_full_text(passage)
+    if _REFERENCE_SECTION_FRAGMENT_PATTERN.search(section):
+        return True
+    citation_hits = len(_REFERENCE_CITATION_PATTERN.findall(f"{section} {text}"))
+    if citation_hits >= 2 and not _PROJECT_ACTION_PATTERN.search(full):
+        return True
+    return False
+
+
+def _hypothesis_quality(passage: Dict[str, Any]) -> Dict[str, Any]:
+    joined = f"{_passage_section_text(passage)} {_passage_full_text(passage)}"
+    explicit = bool(_EXPLICIT_HYPOTHESIS_PATTERN.search(joined))
+    proposal = bool(_CONTRIBUTION_PATTERN.search(joined))
+    design_proposal = bool(_DESIGN_PROPOSAL_PATTERN.search(joined))
+    research_objective_only = bool(_RESEARCH_OBJECTIVE_ONLY_PATTERN.search(joined)) and not design_proposal
+    linked_reason = bool(_HYPOTHESIS_LINK_PATTERN.search(joined))
+    rejected = bool(_REJECTED_OR_COUNTERFACTUAL_PATTERN.search(joined))
+    return {
+        "explicit": explicit,
+        "proposal": proposal,
+        "design_proposal": design_proposal,
+        "research_objective_only": research_objective_only,
+        "linked_reason": linked_reason,
+        "rejected_or_counterfactual": rejected,
+    }
+
+
+def _result_scope(passage: Dict[str, Any], fragment: Optional[str] = None) -> str:
+    """Classe un résultat sans dépendre du domaine métier."""
+    text = clean_text(fragment) if fragment is not None else _passage_full_text(passage)
+    section = _passage_section_text(passage)
+    joined = f"{section} {text}"
+    has_values = bool(_quantitative_values(text))
+    comparative = bool(_COMPARATIVE_RESULT_PATTERN.search(joined))
+    pairwise = bool(_PAIRWISE_COMPARISON_PATTERN.search(joined))
+    observed_gain = bool(_OBSERVED_GAIN_PATTERN.search(joined))
+    global_signal = bool(_GLOBAL_RESULT_PATTERN.search(joined))
+    per_item = bool(_PER_ITEM_RESULT_PATTERN.search(joined))
+    headroom = bool(_HEADROOM_OR_BOUND_PATTERN.search(joined))
+    observed = bool(_RESULT_OBSERVATION_PATTERN.search(joined))
+    if pairwise and has_values and not per_item:
+        return "global_comparison"
+    if observed_gain and has_values and not per_item:
+        return "observed_gain"
+    if global_signal and has_values and observed:
+        return "global_metric"
+    if per_item and has_values:
+        return "per_item_metric"
+    if headroom and has_values:
+        return "headroom_context"
+    if has_values and observed:
+        return "observed_metric"
+    if observed:
+        return "qualitative_observation"
+    return "result_context"
+
+
+def _fragment_windows(value: str) -> List[str]:
+    """Crée de petits fragments pour éviter qu'un chunk mélange plusieurs métriques."""
+    text = re.sub(r"\s+", " ", clean_text(value)).strip()
+    if not text:
+        return []
+    sentences = [
+        item.strip()
+        for item in re.split(r"(?<=[.!?])\s+(?=[A-ZÀ-ÖØ-Ý0-9])", text)
+        if item.strip()
+    ]
+    if len(sentences) <= 1:
+        # Les extractions PDF perdent parfois la ponctuation ; garder aussi des
+        # fenêtres raisonnables autour des séparateurs forts.
+        clauses = [item.strip() for item in re.split(r"\s*[;•]\s*", text) if item.strip()]
+        sentences = clauses if len(clauses) > 1 else [text]
+    windows: List[str] = []
+    for index, sentence in enumerate(sentences):
+        windows.append(sentence)
+        if index + 1 < len(sentences):
+            windows.append(f"{sentence} {sentences[index + 1]}")
+    # Le texte complet reste candidat seulement si aucune vraie segmentation
+    # n'a été possible ; sinon il mélangerait plusieurs métriques ou conclusions.
+    if len(sentences) == 1 and len(text) <= 650:
+        windows.append(text)
+    seen = set()
+    out = []
+    for item in windows:
+        sig = _diag_norm(item)
+        if not sig or sig in seen:
+            continue
+        seen.add(sig)
+        out.append(item)
+    return out
+
+
+def _distinctive_tokens(value: Any) -> set[str]:
+    common = {
+        "with", "that", "this", "from", "have", "their", "they", "were", "been",
+        "pour", "avec", "dans", "cette", "nous", "sont", "plus", "entre", "ainsi",
+        "result", "results", "resultat", "resultats", "approach", "approche",
+    }
+    return {
+        token for token in _diag_norm(value).split()
+        if len(token) >= 4 and token not in common
+    }
+
+
+def _nlp_passage_proof(passage: Any) -> Dict[str, Any]:
+    item = passage if isinstance(passage, dict) else {}
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    raw_path = clean_text(item.get("source_path") or metadata.get("source_path"))
+    document = clean_text(
+        item.get("document") or item.get("document_name") or item.get("filename")
+        or metadata.get("document") or metadata.get("document_name") or metadata.get("filename")
+    )
+    if not document and raw_path:
+        document = Path(raw_path).name
+    excerpt = _passage_full_text(item)
+    passage_id = _passage_evidence_id(item)
+    original_text = re.sub(r"\s+", " ", clean_text(item.get("text"))).strip()
+    coordinates = item.get("highlight_coordinates")
+    if coordinates is None:
+        coordinates = (
+            item.get("coordinates") or item.get("bbox") or item.get("bounding_box")
+            or metadata.get("highlight_coordinates") or metadata.get("coordinates")
+            or metadata.get("bbox") or metadata.get("bounding_box")
+        )
+    return {
+        "evidence_id": passage_id,
+        "passage_id": passage_id,
+        "document_id": (
+            item.get("document_id") or item.get("source_document_id") or item.get("doc_id")
+            or metadata.get("document_id") or metadata.get("source_document_id")
+        ),
+        "document": document,
+        "document_name": document,
+        "source_path": raw_path,
+        "page_number": item.get("page_number") or item.get("page") or metadata.get("page_number") or metadata.get("page"),
+        "section_title": clean_text(item.get("section_title") or metadata.get("section_title")),
+        "section_path": clean_text(item.get("section_path") or metadata.get("section_path")),
+        "sentence_start": item.get("sentence_start") if item.get("sentence_start") is not None else metadata.get("sentence_start"),
+        "paragraph_index": item.get("paragraph_index") if item.get("paragraph_index") is not None else metadata.get("paragraph_index"),
+        "char_start": (
+            item.get("char_start") if item.get("char_start") is not None
+            else metadata.get("char_start") if metadata.get("char_start") is not None
+            else item.get("sentence_start") if item.get("sentence_start") is not None
+            else metadata.get("sentence_start")
+        ),
+        "char_end": item.get("char_end") if item.get("char_end") is not None else metadata.get("char_end"),
+        "highlight_coordinates": coordinates,
+        "role": clean_text(
+            item.get("role") or item.get("semantic_role") or item.get("original_model_role")
+            or metadata.get("role") or metadata.get("semantic_role")
+        ),
+        "original_role": clean_text(item.get("original_model_role")),
+        "analysis_text_used": bool(item.get("analysis_text")),
+        "context_before_used": bool(item.get("context_before")),
+        "context_after_used": bool(item.get("context_after")),
+        "source_text_original": truncate(original_text or excerpt, 1200),
+        "excerpt": truncate(excerpt, 700),
+    }
+
+
+def _dedupe_nlp_passages(passages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    seen = set()
+    output: List[Dict[str, Any]] = []
+    for index, passage in enumerate(passages):
+        if not isinstance(passage, dict):
+            continue
+        evidence_id = _passage_evidence_id(passage)
+        signature = evidence_id or (
+            _passage_document_key(passage),
+            _passage_position(passage, index),
+            _diag_norm(_passage_full_text(passage))[:300],
+        )
+        if not _passage_full_text(passage) or signature in seen:
+            continue
+        seen.add(signature)
+        output.append(passage)
+    return output
+
+
+def _dedupe_proofs(proofs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    seen = set()
+    output: List[Dict[str, Any]] = []
+    for proof in proofs:
+        if not isinstance(proof, dict):
+            continue
+        signature = clean_text(proof.get("evidence_id") or proof.get("passage_id")) or (
+            clean_text(proof.get("document")),
+            clean_text(proof.get("source_text_original") or proof.get("excerpt"))[:300],
+        )
+        if signature in seen:
+            continue
+        seen.add(signature)
+        output.append(proof)
+    return output
+
+
+def _semantic_bigrams(value: Any) -> set[str]:
+    tokens = [token for token in _diag_norm(value).split() if len(token) >= 4]
+    return {f"{left} {right}" for left, right in zip(tokens, tokens[1:])}
+
+
+def _operation_semantic_link_report(
+    passage: Dict[str, Any],
+    group: Optional[Dict[str, Any]],
+    purpose: str = "",
+    passage_index: int = 0,
+) -> Dict[str, Any]:
+    if not isinstance(group, dict) or not group:
+        return {
+            "score": 0.0,
+            "operation_id": None,
+            "purpose": purpose or None,
+            "shared_terms": [],
+            "reasons_fr": ["Le rattachement à une opération précise n’a pas pu être vérifié."],
+            "direct_support": False,
+        }
+
+    supporting = [
+        item for item in (group.get("supporting_passages") or [])
+        if isinstance(item, dict)
+    ]
+    evidence_id = _passage_evidence_id(passage)
+    supporting_ids = {_passage_evidence_id(item) for item in supporting if _passage_evidence_id(item)}
+    direct_support = bool(evidence_id and evidence_id in supporting_ids)
+    document_key = _passage_document_key(passage)
+    same_document_support = [item for item in supporting if _passage_document_key(item) == document_key]
+    same_document = bool(document_key and same_document_support)
+
+    operation_text = " ".join((
+        clean_text(group.get("text")),
+        clean_text(group.get("analysis_text")),
+        clean_text(group.get("technical_scope")),
+        clean_text(group.get("section_title")),
+        " ".join(_passage_full_text(item) for item in supporting[:8]),
+    ))
+    passage_text = _passage_full_text(passage)
+    operation_tokens = _distinctive_tokens(operation_text)
+    passage_tokens = _distinctive_tokens(passage_text)
+    shared_terms = sorted(operation_tokens & passage_tokens, key=lambda value: (-len(value), value))[:10]
+    shared_bigrams = _semantic_bigrams(operation_text) & _semantic_bigrams(passage_text)
+
+    distance: Optional[int] = None
+    if same_document_support and _passage_has_position(passage):
+        positioned = [item for item in same_document_support if _passage_has_position(item)]
+        if positioned:
+            distance = min(
+                abs(_passage_position(passage, passage_index) - _passage_position(item))
+                for item in positioned
+            )
+
+    purpose_pattern = _FUNCTION_PATTERNS.get(purpose) or _FRASCATI_PROOF_PATTERNS.get(purpose)
+    purpose_aligned = bool(purpose_pattern and purpose_pattern.search(passage_text))
+    score = 0.0
+    reasons: List[str] = []
+    if direct_support:
+        score += 0.45
+        reasons.append("le passage appartient aux preuves déjà rattachées à l’opération")
+    if same_document:
+        score += 0.12
+        reasons.append("il provient du même document que l’opération")
+    if distance is not None:
+        if distance <= 6:
+            score += 0.16
+            reasons.append("il est immédiatement voisin du passage décrivant l’opération")
+        elif distance <= 14:
+            score += 0.11
+            reasons.append("il est proche du passage décrivant l’opération")
+        elif distance <= 30:
+            score += 0.05
+    if shared_terms:
+        score += min(0.16, len(shared_terms) * 0.025)
+        reasons.append("il partage le vocabulaire technique propre à l’opération")
+    if shared_bigrams:
+        score += min(0.06, len(shared_bigrams) * 0.02)
+    if purpose_aligned:
+        score += 0.08
+        reasons.append(f"son contenu remplit la fonction documentaire « {purpose} »")
+    score = min(1.0, score)
+    rendered_terms = ", ".join(shared_terms[:5])
+    purpose_labels = {
+        "uncertainty": "incertitude ou verrou",
+        "hypothesis": "hypothèse",
+        "experiment": "expérimentation",
+        "result": "résultat",
+        "learning": "apprentissage",
+        "novelty": "nouveauté",
+        "creativity": "créativité",
+        "systematicity": "démarche systématique",
+        "transferability": "transférabilité",
+    }
+    if purpose_aligned:
+        reasons[-1] = (
+            "son contenu remplit la fonction documentaire « "
+            + purpose_labels.get(purpose, purpose)
+            + " »"
+        )
+    bridge = "Cette preuve est reliée à l’opération"
+    if reasons:
+        bridge += " car " + ", ".join(reasons[:3])
+    if rendered_terms:
+        bridge += f" ; les termes techniques communs les plus discriminants sont : {rendered_terms}"
+    bridge += "."
+    return {
+        "score": round(score, 4),
+        "operation_id": clean_text(group.get("lock_group_id") or group.get("passage_id")) or None,
+        "purpose": purpose or None,
+        "shared_terms": shared_terms,
+        "shared_bigrams_count": len(shared_bigrams),
+        "same_document": same_document,
+        "position_distance": distance,
+        "purpose_aligned": purpose_aligned,
+        "direct_support": direct_support,
+        "reasons_fr": reasons,
+        "justification_bridge_fr": bridge,
+    }
+
+
+def _operation_affinity_score(
+    passage: Dict[str, Any],
+    group: Optional[Dict[str, Any]],
+    passage_index: int,
+) -> float:
+    return 100.0 * float(
+        _operation_semantic_link_report(passage, group, passage_index=passage_index).get("score") or 0.0
+    )
+
+
+def _proof_summary_fr(purpose: str, passage: Dict[str, Any], values: Optional[List[str]] = None) -> str:
+    # Le résumé visible ne doit jamais devenir une liste brute de nombres. Les
+    # valeurs restent dans ``quantitative_values`` pour le LLM et la traçabilité,
+    # qui doivent les remettre dans leur contexte (métrique, objet, comparaison).
+    summaries = {
+        "uncertainty": "Ce passage documente l’incertitude technique, le verrou ou la limite qui motive l’investigation.",
+        "hypothesis": "Ce passage formule ou étaye l’hypothèse technique et la raison de l’investigation.",
+        "experiment": "Ce passage décrit le protocole, les paramètres, les données, la comparaison ou les conditions expérimentales effectivement mobilisés.",
+        "result": "Ce passage rapporte un résultat observé ou une conclusion quantitative issue des travaux ; les valeurs doivent être interprétées avec leur métrique et leur objet.",
+        "learning": "Ce passage présente l’enseignement ou la conclusion tirée des résultats obtenus.",
+        "novelty": "Ce passage situe les limites des connaissances ou solutions existantes qui soutiennent la nouveauté recherchée.",
+        "creativity": "Ce passage documente une hypothèse, une contribution, une nouvelle conception ou une combinaison originale.",
+        "systematicity": "Ce passage décrit une démarche effectivement menée dans le projet, avec un protocole, des paramètres ou une validation traçable.",
+        "transferability": "Ce passage documente des paramètres, une procédure réutilisable, une validation dans plusieurs conditions ou des connaissances transférables.",
+    }
+    return summaries.get(purpose, "Ce passage apporte une preuve directement rattachée à l’opération évaluée.")
+
+
+def _best_source_fragment(passage: Dict[str, Any], purpose: str) -> Tuple[str, str, bool]:
+    candidates: List[Tuple[float, str, str]] = []
+    pattern = _FUNCTION_PATTERNS.get(purpose) or _FRASCATI_PROOF_PATTERNS.get(purpose)
+    for field in ("text", "context_before", "context_after"):
+        raw_value = re.sub(r"\s+", " ", clean_text(passage.get(field))).strip()
+        if not raw_value:
+            continue
+        for value in _fragment_windows(raw_value):
+            score = min(len(value), 500) / 500 * 3.0
+            if pattern is not None:
+                score += min(len(pattern.findall(value)), 8) * 12.0
+            if purpose == "result":
+                score += min(len(_quantitative_values(value)), 8) * 14.0
+                score += min(len(_RESULT_OBSERVATION_PATTERN.findall(value)), 5) * 14.0
+                scope = _result_scope(passage, value)
+                score += {
+                    "global_comparison": 95.0,
+                    "global_metric": 72.0,
+                    "observed_gain": 60.0,
+                    "observed_metric": 48.0,
+                    "qualitative_observation": 22.0,
+                    "per_item_metric": -18.0,
+                    "headroom_context": -65.0,
+                    "result_context": -40.0,
+                }.get(scope, 0.0)
+            elif purpose == "hypothesis":
+                quality = _hypothesis_quality({**passage, "text": value, "context_before": "", "context_after": "", "analysis_text": ""})
+                score += 90.0 if quality["explicit"] else 0.0
+                score += 42.0 if quality["proposal"] else 0.0
+                score += 95.0 if quality["design_proposal"] else 0.0
+                score += 22.0 if quality["linked_reason"] else 0.0
+                score -= 110.0 if quality["research_objective_only"] else 0.0
+                score -= 120.0 if quality["rejected_or_counterfactual"] else 0.0
+                if quality["explicit"] and len(value) < 90 and not _HYPOTHESIS_LINK_PATTERN.search(value):
+                    score -= 85.0
+            elif purpose in {"experiment", "systematicity", "transferability"}:
+                score += min(len(_EXPERIMENT_PATTERN.findall(value)), 8) * 9.0
+                if _STRONG_PROTOCOL_PATTERN.search(value):
+                    score += 65.0
+            # Les très gros fragments favorisent les mélanges de faits ; pénalité douce.
+            if len(value) > 800:
+                score -= (len(value) - 800) / 40.0
+            candidates.append((score, field, value))
+    if candidates:
+        _, field, value = max(candidates, key=lambda item: item[0])
+        return value, field, True
+    analysis = re.sub(r"\s+", " ", clean_text(passage.get("analysis_text"))).strip()
+    return analysis, "analysis_text", False
+
+
+def _purpose_score(
+    passage: Dict[str, Any],
+    purpose: str,
+    group: Optional[Dict[str, Any]],
+    passage_index: int,
+    preferred_evidence_ids: Optional[set[str]] = None,
+) -> float:
+    if _is_result_metadata(passage):
+        return -1000.0
+    full_text = _passage_full_text(passage)
+    section = _passage_section_text(passage)
+    joined = f"{section} {full_text}".strip()
+    if not joined:
+        return -1000.0
+    reference_like = _is_reference_like_passage(passage)
+
+    role = _diag_norm(
+        passage.get("role")
+        or passage.get("semantic_role")
+        or passage.get("original_model_role")
+        or (
+            passage.get("metadata", {}).get("role")
+            if isinstance(passage.get("metadata"), dict)
+            else ""
+        )
+    )
+    evidence_id = _passage_evidence_id(passage)
+    values = _quantitative_values(full_text)
+    score = _operation_affinity_score(passage, group, passage_index)
+    if evidence_id and evidence_id in (preferred_evidence_ids or set()):
+        score += 42.0
+    if role in _ROLE_HINTS.get(purpose, set()):
+        score += 24.0
+
+    pattern = _FUNCTION_PATTERNS.get(purpose) or _FRASCATI_PROOF_PATTERNS.get(purpose)
+    if pattern is not None:
+        score += min(len(pattern.findall(joined)), 8) * 15.0
+
+    if purpose == "uncertainty":
+        score += min(len(_LIMITATION_PATTERN.findall(joined)), 6) * 13.0
+    elif purpose == "hypothesis":
+        quality = _hypothesis_quality(passage)
+        score += min(len(_HYPOTHESIS_LINK_PATTERN.findall(joined)), 6) * 10.0
+        score += min(len(_CONTRIBUTION_PATTERN.findall(joined)), 5) * 8.0
+        if quality["explicit"]:
+            score += 135.0
+        elif quality["proposal"]:
+            score += 58.0
+        if quality["design_proposal"]:
+            score += 130.0
+        if quality["linked_reason"]:
+            score += 24.0
+        if quality["rejected_or_counterfactual"]:
+            score -= 190.0
+        # Une question « étudier l'impact de X » n'est pas encore l'hypothèse.
+        if quality["research_objective_only"]:
+            score -= 155.0
+        if reference_like:
+            score -= 120.0
+    elif purpose == "experiment":
+        score += min(len(_EXPERIMENT_PATTERN.findall(joined)), 10) * 12.0
+        if values:
+            score += min(len(values), 6) * 5.0
+        if _STRONG_PROTOCOL_PATTERN.search(joined):
+            score += 115.0
+        if _CONTROLLED_PROTOCOL_PATTERN.search(joined):
+            score += 135.0
+        if _PROJECT_ACTION_PATTERN.search(joined):
+            score += 70.0
+        if reference_like:
+            score -= 320.0
+        if role == "resultat" or _RESULT_SECTION_PATTERN.search(section):
+            score -= 95.0
+        if _THIRD_PARTY_WORK_PATTERN.search(joined) and not _PROJECT_ACTION_PATTERN.search(full_text):
+            score -= 240.0
+        if _STATE_OF_ART_PATTERN.search(joined) and not _PROJECT_ACTION_PATTERN.search(full_text):
+            score -= 180.0
+        # Une simple mention de simulation/dataset n'est pas suffisante pour être
+        # une expérience du projet.
+        if not (_STRONG_PROTOCOL_PATTERN.search(joined) or _PROJECT_ACTION_PATTERN.search(joined)):
+            score -= 65.0
+    elif purpose == "result":
+        if reference_like:
+            score -= 340.0
+        if _THIRD_PARTY_WORK_PATTERN.search(joined) and not _PROJECT_ACTION_PATTERN.search(full_text):
+            score -= 260.0
+        if _STATE_OF_ART_PATTERN.search(joined) and not _PROJECT_ACTION_PATTERN.search(full_text):
+            score -= 180.0
+        if role == "resultat":
+            score += 120.0
+        if _RESULT_SECTION_PATTERN.search(section):
+            score += 90.0
+        if _LEARNING_PATTERN.search(joined):
+            score += 34.0
+        if _RESULT_OBSERVATION_PATTERN.search(joined):
+            score += 42.0
+        score += min(len(values), 10) * 14.0
+        scope = _result_scope(passage)
+        score += {
+            "global_comparison": 145.0,
+            "global_metric": 105.0,
+            "observed_gain": 82.0,
+            "observed_metric": 65.0,
+            "qualitative_observation": 25.0,
+            "per_item_metric": -35.0,
+            "headroom_context": -115.0,
+            "result_context": -80.0,
+        }.get(scope, 0.0)
+        outcome_signal = bool(
+            role == "resultat"
+            or _RESULT_SECTION_PATTERN.search(section)
+            or _LEARNING_PATTERN.search(joined)
+            or _RESULT_OBSERVATION_PATTERN.search(joined)
+        )
+        if not outcome_signal:
+            score -= 170.0 if _EXPERIMENT_PATTERN.search(joined) else 95.0
+    elif purpose == "learning":
+        if reference_like:
+            score -= 250.0
+        if _RESULT_SECTION_PATTERN.search(section):
+            score += 50.0
+        if role == "resultat":
+            score += 45.0
+        if values:
+            score += min(len(values), 6) * 5.0
+    elif purpose == "novelty":
+        if _STATE_OF_ART_PATTERN.search(joined):
+            score += 75.0
+        score += min(len(_LIMITATION_PATTERN.findall(joined)), 6) * 16.0
+    elif purpose == "creativity":
+        score += min(len(_CONTRIBUTION_PATTERN.findall(joined)), 8) * 16.0
+        score += min(len(_HYPOTHESIS_EVIDENCE_PATTERN.findall(joined)), 6) * 9.0
+    elif purpose == "systematicity":
+        score += min(len(_EXPERIMENT_PATTERN.findall(joined)), 10) * 14.0
+        if _STRONG_PROTOCOL_PATTERN.search(joined):
+            score += 95.0
+        if _PROJECT_ACTION_PATTERN.search(joined):
+            score += 70.0
+        if reference_like:
+            score -= 320.0
+        if _STATE_OF_ART_PATTERN.search(joined) and not _PROJECT_ACTION_PATTERN.search(full_text):
+            score -= 220.0
+    elif purpose == "transferability":
+        score += min(len(_REPRODUCIBILITY_PATTERN.findall(joined)), 8) * 18.0
+        score += min(len(_EXPERIMENT_PATTERN.findall(joined)), 6) * 7.0
+        if _PROJECT_ACTION_PATTERN.search(joined):
+            score += 28.0
+        if reference_like and not _REPRODUCIBILITY_PATTERN.search(joined):
+            score -= 180.0
+
+    if passage.get("analysis_text"):
+        score += 5.0
+    if passage.get("context_before") or passage.get("context_after"):
+        score += 4.0
+    return score
+
+
+def _rank_passages_for_purpose(
+    passages: List[Dict[str, Any]],
+    purpose: str,
+    group: Optional[Dict[str, Any]] = None,
+    preferred_evidence_ids: Optional[List[str]] = None,
+    max_items: int = 3,
+) -> List[Dict[str, Any]]:
+    preferred = {clean_text(value) for value in (preferred_evidence_ids or []) if clean_text(value)}
+    candidates: List[Tuple[float, int, Dict[str, Any], List[str]]] = []
+    for index, passage in enumerate(_dedupe_nlp_passages(passages)):
+        score = _purpose_score(passage, purpose, group, index, preferred)
+        semantic_link = _operation_semantic_link_report(
+            passage,
+            group,
+            purpose=purpose,
+            passage_index=index,
+        )
+        if isinstance(group, dict) and group:
+            link_score = float(semantic_link.get("score") or 0.0)
+            direct_support = bool(semantic_link.get("direct_support"))
+            shared_terms = semantic_link.get("shared_terms") or []
+            distance = semantic_link.get("position_distance")
+            purpose_aligned = bool(semantic_link.get("purpose_aligned"))
+            close_and_aligned = bool(
+                distance is not None
+                and int(distance) <= 6
+                and purpose_aligned
+                and len(shared_terms) >= 1
+            )
+            # Même document + motif lexical ne suffit plus. On exige soit une
+            # preuve directement possédée par le groupe, soit un lien sémantique
+            # réellement discriminant avec l'opération.
+            if not direct_support and not close_and_aligned and (link_score < 0.32 or len(shared_terms) < 2):
+                continue
+        if score < 35.0:
+            continue
+        values = _quantitative_values(_passage_full_text(passage))
+        passage_with_link = {**passage, "_semantic_link": semantic_link}
+        candidates.append((score, index, passage_with_link, values))
+    candidates.sort(key=lambda item: (item[0], -item[1]), reverse=True)
+
+    output: List[Dict[str, Any]] = []
+    for score, _, passage, values in candidates[:max_items]:
+        proof = _nlp_passage_proof(passage)
+        source_fragment, source_field, source_is_original = _best_source_fragment(passage, purpose)
+        source_values = _quantitative_values(source_fragment)
+        grounded_values = source_values if source_is_original else values
+        semantic_link = passage.get("_semantic_link") if isinstance(passage.get("_semantic_link"), dict) else {}
+        hypothesis_quality = _hypothesis_quality(passage) if purpose == "hypothesis" else {}
+        result_scope = _result_scope(passage, source_fragment) if purpose == "result" else None
+        proof.update({
+            "proof_kind": purpose,
+            "selection_score": round(score, 2),
+            "summary_fr": _proof_summary_fr(purpose, passage, grounded_values),
+            "quantitative_values": grounded_values,
+            "source_field": source_field,
+            "source_is_original": source_is_original,
+            "reference_like": _is_reference_like_passage(passage),
+            "result_scope": result_scope,
+            "hypothesis_explicit": hypothesis_quality.get("explicit"),
+            "hypothesis_design_proposal": hypothesis_quality.get("design_proposal"),
+            "hypothesis_research_objective_only": hypothesis_quality.get("research_objective_only"),
+            "hypothesis_rejected_or_counterfactual": hypothesis_quality.get("rejected_or_counterfactual"),
+            "selection_context_excerpt": truncate(_passage_full_text(passage), 900),
+            "source_text_original": truncate(source_fragment, 1200),
+            "excerpt": truncate(source_fragment, 700),
+            "semantic_link": semantic_link,
+            "justification_bridge_fr": clean_text(semantic_link.get("justification_bridge_fr")),
+        })
+        output.append(proof)
+    return output
+
+
+def _proofs_are_linked(left: Dict[str, Any], right: Dict[str, Any]) -> bool:
+    if _passage_document_key(left) != _passage_document_key(right):
+        return False
+    if (
+        _passage_has_position(left)
+        and _passage_has_position(right)
+        and abs(_passage_position(left) - _passage_position(right)) <= 30
+    ):
+        return True
+    left_text = _passage_full_text(left) or clean_text(left.get("source_text_original") or left.get("excerpt"))
+    right_text = _passage_full_text(right) or clean_text(right.get("source_text_original") or right.get("excerpt"))
+    return len(_distinctive_tokens(left_text) & _distinctive_tokens(right_text)) >= 2
+
+
+def _causal_coherence_report(function_evidence: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
+    stages = ["uncertainty", "hypothesis", "experiment", "result", "learning"]
+    present = {stage: bool(function_evidence.get(stage)) for stage in stages}
+    base_score = sum(1 for value in present.values() if value) / len(stages)
+    linked_pairs: List[str] = []
+    for left_stage, right_stage in zip(stages, stages[1:]):
+        left_proofs = function_evidence.get(left_stage) or []
+        right_proofs = function_evidence.get(right_stage) or []
+        if any(
+            _proofs_are_linked(left, right)
+            for left in left_proofs
+            for right in right_proofs
+        ):
+            linked_pairs.append(f"{left_stage}->{right_stage}")
+    causal_link_bonus = min(0.2, len(linked_pairs) * 0.05)
+    score = min(1.0, base_score + causal_link_bonus)
+    required_proofs = bool(
+        present["uncertainty"]
+        and present["experiment"]
+        and (present["result"] or present["learning"])
+    )
+    explicit_hypothesis_or_strong_reasoning = bool(
+        present["hypothesis"] or (required_proofs and len(linked_pairs) >= 3)
+    )
+    return {
+        "score": round(score, 4),
+        "base_stage_coverage": round(base_score, 4),
+        "causal_link_bonus": round(causal_link_bonus, 4),
+        "stages_present": present,
+        "linked_pairs": linked_pairs,
+        "chain_complete": all(present.values()),
+        "required_proofs_present": required_proofs,
+        "explicit_hypothesis_or_strong_reasoning": explicit_hypothesis_or_strong_reasoning,
+        "defendable_evidence_gate": bool(required_proofs and explicit_hypothesis_or_strong_reasoning),
+    }
+
+
+def _review_operation_status(raw_status: str, causal_report: Dict[str, Any]) -> Tuple[str, str]:
+    status = raw_status or "insufficient_evidence"
+    gate = bool(causal_report.get("defendable_evidence_gate"))
+    required = bool(causal_report.get("required_proofs_present"))
+    if status == "classical_engineering":
+        return status, "La qualification d’ingénierie classique issue du garde métier est conservée."
+    if status == "insufficient_evidence":
+        return status, (
+            "Les preuves restent insuffisantes et nécessitent une validation du consultant ; "
+            "elles ne sont pas requalifiées automatiquement en ingénierie classique."
+        )
+    if status == "rnd_core_defendable" and not gate:
+        if required:
+            return "rnd_core_partial", (
+                "L’incertitude, l’expérimentation et le résultat sont rattachés, mais l’hypothèse explicite "
+                "ou la continuité causale doit encore être consolidée."
+            )
+        return "insufficient_evidence", (
+            "La qualification R&D défendable n’est pas affichée faute de preuves suffisantes sur "
+            "l’incertitude, l’expérimentation et le résultat ou l’apprentissage."
+        )
+    if status == "rnd_core_partial" and not required:
+        return "insufficient_evidence", (
+            "La chaîne documentaire reste trop incomplète pour soutenir un noyau R&D partiel sans validation."
+        )
+    return status, "Le statut est cohérent avec la chaîne de preuves rattachée à l’opération."
+
+
+def _criterion_reason_fr(criterion: Dict[str, Any], evidence: List[Dict[str, Any]]) -> str:
+    label = clean_text(criterion.get("label") or criterion.get("criterion"))
+    status = clean_text(criterion.get("status"))
+    if status == "documented" and evidence:
+        return f"Le critère « {label} » est documenté par des passages classés selon leur pertinence pour cette opération."
+    if status == "partial" and evidence:
+        return f"Le critère « {label} » est partiellement documenté ; les preuves disponibles doivent encore être consolidées."
+    if status == "contradictory":
+        return f"Les éléments rattachés au critère « {label} » sont contradictoires et nécessitent une vérification du consultant."
+    return f"Le critère « {label} » ne dispose pas encore d’une preuve projet suffisamment explicite."
+
+
+def _selection_number(value: Any) -> float:
+    try:
+        return float(str(value if value is not None else 0.0).strip().replace("%", "").replace(",", "."))
+    except Exception:
+        return 0.0
+
+
+def _operation_justification_fr(operation: Dict[str, Any]) -> str:
+    """Résumé d'audit déterministe, jamais utilisé comme récit final du projet.
+
+    Le récit consultant doit être produit à partir des preuves fonctionnelles
+    (verrou → hypothèse → expérience → résultat → apprentissage). Cette fonction
+    évite donc volontairement toute liste de nombres et toute pseudo-explication
+    technique générique qui pourrait être concaténée dans la conclusion globale.
+    """
+    functional = operation.get("functional_evidence") if isinstance(operation.get("functional_evidence"), dict) else {}
+    causal = operation.get("causal_coherence") if isinstance(operation.get("causal_coherence"), dict) else {}
+    stages = causal.get("stages_present") if isinstance(causal.get("stages_present"), dict) else {}
+
+    present_labels = [
+        label
+        for key, label in (
+            ("uncertainty", "incertitude/verrou"),
+            ("hypothesis", "hypothèse"),
+            ("experiment", "expérimentation"),
+            ("result", "résultat"),
+            ("learning", "apprentissage"),
+        )
+        if stages.get(key) and functional.get(key)
+    ]
+    missing_labels = [
+        label
+        for key, label in (
+            ("uncertainty", "incertitude/verrou"),
+            ("hypothesis", "hypothèse"),
+            ("experiment", "expérimentation"),
+            ("result", "résultat"),
+            ("learning", "apprentissage"),
+        )
+        if not (stages.get(key) and functional.get(key))
+    ]
+
+    status = clean_text(operation.get("operation_status"))
+    status_text = {
+        "rnd_core_defendable": "Le garde métier classe cette opération comme noyau R&D défendable.",
+        "rnd_core_partial": "Le garde métier identifie un noyau R&D partiel à consolider.",
+        "classical_engineering": "Le garde métier classe cette opération comme ingénierie classique au vu des preuves rattachées.",
+        "insufficient_evidence": "Les preuves rattachées sont insuffisantes pour qualifier le noyau R&D.",
+    }.get(status, "La qualification de l’opération doit être validée.")
+
+    parts = [status_text]
+    if present_labels:
+        parts.append("Maillons documentés : " + ", ".join(present_labels) + ".")
+    if missing_labels:
+        parts.append("Maillons à consolider : " + ", ".join(missing_labels) + ".")
+    if operation.get("consultant_validation_required"):
+        parts.append("Validation du consultant CIR requise.")
+    return " ".join(parts)
+
+
+def _operation_passage_pool(
+    group: Dict[str, Any],
+    additional_passages: List[Dict[str, Any]],
+    max_neighbor_distance: int = 14,
+    foreign_owned_evidence_ids: Optional[set[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Élargit prudemment les preuves d'une opération sans fuite inter-opérations.
+
+    Un passage déjà utilisé comme preuve de base d'une autre opération n'est pas
+    réattaché automatiquement. Un simple voisinage documentaire ne suffit plus :
+    il faut également un signal fonctionnel et un lien lexical/sectionnel avec
+    l'opération courante.
+    """
+    base = [item for item in (group.get("supporting_passages") or []) if isinstance(item, dict)]
+    base_by_document: Dict[str, List[int]] = {}
+    base_tokens_by_document: Dict[str, List[set[str]]] = {}
+    base_sections_by_document: Dict[str, set[str]] = {}
+    for index, passage in enumerate(base):
+        document_key = _passage_document_key(passage)
+        if document_key:
+            base_by_document.setdefault(document_key, []).append(_passage_position(passage, index))
+            base_tokens_by_document.setdefault(document_key, []).append(
+                _distinctive_tokens(_passage_full_text(passage))
+            )
+            section = _diag_norm(_passage_section_text(passage))
+            if section:
+                base_sections_by_document.setdefault(document_key, set()).add(section)
+
+    attached = list(base)
+    base_ids = {_passage_evidence_id(item) for item in base if _passage_evidence_id(item)}
+    foreign_owned = foreign_owned_evidence_ids or set()
+
+    for index, passage in enumerate(additional_passages):
+        evidence_id = _passage_evidence_id(passage)
+        if evidence_id and (evidence_id in base_ids or evidence_id in foreign_owned):
+            continue
+        document_key = _passage_document_key(passage)
+        positions = base_by_document.get(document_key) or []
+        if not positions:
+            continue
+
+        full_text = _passage_full_text(passage)
+        if not full_text or _is_result_metadata(passage):
+            continue
+        candidate_tokens = _distinctive_tokens(full_text)
+        shared_token_count = max(
+            (len(candidate_tokens & base_tokens) for base_tokens in (base_tokens_by_document.get(document_key) or [])),
+            default=0,
+        )
+        position = _passage_position(passage, index)
+        distance = min(abs(position - base_position) for base_position in positions)
+        section = _diag_norm(_passage_section_text(passage))
+        same_section = bool(section and section in (base_sections_by_document.get(document_key) or set()))
+
+        has_function_or_criterion_signal = any(
+            pattern.search(full_text)
+            for pattern in (
+                _HYPOTHESIS_EVIDENCE_PATTERN,
+                _EXPERIMENT_PATTERN,
+                _RESULT_SIGNAL_PATTERN,
+                _LEARNING_PATTERN,
+                *_FRASCATI_PROOF_PATTERNS.values(),
+            )
+        )
+        if not has_function_or_criterion_signal:
+            continue
+
+        strong_neighbor = distance <= min(max_neighbor_distance, 6) and shared_token_count >= 1
+        strong_semantic = shared_token_count >= 2
+        section_link = same_section and shared_token_count >= 1 and distance <= max_neighbor_distance
+        if strong_neighbor or strong_semantic or section_link:
+            attached.append(passage)
+
+    return _dedupe_nlp_passages(attached)
+
+
+def _build_hypothesis_evidence(
+    passages: List[Dict[str, Any]],
+    group: Optional[Dict[str, Any]] = None,
+    max_items: int = 5,
+) -> List[Dict[str, Any]]:
+    """Reconstruit l'hypothèse en privilégiant une proposition explicite non rejetée."""
+    ranked = _rank_passages_for_purpose(
+        passages,
+        "hypothesis",
+        group=group,
+        max_items=max(max_items * 4, 12),
+    )
+    passages_by_id = {
+        clean_text(item.get("passage_id") or item.get("id")): item
+        for item in _dedupe_nlp_passages(passages)
+    }
+    candidates: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
+    for proof in ranked:
+        if proof.get("reference_like") or proof.get("hypothesis_rejected_or_counterfactual"):
+            continue
+        raw = passages_by_id.get(clean_text(proof.get("evidence_id")))
+        if isinstance(raw, dict):
+            candidates.append((proof, raw))
+    if not candidates:
+        return []
+
+    explicit_candidates = [item for item in candidates if item[0].get("hypothesis_explicit")]
+    seed_pool = explicit_candidates or candidates
+    # L'ancre doit contenir la matière technique de l'hypothèse, pas seulement
+    # une amorce du type « nous proposons une nouvelle approche ».
+    seed = max(
+        seed_pool,
+        key=lambda item: (
+            1 if item[0].get("hypothesis_design_proposal") else 0,
+            1 if _HYPOTHESIS_LINK_PATTERN.search(clean_text(item[0].get("excerpt"))) else 0,
+            min(len(clean_text(item[0].get("excerpt"))), 500),
+            float(item[0].get("selection_score") or 0.0),
+        ),
+    )
+    selected = [seed]
+    for candidate in candidates:
+        if candidate is seed:
+            continue
+        linked = any(_proofs_are_linked(candidate[1], current[1]) for current in selected)
+        if not linked:
+            continue
+        selected.append(candidate)
+        if len(selected) >= min(max_items, 4):
+            break
+    seed_id = clean_text(seed[0].get("evidence_id"))
+    selected.sort(key=lambda item: _passage_position(item[1]))
+    proofs: List[Dict[str, Any]] = []
+    component_ids = [clean_text(item[0].get("evidence_id")) for item in selected]
+    for index, (proof, _) in enumerate(selected):
+        proof = dict(proof)
+        is_anchor = clean_text(proof.get("evidence_id")) == seed_id
+        proof.update({
+            "proof_kind": "hypothesis_component",
+            "reconstruction_basis": "explicit_proposal_then_same_document_semantic_neighbors",
+            "hypothesis_component_ids": component_ids,
+            "hypothesis_anchor": is_anchor,
+            "summary_fr": (
+                "Ce passage constitue le point d’ancrage de l’hypothèse technique."
+                if is_anchor
+                else "Ce passage complète l’hypothèse par une raison, une condition ou une conséquence explicitement reliée."
+            ),
+        })
+        proofs.append(proof)
+    return proofs
+
+
+def _quantitative_values(value: Any) -> List[str]:
+    output: List[str] = []
+    for match in _QUANTITATIVE_PATTERN.finditer(str(value or "")):
+        token = re.sub(r"\s+", " ", match.group(0)).strip()
+        bare = token.replace("%", "").replace(",", ".").strip()
+        try:
+            number = float(re.match(r"[-+]?\d+(?:\.\d+)?", bare).group(0))  # type: ignore[union-attr]
+        except Exception:
+            number = None
+        if number is not None and 1900 <= number <= 2100 and not re.search(r"[%A-Za-z°]", token):
+            continue
+        normalized = token.lower().replace(" ", "").replace(",", ".")
+        if normalized and normalized not in output:
+            output.append(normalized)
+    return output
+
+
+def _build_result_evidence(
+    passages: List[Dict[str, Any]],
+    group: Optional[Dict[str, Any]] = None,
+    max_items: int = 6,
+) -> List[Dict[str, Any]]:
+    candidates = _rank_passages_for_purpose(
+        passages,
+        "result",
+        group=group,
+        max_items=max(max_items * 5, 20),
+    )
+    scope_priority = {
+        "global_comparison": 6,
+        "global_metric": 5,
+        "observed_gain": 4,
+        "observed_metric": 4,
+        "qualitative_observation": 3,
+        "per_item_metric": 2,
+        "headroom_context": 1,
+        "result_context": 0,
+    }
+    candidates = [item for item in candidates if not item.get("reference_like")]
+    candidates.sort(
+        key=lambda item: (
+            scope_priority.get(clean_text(item.get("result_scope")), 0),
+            float(item.get("selection_score") or 0.0),
+        ),
+        reverse=True,
+    )
+
+    selected: List[Dict[str, Any]] = []
+    covered_values: set[str] = set()
+    primary_selected = 0
+    for raw_proof in candidates:
+        if len(selected) >= max_items:
+            break
+        proof = dict(raw_proof)
+        scope = clean_text(proof.get("result_scope")) or "result_context"
+        values = [str(value) for value in (proof.get("quantitative_values") or [])]
+        new_values = set(values) - covered_values
+
+        # Les preuves globales/comparatives sont prioritaires. Les métriques par
+        # classe et les bornes théoriques ne doivent jamais devenir le résultat
+        # principal lorsqu'une preuve globale existe.
+        if scope in {"global_comparison", "global_metric", "observed_gain", "observed_metric"}:
+            primary_selected += 1
+        elif scope == "per_item_metric" and primary_selected >= 2:
+            continue
+        elif scope == "headroom_context" and primary_selected >= 1:
+            continue
+
+        if selected and not new_values and scope != "qualitative_observation":
+            continue
+        proof.update({
+            "proof_kind": "quantitative_result" if values else "qualitative_result",
+            "result_priority_score": proof.get("selection_score"),
+            "quantitative_values": values,
+            "metadata_excluded": False,
+            "primary_result_evidence": scope in {"global_comparison", "global_metric", "observed_gain", "observed_metric"},
+        })
+        selected.append(proof)
+        covered_values.update(values)
+
+    # Si aucun résultat principal n'a été trouvé, garder au maximum deux preuves
+    # secondaires au lieu de remplir la sortie avec des métriques par classe.
+    if not any(item.get("primary_result_evidence") for item in selected):
+        selected = selected[:2]
+    return selected
+
+
+def _criterion_breakdown_from_assessment(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
+    existing = raw.get("criteria_score_breakdown")
+    if isinstance(existing, list) and existing:
+        return [dict(item) for item in existing if isinstance(item, dict)]
+    criteria = raw.get("criteria") or raw.get("dimensions") or {}
+    if not isinstance(criteria, dict):
+        criteria = {}
+    output: List[Dict[str, Any]] = []
+    for criterion in _FRASCATI_LABELS:
+        item = criteria.get(criterion) if isinstance(criteria.get(criterion), dict) else {}
+        status = clean_text(item.get("status")) or "missing"
+        contribution = round(0.2 * _FRASCATI_STATUS_VALUE.get(status, 0.0), 4)
+        output.append({
+            "criterion": criterion,
+            "label": _FRASCATI_LABELS[criterion],
+            "status": status,
+            "criterion_weight": 0.2,
+            "contribution_to_index": contribution,
+            "remaining_gap_to_full_coverage": round(0.2 - contribution, 4),
+            "reason": clean_text(item.get("reason")),
+            "evidence_ids": [clean_text(value) for value in (item.get("evidence_ids") or []) if clean_text(value)],
+            "question": clean_text(item.get("question")) or None,
+        })
+    return output
+
+
+def _build_eligibility_evidence_report(
+    assessment: Dict[str, Any],
+    technical_groups: List[Dict[str, Any]],
+    additional_passages: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Construit la justification traçable affichée par le frontend.
+
+    Le texte LLM ne décide ni des critères ni du calcul. Cette structure relie
+    chaque contribution de 20/10/0 points et chaque maillon causal aux passages
+    du NLP qui l'ont déclenché.
+    """
+    groups_by_id: Dict[str, Dict[str, Any]] = {}
+    proof_catalog_by_group: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    passage_pool_by_group: Dict[str, List[Dict[str, Any]]] = {}
+    additional = _dedupe_nlp_passages(additional_passages or [])
+
+    # Propriété des preuves de base : un passage appartenant explicitement au
+    # noyau d'une autre opération ne doit pas fuiter vers l'opération courante.
+    passage_owners: Dict[str, set[str]] = {}
+    for candidate_group in technical_groups:
+        if not isinstance(candidate_group, dict):
+            continue
+        candidate_group_id = clean_text(candidate_group.get("lock_group_id") or candidate_group.get("passage_id"))
+        if not candidate_group_id:
+            continue
+        for passage in candidate_group.get("supporting_passages") or []:
+            if not isinstance(passage, dict):
+                continue
+            evidence_id = _passage_evidence_id(passage)
+            if evidence_id:
+                passage_owners.setdefault(evidence_id, set()).add(candidate_group_id)
+
+    for group in technical_groups:
+        if not isinstance(group, dict):
+            continue
+        group_id = clean_text(group.get("lock_group_id") or group.get("passage_id"))
+        if not group_id:
+            continue
+        groups_by_id[group_id] = group
+        foreign_owned = {
+            evidence_id
+            for evidence_id, owners in passage_owners.items()
+            if group_id not in owners
+        }
+        passage_pool = _operation_passage_pool(
+            group, additional, foreign_owned_evidence_ids=foreign_owned
+        )
+        passage_pool_by_group[group_id] = passage_pool
+        catalog: Dict[str, Dict[str, Any]] = {}
+        for passage in passage_pool:
+            proof = _nlp_passage_proof(passage)
+            evidence_id = clean_text(proof.get("evidence_id"))
+            if evidence_id and proof.get("excerpt") and evidence_id not in catalog:
+                catalog[evidence_id] = proof
+        proof_catalog_by_group[group_id] = catalog
+
+    raw_assessments = [
+        item for item in (assessment.get("group_assessments") or []) if isinstance(item, dict)
+    ]
+    basis_group_id = clean_text(assessment.get("score_basis_group_id"))
+    if not basis_group_id and raw_assessments:
+        eligible = [
+            item for item in raw_assessments
+            if int(item.get("eligibility_recommendation") or 0) == 1
+            and clean_text((item.get("demarche_legibility") or {}).get("operation_status"))
+            in {"rnd_core_defendable", "rnd_core_partial"}
+        ]
+        pool = eligible or raw_assessments
+        status_priority = {
+            "rnd_core_defendable": 4,
+            "rnd_core_partial": 3,
+            "insufficient_evidence": 2,
+            "classical_engineering": 1,
+        }
+        basis_group_id = clean_text(max(
+            pool,
+            key=lambda item: (
+                status_priority.get(
+                    clean_text((item.get("demarche_legibility") or {}).get("operation_status")),
+                    0,
+                ),
+                float(item.get("documentary_coverage") or item.get("eligibility_score") or 0.0),
+            ),
+        ).get("group_id"))
+
+    operation_reports: List[Dict[str, Any]] = []
+    for raw in raw_assessments:
+        group_id = clean_text(raw.get("group_id"))
+        group = groups_by_id.get(group_id, {})
+        catalog = proof_catalog_by_group.get(group_id, {})
+        passage_pool = passage_pool_by_group.get(group_id, [])
+        demarche = raw.get("demarche_legibility") if isinstance(raw.get("demarche_legibility"), dict) else {}
+        breakdown: List[Dict[str, Any]] = []
+        for criterion in _criterion_breakdown_from_assessment(raw):
+            criterion_key = clean_text(criterion.get("criterion"))
+            evidence = _rank_passages_for_purpose(
+                passage_pool,
+                criterion_key,
+                group=group,
+                preferred_evidence_ids=criterion.get("evidence_ids") or [],
+                max_items=3,
+            )
+            if not evidence:
+                evidence = [
+                    catalog[evidence_id]
+                    for evidence_id in criterion.get("evidence_ids") or []
+                    if evidence_id in catalog
+                ][:3]
+                for proof in evidence:
+                    proof.setdefault("summary_fr", _proof_summary_fr(criterion_key, {}))
+            breakdown.append({
+                **criterion,
+                "reason_fr": _criterion_reason_fr(criterion, evidence),
+                "evidence": evidence,
+            })
+
+        causal_chain = demarche.get("causal_chain") if isinstance(demarche.get("causal_chain"), dict) else {}
+        chain_proofs: Dict[str, List[Dict[str, Any]]] = {}
+        for chain_key in (
+            "uncertainty_evidence_ids",
+            "hypothesis_or_rationale_evidence_ids",
+            "experiment_evidence_ids",
+            "result_or_learning_evidence_ids",
+        ):
+            chain_proofs[chain_key] = [
+                catalog[evidence_id]
+                for evidence_id in (causal_chain.get(chain_key) or [])
+                if evidence_id in catalog
+            ][:2]
+
+        functional_evidence = {
+            "uncertainty": _rank_passages_for_purpose(
+                passage_pool, "uncertainty", group=group, max_items=3,
+            ),
+            "hypothesis": _build_hypothesis_evidence(
+                passage_pool, group=group, max_items=4,
+            ),
+            "experiment": _rank_passages_for_purpose(
+                passage_pool, "experiment", group=group, max_items=3,
+            ),
+            "result": _build_result_evidence(
+                passage_pool, group=group, max_items=4,
+            ),
+            "learning": _rank_passages_for_purpose(
+                passage_pool, "learning", group=group, max_items=3,
+            ),
+        }
+        reconstructed_hypothesis = functional_evidence["hypothesis"]
+        prioritized_results = functional_evidence["result"]
+        if functional_evidence["uncertainty"]:
+            chain_proofs["uncertainty_evidence_ids"] = functional_evidence["uncertainty"]
+        if reconstructed_hypothesis:
+            chain_proofs["hypothesis_or_rationale_evidence_ids"] = reconstructed_hypothesis
+        if functional_evidence["experiment"]:
+            chain_proofs["experiment_evidence_ids"] = functional_evidence["experiment"]
+        result_learning = _dedupe_proofs(
+            prioritized_results + functional_evidence["learning"]
+        )
+        if result_learning:
+            chain_proofs["result_or_learning_evidence_ids"] = result_learning[:4]
+        causal_coherence = _causal_coherence_report(functional_evidence)
+        raw_operation_status = clean_text(demarche.get("operation_status")) or "insufficient_evidence"
+        reviewed_operation_status, status_reason_fr = _review_operation_status(
+            raw_operation_status,
+            causal_coherence,
+        )
+
+        activities_by_status: Dict[str, List[Dict[str, Any]]] = {
+            "direct_rnd": [],
+            "necessary_rnd_support": [],
+            "classical_engineering": [],
+            "insufficient_evidence": [],
+        }
+        for activity in demarche.get("activities") or []:
+            if not isinstance(activity, dict):
+                continue
+            status = clean_text(activity.get("activity_status"))
+            if status not in activities_by_status or len(activities_by_status[status]) >= 4:
+                continue
+            evidence_id = clean_text(activity.get("evidence_id"))
+            proof = catalog.get(evidence_id) or {
+                "evidence_id": evidence_id,
+                "document": clean_text(activity.get("document")),
+                "source_path": "",
+                "page_number": None,
+                "section_title": clean_text(activity.get("section_title")),
+                "sentence_start": activity.get("sentence_start"),
+                "role": "methode",
+                "excerpt": truncate(activity.get("text_excerpt"), 700),
+            }
+            activities_by_status[status].append(proof)
+
+        title = clean_text(
+            group.get("text") or group.get("analysis_text") or group.get("section_title")
+        )
+        anchor_evidence_id = clean_text(group.get("passage_id"))
+        anchor_evidence = catalog.get(anchor_evidence_id)
+        if anchor_evidence is None and catalog:
+            anchor_evidence = next(iter(catalog.values()))
+        criteria_with_evidence = sum(1 for item in breakdown if item.get("evidence"))
+        semantic_scores = [
+            float((proof.get("semantic_link") or {}).get("score") or 0.0)
+            for proofs in functional_evidence.values()
+            for proof in proofs
+            if isinstance(proof, dict) and isinstance(proof.get("semantic_link"), dict)
+        ]
+        semantic_link_quality_score = round(
+            sum(semantic_scores) / len(semantic_scores) if semantic_scores else 0.0,
+            4,
+        )
+        evidence_quality_score = round(
+            0.5 * float(causal_coherence.get("score") or 0.0)
+            + 0.25 * (criteria_with_evidence / max(len(breakdown), 1))
+            + 0.25 * semantic_link_quality_score,
+            4,
+        )
+        consultant_validation_required = bool(
+            reviewed_operation_status in {"rnd_core_partial", "insufficient_evidence"}
+            or not causal_coherence.get("chain_complete")
+            or any(item.get("status") != "documented" for item in breakdown)
+        )
+        operation_report = {
+            "group_id": group_id,
+            "title": truncate(title, 320) or f"Opération {len(operation_reports) + 1}",
+            "technical_scope": clean_text(group.get("technical_scope")),
+            "anchor_evidence": anchor_evidence or {},
+            "operation_status": reviewed_operation_status,
+            "nlp_operation_status": raw_operation_status,
+            "status_review_reason_fr": status_reason_fr,
+            "documentary_coverage": raw.get("documentary_coverage") or raw.get("eligibility_score") or 0.0,
+            "rnd_defensibility_index": raw.get("rnd_defensibility_index") or raw.get("eligibility_assessment_score") or 0.0,
+            "eligibility_recommendation": raw.get("eligibility_recommendation"),
+            "risk_level": clean_text(raw.get("risk_level")),
+            "evidence_risk_level": "high" if reviewed_operation_status == "insufficient_evidence" else (
+                "medium" if consultant_validation_required else clean_text(raw.get("risk_level")) or "low"
+            ),
+            "consultant_validation_required": consultant_validation_required,
+            "evidence_quality_score": evidence_quality_score,
+            "semantic_link_quality_score": semantic_link_quality_score,
+            "criteria": breakdown,
+            "causal_chain_complete": bool(causal_coherence.get("chain_complete")),
+            "causal_coherence": causal_coherence,
+            "causal_chain_evidence": chain_proofs,
+            "functional_evidence": functional_evidence,
+            "hypothesis_reconstruction_evidence": reconstructed_hypothesis,
+            "prioritized_result_evidence": prioritized_results,
+            "activities_by_status": activities_by_status,
+        }
+        operation_report["justification_fr"] = _operation_justification_fr(operation_report)
+        operation_reports.append(operation_report)
+
+    basis = next(
+        (item for item in operation_reports if item.get("group_id") == basis_group_id),
+        operation_reports[0] if operation_reports else {},
+    )
+    status_priority = {
+        "rnd_core_defendable": 4,
+        "rnd_core_partial": 3,
+        "insufficient_evidence": 2,
+        "classical_engineering": 1,
+    }
+    reference_operation = max(
+        operation_reports,
+        key=lambda item: (
+            status_priority.get(clean_text(item.get("operation_status")), 0),
+            _selection_number(item.get("documentary_coverage")),
+            _selection_number(item.get("evidence_quality_score")),
+        ),
+        default={},
+    )
+    reference_group_id = clean_text(reference_operation.get("group_id"))
+    try:
+        score = round(float(assessment.get("rnd_defensibility_index") or assessment.get("eligibility_assessment_score") or 0.0), 4)
+    except Exception:
+        score = 0.0
+    reference_passage_pool = passage_pool_by_group.get(reference_group_id, [])
+    project_hypothesis_evidence = _build_hypothesis_evidence(
+        reference_passage_pool,
+        group=groups_by_id.get(reference_group_id),
+        max_items=5,
+    )
+    prioritized_result_evidence = _build_result_evidence(
+        reference_passage_pool,
+        group=groups_by_id.get(reference_group_id),
+        max_items=6,
+    )
+    if reference_operation and project_hypothesis_evidence:
+        reference_operation["hypothesis_reconstruction_evidence"] = project_hypothesis_evidence
+        chain = reference_operation.get("causal_chain_evidence") if isinstance(reference_operation.get("causal_chain_evidence"), dict) else {}
+        chain["hypothesis_or_rationale_evidence_ids"] = project_hypothesis_evidence
+        reference_operation["causal_chain_evidence"] = chain
+    if reference_operation and prioritized_result_evidence:
+        reference_operation["prioritized_result_evidence"] = prioritized_result_evidence
+        chain = reference_operation.get("causal_chain_evidence") if isinstance(reference_operation.get("causal_chain_evidence"), dict) else {}
+        chain["result_or_learning_evidence_ids"] = prioritized_result_evidence
+        reference_operation["causal_chain_evidence"] = chain
+    return {
+        "version": "eligibility_evidence_report_v4_reference_safe_hypothesis_result_scope",
+        "score": score,
+        "documented_share": score,
+        "remaining_documentary_gap": round(max(0.0, 1.0 - score), 4),
+        "score_formula": assessment.get("score_formula") or "five_equal_weight_frascati_criteria_20_percent_each",
+        "score_basis_group_id": basis_group_id or None,
+        "score_basis_operation": basis,
+        "reference_operation_group_id": reference_group_id or None,
+        "reference_operation": reference_operation,
+        "reference_operation_selection_order": [
+            "rnd_core_defendable",
+            "rnd_core_partial",
+            "insufficient_evidence",
+            "classical_engineering",
+        ],
+        "operations": operation_reports,
+        "hypothesis_reconstruction_evidence": project_hypothesis_evidence,
+        "prioritized_result_evidence": prioritized_result_evidence,
+        "attachment_policy": {
+            "roles_allowed": ["objectif", "contribution", "parametre", "verrou", "methode", "resultat"],
+            "text_fields_used": ["text", "analysis_text", "context_before", "context_after"],
+            "location_fields_used": [
+                "document_id", "document", "section_title", "section_path",
+                "sentence_start", "page_number", "passage_id",
+            ],
+            "same_document_neighbor_attachment": True,
+            "ranking_functions": ["uncertainty", "hypothesis", "experiment", "result", "learning"],
+            "ranking_frascati": ["novelty", "creativity", "systematicity", "transferability"],
+            "result_priority": [
+                "role_resultat", "results_or_conclusion_section", "quantitative_metrics",
+                "observation_or_conclusion_wording",
+            ],
+            "result_metadata_excluded": True,
+            "systematicity_state_of_art_only_penalized": True,
+            "no_role_only_decision": True,
+        },
+        "proof_policy": "each_numeric_or_causal_project_claim_must_reference_source_evidence_no_derived_metric_or_cause",
+    }
 
 
 def dedupe_sources(sources: List[Dict[str, Any]], max_items: int = 30) -> List[Dict[str, Any]]:
@@ -1224,18 +3040,23 @@ class EnnoDiagnosticAgent:
                     score = float(raw.get("eligibility_score"))
                 except Exception:
                     score = 0.0
-                if not group_id or score <= 0:
+                if not group_id:
                     continue
                 group_assessments.append({
                     "group_id": group_id,
                     "eligibility_score": round(score, 4),
+                    "documentary_coverage": raw.get("documentary_coverage"),
                     "eligibility_assessment_score": raw.get("eligibility_assessment_score"),
+                    "rnd_defensibility_index": raw.get("rnd_defensibility_index"),
+                    "eligibility_recommendation": raw.get("eligibility_recommendation"),
                     "risk_level": clean_text(raw.get("risk_level")) or None,
                     "interpretation": clean_text(raw.get("interpretation")) or None,
                     "questions_to_ask": raw.get("questions_to_ask")
                     if isinstance(raw.get("questions_to_ask"), list) else [],
                     "dimensions": raw.get("dimensions")
                     if isinstance(raw.get("dimensions"), dict) else {},
+                    "criteria_score_breakdown": _criterion_breakdown_from_assessment(raw),
+                    "demarche_legibility": compact_demarche_audit(raw.get("demarche_legibility")),
                 })
 
         scope_by_group: Dict[str, Dict[str, Any]] = {}
@@ -1250,7 +3071,26 @@ class EnnoDiagnosticAgent:
                 scope_by_group[group_id] = {
                     "technical_scope": clean_text(group.get("technical_scope") or group.get("lock_scope")),
                     "display_as_main_lock": bool(group.get("display_as_main_lock", True)),
+                    "operation_title": truncate(
+                        group.get("text") or group.get("analysis_text") or group.get("section_title"),
+                        320,
+                    ),
                 }
+
+        additional_passages: List[Dict[str, Any]] = []
+        fastjudge_audit = guard.get("fastjudge_verrou_signals_audit") or []
+        if isinstance(fastjudge_audit, list):
+            additional_passages.extend(
+                item for item in fastjudge_audit if isinstance(item, dict)
+            )
+        evidence_pack = payload.get("multi_document_evidence_pack_for_ennodiagnostic") or {}
+        if isinstance(evidence_pack, dict):
+            evidence_catalog = evidence_pack.get("evidence_catalog") or []
+            if isinstance(evidence_catalog, list):
+                additional_passages.extend(
+                    item for item in evidence_catalog if isinstance(item, dict)
+                )
+        additional_passages = _dedupe_nlp_passages(additional_passages)
 
         main_group_assessments: List[Dict[str, Any]] = []
         for item in group_assessments:
@@ -1287,6 +3127,11 @@ class EnnoDiagnosticAgent:
         demarche_legibility = compact_demarche_audit(
             assessment.get("demarche_legibility")
         )
+        eligibility_evidence_report = _build_eligibility_evidence_report(
+            assessment,
+            [group for group in technical_groups if isinstance(group, dict)],
+            additional_passages=additional_passages,
+        )
 
         return {
             "ok": global_score is not None or bool(group_assessments),
@@ -1295,6 +3140,14 @@ class EnnoDiagnosticAgent:
             "average_frascati_score": global_score,
             "eligibility_assessment_score": eligibility_assessment_score,
             "eligibility_assessment_score_semantics": assessment.get("eligibility_assessment_score_semantics"),
+            "rnd_defensibility_index": assessment.get("rnd_defensibility_index"),
+            "documentary_coverage": assessment.get("documentary_coverage"),
+            "documented_share": assessment.get("documented_share"),
+            "remaining_documentary_gap": assessment.get("remaining_documentary_gap"),
+            "score_formula": assessment.get("score_formula"),
+            "score_basis_group_id": assessment.get("score_basis_group_id"),
+            "score_basis_operation_status": assessment.get("score_basis_operation_status"),
+            "portfolio_criteria_coverage": assessment.get("portfolio_criteria_coverage"),
             "eligibility_recommendation": assessment.get("eligibility_recommendation"),
             "recommendation_label": assessment.get("recommendation_label"),
             "risk_level": clean_text(assessment.get("risk_level")) or None,
@@ -1311,6 +3164,7 @@ class EnnoDiagnosticAgent:
             "questions_to_ask": assessment.get("questions_to_ask")
             if isinstance(assessment.get("questions_to_ask"), list) else [],
             "demarche_legibility": demarche_legibility,
+            "eligibility_evidence_report": eligibility_evidence_report,
         }
 
     def _load_rag_cluster_frascati_audit(self) -> Dict[str, Any]:
@@ -1370,6 +3224,14 @@ class EnnoDiagnosticAgent:
             "average_frascati_score": average_score,
             "eligibility_assessment_score": official.get("eligibility_assessment_score"),
             "eligibility_assessment_score_semantics": official.get("eligibility_assessment_score_semantics"),
+            "rnd_defensibility_index": official.get("rnd_defensibility_index"),
+            "documentary_coverage": official.get("documentary_coverage"),
+            "documented_share": official.get("documented_share"),
+            "remaining_documentary_gap": official.get("remaining_documentary_gap"),
+            "score_formula": official.get("score_formula"),
+            "score_basis_group_id": official.get("score_basis_group_id"),
+            "score_basis_operation_status": official.get("score_basis_operation_status"),
+            "portfolio_criteria_coverage": official.get("portfolio_criteria_coverage"),
             "eligibility_recommendation": official.get("eligibility_recommendation"),
             "recommendation_label": official.get("recommendation_label"),
             "scores_count": official.get("scores_count", len(rag_scores)) if official.get("ok") else len(rag_scores),
@@ -1382,6 +3244,7 @@ class EnnoDiagnosticAgent:
             "main_groups_average_frascati_score": official.get("main_groups_average_frascati_score"),
             "questions_to_ask": official.get("questions_to_ask") or [],
             "demarche_legibility": official.get("demarche_legibility") or {},
+            "eligibility_evidence_report": official.get("eligibility_evidence_report") or {},
             "decisions_count": interpretation_counts or rag_decisions,
             "candidate_levels_count": risk_counts or rag_levels,
             "rag_audit": {
@@ -1416,6 +3279,12 @@ class EnnoDiagnosticAgent:
             {
                 "average_frascati_score": frascati_summary.get("average_frascati_score"),
                 "eligibility_assessment_score": frascati_summary.get("eligibility_assessment_score"),
+                "rnd_defensibility_index": frascati_summary.get("rnd_defensibility_index"),
+                "documentary_coverage": frascati_summary.get("documentary_coverage"),
+                "portfolio_criteria_coverage": frascati_summary.get("portfolio_criteria_coverage"),
+                "remaining_documentary_gap": frascati_summary.get("remaining_documentary_gap"),
+                "score_formula": frascati_summary.get("score_formula"),
+                "score_basis_group_id": frascati_summary.get("score_basis_group_id"),
                 "eligibility_recommendation": frascati_summary.get("eligibility_recommendation"),
                 "recommendation_label": frascati_summary.get("recommendation_label"),
                 "scores_count": frascati_summary.get("scores_count"),
@@ -1428,6 +3297,7 @@ class EnnoDiagnosticAgent:
                 "demarche_legibility": compact_demarche_audit(
                     frascati_summary.get("demarche_legibility")
                 ),
+                "eligibility_evidence_report": frascati_summary.get("eligibility_evidence_report") or {},
             },
             ensure_ascii=False,
             indent=2,
@@ -2098,24 +3968,17 @@ class EnnoDiagnosticAgent:
             except Exception:
                 from consultant_verrou_synthesizer import synthesize_consultant_verrous
 
+            # MODE PROJET COURANT : aucune formulation, exemple ou contexte provenant
+            # d'un autre projet ne doit influencer la reformulation des verrous.
+            # Les preuves NLP/RAG du projet courant sont l'unique base factuelle.
             style_block = ""
-            try:
-                # On donne uniquement un style court, jamais une preuve factuelle.
-                style_block = self._style_memory_for_role(
-                    getattr(self, "_last_style_memory_report", None),
-                    "verrou",
-                    max_chars=1200,
-                )
-            except Exception:
-                style_block = ""
-
             synthesis = synthesize_consultant_verrous(
                 sections=sections,
                 frascati_summary=frascati_summary,
                 llm=self.llm,
                 style_block=style_block,
-                memory_v2_report=getattr(self, "_last_memory_v2_report", None),
-                previous_cir_context=getattr(self, "_last_previous_verrou_context", None),
+                memory_v2_report=None,
+                previous_cir_context=None,
             )
             self._last_verrou_synthesis_report = synthesis
             items = synthesis.get("llm_reformulated_verrous") if isinstance(synthesis, dict) else []
@@ -2676,17 +4539,17 @@ class EnnoDiagnosticAgent:
         lines.append(f"- Décisions détectées : {frascati_summary.get('decisions_count')}")
         lines.append(f"- Niveaux de signaux candidats : {frascati_summary.get('candidate_levels_count')}")
         lines.append(
-            "- Score de l'étude d'éligibilité (critères Frascati + démarche) : "
+            "- Indice de défendabilité R&D (sans multiplication par un ratio d'activités) : "
             f"{frascati_summary.get('eligibility_assessment_score')}"
         )
         demarche = compact_demarche_audit(frascati_summary.get("demarche_legibility"))
         if demarche:
             lines.append(
-                "- Pertinence de la démarche : "
-                f"{demarche.get('label')} ; "
-                f"étapes R&D justifiées={demarche.get('research_justified_steps_count', 0)}, "
-                f"ingénierie classique={demarche.get('routine_engineering_steps_count', 0)}, "
-                f"à expliquer={demarche.get('unexplained_steps_count', 0)}."
+                "- Étude séparée de la démarche : "
+                f"statut={demarche.get('project_status') or demarche.get('operation_status')} ; "
+                f"opérations R&D défendables={demarche.get('rnd_core_defendable_operations_count', 0)}, "
+                f"opérations partielles={demarche.get('rnd_core_partial_operations_count', 0)}, "
+                f"opérations classiques={demarche.get('classical_engineering_operations_count', 0)}."
             )
         lines.append("")
         lines.append(
@@ -3362,9 +5225,35 @@ Contraintes :
         frascati_sources = sections.get("_frascati_verrous") or sections.get("verrous") or []
         frascati_summary = self.frascati_summary_from_chroma(frascati_sources)
         ai_detection_report = self.load_ai_detection_report()
-        style_memory_report = self.load_style_memory_context(sections)
-        memory_v2_report = self.load_memory_v2_context(sections)
-        previous_verrou_context = self.load_previous_verrou_context()
+        current_project_only = str(os.getenv("ENNOSMART_DIAG_CURRENT_PROJECT_ONLY", "1")).strip().lower() not in {
+            "0", "false", "no", "off"
+        }
+        if current_project_only:
+            # Ne charge pas de texte d'autres projets dans la génération du diagnostic courant.
+            # Les comparaisons historiques éventuelles restent des vues séparées et ne servent
+            # jamais à produire Objectif / Synthèse / Verrous / Démarche / Résultats / Paramètres.
+            style_memory_report = {
+                "ok": False, "available": False, "disabled_for_current_project_only": True,
+                "principle": "current_project_only",
+            }
+            memory_v2_report = {
+                "ok": False, "available": False, "disabled_for_current_project_only": True,
+                "principle": "current_project_only",
+            }
+            previous_verrou_context = {
+                "ok": False, "available": False, "previous_years": [], "examples_count": 0,
+                "disabled_for_current_project_only": True,
+            }
+            print(
+                "[EnnoDiagnostic][CURRENT_PROJECT_ONLY] "
+                "style_memory=disabled memory_v2=disabled previous_lock_context=disabled",
+                flush=True,
+            )
+        else:
+            style_memory_report = self.load_style_memory_context(sections)
+            memory_v2_report = self.load_memory_v2_context(sections)
+            previous_verrou_context = self.load_previous_verrou_context()
+
         self._last_style_memory_report = style_memory_report
         self._last_memory_v2_report = memory_v2_report
         self._last_previous_verrou_context = previous_verrou_context
@@ -3388,9 +5277,9 @@ Contraintes :
                 llm=self.llm,
                 sections=sections,
                 frascati_summary=frascati_summary,
-                style_memory_report=style_memory_report,
+                style_memory_report=None if current_project_only else style_memory_report,
                 ai_detection_report=ai_detection_report,
-                memory_v2_report=memory_v2_report,
+                memory_v2_report=None if current_project_only else memory_v2_report,
             )
         except Exception as exc:
             presenter_error = str(exc)
@@ -3441,8 +5330,7 @@ Contraintes :
                 static_diagnostic["sections_by_title"] = titles
 
                 ordered = [
-                    ("Analyse Frascati", values.get("lecture_frascati")),
-                    ("Justification Frascati du score", values.get("justification_frascati")),
+                    ("Étude d'éligibilité", values.get("lecture_frascati")),
                     (MEMORY_V2_SECTION_TITLE, values.get("memoire_v2")),
                     (CIR_PREVIOUS_SECTION_TITLE, values.get("continuite_n1")),
                     ("Synthèse stratégique du projet", values.get("synthese_strategique")),
@@ -3519,7 +5407,7 @@ Contraintes :
         report: Dict[str, Any] = {
             "ok": True,
             "status": "completed",
-            "version": "ennodiagnostic_v189_nlp_group_passthrough_cir_reformulation",
+            "version": "ennodiagnostic_v190_traceable_unified_eligibility_analysis",
             "mode": core_result.get("status") or "fast_prompt_fallback",
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "organisme": self.organisme,

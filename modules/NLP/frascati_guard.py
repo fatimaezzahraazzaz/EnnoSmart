@@ -26,7 +26,7 @@ from .semantic_lock_finalizer import finalize_lock_groups
 from .frascati_assessment import assess_project_frascati
 
 
-VERSION = "frascati_guard_v190_demarche_legibility_audit"
+VERSION = "frascati_guard_v191_traceable_eligibility_evidence"
 
 
 def _unique_support_ids(groups: Iterable[Mapping[str, Any]]) -> set[str]:
@@ -313,6 +313,7 @@ def apply_frascati_guard(
             "global_frascati_score_semantics": "documentary_coverage_not_probability_not_official_score",
             "documentary_coverage": documentary_coverage,
             "eligibility_assessment_score": assessment.get("eligibility_assessment_score", 0.0),
+            "rnd_defensibility_index": assessment.get("rnd_defensibility_index", 0.0),
             "eligibility_assessment_score_semantics": assessment.get("eligibility_assessment_score_semantics"),
             "eligibility_recommendation": recommendation,
             "recommendation_label": recommendation_label,
@@ -332,6 +333,7 @@ def apply_frascati_guard(
             "risk_level": assessment.get("risk_level", "eleve"),
             "documentary_coverage": documentary_coverage,
             "eligibility_assessment_score": assessment.get("eligibility_assessment_score", 0.0),
+            "rnd_defensibility_index": assessment.get("rnd_defensibility_index", 0.0),
             "criteria_summary": assessment.get("criteria_summary", {}),
             "demarche_legibility": assessment.get("demarche_legibility", {}),
             "potential_verrous_count": len(main_groups),

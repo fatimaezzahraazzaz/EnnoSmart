@@ -61,6 +61,7 @@ import { DiagnosticRagChat } from "@/components/ennosmart/diagnostic-rag-chat"
 
 import {
   SourceTextWithDocuments,
+  SourceEvidenceCitations,
   useProjectSourceDocuments,
   type DbSourceDocument,
   type SourceEvidence,
@@ -1667,6 +1668,55 @@ function getBackendFrascatiJustificationV94(
   return ""
 }
 
+function getEligibilityEvidenceReportV153(payload: any, display: any): any {
+  const report = unwrapBackendDiagnosticReportV93(payload)
+  return (
+    display?.frascati_summary?.eligibility_evidence_report ||
+    report?.display?.frascati_summary?.eligibility_evidence_report ||
+    report?.frascati_summary?.eligibility_evidence_report ||
+    report?.static_diagnostic?.section_payloads_by_key?.lecture_frascati?.eligibility_evidence_report ||
+    {}
+  )
+}
+
+function getEligibilityProofClaimsV153(payload: any, display: any): any[] {
+  const report = unwrapBackendDiagnosticReportV93(payload)
+  const cards =
+    display?.diagnostic_cards ||
+    report?.display?.diagnostic_cards ||
+    report?.diagnostic_cards ||
+    report?.static_diagnostic?.cards ||
+    []
+  if (!Array.isArray(cards)) return []
+  const card = cards.find((item: any) =>
+    String(item?.key || "") === "lecture_frascati" ||
+    normalizeKeyV93(String(item?.title || "")) === "etude d eligibilite"
+  )
+  if (!card || !Array.isArray(card?.paragraphs)) return []
+  const evidenceById = new Map<string, any>()
+  for (const evidence of Array.isArray(card?.evidence) ? card.evidence : []) {
+    if (evidence?.evidence_id) evidenceById.set(String(evidence.evidence_id), evidence)
+  }
+  const resolveProofs = (claim: any) => Array.isArray(claim?.proofs) && claim.proofs.length > 0
+    ? claim.proofs
+    : (Array.isArray(claim?.evidence_ids) ? claim.evidence_ids : [])
+        .map((id: any) => evidenceById.get(String(id)))
+        .filter(Boolean)
+  return card.paragraphs
+    .filter((claim: any) => cleanDisplayText(String(claim?.text || "")) && Array.isArray(claim?.evidence_ids) && claim.evidence_ids.length > 0)
+    .map((claim: any) => ({
+      text: cleanDisplayText(String(claim.text || "")),
+      proofs: resolveProofs(claim),
+      claims: (Array.isArray(claim?.claims) ? claim.claims : [])
+        .filter((part: any) => cleanDisplayText(String(part?.text || "")))
+        .map((part: any) => ({
+          claim_kind: cleanDisplayText(String(part?.claim_kind || "")),
+          text: cleanDisplayText(String(part?.text || "")),
+          proofs: resolveProofs(part),
+        })),
+    }))
+}
+
 function stripMarkdownSymbolsV93(value: string) {
   return fixFrenchMojibakeV93(String(value || ""))
     .replace(/^#{1,6}\s+/, "")
@@ -1975,29 +2025,169 @@ function BackendSectionCardV93({
 }
 
 
+function EligibilityProofExcerptV153({
+  proof,
+  projectId,
+  sourceDocuments = [],
+}: {
+  proof: any
+  projectId?: number | string
+  sourceDocuments?: DbSourceDocument[]
+}) {
+  const originalSource = cleanDisplayText(String(
+    proof?.source_text_original || proof?.excerpt || proof?.text || ""
+  ))
+  if (!originalSource) return null
+  const locator = [
+    cleanSourceDocumentName(String(proof?.document || "")),
+    proof?.section_title ? `section « ${cleanDisplayText(String(proof.section_title))} »` : "",
+    proof?.role ? `rôle ${cleanDisplayText(String(proof.role))}` : "",
+    proof?.page_number !== null && proof?.page_number !== undefined ? `page ${proof.page_number}` : "",
+    proof?.sentence_start !== null && proof?.sentence_start !== undefined ? `position ${proof.sentence_start}` : "",
+  ].filter(Boolean).join(" · ")
+  const isCalculation = String(proof?.proof_type || "") === "calculation_rule" || String(proof?.evidence_id || "") === "F0"
+  const summaryFr = cleanDisplayText(String(
+    proof?.summary_fr || "Ce passage apporte une preuve directement rattachée à l’opération évaluée."
+  ))
+  const evidence: SourceEvidence = {
+    evidence_id: proof?.evidence_id,
+    rag_chunk_id: proof?.rag_chunk_id,
+    passage_id: proof?.passage_id || proof?.evidence_id,
+    document_id: proof?.document_id,
+    document: proof?.document,
+    document_name: proof?.document_name || proof?.document,
+    source_path: proof?.source_path,
+    page_number: proof?.page_number,
+    paragraph_index: proof?.paragraph_index,
+    char_start: proof?.char_start ?? proof?.sentence_start,
+    char_end: proof?.char_end,
+    sentence_start: proof?.sentence_start,
+    section_title: proof?.section_title,
+    section_path: proof?.section_path,
+    role: proof?.role,
+    summary_fr: summaryFr,
+    source_text_original: originalSource,
+    source_field: proof?.source_field,
+    source_is_original: proof?.source_is_original,
+    highlight_coordinates: proof?.highlight_coordinates,
+    excerpt: originalSource,
+  }
+
+  return (
+    <div className={`rounded-lg border-l-4 p-3 ${isCalculation ? "border-brand bg-brand/5" : "border-warning bg-warning/5"}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {isCalculation ? "Règle de calcul NLP/Frascati" : "Preuve source"}
+        {locator ? ` · ${locator}` : ""}
+      </p>
+      {isCalculation ? (
+        <p className="mt-2 text-sm leading-6 text-foreground">{originalSource}</p>
+      ) : (
+        <>
+          <p className="mt-2 text-sm leading-6 text-foreground">{summaryFr}</p>
+          {projectId ? (
+            <div className="mt-3">
+              <SourceTextWithDocuments
+                projectId={projectId}
+                text={locator ? `Source : ${locator}` : "Source documentaire"}
+                documents={sourceDocuments}
+                evidence={[evidence]}
+                compact
+                hideTextWhenMatched
+                actionLabel="Voir la preuve dans le document"
+              />
+            </div>
+          ) : locator ? (
+            <p className="mt-2 text-xs text-muted-foreground">Source : {locator}</p>
+          ) : null}
+        </>
+      )}
+    </div>
+  )
+}
+
+
+function isFrenchEligibilityTextV190(value: unknown) {
+  const text = cleanDisplayText(String(value || "")).toLocaleLowerCase("fr")
+  if (!text) return false
+  const frenchSignals = text.match(/\b(?:l’opération|l'operation|incertitude|verrou|hypothèse|expérimentation|résultats?|l’équipe|l'equipe|preuves?|démarche|caractère|consultant|documenté)\b/g)
+  return (frenchSignals?.length || 0) >= 2
+}
+
+function isStrongProjectEligibilityTextV192(value: unknown) {
+  const text = cleanDisplayText(String(value || "")).toLocaleLowerCase("fr")
+  if (!isFrenchEligibilityTextV190(text)) return false
+  if (/calcul officiel nlp\/frascati|règle\s*:\s*cinq critères|documenté apporte 0[.,]2/i.test(text)) return false
+  const projectStages = [
+    /incertitude|verrou/,
+    /hypothèse|raison d’investigation|raison d'investigation/,
+    /expérimentation|protocole|démarche|essais?|comparaison/,
+    /résultats?|apprentissage|observation|mesure/,
+  ]
+  return projectStages.filter((pattern) => pattern.test(text)).length >= 3
+}
+
+
 function FrascatiAnalysisCard({
   score,
+  documentaryCoverage,
   signalsCount,
   candidateCount,
   reading,
   justification,
   demarche,
+  evidenceReport,
+  proofClaims,
+  projectId,
+  sourceDocuments,
 }: {
   score: number | string | null | undefined
+  documentaryCoverage: number | string | null | undefined
   signalsCount: number
   candidateCount: number
   reading: string
   justification: string
   demarche: any
+  evidenceReport: any
+  proofClaims: any[]
+  projectId?: number | string
+  sourceDocuments: DbSourceDocument[]
 }) {
   const demarcheLabels: Record<string, string> = {
-    clear_research_trajectory: "Démarche R&D justifiée",
-    routine_engineering_dominant: "Ingénierie classique dominante",
-    mixed_or_partially_justified_trajectory: "Démarche mixte à valider",
-    insufficient_documentation: "Documentation insuffisante",
+    rnd_core_defendable: "Au moins un noyau R&D défendable",
+    rnd_core_partial: "Noyau R&D partiel à compléter",
+    classical_engineering: "Ingénierie classique sans noyau R&D défendable",
+    insufficient_evidence: "Preuves insuffisantes pour qualifier le noyau R&D",
   }
-  const demarcheLabel = demarcheLabels[String(demarche?.label || "")] || "Démarche à qualifier"
-  const isRoutineEngineering = demarche?.label === "routine_engineering_dominant"
+  const demarcheStatus = String(demarche?.project_status || demarche?.operation_status || "insufficient_evidence")
+  const demarcheLabel = demarcheLabels[demarcheStatus] || "Démarche à qualifier"
+  const isRoutineEngineering = demarcheStatus === "classical_engineering"
+  const scoreBasisOperation = evidenceReport?.score_basis_operation || {}
+  const referenceOperation = evidenceReport?.reference_operation || scoreBasisOperation
+  const criteria = Array.isArray(referenceOperation?.criteria) ? referenceOperation.criteria : []
+  const operations = Array.isArray(evidenceReport?.operations) ? evidenceReport.operations : []
+  const generalProofClaims = proofClaims.filter((claim: any) =>
+    isFrenchEligibilityTextV190(claim?.text) && (
+      !Array.isArray(claim?.proofs) || !claim.proofs.some((proof: any) =>
+        /^opération\s+\d+\s+—/i.test(String(proof?.role || "").trim())
+      )
+    )
+  )
+  const rawDocumentedShare = Number(evidenceReport?.documented_share ?? score ?? 0)
+  const documentedShare = Math.max(0, Math.min(1, rawDocumentedShare > 1 ? rawDocumentedShare / 100 : rawDocumentedShare))
+  const rawRemainingShare = Number(evidenceReport?.remaining_documentary_gap ?? (1 - documentedShare))
+  const remainingShare = Math.max(0, Math.min(1, rawRemainingShare > 1 ? rawRemainingShare / 100 : rawRemainingShare))
+  const criterionStatusLabels: Record<string, string> = {
+    documented: "Documenté",
+    partial: "Partiel",
+    missing: "Manquant",
+    contradictory: "Contradictoire",
+  }
+  const chainLabels: Record<string, string> = {
+    uncertainty_evidence_ids: "Incertitude ou verrou",
+    hypothesis_or_rationale_evidence_ids: "Hypothèse",
+    experiment_evidence_ids: "Expérimentation",
+    result_or_learning_evidence_ids: "Résultat et apprentissage",
+  }
 
   return (
     <Card className="overflow-hidden border-brand/20 bg-gradient-to-br from-brand/5 via-white to-white">
@@ -2009,7 +2199,7 @@ function FrascatiAnalysisCard({
               Étude d'éligibilité
             </CardTitle>
             <CardDescription>
-              Le score combine les cinq critères Frascati avec la pertinence réelle des démarches. Une ingénierie classique dominante sans étape R&D justifiée donne directement un avis non éligible.
+              Frascati mesure la couverture des cinq critères ; l'étude de démarche vérifie séparément si les travaux lèvent une incertitude R&D ou relèvent de l'ingénierie classique.
             </CardDescription>
           </div>
           <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">
@@ -2022,7 +2212,7 @@ function FrascatiAnalysisCard({
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="rounded-xl border bg-white p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Score d'éligibilité
+              Indice de défendabilité R&D
             </p>
             <p className="mt-1 text-2xl font-semibold text-foreground">
               {formatScore(score)}
@@ -2031,10 +2221,19 @@ function FrascatiAnalysisCard({
 
           <div className="rounded-xl border bg-white p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Passages analysés
+              Couverture Frascati
             </p>
             <p className="mt-1 text-2xl font-semibold text-foreground">
-              {signalsCount}
+              {formatScore(documentaryCoverage)}
+            </p>
+          </div>
+
+          <div className="rounded-xl border bg-white p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Opérations évaluées
+            </p>
+            <p className="mt-1 text-2xl font-semibold text-foreground">
+              {Number(demarche?.operations_count || signalsCount || 0)}
             </p>
           </div>
 
@@ -2044,15 +2243,6 @@ function FrascatiAnalysisCard({
             </p>
             <p className="mt-1 text-2xl font-semibold text-foreground">
               {candidateCount}
-            </p>
-          </div>
-
-          <div className="rounded-xl border bg-white p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Nature du score
-            </p>
-            <p className="mt-2 text-sm font-semibold text-foreground">
-              Aide à la décision
             </p>
           </div>
         </div>
@@ -2073,25 +2263,47 @@ function FrascatiAnalysisCard({
 
             <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
               <div className="rounded-lg border bg-white p-3">
-                <p className="text-[11px] text-muted-foreground">Étapes analysées</p>
-                <p className="mt-1 text-lg font-semibold">{Number(demarche?.method_steps_count || 0)}</p>
+                <p className="text-[11px] text-muted-foreground">Noyaux R&D défendables</p>
+                <p className="mt-1 text-lg font-semibold text-success">{Number(demarche?.rnd_core_defendable_operations_count || 0)}</p>
               </div>
               <div className="rounded-lg border bg-white p-3">
-                <p className="text-[11px] text-muted-foreground">R&D justifiées</p>
-                <p className="mt-1 text-lg font-semibold text-success">{Number(demarche?.research_justified_steps_count || 0)}</p>
+                <p className="text-[11px] text-muted-foreground">Noyaux R&D partiels</p>
+                <p className="mt-1 text-lg font-semibold text-warning">{Number(demarche?.rnd_core_partial_operations_count || 0)}</p>
               </div>
               <div className="rounded-lg border bg-white p-3">
-                <p className="text-[11px] text-muted-foreground">Ingénierie classique</p>
-                <p className="mt-1 text-lg font-semibold text-warning">{Number(demarche?.routine_engineering_steps_count || 0)}</p>
+                <p className="text-[11px] text-muted-foreground">Opérations classiques</p>
+                <p className="mt-1 text-lg font-semibold text-warning">{Number(demarche?.classical_engineering_operations_count || 0)}</p>
               </div>
               <div className="rounded-lg border bg-white p-3">
-                <p className="text-[11px] text-muted-foreground">À expliquer</p>
-                <p className="mt-1 text-lg font-semibold">{Number(demarche?.unexplained_steps_count || 0)}</p>
+                <p className="text-[11px] text-muted-foreground">Opérations à documenter</p>
+                <p className="mt-1 text-lg font-semibold">{Number(demarche?.insufficient_evidence_operations_count || 0)}</p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="rounded-lg border bg-white p-3">
+                <p className="text-[11px] text-muted-foreground">Activités R&D directes</p>
+                <p className="mt-1 text-lg font-semibold text-success">{Number(demarche?.direct_rnd_activities_count || 0)}</p>
+              </div>
+              <div className="rounded-lg border bg-white p-3">
+                <p className="text-[11px] text-muted-foreground">Supports R&D nécessaires</p>
+                <p className="mt-1 text-lg font-semibold text-brand">{Number(demarche?.necessary_rnd_support_activities_count || 0)}</p>
+              </div>
+              <div className="rounded-lg border bg-white p-3">
+                <p className="text-[11px] text-muted-foreground">Activités classiques</p>
+                <p className="mt-1 text-lg font-semibold text-warning">{Number(demarche?.classical_engineering_activities_count || 0)}</p>
+              </div>
+              <div className="rounded-lg border bg-white p-3">
+                <p className="text-[11px] text-muted-foreground">Activités à rattacher</p>
+                <p className="mt-1 text-lg font-semibold">{Number(demarche?.insufficient_evidence_activities_count || 0)}</p>
               </div>
             </div>
 
             <p className="mt-4 text-sm leading-6 text-muted-foreground">
-              Chaque étape doit être reliée à une incertitude, une hypothèse, une évaluation et un apprentissage. Les procédures standard ou les variantes sans justification diminuent le score.
+              Une opération reconstruit la chaîne verrou → hypothèse → expérience → résultat. Plusieurs passages ou activités peuvent donc appartenir au même noyau R&D. Les preuves insuffisantes augmentent le risque, mais ne réduisent pas mécaniquement la couverture Frascati.
+            </p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Une validation ou une métrique classique n'est pas une R&D directe : elle est classée support seulement si son lien avec le protocole qui traite l'incertitude est prouvé ; sinon elle relève de l'ingénierie classique ou reste à documenter.
             </p>
             {demarche?.direct_final_solution_risk ? (
               <p className="mt-2 text-sm font-medium text-warning">
@@ -2101,34 +2313,526 @@ function FrascatiAnalysisCard({
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <div className="rounded-xl border bg-white p-5">
-            <div className="mb-3 flex items-center gap-2">
-              <Target className="size-4 text-brand" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-brand">
-                Lecture du score
+        <div className="rounded-xl border border-brand/20 bg-white p-5 space-y-5">
+          <div className="flex items-start gap-3">
+            <Sparkles className="mt-0.5 size-5 text-brand" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Pourquoi cet indice, quels verrous et quelles preuves ?
+              </p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Une seule analyse réunit le calcul, l'opération de référence, la démarche, les cinq critères Frascati et les extraits sources qui les justifient.
               </p>
             </div>
-            <BackendSectionRendererV93
-              text={reading || "La lecture Frascati sera disponible après l'analyse du dossier."}
-            />
           </div>
 
-          <div className="rounded-xl border border-brand/20 bg-brand/5 p-5">
-            <div className="mb-3 flex items-center gap-2">
-              <Sparkles className="size-4 text-brand" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-brand">
-                Justification projet-spécifique
-              </p>
-            </div>
-            <BackendSectionRendererV93
-              text={justification || "La justification LLM sera disponible après l'exécution d'EnnoDiagnostic."}
-            />
+          {evidenceReport && Object.keys(evidenceReport).length > 0 ? (
+            <>
+              <div className="rounded-lg border bg-muted/15 p-4">
+                <div className="flex items-center justify-between gap-3 text-xs font-medium">
+                  <span>Part documentée : {formatScore(documentedShare)}</span>
+                  <span>Part à consolider : {formatScore(remainingShare)}</span>
+                </div>
+                <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-muted">
+                  <div className="bg-success" style={{ width: `${documentedShare * 100}%` }} />
+                  <div className="bg-warning/70" style={{ width: `${remainingShare * 100}%` }} />
+                </div>
+                <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                  Chaque critère pèse 20 % : documenté = 20 %, partiel = 10 %, manquant ou contradictoire = 0 %. Le garde « ingénierie classique » est appliqué séparément.
+                </p>
+              </div>
+
+              {operations.length > 0 ? (
+                <div>
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand">
+                    Opérations et verrous évalués
+                  </p>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {operations.map((operation: any, index: number) => {
+                      const isReference = String(operation?.group_id || "") === String(evidenceReport?.reference_operation_group_id || "")
+                      const operationNumber = index + 1
+                      const operationClaim = proofClaims.find((claim: any) =>
+                        isFrenchEligibilityTextV190(claim?.text) && Array.isArray(claim?.proofs) && claim.proofs.some((proof: any) =>
+                          String(proof?.role || "").toLocaleLowerCase("fr").includes(`opération ${operationNumber}`)
+                        )
+                      )
+                      const operationProofs = Array.isArray(operationClaim?.proofs)
+                        ? operationClaim.proofs.slice(0, 3)
+                        : operation?.anchor_evidence?.excerpt
+                          ? [operation.anchor_evidence]
+                          : []
+                      return (
+                        <div key={operation?.group_id || index} className={`rounded-lg border p-4 ${isReference ? "border-success/40 bg-success/5" : "bg-muted/10"}`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-medium text-foreground">
+                              Opération {operationNumber}
+                            </p>
+                            {isReference ? <Badge className="shrink-0 bg-success/10 text-success hover:bg-success/10">Opération de référence</Badge> : null}
+                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            {demarcheLabels[String(operation?.operation_status || "")] || "Démarche à qualifier"} · couverture {formatScore(operation?.documentary_coverage)}
+                          </p>
+                          <p className="mt-3 text-sm leading-6 text-foreground">
+                            {cleanDisplayText(String(
+                              operationClaim?.text || operation?.justification_fr || "La justification de cette opération doit être complétée par le consultant CIR."
+                            ))}
+                          </p>
+                          {operation?.consultant_validation_required ? (
+                            <p className="mt-2 text-xs font-medium text-warning">Validation du consultant requise.</p>
+                          ) : null}
+                          {operationProofs.length > 0 ? (
+                            <div className="mt-3 space-y-2">
+                              {operationProofs.map((proof: any, proofIndex: number) => (
+                                <EligibilityProofExcerptV153
+                                  key={proof?.evidence_id || proofIndex}
+                                  proof={proof}
+                                  projectId={projectId}
+                                  sourceDocuments={sourceDocuments}
+                                />
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {referenceOperation?.group_id ? (
+                <div className="rounded-lg border border-brand/20 bg-brand/5 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-brand">Opération de référence pour l’étude des preuves</p>
+                  <p className="mt-2 text-sm font-semibold text-foreground">
+                    Opération {Math.max(1, operations.findIndex((operation: any) => String(operation?.group_id) === String(referenceOperation?.group_id)) + 1)}
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {demarcheLabels[String(referenceOperation?.operation_status || "")] || "Démarche à qualifier"}
+                  </p>
+                  {referenceOperation?.anchor_evidence?.excerpt ? (
+                    <div className="mt-3">
+                      <EligibilityProofExcerptV153
+                        proof={referenceOperation.anchor_evidence}
+                        projectId={projectId}
+                        sourceDocuments={sourceDocuments}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {referenceOperation?.causal_chain_evidence ? (
+                <div>
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand">Chaîne de démarche prouvée</p>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {Object.entries(chainLabels).map(([key, label]) => {
+                      const proofs = Array.isArray(referenceOperation?.causal_chain_evidence?.[key])
+                        ? referenceOperation.causal_chain_evidence[key]
+                        : []
+                      return (
+                        <div key={key} className="rounded-lg border bg-muted/10 p-3 space-y-2">
+                          <p className="text-xs font-semibold text-foreground">{label}</p>
+                          {proofs.length > 0 ? proofs.slice(0, 3).map((proof: any, index: number) => (
+                            <EligibilityProofExcerptV153
+                              key={proof?.evidence_id || index}
+                              proof={proof}
+                              projectId={projectId}
+                              sourceDocuments={sourceDocuments}
+                            />
+                          )) : (
+                            <p className="text-xs text-warning">Preuve explicite à compléter.</p>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {criteria.length > 0 ? (
+                <div>
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand">
+                    Pourquoi la part est acquise et pourquoi le reste manque
+                  </p>
+                  <div className="space-y-3">
+                    {criteria.map((criterion: any, index: number) => {
+                      const proofs = Array.isArray(criterion?.evidence) ? criterion.evidence : []
+                      const criterionLabels: Record<string, string> = {
+                        novelty: "Nouveauté",
+                        creativity: "Créativité",
+                        uncertainty: "Incertitude ou verrou",
+                        systematicity: "Démarche systématique",
+                        transferability: "Transférabilité",
+                      }
+                      return (
+                        <div key={criterion?.criterion || index} className="rounded-lg border bg-muted/10 p-4 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-foreground">
+                              {criterionLabels[String(criterion?.criterion || "")] || criterion?.label || "Critère Frascati"}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline">{criterionStatusLabels[String(criterion?.status || "")] || criterion?.status}</Badge>
+                              <span className="text-xs font-medium text-success">+{formatScore(criterion?.contribution_to_index)}</span>
+                              {Number(criterion?.remaining_gap_to_full_coverage || 0) > 0 ? (
+                                <span className="text-xs font-medium text-warning">reste {formatScore(criterion?.remaining_gap_to_full_coverage)}</span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <p className="text-sm leading-6 text-muted-foreground">{cleanDisplayText(String(criterion?.reason_fr || "Justification documentaire à compléter."))}</p>
+                          {proofs.length > 0 ? (
+                            <div className="space-y-2">
+                              {proofs.slice(0, 3).map((proof: any, proofIndex: number) => (
+                                <EligibilityProofExcerptV153
+                                  key={proof?.evidence_id || proofIndex}
+                                  proof={proof}
+                                  projectId={projectId}
+                                  sourceDocuments={sourceDocuments}
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-warning">
+                              Aucun extrait source suffisamment explicite : ce point explique la part documentaire restante.
+                            </div>
+                          )}
+                          {criterion?.question ? (
+                            <p className="text-xs font-medium text-warning">
+                              À documenter : compléter ce critère avec une preuve projet explicite et la faire valider par le consultant.
+                            </p>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <BackendSectionRendererV93 text={reading || "L'analyse détaillée sera disponible après l'exécution du NLP et d'EnnoDiagnostic."} />
+          )}
+
+          {generalProofClaims.length > 0 || operations.length === 0 ? (
+          <div className="border-t pt-5">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand">
+              Analyse approfondie projet-spécifique
+            </p>
+            {generalProofClaims.length > 0 ? (
+              <div className="space-y-4">
+                {generalProofClaims.map((claim: any, index: number) => (
+                  <div key={index} className="rounded-lg border bg-white p-4 space-y-3">
+                    <p className="text-sm leading-7 text-foreground">{claim.text}</p>
+                    {(claim.proofs || []).slice(0, 3).map((proof: any, proofIndex: number) => (
+                      <EligibilityProofExcerptV153
+                        key={proof?.evidence_id || proofIndex}
+                        proof={proof}
+                        projectId={projectId}
+                        sourceDocuments={sourceDocuments}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <BackendSectionRendererV93 text="L’analyse approfondie en français sera disponible après l’exécution d’EnnoDiagnostic." />
+            )}
           </div>
+          ) : null}
         </div>
 
         <p className="text-xs leading-6 text-muted-foreground">
-          Ce score est une aide interne à la décision, pas une décision administrative CIR. Il change avec les preuves Frascati et avec la justification des démarches.
+          L'indice est une mesure interne de défendabilité documentaire, pas une probabilité d'acceptation CIR. Une opération classique est bloquée séparément ; un projet reste potentiellement éligible s'il contient au moins une opération R&D défendable ou partielle selon les preuves.
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function eligibilityProofToEvidenceV191(proof: any): SourceEvidence {
+  return {
+    evidence_id: proof?.evidence_id,
+    rag_chunk_id: proof?.rag_chunk_id,
+    passage_id: proof?.passage_id || proof?.evidence_id,
+    document_id: proof?.document_id,
+    document: proof?.document,
+    document_name: proof?.document_name || proof?.document,
+    source_path: proof?.source_path,
+    page_number: proof?.page_number,
+    paragraph_index: proof?.paragraph_index,
+    char_start: proof?.char_start ?? proof?.sentence_start,
+    char_end: proof?.char_end,
+    sentence_start: proof?.sentence_start,
+    section_title: proof?.section_title,
+    section_path: proof?.section_path,
+    role: proof?.role,
+    summary_fr: proof?.summary_fr,
+    source_text_original: proof?.source_text_original || proof?.excerpt,
+    source_field: proof?.source_field,
+    source_is_original: proof?.source_is_original,
+    highlight_coordinates: proof?.highlight_coordinates,
+    semantic_link: proof?.semantic_link,
+    justification_bridge_fr: proof?.justification_bridge_fr,
+    excerpt: proof?.source_text_original || proof?.excerpt,
+  }
+}
+
+function eligibilityProofKeyV193(proof: any, fallbackIndex = 0) {
+  return String(
+    proof?.passage_id || proof?.evidence_id ||
+    `${proof?.document || "source"}:${proof?.sentence_start ?? proof?.char_start ?? fallbackIndex}:${String(proof?.source_text_original || proof?.excerpt || "").slice(0, 180)}`
+  )
+}
+
+function dedupeEligibilityProofsV191(proofs: any[]) {
+  const seen = new Set<string>()
+  return proofs.filter((proof: any, index: number) => {
+    if (!proof || typeof proof !== "object") return false
+    if (String(proof?.evidence_id || "") === "F0") return false
+    const key = eligibilityProofKeyV193(proof, index)
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return Boolean(proof?.source_text_original || proof?.excerpt)
+  })
+}
+
+function UnifiedEligibilityStudyCardV191({
+  score,
+  signalsCount,
+  candidateCount,
+  reading,
+  justification,
+  demarche,
+  evidenceReport,
+  proofClaims,
+  projectId,
+  sourceDocuments,
+}: {
+  score: number | string | null | undefined
+  signalsCount: number
+  candidateCount: number
+  reading: string
+  justification: string
+  demarche: any
+  evidenceReport: any
+  proofClaims: any[]
+  projectId?: number | string
+  sourceDocuments: DbSourceDocument[]
+}) {
+  const operations = Array.isArray(evidenceReport?.operations) ? evidenceReport.operations : []
+  const scoreBasisOperation = evidenceReport?.score_basis_operation || {}
+  const referenceOperation = evidenceReport?.reference_operation || scoreBasisOperation
+  const criteria = Array.isArray(scoreBasisOperation?.criteria) && scoreBasisOperation.criteria.length > 0
+    ? scoreBasisOperation.criteria
+    : Array.isArray(referenceOperation?.criteria) ? referenceOperation.criteria : []
+  const frenchClaims = (proofClaims || []).filter((claim: any) => isStrongProjectEligibilityTextV192(claim?.text))
+  const atomicNarrativeClaims = frenchClaims.flatMap((claim: any) =>
+    Array.isArray(claim?.claims) ? claim.claims : []
+  ).filter((claim: any) => cleanDisplayText(String(claim?.text || "")))
+  const narrativeParts = atomicNarrativeClaims.length > 0 ? atomicNarrativeClaims : frenchClaims
+  const generatedNarrative = cleanDisplayText(
+    narrativeParts.map((claim: any) => cleanDisplayText(String(claim?.text || ""))).filter(Boolean).join(" ")
+  )
+  const demarcheLabels: Record<string, string> = {
+    rnd_core_defendable: "les preuves soutiennent un noyau R&D défendable",
+    rnd_core_partial: "un noyau R&D est identifiable mais doit être consolidé",
+    classical_engineering: "les travaux relèvent de l’ingénierie classique selon les preuves disponibles",
+    insufficient_evidence: "les preuves sont insuffisantes et nécessitent une validation du consultant",
+  }
+  const demarcheStatus = String(demarche?.project_status || demarche?.operation_status || "insufficient_evidence")
+  const operationNarrative = operations
+    .map((operation: any) => cleanDisplayText(String(operation?.justification_fr || "")))
+    .filter(Boolean)
+    .join(" ")
+  const criteriaNarrative = criteria
+    .map((criterion: any) => cleanDisplayText(String(criterion?.reason_fr || "")))
+    .filter(Boolean)
+    .join(" ")
+  const documentedCriteriaNarrative = criteria
+    .filter((criterion: any) => String(criterion?.status || "") === "documented")
+    .map((criterion: any) => {
+      const label = cleanDisplayText(String(criterion?.label || criterion?.criterion || "critère"))
+      const reason = cleanDisplayText(String(criterion?.reason_fr || criterion?.reason || ""))
+      return `${label} est documenté${reason ? ` : ${reason}` : ""}`
+    })
+    .join(" ; ")
+  const weakCriteriaNarrative = criteria
+    .filter((criterion: any) => String(criterion?.status || "") !== "documented")
+    .map((criterion: any) => {
+      const label = cleanDisplayText(String(criterion?.label || criterion?.criterion || "critère"))
+      const reason = cleanDisplayText(String(criterion?.reason_fr || criterion?.reason || ""))
+      const gap = formatScore(criterion?.remaining_gap_to_full_coverage)
+      return `${gap !== "—" ? `${gap} restent à consolider pour ` : "Le critère "}${label}${reason ? `, car ${reason}` : ""}`
+    })
+    .join(" ; ")
+  const remainingGap = formatScore(evidenceReport?.remaining_documentary_gap)
+  const fallbackConclusion = demarcheStatus === "classical_engineering"
+    ? "EnnoDiagnostic considère donc l’opération comme non éligible au titre d’une activité de R&D, sous réserve de validation par le consultant CIR."
+    : demarcheStatus === "insufficient_evidence"
+      ? "Les preuves disponibles ne permettent pas encore de conclure à une éligibilité potentielle ; le consultant CIR doit confirmer la qualification."
+      : "EnnoDiagnostic considère ainsi l’opération comme potentiellement éligible au CIR, sous réserve de validation par le consultant."
+  const fallbackNarrative = cleanDisplayText(
+    `${operationNarrative || cleanDisplayText(reading || justification)} ` +
+    `${demarcheLabels[demarcheStatus] || "La nature de la démarche reste à qualifier"}. ` +
+    `${documentedCriteriaNarrative ? `Les critères Frascati acquis s’expliquent ainsi : ${documentedCriteriaNarrative}. ` : ""}` +
+    `${weakCriteriaNarrative ? `La part restant à consolider se répartit ainsi : ${weakCriteriaNarrative}. ` : criteriaNarrative} ` +
+    `Ces éléments conduisent à un niveau de défendabilité R&D de ${formatScore(score)}${remainingGap !== "—" ? `, avec ${remainingGap} restant à consolider` : ""}. ` +
+    fallbackConclusion
+  )
+  const narrative = generatedNarrative || fallbackNarrative
+
+  const referenceFunctional = referenceOperation?.functional_evidence && typeof referenceOperation.functional_evidence === "object"
+    ? referenceOperation.functional_evidence
+    : {}
+  const referenceProofs = ["uncertainty", "hypothesis", "experiment", "result", "learning"].flatMap((stage) =>
+    Array.isArray(referenceFunctional?.[stage]) ? referenceFunctional[stage].slice(0, 1) : []
+  )
+  const otherOperationProofs = operations
+    .filter((operation: any) => String(operation?.group_id || "") !== String(referenceOperation?.group_id || ""))
+    .flatMap((operation: any) => {
+      const functional = operation?.functional_evidence && typeof operation.functional_evidence === "object"
+        ? operation.functional_evidence
+        : {}
+      const firstStage = ["uncertainty", "hypothesis", "experiment", "result", "learning"].find((stage) =>
+        Array.isArray(functional?.[stage]) && functional[stage].length > 0
+      )
+      return firstStage ? functional[firstStage].slice(0, 1) : []
+    })
+  const criterionProofs = criteria.flatMap((criterion: any) =>
+    Array.isArray(criterion?.evidence) ? criterion.evidence.slice(0, 1) : []
+  )
+  const citedProofs = narrativeParts.flatMap((claim: any) =>
+    Array.isArray(claim?.proofs) ? claim.proofs : []
+  )
+  const documentaryCitedProofs = citedProofs.filter((proof: any) => String(proof?.evidence_id || "") !== "F0")
+  const fallbackProofs = [...referenceProofs, ...otherOperationProofs, ...criterionProofs]
+  const sourceProofs = dedupeEligibilityProofsV191(
+    documentaryCitedProofs.length > 0 ? documentaryCitedProofs : fallbackProofs
+  ).slice(0, 8)
+  const sourceEvidence = sourceProofs.map(eligibilityProofToEvidenceV191)
+  const sourceProofNumbers = new Map(
+    sourceProofs.map((proof: any, index: number) => [eligibilityProofKeyV193(proof, index), index + 1])
+  )
+  const sourcedNarrativeParts = generatedNarrative
+    ? narrativeParts.map((claim: any) => {
+        const proofs = dedupeEligibilityProofsV191(Array.isArray(claim?.proofs) ? claim.proofs : [])
+          .map((proof: any) => ({ proof, citationNumber: sourceProofNumbers.get(eligibilityProofKeyV193(proof)) }))
+          .filter((item: any) => Number.isFinite(item.citationNumber))
+        return {
+          text: cleanDisplayText(String(claim?.text || "")),
+          evidence: proofs.map((item: any) => eligibilityProofToEvidenceV191(item.proof)),
+          citationNumbers: proofs.map((item: any) => Number(item.citationNumber)),
+        }
+      }).filter((claim: any) => claim.text)
+    : []
+  const operationsCount = Number(demarche?.operations_count || operations.length || signalsCount || 0)
+
+  return (
+    <Card className="overflow-hidden border-brand/20 bg-gradient-to-br from-brand/5 via-white to-white">
+      <CardHeader className="border-b bg-white/70">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BrainCircuit className="size-5 text-brand" />
+              Étude d’éligibilité
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Une lecture unique reliant les verrous, la démarche de recherche, les critères Frascati et les preuves du dossier.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline">{operationsCount} opération(s) · {candidateCount} verrou(s)</Badge>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-5 pt-5">
+        <div className="rounded-xl border border-brand/20 bg-white p-5">
+          <p className="text-sm font-semibold text-foreground">Conclusion globale d’éligibilité</p>
+          <p className="mt-3 text-sm leading-7 text-foreground">
+            {sourcedNarrativeParts.length > 0 ? sourcedNarrativeParts.map((claim: any, index: number) => (
+              <span key={`${claim.text.slice(0, 80)}:${index}`}>
+                {claim.text}
+                {projectId && claim.evidence.length > 0 ? (
+                  <SourceEvidenceCitations
+                    projectId={projectId}
+                    documents={sourceDocuments}
+                    evidence={claim.evidence}
+                    citationNumbers={claim.citationNumbers}
+                  />
+                ) : null}
+                {index < sourcedNarrativeParts.length - 1 ? " " : null}
+              </span>
+            )) : narrative}
+            {sourcedNarrativeParts.length === 0 && projectId && sourceEvidence.length > 0 ? (
+              <SourceEvidenceCitations
+                projectId={projectId}
+                documents={sourceDocuments}
+                evidence={sourceEvidence}
+              />
+            ) : null}
+          </p>
+        </div>
+
+        <div className="rounded-xl border bg-white p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Sources et passages</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Les numéros correspondent aux citations du paragraphe. Chaque lien ouvre le passage dans le document et tente de le surligner.
+              </p>
+            </div>
+            <Badge variant="secondary">{sourceProofs.length} preuve(s)</Badge>
+          </div>
+
+          {sourceProofs.length > 0 ? (
+            <div className="mt-4 divide-y rounded-lg border">
+              {sourceProofs.map((proof: any, index: number) => {
+                const evidence = sourceEvidence[index]
+                const sourceLabel = [
+                  cleanSourceDocumentName(String(proof?.document_name || proof?.document || "Document source")),
+                  proof?.page_number != null ? `page ${proof.page_number}` : "",
+                  proof?.section_title ? `section « ${cleanDisplayText(String(proof.section_title))} »` : "",
+                ].filter(Boolean).join(" · ")
+                return (
+                  <div key={proof?.passage_id || proof?.evidence_id || index} className="p-4">
+                    <div className="flex items-start gap-3">
+                      <span className="shrink-0 rounded bg-brand/10 px-2 py-1 text-xs font-semibold text-brand">[{index + 1}]</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm leading-6 text-foreground">
+                          {cleanDisplayText(String(proof?.summary_fr || "Preuve documentaire reliée à l’étude d’éligibilité."))}
+                        </p>
+                        {proof?.justification_bridge_fr ? (
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            {cleanDisplayText(String(proof.justification_bridge_fr))}
+                          </p>
+                        ) : null}
+                        <p className="mt-2 text-xs font-medium text-muted-foreground">Source : {sourceLabel}</p>
+                        {projectId ? (
+                          <div className="mt-2">
+                            <SourceTextWithDocuments
+                              projectId={projectId}
+                              text={sourceLabel}
+                              documents={sourceDocuments}
+                              evidence={[evidence]}
+                              compact
+                              hideTextWhenMatched
+                              actionLabel={`Voir le passage [${index + 1}] dans le document`}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-warning">
+              Aucun passage localisable n’est encore disponible ; la validation documentaire reste nécessaire.
+            </p>
+          )}
+        </div>
+
+        <p className="text-xs leading-6 text-muted-foreground">
+          L’indice mesure la défendabilité documentaire interne et non une probabilité d’acceptation administrative. La décision finale reste celle du consultant CIR.
         </p>
       </CardContent>
     </Card>
@@ -3018,11 +3722,22 @@ export function DiagnosisPage() {
   }, [display, prepareReport])
 
   const frascatiScore =
+    display?.frascati_summary?.rnd_defensibility_index ??
+    diagnosticBundle?.frascati_summary?.rnd_defensibility_index ??
+    prepareReport?.nlp_stats?.rnd_defensibility_index ??
     display?.frascati_summary?.eligibility_assessment_score ??
     diagnosticBundle?.frascati_summary?.eligibility_assessment_score ??
     prepareReport?.nlp_stats?.eligibility_assessment_score ??
     display?.frascati_summary?.average_frascati_score ??
     display?.frascati_score ??
+    prepareReport?.nlp_stats?.global_frascati_score ??
+    null
+
+  const frascatiDocumentaryCoverage =
+    display?.frascati_summary?.documentary_coverage ??
+    diagnosticBundle?.frascati_summary?.documentary_coverage ??
+    display?.frascati_summary?.average_frascati_score ??
+    diagnosticBundle?.frascati_summary?.average_frascati_score ??
     prepareReport?.nlp_stats?.global_frascati_score ??
     null
 
@@ -3358,6 +4073,14 @@ export function DiagnosisPage() {
     return getBackendDiagnosticSectionsV93(diagnosticBundle, display)
   }, [diagnosticBundle, display])
 
+  const eligibilityEvidenceReport = useMemo(() => {
+    return getEligibilityEvidenceReportV153(diagnosticBundle, display)
+  }, [diagnosticBundle, display])
+
+  const eligibilityProofClaims = useMemo(() => {
+    return getEligibilityProofClaimsV153(diagnosticBundle, display)
+  }, [diagnosticBundle, display])
+
   const summary = useMemo(() => {
     return (
       pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
@@ -3387,7 +4110,7 @@ export function DiagnosisPage() {
     ])
 
     if (merged) {
-      const beforeJustification = merged.split(/Justification projet-spécifique/i)[0]
+      const beforeJustification = merged.split(/Justification projet-spécifique|Analyse approfondie reliée aux preuves/i)[0]
       return beforeJustification
         .replace(/^Lecture du score\s*/i, "")
         .trim()
@@ -3410,7 +4133,7 @@ export function DiagnosisPage() {
       "Étude d'éligibilité",
       "Analyse Frascati",
     ])
-    const parts = merged.split(/Justification projet-spécifique/i)
+    const parts = merged.split(/Justification projet-spécifique|Analyse approfondie reliée aux preuves/i)
     return parts.length > 1 ? parts.slice(1).join(" ").trim() : ""
   }, [diagnosticBundle, backendSectionsV93, backendMarkdownV93])
 
@@ -3421,7 +4144,6 @@ export function DiagnosisPage() {
       verrous
     )
   }, [diagnosticBundle, display, verrous])
-
 
   const demarcheText = useMemo(() => {
     return pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
@@ -3445,7 +4167,6 @@ export function DiagnosisPage() {
       "Paramètres techniques",
     ])
   }, [backendSectionsV93, backendMarkdownV93])
-
 
 
   const hasDiagnostic = Boolean(backendMarkdownV93 || latestRun || verrousForDisplay.length > 0 || reportMarkdown)
@@ -4309,7 +5030,7 @@ export function DiagnosisPage() {
 
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Score d'éligibilité</p>
+            <p className="text-xs text-muted-foreground">Indice de défendabilité R&D</p>
             <p className="text-2xl font-bold text-warning mt-1">
               {formatScore(frascatiScore)}
             </p>
@@ -4416,7 +5137,7 @@ export function DiagnosisPage() {
             emptyText="L’objectif global apparaîtra après l’exécution d’EnnoDiagnostic."
           />
 
-          <FrascatiAnalysisCard
+          <UnifiedEligibilityStudyCardV191
             score={frascatiScore}
             signalsCount={Number(
               display?.frascati_summary?.scores_count ??
@@ -4427,6 +5148,10 @@ export function DiagnosisPage() {
             reading={lectureFrascatiText}
             justification={frascatiJustificationText}
             demarche={demarcheAudit}
+            evidenceReport={eligibilityEvidenceReport}
+            proofClaims={eligibilityProofClaims}
+            projectId={project?.id}
+            sourceDocuments={sourceDocuments}
           />
 
           <Card>
@@ -4644,7 +5369,7 @@ Chaque verrou candidat est relié à ses documents sources. Le consultant peut r
                                     {verrou.tag_cir || "Verrou à vérifier"}
                                   </Badge>
                                   <Badge variant="outline" className="text-xs">
-                                    Score Frascati {formatVerrouScoreV124(verrou.score)}
+                                    Couverture Frascati {formatVerrouScoreV124(verrou.score)}
                                   </Badge>
                                 </div>
                               </div>
@@ -4734,11 +5459,10 @@ Chaque verrou candidat est relié à ses documents sources. Le consultant peut r
             </CardContent>
           </Card>
 
-
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <BackendSectionCardV93
               title="Pertinence des démarches"
-              description="Nécessité des étapes, distinction R&D / ingénierie classique et possibilité d'aller directement à la solution finale."
+              description="Nécessité des étapes, distinction R&D / ingénierie classique et possibilité d’aller directement à la solution finale."
               icon={Search}
               text={demarcheText}
               emptyText="Aucune démarche détectée."
@@ -4755,14 +5479,13 @@ Chaque verrou candidat est relié à ses documents sources. Le consultant peut r
 
             <BackendSectionCardV93
               title="Paramètres et contraintes techniques"
-              description="Contraintes de pression, débit, environnement, mécanique ou acoustique."
+              description="Paramètres, jeux de données, conditions expérimentales et contraintes techniques."
               icon={FileText}
               text={parametresText}
               emptyText="Aucun paramètre technique disponible."
             />
-
-
           </div>
+
 
         </TabsContent>
 

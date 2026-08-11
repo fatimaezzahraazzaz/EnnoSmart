@@ -25,7 +25,7 @@ from .demarche_legibility import (
     assess_project_demarche_legibility,
 )
 
-VERSION = "frascati_assessment_v182_demarche_necessity_and_routine_control"
+VERSION = "frascati_assessment_v184_traceable_score_basis_and_remaining_gap"
 
 DIMENSIONS = (
     "novelty",
@@ -34,6 +34,14 @@ DIMENSIONS = (
     "systematicity",
     "transferability",
 )
+
+DIMENSION_LABELS = {
+    "novelty": "Nouveauté",
+    "creativity": "Créativité",
+    "uncertainty": "Incertitude scientifique ou technique",
+    "systematicity": "Démarche systématique",
+    "transferability": "Transférabilité ou reproductibilité",
+}
 
 QUESTIONS = {
     "novelty": "Quelles connaissances ou solutions existantes ont été étudiées et pourquoi étaient-elles insuffisantes ?",
@@ -246,31 +254,16 @@ def _assess_systematicity(
     group: Mapping[str, Any],
     blob: str,
     roles: Set[str],
-    demarche: Mapping[str, Any],
 ) -> Dict[str, Any]:
     pattern_ids = _ids_matching_pattern(group, PATTERNS["systematicity_positive"])
     role_ids = _ids_for_roles(group, ROLE_SUPPORT["systematicity"])
     strong_roles = roles & {"methode", "parametre", "resultat"}
-    justified_steps = int(demarche.get("research_justified_steps_count") or 0)
-    method_steps = int(demarche.get("method_steps_count") or 0)
 
-    if (
-        demarche.get("label") == "routine_engineering_dominant"
-        and justified_steps == 0
-    ):
-        return _criterion(
-            name="systematicity",
-            status="contradictory",
-            evidence_ids=role_ids + pattern_ids,
-            reason=(
-                "Les etapes detectees relevent surtout de procedures d'ingenierie "
-                "routiniere ou non differenciees, sans hypothese, necessite ni "
-                "apprentissage experimental suffisamment traces."
-            ),
-            question_needed=False,
-        )
-
-    if justified_steps > 0 and pattern_ids and len(strong_roles) >= 2:
+    # La systematicite mesure seulement l'organisation et la tracabilite de la
+    # demarche. Une procedure peut etre tres systematique tout en restant de
+    # l'ingenierie classique ; cette nature est decidee par le garde separe
+    # demarche_legibility, jamais par ce critere Frascati.
+    if pattern_ids and len(strong_roles) >= 2:
         return _criterion(
             name="systematicity",
             status="documented",
@@ -278,7 +271,7 @@ def _assess_systematicity(
             reason="Le dossier documente une démarche structurée avec essais, mesures, paramètres, comparaisons ou résultats.",
             question_needed=False,
         )
-    if method_steps or pattern_ids or role_ids:
+    if pattern_ids or role_ids:
         return _criterion(
             name="systematicity",
             status="partial",
@@ -480,33 +473,62 @@ def _coverage(criteria: Mapping[str, Mapping[str, Any]]) -> float:
     return round(value / len(DIMENSIONS), 4)
 
 
+def _criteria_score_breakdown(
+    criteria: Mapping[str, Mapping[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Explique exactement la part acquise et la part manquante du score.
+
+    Chaque critère pèse 20 points. ``documented`` apporte 20 points,
+    ``partial`` 10 points et ``missing``/``contradictory`` 0 point. Ce détail
+    évite toute justification LLM inventée du type « +4 dû à ... ».
+    """
+    weight = round(1.0 / len(DIMENSIONS), 4)
+    output: List[Dict[str, Any]] = []
+    for name in DIMENSIONS:
+        item = criteria.get(name) if isinstance(criteria.get(name), Mapping) else {}
+        status = str(item.get("status") or "missing")
+        status_value = STATUS_VALUE.get(status, 0.0)
+        contribution = round(weight * status_value, 4)
+        gap = round(weight - contribution, 4)
+        output.append({
+            "criterion": name,
+            "label": DIMENSION_LABELS[name],
+            "status": status,
+            "criterion_weight": weight,
+            "contribution_to_index": contribution,
+            "remaining_gap_to_full_coverage": gap,
+            "reason": item.get("reason"),
+            "evidence_ids": list(dict.fromkeys(
+                str(value) for value in (item.get("evidence_ids") or []) if value
+            )),
+            "question": item.get("question"),
+        })
+    return output
+
+
 def _eligibility_assessment_score(
     recommendation: int,
     documentary_coverage: float,
     demarche: Mapping[str, Any],
 ) -> float:
-    """Score interne combinant Frascati et pertinence de la demarche.
+    """Indice de defendabilite, sans multiplication par un ratio de passages.
 
-    Ce score n'est pas un score officiel CIR. Une demarche d'ingenierie
-    classique dominante sans etape R&D justifiee vaut directement 0. Dans les
-    cas mixtes, la couverture Frascati est ponderee par la lisibilite causale
-    des etapes et par le risque de raccourci vers la solution finale.
+    La couverture Frascati est conservee telle quelle pour une operation
+    potentiellement eligible. L'etude de demarche agit separement sur le risque
+    et bloque uniquement une operation effectivement classique.
     """
     if not recommendation:
         return 0.0
-    if (
-        demarche.get("label") == "routine_engineering_dominant"
-        and int(demarche.get("research_justified_steps_count") or 0) == 0
-    ):
+    operation_status = str(
+        demarche.get("project_status")
+        or demarche.get("operation_status")
+        or ""
+    )
+    if operation_status == "classical_engineering":
         return 0.0
-    if int(demarche.get("method_steps_count") or 0) <= 0:
-        return 0.0
-    try:
-        readability = min(1.0, max(0.0, float(demarche.get("readability_score") or 0.0)))
-    except Exception:
-        readability = 0.0
-    shortcut_factor = 0.8 if demarche.get("direct_final_solution_risk") else 1.0
-    return round(float(documentary_coverage) * readability * shortcut_factor, 4)
+    # Les preuves insuffisantes et le raccourci potentiel modifient le risque
+    # et la confiance, pas la couverture des cinq criteres Frascati.
+    return round(float(documentary_coverage), 4)
 
 
 def assess_group_frascati(group: Mapping[str, Any]) -> Dict[str, Any]:
@@ -518,12 +540,22 @@ def assess_group_frascati(group: Mapping[str, Any]) -> Dict[str, Any]:
         "novelty": _assess_novelty(group, blob, roles),
         "creativity": _assess_creativity(group, blob, roles),
         "uncertainty": _assess_uncertainty(group, blob),
-        "systematicity": _assess_systematicity(group, blob, roles, demarche),
+        "systematicity": _assess_systematicity(group, blob, roles),
         "transferability": _assess_transferability(group, blob, roles),
     }
 
     recommendation, recommendation_label, blocking = _recommendation(criteria)
+    if demarche.get("operation_status") == "classical_engineering":
+        recommendation = 0
+        recommendation_label = "non_eligible_potentiel"
+        blocking = list(dict.fromkeys([*blocking, "classical_engineering_operation"]))
     risk = _risk_level(recommendation, criteria)
+    if (
+        recommendation == 1
+        and demarche.get("operation_status") in {"rnd_core_partial", "insufficient_evidence"}
+        and risk == "faible"
+    ):
+        risk = "moyen"
     coverage = _coverage(criteria)
     eligibility_assessment_score = _eligibility_assessment_score(
         recommendation,
@@ -545,7 +577,7 @@ def assess_group_frascati(group: Mapping[str, Any]) -> Dict[str, Any]:
         questions.append({
             "dimension": "demarche_legibility",
             "question": str(question),
-            "reason": "La necessite scientifique de certaines etapes doit etre demontree.",
+            "reason": "La chaîne causale de l'opération ou le rattachement de ses activités doit être démontré.",
         })
 
     counts = {
@@ -554,6 +586,7 @@ def assess_group_frascati(group: Mapping[str, Any]) -> Dict[str, Any]:
         "missing": sum(1 for name in DIMENSIONS if criteria[name]["status"] == "missing"),
         "contradictory": sum(1 for name in DIMENSIONS if criteria[name]["status"] == "contradictory"),
     }
+    score_breakdown = _criteria_score_breakdown(criteria)
 
     return {
         "version": VERSION,
@@ -563,11 +596,16 @@ def assess_group_frascati(group: Mapping[str, Any]) -> Dict[str, Any]:
         "dimensions": criteria,
         "criteria_summary": counts,
         "documentary_coverage": coverage,
+        "documented_share": coverage,
+        "remaining_documentary_gap": round(max(0.0, 1.0 - coverage), 4),
+        "criteria_score_breakdown": score_breakdown,
+        "score_formula": "equal_weight_20_percent_per_frascati_criterion_documented_20_partial_10_missing_or_contradictory_0",
         "documentary_coverage_label": f"{counts['documented']} documentes, {counts['partial']} partiels sur 5",
         "eligibility_score": coverage,
         "eligibility_score_semantics": "legacy_alias_of_documentary_coverage_not_probability_not_official_frascati_score",
         "eligibility_assessment_score": eligibility_assessment_score,
-        "eligibility_assessment_score_semantics": "internal_decision_aid_combining_frascati_criteria_and_approach_legibility_not_official_cir_score",
+        "eligibility_assessment_score_semantics": "rnd_defensibility_index_equal_to_frascati_documentary_coverage_when_operation_not_classical_not_official_cir_probability",
+        "rnd_defensibility_index": eligibility_assessment_score,
         "eligibility_recommendation": recommendation,
         "recommendation_label": recommendation_label,
         "blocking_criteria": blocking,
@@ -596,9 +634,10 @@ def _merge_project_criterion_status(assessments: Sequence[Mapping[str, Any]], na
     ]
     statuses = [str(item.get("status") or "missing") for item in items]
 
-    # Au niveau projet, une preuve documentée dans au moins une opération suffit
-    # à documenter le critère pour la recommandation globale. Une contradiction
-    # n'écrase pas automatiquement une autre opération R&D valide.
+    # Cette fusion est une vue portefeuille uniquement. Elle ne sert jamais à
+    # rendre le projet éligible : la décision reste calculée opération par
+    # opération afin de ne pas assembler cinq critères provenant de groupes
+    # différents en une opération R&D fictive.
     if "documented" in statuses:
         status = "documented"
     elif "partial" in statuses:
@@ -647,10 +686,18 @@ def assess_project_frascati(groups: Iterable[Mapping[str, Any]]) -> Dict[str, An
             "dimensions": empty_criteria,
             "criteria_summary": {"documented": 0, "partial": 0, "missing": 5, "contradictory": 0},
             "documentary_coverage": 0.0,
+            "documented_share": 0.0,
+            "remaining_documentary_gap": 1.0,
+            "score_basis_group_id": None,
+            "score_basis_operation_status": "insufficient_evidence",
+            "score_basis_criteria_breakdown": _criteria_score_breakdown(empty_criteria),
+            "score_basis_guard_blocked": True,
+            "score_formula": "equal_weight_20_percent_per_frascati_criterion_documented_20_partial_10_missing_or_contradictory_0_then_separate_classical_engineering_guard",
             "eligibility_score": 0.0,
             "eligibility_score_semantics": "legacy_alias_of_documentary_coverage_not_probability_not_official_frascati_score",
             "eligibility_assessment_score": 0.0,
-            "eligibility_assessment_score_semantics": "internal_decision_aid_combining_frascati_criteria_and_approach_legibility_not_official_cir_score",
+            "eligibility_assessment_score_semantics": "rnd_defensibility_index_equal_to_frascati_documentary_coverage_when_operation_not_classical_not_official_cir_probability",
+            "rnd_defensibility_index": 0.0,
             "eligibility_recommendation": 0,
             "recommendation_label": "non_eligible_potentiel",
             "risk_level": "eleve",
@@ -673,14 +720,14 @@ def assess_project_frascati(groups: Iterable[Mapping[str, Any]]) -> Dict[str, An
     # Réalisme opérationnel : s'il existe au moins une opération / un verrou
     # principal recommandé 1, le projet est présenté comme candidat potentiel.
     # Le consultant voit ensuite les groupes à risque et les critères manquants.
-    eligible_groups = [item for item in assessments if int(item.get("eligibility_recommendation") or 0) == 1]
+    eligible_groups = [
+        item
+        for item in assessments
+        if int(item.get("eligibility_recommendation") or 0) == 1
+        and (item.get("demarche_legibility") or {}).get("operation_status")
+        in {"rnd_core_defendable", "rnd_core_partial"}
+    ]
     recommendation = 1 if eligible_groups else 0
-    strict_routine_block = bool(
-        project_demarche.get("label") == "routine_engineering_dominant"
-        and int(project_demarche.get("research_justified_steps_count") or 0) == 0
-    )
-    if strict_routine_block:
-        recommendation = 0
     recommendation_label = "eligible_potentiel" if recommendation else "non_eligible_potentiel"
 
     questions: List[Dict[str, str]] = []
@@ -692,7 +739,33 @@ def assess_project_frascati(groups: Iterable[Mapping[str, Any]]) -> Dict[str, An
                 seen.add(signature)
                 questions.append(dict(question))
 
-    coverage = _coverage(project_criteria)
+    portfolio_coverage = _coverage(project_criteria)
+    coverage_pool = eligible_groups or assessments
+
+    # L'indice projet doit être porté en priorité par l'opération R&D la plus
+    # défendable, puis par la mieux documentée. À couverture égale (ou même
+    # lorsqu'un noyau partiel est davantage documenté), on ne laisse pas une
+    # opération partielle devenir l'opération de référence si un noyau R&D
+    # défendable existe. Cette règle reste générique et ne dépend d'aucun projet.
+    status_priority = {
+        "rnd_core_defendable": 4,
+        "rnd_core_partial": 3,
+        "insufficient_evidence": 2,
+        "classical_engineering": 1,
+    }
+
+    def _score_basis_key(item: Mapping[str, Any]) -> tuple:
+        demarche = item.get("demarche_legibility")
+        demarche = demarche if isinstance(demarche, Mapping) else {}
+        operation_status = str(demarche.get("operation_status") or "insufficient_evidence")
+        return (
+            status_priority.get(operation_status, 0),
+            float(item.get("documentary_coverage") or 0.0),
+            1 if int(item.get("eligibility_recommendation") or 0) == 1 else 0,
+        )
+
+    score_basis = max(coverage_pool, key=_score_basis_key, default={})
+    coverage = float(score_basis.get("documentary_coverage") or 0.0)
     summary = {
         "documented": sum(1 for name in DIMENSIONS if project_criteria[name]["status"] == "documented"),
         "partial": sum(1 for name in DIMENSIONS if project_criteria[name]["status"] == "partial"),
@@ -704,19 +777,29 @@ def assess_project_frascati(groups: Iterable[Mapping[str, Any]]) -> Dict[str, An
     # comme le maximum mécanique des risques de chaque groupe. Cela évite
     # qu'un verrou secondaire incomplet fasse apparaître tout le projet comme
     # risque élevé alors que le noyau R&D reste défendable.
-    risk = _risk_level(recommendation, project_criteria)
-    if (
-        recommendation == 1
-        and project_demarche.get("label")
-        in {"mixed_or_partially_justified_trajectory", "routine_engineering_dominant"}
-        and risk == "faible"
-    ):
-        risk = "moyen"
+    if recommendation == 0:
+        risk = "eleve"
+    else:
+        eligible_risks = [str(item.get("risk_level") or "moyen") for item in eligible_groups]
+        mixed_perimeter = len(eligible_groups) != len(assessments) or bool(
+            project_demarche.get("risk_adjustment")
+            in {"raise_to_medium", "raise_to_medium_for_perimeter", "raise_to_medium_or_human_review"}
+        )
+        if "eleve" in eligible_risks:
+            risk = "eleve"
+        elif mixed_perimeter or "moyen" in eligible_risks:
+            risk = "moyen"
+        else:
+            risk = "faible"
     eligibility_assessment_score = _eligibility_assessment_score(
         recommendation,
         coverage,
         project_demarche,
     )
+    basis_breakdown = score_basis.get("criteria_score_breakdown")
+    if not isinstance(basis_breakdown, list):
+        basis_criteria = score_basis.get("criteria") or score_basis.get("dimensions") or {}
+        basis_breakdown = _criteria_score_breakdown(basis_criteria) if isinstance(basis_criteria, Mapping) else []
 
     return {
         "version": VERSION,
@@ -724,20 +807,37 @@ def assess_project_frascati(groups: Iterable[Mapping[str, Any]]) -> Dict[str, An
         "dimensions": project_criteria,
         "criteria_summary": summary,
         "documentary_coverage": coverage,
+        "documented_share": eligibility_assessment_score,
+        "remaining_documentary_gap": round(max(0.0, 1.0 - eligibility_assessment_score), 4),
+        "score_basis_group_id": score_basis.get("group_id"),
+        "score_basis_operation_status": (
+            (score_basis.get("demarche_legibility") or {}).get("operation_status")
+            if isinstance(score_basis.get("demarche_legibility"), Mapping)
+            else None
+        ),
+        "score_basis_criteria_breakdown": basis_breakdown,
+        "score_basis_guard_blocked": recommendation == 0,
+        "score_formula": "equal_weight_20_percent_per_frascati_criterion_documented_20_partial_10_missing_or_contradictory_0_then_separate_classical_engineering_guard",
+        "documentary_coverage_semantics": "best_complete_operation_coverage_not_cross_operation_merge_not_probability",
+        "portfolio_criteria_coverage": portfolio_coverage,
+        "portfolio_criteria_coverage_semantics": "descriptive_cross_operation_summary_not_used_for_project_recommendation",
         "eligibility_score": coverage,
         "eligibility_score_semantics": "legacy_alias_of_documentary_coverage_not_probability_not_official_frascati_score",
         "eligibility_assessment_score": eligibility_assessment_score,
-        "eligibility_assessment_score_semantics": "internal_decision_aid_combining_frascati_criteria_and_approach_legibility_not_official_cir_score",
+        "eligibility_assessment_score_semantics": "rnd_defensibility_index_equal_to_frascati_documentary_coverage_when_at_least_one_operation_is_potentially_eligible_not_official_cir_probability",
+        "rnd_defensibility_index": eligibility_assessment_score,
         "eligibility_recommendation": recommendation,
         "recommendation_label": recommendation_label,
         "eligibility_blocking_reason": (
-            "routine_engineering_without_justified_rnd_step"
-            if strict_routine_block else None
+            "no_potentially_eligible_operation"
+            if not eligible_groups else None
         ),
         "risk_level": risk,
         "demarche_legibility": project_demarche,
         "eligible_groups_count": len(eligible_groups),
+        "eligible_operations_count": len(eligible_groups),
         "groups_count": len(assessments),
+        "project_criteria_semantics": "portfolio_summary_only_project_recommendation_is_based_on_complete_per_operation_assessments",
         "group_assessments": assessments,
         "questions_to_ask": questions,
         "human_validation_required": True,
