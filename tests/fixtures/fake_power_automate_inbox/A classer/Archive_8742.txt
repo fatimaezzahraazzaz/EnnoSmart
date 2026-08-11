@@ -1,0 +1,19 @@
+DOSSIER JUSTIFICATIF — CRÉDIT D'IMPÔT RECHERCHE
+Version finale
+
+Entreprise : Fictive Innovation
+Projet : PhotonIQ
+Année : 2024
+
+État de l'art
+Les solutions disponibles ne permettent pas de garantir la stabilité de la mesure dans les conditions étudiées.
+
+Verrou scientifique et technique
+Le principal verrou concerne la compensation des dérives sans référence externe stable.
+
+Travaux de recherche réalisés
+Une méthode expérimentale et plusieurs protocoles comparatifs ont été développés et évalués.
+
+Résultats obtenus
+Les essais ont permis de caractériser les limites et les performances de l'approche.
+

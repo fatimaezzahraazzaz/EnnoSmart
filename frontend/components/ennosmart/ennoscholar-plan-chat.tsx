@@ -49,6 +49,7 @@ import {
   deleteGuidedResearchSession,
   decideGuidedResearchSources,
   getGuidedResearchSession,
+  getStateOfArtVisualBlob,
   getUploadedScholarArticlePdf,
   listGuidedResearchSessions,
   prepareStateOfArtPhase1And2,
@@ -88,7 +89,7 @@ type Props = {
   projectLabel?: string
   selectedArticles?: ArticleRead[]
   onCorpusChanged?: () => Promise<void> | void
-  onGenerate: () => Promise<void> | void
+  onGenerate: (guidedSessionId?: string | null) => Promise<any> | any
   onRefreshDraft?: () => Promise<void> | void
   draftMarkdown?: string
   generating?: boolean
@@ -135,7 +136,69 @@ function citationText(text: string) {
   )
 }
 
-function DraftPreview({ markdown }: { markdown: string }) {
+function StateOfArtFigure({
+  projectId,
+  visualId,
+  alt,
+}: {
+  projectId: number
+  visualId: string
+  alt: string
+}) {
+  const [source, setSource] = useState("")
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    let objectUrl = ""
+    setFailed(false)
+    void getStateOfArtVisualBlob(projectId, visualId)
+      .then((blob) => {
+        if (!active) return
+        objectUrl = URL.createObjectURL(blob)
+        setSource(objectUrl)
+      })
+      .catch(() => {
+        if (active) setFailed(true)
+      })
+    return () => {
+      active = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [projectId, visualId])
+
+  if (failed) {
+    return (
+      <div className="my-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        La figure originale n’a pas pu être chargée. Sa provenance reste
+        disponible dans la légende.
+      </div>
+    )
+  }
+  return (
+    <figure className="my-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      {source ? (
+        <img
+          src={source}
+          alt={alt}
+          className="mx-auto max-h-[560px] w-auto max-w-full object-contain"
+        />
+      ) : (
+        <div className="flex h-44 items-center justify-center text-slate-400">
+          <Loader2 className="size-5 animate-spin" />
+        </div>
+      )}
+    </figure>
+  )
+}
+
+function DraftPreview({
+  markdown,
+  projectId,
+}: {
+  markdown: string
+  projectId: number
+}) {
   if (!markdown.trim()) {
     return (
       <div className="flex h-full min-h-[430px] flex-col items-center justify-center px-8 text-center">
@@ -159,6 +222,19 @@ function DraftPreview({ markdown }: { markdown: string }) {
         {markdown.split(/\n/).map((raw, index) => {
           const line = raw.trim()
           if (!line) return <div key={index} className="h-2" />
+          const visualMatch = line.match(
+            /^!\[(.*)\]\(ennoscholar-visual:\/\/([A-Za-z0-9_-]+)\)$/,
+          )
+          if (visualMatch) {
+            return (
+              <StateOfArtFigure
+                key={`${visualMatch[2]}-${index}`}
+                projectId={projectId}
+                visualId={visualMatch[2]}
+                alt={visualMatch[1] || "Figure scientifique sourcée"}
+              />
+            )
+          }
           if (line.startsWith("# ")) {
             return (
               <h1
@@ -193,6 +269,13 @@ function DraftPreview({ markdown }: { markdown: string }) {
             return (
               <p key={index} className="ml-4 border-l-2 border-blue-200 pl-3">
                 {citationText(line.slice(2))}
+              </p>
+            )
+          }
+          if (line.startsWith("*") && line.endsWith("*")) {
+            return (
+              <p key={index} className="mb-5 text-center text-xs italic leading-5 text-slate-500">
+                {citationText(line.slice(1, -1))}
               </p>
             )
           }
@@ -529,14 +612,20 @@ export function EnnoScholarPlanChat({
   const [preparingCorpus, setPreparingCorpus] = useState(false)
   const [busyArticleId, setBusyArticleId] = useState<number | null>(null)
   const [deletingSessionId, setDeletingSessionId] = useState("")
+  const [operatingMode, setOperatingMode] = useState("")
+  const [sessionDraftMarkdown, setSessionDraftMarkdown] = useState("")
   const previousHasDraft = useRef(Boolean(draftMarkdown.trim()))
   const messagesViewportRef = useRef<HTMLDivElement | null>(null)
 
-  const hasDraft = Boolean(draftMarkdown.trim())
+  const chatOnly = operatingMode === "standalone_chat"
+  const effectiveDraftMarkdown = chatOnly
+    ? sessionDraftMarkdown
+    : sessionDraftMarkdown || draftMarkdown
+  const hasDraft = Boolean(effectiveDraftMarkdown.trim())
   const canSend = Boolean(sessionId && input.trim() && !loading && !generating)
   const wordCount = useMemo(
-    () => (draftMarkdown.match(/\b[\p{L}\p{N}'’-]+\b/gu) || []).length,
-    [draftMarkdown],
+    () => (effectiveDraftMarkdown.match(/\b[\p{L}\p{N}'’-]+\b/gu) || []).length,
+    [effectiveDraftMarkdown],
   )
 
   useEffect(() => {
@@ -574,6 +663,8 @@ export function EnnoScholarPlanChat({
       setSessionId(id)
       setMessages(current?.session?.messages || [])
       setCandidates(candidatesFromSession(current))
+      setOperatingMode(String(current?.session?.context?.operating_mode || ""))
+      setSessionDraftMarkdown(String(current?.artifacts?.draft?.markdown || ""))
       localStorage.setItem(storageKey(projectId), id)
     } catch (err: any) {
       setError(err?.message || "Impossible d’ouvrir cette conversation.")
@@ -594,6 +685,8 @@ export function EnnoScholarPlanChat({
       setSessionId(id)
       setMessages(created?.session?.messages || [])
       setCandidates([])
+      setOperatingMode(String(created?.session?.context?.operating_mode || ""))
+      setSessionDraftMarkdown("")
       localStorage.setItem(storageKey(projectId), id)
       await refreshSessions()
     } catch (err: any) {
@@ -697,8 +790,67 @@ export function EnnoScholarPlanChat({
         response?.metadata?.candidates ||
         response?.metadata?.research?.candidates
       if (Array.isArray(found)) setCandidates(found)
+      if (response?.metadata?.operating_mode) {
+        setOperatingMode(String(response.metadata.operating_mode))
+      }
+      if (response?.metadata?.standalone_draft_markdown) {
+        setSessionDraftMarkdown(
+          String(response.metadata.standalone_draft_markdown),
+        )
+      }
       if (response?.metadata?.trigger_state_of_art_generation === true) {
-        await onGenerate()
+        const generationResult = await onGenerate(sessionId)
+        if (generationResult?.ok === false) {
+          setMessages((current) => [
+            ...current,
+            {
+              message_id: `assistant-generation-${Date.now()}`,
+              role: "assistant",
+              content: String(
+                generationResult?.assistant_message ||
+                  "La rédaction n'est pas encore publiée. Votre corpus, votre plan et vos choix sont conservés ; vous pouvez poursuivre dans ce chat.",
+              ),
+              created_at: new Date().toISOString(),
+              metadata: {
+                generation_status: generationResult?.status || "pending",
+                previous_draft_preserved: Boolean(
+                  generationResult?.previous_draft_preserved,
+                ),
+              },
+            },
+          ])
+        } else {
+          // En mode autonome, le panneau doit rester isolé par conversation :
+          // `effectiveDraftMarkdown` ne reprend donc pas le dernier document
+          // global du projet. Après le pipeline commun, synchroniser
+          // explicitement le document publié avec la conversation qui vient de
+          // le demander. Sans cela, Phase 5 termine correctement côté backend
+          // mais l'artefact reste visuellement fermé jusqu'à un rechargement de
+          // session.
+          let publishedMarkdown = String(
+            generationResult?.markdown ||
+              generationResult?.state_of_art_view?.markdown ||
+              generationResult?.report?.markdown ||
+              "",
+          )
+
+          if (!publishedMarkdown.trim()) {
+            const refreshedSession = await getGuidedResearchSession(
+              projectId,
+              sessionId,
+            )
+            publishedMarkdown = String(
+              refreshedSession?.artifacts?.draft?.markdown || "",
+            )
+          }
+          if (publishedMarkdown.trim()) {
+            setSessionDraftMarkdown(publishedMarkdown)
+            setArtifactOpen(true)
+            setNotice(
+              "La nouvelle rédaction est terminée et affichée dans l’artefact État de l’art.",
+            )
+          }
+        }
       }
       await refreshSessions()
     } catch (err: any) {
@@ -805,7 +957,7 @@ export function EnnoScholarPlanChat({
     setError(null)
     setNotice(null)
     try {
-      const result = await uploadNewScholarSource(projectId, file)
+      const result = await uploadNewScholarSource(projectId, file, sessionId)
       await onCorpusChanged?.()
       const cardsCount = Number(result?.phase_2?.cards_count || 0)
       setNotice(
@@ -994,7 +1146,7 @@ export function EnnoScholarPlanChat({
             </div>
 
             <div className="flex items-center gap-2">
-              {onBackToArticles && (
+              {onBackToArticles && !chatOnly && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1144,9 +1296,14 @@ export function EnnoScholarPlanChat({
                   {notice}
                 </div>
               )}
-              {(error || generationError) && (
+              {error && (
                 <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                  {error || generationError}
+                  {error}
+                </div>
+              )}
+              {generationError && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  {generationError}
                 </div>
               )}
             </div>
@@ -1218,7 +1375,7 @@ export function EnnoScholarPlanChat({
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => navigator.clipboard?.writeText(draftMarkdown)}
+                  onClick={() => navigator.clipboard?.writeText(effectiveDraftMarkdown)}
                   title="Copier le document"
                 >
                   <Copy className="size-4" />
@@ -1247,7 +1404,10 @@ export function EnnoScholarPlanChat({
               </div>
             </header>
             <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto [overflow-wrap:anywhere]">
-              <DraftPreview markdown={draftMarkdown} />
+              <DraftPreview
+                markdown={effectiveDraftMarkdown}
+                projectId={projectId}
+              />
             </div>
           </aside>
         )}
@@ -1318,7 +1478,7 @@ export function EnnoScholarPlanChat({
               </span>
               <Badge variant="outline">{selectedArticles.length}</Badge>
             </Button>
-            {onBackToArticles && (
+            {onBackToArticles && !chatOnly && (
               <Button
                 variant="ghost"
                 className="mt-2 w-full justify-start rounded-xl"

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+from modules.LLM.usage_budget import budgeted_pipeline
 
 """
 services/ennoscholar_state_of_art_orchestrator.py
@@ -653,10 +654,20 @@ def _normalize_state_of_art_view(project: Any, phase5_payload: Dict[str, Any], m
 def read_latest_state_of_art(project: Any) -> Dict[str, Any]:
     paths = _phase_paths(project)
     payload = _read_json(paths["phase5_payload"], {})
-    markdown = _read_text(paths["phase5_markdown"])
+    guard = payload.get("guard") if isinstance(payload.get("guard"), dict) else {}
+    payload_valid = bool(payload) and bool(payload.get("ok", True)) and (
+        not guard
+        or bool(guard.get("passed", guard.get("ok", False)))
+        and not _as_list(guard.get("errors"))
+    )
+    markdown = (
+        _read_text(paths["phase5_markdown"])
+        if payload_valid
+        else ""
+    )
     view = _normalize_state_of_art_view(project, payload, markdown, paths)
     return {
-        "ok": bool(payload) and bool(markdown),
+        "ok": payload_valid and bool(markdown),
         "report": view,
         "state_of_art_view": view,
         "markdown": markdown,
@@ -695,7 +706,71 @@ def get_state_of_art_history(project: Any) -> Dict[str, Any]:
 # ============================================================
 
 
+def _phase5_consultant_failure(
+    payload: Dict[str, Any],
+    *,
+    previous_available: bool,
+) -> Dict[str, Any]:
+    """Traduit un arrêt technique en état conversationnel actionnable."""
+    status = str(payload.get("status") or "writing_not_published").strip()
+    if status in {
+        "writing_source_count_mismatch",
+        "writing_source_selection_incomplete",
+    }:
+        message = (
+            "La sélection exacte demandée contient des références qui ne sont "
+            "pas encore toutes disponibles sous forme de texte intégral et "
+            "d'Article Card. Je conserve le plan et les sources prêtes ; "
+            "complétez les sources manquantes ou demandez d'utiliser toutes "
+            "les sources actuellement validées."
+        )
+        next_action = "resolve_source_selection"
+    elif status == "insufficient_evidence":
+        message = (
+            "Le corpus ne contient pas encore assez de textes intégraux et "
+            "d'Article Cards exploitables pour produire une rédaction sourcée. "
+            "Les sources déjà prêtes sont conservées ; préparez les sources "
+            "signalées comme indisponibles puis relancez."
+        )
+        next_action = "prepare_missing_sources"
+    elif status in {
+        "consultant_plan_required",
+        "plan_not_approved",
+        "writing_not_authorized",
+    }:
+        message = (
+            "Le plan de référence doit être validé ou resynchronisé avec les "
+            "verrous actuels avant la rédaction. Confirmez le plan dans le chat, "
+            "puis relancez sans recommencer la recherche."
+        )
+        next_action = "validate_plan"
+    elif "verrou" in status or "contract" in status:
+        message = (
+            "Les verrous ou le plan ont changé depuis la dernière préparation. "
+            "Je conserve le corpus ; validez le plan resynchronisé avant de "
+            "relancer la rédaction."
+        )
+        next_action = "resynchronize_plan"
+    else:
+        message = (
+            "Je n'ai pas publié cette tentative, car certaines parties doivent "
+            "encore être mieux reliées aux publications validées. Votre corpus "
+            "et votre plan sont conservés ; vous pouvez poursuivre directement "
+            "dans le chat."
+        )
+        next_action = "review_evidence"
 
+    if previous_available:
+        message = "Je n'ai pas remplacé la version précédente. " + message
+    return {
+        "status": status,
+        "assistant_message": message,
+        "next_action": next_action,
+    }
+
+
+
+@budgeted_pipeline(run_type="ennoscholar_state_of_art")
 def generate_state_of_art_after_consultant_selection(
     db: Session,
     project: Any,
@@ -1076,11 +1151,14 @@ def generate_state_of_art_after_consultant_selection(
         raise RuntimeError(
             f"Phase 5 échouée : réponse invalide de type {type(phase5_result).__name__}"
         )
-    if not paths["phase5_payload"].exists():
+    if phase5_result.get("ok") and not paths["phase5_payload"].exists():
         raise RuntimeError(f"Phase 5 échouée : state_of_art_draft_payload.json introuvable : {paths['phase5_payload']}")
 
-    phase5_payload = _read_json(paths["phase5_payload"], phase5_result)
-    markdown = _read_text(paths["phase5_markdown"])
+    phase5_payload = (
+        phase5_result
+        if not phase5_result.get("ok")
+        else _read_json(paths["phase5_payload"], phase5_result)
+    )
     phase5_guard = phase5_payload.get("guard") if isinstance(phase5_payload.get("guard"), dict) else {}
     phase5_quality = phase5_payload.get("quality") if isinstance(phase5_payload.get("quality"), dict) else {}
     if (
@@ -1089,15 +1167,42 @@ def generate_state_of_art_after_consultant_selection(
         or not phase5_guard.get("passed")
         or phase5_guard.get("errors")
     ):
-        raise RuntimeError(
-            "Phase 5 bloquée par les garde-fous V11 : "
-            f"guard={json.dumps(phase5_guard, ensure_ascii=False)}"
+        # Le contrôle reste strict, mais son vocabulaire technique ne remonte
+        # jamais dans le chat consultant. La dernière version valide, si elle
+        # existe, reste inchangée et la tentative est conservée séparément pour
+        # diagnostic développeur.
+        print(
+            "[EnnoScholar][SOA][INTERNAL] Draft non publié "
+            f"status={phase5_payload.get('status') or phase5_result.get('status')} "
+            f"message={phase5_payload.get('message') or phase5_result.get('message') or ''} "
+            f"guard={json.dumps(phase5_guard, ensure_ascii=False)} "
+            f"rejected={phase5_payload.get('rejected_markdown_output_path') or ''}"
         )
-    if not phase5_quality.get("consultant_quality_ready"):
-        raise RuntimeError(
-            "Phase 5 scientifiquement valide mais rédaction non acceptée au niveau consultant : "
-            f"quality={json.dumps(phase5_quality, ensure_ascii=False)}"
+        previous = read_latest_state_of_art(project)
+        previous_available = bool(previous.get("ok"))
+        public_failure = _phase5_consultant_failure(
+            phase5_payload,
+            previous_available=previous_available,
         )
+        return {
+            "ok": False,
+            "status": public_failure["status"],
+            "assistant_message": public_failure["assistant_message"],
+            "next_action": public_failure["next_action"],
+            "previous_draft_preserved": previous_available,
+            "retryable": True,
+            "project": {
+                "id": project.id,
+                "organisme": project.organisme,
+                "project_name": project.project_name,
+                "year": project.year,
+            },
+        }
+    # Une profondeur ou un style perfectible reste une information éditoriale,
+    # pas une raison de masquer un document dont les affirmations et citations
+    # ont passé les contrôles scientifiques. Le consultant peut ensuite demander
+    # un approfondissement ciblé depuis le chat.
+    markdown = _read_text(paths["phase5_markdown"])
     if not markdown.strip():
         raise RuntimeError("Phase 5 échouée : state_of_art_draft.md est vide.")
     readonly_fingerprints_after = {

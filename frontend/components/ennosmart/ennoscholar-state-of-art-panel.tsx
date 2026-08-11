@@ -134,7 +134,7 @@ export function EnnoScholarStateOfArtPanel({ projectId }: { projectId: number })
                     <Checkbox
                       checked={article.consultant_status === "garde"}
                       disabled={loading}
-                      onCheckedChange={(checked) => updateArticle(article.id, checked ? "garde" : "en_attente")}
+                      onCheckedChange={(checked: boolean) => updateArticle(article.id, checked ? "garde" : "en_attente")}
                     />
                     <div className="flex-1">
                       <div className="flex gap-2 flex-wrap mb-1">
@@ -171,7 +171,7 @@ export function EnnoScholarStateOfArtPanel({ projectId }: { projectId: number })
           </div>
 
           {preview?.verrous?.length > 0 && (
-            <Accordion type="single" collapsible>
+            <Accordion>
               <AccordionItem value="readiness">
                 <AccordionTrigger>Contrôle avant rédaction</AccordionTrigger>
                 <AccordionContent className="space-y-2">
@@ -203,7 +203,7 @@ export function EnnoScholarStateOfArtPanel({ projectId }: { projectId: number })
                   <p className="text-sm font-semibold mb-2">V{i + 1} — {r.verrou_title}</p>
                   <div className="prose prose-sm max-w-none whitespace-pre-wrap">{soa.draft || "Aucun texte généré."}</div>
                   {soa.references?.length > 0 && (
-                    <Accordion type="single" collapsible className="mt-3">
+                    <Accordion className="mt-3">
                       <AccordionItem value="refs">
                         <AccordionTrigger>Références</AccordionTrigger>
                         <AccordionContent>

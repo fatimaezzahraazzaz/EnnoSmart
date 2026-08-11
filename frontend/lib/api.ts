@@ -6,6 +6,37 @@ const API_BASE_URL =
 const ACCESS_TOKEN_KEY = "ennosmart_access_token"
 const REFRESH_TOKEN_KEY = "ennosmart_refresh_token"
 let refreshPromise: Promise<string | null> | null = null
+const readCache = new Map<string, { expiresAt: number; value: unknown }>()
+const pendingReads = new Map<string, Promise<unknown>>()
+
+function clearReadCache(prefix?: string) {
+  if (!prefix) {
+    readCache.clear()
+    pendingReads.clear()
+    return
+  }
+  for (const key of readCache.keys()) {
+    if (key.startsWith(prefix)) readCache.delete(key)
+  }
+}
+
+async function cachedRead<T>(key: string, ttlMs: number, loader: () => Promise<T>): Promise<T> {
+  const cached = readCache.get(key)
+  if (cached && cached.expiresAt > Date.now()) return cached.value as T
+
+  const pending = pendingReads.get(key)
+  if (pending) return pending as Promise<T>
+
+  const request = loader()
+  pendingReads.set(key, request)
+  try {
+    const value = await request
+    readCache.set(key, { expiresAt: Date.now() + ttlMs, value })
+    return value
+  } finally {
+    pendingReads.delete(key)
+  }
+}
 
 export type UserRead = {
   id: number
@@ -27,6 +58,92 @@ export type LoginRequest = {
   password: string
 }
 
+export type RegisterRequest = {
+  full_name: string
+  email: string
+  password: string
+  company?: string
+  job_title?: string
+}
+
+export type UserPreferences = {
+  language: string
+  timezone: string
+  theme: "light" | "dark" | "system"
+  compact_sidebar: boolean
+  email_notifications: boolean
+  project_notifications: boolean
+  weekly_summary: boolean
+  updated_at?: string | null
+}
+
+export type AccountRead = {
+  user: UserRead
+  profile: {
+    job_title: string | null
+    company: string | null
+    phone: string | null
+    bio: string | null
+    avatar_url: string | null
+    updated_at?: string | null
+  }
+  preferences: UserPreferences
+}
+
+export type AdminOverview = {
+  users: { total: number; active: number; consultants: number; admins: number }
+  projects: { total: number; completed: number; unassigned: number; by_stage: Record<string, number> }
+  generated_at: string
+}
+
+export type AdminUser = {
+  id: number
+  full_name: string
+  email: string
+  role: "consultant" | "admin" | "superadmin"
+  is_active: boolean
+  created_at: string
+  company: string | null
+  job_title: string | null
+  project_count: number
+}
+
+export type AdminProject = {
+  id: number
+  organisme: string
+  project_name: string
+  year: string
+  domain_label: string | null
+  status: string
+  created_at: string
+  consultant: { id: number; full_name: string; email: string } | null
+  workflow: {
+    stage: string
+    progress_percent: number
+    priority: string
+    due_date: string | null
+    notes: string | null
+    updated_at: string | null
+  }
+  counts: { documents: number; diagnostics: number; scholar_runs: number }
+}
+
+export type AIModelSettings = {
+  provider: "openai" | "ollama" | "openrouter" | "gemini"
+  primary_model: string
+  writer_model: string | null
+  fallback_models: string[]
+  allow_cross_provider_fallback: boolean
+  default_temperature: number
+  max_output_tokens_cap: number
+  max_prompt_chars: number
+  writer_max_prompt_chars: number
+  monthly_budget_eur: number
+  enabled_agents: Record<string, boolean>
+  runtime_config?: string
+  applied?: boolean
+}
+
 export type ProjectRead = {
   id: number
   consultant_id: number
@@ -37,6 +154,37 @@ export type ProjectRead = {
   status: string
   ai_folder: string | null
   created_at: string
+}
+
+export type ProjectOverview = {
+  project: ProjectRead
+  documents: { count: number; latest_at: string | null }
+  diagnostic: {
+    available: boolean
+    latest_run: { id: number; status: string; created_at: string; completed_at: string | null } | null
+    verrous: {
+      count: number
+      pending: number
+      pertinent: number
+      moyen: number
+      average_score: number | null
+      latest_at: string | null
+    }
+  }
+  scholar: {
+    available: boolean
+    latest_run: { id: number; status: string; created_at: string; completed_at: string | null } | null
+    articles: {
+      count: number
+      pending: number
+      useful: number
+      direct: number
+      fondamental: number
+      connexe: number
+      hors_sujet: number
+      latest_at: string | null
+    }
+  }
 }
 
 export type DocumentRead = {
@@ -50,6 +198,10 @@ export type DocumentRead = {
   document_type: string | null
   upload_status: string
   created_at: string
+  original_filename?: string | null
+  storage_path?: string | null
+  mime_type?: string | null
+  size_bytes?: number | null
 }
 
 export type VerrouRead = {
@@ -91,11 +243,13 @@ function getRefreshToken() {
 }
 
 export function setTokens(tokens: TokenResponse) {
+  clearReadCache()
   localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token)
   localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token)
 }
 
 export function clearTokens() {
+  clearReadCache()
   localStorage.removeItem(ACCESS_TOKEN_KEY)
   localStorage.removeItem(REFRESH_TOKEN_KEY)
 }
@@ -242,12 +396,158 @@ export async function login(payload: LoginRequest) {
   return tokens
 }
 
+export async function register(payload: RegisterRequest) {
+  return apiRequest<UserRead>(
+    "/auth/register",
+    { method: "POST", body: JSON.stringify(payload) },
+    false,
+  )
+}
+
+export async function forgotPassword(email: string) {
+  return apiRequest<{
+    status: string
+    message: string
+    email_sent?: boolean
+    preview_token?: string
+    reset_url?: string
+  }>(
+    "/auth/forgot-password",
+    { method: "POST", body: JSON.stringify({ email }) },
+    false,
+  )
+}
+
+export async function resetPassword(token: string, password: string) {
+  return apiRequest<{ status: string; message: string }>(
+    "/auth/reset-password",
+    { method: "POST", body: JSON.stringify({ token, password }) },
+    false,
+  )
+}
+
 export async function getMe() {
   return apiRequest<UserRead>("/auth/me")
 }
 
+export async function getAccount() {
+  return apiRequest<AccountRead>("/auth/me/account")
+}
+
+export async function updateProfile(payload: Partial<AccountRead["profile"]> & {
+  full_name?: string
+  email?: string
+}) {
+  return apiRequest<AccountRead>("/auth/me/profile", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updatePreferences(payload: UserPreferences) {
+  return apiRequest<AccountRead>("/auth/me/preferences", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function changePassword(currentPassword: string, newPassword: string) {
+  return apiRequest<{ status: string; message: string }>("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  })
+}
+
+export async function getAdminOverview() {
+  return apiRequest<AdminOverview>("/admin/overview")
+}
+
+export async function getAdminUsers() {
+  return apiRequest<AdminUser[]>("/admin/users")
+}
+
+export async function createAdminUser(payload: {
+  full_name: string
+  email: string
+  password: string
+  role: "consultant" | "admin" | "superadmin"
+  company?: string
+  job_title?: string
+}) {
+  return apiRequest<AdminUser>("/admin/users", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateAdminUser(
+  userId: number,
+  payload: { full_name?: string; role?: AdminUser["role"]; is_active?: boolean },
+) {
+  return apiRequest<AdminUser>(`/admin/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function getAdminProjects() {
+  return apiRequest<AdminProject[]>("/admin/projects")
+}
+
+export async function assignAdminProject(projectId: number, consultantId: number) {
+  return apiRequest<AdminProject>(`/admin/projects/${projectId}/assignment`, {
+    method: "PATCH",
+    body: JSON.stringify({ consultant_id: consultantId }),
+  })
+}
+
+export async function updateAdminProjectWorkflow(
+  projectId: number,
+  payload: {
+    stage: string
+    progress_percent: number
+    priority: string
+    due_date?: string | null
+    notes?: string | null
+  },
+) {
+  return apiRequest<AdminProject>(`/admin/projects/${projectId}/workflow`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function getAISettings() {
+  return apiRequest<AIModelSettings>("/admin/ai-settings")
+}
+
+export async function updateAISettings(payload: AIModelSettings) {
+  return apiRequest<AIModelSettings>("/admin/ai-settings", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function getAdminAuditLog() {
+  return apiRequest<Array<{
+    id: number
+    actor_user_id: number | null
+    action: string
+    entity_type: string
+    entity_id: string | null
+    metadata: Record<string, unknown> | null
+    created_at: string
+  }>>("/admin/audit-log")
+}
+
 export async function getProjects() {
-  return apiRequest<ProjectRead[]>("/projects")
+  return cachedRead("projects", 10_000, () => apiRequest<ProjectRead[]>("/projects"))
+}
+
+export async function getProjectOverviews() {
+  return cachedRead("project-overviews", 10_000, () =>
+    apiRequest<ProjectOverview[]>("/projects/overview"),
+  )
 }
 
 export async function getProject(projectId: number) {
@@ -260,14 +560,18 @@ export async function createProject(payload: {
   year: string
   domain_label?: string
 }) {
-  return apiRequest<ProjectRead>("/projects", {
+  const project = await apiRequest<ProjectRead>("/projects", {
     method: "POST",
     body: JSON.stringify(payload),
   })
+  clearReadCache("project")
+  return project
 }
 
 export async function getDocuments(projectId: number) {
-  return apiRequest<DocumentRead[]>(`/projects/${projectId}/documents`)
+  return cachedRead(`documents:${projectId}`, 10_000, () =>
+    apiRequest<DocumentRead[]>(`/projects/${projectId}/documents`),
+  )
 }
 
 export async function uploadDocument(
@@ -282,22 +586,28 @@ export async function uploadDocument(
     ? `?document_type=${encodeURIComponent(documentType)}`
     : ""
 
-  return apiRequest<DocumentRead>(
+  const document = await apiRequest<DocumentRead>(
     `/projects/${projectId}/documents/upload${query}`,
     {
       method: "POST",
       body: formData,
     }
   )
+  clearReadCache(`documents:${projectId}`)
+  clearReadCache("project-overviews")
+  return document
 }
 
 export async function importExistingDocuments(projectId: number) {
-  return apiRequest<DocumentRead[]>(
+  const documents = await apiRequest<DocumentRead[]>(
     `/projects/${projectId}/documents/import-existing`,
     {
       method: "POST",
     }
   )
+  clearReadCache(`documents:${projectId}`)
+  clearReadCache("project-overviews")
+  return documents
 }
 
 export async function getVerrous(projectId: number) {
@@ -309,17 +619,20 @@ export async function updateVerrouDecision(
   verrouId: number,
   consultant_status: "garde" | "rejete" | "reformuler" | "en_attente"
 ) {
-  return apiRequest<VerrouRead>(
+  const verrou = await apiRequest<VerrouRead>(
     `/projects/${projectId}/verrous/${verrouId}/decision`,
     {
       method: "PATCH",
       body: JSON.stringify({ consultant_status }),
     }
   )
+  clearReadCache("project-overviews")
+  return verrou
 }
 
-export async function getArticles(projectId: number) {
-  return apiRequest<ArticleRead[]>(`/projects/${projectId}/articles`)
+export async function getArticles(projectId: number, compact = false) {
+  const query = compact ? "?compact=true" : ""
+  return apiRequest<ArticleRead[]>(`/projects/${projectId}/articles${query}`)
 }
 
 export async function updateArticleDecision(
@@ -327,13 +640,15 @@ export async function updateArticleDecision(
   articleId: number,
   consultant_status: "garde" | "rejete" | "en_attente"
 ) {
-  return apiRequest<ArticleRead>(
+  const article = await apiRequest<ArticleRead>(
     `/projects/${projectId}/articles/${articleId}/decision`,
     {
       method: "PATCH",
       body: JSON.stringify({ consultant_status }),
     }
   )
+  clearReadCache("project-overviews")
+  return article
 }
 
 /**
@@ -354,8 +669,9 @@ export async function translateArticleAbstract(
   )
 }
 
-export async function getDiagnosticLatest(projectId: number) {
-  return apiRequest<any>(`/projects/${projectId}/diagnostic/latest`)
+export async function getDiagnosticLatest(projectId: number, compact = true) {
+  const query = compact ? "?compact=true" : ""
+  return apiRequest<any>(`/projects/${projectId}/diagnostic/latest${query}`)
 }
 
 export async function compareCurrentWithPreviousCir(projectId: number) {
@@ -369,28 +685,35 @@ export async function getPreviousCirComparisonLatest(projectId: number) {
 }
 
 export async function importExistingDiagnostic(projectId: number) {
-  return apiRequest<any>(`/projects/${projectId}/diagnostic/import-existing`, {
+  const result = await apiRequest<any>(`/projects/${projectId}/diagnostic/import-existing`, {
     method: "POST",
   })
+  clearReadCache("project-overviews")
+  return result
 }
 
 export async function runDiagnostic(projectId: number) {
-  return apiRequest<any>(`/projects/${projectId}/diagnostic/run`, {
+  const result = await apiRequest<any>(`/projects/${projectId}/diagnostic/run`, {
     method: "POST",
   })
+  clearReadCache("project-overviews")
+  return result
 }
 
 export async function syncVerrous(projectId: number, runId: number) {
-  return apiRequest<any>(
+  const result = await apiRequest<any>(
     `/projects/${projectId}/diagnostic/${runId}/sync-verrous`,
     {
       method: "POST",
     }
   )
+  clearReadCache("project-overviews")
+  return result
 }
 
-export async function getScholarLatest(projectId: number) {
-  return apiRequest<any>(`/projects/${projectId}/scholar/latest`)
+export async function getScholarLatest(projectId: number, compact = true) {
+  const query = compact ? "?compact=true" : ""
+  return apiRequest<any>(`/projects/${projectId}/scholar/latest${query}`)
 }
 
 
@@ -514,6 +837,7 @@ export type StateOfArtGenerationOptions = {
   enablePolish?: boolean | null
   enableNormalization?: boolean | null
   fastMode?: boolean
+  guidedSessionId?: string | null
 }
 
 function buildStateOfArtQuery(options: StateOfArtGenerationOptions = {}) {
@@ -524,6 +848,7 @@ function buildStateOfArtQuery(options: StateOfArtGenerationOptions = {}) {
   if (options.enablePolish !== undefined && options.enablePolish !== null) params.set("enable_polish", options.enablePolish ? "true" : "false")
   if (options.enableNormalization !== undefined && options.enableNormalization !== null) params.set("enable_normalization", options.enableNormalization ? "true" : "false")
   if (options.fastMode !== undefined) params.set("fast_mode", options.fastMode ? "true" : "false")
+  if (options.guidedSessionId) params.set("guided_session_id", options.guidedSessionId)
 
   const qs = params.toString()
   return qs ? `?${qs}` : ""
@@ -535,6 +860,15 @@ export async function getLatestStateOfArt(projectId: number): Promise<StateOfArt
 
 export async function getStateOfArtHistory(projectId: number) {
   return apiRequest<any>(`/projects/${projectId}/scholar/state-of-art/history`)
+}
+
+export async function getStateOfArtVisualBlob(
+  projectId: number,
+  visualId: string,
+) {
+  return apiBlobRequest(
+    `/projects/${projectId}/scholar/state-of-art/visuals/${encodeURIComponent(visualId)}`,
+  )
 }
 
 /**
@@ -658,9 +992,11 @@ export async function recoverScholarSelectedFulltextLegally(
 }
 
 export async function importExistingScholar(projectId: number) {
-  return apiRequest<any>(`/projects/${projectId}/scholar/import-existing`, {
+  const result = await apiRequest<any>(`/projects/${projectId}/scholar/import-existing`, {
     method: "POST",
   })
+  clearReadCache("project-overviews")
+  return result
 }
 
 export function logout() {
@@ -692,9 +1028,11 @@ export async function uploadAndExtractArticlePdf(
 export async function uploadNewScholarSource(
   projectId: number,
   file: File,
+  guidedSessionId?: string | null,
 ) {
   const formData = new FormData()
   formData.append("file", file)
+  if (guidedSessionId) formData.append("guided_session_id", guidedSessionId)
   return apiRequest<{
     ok: boolean
     article: ArticleRead
@@ -964,6 +1302,220 @@ export async function sendGuidedResearchMessage(
     {
       method: "POST",
       body: JSON.stringify({ message }),
+    },
+  )
+}
+
+// ============================================================
+// EnnoAmelioration — conversations et versions contrôlées
+// ============================================================
+export type ImprovementMessage = {
+  message_id: string
+  role: "consultant" | "assistant" | string
+  content: string
+  intent?: string | null
+  metadata?: Record<string, any>
+  created_at?: string | null
+}
+
+export type ImprovementSection = {
+  section_id: string
+  title: string
+  level: number
+  start: number
+  end: number
+  content: string
+}
+
+export type ImprovementVersion = {
+  version_id: string
+  version_number: number
+  status: "original" | "candidate" | "accepted" | "rejected" | "superseded" | string
+  content: string
+  parent_version_id?: string | null
+  instruction?: string | null
+  diff?: {
+    unified?: string
+    changes?: Array<{ operation: string; before: string; after: string }>
+    similarity?: number
+    before_chars?: number
+    after_chars?: number
+  }
+  audit?: { findings?: Array<Record<string, any>> }
+  evidence?: Record<string, any>
+  generation?: Record<string, any>
+  created_at?: string | null
+  decided_at?: string | null
+  is_active?: boolean
+}
+
+export type ImprovementProjectContext = {
+  project: {
+    id: number
+    organisme: string
+    project_name: string
+    year: string
+    domain_label?: string | null
+    status: string
+  }
+  documents: { available: boolean; count: number }
+  diagnostic: { available: boolean; latest_run_id?: number | null; status?: string | null }
+  scholar: {
+    available: boolean
+    latest_run_id?: number | null
+    status?: string | null
+    accepted_article_count: number
+  }
+  cir_memory: {
+    available: boolean
+    source_memory_available: boolean
+    policy: string
+  }
+  last_improvement?: {
+    session_id: string
+    title: string
+    state: string
+    updated_at?: string | null
+  } | null
+}
+
+export type ImprovementSession = {
+  session_id: string
+  project_id: number
+  title: string
+  state: string
+  target_scope: string
+  target_section_id?: string | null
+  target_section_title?: string | null
+  source_document_id?: number | null
+  active_version_id?: string | null
+  active_version_number?: number | null
+  candidate_count: number
+  message_count: number
+  preview?: string
+  context?: { sections?: ImprovementSection[]; [key: string]: any }
+  messages?: ImprovementMessage[]
+  versions?: ImprovementVersion[]
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export async function getImprovementProjectContext(projectId: number) {
+  return apiRequest<{ ok: boolean; context: ImprovementProjectContext }>(
+    `/api/projects/${projectId}/improvements/context`,
+  )
+}
+
+export async function listImprovementSessions(projectId: number) {
+  return apiRequest<{ ok: boolean; sessions: ImprovementSession[] }>(
+    `/api/projects/${projectId}/improvements/sessions`,
+  )
+}
+
+export async function createImprovementSession(
+  projectId: number,
+  payload: {
+    title?: string
+    source_text?: string
+    source_document_id?: number
+    target_scope?: "selection" | "paragraph" | "section" | "multi_section" | "full_document"
+    target_section_id?: string
+    target_section_title?: string
+  },
+) {
+  return apiRequest<{ ok: boolean; session: ImprovementSession }>(
+    `/api/projects/${projectId}/improvements/sessions`,
+    { method: "POST", body: JSON.stringify(payload) },
+  )
+}
+
+export async function getImprovementSession(projectId: number, sessionId: string) {
+  return apiRequest<{ ok: boolean; session: ImprovementSession }>(
+    `/api/projects/${projectId}/improvements/sessions/${encodeURIComponent(sessionId)}`,
+  )
+}
+
+export async function getImprovementSourceDocument(
+  projectId: number,
+  documentId: number,
+) {
+  const token = getAccessToken()
+  const response = await fetch(
+    `${API_BASE_URL}/projects/${projectId}/source-documents/${documentId}/open`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  )
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "")
+    throw new Error(detail || `Impossible d'ouvrir le document source (HTTP ${response.status}).`)
+  }
+  return response.blob()
+}
+
+export async function deleteImprovementSession(projectId: number, sessionId: string) {
+  return apiRequest<{ ok: boolean; session_id: string }>(
+    `/api/projects/${projectId}/improvements/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "DELETE" },
+  )
+}
+
+export async function sendImprovementMessage(
+  projectId: number,
+  sessionId: string,
+  payload: {
+    message: string
+    selected_text?: string
+    target_scope?: "selection" | "paragraph" | "section" | "multi_section" | "full_document"
+    target_section_id?: string
+    target_section_title?: string
+  },
+) {
+  return apiRequest<{
+    ok: boolean
+    session: ImprovementSession
+    candidate_version_id?: string | null
+  }>(
+    `/api/projects/${projectId}/improvements/sessions/${encodeURIComponent(sessionId)}/messages`,
+    { method: "POST", body: JSON.stringify(payload) },
+  )
+}
+
+export async function decideImprovementVersion(
+  projectId: number,
+  sessionId: string,
+  versionId: string,
+  decision: "accepted" | "rejected",
+  reason = "",
+) {
+  return apiRequest<{ ok: boolean; session: ImprovementSession }>(
+    `/api/projects/${projectId}/improvements/sessions/${encodeURIComponent(sessionId)}/versions/${encodeURIComponent(versionId)}/decision`,
+    { method: "POST", body: JSON.stringify({ decision, reason }) },
+  )
+}
+
+export async function restoreImprovementVersion(
+  projectId: number,
+  sessionId: string,
+  versionId: string,
+  reason = "",
+) {
+  return apiRequest<{ ok: boolean; session: ImprovementSession }>(
+    `/api/projects/${projectId}/improvements/sessions/${encodeURIComponent(sessionId)}/versions/${encodeURIComponent(versionId)}/restore`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  )
+}
+
+export async function decideImprovementSources(
+  projectId: number,
+  sessionId: string,
+  candidateIds: string[],
+  decision: "accepted" | "rejected",
+  reason = "",
+) {
+  return apiRequest<{ ok: boolean; session: ImprovementSession }>(
+    `/api/projects/${projectId}/improvements/sessions/${encodeURIComponent(sessionId)}/sources/decision`,
+    {
+      method: "POST",
+      body: JSON.stringify({ candidate_ids: candidateIds, decision, reason }),
     },
   )
 }

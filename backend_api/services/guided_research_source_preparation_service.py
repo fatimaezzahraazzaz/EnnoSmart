@@ -209,6 +209,59 @@ def _find_existing_article(
     return None
 
 
+def _get_or_create_improvement_scholar_run(
+    db: Session,
+    project: Project,
+    corpus_scope_id: str,
+    guided_session_id: str | None,
+) -> ScholarRun:
+    """Crée un stockage scientifique privé à une conversation d'amélioration."""
+
+    scope_id = _clean(corpus_scope_id, 120)
+    rows = (
+        db.query(ScholarRun)
+        .filter(ScholarRun.project_id == project.id)
+        .filter(ScholarRun.status == "improvement_corpus")
+        .order_by(ScholarRun.created_at.desc(), ScholarRun.id.desc())
+        .all()
+    )
+    for row in rows:
+        raw = dict(row.raw_result_json or {})
+        if _clean(raw.get("corpus_scope_id"), 120) == scope_id:
+            guided_id = _clean(guided_session_id, 120)
+            guided_ids = [
+                _clean(value, 120)
+                for value in (raw.get("guided_session_ids") or [])
+                if _clean(value, 120)
+            ]
+            if guided_id and guided_id not in guided_ids:
+                raw["guided_session_ids"] = [*guided_ids, guided_id]
+                raw["updated_at"] = _utc_now()
+                row.raw_result_json = raw
+                db.add(row)
+                db.commit()
+                db.refresh(row)
+            return row
+
+    row = ScholarRun(
+        project_id=project.id,
+        status="improvement_corpus",
+        raw_result_json={
+            "mode": "ennoamelioration_conversation",
+            "corpus_scope_id": scope_id,
+            "guided_session_ids": [
+                _clean(guided_session_id, 120)
+            ] if guided_session_id else [],
+            "created_at": _utc_now(),
+            "isolation_policy": "one_improvement_conversation_one_corpus",
+        },
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 def _upsert_selected_article(
     db: Session,
     project: Project,
@@ -370,13 +423,90 @@ def prepare_accepted_guided_sources(
     sources: list[dict[str, Any]],
     candidate_ids: Iterable[str],
     rebuild_scientific_payloads: bool = True,
+    standalone_context: dict[str, Any] | None = None,
+    guided_session_id: str | None = None,
+    entry_module: str | None = None,
+    corpus_scope_id: str | None = None,
 ) -> dict[str, Any]:
     """Prépare uniquement les candidats visés par la décision courante."""
     wanted = {_clean(value) for value in candidate_ids if _clean(value)}
     updated_sources = deepcopy(sources)
-    scholar_run = get_current_scholar_run(db, project)
+    improvement_scope = _clean(corpus_scope_id, 120)
+    if _norm(entry_module) == "ennoamel" and improvement_scope:
+        scholar_run = _get_or_create_improvement_scholar_run(
+            db,
+            project,
+            improvement_scope,
+            guided_session_id,
+        )
+    else:
+        scholar_run = get_current_scholar_run(db, project)
     reports: list[dict[str, Any]] = []
     ready_article_ids: list[int] = []
+
+    operating_mode = _clean(
+        (standalone_context or {}).get("operating_mode"), 80
+    )
+    created_standalone_run = False
+    if scholar_run is None and operating_mode == "standalone_chat":
+        scholar_run = ScholarRun(
+            project_id=project.id,
+            status="guided_research_standalone",
+            raw_result_json={
+                "mode": "standalone_chat",
+                "guided_session_id": _clean(guided_session_id, 100),
+                "project_brief": dict(
+                    (standalone_context or {}).get(
+                        "standalone_project_brief"
+                    )
+                    or {}
+                ),
+                "consultant_verrous": list(
+                    (standalone_context or {}).get("consultant_verrous")
+                    or []
+                ),
+                "created_by": "ennoscholar_guided_research",
+            },
+        )
+        db.add(scholar_run)
+        db.commit()
+        db.refresh(scholar_run)
+        created_standalone_run = True
+
+    # La conversation autonome reste la source canonique du contexte mÃªme si
+    # le ScholarRun a Ã©tÃ© crÃ©Ã© lors d'une recherche prÃ©cÃ©dente. Sans cette
+    # synchronisation, les Phases 4â†’5 voyaient un verrou ancien ou vide.
+    if scholar_run is not None and operating_mode == "standalone_chat":
+        raw_result = (
+            dict(scholar_run.raw_result_json)
+            if isinstance(scholar_run.raw_result_json, dict)
+            else {}
+        )
+        raw_result.update(
+            {
+                "mode": "standalone_chat",
+                "guided_session_id": _clean(guided_session_id, 100),
+                "project_brief": dict(
+                    (standalone_context or {}).get("standalone_project_brief")
+                    or {}
+                ),
+                "consultant_verrous": list(
+                    (standalone_context or {}).get("consultant_verrous") or []
+                ),
+                "active_verrou_ids": list(
+                    (standalone_context or {}).get("active_verrou_ids") or []
+                ),
+                "review_scope": _clean(
+                    (standalone_context or {}).get("review_scope"), 40
+                ),
+                "updated_by": "ennoscholar_guided_research",
+            }
+        )
+        scholar_run.raw_result_json = raw_result
+        if not created_standalone_run:
+            db.add(scholar_run)
+        db.commit()
+        db.refresh(scholar_run)
 
     if scholar_run is None:
         return {
@@ -480,39 +610,132 @@ def prepare_accepted_guided_sources(
     article_cards_payload: dict[str, Any] | None = None
     rebuild_errors: list[dict[str, str]] = []
     if rebuild_scientific_payloads and reports:
-        try:
-            selection_payload = build_state_of_art_selection_payload(db, project)
-        except Exception as exc:
-            rebuild_errors.append(
-                {"stage": "selection_payload", "error": str(exc)}
-            )
+        if improvement_scope:
+            selection_payload = {
+                "ok": True,
+                "scope_id": improvement_scope,
+                "policy": "conversation_scoped_no_global_selection_mutation",
+            }
+        else:
+            try:
+                selection_payload = build_state_of_art_selection_payload(db, project)
+            except Exception as exc:
+                rebuild_errors.append(
+                    {"stage": "selection_payload", "error": str(exc)}
+                )
         try:
             article_cards_payload = build_article_cards_for_selected_articles(
                 db,
                 project,
                 mode="auto",
                 force=False,
+                scholar_run_id=(int(scholar_run.id) if improvement_scope else None),
+                scope_id=improvement_scope or None,
             )
         except Exception as exc:
             rebuild_errors.append(
                 {"stage": "article_cards", "error": str(exc)}
             )
 
+    cards_by_article_id: dict[int, dict[str, Any]] = {}
+    if isinstance(article_cards_payload, dict):
+        for card in article_cards_payload.get("cards") or []:
+            if not isinstance(card, dict):
+                continue
+            try:
+                card_article_id = int(card.get("article_id"))
+            except (TypeError, ValueError):
+                continue
+            cards_by_article_id[card_article_id] = card
+
+    for report in reports:
+        if "ready_for_writing" not in report:
+            continue
+        fulltext_ready = bool(report.get("ready_for_writing"))
+        try:
+            report_article_id = int(report.get("article_id"))
+        except (TypeError, ValueError):
+            report_article_id = 0
+        card = cards_by_article_id.get(report_article_id)
+        quality = (
+            dict(card.get("quality_guard") or {})
+            if isinstance(card, dict)
+            else {}
+        )
+        quality_status = _norm(quality.get("status"))
+        card_ready = bool(
+            card
+            and quality_status in {"valid", "valid with warnings"}
+        )
+        report["fulltext_ready"] = fulltext_ready
+        report["selection_payload_ready"] = bool(
+            isinstance(selection_payload, dict)
+            and selection_payload.get("ok", True)
+        )
+        report["article_card_ready"] = card_ready
+        report["article_card"] = {
+            "citation_label": card.get("citation_label") if card else None,
+            "quality_status": quality.get("status"),
+            "guided_candidate_id": (
+                card.get("guided_candidate_id") if card else None
+            ),
+        }
+        report["ready_for_writing"] = bool(fulltext_ready and card_ready)
+        if fulltext_ready and not card_ready:
+            report["status"] = "article_card_unavailable"
+
+    reports_by_candidate_id = {
+        _clean(report.get("candidate_id")): report
+        for report in reports
+        if _clean(report.get("candidate_id"))
+    }
+    for source in updated_sources:
+        report = reports_by_candidate_id.get(_clean(source.get("candidate_id")))
+        if report is None:
+            continue
+        preparation_state = dict(source.get("fulltext_preparation") or {})
+        preparation_state.update(
+            {
+                "article_card_ready": bool(report.get("article_card_ready")),
+                "ready_for_writing": bool(report.get("ready_for_writing")),
+            }
+        )
+        source["fulltext_preparation"] = preparation_state
+        source["scientific_evidence_eligible"] = bool(
+            report.get("ready_for_writing")
+        )
+
+    writing_ready_article_ids = [
+        int(report["article_id"])
+        for report in reports
+        if report.get("ready_for_writing") is True
+        and report.get("article_id") is not None
+    ]
+    all_ready = all(
+        report.get("ready_for_writing", True)
+        for report in reports
+    )
+
     return {
-        "ok": all(
-            report.get("ready_for_writing", True)
-            for report in reports
-        ),
+        "ok": all_ready,
         "status": (
             "all_scientific_sources_ready"
-            if all(report.get("ready_for_writing", True) for report in reports)
+            if all_ready
             else "some_scientific_sources_unavailable"
         ),
         "sources": updated_sources,
         "reports": reports,
         "ready_article_ids": ready_article_ids,
+        "fulltext_ready_article_ids": ready_article_ids,
+        "writing_ready_article_ids": writing_ready_article_ids,
         "mcp_calls_count": sum(
             1 for report in reports if report.get("mcp_called") is True
+        ),
+        "mcp_success_count": sum(
+            1
+            for report in reports
+            if report.get("mcp_called") is True
+            and report.get("fulltext_ready") is True
         ),
         "selection_payload_path": (
             selection_payload.get("payload_path")
@@ -525,9 +748,7 @@ def prepare_accepted_guided_sources(
             else None
         ),
         "writing_ready_cards_count": (
-            article_cards_payload.get("writing_ready_cards_count")
-            if isinstance(article_cards_payload, dict)
-            else None
+            len(writing_ready_article_ids)
         ),
         "rebuild_errors": rebuild_errors,
         "prepared_at": _utc_now(),

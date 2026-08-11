@@ -14,11 +14,12 @@ Version corrigée :
 from pathlib import Path
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
-from core.deps import get_current_user, get_db
+from core.config import settings
+from core.deps import get_current_user, get_db, require_agent_enabled, require_superadmin
 from db.models import Article, Project, ScholarRun, User
 from services.project_service import get_project_for_user
 from services.cir_memory_service import (
@@ -34,9 +35,21 @@ from services.cir_memory_service import (
     search_organism_memory,
     slugify,
 )
+from services.experience_memory_v2_service import (
+    build_uploaded_cir,
+    create_library_slot,
+    get_memory_v2_catalog,
+    process_existing_cir,
+    project_cards,
+    rebuild_memory_v2,
+    remove_memory_v2_project,
+    save_upload_to_temp,
+    search_memory_v2,
+)
+from services.sharepoint_audit_service import mark_matching_items_memory_removed
 
 
-router = APIRouter(tags=["cir-memory"])
+router = APIRouter(tags=["cir-memory"], dependencies=[Depends(require_agent_enabled("cir_memory"))])
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +136,9 @@ def _filter_owner_if_exists(q: Any, current_user: User) -> Any:
     Applique le filtre utilisateur si une colonne propriétaire existe.
     Ton modèle Project a consultant_id d'après le traceback.
     """
+    if current_user.role in {"admin", "superadmin"}:
+        return q
+
     if hasattr(Project, "consultant_id"):
         return q.filter(Project.consultant_id == current_user.id)
 
@@ -680,3 +696,164 @@ def rag_search_memory(
         source_types=source_types,
         top_k=top_k,
     )
+
+
+# ---------------------------------------------------------------------------
+# Memory V2 — vraie base vectorielle CIR partagée par les agents
+# ---------------------------------------------------------------------------
+
+@router.get("/cir-memory/v2/catalog")
+def memory_v2_catalog(
+    current_user: User = Depends(require_superadmin),
+):
+    """Catalogue indépendant des projets opérationnels PostgreSQL."""
+    return get_memory_v2_catalog()
+
+
+@router.post("/cir-memory/v2/library")
+def memory_v2_create_library_slot(
+    payload: Dict[str, Any] = Body(default={}),
+    current_user: User = Depends(require_superadmin),
+):
+    try:
+        return create_library_slot(
+            payload.get("organisme") or payload.get("enterprise"),
+            payload.get("project") or payload.get("project_name"),
+            payload.get("year"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/cir-memory/v2/upload")
+async def memory_v2_upload_and_index(
+    file: UploadFile = File(...),
+    organisme: str = Form(...),
+    project: str = Form(...),
+    year: str = Form(...),
+    vision_mode: str = Form("text_only"),
+    formula_mode: str = Form("off"),
+    current_user: User = Depends(require_superadmin),
+):
+    """CIR final → extraction → NLP → cartes → Chroma V2 global."""
+    content = await file.read()
+    max_bytes = int(settings.MAX_UPLOAD_SIZE_MB) * 1024 * 1024
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Fichier trop volumineux. Limite : {settings.MAX_UPLOAD_SIZE_MB} Mo.",
+        )
+    temp_path: Path | None = None
+    try:
+        temp_path = save_upload_to_temp(file.filename or "cir_final.pdf", content)
+        return build_uploaded_cir(
+            temp_path,
+            organisme=organisme,
+            project=project,
+            year=year,
+            vision_mode=vision_mode,
+            formula_mode=formula_mode,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Indexation Memory V2 impossible : {exc}") from exc
+    finally:
+        if temp_path and temp_path.is_file():
+            try:
+                temp_path.unlink()
+                temp_path.parent.rmdir()
+            except OSError:
+                pass
+
+
+@router.post("/cir-memory/v2/process-existing")
+def memory_v2_process_existing(
+    payload: Dict[str, Any] = Body(default={}),
+    current_user: User = Depends(require_superadmin),
+):
+    """Indexe un CIR final déjà présent dans ``storage/organismes``."""
+    try:
+        return process_existing_cir(
+            payload.get("organisme"),
+            payload.get("project") or payload.get("project_name"),
+            payload.get("year"),
+            payload.get("file_name") or "",
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Indexation Memory V2 impossible : {exc}") from exc
+
+
+@router.post("/cir-memory/v2/rebuild")
+def memory_v2_rebuild(
+    current_user: User = Depends(require_superadmin),
+):
+    """Reconstruit catalogue, graphe et collections Chroma sans supprimer les sources."""
+    try:
+        return rebuild_memory_v2()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Reconstruction Memory V2 impossible : {exc}") from exc
+
+
+@router.post("/cir-memory/v2/projects/remove")
+def memory_v2_remove_project(
+    payload: Dict[str, Any] = Body(default={}),
+    current_user: User = Depends(require_superadmin),
+):
+    """Retire le projet de toute la mémoire locale, jamais de la source d'import."""
+    try:
+        result = remove_memory_v2_project(
+            payload.get("organisme"),
+            payload.get("project") or payload.get("project_name"),
+            payload.get("year"),
+            confirmation=payload.get("confirmation"),
+        )
+        try:
+            result["import_audit"] = mark_matching_items_memory_removed(
+                result["organisme"], result["project"], result["year"]
+            )
+        except Exception as audit_exc:
+            # La mémoire est déjà supprimée avec succès. Une erreur de mise à
+            # jour d'un ancien journal d'import ne doit pas transformer ce
+            # succès en faux échec HTTP.
+            result["import_audit"] = {"ok": False, "warning": str(audit_exc), "source_modified": False}
+        return result
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Suppression Memory V2 impossible : {exc}") from exc
+
+
+@router.post("/cir-memory/v2/search")
+def memory_v2_search(
+    payload: Dict[str, Any] = Body(default={}),
+    current_user: User = Depends(require_superadmin),
+):
+    try:
+        return search_memory_v2(
+            payload.get("query"),
+            organisme=payload.get("organisme") or "",
+            role=payload.get("role") or "",
+            top_k=int(payload.get("top_k") or 8),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Recherche vectorielle indisponible : {exc}") from exc
+
+
+@router.get("/cir-memory/v2/cards")
+def memory_v2_project_cards(
+    organisme: str = Query(...),
+    project: str = Query(...),
+    year: str = Query(...),
+    limit: int = Query(40, ge=1, le=200),
+    current_user: User = Depends(require_superadmin),
+):
+    return project_cards(organisme, project, year, limit=limit)

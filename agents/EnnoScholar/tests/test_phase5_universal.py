@@ -213,6 +213,8 @@ class Phase5UniversalTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["status"], "insufficient_evidence")
         self.assertFalse((self.root / "blocked.md").exists())
+        self.assertFalse((self.root / "blocked.json").exists())
+        self.assertTrue((self.root / "blocked_rejected.json").exists())
 
     def test_legacy_phase47_target_verrous_are_accepted_without_rewriting_story(self) -> None:
         legacy_phase47 = write(

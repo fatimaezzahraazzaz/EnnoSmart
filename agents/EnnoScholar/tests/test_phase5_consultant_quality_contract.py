@@ -1,14 +1,24 @@
 from __future__ import annotations
 
+import json
+
+from agents.EnnoScholar.state_of_art import (
+    phase_5_state_of_art_writer_service as phase5,
+)
 from agents.EnnoScholar.state_of_art.phase_5_state_of_art_writer_service import (
+    _build_section_llm_prompt,
+    _build_targeted_section_repair_prompt,
     _evidence_sentence,
     _build_missing_citation_repair_prompt,
+    _non_french_raw_fragments,
+    _publication_guard_for_new_llm,
     _repair_uncited_taxonomy_claims,
     _semantic_claim_audit,
     _validate_generated_section,
     build_unified_blueprint,
     citations_from_text,
     extract_evidence_units,
+    validate_draft,
 )
 
 
@@ -370,6 +380,219 @@ def test_generated_section_rejects_raw_page_counter_fragment() -> None:
     assert report["raw_extraction_fragments"]
 
 
+def test_raw_english_article_excerpt_is_detected_but_french_is_not() -> None:
+    english = (
+        "In this part, we demonstrate the application of the proposed method "
+        "and this paper presents the results obtained with our approach."
+    )
+    french = (
+        "Cette section analyse la méthode proposée et présente les résultats "
+        "obtenus dans les conditions expérimentales documentées."
+    )
+
+    assert _non_french_raw_fragments(english)
+    assert _non_french_raw_fragments(french) == []
+
+
+def test_publication_guard_keeps_new_llm_semantic_advice_without_hiding_it() -> None:
+    report = _publication_guard_for_new_llm(
+        {
+            "ok": False,
+            "passed": False,
+            "errors": ["unsupported_or_misattributed_claims"],
+            "semantic_claims_ok": False,
+        }
+    )
+
+    assert report["ok"] is True
+    assert report["errors"] == []
+    assert report["strict_ok"] is False
+    assert report["advisory_errors"] == [
+        "unsupported_or_misattributed_claims"
+    ]
+    assert report["new_llm_draft_preserved"] is True
+
+
+def test_publication_guard_still_blocks_structural_or_unknown_citation_errors() -> None:
+    report = _publication_guard_for_new_llm(
+        {
+            "ok": False,
+            "passed": False,
+            "errors": [
+                "unknown_citations",
+                "unsupported_or_misattributed_claims",
+            ],
+        }
+    )
+
+    assert report["ok"] is False
+    assert report["errors"] == ["unknown_citations"]
+    assert report["advisory_errors"] == [
+        "unsupported_or_misattributed_claims"
+    ]
+
+
+def test_targeted_repair_prompt_is_smaller_than_full_writer_prompt() -> None:
+    section = {
+        "section_id": "limits",
+        "title": "Limites et gap scientifique",
+        "objective": "Nuancer les limites des méthodes.",
+        "available_citations": [f"A{i}" for i in range(1, 13)],
+        "required_citations": ["A1"],
+        "target_words": 650,
+        "verrous": [],
+    }
+    blueprint = {
+        "project": "Projet de test",
+        "sections": [section],
+        "project_context": {"objective": "Évaluer une méthode."},
+        "source_roles": {},
+    }
+    evidence = [
+        _unit(
+            f"A{citation}",
+            f"Method {citation} reports a documented protocol and result {row}.",
+            kind=("method", "protocol", "result", "limitation")[row % 4],
+        )
+        for citation in range(1, 13)
+        for row in range(10)
+    ]
+    draft = {
+        "section_id": "limits",
+        "title": "Limites et gap scientifique",
+        "content": "La méthode 1 est décrite dans le corpus [A1].",
+        "subsections": [],
+    }
+    validation = {
+        "errors": ["unsupported_or_misattributed_claims"],
+        "semantic_claim_audit": {
+            "issues": [
+                {
+                    "type": "citation_entity_mismatch",
+                    "location": "section",
+                    "claim": "La méthode inconnue est validée [A1].",
+                    "citations": ["A1"],
+                    "unsupported_entity": "Inconnue",
+                }
+            ]
+        },
+    }
+
+    full_prompt = _build_section_llm_prompt(
+        blueprint,
+        section,
+        evidence,
+        previous_tail="",
+    )
+    repair_prompt = _build_targeted_section_repair_prompt(
+        blueprint,
+        section,
+        draft,
+        validation,
+        evidence,
+    )
+
+    assert "NOUVELLE RÉDACTION À CORRIGER" in repair_prompt
+    assert len(repair_prompt) < len(full_prompt) * 0.65
+
+
+def test_sectional_writer_keeps_latest_new_llm_text_never_raw_fallback(
+    monkeypatch,
+) -> None:
+    class FakeClient:
+        responses: list[str] = []
+        prompts: list[str] = []
+
+        def __init__(self, model=None) -> None:
+            self.model = model
+            self.read_timeout = 300
+            self._meta = {}
+
+        def generate(self, prompt: str, **kwargs) -> str:
+            self.prompts.append(prompt)
+            self._meta = {
+                "model": self.model or "test-model",
+                "prompt_tokens": len(prompt) // 4,
+                "completion_tokens": 500,
+                "total_tokens": len(prompt) // 4 + 500,
+            }
+            return self.responses.pop(0)
+
+        def get_last_generation_meta(self) -> dict:
+            return dict(self._meta)
+
+    repeated = " ".join(
+        "La méthode Alpha décrit un protocole scientifique documenté [A1]."
+        for _ in range(42)
+    )
+    first = {
+        "section_id": "methods",
+        "title": "Méthodes analysées",
+        "content": repeated + " La méthode Beta est validée [A1].",
+        "subsections": [],
+    }
+    second = {
+        "section_id": "methods",
+        "title": "Méthodes analysées",
+        "content": repeated + " La méthode Gamma est validée [A1].",
+        "subsections": [],
+    }
+    FakeClient.responses = [
+        json.dumps(first, ensure_ascii=False),
+        json.dumps(second, ensure_ascii=False),
+    ]
+    FakeClient.prompts = []
+    monkeypatch.setattr(phase5, "LLMClient", FakeClient)
+    monkeypatch.setattr(phase5, "reload_config", lambda: {})
+    monkeypatch.setenv("ENNOSCHOLAR_PHASE5_ENABLE_LLM", "1")
+    monkeypatch.setenv("ENNOSCHOLAR_PHASE5_SECTION_ATTEMPTS", "2")
+    monkeypatch.setenv(
+        "ENNOSCHOLAR_PHASE5_ENABLE_INDEPENDENT_VERIFIER",
+        "0",
+    )
+    monkeypatch.setenv("ENNOSCHOLAR_PHASE5_REUSE_SECTION_CHECKPOINTS", "0")
+    blueprint = {
+        "project": "Projet de test",
+        "sections": [
+            {
+                "section_id": "methods",
+                "title": "Méthodes analysées",
+                "objective": "Analyser les méthodes.",
+                "target_words": 350,
+                "available_citations": ["A1"],
+                "required_citations": ["A1"],
+                "verrous": [],
+            }
+        ],
+        "project_context": {},
+        "style_memory": {},
+        "source_roles": {"A1": "scientific_source"},
+    }
+    evidence = [
+        _unit(
+            "A1",
+            "Method Alpha describes a documented scientific protocol.",
+        )
+    ]
+
+    draft, report = phase5.call_sectional_writer_llm(
+        blueprint,
+        evidence,
+    )
+
+    assert len(FakeClient.prompts) == 2
+    assert "NOUVELLE RÉDACTION À CORRIGER" in FakeClient.prompts[1]
+    assert "Gamma" in draft["sections"][0]["content"]
+    assert "Beta" not in draft["sections"][0]["content"]
+    assert report["mode"] == "sectional_llm_with_advisories"
+    assert report["deterministic_fallback_sections_count"] == 0
+    assert report["all_sections_generated_by_llm"] is True
+    assert all(
+        attempt.get("attempt") != "deterministic_fallback"
+        for attempt in report["sections"][0]["attempts"]
+    )
+
+
 def test_only_taxonomy_claims_receive_planner_required_citations() -> None:
     section = {
         "section_id": "methods",
@@ -708,3 +931,34 @@ def test_passive_unestablished_scope_may_name_an_absent_target() -> None:
     }
 
     assert _semantic_claim_audit(generated, section, evidence)["ok"] is True
+
+
+def test_global_guard_compares_normalized_consultant_titles() -> None:
+    blueprint = {
+        "sections": [
+            {
+                "section_id": "problem",
+                "title": "Problématique : Validité du modèle",
+                "verrous": [],
+            }
+        ],
+        "allowed_citations": [],
+        "required_citations": [],
+        "available_evidence_citations": [],
+        "required_citations_by_verrou": {},
+    }
+    draft = {
+        "sections": [
+            {
+                "section_id": "problem",
+                "title": "Problématique : Validité du modèle",
+                "content": "Le contexte du projet définit la question à examiner.",
+                "subsections": [],
+            }
+        ]
+    }
+
+    guard = validate_draft(draft, blueprint)
+
+    assert guard["ok"] is True
+    assert "section_titles_mismatch" not in guard["errors"]

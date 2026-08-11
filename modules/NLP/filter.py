@@ -193,55 +193,453 @@ def _is_context_only(item: Dict[str, Any]) -> bool:
     )
 
 
-def _analysis_text(item: Dict[str, Any]) -> str:
-    # Le nom du fichier reste une métadonnée. L'utiliser ici créait des faux
-    # signaux (par exemple un plan nommé « séparateur » devenait une preuve).
+
+def _normalize_signal_text(*values: Any) -> str:
     text = " ".join(
         str(value or "")
-        for value in (
-            item.get("section_title"),
-            item.get("context_before"),
-            item.get("analysis_text"),
-            item.get("text"),
-            item.get("context_after"),
-        )
+        for value in values
         if value
     ).lower()
-    text = unicodedata.normalize("NFKD", text)
-    return "".join(char for char in text if not unicodedata.combining(char))
 
+    text = unicodedata.normalize(
+        "NFKD",
+        text,
+    )
+
+    text = "".join(
+        char
+        for char in text
+        if not unicodedata.combining(char)
+    )
+
+    return re.sub(
+        r"\s+",
+        " ",
+        text,
+    ).strip()
+
+
+def _source_analysis_text(
+    item: Dict[str, Any],
+) -> str:
+    """
+    Texte r?ellement pr?dit par FastJudge.
+
+    Le contexte voisin ne doit pas transformer
+    une m?tadonn?e en verrou.
+    """
+
+    return _normalize_signal_text(
+        item.get("text")
+    )
+
+
+def _context_analysis_text(
+    item: Dict[str, Any],
+) -> str:
+    """
+    Contexte local utilis? uniquement comme preuve
+    compl?mentaire.
+    """
+
+    return _normalize_signal_text(
+        item.get("section_title"),
+        item.get("context_before"),
+        item.get("context_after"),
+    )
+
+
+def _analysis_text(
+    item: Dict[str, Any],
+) -> str:
+    """
+    Vue compl?te conserv?e pour les autres fonctions.
+    """
+
+    return _normalize_signal_text(
+        item.get("section_title"),
+        item.get("context_before"),
+        item.get("text"),
+        item.get("context_after"),
+    )
 
 def _has_any(text: str, patterns: Iterable[str]) -> bool:
     return any(re.search(pattern, text, flags=re.I) for pattern in patterns)
 
 
-def _signal_features(item: Dict[str, Any]) -> Dict[str, bool]:
-    text = _analysis_text(item)
+
+def _features_from_text(
+    text: str,
+) -> Dict[str, bool]:
+
     return {
-        "uncertainty": _has_any(text, UNCERTAINTY_PATTERNS),
-        "measurement_limit": _has_any(text, MEASUREMENT_LIMIT_PATTERNS),
-        "causal_gap": _has_any(text, CAUSAL_GAP_PATTERNS),
-        "dependency": _has_any(text, DEPENDENCY_PATTERNS),
-        "tradeoff": _has_any(text, TRADEOFF_PATTERNS),
-        "open_validation": _has_any(text, OPEN_VALIDATION_PATTERNS),
-        "knowledge_gap": _has_any(text, KNOWLEDGE_GAP_PATTERNS),
-        "routine_resolution": _has_any(text, ROUTINE_RESOLUTION_PATTERNS),
-        "technical": _has_any(text, TECHNICAL_PATTERNS),
+        "uncertainty":
+            _has_any(
+                text,
+                UNCERTAINTY_PATTERNS,
+            ),
+
+        "measurement_limit":
+            _has_any(
+                text,
+                MEASUREMENT_LIMIT_PATTERNS,
+            ),
+
+        "causal_gap":
+            _has_any(
+                text,
+                CAUSAL_GAP_PATTERNS,
+            ),
+
+        "dependency":
+            _has_any(
+                text,
+                DEPENDENCY_PATTERNS,
+            ),
+
+        "tradeoff":
+            _has_any(
+                text,
+                TRADEOFF_PATTERNS,
+            ),
+
+        "open_validation":
+            _has_any(
+                text,
+                OPEN_VALIDATION_PATTERNS,
+            ),
+
+        "knowledge_gap":
+            _has_any(
+                text,
+                KNOWLEDGE_GAP_PATTERNS,
+            ),
+
+        "routine_resolution":
+            _has_any(
+                text,
+                ROUTINE_RESOLUTION_PATTERNS,
+            ),
+
+        "technical":
+            _has_any(
+                text,
+                TECHNICAL_PATTERNS,
+            ),
     }
 
 
-def safe_for_synthesis(item: Dict[str, Any]) -> bool:
-    text = str(item.get("text") or "").strip()
-    low = text.lower()
-    if len(text) < 45 or any(marker in low for marker in BAD_SYNTH):
-        return False
-    if is_noise_line(text):
-        return False
-    if item.get("content_origin") == "metadata":
-        return False
-    words = re.findall(r"[A-Za-zÀ-ÿ]{3,}", text)
-    return len(words) >= 6
+def _generic_technical_expression(
+    text: str,
+) -> bool:
+    """
+    Compl?ment bilingue g?n?rique.
 
+    Aucun vocabulaire projet ou m?tier sp?cifique.
+    """
+
+    return bool(
+        re.search(
+            r"\b(?:"
+            r"model|models|modeling|modelling|"
+            r"method|methods|approach|approaches|"
+            r"algorithm|algorithms|"
+            r"simulation|simulations|simulator|simulators|"
+            r"system|systems|"
+            r"process|processes|"
+            r"measurement|measurements|"
+            r"data|dataset|datasets|"
+            r"parameter|parameters|"
+            r"material|materials|"
+            r"signal|signals|"
+            r"performance|performances|accuracy|"
+            r"robustness|validation|"
+            r"phenomenon|phenomena|physical|"
+            r"computational|training|generalization|"
+            r"modele|modeles|methode|methodes|"
+            r"algorithme|algorithmes|simulation|"
+            r"simulateur|simulateurs|systeme|systemes|"
+            r"mesure|mesures|donnee|donnees|"
+            r"parametre|parametres|materiau|materiaux|"
+            r"signal|signaux|performance|performances|"
+            r"precision|robustesse|validation|"
+            r"phenomene|phenomenes|calcul"
+            r")\b",
+            text,
+            flags=re.I,
+        )
+    )
+
+
+def _generic_problem_expression(
+    text: str,
+) -> bool:
+    """
+    Expression g?n?rique d'un probl?me scientifique/
+    technique encore ouvert.
+
+    Aucun secteur, outil ou projet n'est cod? ici.
+    """
+
+    patterns = (
+        r"\buncertain(?:ty)?\b",
+        r"\bunknown\b",
+        r"\bunresolved\b",
+        r"\bnot understood\b",
+        r"\bnot known\b",
+        r"\bnot validated\b",
+        r"\bnot guaranteed\b",
+        r"\bnot representative\b",
+        r"\bnot applicable\b",
+
+        r"\bcannot\b",
+        r"\bcan not\b",
+        r"\bunable to\b",
+        r"\bfails? to\b",
+
+        r"\blimitation(?:s)?\b",
+        r"\bdrawback(?:s)?\b",
+
+        r"\btrade[- ]?off\b",
+        r"\bcompromise\b",
+
+        r"\bgap between\b",
+        r"\bperformance gap\b",
+        r"\bgeneralization gap\b",
+        r"\bgeneralisation gap\b",
+
+        r"\bgeneralization (?:issue|issues|problem|problems)\b",
+        r"\bgeneralisation (?:issue|issues|problem|problems)\b",
+
+        r"\bsimplifying assumption(?:s)?\b",
+
+        r"\bremains? (?:unknown|unclear|unresolved|limited)\b",
+
+        r"\bremains? to (?:be )?"
+        r"(?:determined|validated|verified|understood|confirmed)\b",
+
+        r"\bopen question(?:s)?\b",
+
+        r"\bdifficult(?:y)? to\b",
+
+        r"\binsufficient\b",
+        r"\black of\b",
+
+        r"\bincertitud",
+        r"\binconnu",
+        r"\bnon resolu",
+        r"\bnon maitrise",
+        r"\bnon valide",
+        r"\bnon garanti",
+        r"\breste a (?:determiner|valider|verifier|comprendre|confirmer)\b",
+        r"\bdifficulte a\b",
+        r"\blimite(?:s)?\b",
+        r"\bcompromis\b",
+    )
+
+    return _has_any(
+        text,
+        patterns,
+    )
+
+
+def _looks_like_editorial_noise(
+    text: str,
+) -> bool:
+    """
+    Bruit ?ditorial g?n?rique.
+
+    On ne l'utilise jamais seul pour supprimer
+    un vrai probl?me technique.
+    """
+
+    patterns = (
+        r"\bto cite this version\b",
+        r"\barchive for the deposit\b",
+        r"\bthis work has been funded\b",
+        r"\bfunded by\b",
+        r"\backnowledg(?:e)?ments?\b",
+        r"\bcopyright\b",
+        r"\ball rights reserved\b",
+        r"\blicense\b",
+        r"\bauthor affiliations?\b",
+        r"\bcorresponding author\b",
+        r"\bdoi\s*:",
+        r"\breferences\s*$",
+        r"\bbibliography\s*$",
+        r"\bfinanc[?e] par\b",
+        r"\bremerciements?\b",
+    )
+
+    return _has_any(
+        text,
+        patterns,
+    )
+
+
+def _problem_bridge_expression(
+    text: str,
+) -> bool:
+    """
+    Un passage peut d?pendre de la phrase pr?c?dente
+    ou suivante, mais il doit lui-m?me contenir une
+    articulation de probl?me.
+    """
+
+    patterns = (
+        r"\bhowever\b",
+        r"\bnevertheless\b",
+        r"\bbut\b",
+        r"\balthough\b",
+        r"\bdespite\b",
+        r"\bwhereas\b",
+        r"\bwhile\b",
+
+        r"\bimpact\b",
+        r"\bdepends?\b",
+        r"\bdifference(?:s)?\b",
+        r"\bgap\b",
+        r"\blimit(?:ed|ation|ations)?\b",
+
+        r"\bcependant\b",
+        r"\btoutefois\b",
+        r"\bmais\b",
+        r"\bmalgre\b",
+        r"\bimpact\b",
+        r"\bdepend\b",
+        r"\bdifference",
+        r"\becart\b",
+        r"\blimit",
+    )
+
+    return _has_any(
+        text,
+        patterns,
+    )
+
+
+def _signal_feature_views(
+    item: Dict[str, Any],
+):
+    source_text = _source_analysis_text(
+        item
+    )
+
+    context_text = _context_analysis_text(
+        item
+    )
+
+    source_features = _features_from_text(
+        source_text
+    )
+
+    context_features = _features_from_text(
+        context_text
+    )
+
+    source_features["technical"] = bool(
+        source_features["technical"]
+        or _generic_technical_expression(
+            source_text
+        )
+    )
+
+    context_features["technical"] = bool(
+        context_features["technical"]
+        or _generic_technical_expression(
+            context_text
+        )
+    )
+
+    return (
+        source_features,
+        context_features,
+    )
+
+
+def _signal_features(
+    item: Dict[str, Any],
+) -> Dict[str, bool]:
+    """
+    Vue fusionn?e conserv?e pour compatibilit?.
+
+    La d?cision project_lock_seed utilise, elle,
+    source et contexte s?par?ment.
+    """
+
+    source_features, context_features = (
+        _signal_feature_views(
+            item
+        )
+    )
+
+    return {
+        key: bool(
+            source_features.get(
+                key
+            )
+            or context_features.get(
+                key
+            )
+        )
+        for key in source_features
+    }
+
+
+def safe_for_synthesis(
+    item: Dict[str, Any],
+) -> bool:
+
+    text = str(
+        item.get("text")
+        or ""
+    ).strip()
+
+    low = text.lower()
+
+    if (
+        len(text) < 45
+        or any(
+            marker in low
+            for marker in BAD_SYNTH
+        )
+    ):
+        return False
+
+    if is_noise_line(
+        text
+    ):
+        return False
+
+    if (
+        item.get("content_origin")
+        == "metadata"
+    ):
+        return False
+
+    source_text = _source_analysis_text(
+        item
+    )
+
+    # M?tadonn?e ?ditoriale pure.
+    # Si elle contient r?ellement une formulation
+    # technique ouverte, elle n'est pas rejet?e ici.
+    if (
+        _looks_like_editorial_noise(
+            source_text
+        )
+        and not _generic_problem_expression(
+            source_text
+        )
+    ):
+        return False
+
+    words = re.findall(
+        r"[A-Za-z?-?]{3,}",
+        text,
+    )
+
+    return len(words) >= 6
 
 def rank_score(item: Dict[str, Any]) -> float:
     semantic_conf = _sf(item.get("semantic_role_confidence"))
@@ -255,83 +653,367 @@ def rank_score(item: Dict[str, Any]) -> float:
     return round(score, 4)
 
 
-def _mark_lock_candidate(item: Dict[str, Any]) -> None:
-    model_role = str(item.get("original_model_role") or item.get("role") or "").lower()
-    hint = str(item.get("section_role_hint") or "").lower()
-    model_confidence = _sf(item.get("model_confidence"))
-    lock_score = _sf(item.get("lock_candidate_score") or item.get("verrou_score"))
-    features = _signal_features(item)
-    strong_problem_signal = any(
-        features[key]
-        for key in ("uncertainty", "measurement_limit", "causal_gap", "tradeoff", "open_validation", "knowledge_gap")
-    )
-    explicit = bool(
-        features["technical"]
-        and strong_problem_signal
-        and (
-            hint == "verrou"
-            or (
-                model_role == "verrou"
-                and model_confidence >= max(LOCK_ROLE_RECALL, 0.68)
-            )
+
+def _mark_lock_candidate(
+    item: Dict[str, Any],
+) -> None:
+
+    model_role = str(
+        item.get(
+            "original_model_role"
+        )
+        or item.get("role")
+        or ""
+    ).lower()
+
+    model_confidence = _sf(
+        item.get(
+            "model_confidence"
         )
     )
-    contextual_problem_signal = strong_problem_signal or features["dependency"]
-    technical_problem = bool(features["technical"] and strong_problem_signal)
+
+    lock_score = _sf(
+        item.get(
+            "lock_candidate_score"
+        )
+        or item.get(
+            "verrou_score"
+        )
+    )
+
+    source_text = (
+        _source_analysis_text(
+            item
+        )
+    )
+
+    source_features, context_features = (
+        _signal_feature_views(
+            item
+        )
+    )
+
+
+    # ========================================================
+    # 1. RESULTAT FASTJUDGE
+    #
+    # Jamais supprim?.
+    # ========================================================
+
+    fastjudge_signal = bool(
+        model_role == "verrou"
+    )
+
+
+    # ========================================================
+    # 2. PROBLEME DANS LE PASSAGE SOURCE
+    # ========================================================
+
+    strong_keys = (
+        "uncertainty",
+        "measurement_limit",
+        "causal_gap",
+        "tradeoff",
+        "open_validation",
+        "knowledge_gap",
+    )
+
+    source_structured_problem = any(
+        bool(
+            source_features.get(
+                key
+            )
+        )
+        for key in strong_keys
+    )
+
+    context_structured_problem = any(
+        bool(
+            context_features.get(
+                key
+            )
+        )
+        for key in strong_keys
+    )
+
+    source_problem = bool(
+        source_structured_problem
+        or _generic_problem_expression(
+            source_text
+        )
+    )
+
+    context_text = (
+        _context_analysis_text(
+            item
+        )
+    )
+
+    context_problem = bool(
+        context_structured_problem
+        or _generic_problem_expression(
+            context_text
+        )
+    )
+
+
+    # ========================================================
+    # 3. TECHNICITE
+    # ========================================================
+
+    source_technical = bool(
+        source_features.get(
+            "technical"
+        )
+    )
+
+    context_technical = bool(
+        context_features.get(
+            "technical"
+        )
+    )
+
+
+    # ========================================================
+    # 4. BRUIT / RESOLUTION ROUTINIERE
+    # ========================================================
+
+    editorial_noise = bool(
+        _looks_like_editorial_noise(
+            source_text
+        )
+        and not source_problem
+    )
+
     routine_only = bool(
-        features["routine_resolution"]
-        and not features["tradeoff"]
-        and not features["knowledge_gap"]
-        and not features["open_validation"]
+        source_features.get(
+            "routine_resolution"
+        )
+        and not source_features.get(
+            "tradeoff"
+        )
+        and not source_features.get(
+            "knowledge_gap"
+        )
+        and not source_features.get(
+            "open_validation"
+        )
+        and not source_problem
     )
 
-    candidate = bool(
-        explicit
-        or (
-            model_role != "bruit"
-            and technical_problem
-            and not routine_only
-            and (
-                (features["knowledge_gap"] and lock_score >= 0.40)
-                or (features["tradeoff"] and lock_score >= 0.40)
-                or (features["causal_gap"] and lock_score >= 0.46)
-                or (features["uncertainty"] and lock_score >= LOCK_CANDIDATE_RECALL)
-                or (features["open_validation"] and lock_score >= LOCK_CANDIDATE_RECALL)
-                or (
-                    features["measurement_limit"]
-                    and features["open_validation"]
-                    and lock_score >= 0.50
-                )
+
+    # ========================================================
+    # 5. DEUX CHEMINS LEGITIMES
+    # ========================================================
+
+    # Le passage lui-m?me formule le verrou.
+    direct_source_problem = bool(
+        source_technical
+        and source_problem
+    )
+
+
+    # Le probl?me est formul? juste avant/apr?s,
+    # MAIS le passage courant doit lui-m?me ?tre
+    # technique et contenir un lien logique.
+    contextual_problem = bool(
+        source_technical
+        and context_technical
+        and context_problem
+        and _problem_bridge_expression(
+            source_text
+        )
+    )
+
+
+    # ========================================================
+    # 6. PROJECT LOCK SEED
+    #
+    # Seul FastJudge peut cr?er le signal verrou.
+    # Les r?gles ci-dessous ne cr?ent donc jamais
+    # un verrou ? partir d'objectif/methode/resultat.
+    # ========================================================
+
+    project_lock_seed = bool(
+        fastjudge_signal
+        and not _is_context_only(
+            item
+        )
+        and not editorial_noise
+        and not routine_only
+        and (
+            direct_source_problem
+            or contextual_problem
+        )
+    )
+
+
+    # ========================================================
+    # 7. TRACE COMPLETE
+    # ========================================================
+
+    item[
+        "fastjudge_verrou_signal"
+    ] = fastjudge_signal
+
+    # Compatibilit? :
+    # lock_candidate = signal FastJudge brut.
+    item[
+        "lock_candidate"
+    ] = fastjudge_signal
+
+    item[
+        "project_lock_seed"
+    ] = project_lock_seed
+
+    item[
+        "lock_eligible"
+    ] = project_lock_seed
+
+    item[
+        "lock_candidate_score"
+    ] = lock_score
+
+    item[
+        "lock_candidate_explicit"
+    ] = bool(
+        project_lock_seed
+        and direct_source_problem
+    )
+
+    item[
+        "lock_candidate_features"
+    ] = {
+        key: bool(
+            source_features.get(
+                key
+            )
+            or context_features.get(
+                key
             )
         )
-        or (
-            model_role == "bruit"
-            and technical_problem
-            and lock_score >= LOCK_CANDIDATE_STRONG
-            and (features["knowledge_gap"] or features["tradeoff"])
+        for key in source_features
+    }
+
+    item[
+        "lock_source_features"
+    ] = source_features
+
+    item[
+        "lock_context_features"
+    ] = context_features
+
+    item[
+        "lock_source_problem"
+    ] = source_problem
+
+    item[
+        "lock_context_problem"
+    ] = context_problem
+
+    item[
+        "lock_source_technical"
+    ] = source_technical
+
+    item[
+        "lock_editorial_noise"
+    ] = editorial_noise
+
+    item[
+        "lock_contextual_bridge"
+    ] = contextual_problem
+
+
+    # ========================================================
+    # 8. STATUT EXPLICABLE
+    # ========================================================
+
+    if not fastjudge_signal:
+
+        status = (
+            "not_fastjudge_verrou"
         )
-    )
 
-    signal_count = sum(bool(value) for value in features.values())
-    item["lock_candidate"] = bool(candidate)
-    item["lock_candidate_score"] = lock_score
-    item["lock_candidate_explicit"] = bool(explicit)
-    item["lock_candidate_uncertainty_signal"] = bool(features["uncertainty"])
-    item["lock_candidate_features"] = features
-    item["lock_candidate_signal_count"] = signal_count
-    item["lock_eligible"] = bool(candidate and not _is_context_only(item))
+        reason = (
+            "FastJudge n'a pas pr?dit verrou."
+        )
 
-    if not candidate:
-        status = "not_candidate"
-    elif not item["lock_eligible"]:
-        status = "context_only_candidate"
-        item["non_verrou_reason"] = "source contextuelle : preuve de soutien uniquement"
-    elif explicit or features["knowledge_gap"] or features["tradeoff"]:
-        status = "strong_candidate_to_group"
+    elif _is_context_only(
+        item
+    ):
+
+        status = (
+            "fastjudge_signal_context_only"
+        )
+
+        reason = (
+            "Signal FastJudge conserv?, "
+            "mais source contextuelle uniquement."
+        )
+
+    elif editorial_noise:
+
+        status = (
+            "fastjudge_signal_demoted_editorial"
+        )
+
+        reason = (
+            "Signal FastJudge conserv?, "
+            "mais passage ?ditorial/m?tadonn?e "
+            "sans probl?me technique exprim?."
+        )
+
+    elif routine_only:
+
+        status = (
+            "fastjudge_signal_demoted_routine"
+        )
+
+        reason = (
+            "Signal FastJudge conserv?, "
+            "mais r?solution technique routini?re."
+        )
+
+    elif project_lock_seed:
+
+        status = (
+            "project_lock_seed"
+        )
+
+        reason = (
+            "FastJudge=verrou + probl?me "
+            "technique non r?solu exprim? "
+            "dans le passage ou son contexte "
+            "local coh?rent."
+        )
+
     else:
-        status = "candidate_to_group"
-    item["lock_candidate_status"] = status
 
+        status = (
+            "fastjudge_signal_support_only"
+        )
+
+        reason = (
+            "Signal FastJudge conserv?, "
+            "mais le passage d?crit surtout "
+            "une m?thode, un r?sultat, un param?tre "
+            "ou un contexte sans verrou suffisamment "
+            "explicite."
+        )
+
+
+    item[
+        "lock_candidate_status"
+    ] = status
+
+    item[
+        "project_lock_seed_reason"
+    ] = reason
+
+    if not project_lock_seed:
+        item[
+            "non_verrou_reason"
+        ] = reason
 
 def apply_quality_filter(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     kept: List[Dict[str, Any]] = []
@@ -354,8 +1036,25 @@ def apply_quality_filter(items: List[Dict[str, Any]]) -> Dict[str, Any]:
         strict = semantic_conf >= STRICT.get(semantic_role, 1.0)
         recall = semantic_conf >= RECALL.get(semantic_role, 1.0)
 
-        if safe and (strict or recall or item["lock_candidate"]):
-            status = "strict" if strict else "recall" if recall else "lock_candidate_preserved"
+        # LinearSVC n'expose pas de probabilités calibrées. Ses marges transformées
+        # en scores 0..1 sont utiles pour le ranking, pas pour appliquer les anciens
+        # seuils de probabilité. Dans ce cas, on fait confiance à la classe prédite
+        # pour les rôles non-bruit, tout en conservant le filtre de qualité textuelle.
+        score_source = str(item.get("model_score_source") or "")
+        linear_svc_role_accepted = bool(
+            score_source == "decision_function_sigmoid_uncalibrated"
+            and str(item.get("original_model_role") or "").lower() in NON_LOCK_SEMANTIC_ROLES
+        )
+
+        if safe and (strict or recall or linear_svc_role_accepted or item["lock_candidate"]):
+            if item["lock_candidate"]:
+                status = "lock_candidate_preserved"
+            elif strict:
+                status = "strict"
+            elif recall:
+                status = "recall"
+            else:
+                status = "linear_svc_prediction"
             item["quality_status"] = status
             item["accepted_for_semantic_section"] = True
             item["accepted_for_synthesis"] = True
@@ -382,6 +1081,44 @@ def apply_quality_filter(items: List[Dict[str, Any]]) -> Dict[str, Any]:
             "lock_candidates_total": len(lock_candidates),
             "lock_candidates_eligible": sum(bool(item.get("lock_eligible")) for item in lock_candidates),
             "lock_candidates_context_only": sum(not bool(item.get("lock_eligible")) for item in lock_candidates),
+            "fastjudge_verrou_signals":
+                sum(
+                    bool(
+                        item.get(
+                            "fastjudge_verrou_signal"
+                        )
+                    )
+                    for item
+                    in lock_candidates
+                ),
+
+            "project_lock_seeds":
+                sum(
+                    bool(
+                        item.get(
+                            "project_lock_seed"
+                        )
+                    )
+                    for item
+                    in lock_candidates
+                ),
+
+            "fastjudge_verrou_demoted":
+                sum(
+                    bool(
+                        item.get(
+                            "fastjudge_verrou_signal"
+                        )
+                    )
+                    and not bool(
+                        item.get(
+                            "project_lock_seed"
+                        )
+                    )
+                    for item
+                    in lock_candidates
+                ),
+
         },
     }
 
@@ -393,8 +1130,10 @@ def thresholds() -> Dict[str, Any]:
         "lock_candidate_recall": LOCK_CANDIDATE_RECALL,
         "lock_candidate_strong": LOCK_CANDIDATE_STRONG,
         "lock_role_recall": LOCK_ROLE_RECALL,
+        "lock_detection": "FastJudge predicted role == verrou",
+        "legacy_lock_thresholds_used_for_detection": False,
         "rule": (
-            "explicit OR uncertainty/measurement/causal/tradeoff/open-validation signal with calibrated "
-            "lock score; high detector score alone remains insufficient"
+            "FastJudge is the only lock detector. Generic uncertainty/technical patterns are retained "
+            "for evidence support, grouping and Frascati explainability, not to create or reject a lock."
         ),
     }

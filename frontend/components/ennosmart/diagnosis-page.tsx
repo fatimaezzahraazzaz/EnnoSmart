@@ -57,6 +57,7 @@ import {
 import { getCurrentProjectId, setCurrentProjectId } from "@/lib/project-session"
 import { CirFinalConsultantPanel } from "@/components/ennosmart/cir-final-consultant-panel"
 import CirPreviousContinuityTab from "@/components/ennosmart/cir-previous-continuity-tab"
+import { DiagnosticRagChat } from "@/components/ennosmart/diagnostic-rag-chat"
 
 import {
   SourceTextWithDocuments,
@@ -1590,8 +1591,8 @@ function collectBackendDisplayVerrousV139(
 
   const normalizedBackend = backendItems
     .map((item: any, index: number) => normalizeBackendDisplayVerrouV139(item, index))
-    .filter(Boolean)
-    .filter((verrou: VerrouRead) => !isFallbackVerrouReadV124(verrou)) as VerrouRead[]
+    .filter((verrou): verrou is VerrouRead => Boolean(verrou))
+    .filter((verrou) => !isFallbackVerrouReadV124(verrou))
 
   const cleanDbVerrous = (dbVerrous || [])
     .filter((verrou) => !isFallbackVerrouReadV124(verrou))
@@ -1980,13 +1981,24 @@ function FrascatiAnalysisCard({
   candidateCount,
   reading,
   justification,
+  demarche,
 }: {
   score: number | string | null | undefined
   signalsCount: number
   candidateCount: number
   reading: string
   justification: string
+  demarche: any
 }) {
+  const demarcheLabels: Record<string, string> = {
+    clear_research_trajectory: "Démarche R&D justifiée",
+    routine_engineering_dominant: "Ingénierie classique dominante",
+    mixed_or_partially_justified_trajectory: "Démarche mixte à valider",
+    insufficient_documentation: "Documentation insuffisante",
+  }
+  const demarcheLabel = demarcheLabels[String(demarche?.label || "")] || "Démarche à qualifier"
+  const isRoutineEngineering = demarche?.label === "routine_engineering_dominant"
+
   return (
     <Card className="overflow-hidden border-brand/20 bg-gradient-to-br from-brand/5 via-white to-white">
       <CardHeader className="border-b bg-white/70">
@@ -1994,10 +2006,10 @@ function FrascatiAnalysisCard({
           <div className="space-y-1">
             <CardTitle className="flex items-center gap-2 text-base">
               <BrainCircuit className="size-5 text-brand" />
-              Analyse Frascati
+              Étude d'éligibilité
             </CardTitle>
             <CardDescription>
-              Le score est calculé par NLP/Frascati. La justification projet-spécifique est générée par le LLM à partir des preuves RAG/Chroma.
+              Le score combine les cinq critères Frascati avec la pertinence réelle des démarches. Une ingénierie classique dominante sans étape R&D justifiée donne directement un avis non éligible.
             </CardDescription>
           </div>
           <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">
@@ -2010,7 +2022,7 @@ function FrascatiAnalysisCard({
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="rounded-xl border bg-white p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Score Frascati
+              Score d'éligibilité
             </p>
             <p className="mt-1 text-2xl font-semibold text-foreground">
               {formatScore(score)}
@@ -2040,10 +2052,54 @@ function FrascatiAnalysisCard({
               Nature du score
             </p>
             <p className="mt-2 text-sm font-semibold text-foreground">
-              Aide à la priorisation
+              Aide à la décision
             </p>
           </div>
         </div>
+
+        {demarche && Object.keys(demarche).length > 0 ? (
+          <div className={`rounded-xl border p-5 ${isRoutineEngineering ? "border-destructive/30 bg-destructive/5" : "border-brand/20 bg-white"}`}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-brand">
+                  Analyse de la pertinence des démarches
+                </p>
+                <p className="mt-2 text-sm font-semibold text-foreground">{demarcheLabel}</p>
+              </div>
+              <Badge variant="outline" className={isRoutineEngineering ? "border-destructive/30 text-destructive" : "border-brand/30 text-brand"}>
+                {isRoutineEngineering ? "Non éligible potentiel" : "Validation consultant requise"}
+              </Badge>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="rounded-lg border bg-white p-3">
+                <p className="text-[11px] text-muted-foreground">Étapes analysées</p>
+                <p className="mt-1 text-lg font-semibold">{Number(demarche?.method_steps_count || 0)}</p>
+              </div>
+              <div className="rounded-lg border bg-white p-3">
+                <p className="text-[11px] text-muted-foreground">R&D justifiées</p>
+                <p className="mt-1 text-lg font-semibold text-success">{Number(demarche?.research_justified_steps_count || 0)}</p>
+              </div>
+              <div className="rounded-lg border bg-white p-3">
+                <p className="text-[11px] text-muted-foreground">Ingénierie classique</p>
+                <p className="mt-1 text-lg font-semibold text-warning">{Number(demarche?.routine_engineering_steps_count || 0)}</p>
+              </div>
+              <div className="rounded-lg border bg-white p-3">
+                <p className="text-[11px] text-muted-foreground">À expliquer</p>
+                <p className="mt-1 text-lg font-semibold">{Number(demarche?.unexplained_steps_count || 0)}</p>
+              </div>
+            </div>
+
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">
+              Chaque étape doit être reliée à une incertitude, une hypothèse, une évaluation et un apprentissage. Les procédures standard ou les variantes sans justification diminuent le score.
+            </p>
+            {demarche?.direct_final_solution_risk ? (
+              <p className="mt-2 text-sm font-medium text-warning">
+                Raccourci possible : le dossier doit expliquer pourquoi la solution finale ne pouvait pas être choisie dès le départ.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <div className="rounded-xl border bg-white p-5">
@@ -2072,7 +2128,7 @@ function FrascatiAnalysisCard({
         </div>
 
         <p className="text-xs leading-6 text-muted-foreground">
-          Les passages scorés ne correspondent pas automatiquement à autant de verrous. EnnoDiagnostic les regroupe et les reformule avant la validation du consultant.
+          Ce score est une aide interne à la décision, pas une décision administrative CIR. Il change avec les preuves Frascati et avec la justification des démarches.
         </p>
       </CardContent>
     </Card>
@@ -2605,7 +2661,7 @@ async function getScholarLatest(projectId: number) {
     throw new Error("Utilisateur non authentifié.")
   }
 
-  const response = await fetch(`${API_BASE_URL}/projects/${projectId}/scholar/latest`, {
+  const response = await fetch(`${API_BASE_URL}/projects/${projectId}/scholar/latest?compact=true`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -2627,7 +2683,7 @@ async function getArticles(projectId: number) {
     throw new Error("Utilisateur non authentifié.")
   }
 
-  const response = await fetch(`${API_BASE_URL}/projects/${projectId}/articles`, {
+  const response = await fetch(`${API_BASE_URL}/projects/${projectId}/articles?compact=true`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -2962,10 +3018,20 @@ export function DiagnosisPage() {
   }, [display, prepareReport])
 
   const frascatiScore =
+    display?.frascati_summary?.eligibility_assessment_score ??
+    diagnosticBundle?.frascati_summary?.eligibility_assessment_score ??
+    prepareReport?.nlp_stats?.eligibility_assessment_score ??
     display?.frascati_summary?.average_frascati_score ??
     display?.frascati_score ??
     prepareReport?.nlp_stats?.global_frascati_score ??
     null
+
+  const demarcheAudit =
+    display?.frascati_summary?.demarche_legibility ||
+    diagnosticBundle?.frascati_summary?.demarche_legibility ||
+    diagnosticBundle?.demarche_legibility ||
+    prepareReport?.demarche_legibility ||
+    {}
 
   const frascatiRisk =
     display?.frascati_summary?.risk_level ||
@@ -3316,6 +3382,7 @@ export function DiagnosisPage() {
 
   const lectureFrascatiText = useMemo(() => {
     const merged = pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
+      "Étude d'éligibilité",
       "Analyse Frascati",
     ])
 
@@ -3340,6 +3407,7 @@ export function DiagnosisPage() {
     if (explicit) return explicit
 
     const merged = pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
+      "Étude d'éligibilité",
       "Analyse Frascati",
     ])
     const parts = merged.split(/Justification projet-spécifique/i)
@@ -3427,30 +3495,34 @@ export function DiagnosisPage() {
         setPreviousCirYear(Number.isFinite(previousYear) ? String(previousYear - 1) : "")
       }
 
-      // Données principales : nécessaires pour ne pas afficher des onglets vides.
-      // On ne met pas diagnostic/document-compare/CIR précédent dans le même bloc lourd.
-      const [verrousData, documentsData, diagnosticData, scholarData, articlesData] = await Promise.all([
-        getVerrous(selectedProject.id).catch(() => []),
+      // Le diagnostic officiel contient déjà les verrous décisionnels. L'ancien
+      // chargement appelait /verrous en parallèle et relisait deux fois le même
+      // gros rapport PostgreSQL/fichier.
+      const [documentsData, diagnosticData] = await Promise.all([
         getDocuments(selectedProject.id).catch(() => []),
         getDiagnosticLatest(selectedProject.id).catch(() => null),
-        getScholarLatest(selectedProject.id).catch(() => null),
-        getArticles(selectedProject.id).catch(() => []),
       ])
 
-      setVerrous(Array.isArray(verrousData) ? verrousData : [])
+      const diagnosticVerrous =
+        diagnosticData?.validation_verrous ||
+        diagnosticData?.display?.validation_verrous ||
+        []
+      setVerrous(Array.isArray(diagnosticVerrous) ? diagnosticVerrous : [])
       setDocuments(Array.isArray(documentsData) ? documentsData : [])
       setDiagnosticBundle(diagnosticData)
-      setScholarBundle(scholarData)
-      setArticles(Array.isArray(articlesData) ? articlesData : [])
       setLoading(false)
 
       // Données secondaires : elles ne bloquent pas l’affichage du diagnostic.
       Promise.all([
+        getScholarLatest(selectedProject.id).catch(() => null),
+        getArticles(selectedProject.id).catch(() => []),
         getDocumentComparePairs(selectedProject.id, false).catch(() => null),
         getPreviousCirFinals(selectedProject.id).catch(() => []),
         getPreviousCirComparisonLatest(selectedProject.id).catch(() => null),
       ])
-        .then(([compareIndexData, previousCirData, previousCirComparisonData]) => {
+        .then(([scholarData, articlesData, compareIndexData, previousCirData, previousCirComparisonData]) => {
+          setScholarBundle(scholarData)
+          setArticles(Array.isArray(articlesData) ? articlesData : [])
           setDocumentCompareIndex(compareIndexData)
           setPreviousCirList(Array.isArray(previousCirData) ? previousCirData : [])
           setPreviousCirComparisonReport(previousCirComparisonData)
@@ -3650,28 +3722,30 @@ export function DiagnosisPage() {
       const previousYear = Number(selectedProject?.year)
       setPreviousCirYear(Number.isFinite(previousYear) ? String(previousYear - 1) : "")
 
-      setLoading(false)
-
-      const [verrousData, documentsData, diagnosticData, scholarData, articlesData] = await Promise.all([
-        getVerrous(projectId).catch(() => []),
+      const [documentsData, diagnosticData] = await Promise.all([
         getDocuments(projectId).catch(() => []),
         getDiagnosticLatest(projectId).catch(() => null),
-        getScholarLatest(projectId).catch(() => null),
-        getArticles(projectId).catch(() => []),
       ])
 
-      setVerrous(verrousData)
+      const diagnosticVerrous =
+        diagnosticData?.validation_verrous ||
+        diagnosticData?.display?.validation_verrous ||
+        []
+      setVerrous(Array.isArray(diagnosticVerrous) ? diagnosticVerrous : [])
       setDocuments(documentsData)
       setDiagnosticBundle(diagnosticData)
-      setScholarBundle(scholarData)
-      setArticles(articlesData)
+      setLoading(false)
 
       Promise.all([
+        getScholarLatest(projectId).catch(() => null),
+        getArticles(projectId).catch(() => []),
         getDocumentComparePairs(projectId, false).catch(() => null),
         getPreviousCirFinals(projectId).catch(() => []),
         getPreviousCirComparisonLatest(projectId).catch(() => null),
       ])
-        .then(([compareIndexData, previousCirData, previousCirComparisonData]) => {
+        .then(([scholarData, articlesData, compareIndexData, previousCirData, previousCirComparisonData]) => {
+          setScholarBundle(scholarData)
+          setArticles(Array.isArray(articlesData) ? articlesData : [])
           setDocumentCompareIndex(compareIndexData)
           setPreviousCirList(previousCirData)
           setPreviousCirComparisonReport(previousCirComparisonData)
@@ -4071,8 +4145,8 @@ export function DiagnosisPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+    <div className="mx-auto max-w-7xl space-y-6 p-5 sm:p-7 lg:p-9">
+      <div className="ennoma-page-header flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <div className="size-7 rounded-md bg-brand flex items-center justify-center">
@@ -4235,7 +4309,7 @@ export function DiagnosisPage() {
 
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Score Frascati</p>
+            <p className="text-xs text-muted-foreground">Score d'éligibilité</p>
             <p className="text-2xl font-bold text-warning mt-1">
               {formatScore(frascatiScore)}
             </p>
@@ -4352,6 +4426,7 @@ export function DiagnosisPage() {
             candidateCount={verrousForDisplay.length}
             reading={lectureFrascatiText}
             justification={frascatiJustificationText}
+            demarche={demarcheAudit}
           />
 
           <Card>
@@ -4662,8 +4737,8 @@ Chaque verrou candidat est relié à ses documents sources. Le consultant peut r
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <BackendSectionCardV93
-              title="Démarche détectée"
-              description="Méthodes, protocoles, essais ou analyses détectés dans les documents sources."
+              title="Pertinence des démarches"
+              description="Nécessité des étapes, distinction R&D / ingénierie classique et possibilité d'aller directement à la solution finale."
               icon={Search}
               text={demarcheText}
               emptyText="Aucune démarche détectée."
@@ -5662,6 +5737,11 @@ Chaque verrou candidat est relié à ses documents sources. Le consultant peut r
           </Card>
         </TabsContent>
       </Tabs>
+
+      <DiagnosticRagChat
+        projectId={project.id}
+        refreshToken={`${project.id}:${hasDiagnostic ? "diagnostic" : "pending"}:${pipelineStats?.chunks_indexed ?? 0}:${latestRun?.id ?? ""}`}
+      />
     </div>
   )
 }

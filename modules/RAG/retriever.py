@@ -8,8 +8,8 @@ Objectif :
 - quand role_filter="verrou", chercher uniquement dans les chunks role="verrou" ;
 - conserver les supporting_passages indexés pour la traçabilité ;
 - favoriser les chunks principaux NLP dans le classement ;
-- la consolidation finale des groupes est lue dans rag/lock_clusters.json et
-  n'est pas recalculée par ce retriever.
+- l'identité des groupes ``lock_group_id`` vient uniquement du NLP avant
+  Frascati et n'est jamais recalculée par le RAG.
 """
 
 from collections import defaultdict

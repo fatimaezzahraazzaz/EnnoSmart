@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,174 @@ def get_guided_research_agent() -> EnnoScholarGuidedResearchAgent:
     return _AGENT
 
 
+def attach_uploaded_article_to_session(
+    db: Session,
+    project: Any,
+    *,
+    session_id: str,
+    article: Any,
+    extraction: dict[str, Any],
+) -> dict[str, Any]:
+    """Ajoute un PDF consultant au corpus acceptÃ© de la conversation active."""
+
+    agent = get_guided_research_agent()
+    session = agent.state_manager.get_session(
+        db,
+        session_id,
+        include_messages=False,
+    )
+    if int(session.project_id) != int(project.id):
+        raise PermissionError("Cette conversation appartient Ã  un autre projet.")
+
+    snapshot = agent.repository.snapshot(db, session_id)
+    context = dict(snapshot.get("context") or {})
+    all_verrous = [
+        dict(row)
+        for row in (context.get("consultant_verrous") or [])
+        if isinstance(row, dict)
+    ]
+    active_ids = [
+        str(value).strip()
+        for value in (context.get("active_verrou_ids") or [])
+        if str(value).strip()
+    ]
+    target_verrous = active_ids or [
+        str(row.get("id") or "").strip()
+        for row in all_verrous
+        if str(row.get("id") or "").strip()
+    ]
+    source_json = dict(article.source_json) if isinstance(article.source_json, dict) else {}
+    candidate_id = str(
+        source_json.get("guided_candidate_id") or f"UPLOAD-{int(article.id)}"
+    )
+    source = {
+        "candidate_id": candidate_id,
+        "candidate_kind": "scientific_article",
+        "title": article.title,
+        "authors": list(source_json.get("authors") or []),
+        "year": article.year,
+        "doi": article.doi,
+        "url": article.url,
+        "provider": "consultant_upload",
+        "source": "consultant_upload",
+        "open_access": True,
+        "relevance_role": source_json.get("consultant_evidence_role") or "connected_evidence",
+        "direct_evidence": False,
+        "scientific_evidence_eligible": True,
+        "consultant_decision": "accepted",
+        "consultant_reason": "Publication PDF ajoutÃ©e explicitement par le consultant.",
+        "target_verrous": target_verrous,
+        "section_ids": list(source_json.get("section_ids") or []),
+        "guided_session_id": session_id,
+        "fulltext_verified": True,
+        "fulltext_preparation": {
+            "ok": True,
+            "status": extraction.get("status") or "text_extracted_from_uploaded_pdf",
+            "retrieval_stage": "consultant_upload",
+            "mcp_called": False,
+            "article_id": int(article.id),
+            "article_created": True,
+            "usable_as_scientific_evidence": True,
+            "proof_policy": "fulltext_verified_only",
+            "output_path": extraction.get("output_path"),
+            "prepared_at": datetime.now(timezone.utc).isoformat(),
+        },
+    }
+    selected_sources = [
+        dict(row)
+        for row in (snapshot.get("selected_sources") or [])
+        if isinstance(row, dict)
+        and str(row.get("candidate_id") or "") != candidate_id
+        and int((row.get("fulltext_preparation") or {}).get("article_id") or 0)
+        != int(article.id)
+    ]
+    selected_sources.append(source)
+    agent.repository.update(
+        db,
+        session_id,
+        selected_sources=selected_sources,
+        context_updates={
+            "last_uploaded_article_id": int(article.id),
+            "last_uploaded_candidate_id": candidate_id,
+        },
+    )
+
+    from agents.EnnoScholar.consultant_plan_service import write_json
+
+    accepted_sources = [
+        row
+        for row in selected_sources
+        if row.get("consultant_decision") == "accepted"
+    ]
+    write_json(
+        agent._sources_path(project),
+        {
+            "ok": True,
+            "payload_type": "guided_accepted_sources_v2_fulltext_gated",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "sources": accepted_sources,
+        },
+    )
+    return source
+
+
+def record_guided_pipeline_result(
+    db: Session,
+    project: Any,
+    *,
+    session_id: str,
+    result: dict[str, Any],
+) -> None:
+    """Rattache le rÃ©sultat du pipeline commun Ã  la bonne conversation."""
+
+    agent = get_guided_research_agent()
+    session = agent.state_manager.get_session(
+        db,
+        session_id,
+        include_messages=False,
+    )
+    if int(session.project_id) != int(project.id):
+        raise PermissionError("Cette conversation appartient Ã  un autre projet.")
+    try:
+        from agents.EnnoScholar.guided_research.lot1.domain.enums import (
+            GuidedResearchState,
+        )
+    except Exception:
+        from modules.EnnoScholar.guided_research.lot1.domain.enums import (  # type: ignore
+            GuidedResearchState,
+        )
+
+    if result.get("ok"):
+        agent.repository.update(
+            db,
+            session_id,
+            draft={
+                "ok": True,
+                "pipeline": "phase_1_to_phase_5",
+                "markdown": result.get("markdown") or "",
+                "state_of_art_view": result.get("state_of_art_view") or {},
+                "paths": result.get("paths") or {},
+            },
+            state=GuidedResearchState.DRAFT_READY,
+            ready_to_write=False,
+            context_updates={
+                "pipeline_execution_requested": False,
+                "standalone_full_pipeline_completed": True,
+            },
+        )
+    else:
+        agent.repository.update(
+            db,
+            session_id,
+            state=GuidedResearchState.READY_TO_WRITE,
+            ready_to_write=True,
+            context_updates={
+                "pipeline_execution_requested": False,
+                "last_pipeline_status": result.get("status"),
+            },
+        )
+
+
 def ensure_guided_research_tables(engine: Any) -> None:
     get_guided_research_agent().state_manager.ensure_schema(engine)
 
@@ -47,6 +216,7 @@ def create_guided_research_session(
     user_id: int | None,
     target_mode: str = "global",
     entry_module: str = "ennoscholar",
+    context_updates: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     try:
         from agents.EnnoScholar.guided_research.lot1.domain.enums import (
@@ -65,6 +235,16 @@ def create_guided_research_session(
         target_mode=GuidedResearchTargetMode(target_mode),
         entry_module=GuidedResearchEntryModule(entry_module),
     )
+    if context_updates:
+        get_guided_research_agent().repository.update(
+            db,
+            session.session_id,
+            context_updates=dict(context_updates),
+        )
+        session = get_guided_research_agent().state_manager.get_session(
+            db,
+            session.session_id,
+        )
     return session.model_dump(mode="json")
 
 
@@ -148,6 +328,27 @@ def send_guided_research_message(
     return result.model_dump(mode="json")
 
 
+def run_guided_research_requests(
+    db: Session,
+    project: Any,
+    *,
+    session_id: str,
+    requests_payload: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Exécute un plan de recherche explicite dans une session guidée existante.
+
+    Ce point d'entrée sert aux modules orchestrateurs qui connaissent déjà le
+    passage et ses sous-sections. Il évite qu'une demande éditoriale très large
+    dépende uniquement de l'interprétation conversationnelle d'une requête.
+    """
+
+    agent = get_guided_research_agent()
+    session = agent.state_manager.get_session(db, session_id)
+    if int(session.project_id) != int(project.id):
+        raise PermissionError("Cette session appartient à un autre projet.")
+    return agent._run_research(db, project, session, requests_payload)
+
+
 def decide_guided_research_sources(
     db: Session,
     project: Any,
@@ -185,6 +386,13 @@ def decide_guided_research_sources(
         sources=list(snapshot.get("selected_sources") or []),
         candidate_ids=candidate_ids,
         rebuild_scientific_payloads=True,
+        standalone_context=dict(snapshot.get("context") or {}),
+        guided_session_id=session_id,
+        entry_module=str(snapshot.get("entry_module") or ""),
+        corpus_scope_id=str(
+            (snapshot.get("context") or {}).get("corpus_scope_id")
+            or session_id
+        ),
     )
     updated_sources = list(preparation.pop("sources", []) or [])
     refreshed_coverage = (
@@ -228,12 +436,45 @@ def decide_guided_research_sources(
     )
     response.setdefault("metadata", {})["source_preparation"] = preparation
     response.setdefault("metadata", {})["coverage"] = refreshed_coverage
-    ready_count = len(preparation.get("ready_article_ids") or [])
+    reports = list(preparation.get("reports") or [])
+    targeted_count = len(reports)
+    accepted_count = len(accepted_sources)
+    fulltext_count = sum(
+        1
+        for source in accepted_sources
+        if isinstance(source.get("fulltext_preparation"), dict)
+        and bool(
+            (source.get("fulltext_preparation") or {}).get(
+                "usable_as_scientific_evidence"
+            )
+        )
+    )
+    ready_count = int(
+        preparation.get("writing_ready_cards_count")
+        or fulltext_count
+    )
     mcp_count = int(preparation.get("mcp_calls_count") or 0)
+    mcp_success_count = int(preparation.get("mcp_success_count") or 0)
+    failed_titles = [
+        str(report.get("title") or "Source sans titre").strip()
+        for report in reports
+        if report.get("ready_for_writing") is False
+    ]
     response["assistant_message"] = (
         f"{response.get('assistant_message', '').strip()} "
-        f"Préparation scientifique terminée : {ready_count} texte(s) intégral(aux) "
-        f"prêt(s), avec {mcp_count} recours au MCP après échec direct."
+        f"Le corpus total contient {accepted_count} source(s) validée(s), dont "
+        f"{fulltext_count} texte(s) intégral(aux) vérifié(s) et {ready_count} "
+        f"Article Card(s) prête(s) pour la rédaction. "
+        f"Cette mise à jour a traité {targeted_count} source(s) ; le MCP a été "
+        f"lancé {mcp_count} fois après échec direct et a permis de préparer "
+        f"{mcp_success_count} source(s)."
+        + (
+            " Sources encore indisponibles : "
+            + "; ".join(failed_titles[:5])
+            + "."
+            if failed_titles
+            else ""
+        )
     ).strip()
     return response
 

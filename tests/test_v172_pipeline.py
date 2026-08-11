@@ -17,11 +17,17 @@ def fake_encode(texts):
 
 
 def item(pid, text, role, features, score=.45, document="d"):
+    fastjudge_verrou = bool(features.get("open_validation"))
     return {
         "passage_id": pid,
         "text": text,
         "analysis_text": text,
         "semantic_role": role,
+        "original_model_role": "verrou" if fastjudge_verrou else role,
+        "role": "verrou" if fastjudge_verrou else role,
+        "fastjudge_verrou_signal": fastjudge_verrou,
+        "project_lock_seed": fastjudge_verrou,
+        "lock_candidate": fastjudge_verrou,
         "lock_candidate_features": features,
         "lock_candidate_score": score,
         "document": document,
@@ -41,17 +47,17 @@ def test_cross_document_grouping_and_no_frascati_filter():
         item("p3", "Le bruit reste élevé et les pics harmoniques doivent être analysés", "resultat", {"technical": True, "open_validation": True}, .58, "c.pdf"),
     ]
     report=build_technical_lock_groups(candidates, encode_texts=fake_encode, minimum_complete_link_score=.40)
-    assert report["coverage"]["coverage_rate"] == 1.0
+    assert report["coverage"]["seed_coverage_rate"] == 1.0
+    assert report["coverage"]["unassigned_support_count"] == 0
     assert sum(len(g["supporting_passages"]) for g in report["groups"]) == 3
     fr=assess_project_frascati(report["groups"])
     assert len(fr["group_assessments"]) == len(report["groups"])
-    assert fr["decision"] is None
     assert fr["human_validation_required"] is True
 
 
 def test_methodological_assumption_is_not_deleted():
     candidates=[item("p1", "L'écoulement est considéré isotherme pour la simulation", "parametre", {"technical": True}, .52)]
     report=build_technical_lock_groups(candidates, encode_texts=fake_encode)
-    assert len(report["groups"]) == 1
-    fr=assess_project_frascati(report["groups"])
-    assert len(fr["group_assessments"]) == 1
+    assert report["groups"] == []
+    assert report["support_count"] == 1
+    assert [item["passage_id"] for item in report["candidate_passages"]] == ["p1"]

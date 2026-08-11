@@ -33,7 +33,7 @@ else:
     _CIR_IMPORT_ERROR = None
 
 
-VERSION = "v178_domain_neutral_single_lock_grouping_with_technical_system_graph"
+VERSION = "v189_single_fastjudge_role_aware_nli_grouping_before_frascati"
 
 
 def _safe_list(value: Any) -> List[Any]:
@@ -444,6 +444,9 @@ def run_nlp_pipeline_routed(
         for key, value in frascati.items()
         if key not in {"qualified_pack_for_ennodiagnostic", "evidence_pack_for_ennodiagnostic", "technical_system_graph"}
     }
+    demarche_legibility = (
+        (frascati.get("frascati_assessment") or {}).get("demarche_legibility") or {}
+    )
 
     result = {
         "version": VERSION,
@@ -469,6 +472,11 @@ def run_nlp_pipeline_routed(
             "frascati_verrous_a_verifier": len(frascati.get("verrous_a_verifier", [])),
             "frascati_faux_verrous_rejetes": len(frascati.get("faux_verrous_rejetes", [])),
             "global_frascati_score": (frascati.get("risk_report") or {}).get("global_frascati_score"),
+            "eligibility_assessment_score": (frascati.get("frascati_assessment") or {}).get("eligibility_assessment_score", 0.0),
+            "demarche_method_steps": demarche_legibility.get("method_steps_count", 0),
+            "demarche_research_justified_steps": demarche_legibility.get("research_justified_steps_count", 0),
+            "demarche_routine_engineering_steps": demarche_legibility.get("routine_engineering_steps_count", 0),
+            "demarche_unexplained_steps": demarche_legibility.get("unexplained_steps_count", 0),
             "lock_seed_candidates": lock_grouping.get("seed_count", 0),
             "lock_supporting_evidence": lock_grouping.get("support_count", 0),
             "lock_duplicates_removed": len(lock_grouping.get("duplicates_removed") or []),
@@ -486,6 +494,7 @@ def run_nlp_pipeline_routed(
         "pre_cir_structured_result": _compact_subresult(pre_cir_result),
         "cir_structured_result": _compact_subresult(cir_result),
         "frascati_guard": frascati_summary,
+        "demarche_legibility": demarche_legibility,
         "technical_system_graph": frascati.get("technical_system_graph") or {},
         "document_evidence_summaries": context["document_evidence_summaries"],
         # Pack canonique unique utilisé par json_to_chunks / RAG.
@@ -507,6 +516,7 @@ def run_nlp_pipeline_routed(
                 "Le regroupement V177 utilise les embeddings existants et le complete-linkage, sans perdre les passages sources.",
                 "Le Technical System Graph décrit objets, fonctions, phénomènes et paramètres sans créer de verrou.",
                 "Frascati ne rejette et ne supprime aucun groupe technique ; il calcule uniquement un score et des questions.",
+                "La lisibilite de la demarche distingue les etapes R&D justifiees, l'ingenierie courante et les procedures sans lien causal explicite.",
                 "Memory V2 est un contexte de l'agent, jamais une preuve ni un classifieur NLP.",
             ],
         },

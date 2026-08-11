@@ -364,6 +364,28 @@ class WebResearchService:
         ):
             seen_web_entities: set[str] = set()
             for request in seed_requests:
+                entity_tokens = _tokens(
+                    request.get("entity_name") or request.get("query")
+                )
+                focused_entity = bool(
+                    self._contract_identifier(request.get("entity_type"))
+                    in self.DOCUMENTATION_ENTITY_TYPES
+                    or len(entity_tokens) <= 4
+                )
+                use_web_discovery = bool(
+                    self._wants_documentation(request)
+                    or (
+                        focused_entity
+                        and request.get("refinement_reason")
+                        in {
+                            "missing_scientific_articles",
+                            "missing_direct_scientific_evidence",
+                            "missing_scientific_breadth",
+                        }
+                    )
+                )
+                if not use_web_discovery:
+                    continue
                 web_key = _norm(
                     request.get("entity_name") or request.get("query")
                 )
@@ -409,6 +431,23 @@ class WebResearchService:
             merged,
             seed_requests,
         )
+        year_ceilings = [
+            _year(request.get("publication_year_max"))
+            for request in seed_requests
+            if request.get("publication_year_max") is not None
+        ]
+        year_ceilings = [year for year in year_ceilings if year is not None]
+        if year_ceilings:
+            # Une contrainte temporelle explicite est stricte : une source sans
+            # année vérifiable ne doit pas être présentée comme conforme.
+            publication_year_max = min(year_ceilings)
+            merged = [
+                row
+                for row in merged
+                if _year(row.get("year") or row.get("publication_year")) is not None
+                and _year(row.get("year") or row.get("publication_year"))
+                <= publication_year_max
+            ]
         role_priority = {
             "direct_evidence": 4,
             "official_documentation": 3,
@@ -465,10 +504,27 @@ class WebResearchService:
             ranked,
         )
         refinement_rounds: list[dict[str, Any]] = []
-        if auto_refine and completeness["missing_source_types"]:
+        missing_for_refinement = list(
+            completeness["missing_source_types"]
+        )
+        if (
+            "direct_scientific_evidence" in missing_for_refinement
+            and int(
+                (completeness.get("found") or {}).get(
+                    "scientific_articles", 0
+                )
+            )
+            >= 6
+        ):
+            # Le portefeuille contient déjà assez de travaux pour exposer
+            # honnêtement l'absence de preuve directe. Une seconde recherche
+            # automatique coûteuse et quasi identique n'améliore généralement
+            # pas la couverture ; le consultant pourra demander un affinage.
+            missing_for_refinement.remove("direct_scientific_evidence")
+        if auto_refine and missing_for_refinement:
             refinements = self._build_refinement_requests(
                 requests_list,
-                completeness["missing_source_types"],
+                missing_for_refinement,
             )
             if refinements:
                 retry = self.search(
@@ -806,9 +862,23 @@ class WebResearchService:
             candidate.get("web_citation_context")
         )
         matching_request: Mapping[str, Any] = {}
+        candidate_query = _norm(candidate.get("query"))
+        if candidate_query:
+            matching_request = next(
+                (
+                    request
+                    for request in requests_list
+                    if _norm(request.get("query")) == candidate_query
+                ),
+                {},
+            )
         for request in requests_list:
+            if matching_request:
+                break
             entity_tokens = _tokens(request.get("entity_name"))
-            if not entity_tokens or entity_tokens.issubset(identity_found):
+            entity_hits = len(entity_tokens & identity_found)
+            minimum_hits = min(2, len(entity_tokens))
+            if not entity_tokens or entity_hits >= minimum_hits:
                 matching_request = request
                 break
         if kind == "scientific_article":
@@ -818,15 +888,40 @@ class WebResearchService:
             direct_dimensions = [
                 dimension
                 for dimension in context_dimensions
-                if _tokens(dimension) & found
+                if (
+                    (dimension_tokens := _tokens(dimension))
+                    and len(dimension_tokens & found)
+                    >= max(1, (len(dimension_tokens) + 1) // 2)
+                )
             ]
             required_dimension_matches = min(
                 2,
                 len(context_dimensions),
             )
+            direct_specificity_ok = True
+            if matching_request.get("require_direct_evidence") is True:
+                entity_tokens = _tokens(
+                    matching_request.get("entity_name")
+                )
+                discriminating_groups = [
+                    tokens
+                    for tokens in (
+                        _tokens(value)
+                        for value in (
+                            matching_request.get("required_terms") or []
+                        )
+                    )
+                    if tokens and not tokens.issubset(entity_tokens)
+                ]
+                if discriminating_groups:
+                    direct_specificity_ok = any(
+                        tokens.issubset(found)
+                        for tokens in discriminating_groups
+                    )
             if (
                 direct_dimensions
                 and len(direct_dimensions) >= required_dimension_matches
+                and direct_specificity_ok
             ):
                 return (
                     "direct_evidence",
@@ -1566,6 +1661,7 @@ Chaque source mentionnée doit avoir une citation Web vérifiable.
             ),
             "query": request.get("query"),
             "entity_name": request.get("entity_name"),
+            "entity_type": request.get("entity_type"),
             "query_kind": request.get("query_kind"),
             "discovery_kind": "semantic_web_discovery",
             "required_terms": list(request.get("required_terms") or []),
@@ -1701,6 +1797,7 @@ Chaque source mentionnée doit avoir une citation Web vérifiable.
             ),
             "query": request.get("query"),
             "entity_name": request.get("entity_name"),
+            "entity_type": request.get("entity_type"),
             "query_kind": request.get("query_kind"),
             "required_terms": list(request.get("required_terms") or []),
             "excluded_terms": list(request.get("excluded_terms") or []),
@@ -1769,6 +1866,7 @@ Chaque source mentionnée doit avoir une citation Web vérifiable.
             ),
             "query": request.get("query"),
             "entity_name": request.get("entity_name"),
+            "entity_type": request.get("entity_type"),
             "query_kind": request.get("query_kind"),
             "required_terms": list(request.get("required_terms") or []),
             "excluded_terms": list(request.get("excluded_terms") or []),
@@ -1870,6 +1968,7 @@ Chaque source mentionnée doit avoir une citation Web vérifiable.
             "requested_dimensions": list(request.get("requested_dimensions") or []),
             "query": request.get("query"),
             "entity_name": request.get("entity_name"),
+            "entity_type": request.get("entity_type"),
             "query_kind": request.get("query_kind"),
             "required_terms": list(request.get("required_terms") or []),
             "excluded_terms": list(request.get("excluded_terms") or []),
@@ -1972,6 +2071,7 @@ Chaque source mentionnée doit avoir une citation Web vérifiable.
             "requested_dimensions": list(request.get("requested_dimensions") or []),
             "query": request.get("query"),
             "entity_name": request.get("entity_name"),
+            "entity_type": request.get("entity_type"),
             "query_kind": request.get("query_kind"),
             "required_terms": list(request.get("required_terms") or []),
             "excluded_terms": list(request.get("excluded_terms") or []),
@@ -1998,8 +2098,37 @@ Chaque source mentionnée doit avoir une citation Web vérifiable.
             return False
 
         entity_tokens = _tokens(candidate.get("entity_name"))
+        required_groups = [
+            term_tokens
+            for term_tokens in (
+                _tokens(term)
+                for term in (candidate.get("required_terms") or [])
+                if _clean(term, 300)
+            )
+            if term_tokens
+        ]
+        entity_type = WebResearchService._contract_identifier(
+            candidate.get("entity_type")
+        )
+        named_entity = bool(
+            entity_type
+            in {
+                "tool",
+                "scientific_software",
+                "software_library",
+                "dataset",
+                "protocol",
+                "standard",
+            }
+            or (
+                len(required_groups) == 1
+                and required_groups[0] == entity_tokens
+            )
+        )
         entity_minimum_hits = (
             max(1, len(entity_tokens) - 1)
+            if named_entity and entity_tokens
+            else min(2, len(entity_tokens))
             if entity_tokens
             else 0
         )
@@ -2019,40 +2148,33 @@ Chaque source mentionnée doit avoir une citation Web vérifiable.
             )
             if tokens
         ]
-        if candidate.get("require_direct_evidence") and context_groups:
-            context_matched = any(
-                len(tokens & found)
-                >= max(1, int(len(tokens) * 0.60 + 0.5))
-                for tokens in context_groups
-            )
-            if not context_matched:
-                return False
-
-        required_terms = [
-            _clean(value, 300)
-            for value in (candidate.get("required_terms") or [])
-            if _clean(value, 300)
-        ]
-        required_groups = [
-            term_tokens
-            for term_tokens in (_tokens(term) for term in required_terms)
-            if term_tokens
-        ]
+        context_matched = any(
+            len(tokens & found)
+            >= max(1, (len(tokens) + 1) // 2)
+            for tokens in context_groups
+        )
         if required_groups:
             matched_groups = sum(
-                (
-                    len(term_tokens & found) >= entity_minimum_hits
-                    if entity_tokens and term_tokens == entity_tokens
-                    else term_tokens.issubset(found)
-                )
+                len(term_tokens & found)
+                >= max(1, (len(term_tokens) + 1) // 2)
                 for term_tokens in required_groups
             )
-            # Trois ancrages ou plus décrivent généralement méthode + domaine
-            # + finalité. Deux correspondances suffisent pour accepter une
-            # reformulation scientifique tout en rejetant un homonyme qui ne
-            # partage qu'un concept générique.
-            minimum_groups = 2 if len(required_groups) >= 3 else 1
+            # Un contexte cible effectivement observé constitue déjà un second
+            # ancrage. Sans ce contexte, deux groupes conceptuels sont exigés
+            # pour éviter les homonymes et applications hors domaine.
+            minimum_groups = (
+                1
+                if context_matched or len(required_groups) < 3
+                else 2
+            )
             if matched_groups < minimum_groups:
+                return False
+            if (
+                candidate.get("require_direct_evidence")
+                and context_groups
+                and not context_matched
+                and matched_groups < 2
+            ):
                 return False
 
         for term in candidate.get("excluded_terms") or []:
@@ -2065,7 +2187,7 @@ Chaque source mentionnée doit avoir une citation Web vérifiable.
             return False
         hits = len(wanted & found)
         minimum_hits = 1 if len(wanted) <= 4 else 2
-        return hits >= minimum_hits and hits / len(wanted) >= 0.12
+        return hits >= minimum_hits and hits / len(wanted) >= 0.08
 
     @staticmethod
     def _score(

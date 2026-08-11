@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from .json_to_chunks import nlp_json_to_chunks
-from .lock_semantic_consolidator import save_lock_clusters
 from .project_store import ProjectStore
 from .vector_store import RAGVectorStore
 
@@ -20,37 +19,6 @@ def _count_meta(chunks, key: str) -> Dict[str, int]:
     return dict(counter)
 
 
-def _apply_cluster_metadata(chunks, cluster_report: Dict[str, Any]) -> None:
-    """Ajoute l'identifiant de cluster aux chunks principaux sans modifier la preuve."""
-    membership: Dict[str, Dict[str, Any]] = {}
-    for cluster in cluster_report.get("clusters") or []:
-        if not isinstance(cluster, dict):
-            continue
-        for group_id in cluster.get("member_group_ids") or []:
-            membership[str(group_id)] = cluster
-
-    for chunk in chunks or []:
-        if not isinstance(chunk, dict):
-            continue
-        meta = chunk.get("metadata") or {}
-        if not isinstance(meta, dict):
-            continue
-        group_id = str(meta.get("lock_group_id") or "").strip()
-        cluster = membership.get(group_id)
-        if not cluster:
-            continue
-        meta.update({
-            "semantic_lock_cluster_id": str(cluster.get("cluster_id") or ""),
-            "semantic_lock_cluster_scope": str(cluster.get("lock_scope") or ""),
-            "semantic_lock_cluster_technical_scope": str(cluster.get("technical_scope") or ""),
-            "semantic_lock_cluster_role": str(cluster.get("cluster_role") or ""),
-            "semantic_lock_cluster_display": bool(cluster.get("display_as_lock", True)),
-            "semantic_lock_cluster_size": int(cluster.get("group_count") or 1),
-            "semantic_lock_cluster_version": str(cluster_report.get("version") or ""),
-        })
-        chunk["metadata"] = meta
-
-
 def index_nlp_result(
     organisme: str,
     project: str,
@@ -59,7 +27,11 @@ def index_nlp_result(
     year: Optional[str | int] = None,
     annee: Optional[str | int] = None,
 ) -> Dict[str, Any]:
-    """Indexe le NLP et consolide les groupes de verrous dans le RAG, sans LLM."""
+    """Indexe fidelement les groupes deja finalises par le NLP.
+
+    Le RAG ne regroupe, ne separe et ne reclasse aucun verrou. L'identifiant
+    ``lock_group_id`` produit avant Frascati reste l'unique identite aval.
+    """
     project_store = ProjectStore(organisme, project, year=year, annee=annee).ensure()
     project_store.save_json("nlp/nlp_result.json", nlp_result)
 
@@ -69,14 +41,15 @@ def index_nlp_result(
         year=project_store.year,
     )
 
-    # La consolidation sémantique est calculée une fois lors de l'indexation.
-    # EnnoDiagnostic lira ensuite ce fichier et ne décidera plus des fusions.
-    lock_clusters_path = project_store.rag_dir / "lock_clusters.json"
-    cluster_report = save_lock_clusters(
-        nlp_result=nlp_result,
-        output_path=lock_clusters_path,
-    )
-    _apply_cluster_metadata(chunks, cluster_report)
+    # Projection fidèle : aucune consolidation sémantique n'est exécutée ici.
+    nlp_lock_group_ids = {
+        str((chunk.get("metadata") or {}).get("lock_group_id") or "").strip()
+        for chunk in chunks
+        if isinstance(chunk, dict)
+        and str((chunk.get("metadata") or {}).get("role") or "") == "verrou"
+        and str((chunk.get("metadata") or {}).get("chunk_level") or "") == "nlp_main_item"
+        and str((chunk.get("metadata") or {}).get("lock_group_id") or "").strip()
+    }
 
     chunks_path = project_store.rag_dir / "chunks.json"
     chunks_path.write_text(
@@ -104,17 +77,16 @@ def index_nlp_result(
         "theme_ids_count": _count_meta(chunks, "theme_id"),
         "verrou_candidate_levels_count": _count_meta(chunks, "verrou_candidate_level"),
         "chunk_levels_count": _count_meta(chunks, "chunk_level"),
-        "semantic_lock_cluster_ids_count": _count_meta(chunks, "semantic_lock_cluster_id"),
+        "nlp_lock_group_ids_count": len(nlp_lock_group_ids),
     }
 
     project_store.write_metadata({
         "last_indexed_chunks": report.get("added", 0),
         "collection_name": collection_name,
         "rag_dir": str(project_store.rag_dir),
-        "lock_clusters_path": str(lock_clusters_path),
-        "lock_clusters_version": cluster_report.get("version"),
-        "lock_clusters_mode": cluster_report.get("mode"),
-        "lock_clusters_count": cluster_report.get("display_clusters_count", 0),
+        "lock_grouping_owner": "nlp_before_frascati",
+        "downstream_lock_regrouping_enabled": False,
+        "nlp_lock_groups_count": len(nlp_lock_group_ids),
         **stats,
     })
 
@@ -131,14 +103,18 @@ def index_nlp_result(
         "embedding_model": report.get("embedding_model"),
         "project_dir": str(project_store.project_dir),
         "chunks_path": str(chunks_path),
-        "lock_clusters_path": str(lock_clusters_path),
-        "lock_clusters_ok": bool(cluster_report.get("ok")),
-        "lock_clusters_version": cluster_report.get("version"),
-        "lock_clusters_mode": cluster_report.get("mode"),
-        "lock_groups_count": cluster_report.get("groups_count", 0),
-        "lock_display_clusters_count": cluster_report.get("display_clusters_count", 0),
-        "lock_support_only_clusters_count": cluster_report.get("support_only_clusters_count", 0),
-        "lock_cluster_error": cluster_report.get("error"),
+        "lock_grouping_owner": "nlp_before_frascati",
+        "downstream_lock_regrouping_enabled": False,
+        "nlp_lock_groups_count": len(nlp_lock_group_ids),
+        # Alias historiques : aucun fichier/cluster RAG n'est desormais cree.
+        "lock_clusters_path": None,
+        "lock_clusters_ok": True,
+        "lock_clusters_version": None,
+        "lock_clusters_mode": "disabled_nlp_group_passthrough",
+        "lock_groups_count": len(nlp_lock_group_ids),
+        "lock_display_clusters_count": len(nlp_lock_group_ids),
+        "lock_support_only_clusters_count": 0,
+        "lock_cluster_error": None,
         **stats,
     }
 

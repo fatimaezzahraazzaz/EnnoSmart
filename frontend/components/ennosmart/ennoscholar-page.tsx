@@ -3545,28 +3545,38 @@ export function EnnoScholarPage({
       setCurrentProjectId(selectedProject.id)
       setProject(selectedProject)
 
-      const [documentsData, articlesData, scholarData, stateArtData, latestStateArtData] = await Promise.all([
+      const [documentsData, articlesData] = await Promise.all([
         getDocuments(selectedProject.id).catch(() => []),
-        getArticles(selectedProject.id),
-        getScholarLatest(selectedProject.id).catch(() => null),
-        getStateOfArtHistory(selectedProject.id).catch(() => null),
-        getLatestStateOfArt(selectedProject.id).catch(() => null),
+        getArticles(selectedProject.id, true),
       ])
-
-      const stateArtReports = Array.isArray(stateArtData?.reports) ? stateArtData.reports : []
 
       setDocuments(documentsData)
       setArticles(articlesData)
-      setScholarBundle(scholarData)
-      setStateOfArtHistory(stateArtReports)
-      setSelectedStateOfArtRunId(stateArtReports[0]?.run_id ? String(stateArtReports[0].run_id) : null)
       setGeneratedStateArtResult(null)
-      setLatestStateArtResult(latestStateArtData)
       setSelectionPreviewPayload(null)
       setArticleCardsPayload(null)
       setFulltextStatusPayload(null)
       setDirectExtractStatusPayload(null)
       setPrepareStateArtStage("idle")
+      setLoading(false)
+
+      void Promise.all([
+        getScholarLatest(selectedProject.id).catch(() => null),
+        getStateOfArtHistory(selectedProject.id).catch(() => null),
+      ])
+        .then(([scholarData, stateArtData]) => {
+          setScholarBundle(scholarData)
+          const reports = Array.isArray(stateArtData?.reports) ? stateArtData.reports : []
+          const latest = reports[0]
+          setStateOfArtHistory(reports)
+          setSelectedStateOfArtRunId(latest?.run_id ? String(latest.run_id) : null)
+          setLatestStateArtResult(latest ? {
+            markdown: latest.markdown || latest.report?.markdown || "",
+            report: latest.report || null,
+            state_of_art_view: latest.report || null,
+          } : null)
+        })
+        .catch(() => undefined)
     } catch (err) {
       setError(
         err instanceof Error
@@ -3599,29 +3609,43 @@ export function EnnoScholarPage({
     try {
       const selectedProject = projects.find((item) => item.id === projectId) || null
       setProject(selectedProject)
+      setScholarBundle(null)
+      setStateOfArtHistory([])
+      setSelectedStateOfArtRunId(null)
+      setLatestStateArtResult(null)
 
-      const [documentsData, articlesData, scholarData, stateArtData, latestStateArtData] = await Promise.all([
+      const [documentsData, articlesData] = await Promise.all([
         getDocuments(projectId).catch(() => []),
-        getArticles(projectId),
-        getScholarLatest(projectId).catch(() => null),
-        getStateOfArtHistory(projectId).catch(() => null),
-        getLatestStateOfArt(projectId).catch(() => null),
+        getArticles(projectId, true),
       ])
-
-      const stateArtReports = Array.isArray(stateArtData?.reports) ? stateArtData.reports : []
 
       setDocuments(documentsData)
       setArticles(articlesData)
-      setScholarBundle(scholarData)
-      setStateOfArtHistory(stateArtReports)
-      setSelectedStateOfArtRunId(stateArtReports[0]?.run_id ? String(stateArtReports[0].run_id) : null)
       setGeneratedStateArtResult(null)
-      setLatestStateArtResult(latestStateArtData)
       setSelectionPreviewPayload(null)
       setArticleCardsPayload(null)
       setFulltextStatusPayload(null)
       setDirectExtractStatusPayload(null)
       setPrepareStateArtStage("idle")
+      setLoading(false)
+
+      void Promise.all([
+        getScholarLatest(projectId).catch(() => null),
+        getStateOfArtHistory(projectId).catch(() => null),
+      ])
+        .then(([scholarData, stateArtData]) => {
+          setScholarBundle(scholarData)
+          const reports = Array.isArray(stateArtData?.reports) ? stateArtData.reports : []
+          const latest = reports[0]
+          setStateOfArtHistory(reports)
+          setSelectedStateOfArtRunId(latest?.run_id ? String(latest.run_id) : null)
+          setLatestStateArtResult(latest ? {
+            markdown: latest.markdown || latest.report?.markdown || "",
+            report: latest.report || null,
+            state_of_art_view: latest.report || null,
+          } : null)
+        })
+        .catch(() => undefined)
     } catch (err) {
       setError(
         err instanceof Error
@@ -3695,7 +3719,7 @@ export function EnnoScholarPage({
 
   const refreshCorpusAfterChatAction = async () => {
     if (!project?.id) return
-    const refreshedArticles = await getArticles(project.id)
+    const refreshedArticles = await getArticles(project.id, true)
     setArticles(refreshedArticles)
     await loadStateOfArtPreparationStatus()
   }
@@ -3775,7 +3799,9 @@ export function EnnoScholarPage({
     }
   }
 
-  const launchFinalStateOfArtGeneration = async () => {
+  const launchFinalStateOfArtGeneration = async (
+    guidedSessionId?: string | null,
+  ) => {
     if (!project?.id) return
 
     setGeneratingStateArt(true)
@@ -3796,8 +3822,13 @@ export function EnnoScholarPage({
         // Qualité complète : le backend applique le contexte Phase 3 → 4.7
         // et choisit le modèle via le LLMClient central.
         fastMode: false,
+        guidedSessionId,
       })
       setGeneratedStateArtResult(generated)
+      if (generated?.ok === false) {
+        setGenerateStateArtError("")
+        return generated
+      }
       setLatestStateArtResult(generated)
 
       const stateArtData = await getStateOfArtHistory(project.id).catch(() => null)
@@ -3806,9 +3837,18 @@ export function EnnoScholarPage({
       setStateOfArtHistory(stateArtReports)
       setSelectedStateOfArtRunId(stateArtReports[0]?.run_id ? String(stateArtReports[0].run_id) : null)
       setActiveTab("etat-art-rediges")
-    } catch (error: any) {
-      setGenerateStateArtError(error?.message || "Impossible de générer l’état de l’art.")
-      setActiveTab("etat-art-rediges")
+      return generated
+    } catch {
+      const deferred = {
+        ok: false,
+        status: "writing_service_temporarily_unavailable",
+        assistant_message:
+          "Le service de rédaction est momentanément indisponible. Votre corpus, votre plan et vos choix sont conservés ; relancez la rédaction sans recommencer la recherche.",
+        retryable: true,
+        previous_draft_preserved: true,
+      }
+      setGenerateStateArtError(deferred.assistant_message)
+      return deferred
     } finally {
       setGeneratingStateArt(false)
     }
@@ -3904,9 +3944,9 @@ export function EnnoScholarPage({
   }
 
   return (
-    <div className="mx-auto max-w-[1800px] space-y-4 p-4 xl:p-6">
+    <div className="mx-auto max-w-[1800px] space-y-5 p-5 sm:p-7 lg:p-8">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="ennoma-page-header flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <div className="size-7 rounded-md bg-brand flex items-center justify-center">

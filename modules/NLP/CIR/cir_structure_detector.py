@@ -24,6 +24,7 @@ CIR_STRONG_SIGNALS = [
 ]
 
 SECTION_MARKER_RE = re.compile(r"^\s*\[SECTION\s*:\s*(.+?)\]\s*$", re.I)
+PAGE_MARKER_RE = re.compile(r"^\s*\[PAGE\s+(\d+)\]\s*$", re.I)
 NUMBERED_HEADING_RE = re.compile(r"^\s*(\d+(?:\.\d+){0,6})\.?\s+(.{3,180}?)\s*$")
 PLAIN_HEADING_RE = re.compile(
     r"^\s*(FICHE DESCRIPTIVE DU PROJET|TH[ÉE]SAURUS|MOTS[- ]CL[ÉE]S?)\s*$",
@@ -47,7 +48,7 @@ def _is_toc_start(line: str) -> bool:
 def _is_toc_line(line: str) -> bool:
     """
     Détecte une ligne de table des matières Word :
-    - PAGEREF / _Toc / TOC \o
+    - PAGEREF / _Toc / TOC \\o
     - 1.3. Etat de l'art 5
     """
     raw = str(line or "").strip()
@@ -62,12 +63,54 @@ def _is_toc_line(line: str) -> bool:
     if "pageref" in low or "_toc" in low or low.startswith("toc \\o"):
         return True
 
+    # Les titres longs d'un sommaire Word sont parfois coupés sur plusieurs
+    # lignes. Les pointillés et le numéro final restent alors le signal le
+    # plus fiable, même si le numéro de section est sur la ligne précédente.
+    if re.search(r"\.{4,}\s*\d{1,3}\s*$", raw):
+        return True
+
     if re.match(r"^\s*\d+(?:\.\d+)*\.?\s+.{3,180}\s+\d{1,3}\s*$", raw):
         words = re.findall(r"[A-Za-zÀ-ÿ]{3,}", raw)
         if len(words) >= 2:
             return True
 
     return False
+
+
+def _drop_toc_pages(lines: List[str]) -> List[str]:
+    """Supprime les pages entières de sommaire quand les marqueurs sont présents."""
+    if not any(PAGE_MARKER_RE.match(str(line or "").strip()) for line in lines):
+        return lines
+
+    pages: List[List[str]] = []
+    current: List[str] = []
+    prefix: List[str] = []
+
+    for line in lines:
+        if PAGE_MARKER_RE.match(str(line or "").strip()):
+            if current:
+                pages.append(current)
+            current = [line]
+        elif current:
+            current.append(line)
+        else:
+            prefix.append(line)
+    if current:
+        pages.append(current)
+
+    output = list(prefix)
+    for page_lines in pages:
+        content = [str(line or "").strip() for line in page_lines[1:] if str(line or "").strip()]
+        has_start = any(_is_toc_start(line) for line in content)
+        toc_signals = sum(1 for line in content if _is_toc_line(line))
+        is_toc_page = has_start or (
+            toc_signals >= 3
+            and toc_signals >= max(3, int(len(content) * 0.12))
+        )
+        if not is_toc_page:
+            output.extend(page_lines)
+
+    return output
 
 
 def _drop_toc_lines(lines: List[str]) -> List[str]:
@@ -208,11 +251,13 @@ def _content_is_only_toc(text: str) -> bool:
 def detect_cir_structure(text: str, document: str = "") -> Dict[str, Any]:
     text = str(text or "").replace("\r", "\n")
     lines = text.splitlines()
+    lines = _drop_toc_pages(lines)
     lines = _drop_toc_lines(lines)
 
     sections: List[Dict[str, Any]] = []
     current: Optional[Dict[str, Any]] = None
     buf: List[str] = []
+    current_page: Optional[int] = None
 
     def flush() -> None:
         nonlocal current, buf
@@ -221,19 +266,37 @@ def detect_cir_structure(text: str, document: str = "") -> Dict[str, Any]:
             if _content_is_only_toc(content):
                 content = ""
             current["text"] = content
+            page_numbers = sorted(set(current.pop("_page_numbers", []) or []))
+            if page_numbers:
+                current["page_number"] = page_numbers[0]
+                current["page"] = page_numbers[0]
+                current["page_start"] = page_numbers[0]
+                current["page_end"] = page_numbers[-1]
+                current["page_numbers"] = page_numbers
             sections.append(current)
         current = None
         buf = []
 
     for line in lines:
+        page_match = PAGE_MARKER_RE.match(str(line or "").strip())
+        if page_match:
+            current_page = int(page_match.group(1))
+            if current is not None:
+                current.setdefault("_page_numbers", []).append(current_page)
+            continue
+
         h = _is_heading(line)
         if h:
             flush()
             current = h
+            if current_page is not None:
+                current["_page_numbers"] = [current_page]
             buf = []
         else:
             if current is not None:
                 buf.append(line)
+                if current_page is not None:
+                    current.setdefault("_page_numbers", []).append(current_page)
 
     flush()
 

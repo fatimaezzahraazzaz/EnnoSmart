@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import hashlib
+import inspect
 import json
 import re
 import unicodedata
@@ -47,7 +49,10 @@ from ..lot1.domain.models import (
     RequestedSection,
     RequestedTopic,
 )
-from ..lot1.conversation_understanding_service import ConversationUnderstandingService
+from ..lot1.conversation_understanding_service import (
+    ConversationUnderstandingService,
+    _ground_writing_source_policy,
+)
 from ..lot1.session_state_manager import GuidedResearchSessionStateManager
 from .session_repository import GuidedResearchSessionRepository
 from .web_research_service import WebResearchService
@@ -73,6 +78,7 @@ _SEARCH_ACTION_INTENTS = {
     ConsultantIntent.SEARCH_MORE,
     ConsultantIntent.SEARCH_ALTERNATIVE,
     ConsultantIntent.REPLACE_SOURCE,
+    ConsultantIntent.ADD_VERROU_AND_SEARCH,
 }
 _RESPONSE_ONLY_INTENTS = {
     ConsultantIntent.CONVERSE,
@@ -153,6 +159,32 @@ def _resolve_effective_writing_source_identifiers(
     ):
         return stored
     return current or stored
+
+
+def _resolve_candidate_display_identifiers(
+    identifiers: Iterable[str],
+    current_candidate_ids: Iterable[str] | None,
+) -> list[str]:
+    """Convertit C1/C2 du dernier résultat en identifiants persistants."""
+    candidates = [
+        _clean(value, 500)
+        for value in (current_candidate_ids or [])
+        if _clean(value, 500)
+    ]
+    resolved: list[str] = []
+    seen: set[str] = set()
+    for raw in identifiers:
+        value = _clean(raw, 500)
+        match = re.fullmatch(r"C\s*(\d{1,4})", value, flags=re.I)
+        if match:
+            index = int(match.group(1)) - 1
+            if 0 <= index < len(candidates):
+                value = candidates[index]
+        key = value.casefold()
+        if value and key not in seen:
+            seen.add(key)
+            resolved.append(value)
+    return resolved
 
 
 def _reconcile_contextual_intent(
@@ -633,6 +665,7 @@ class EnnoScholarGuidedResearchAgent:
 
     def _conversation_project_context(
         self,
+        db: Session,
         project: Any,
         session: GuidedResearchSessionData,
     ) -> dict[str, Any]:
@@ -691,6 +724,37 @@ class EnnoScholarGuidedResearchAgent:
             json.dumps(narrative_context, ensure_ascii=False, default=str),
             18000,
         )
+
+        try:
+            from services.consultant_verrou_service import (
+                list_latest_diagnostic_verrous_for_chat,
+            )
+            current_verrous = list_latest_diagnostic_verrous_for_chat(
+                db, project
+            )
+        except Exception as exc:
+            current_verrous = []
+            print(
+                "[EnnoScholar][GuidedResearch][WARN] "
+                f"lecture verrous chat impossible: {exc}"
+            )
+
+        standalone_verrous = [
+            dict(row)
+            for row in (session.context.get("consultant_verrous") or [])
+            if isinstance(row, Mapping) and _clean(row.get("title"), 700)
+        ]
+        known_ids = {
+            _clean(row.get("id"), 120)
+            for row in current_verrous
+            if _clean(row.get("id"), 120)
+        }
+        current_verrous.extend(
+            row
+            for row in standalone_verrous
+            if _clean(row.get("id"), 120) not in known_ids
+        )
+
         return {
             "project": {
                 "id": int(project.id),
@@ -701,6 +765,13 @@ class EnnoScholarGuidedResearchAgent:
             },
             "scientific_context": narrative_text,
             "validated_article_cards": article_context,
+            "current_verrous": current_verrous,
+            "operating_mode": _clean(
+                session.context.get("operating_mode"), 80
+            ),
+            "standalone_project_brief": dict(
+                session.context.get("standalone_project_brief") or {}
+            ),
             "previous_project_memories": list(
                 session.context.get("previous_project_memories") or []
             )[-5:],
@@ -712,6 +783,22 @@ class EnnoScholarGuidedResearchAgent:
             ),
         }
 
+    def _resolved_conversation_project_context(
+        self,
+        db: Session,
+        project: Any,
+        session: GuidedResearchSessionData,
+    ) -> dict[str, Any]:
+        """Compatibilité avec les adaptateurs historiques à deux arguments."""
+        builder = self._conversation_project_context
+        try:
+            parameter_count = len(inspect.signature(builder).parameters)
+        except (TypeError, ValueError):
+            parameter_count = 3
+        if parameter_count <= 2:
+            return builder(project, session)  # type: ignore[call-arg]
+        return builder(db, project, session)
+
     def create_session(
         self,
         db: Session,
@@ -721,22 +808,36 @@ class EnnoScholarGuidedResearchAgent:
         target_mode: GuidedResearchTargetMode = GuidedResearchTargetMode.GLOBAL,
         entry_module: GuidedResearchEntryModule = GuidedResearchEntryModule.ENNOSCHOLAR,
     ) -> GuidedResearchSessionData:
-        contract = self._load_or_create_contract(project)
+        try:
+            from services.consultant_verrou_service import (
+                get_latest_diagnostic_run,
+            )
+            diagnostic_backed = bool(
+                get_latest_diagnostic_run(db, int(project.id))
+            )
+        except Exception:
+            diagnostic_backed = False
+        contract = (
+            {}
+            if entry_module == GuidedResearchEntryModule.ENNOAMEL
+            else self._load_or_create_contract(project)
+        )
         brief = _brief_from_contract(contract) if contract else None
         previous_memories: list[dict[str, Any]] = []
-        for previous in self.state_manager.list_project_sessions(
-            db, int(project.id), limit=8
-        ):
-            memory = previous.context.get("conversation_memory")
-            if isinstance(memory, dict) and memory:
-                previous_memories.append(memory)
+        if entry_module != GuidedResearchEntryModule.ENNOAMEL:
+            for previous in self.state_manager.list_project_sessions(
+                db, int(project.id), limit=8
+            ):
+                memory = previous.context.get("conversation_memory")
+                if isinstance(memory, dict) and memory:
+                    previous_memories.append(memory)
         latest_memory = previous_memories[0] if previous_memories else {}
         session = self.state_manager.create_session(
             db,
             project_id=int(project.id),
             created_by_user_id=created_by_user_id,
             entry_module=entry_module,
-            target_mode=GuidedResearchTargetMode.GLOBAL,
+            target_mode=target_mode,
             initial_context={
                 "project": {
                     "id": int(project.id),
@@ -749,6 +850,14 @@ class EnnoScholarGuidedResearchAgent:
                 "guided_sources_path": str(self._sources_path(project)),
                 "research_enabled": True,
                 "conversation_mode": "natural_llm",
+                "operating_mode": (
+                    "diagnostic_backed"
+                    if diagnostic_backed
+                    else "standalone_chat"
+                ),
+                "chat_only_interface": not diagnostic_backed,
+                "consultant_verrous": [],
+                "standalone_project_brief": {},
                 "conversation_memory": latest_memory,
                 "previous_project_memories": previous_memories[:5],
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -768,9 +877,19 @@ class EnnoScholarGuidedResearchAgent:
             ready_to_write=bool(contract.get("approved_plan")),
         )
         greeting = (
-            "Parlez-moi librement de l'histoire scientifique que vous voulez construire. "
-            "Je peux proposer ou modifier le plan, signaler les parties faibles, rechercher "
-            "des articles ou des documentations officielles, puis rédiger lorsque vous le décidez."
+            (
+                "Parlez-moi librement de l'histoire scientifique que vous voulez construire. "
+                "Je peux proposer ou modifier le plan, signaler les parties faibles, rechercher "
+                "des articles ou des documentations officielles, ajouter un verrou manquant "
+                "sur demande explicite, puis rédiger lorsque vous le décidez."
+            )
+            if diagnostic_backed
+            else (
+                "Cette conversation peut partir sans diagnostic préalable. Indiquez le "
+                "projet, son domaine, son objectif et le ou les verrous à étudier. "
+                "Je rechercherai les publications pertinentes avant de rédiger une revue "
+                "ciblée pour un verrou ou globale pour plusieurs verrous."
+            )
         )
         self.state_manager.append_message(
             db,
@@ -841,7 +960,9 @@ class EnnoScholarGuidedResearchAgent:
         understanding = self.understanding.understand(
             session=session,
             consultant_message=message,
-            project_context=self._conversation_project_context(project, session),
+            project_context=self._resolved_conversation_project_context(
+                db, project, session
+            ),
             current_plan=_contract_sections(contract),
         )
         understanding_failure: dict[str, Any] = {}
@@ -855,6 +976,10 @@ class EnnoScholarGuidedResearchAgent:
             else _fallback_intent_classification(message)
         )
         classification = _reconcile_contextual_intent(classification)
+        classification = _ground_writing_source_policy(
+            message,
+            classification,
+        )
         original_intent = classification.intent
         intent = _resolve_routed_intent(classification)
         classification.intent = intent
@@ -881,6 +1006,9 @@ class EnnoScholarGuidedResearchAgent:
                 "plan": [],
                 "topics": [],
                 "constraints": [],
+                "verrous": [],
+                "project_brief": {},
+                "review_scope": "auto",
                 "search_requests": [],
                 "interpreter": {
                     "fallback": True,
@@ -895,6 +1023,18 @@ class EnnoScholarGuidedResearchAgent:
         if intent != ConsultantIntent.DESCRIBE_REQUIREMENTS:
             interpretation["topics"] = []
             interpretation["constraints"] = []
+        standalone_context_declaration = bool(
+            intent == ConsultantIntent.DESCRIBE_REQUIREMENTS
+            and _clean(session.context.get("operating_mode"), 80)
+            == "standalone_chat"
+        )
+        if (
+            intent != ConsultantIntent.ADD_VERROU_AND_SEARCH
+            and not standalone_context_declaration
+        ):
+            interpretation["verrous"] = []
+            interpretation["project_brief"] = {}
+            interpretation["review_scope"] = "auto"
         if (
             intent not in _SEARCH_ACTION_INTENTS
             or not classification.explicit_research_command
@@ -904,6 +1044,9 @@ class EnnoScholarGuidedResearchAgent:
             interpretation["plan"] = []
             interpretation["topics"] = []
             interpretation["constraints"] = []
+            interpretation["verrous"] = []
+            interpretation["project_brief"] = {}
+            interpretation["review_scope"] = "auto"
             interpretation["search_requests"] = []
 
         interpreter_metadata = interpretation.get("interpreter")
@@ -930,6 +1073,7 @@ class EnnoScholarGuidedResearchAgent:
                     classification.writing_source_scope
                     == "baseline_verrou_corpus"
                 ),
+                "grounded_in_current_message": True,
             }
         if (
             understanding is not None
@@ -988,6 +1132,33 @@ class EnnoScholarGuidedResearchAgent:
             )
             self.repository.update(
                 db, session_id, state=GuidedResearchState.CANCELLED, ready_to_write=False
+            )
+        elif intent == ConsultantIntent.ADD_VERROU_AND_SEARCH:
+            response = self._add_consultant_verrou_and_search(
+                db,
+                project,
+                session,
+                contract,
+                contract_path,
+                message,
+                interpretation=interpretation,
+                pending_write_requested=(
+                    ConsultantIntent.START_WRITING
+                    in classification.requested_actions
+                ),
+            )
+        elif standalone_context_declaration and (
+            interpretation.get("verrous")
+            or interpretation.get("project_brief")
+        ):
+            response = self._add_standalone_verrous_and_search(
+                db,
+                project,
+                session,
+                message,
+                interpretation=interpretation,
+                pending_write_requested=False,
+                run_research=False,
             )
         elif intent == ConsultantIntent.ACCEPT_PLAN:
             response = self._accept_plan(
@@ -1079,6 +1250,842 @@ class EnnoScholarGuidedResearchAgent:
             metadata={"next_action": response.next_action.value, **response.metadata},
         )
         return response
+
+    @staticmethod
+    def _invalidate_plan_after_verrou_scope_change(
+        contract: Mapping[str, Any],
+        *,
+        verrou_id: int,
+        verrou_title: str,
+    ) -> tuple[dict[str, Any], bool]:
+        current = dict(contract or {})
+        if not current:
+            return current, False
+
+        approved = list(current.get("approved_plan") or [])
+        authorized = bool(current.get("writing_authorized"))
+        if not approved and not authorized:
+            return current, False
+
+        if approved and not (
+            current.get("consultant_edited_plan")
+            or current.get("proposed_plan")
+        ):
+            current["consultant_edited_plan"] = approved
+
+        current["approved_plan"] = []
+        current["approval_hash"] = ""
+        current["approved_at"] = ""
+        current["approved_by"] = ""
+        current["writing_authorized"] = False
+        current["plan_version"] = int(current.get("plan_version") or 1) + 1
+
+        history = [
+            dict(row)
+            for row in (current.get("scope_change_history") or [])
+            if isinstance(row, Mapping)
+        ]
+        history.append({
+            "reason": "consultant_added_verrou",
+            "verrou_id": int(verrou_id),
+            "verrou_title": _clean(verrou_title, 1200),
+            "at": datetime.now(timezone.utc).isoformat(),
+        })
+        current["scope_change_history"] = history[-20:]
+        current["scope_revision_required"] = True
+        return current, True
+
+    @staticmethod
+    def _brief_with_consultant_verrou(
+        session: GuidedResearchSessionData,
+        contract: Mapping[str, Any],
+        *,
+        verrou_id: int | str,
+        verrou_title: str,
+        justification: str,
+        supporting_context: str,
+        raw_request: str,
+        research_requested: bool = True,
+    ) -> ConsultantBrief:
+        brief = session.brief or _brief_from_contract(
+            dict(contract or {}),
+            raw_request=raw_request,
+        )
+        topics = list(brief.requested_topics or [])
+        target_id = str(verrou_id)
+        already_present = any(
+            target_id in (topic.target_verrous or [])
+            or _norm(topic.name) == _norm(verrou_title)
+            for topic in topics
+        )
+        if not already_present:
+            topics.append(
+                RequestedTopic(
+                    name=_clean(verrou_title, 1200),
+                    entity_type=RequestedEntityType.SCIENTIFIC_CONCEPT,
+                    requested_dimensions=[
+                        "scientific basis",
+                        "methods",
+                        "experimental results",
+                        "contradictory evidence",
+                        "limitations",
+                        "validation protocols",
+                    ],
+                    target_sections=[],
+                    target_verrous=[target_id],
+                    source_preferences=["articles scientifiques"],
+                    notes=_clean(
+                        " ".join(
+                            value
+                            for value in (justification, supporting_context)
+                            if value
+                        ),
+                        5000,
+                    ),
+                    required=True,
+                )
+            )
+
+        instructions = {
+            str(key): list(values or [])
+            for key, values in (brief.verrou_instructions or {}).items()
+        }
+        instructions[target_id] = [
+            value
+            for value in (
+                _clean(justification, 4000),
+                _clean(supporting_context, 8000),
+                (
+                    "Rechercher des sources qui étayent, nuancent ou contredisent "
+                    "le verrou et qui précisent les conditions de validation."
+                    if research_requested
+                    else ""
+                ),
+            )
+            if value
+        ]
+        return brief.model_copy(
+            update={
+                "raw_request": _clean(
+                    "\n".join(
+                        value
+                        for value in (brief.raw_request, raw_request)
+                        if value
+                    ),
+                    12000,
+                ),
+                "requested_topics": topics,
+                "verrou_instructions": instructions,
+                "research_new_sources": bool(
+                    getattr(brief, "research_new_sources", False)
+                    or research_requested
+                ),
+                "updated_at": datetime.now(timezone.utc),
+            }
+        )
+
+    @staticmethod
+    def _standalone_verrou_id(session_id: str, title: str) -> str:
+        fingerprint = hashlib.sha256(
+            f"{session_id}|{_norm(title)}".encode("utf-8")
+        ).hexdigest()[:12]
+        return f"SV-{fingerprint}"
+
+    def _add_standalone_verrous_and_search(
+        self,
+        db: Session,
+        project: Any,
+        session: GuidedResearchSessionData,
+        message: str,
+        *,
+        interpretation: Mapping[str, Any],
+        pending_write_requested: bool,
+        run_research: bool = True,
+    ) -> ConversationResponse:
+        payloads = [
+            dict(row)
+            for row in (interpretation.get("verrous") or [])
+            if isinstance(row, Mapping) and _clean(row.get("title"), 1200)
+        ][:10]
+        if not payloads and run_research:
+            return self._respond_only(
+                session,
+                intent=ConsultantIntent.UNKNOWN,
+                interpretation={
+                    "assistant_message": (
+                        "Précisez au moins un verrou scientifique ou technologique "
+                        "à étudier, ainsi que le domaine ou l'objectif du projet si "
+                        "ces éléments ne sont pas encore connus."
+                    )
+                },
+            )
+
+        existing_verrous = [
+            dict(row)
+            for row in (session.context.get("consultant_verrous") or [])
+            if isinstance(row, Mapping) and _clean(row.get("title"), 1200)
+        ]
+        requested_verrous: list[dict[str, Any]] = []
+        created_verrou_ids: list[str] = []
+        try:
+            from services.consultant_verrou_service import (
+                verrou_title_similarity,
+            )
+        except Exception:
+            verrou_title_similarity = lambda left, right: (  # type: ignore[assignment]
+                1.0 if _norm(left) == _norm(right) else 0.0
+            )
+
+        for payload in payloads:
+            title = _clean(payload.get("title"), 1200)
+            duplicate = next(
+                (
+                    row
+                    for row in existing_verrous
+                    if verrou_title_similarity(title, row.get("title")) >= 0.86
+                ),
+                None,
+            )
+            if duplicate is not None and not bool(
+                payload.get("force_create_distinct")
+            ):
+                target = duplicate
+                target["justification"] = _clean(
+                    payload.get("justification")
+                    or target.get("justification"),
+                    4000,
+                )
+                target["supporting_context"] = _clean(
+                    payload.get("supporting_context")
+                    or target.get("supporting_context"),
+                    8000,
+                )
+            else:
+                target = {
+                    "id": self._standalone_verrou_id(
+                        session.session_id,
+                        title
+                        + (
+                            f"|{len(existing_verrous) + 1}"
+                            if payload.get("force_create_distinct")
+                            else ""
+                        ),
+                    ),
+                    "title": title,
+                    "justification": _clean(
+                        payload.get("justification"), 4000
+                    ),
+                    "supporting_context": _clean(
+                        payload.get("supporting_context"), 8000
+                    ),
+                    "source_document_ids": list(
+                        payload.get("source_document_ids") or []
+                    ),
+                    "origin": "consultant_standalone_chat",
+                    "consultant_status": "garde",
+                    "supplementary_verrou": True,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+                existing_verrous.append(target)
+                created_verrou_ids.append(str(target["id"]))
+            if target not in requested_verrous:
+                requested_verrous.append(target)
+
+        previous_project_brief = (
+            dict(session.context.get("standalone_project_brief") or {})
+            if isinstance(
+                session.context.get("standalone_project_brief"), Mapping
+            )
+            else {}
+        )
+        incoming_project_brief = (
+            dict(interpretation.get("project_brief") or {})
+            if isinstance(interpretation.get("project_brief"), Mapping)
+            else {}
+        )
+        standalone_project_brief = {
+            "project_name": _clean(
+                incoming_project_brief.get("project_name")
+                or previous_project_brief.get("project_name")
+                or getattr(project, "project_name", ""),
+                500,
+            ),
+            "domain": _clean(
+                incoming_project_brief.get("domain")
+                or previous_project_brief.get("domain")
+                or getattr(project, "domain_label", ""),
+                1000,
+            ),
+            "objective": _clean(
+                incoming_project_brief.get("objective")
+                or previous_project_brief.get("objective"),
+                5000,
+            ),
+            "additional_context": _clean(
+                incoming_project_brief.get("additional_context")
+                or previous_project_brief.get("additional_context"),
+                8000,
+            ),
+        }
+
+        requested_scope = _clean(
+            interpretation.get("review_scope"), 40
+        )
+        review_scope = (
+            "global"
+            if requested_scope == "global" or len(requested_verrous) > 1
+            else "per_verrou"
+        )
+        active_verrous = (
+            existing_verrous
+            if review_scope == "global"
+            else requested_verrous[:1]
+        )
+
+        brief = session.brief or ConsultantBrief(
+            raw_request=message,
+            output_mode=(
+                GuidedResearchTargetMode.GLOBAL
+                if review_scope == "global"
+                else GuidedResearchTargetMode.PER_VERROU
+            ),
+            desired_depth=RequestedDepth.VERY_DETAILED,
+        )
+        for verrou in active_verrous:
+            brief = self._brief_with_consultant_verrou(
+                session.model_copy(update={"brief": brief}),
+                {},
+                verrou_id=str(verrou["id"]),
+                verrou_title=_clean(verrou.get("title"), 1200),
+                justification=_clean(verrou.get("justification"), 4000),
+                supporting_context=_clean(
+                    verrou.get("supporting_context"), 8000
+                ),
+                raw_request=message,
+                research_requested=run_research,
+            )
+        brief = brief.model_copy(
+            update={
+                "output_mode": (
+                    GuidedResearchTargetMode.GLOBAL
+                    if review_scope == "global"
+                    else GuidedResearchTargetMode.PER_VERROU
+                )
+            }
+        )
+        self.state_manager.update_brief(db, session.session_id, brief)
+        self.repository.update(
+            db,
+            session.session_id,
+            ready_to_write=False,
+            context_updates={
+                "operating_mode": "standalone_chat",
+                "chat_only_interface": True,
+                "consultant_verrous": existing_verrous,
+                "standalone_project_brief": standalone_project_brief,
+                "review_scope": review_scope,
+                "active_verrou_ids": [
+                    str(row.get("id")) for row in active_verrous
+                ],
+                "pending_write_request": pending_write_requested,
+                "pipeline_execution_requested": False,
+            },
+        )
+
+        if not run_research:
+            self.repository.update(
+                db,
+                session.session_id,
+                state=GuidedResearchState.BRIEF_PARSED,
+                ready_to_write=False,
+            )
+            project_name = _clean(
+                standalone_project_brief.get("project_name"), 500
+            )
+            domain = _clean(standalone_project_brief.get("domain"), 1000)
+            objective = _clean(
+                standalone_project_brief.get("objective"), 5000
+            )
+            verrou_titles = [
+                _clean(row.get("title"), 1200)
+                for row in active_verrous
+                if _clean(row.get("title"), 1200)
+            ]
+            confirmation = [
+                (
+                    f"Contexte scientifique enregistré pour « {project_name} »."
+                    if project_name
+                    else "Contexte scientifique du projet enregistré."
+                )
+            ]
+            if domain:
+                confirmation.append(f"Domaine retenu : {domain}.")
+            if objective:
+                confirmation.append(f"Objectif retenu : {objective}.")
+            if verrou_titles:
+                label = "Verrou retenu" if len(verrou_titles) == 1 else "Verrous retenus"
+                confirmation.append(f"{label} : " + " ; ".join(verrou_titles) + ".")
+            confirmation.append(
+                "Aucune recherche ni rédaction n'a été lancée."
+            )
+            return self._response(
+                session.session_id,
+                ConsultantIntent.DESCRIBE_REQUIREMENTS,
+                GuidedResearchState.BRIEF_PARSED,
+                "\n\n".join(confirmation),
+                NextAction.NONE,
+                brief,
+                False,
+                {
+                    "operating_mode": "standalone_chat",
+                    "chat_only_interface": True,
+                    "context_recorded": True,
+                    "research_started": False,
+                    "review_scope": review_scope,
+                    "active_verrous": active_verrous,
+                    "standalone_project_brief": standalone_project_brief,
+                    "trigger_state_of_art_generation": False,
+                    "conversation_natural": True,
+                },
+            )
+
+        raw_requests = [
+            dict(row)
+            for row in (interpretation.get("search_requests") or [])
+            if isinstance(row, Mapping) and _clean(row.get("query"), 1200)
+        ][:8]
+        if not raw_requests:
+            for verrou in active_verrous:
+                title = _clean(verrou.get("title"), 1200)
+                context = " ".join(
+                    value
+                    for value in (
+                        standalone_project_brief.get("domain"),
+                        standalone_project_brief.get("objective"),
+                    )
+                    if value
+                )
+                raw_requests.extend(
+                    [
+                        {
+                            "query": f"{title} {context} scientific evidence",
+                            "query_kind": "scientific_evidence",
+                        },
+                        {
+                            "query": (
+                                f"{title} {context} experimental validation "
+                                "limitations contradictory results"
+                            ),
+                            "query_kind": "direct_scientific_evidence",
+                            "require_direct_evidence": True,
+                        },
+                    ]
+                )
+
+        search_requests: list[dict[str, Any]] = []
+        for raw_request in raw_requests[:8]:
+            request = dict(raw_request)
+            request_text = " ".join(
+                _clean(request.get(key), 1200)
+                for key in ("query", "entity_name")
+            )
+            request_tokens = _tokens(request_text)
+            ranked = sorted(
+                active_verrous,
+                key=lambda row: len(
+                    request_tokens & _tokens(row.get("title"))
+                ),
+                reverse=True,
+            )
+            best_overlap = (
+                len(request_tokens & _tokens(ranked[0].get("title")))
+                if ranked
+                else 0
+            )
+            targets = (
+                [str(ranked[0]["id"])]
+                if ranked and best_overlap > 0
+                else [str(row["id"]) for row in active_verrous]
+            )
+            query_kind = _clean(
+                request.get("query_kind"), 80
+            ) or "scientific_evidence"
+            if query_kind not in {
+                "scientific_evidence",
+                "direct_scientific_evidence",
+                "official_documentation",
+            }:
+                query_kind = "scientific_evidence"
+            request["query_kind"] = query_kind
+            request["require_direct_evidence"] = bool(
+                query_kind == "direct_scientific_evidence"
+                or request.get("require_direct_evidence")
+            )
+            request["target_verrous"] = targets
+            request["entity_type"] = _clean(
+                request.get("entity_type"), 120
+            ) or "scientific_concept"
+            request["requested_dimensions"] = list(
+                request.get("requested_dimensions")
+                or [
+                    "scientific basis",
+                    "methods",
+                    "experimental results",
+                    "contradictory evidence",
+                    "limitations",
+                    "validation protocols",
+                ]
+            )
+            request["target_context_dimensions"] = list(
+                request.get("target_context_dimensions")
+                or [
+                    value
+                    for value in (
+                        standalone_project_brief.get("domain"),
+                        standalone_project_brief.get("objective"),
+                    )
+                    if value
+                ]
+            )
+            request["source_preferences"] = list(
+                request.get("source_preferences")
+                or ["articles scientifiques"]
+            )
+            search_requests.append(request)
+
+        research = self._run_research(
+            db, project, session, search_requests
+        )
+        candidates = list(research.get("candidates") or [])
+        synthesis = self._synthesize_research_response(
+            project=project,
+            contract={},
+            consultant_message=message,
+            candidates=candidates,
+            research_completeness=research.get("completeness") or {},
+        )
+        scope_label = (
+            "globale"
+            if review_scope == "global"
+            else f"ciblée sur « {_clean(active_verrous[0].get('title'), 1200)} »"
+        )
+        assistant_message = (
+            (
+                "J'ai enregistré le nouveau verrou et lancé la recherche "
+                if created_verrou_ids
+                else "J'ai lancé la recherche "
+            )
+            + f"{scope_label}. "
+        )
+        if candidates:
+            assistant_message += (
+                f"La recherche propose {len(candidates)} source(s). Sélectionnez les "
+                "publications à retenir ; elles seront extraites et transformées en "
+                "Article Cards avant la rédaction."
+            )
+            if pending_write_requested:
+                assistant_message += (
+                    " Votre demande de rédaction est mémorisée, mais elle attend la "
+                    "validation des sources afin de ne pas produire un texte sans preuves."
+                )
+            if synthesis:
+                assistant_message += "\n\n" + synthesis.strip()
+        else:
+            assistant_message += (
+                "Aucune publication exploitable n'a été trouvée. Il faut préciser "
+                "le domaine, reformuler le verrou ou élargir la stratégie de recherche."
+            )
+
+        return self._response(
+            session.session_id,
+            ConsultantIntent.ADD_VERROU_AND_SEARCH,
+            (
+                GuidedResearchState.WAITING_CONSULTANT_FEEDBACK
+                if candidates
+                else GuidedResearchState.RESEARCH_REFINEMENT
+            ),
+            assistant_message,
+            (
+                NextAction.REVIEW_SOURCES
+                if candidates
+                else NextAction.RUN_RESEARCH
+            ),
+            brief,
+            False,
+            {
+                "operating_mode": "standalone_chat",
+                "chat_only_interface": True,
+                "review_scope": review_scope,
+                "active_verrous": active_verrous,
+                "created_verrou_ids": created_verrou_ids,
+                "research": research,
+                "candidates": candidates,
+                "pending_write_request": pending_write_requested,
+                "trigger_state_of_art_generation": False,
+                "conversation_natural": True,
+            },
+        )
+
+    def _add_consultant_verrou_and_search(
+        self,
+        db: Session,
+        project: Any,
+        session: GuidedResearchSessionData,
+        contract: dict[str, Any],
+        contract_path: Path,
+        message: str,
+        *,
+        interpretation: Mapping[str, Any],
+        pending_write_requested: bool = False,
+    ) -> ConversationResponse:
+        verrou_payloads = [
+            dict(row)
+            for row in (interpretation.get("verrous") or [])
+            if isinstance(row, Mapping)
+        ]
+        try:
+            from services.consultant_verrou_service import (
+                get_latest_diagnostic_run,
+            )
+            diagnostic_backed = bool(
+                get_latest_diagnostic_run(db, int(project.id))
+            )
+        except Exception:
+            diagnostic_backed = False
+
+        if not diagnostic_backed:
+            return self._add_standalone_verrous_and_search(
+                db,
+                project,
+                session,
+                message,
+                interpretation=interpretation,
+                pending_write_requested=pending_write_requested,
+            )
+
+        if len(verrou_payloads) != 1:
+            return self._respond_only(
+                session,
+                intent=ConsultantIntent.UNKNOWN,
+                interpretation={
+                    "assistant_message": (
+                        "Indiquez un seul verrou à la fois, avec sa formulation et "
+                        "le contexte qui justifie son ajout."
+                    )
+                },
+            )
+
+        verrou_payload = verrou_payloads[0]
+        from services.consultant_verrou_service import (
+            create_or_reuse_consultant_verrou,
+        )
+
+        result = create_or_reuse_consultant_verrou(
+            db,
+            project,
+            title=_clean(verrou_payload.get("title"), 1200),
+            justification=_clean(verrou_payload.get("justification"), 4000),
+            supporting_context=_clean(
+                verrou_payload.get("supporting_context"), 8000
+            ),
+            source_document_ids=list(
+                verrou_payload.get("source_document_ids") or []
+            ),
+            session_id=session.session_id,
+            created_by_user_id=session.created_by_user_id,
+            force_create_distinct=bool(
+                verrou_payload.get("force_create_distinct")
+            ),
+        )
+
+        if result.get("status") == "possible_duplicate":
+            candidate = result.get("candidate") or {}
+            return self._response(
+                session.session_id,
+                ConsultantIntent.ADD_VERROU_AND_SEARCH,
+                session.state,
+                (
+                    "Un verrou proche existe déjà : « "
+                    + _clean(candidate.get("title"), 1200)
+                    + " ». Précisez soit « réutilise ce verrou », soit « crée un "
+                    "verrou distinct » avant de lancer la recherche."
+                ),
+                NextAction.CONTINUE_BRIEF,
+                session.brief,
+                False,
+                {
+                    "possible_duplicate": result,
+                    "trigger_state_of_art_generation": False,
+                },
+            )
+
+        verrou_id = int(result["verrou_id"])
+        verrou_title = _clean(result.get("title"), 1200)
+
+        contract, plan_invalidated = self._invalidate_plan_after_verrou_scope_change(
+            contract,
+            verrou_id=verrou_id,
+            verrou_title=verrou_title,
+        )
+        if contract:
+            write_json(contract_path, contract)
+
+        brief = self._brief_with_consultant_verrou(
+            session,
+            contract,
+            verrou_id=verrou_id,
+            verrou_title=verrou_title,
+            justification=_clean(verrou_payload.get("justification"), 4000),
+            supporting_context=_clean(
+                verrou_payload.get("supporting_context"), 8000
+            ),
+            raw_request=message,
+        )
+        self.state_manager.update_brief(db, session.session_id, brief)
+        self.repository.update(
+            db,
+            session.session_id,
+            writing_contract=contract,
+            ready_to_write=False,
+            context_updates={
+                "last_consultant_added_verrou": result,
+                "scope_revision_required": plan_invalidated,
+                "writing_authorized": False,
+                "pipeline_execution_requested": False,
+            },
+        )
+
+        raw_requests = [
+            dict(row)
+            for row in (interpretation.get("search_requests") or [])
+            if isinstance(row, Mapping)
+        ]
+        if not raw_requests:
+            raw_requests = [
+                {
+                    "query": f"{verrou_title} scientific literature",
+                    "query_kind": "scientific_evidence",
+                },
+                {
+                    "query": f"{verrou_title} experimental validation limitations",
+                    "query_kind": "direct_scientific_evidence",
+                    "require_direct_evidence": True,
+                },
+                {
+                    "query": f"{verrou_title} contradictory evidence robustness",
+                    "query_kind": "scientific_evidence",
+                },
+            ]
+
+        search_requests: list[dict[str, Any]] = []
+        for raw_request in raw_requests[:5]:
+            request = dict(raw_request)
+            query_kind = _clean(
+                request.get("query_kind"), 80
+            ) or "scientific_evidence"
+            if query_kind not in {
+                "scientific_evidence",
+                "direct_scientific_evidence",
+            }:
+                query_kind = "scientific_evidence"
+            request["query_kind"] = query_kind
+            request["require_direct_evidence"] = bool(
+                query_kind == "direct_scientific_evidence"
+                or request.get("require_direct_evidence")
+            )
+            request["target_verrous"] = [str(verrou_id)]
+            request["entity_name"] = _clean(
+                request.get("entity_name"), 400
+            ) or verrou_title
+            request["entity_type"] = _clean(
+                request.get("entity_type"), 120
+            ) or "scientific_concept"
+            request["requested_dimensions"] = list(
+                request.get("requested_dimensions")
+                or [
+                    "scientific basis",
+                    "methods",
+                    "experimental results",
+                    "contradictory evidence",
+                    "limitations",
+                    "validation protocols",
+                ]
+            )
+            request["source_preferences"] = list(
+                request.get("source_preferences")
+                or ["articles scientifiques"]
+            )
+            search_requests.append(request)
+
+        research = self._run_research(
+            db,
+            project,
+            session,
+            search_requests,
+        )
+        candidates = list(research.get("candidates") or [])
+        synthesis = self._synthesize_research_response(
+            project=project,
+            contract=contract,
+            consultant_message=message,
+            candidates=candidates,
+            research_completeness=research.get("completeness") or {},
+        )
+
+        action_label = (
+            "réutilisé et validé"
+            if result.get("status") == "reused_existing"
+            else "ajouté au dernier diagnostic et validé par le consultant"
+        )
+        assistant_message = (
+            f"Le verrou « {verrou_title} » a été {action_label}. "
+            "Son score CIR et son tag CIR restent indéterminés jusqu'à l'analyse "
+            "des preuves. "
+        )
+        if candidates:
+            assistant_message += (
+                f"La recherche a trouvé {len(candidates)} source(s) candidate(s). "
+                "Sélectionnez celles à intégrer au corpus ; seules les sources "
+                "acceptées seront extraites et utilisées."
+            )
+            if synthesis:
+                assistant_message += "\n\n" + synthesis.strip()
+        else:
+            assistant_message += (
+                "Aucune source exploitable n'a été trouvée pour cette première "
+                "recherche. Il faut reformuler ou élargir les requêtes."
+            )
+        if plan_invalidated:
+            assistant_message += (
+                "\n\nLe plan précédemment approuvé a été invalidé, car le périmètre "
+                "scientifique a changé. Il devra être revu puis validé avant la rédaction."
+            )
+
+        return self._response(
+            session.session_id,
+            ConsultantIntent.ADD_VERROU_AND_SEARCH,
+            (
+                GuidedResearchState.WAITING_CONSULTANT_FEEDBACK
+                if candidates
+                else GuidedResearchState.RESEARCH_REFINEMENT
+            ),
+            assistant_message,
+            (
+                NextAction.REVIEW_SOURCES
+                if candidates
+                else NextAction.RUN_RESEARCH
+            ),
+            brief,
+            False,
+            {
+                "consultant_verrou": result,
+                "research": research,
+                "candidates": candidates,
+                "plan_invalidated": plan_invalidated,
+                "trigger_state_of_art_generation": False,
+                "conversation_natural": True,
+            },
+        )
 
     def _continue_conversation(
         self,
@@ -1472,6 +2479,341 @@ class EnnoScholarGuidedResearchAgent:
             if action_intent == ConsultantIntent.REVISE_DRAFT
             else ""
         )
+        if _clean(session.context.get("operating_mode"), 80) == "standalone_chat":
+            snapshot = self.repository.snapshot(db, session.session_id)
+            context = dict(snapshot.get("context") or {})
+            all_verrous = [
+                dict(row)
+                for row in (context.get("consultant_verrous") or [])
+                if isinstance(row, Mapping)
+            ]
+            review_scope = _clean(context.get("review_scope"), 40) or (
+                "global" if len(all_verrous) > 1 else "per_verrou"
+            )
+            active_ids = {
+                _clean(value, 120)
+                for value in (context.get("active_verrou_ids") or [])
+                if _clean(value, 120)
+            }
+            active_verrous = (
+                all_verrous
+                if review_scope == "global" or not active_ids
+                else [
+                    row
+                    for row in all_verrous
+                    if _clean(row.get("id"), 120) in active_ids
+                ]
+            )
+
+            # En mode autonome, une commande combinée « je valide et rédige »
+            # doit enregistrer l'approbation avant l'appel du writer. Ainsi un
+            # incident de rédaction ne fait pas perdre la décision du consultant
+            # et une relance courte peut réellement reprendre le même plan.
+            approved_plan: list[dict[str, Any]] = []
+            if _contract_sections(contract):
+                active_verrou_ids = [
+                    _clean(row.get("id"), 120)
+                    for row in active_verrous
+                    if _clean(row.get("id"), 120)
+                ]
+                scoped_plan = []
+                for row in _contract_sections(contract):
+                    scoped = dict(row)
+                    if not scoped.get("verrou_ids"):
+                        scoped["verrou_ids"] = active_verrou_ids
+                    scoped_plan.append(scoped)
+                if plan_hash(scoped_plan) != plan_hash(
+                    _contract_sections(contract)
+                ):
+                    was_approved = bool(contract.get("approved_plan"))
+                    contract = create_contract(
+                        scoped_plan,
+                        version=int(contract.get("plan_version") or 1) + 1,
+                    )
+                    if was_approved or explicit_plan_approval:
+                        contract = approve_plan(
+                            contract,
+                            approved_by=str(
+                                session.created_by_user_id or "consultant"
+                            ),
+                        )
+                approved_contract = _approve_for_combined_write(
+                    contract,
+                    message,
+                    approved_by=str(session.created_by_user_id or "consultant"),
+                    explicit_approval=explicit_plan_approval,
+                )
+                try:
+                    contract = authorize_writing(approved_contract)
+                except Exception as exc:
+                    return self._response(
+                        session.session_id,
+                        action_intent,
+                        GuidedResearchState.BRIEF_IN_PROGRESS,
+                        f"Je ne lance pas encore la rédaction : {exc}",
+                        NextAction.CONTINUE_BRIEF,
+                        session.brief,
+                        False,
+                        {
+                            "operating_mode": "standalone_chat",
+                            "trigger_state_of_art_generation": False,
+                        },
+                    )
+                approved_plan = [
+                    dict(row)
+                    for row in (contract.get("approved_plan") or [])
+                    if isinstance(row, Mapping)
+                ]
+                write_json(contract_path, contract)
+                self.repository.update(
+                    db,
+                    session.session_id,
+                    writing_contract=contract,
+                    state=GuidedResearchState.READY_TO_WRITE,
+                    ready_to_write=True,
+                    context_updates={
+                        "plan_approved": True,
+                        "writing_authorized": True,
+                    },
+                )
+
+            if not approved_plan:
+                return self._response(
+                    session.session_id,
+                    action_intent,
+                    GuidedResearchState.BRIEF_IN_PROGRESS,
+                    (
+                        "Je dois d'abord disposer d'un plan validÃ© avant de "
+                        "lancer toutes les phases de rÃ©daction. Proposez ou "
+                        "validez le plan, puis relancez."
+                    ),
+                    NextAction.CONTINUE_BRIEF,
+                    session.brief,
+                    False,
+                    {
+                        "operating_mode": "standalone_chat",
+                        "trigger_state_of_art_generation": False,
+                    },
+                )
+
+            # Le mode autonome suit dÃ©sormais exactement le pipeline commun :
+            # reconstruction sans LLM des Phases 1/2, puis dÃ©clenchement des
+            # Phases 3, 4, 4.5, 4.6, 4.7 et 5 par le frontend.
+            try:
+                from services.scholar_state_of_art_payload_service import (
+                    build_state_of_art_selection_payload,
+                )
+                from services.article_card_builder import (
+                    build_article_cards_for_selected_articles,
+                )
+
+                selection_payload = build_state_of_art_selection_payload(
+                    db,
+                    project,
+                )
+                cards_payload = build_article_cards_for_selected_articles(
+                    db=db,
+                    project=project,
+                    mode="auto",
+                    force=False,
+                )
+            except Exception as exc:
+                print(
+                    "[EnnoScholar][STANDALONE][PHASE1_2][ERROR] "
+                    f"{type(exc).__name__}: {_clean(exc, 1200)}"
+                )
+                return self._response(
+                    session.session_id,
+                    action_intent,
+                    GuidedResearchState.READY_TO_WRITE,
+                    (
+                        "La prÃ©paration scientifique n'est pas encore complÃ¨te. "
+                        "Le plan et les sources sont conservÃ©s ; relancez la "
+                        "rÃ©daction sans refaire la recherche."
+                    ),
+                    NextAction.START_WRITING,
+                    session.brief,
+                    True,
+                    {
+                        "operating_mode": "standalone_chat",
+                        "trigger_state_of_art_generation": False,
+                        "retryable": True,
+                        "error_type": type(exc).__name__,
+                    },
+                )
+
+            self.repository.update(
+                db,
+                session.session_id,
+                state=GuidedResearchState.WRITING_IN_PROGRESS,
+                ready_to_write=False,
+                context_updates={
+                    "pending_write_request": False,
+                    "pipeline_execution_requested": True,
+                    "write_with_current_sources": True,
+                    "generation_mode": (
+                        "partial_revision"
+                        if revision_request
+                        else "full_generation"
+                    ),
+                    "revision_request": _clean(revision_request, 6000),
+                    "standalone_full_pipeline": True,
+                },
+            )
+            return self._response(
+                session.session_id,
+                action_intent,
+                GuidedResearchState.WRITING_IN_PROGRESS,
+                (
+                    "Je lance la rÃ©daction avec le plan validÃ© et toutes les "
+                    "publications prÃªtes, y compris les PDF ajoutÃ©s depuis votre "
+                    "ordinateur. Le dossier va parcourir les Phases 1 Ã  5 sans "
+                    "nouvelle recherche."
+                ),
+                NextAction.START_WRITING,
+                session.brief,
+                False,
+                {
+                    "operating_mode": "standalone_chat",
+                    "trigger_state_of_art_generation": True,
+                    "standalone_full_pipeline": True,
+                    "phase_1": selection_payload.get("selection_summary") or {},
+                    "phase_2": {
+                        "cards_count": cards_payload.get("cards_count"),
+                        "writing_ready_cards_count": cards_payload.get(
+                            "writing_ready_cards_count"
+                        ),
+                    },
+                },
+            )
+
+            from .standalone_state_of_art_writer_service import (
+                run_standalone_state_of_art_writer,
+            )
+
+            try:
+                draft_result = run_standalone_state_of_art_writer(
+                    llm=self.llm,
+                    project_brief=dict(
+                        context.get("standalone_project_brief") or {}
+                    ),
+                    verrous=active_verrous,
+                    review_scope=review_scope,
+                    selected_sources=list(
+                        snapshot.get("selected_sources") or []
+                    ),
+                    cards_payload=read_json(self._cards_path(project)),
+                    output_dir=(
+                        state_of_art_root(
+                            str(project.organisme),
+                            str(project.project_name),
+                            str(project.year),
+                        )
+                        / "guided_sessions"
+                        / session.session_id
+                    ),
+                    revision_request=revision_request,
+                    current_markdown=_clean(
+                        (snapshot.get("draft") or {}).get("markdown"),
+                        100000,
+                    ),
+                    approved_plan=approved_plan,
+                )
+            except Exception as exc:
+                print(
+                    "[EnnoScholar][STANDALONE][ERROR] "
+                    f"{type(exc).__name__}: {_clean(exc, 1200)}"
+                )
+                return self._response(
+                    session.session_id,
+                    action_intent,
+                    GuidedResearchState.READY_TO_WRITE,
+                    (
+                        "Une erreur technique interne a interrompu la rédaction. "
+                        "Votre plan approuvé, vos sources validées et votre éventuel "
+                        "document précédent sont conservés ; vous pouvez relancer "
+                        "sans recommencer la recherche."
+                    ),
+                    NextAction.START_WRITING,
+                    session.brief,
+                    True,
+                    {
+                        "operating_mode": "standalone_chat",
+                        "trigger_state_of_art_generation": False,
+                        "retryable": True,
+                        "error_type": type(exc).__name__,
+                    },
+                )
+
+            if not draft_result.get("ok"):
+                return self._response(
+                    session.session_id,
+                    action_intent,
+                    GuidedResearchState.READY_TO_WRITE,
+                    _clean(draft_result.get("message"), 3000)
+                    or (
+                        "Je n'ai pas publié cette tentative : certaines parties "
+                        "ne sont pas encore suffisamment reliées aux publications "
+                        "validées. Votre travail précédent est conservé. Vous pouvez "
+                        "valider des sources plus complètes ou demander une version "
+                        "strictement limitée aux preuves actuellement disponibles."
+                    ),
+                    NextAction.START_WRITING,
+                    session.brief,
+                    True,
+                    {
+                        "operating_mode": "standalone_chat",
+                        "standalone_draft": draft_result,
+                        "trigger_state_of_art_generation": False,
+                    },
+                )
+
+            self.repository.update(
+                db,
+                session.session_id,
+                draft=draft_result,
+                state=GuidedResearchState.DRAFT_READY,
+                ready_to_write=False,
+                context_updates={
+                    "pending_write_request": False,
+                    "pipeline_execution_requested": False,
+                    "last_standalone_draft_at": draft_result.get(
+                        "generated_at"
+                    ),
+                },
+            )
+            quality = dict(draft_result.get("quality") or {})
+            assistant_message = (
+                "L'état de l'art autonome a été rédigé à partir des seules "
+                "Article Cards validées. Il couvre "
+                + (
+                    "tous les verrous de la conversation."
+                    if review_scope == "global"
+                    else "le verrou ciblé."
+                )
+            )
+            if not quality.get("consultant_quality_ready"):
+                assistant_message += (
+                    " Une première version sourcée est disponible ; vous pouvez "
+                    "demander un approfondissement ciblé pour augmenter son niveau "
+                    "de détail."
+                )
+            return self._response(
+                session.session_id,
+                action_intent,
+                GuidedResearchState.DRAFT_READY,
+                assistant_message,
+                NextAction.REVIEW_DRAFT,
+                session.brief,
+                False,
+                {
+                    "operating_mode": "standalone_chat",
+                    "standalone_draft": draft_result,
+                    "standalone_draft_markdown": draft_result.get("markdown"),
+                    "trigger_state_of_art_generation": False,
+                },
+            )
+
         generation_mode = (
             "partial_revision"
             if revision_request
@@ -1485,6 +2827,14 @@ class EnnoScholarGuidedResearchAgent:
             )
             else {}
         )
+        if (
+            _clean(writing_source_scope, 80) == "unspecified"
+            and not stored_source_policy.get("grounded_in_current_message")
+        ):
+            # Migration sûre des anciennes sessions : avant l'ancrage au tour
+            # courant, une politique pouvait contenir des références reprises
+            # de la mémoire. Elle ne doit pas bloquer une nouvelle rédaction.
+            stored_source_policy = {}
         effective_source_scope = _clean(writing_source_scope, 80)
         if effective_source_scope == "unspecified":
             effective_source_scope = _clean(
@@ -1499,12 +2849,13 @@ class EnnoScholarGuidedResearchAgent:
                 )
             except (TypeError, ValueError):
                 effective_source_count = None
-        effective_source_identifiers = (
+        effective_source_identifiers = _resolve_candidate_display_identifiers(
             _resolve_effective_writing_source_identifiers(
                 writing_source_identifiers,
                 stored_source_policy.get("source_identifiers") or [],
                 effective_source_count,
-            )
+            ),
+            session.context.get("current_candidate_ids") or [],
         )
         source_policy = {
             "scope": effective_source_scope,
@@ -1520,6 +2871,10 @@ class EnnoScholarGuidedResearchAgent:
             ),
             "exclude_external_research": (
                 effective_source_scope == "baseline_verrou_corpus"
+            ),
+            "grounded_in_current_message": bool(
+                _clean(writing_source_scope, 80) != "unspecified"
+                or stored_source_policy.get("grounded_in_current_message")
             ),
         }
 

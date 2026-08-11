@@ -137,6 +137,9 @@ SCIENTIFIC_NER_BATCH_SIZE = max(1, int(os.getenv("ENNOSCHOLAR_SCIENTIFIC_NER_BAT
 SCIENTIFIC_NER_TOP_K = int(os.getenv("ENNOSCHOLAR_SCIENTIFIC_NER_TOP_K", "20"))
 SCIENTIFIC_NER_MIN_SCORE = float(os.getenv("ENNOSCHOLAR_SCIENTIFIC_NER_MIN_SCORE", "0.62"))
 SCIENTIFIC_NER_RUN_ON_FULLTEXT = os.getenv("ENNOSCHOLAR_SCIENTIFIC_NER_FULLTEXT", "false").lower() in {"1", "true", "yes", "on"}
+SCIENTIFIC_NER_ALLOW_DOWNLOAD = os.getenv(
+    "ENNOSCHOLAR_SCIENTIFIC_NER_ALLOW_DOWNLOAD", "false"
+).lower() in {"1", "true", "yes", "on"}
 
 
 # ============================================================
@@ -391,7 +394,11 @@ def _get_scientific_ner_pipeline():
         return None
 
     try:
-        from transformers import pipeline
+        from transformers import (
+            AutoModelForTokenClassification,
+            AutoTokenizer,
+            pipeline,
+        )
 
         device = _resolve_scientific_ner_device()
         device_label = "cuda:0" if device >= 0 else "cpu"
@@ -399,10 +406,26 @@ def _get_scientific_ner_pipeline():
             f"[EnnoScholar][ArticleCards][SciNER] loading model={SCIENTIFIC_NER_MODEL} device={device_label}",
             flush=True,
         )
+        model_source = SCIENTIFIC_NER_MODEL
+        if not SCIENTIFIC_NER_ALLOW_DOWNLOAD:
+            from huggingface_hub import snapshot_download
+
+            model_source = snapshot_download(
+                repo_id=SCIENTIFIC_NER_MODEL,
+                local_files_only=True,
+            )
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_source,
+            local_files_only=not SCIENTIFIC_NER_ALLOW_DOWNLOAD,
+        )
+        model = AutoModelForTokenClassification.from_pretrained(
+            model_source,
+            local_files_only=not SCIENTIFIC_NER_ALLOW_DOWNLOAD,
+        )
         return pipeline(
             "token-classification",
-            model=SCIENTIFIC_NER_MODEL,
-            tokenizer=SCIENTIFIC_NER_MODEL,
+            model=model,
+            tokenizer=tokenizer,
             aggregation_strategy="simple",
             device=device,
         )
@@ -758,16 +781,26 @@ def _article_file_prefix(article: Article) -> str:
     return f"article_{article.id}_{_slugify(article.title or 'article', 60)}"
 
 
-def _article_cards_dir(project: Project) -> Path:
-    return _project_ennoscholar_dir(project) / "state_of_art_payload" / "article_cards"
+def _article_cards_dir(project: Project, scope_id: str | None = None) -> Path:
+    base = _project_ennoscholar_dir(project) / "state_of_art_payload" / "article_cards"
+    return base / "conversation_scopes" / _slugify(scope_id, 100) if scope_id else base
 
 
-def _article_cards_payload_path(project: Project) -> Path:
-    return _article_cards_dir(project) / "article_cards_payload.json"
+def _article_cards_payload_path(project: Project, scope_id: str | None = None) -> Path:
+    return _article_cards_dir(project, scope_id) / "article_cards_payload.json"
 
 
-def _article_card_path(project: Project, article: Article) -> Path:
-    return _article_cards_dir(project) / f"{_article_file_prefix(article)}_card.json"
+def _article_card_path(
+    project: Project,
+    article: Article,
+    scope_id: str | None = None,
+) -> Path:
+    filename = (
+        f"article_{int(article.id)}_card.json"
+        if scope_id
+        else f"{_article_file_prefix(article)}_card.json"
+    )
+    return _article_cards_dir(project, scope_id) / filename
 
 
 # ============================================================
@@ -3915,6 +3948,31 @@ def apply_extractive_article_reading_layer(
     capsule = _build_capsule_from_extractive_bank(card, bank)
     card["technical_narrative_capsule"] = capsule
 
+    def missing_or_placeholder(value: Any) -> bool:
+        normalized = _norm_key(value)
+        return bool(
+            not normalized
+            or normalized.startswith("non explicitement indique")
+            or normalized.startswith("non renseigne")
+            or normalized in {"inconnu", "unknown", "n a", "na"}
+        )
+
+    extractive_backfills = {
+        "probleme_scientifique": _first_bucket_text(bank, "problem", 1600),
+        "methode": _first_bucket_text(bank, "method", 2200),
+        "jeu_de_donnees": _first_bucket_text(bank, "dataset", 1800),
+        "evaluation": _first_bucket_text(bank, "validation", 2200),
+        "resultat": _first_bucket_text(bank, "results", 2200),
+        "resultats": _first_bucket_text(bank, "results", 2200),
+        "limite_pour_notre_projet": _first_bucket_text(
+            bank, "limitations", 2200
+        ),
+        "limitations": _first_bucket_text(bank, "limitations", 2200),
+    }
+    for field, value in extractive_backfills.items():
+        if value and missing_or_placeholder(card.get(field)):
+            card[field] = value
+
     # Champs plats pour compatibilité phases 4.5/4.7/5.
     card["technical_mechanism_chain"] = capsule.get("technical_mechanism_chain") or []
     card["data_flow"] = capsule.get("data_flow")
@@ -4000,6 +4058,48 @@ def _sync_card_source_context(
     card["section_ids"] = list(source_json.get("section_ids") or [])
     card["target_verrous"] = target_verrous
     card["verrou_ids"] = target_verrous
+    return card
+
+
+def _sync_card_visual_evidence(
+    card: Dict[str, Any],
+    *,
+    project: Project,
+    article: Article,
+    citation_id: str,
+    fulltext_info: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Attache les figures originales sans demander une réécriture vision.
+
+    La sélection finale reste du ressort de la Phase 5 : une figure n'est
+    insérée que dans une section qui cite la même publication et dont elle
+    illustre le contenu. Une indisponibilité du PDF visuel ne rend jamais
+    l'Article Card scientifique invalide.
+    """
+
+    try:
+        from services.scholar_visual_evidence_service import (
+            extract_article_visual_evidence,
+        )
+
+        visuals = extract_article_visual_evidence(
+            project=project,
+            article=article,
+            citation_label=citation_id,
+            fulltext_info=fulltext_info,
+        )
+    except Exception as exc:
+        visuals = []
+        card.setdefault("evidence", {})["visual_evidence_error"] = (
+            f"{type(exc).__name__}: {exc}"
+        )
+    card["visual_evidence"] = visuals
+    evidence = card.setdefault("evidence", {})
+    evidence["visual_evidence_available"] = bool(visuals)
+    evidence["visual_evidence_count"] = len(visuals)
+    evidence["visual_evidence_policy"] = (
+        "original_figure_caption_provenance_no_vision_rewrite"
+    )
     return card
 
 
@@ -4849,8 +4949,13 @@ def _existing_card_is_reusable(card: Dict[str, Any], project: Project, article: 
     return True, "valid_existing_card"
 
 
-def _load_reusable_card(project: Project, article: Article, citation_id: str) -> Tuple[Optional[Dict[str, Any]], str]:
-    card_path = _article_card_path(project, article)
+def _load_reusable_card(
+    project: Project,
+    article: Article,
+    citation_id: str,
+    scope_id: str | None = None,
+) -> Tuple[Optional[Dict[str, Any]], str]:
+    card_path = _article_card_path(project, article, scope_id)
     saved = _json_read(card_path)
     ok, reason = _existing_card_is_reusable(saved or {}, project, article)
 
@@ -4953,9 +5058,12 @@ def build_article_cards_for_selected_articles(
     project: Project,
     mode: str = "auto",
     force: bool = False,
+    *,
+    scholar_run_id: int | None = None,
+    scope_id: str | None = None,
 ) -> Dict[str, Any]:
     started = time.time()
-    out_payload = _article_cards_payload_path(project)
+    out_payload = _article_cards_payload_path(project, scope_id)
     mode_effective = _effective_card_mode(mode)
 
     print(
@@ -4967,7 +5075,16 @@ def build_article_cards_for_selected_articles(
         flush=True,
     )
 
-    articles = get_selected_articles_for_project(db, project)
+    if scholar_run_id is not None:
+        articles = (
+            db.query(Article)
+            .filter(Article.scholar_run_id == int(scholar_run_id))
+            .filter(Article.consultant_status == "garde")
+            .order_by(Article.score.desc(), Article.year.desc(), Article.created_at.asc())
+            .all()
+        )
+    else:
+        articles = get_selected_articles_for_project(db, project)
     print(f"[EnnoScholar][ArticleCards] SELECTED articles={len(articles)}", flush=True)
 
     cards: List[Dict[str, Any]] = []
@@ -4979,6 +5096,25 @@ def build_article_cards_for_selected_articles(
     for idx, article in enumerate(articles, start=1):
         citation_id = f"A{idx}"
         item_started = time.time()
+
+        if isinstance(article.source_json, dict) and article.source_json.get(
+            "manual_upload_source"
+        ):
+            try:
+                from services.scholar_uploaded_pdf_extractor import (
+                    normalize_existing_uploaded_article_identity,
+                )
+
+                normalize_existing_uploaded_article_identity(db, project, article)
+            except ImportError as exc:
+                # La normalisation d'identité est utile mais ne doit pas rendre
+                # impossible la reconstruction d'une carte déjà extraite dans
+                # un worker minimal dépourvu des dépendances HTTP de l'API.
+                print(
+                    "[EnnoScholar][ArticleCards][WARN] Normalisation upload "
+                    f"indisponible article_id={article.id}: {exc}",
+                    flush=True,
+                )
 
         print(
             f"[EnnoScholar][ArticleCards] [{idx}/{len(articles)}] {citation_id} "
@@ -5019,7 +5155,12 @@ def build_article_cards_for_selected_articles(
         if force:
             reusable, reuse_reason = None, "force_rebuild_requested"
         else:
-            reusable, reuse_reason = _load_reusable_card(project, article, citation_id)
+            reusable, reuse_reason = _load_reusable_card(
+                project,
+                article,
+                citation_id,
+                scope_id,
+            )
         if reusable:
             card = reusable
             reused_count += 1
@@ -5063,8 +5204,15 @@ def build_article_cards_for_selected_articles(
                 }
 
         card = _sync_card_source_context(card, article)
+        card = _sync_card_visual_evidence(
+            card,
+            project=project,
+            article=article,
+            citation_id=citation_id,
+            fulltext_info=current_fulltext,
+        )
         cards.append(card)
-        _json_dump(_article_card_path(project, article), card)
+        _json_dump(_article_card_path(project, article, scope_id), card)
 
         elapsed_item = round(time.time() - item_started, 2)
         print(
@@ -5075,9 +5223,25 @@ def build_article_cards_for_selected_articles(
             flush=True,
         )
 
+    try:
+        from services.scholar_visual_evidence_service import (
+            extract_project_document_visuals,
+        )
+
+        project_visual_evidence = extract_project_document_visuals(db, project)
+    except Exception as exc:
+        project_visual_evidence = []
+        print(
+            "[EnnoScholar][ArticleCards][WARN] Figures des documents projet "
+            f"indisponibles: {type(exc).__name__}: {exc}",
+            flush=True,
+        )
+
     payload = {
         "ok": True,
         "project_id": project.id,
+        "scope_id": scope_id,
+        "scholar_run_id": scholar_run_id,
         "selected_articles_count": len(articles),
         "cards_count": len(cards),
         "writing_ready_cards_count": len(cards),
@@ -5093,6 +5257,7 @@ def build_article_cards_for_selected_articles(
         "rebuilt_cards_count": rebuilt_count,
         "errors_count": errors_count,
         "cards": cards,
+        "project_visual_evidence": project_visual_evidence,
         "payload_path": str(out_payload),
         "output_path": str(out_payload),
         "generated_at": datetime.utcnow().isoformat(),
@@ -5119,6 +5284,8 @@ def build_article_cards_for_selected_articles(
             "extractive_reading_enabled": EXTRACTIVE_READING_ENABLED,
             "extractive_only_phase2": EXTRACTIVE_ONLY_PHASE2,
             "core_strategy_means_one_llm_call_per_article": LLM_STRATEGY == "core",
+            "original_figures_extracted_without_vision_rewrite": True,
+            "project_document_figures_are_context_not_scientific_proof": True,
         },
         "quality": {
             "selected_articles": len(articles),
@@ -5142,6 +5309,9 @@ def build_article_cards_for_selected_articles(
             "cards_with_scientific_entities": sum(1 for c in cards if c.get("scientific_entities")),
             "scientific_entities_total": sum(len(c.get("scientific_entities") or []) for c in cards),
             "cards_with_key_scientific_passages": sum(1 for c in cards if c.get("key_scientific_passages")),
+            "cards_with_visual_evidence": sum(1 for c in cards if c.get("visual_evidence")),
+            "article_visual_evidence_count": sum(len(c.get("visual_evidence") or []) for c in cards),
+            "project_visual_evidence_count": len(project_visual_evidence),
             "cards_with_fulltext_but_empty_text": sum(
                 1
                 for c in cards
@@ -5164,8 +5334,11 @@ def build_article_cards_for_selected_articles(
     return payload
 
 
-def get_article_cards_payload(project: Project) -> Dict[str, Any]:
-    path = _article_cards_payload_path(project)
+def get_article_cards_payload(
+    project: Project,
+    scope_id: str | None = None,
+) -> Dict[str, Any]:
+    path = _article_cards_payload_path(project, scope_id)
     saved = _json_read(path)
 
     if saved:

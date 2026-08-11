@@ -251,6 +251,9 @@ class ConversationUnderstanding(BaseModel):
     plan: list[dict[str, Any]] = Field(default_factory=list)
     topics: list[dict[str, Any]] = Field(default_factory=list)
     constraints: list[str] = Field(default_factory=list)
+    verrous: list[dict[str, Any]] = Field(default_factory=list)
+    project_brief: dict[str, Any] = Field(default_factory=dict)
+    review_scope: Literal["auto", "per_verrou", "global"] = "auto"
     search_requests: list[dict[str, Any]] = Field(default_factory=list)
     memory: ConversationMemory = Field(default_factory=ConversationMemory)
     interpreter: dict[str, Any] = Field(default_factory=dict)

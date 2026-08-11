@@ -2080,6 +2080,7 @@ import hashlib as _memory_hashlib
 import math as _memory_math
 
 _MEMORY_EMBEDDER = None
+_MEMORY_EMBEDDER_UNAVAILABLE = False
 _MEMORY_EMBEDDING_DIM = 384
 
 
@@ -2121,15 +2122,31 @@ def memory_embed_texts(texts: List[str]) -> Tuple[List[List[float]], str]:
     Priorité : sentence-transformers si installé.
     Fallback : hash_embedding local 384 dimensions.
     """
-    global _MEMORY_EMBEDDER
+    global _MEMORY_EMBEDDER, _MEMORY_EMBEDDER_UNAVAILABLE
     model_name = os.getenv(
         "ENNOSMART_MEMORY_EMBEDDING_MODEL",
         "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     )
+    allow_download = os.getenv(
+        "ENNOSMART_MEMORY_EMBEDDING_ALLOW_DOWNLOAD", "false"
+    ).strip().lower() in {"1", "true", "yes", "on"}
     try:
+        if _MEMORY_EMBEDDER_UNAVAILABLE:
+            raise RuntimeError("memory_embedding_model_unavailable_in_process")
         if _MEMORY_EMBEDDER is None:
             from sentence_transformers import SentenceTransformer  # type: ignore
-            _MEMORY_EMBEDDER = SentenceTransformer(model_name)
+            model_source = model_name
+            if not allow_download:
+                from huggingface_hub import snapshot_download
+
+                model_source = snapshot_download(
+                    repo_id=model_name,
+                    local_files_only=True,
+                )
+            _MEMORY_EMBEDDER = SentenceTransformer(
+                model_source,
+                local_files_only=not allow_download,
+            )
         vectors = _MEMORY_EMBEDDER.encode(
             texts,
             normalize_embeddings=True,
@@ -2137,6 +2154,7 @@ def memory_embed_texts(texts: List[str]) -> Tuple[List[List[float]], str]:
         ).tolist()
         return [[float(v) for v in row] for row in vectors], model_name
     except Exception:
+        _MEMORY_EMBEDDER_UNAVAILABLE = True
         return [_memory_hash_embedding(t) for t in texts], "hash_embedding_fallback_384"
 
 

@@ -234,25 +234,31 @@ class RankerTests(unittest.TestCase):
         self.assertFalse(report["enabled"])
         self.assertEqual(report["removed_count"], 0)
 
-    def test_articles_published_after_project_year_are_removed(self) -> None:
+    def test_articles_obey_cir_n_minus_1_window(self) -> None:
         articles = [
-            {"title": "Available in project year", "year": 2025},
+            {"title": "Available before project year", "year": 2024},
+            {"title": "Project year is too late", "year": 2025},
             {"title": "Published too late", "year": 2026},
             {"title": "Unknown publication year", "year": None},
         ]
         with patch.dict(
             os.environ,
-            {"ENNOSCHOLAR_ENFORCE_PROJECT_YEAR_CUTOFF": "1"},
+            {
+                "ENNOSCHOLAR_ENFORCE_CIR_YEAR_WINDOW": "1",
+                "ENNOSCHOLAR_CIR_REQUIRE_KNOWN_YEAR": "1",
+                "ENNOSCHOLAR_CIR_LOOKBACK_YEARS": "30",
+            },
             clear=False,
         ):
             kept, report = _filter_articles_after_project_year(articles, "2025")
 
         self.assertEqual(
             [item["title"] for item in kept],
-            ["Available in project year", "Unknown publication year"],
+            ["Available before project year"],
         )
-        self.assertEqual(report["removed_count"], 1)
-        self.assertEqual(report["cutoff_year"], 2025)
+        self.assertEqual(report["removed_count"], 3)
+        self.assertEqual(report["max_year"], 2024)
+        self.assertEqual(report["min_year"], 1995)
 
 
 if __name__ == "__main__":

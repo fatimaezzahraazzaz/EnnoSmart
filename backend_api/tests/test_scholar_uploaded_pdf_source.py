@@ -49,7 +49,7 @@ def test_uploaded_pdf_is_persisted_and_marked_as_consultable(
         db.flush()
         article = Article(
             scholar_run_id=scholar_run.id,
-            title="Source PDF locale",
+            title="2607.08273v1",
             source="consultant_upload",
             tag_article="Connexe",
             consultant_status="garde",
@@ -60,12 +60,23 @@ def test_uploaded_pdf_is_persisted_and_marked_as_consultable(
         db.refresh(article)
 
         document = fitz.open()
+        document.set_metadata(
+            {
+                "title": "Reliable Prediction under Operating-Regime Shift",
+                "author": "Alice Martin; Bob Dupont",
+                "creationDate": "D:20260701000000",
+            }
+        )
         for _ in range(4):
             page = document.new_page()
             page.insert_textbox(
                 fitz.Rect(50, 50, 545, 790),
-                "Validation expérimentale SAR et comparaison aux mesures. " * 90,
-                fontsize=9,
+                (
+                    "arXiv:2607.08273. Validation expérimentale SAR et "
+                    "comparaison aux mesures. "
+                )
+                * 20,
+                fontsize=7,
             )
         pdf_bytes = document.tobytes()
         document.close()
@@ -89,6 +100,10 @@ def test_uploaded_pdf_is_persisted_and_marked_as_consultable(
         assert result["text_chars"] > 1000
         assert uploaded_pdf_path(project, article).is_file()
         assert article.source_json["uploaded_pdf_available"] is True
+        assert article.title == "Reliable Prediction under Operating-Regime Shift"
+        assert article.year == 2026
+        assert article.url == "https://arxiv.org/abs/2607.08273"
+        assert article.source_json["authors"] == ["Alice Martin", "Bob Dupont"]
     finally:
         db.close()
         engine.dispose()

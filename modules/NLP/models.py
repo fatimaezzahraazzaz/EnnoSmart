@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Chargement et inférence des deux classifieurs NLP.
+"""Chargement et inférence du classifieur FastJudge unique.
 
-FastJudge propose un rôle de section. VerrouDetector produit une dimension
-parallèle : il ne doit jamais écraser ce rôle. La décision de conserver le
-passage comme candidat verrou est prise ensuite dans :mod:`filter`.
+FastJudge classe chaque passage dans les huit rôles sémantiques du module NLP.
+La prédiction ``verrou`` sert directement de graine de verrou potentiel. Les
+champs historiques ``verrou_score`` / ``lock_candidate_score`` sont conservés
+pour ne pas casser le pipeline aval, mais ils proviennent désormais du même
+FastJudge et non d'un second modèle.
 """
 from __future__ import annotations
 
@@ -27,13 +29,7 @@ except Exception:  # pragma: no cover
 _APP_ROOT = Path(os.getenv("ENNOSMART_ROOT", Path(__file__).resolve().parents[2]))
 
 DEFAULT_FASTJUDGE_PATHS = [
-    str(_APP_ROOT / "models" / "fastjudge" / "fastjudge_role_classifier.pkl"),
-    str(_APP_ROOT / "models" / "adapte" / "fastjudge_role_classifier.pkl"),
-]
-
-DEFAULT_VERROU_PATHS = [
-    str(_APP_ROOT / "models" / "fastjudge" / "verrou_detector_gold_v2.pkl"),
-    str(_APP_ROOT / "models" / "adapte" / "verrou_detector_gold_v2.pkl"),
+    str(_APP_ROOT / "models" / "fastjudge" / "fastjudge_linearsvc_C025.joblib"),
 ]
 
 ROLE_LABELS = [
@@ -199,13 +195,53 @@ def _decode_labels(preds: Any, label_encoder: Any, classes: List[Any]) -> List[s
     return out
 
 
-def _predict_bundle(bundle: Any, texts: List[str]) -> Tuple[List[str], Any, List[Any]]:
+def _sigmoid(value: float) -> float:
+    # Stable enough for sklearn decision margins. This is a relative score,
+    # not a calibrated probability.
+    if np is not None:
+        value = float(np.clip(value, -40.0, 40.0))
+    else:
+        value = max(-40.0, min(40.0, float(value)))
+    return 1.0 / (1.0 + __import__("math").exp(-value))
+
+
+def _decision_to_score_matrix(decision: Any, classes: List[Any]) -> Any:
+    """Convertit les marges LinearSVC en scores 0..1 pour compatibilité UI.
+
+    Ces scores servent au classement/affichage uniquement. Ils ne sont pas
+    interprétés comme des probabilités calibrées et ne servent plus à décider
+    si un passage est un verrou : la classe prédite ``verrou`` fait foi.
+    """
+    if decision is None:
+        return None
+    try:
+        arr = np.asarray(decision, dtype=float) if np is not None else decision
+        if np is not None:
+            if arr.ndim == 1:
+                if len(classes) == 2:
+                    arr = np.column_stack([-arr, arr])
+                else:
+                    arr = arr.reshape(-1, 1)
+            clipped = np.clip(arr, -40.0, 40.0)
+            return 1.0 / (1.0 + np.exp(-clipped))
+        # Fallback minimal sans numpy
+        rows = decision if isinstance(decision, (list, tuple)) else [decision]
+        out = []
+        for row in rows:
+            vals = list(row) if isinstance(row, (list, tuple)) else [row]
+            out.append([_sigmoid(float(v)) for v in vals])
+        return out
+    except Exception:
+        return None
+
+
+def _predict_bundle(bundle: Any, texts: List[str]) -> Tuple[List[str], Any, List[Any], str]:
     est, vec, le, raw = _unwrap_model(bundle)
 
     if est is None or not hasattr(est, "predict"):
         raise AttributeError(
             "Le modèle chargé n'a pas de méthode predict(). "
-            "Vérifie les clés du .pkl avec debug_model_files()."
+            "Vérifie les clés du .joblib avec debug_model_files()."
         )
 
     x = _transform_if_needed(est, vec, texts)
@@ -213,15 +249,25 @@ def _predict_bundle(bundle: Any, texts: List[str]) -> Tuple[List[str], Any, List
     classes = _classes_from(est, le, raw)
     preds = _decode_labels(preds_raw, le, classes)
 
-    proba = None
+    score_matrix = None
+    score_source = "none"
     if hasattr(est, "predict_proba"):
         try:
-            proba = est.predict_proba(x)
+            score_matrix = est.predict_proba(x)
+            score_source = "predict_proba"
         except Exception:
-            proba = None
+            score_matrix = None
 
-    return preds, proba, classes
+    if score_matrix is None and hasattr(est, "decision_function"):
+        try:
+            decision = est.decision_function(x)
+            score_matrix = _decision_to_score_matrix(decision, classes)
+            score_source = "decision_function_sigmoid_uncalibrated"
+        except Exception:
+            score_matrix = None
+            score_source = "none"
 
+    return preds, score_matrix, classes, score_source
 
 def _score_from_proba(proba: Any, i: int, label: str, classes: List[Any]) -> Tuple[float, Dict[str, float]]:
     if proba is None:
@@ -265,12 +311,6 @@ def _load_fastjudge() -> Tuple[Any, Path]:
     return _load_file(path), path
 
 
-@lru_cache(maxsize=1)
-def _load_verrou_detector() -> Tuple[Any, Path]:
-    path = _first_existing(DEFAULT_VERROU_PATHS, "ENNOSMART_VERROU_MODEL_PATH")
-    return _load_file(path), path
-
-
 # ============================================================
 # Public API
 # ============================================================
@@ -280,7 +320,7 @@ def judge_passages_batch(texts: List[str]) -> List[Dict[str, Any]]:
         return []
 
     model, path = _load_fastjudge()
-    preds, proba, classes = _predict_bundle(model, texts)
+    preds, proba, classes, score_source = _predict_bundle(model, texts)
 
     out: List[Dict[str, Any]] = []
     for i, label in enumerate(preds):
@@ -294,42 +334,8 @@ def judge_passages_batch(texts: List[str]) -> List[Dict[str, Any]]:
             "score": float(conf or 0.0),
             "confidence": float(conf or 0.0),
             "scores": scores,
+            "score_source": score_source,
             "fastjudge_model_path": str(path),
-        })
-    return out
-
-
-def detect_verrous_batch(texts: List[str]) -> List[Dict[str, Any]]:
-    if not texts:
-        return []
-
-    model, path = _load_verrou_detector()
-    preds, proba, classes = _predict_bundle(model, texts)
-
-    out: List[Dict[str, Any]] = []
-    class_list = [str(c) for c in classes]
-
-    for i, label in enumerate(preds):
-        label = str(label).strip()
-        conf, scores = _score_from_proba(proba, i, label, classes)
-
-        # Pour verrou_detector binaire, on veut le score de verrou_evidence si disponible.
-        verrou_score = conf
-        for possible in ["verrou_evidence", "verrou", "1", "True", "true"]:
-            if possible in scores:
-                verrou_score = scores[possible]
-                break
-
-        # Si pas de proba, transforme label en score simple.
-        if not scores:
-            verrou_score = 1.0 if label in {"verrou_evidence", "verrou", "1", "True", "true"} else 0.0
-
-        out.append({
-            "label": label,
-            "score": float(verrou_score or 0.0),
-            "confidence": float(verrou_score or 0.0),
-            "scores": scores,
-            "verrou_model_path": str(path),
         })
     return out
 
@@ -341,67 +347,48 @@ def run_fastjudge(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for c, p in zip(candidates, preds):
         item = dict(c)
-        # Le préfixe de contexte est utile uniquement pendant l'inférence. Le
-        # conserver doublait presque le texte dans chaque JSON de sortie.
         item.pop("model_input", None)
-        role = p.get("label") or p.get("role") or "bruit"
-        # Valeur brute du classifieur. filter.py choisira le rôle sémantique
-        # définitif en tenant aussi compte du titre de section.
-        item["original_model_role"] = str(role)
-        item["role"] = str(role)  # alias historique, corrigé ensuite par le filtre
-        item["model_confidence"] = float(p.get("score") or p.get("confidence") or 0.0)
-        item["confidence"] = item["model_confidence"]
-        item["role_scores"] = p.get("scores", {}) or {}
-        item["scores"] = dict(item["role_scores"])  # compatibilité
+
+        role = str(p.get("label") or p.get("role") or "bruit").strip().lower()
+        role_scores = dict(p.get("scores", {}) or {})
+        model_score = float(p.get("score") or p.get("confidence") or 0.0)
+        verrou_score = float(role_scores.get("verrou", model_score if role == "verrou" else 0.0) or 0.0)
+
+        # Rôle multiclasses : source canonique unique.
+        item["original_model_role"] = role
+        item["role"] = role
+        item["model_confidence"] = model_score
+        item["confidence"] = model_score
+        item["role_scores"] = role_scores
+        item["scores"] = dict(role_scores)
+        item["model_score_source"] = p.get("score_source") or "unknown"
+
+        # Aliases historiques conservés pour les modules aval. Ils ne viennent
+        # plus d'un VerrouDetector séparé.
+        item["verrou_score"] = verrou_score
+        item["lock_candidate_score"] = verrou_score
+        item["lock_model_label"] = "verrou" if role == "verrou" else "not_verrou"
+        item["lock_model_scores"] = {"verrou": verrou_score}
+        item["lock_score_source"] = "fastjudge_single_model"
+
         if INCLUDE_MODEL_PATHS_IN_ITEMS:
             item["fastjudge_model_path"] = p.get("fastjudge_model_path")
+
         out.append(item)
     return out
 
 
-def run_verrou_detector(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Applique le detecteur de verrous à TOUS les passages (plus seulement verrou/limite)"""
-    if not items:
-        return items
-
-    # Correction : on ne filtre plus par rôle
-    target_items = items  # tous les passages
-
-    # Le verrou est souvent formulé dans la phrase voisine ou dans le titre de
-    # section. ``analysis_text`` contient ce contexte local, sans nom de fichier.
-    preds = detect_verrous_batch([
-        str(x.get("analysis_text") or x.get("text") or "")
-        for x in target_items
-    ])
-    by_id: Dict[str, Dict[str, Any]] = {}
-    for x, p in zip(target_items, preds):
-        by_id[str(x.get("passage_id"))] = p
-
-    for x in items:
-        p = by_id.get(str(x.get("passage_id")))
-        if p:
-            x["verrou_score"] = float(p.get("score") or p.get("confidence") or 0.0)
-            x["lock_candidate_score"] = x["verrou_score"]
-            x["lock_model_label"] = p.get("label")
-            x["lock_model_scores"] = p.get("scores", {}) or {}
-            if INCLUDE_MODEL_PATHS_IN_ITEMS:
-                x["verrou_model_path"] = p.get("verrou_model_path")
-        else:
-            x.setdefault("verrou_score", 0.0)
-            x.setdefault("lock_candidate_score", 0.0)
-    return items
-
-
 def apply_models(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Applique uniquement FastJudge ; aucun second classifieur de verrou."""
     if not candidates:
         return []
-    return run_verrou_detector(run_fastjudge(candidates))
+    return run_fastjudge(candidates)
 
 
 def debug_model_files() -> Dict[str, Any]:
     """À afficher dans Streamlit si besoin."""
     info: Dict[str, Any] = {}
-    for name, loader in [("fastjudge", _load_fastjudge), ("verrou_detector", _load_verrou_detector)]:
+    for name, loader in [("fastjudge", _load_fastjudge)]:
         try:
             obj, path = loader()
             est, vec, le, raw = _unwrap_model(obj)
@@ -412,6 +399,7 @@ def debug_model_files() -> Dict[str, Any]:
                 "estimator_type": type(est).__name__ if est is not None else None,
                 "has_predict": bool(hasattr(est, "predict")),
                 "has_predict_proba": bool(hasattr(est, "predict_proba")),
+                "has_decision_function": bool(hasattr(est, "decision_function")),
                 "vectorizer_type": type(vec).__name__ if vec is not None else None,
                 "label_encoder_type": type(le).__name__ if le is not None else None,
                 "classes": [str(x) for x in _classes_from(est, le, raw)],

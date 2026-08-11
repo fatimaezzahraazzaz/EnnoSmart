@@ -448,36 +448,61 @@ def source_passages(verrou: Dict[str, Any]) -> List[str]:
             passages.append(str(s.get("excerpt") or ""))
 
     # fallback
-    for k in ["text", "title", "verrou_title"]:
+    for k in ["text", "title", "research_target_title", "verrou_title"]:
         if verrou.get(k):
             passages.append(str(verrou.get(k)))
 
     cleaned = []
     for p in passages:
         p = remove_frascati_question_text(p)
-        p = clean_text(p, 1200)
+        p = clean_text(p, 4000)
         if len(p) >= 25:
             cleaned.append(p)
 
     cleaned.sort(key=_technical_density, reverse=True)
-    return dedupe_keep_order(cleaned, 8)
+    # ``dedupe_keep_order`` est adapte aux mots-cles et tronque volontairement
+    # chaque element a 120 caracteres. Il ne doit jamais etre utilise pour des
+    # passages sources : cette troncature supprimait presque tout le contenu de
+    # la section avant l'extraction de l'intention scientifique.
+    output: List[str] = []
+    seen = set()
+    for passage in cleaned:
+        value = clean_text(passage, 4000)
+        key = norm(value)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        output.append(value)
+        if len(output) >= 8:
+            break
+    return output
 
 
 def extract_source_text(verrou: Dict[str, Any]) -> str:
     passages = source_passages(verrou)
-    return clean_text(" ".join(passages[:4]), 4500)
+    return clean_text(" ".join(passages[:4]), 8000)
 
 
 def extract_context_text(verrou: Dict[str, Any]) -> str:
     parts = []
     ctx = verrou.get("context") or {}
     if isinstance(ctx, dict):
-        for key in ["objectifs", "methodes", "resultats", "parametres", "limites"]:
+        for key in [
+            "objectifs", "methodes", "resultats", "parametres", "limites",
+            "local_context", "context_text", "section_context",
+        ]:
             val = ctx.get(key)
             if isinstance(val, list):
                 parts.extend(str(x) for x in val[:3])
             elif isinstance(val, str):
                 parts.append(val)
+
+    research_context = verrou.get("research_context") or {}
+    if isinstance(research_context, dict):
+        for key in ["local_context", "context_text", "section_context"]:
+            value = research_context.get(key)
+            if isinstance(value, str) and value.strip():
+                parts.append(value)
 
     diagnostic_context = verrou.get("diagnostic_context") or {}
     if diagnostic_context:
@@ -565,7 +590,7 @@ def extract_constraints(text: str) -> List[str]:
 
 
 def choose_title(verrou: Dict[str, Any], source_text: str) -> str:
-    for key in ["title", "verrou_title"]:
+    for key in ["title", "research_target_title", "verrou_title"]:
         t = clean_title(verrou.get(key))
         if t and not is_generic_title(t) and len(t) > 12:
             return clean_text(t, 140)
@@ -696,7 +721,12 @@ def build_scientific_intent(
     )
 
     intent = ScientificIntent(
-        verrou_id=str(v.get("verrou_id") or ""),
+        verrou_id=str(
+            v.get("research_target_id")
+            or v.get("target_id")
+            or v.get("verrou_id")
+            or ""
+        ),
         verrou_title=title,
         scientific_problem=scientific_problem,
         technical_object=technical_object,
@@ -725,7 +755,21 @@ def build_scientific_intent(
     out["cir_profile_source"] = profile_source
     out["domain_detection"] = domain_detection
     out["cir_domain_detection"] = domain_detection
-    out["intent_scope"] = "current_verrou_evidence_only"
+    research_target_id = str(
+        v.get("research_target_id")
+        or v.get("target_id")
+        or ""
+    )
+    research_target_type = str(v.get("research_target_type") or "").strip()
+    if research_target_id:
+        out["research_target_id"] = research_target_id
+        out["research_target_title"] = title
+        out["research_target_type"] = research_target_type or "scientific_enrichment"
+        out["intent_scope"] = "current_research_target_evidence_only"
+        out["subject_kind"] = "research_target"
+    else:
+        out["intent_scope"] = "current_verrou_evidence_only"
+        out["subject_kind"] = "diagnostic_lock"
     out["query_builder_version"] = "v145_local_evidence_intent"
     return out
 
@@ -962,6 +1006,78 @@ def _v146_scientific_roles(local_text: str, previous: Dict[str, Any]) -> Dict[st
     }
 
 
+def _dynamic_source_anchors(title: str, source_text: str) -> Dict[str, Any]:
+    """Extrait des ancres discriminantes sans vocabulaire metier predefini.
+
+    Les ancres viennent exclusivement du titre et du passage courant. Les
+    acronymes ne sont retenus que s'ils sont repetes dans la source; les groupes
+    de mots sont classes par recurrence et par specificite locale.
+    """
+
+    title_text = clean_text(title, 800)
+    source = clean_text(source_text, 8000)
+    source_norm = norm(source)
+    source_tokens = tokenize(source)
+    title_tokens = [
+        token
+        for token in tokenize(title_text)
+        if token not in INTENT_NOISE_TERMS and not token.replace(".", "").isdigit()
+    ]
+
+    acronyms: List[str] = []
+    for value in re.findall(r"\b[A-Z][A-Z0-9]{1,}(?:[-_/][A-Z0-9]+)?\b", source):
+        if value.upper() in ADMIN_ACRONYMS:
+            continue
+        occurrences = len(
+            re.findall(rf"(?<![A-Z0-9]){re.escape(value)}(?![A-Z0-9])", source)
+        )
+        if occurrences >= 2 and value not in acronyms:
+            acronyms.append(value)
+
+    acronym_norm = {norm(value) for value in acronyms}
+    frequency: Dict[str, int] = {}
+    for token in source_tokens:
+        frequency[token] = frequency.get(token, 0) + 1
+
+    phrase_candidates: List[Tuple[float, str]] = []
+    for size in (3, 2):
+        for index in range(0, max(0, len(title_tokens) - size + 1)):
+            words = title_tokens[index:index + size]
+            if len(set(words)) < 2:
+                continue
+            phrase = " ".join(words)
+            score = float(sum(min(frequency.get(word, 0), 4) for word in words))
+            if any(word in acronym_norm for word in words):
+                score += 4.0
+            score += min(source_norm.count(phrase), 3) * 1.5
+            phrase_candidates.append((score, phrase))
+
+    phrase_candidates.sort(key=lambda row: (-row[0], -len(row[1]), row[1]))
+    phrases: List[str] = []
+    for _, phrase in phrase_candidates:
+        tokens = set(phrase.split())
+        if any(
+            len(tokens & set(existing.split())) / max(1, len(tokens | set(existing.split())))
+            >= 0.80
+            for existing in phrases
+        ):
+            continue
+        phrases.append(phrase)
+        if len(phrases) >= 6:
+            break
+
+    terms = sorted(
+        set(title_tokens),
+        key=lambda token: (-frequency.get(token, 0), -len(token), token),
+    )[:12]
+    return {
+        "literal_source_acronyms": acronyms[:6],
+        "literal_source_phrases": phrases,
+        "literal_source_terms": terms,
+        "literal_source_anchor_policy": "derived_from_current_title_and_source_only",
+    }
+
+
 def build_scientific_intent(
     verrou: Dict[str, Any],
     domain_detection: Dict[str, Any] | None = None,
@@ -969,13 +1085,20 @@ def build_scientific_intent(
 ) -> Dict[str, Any]:
     out = _BUILD_SCIENTIFIC_INTENT_V145(verrou, domain_detection, diagnostic_context)
     sb = out.get("source_basis") if isinstance(out.get("source_basis"), dict) else {}
+    full_source_text = extract_source_text(dict(verrou or {}))
     local_text = " ".join([
         str(out.get("verrou_title") or ""),
+        full_source_text,
         str(sb.get("source_text_excerpt") or ""),
         " ".join(map(str, out.get("key_terms_fr") or [])),
     ])
     roles = _v146_scientific_roles(local_text, out)
     out.update(roles)
+    dynamic_anchors = _dynamic_source_anchors(
+        str(out.get("verrou_title") or ""),
+        full_source_text,
+    )
+    out.update(dynamic_anchors)
 
     core = roles["core_concepts"]
     methods = roles["method_anchors"]
@@ -995,7 +1118,15 @@ def build_scientific_intent(
     ) or out.get("scientific_problem")
 
     # Les ancres fortes ne contiennent plus uncertainty/CPU/GPU/noms tronqués.
-    out["strong_anchors"] = dedupe_keep_order(core + methods + phenomena + tools, 24)
+    out["strong_anchors"] = dedupe_keep_order(
+        list(dynamic_anchors.get("literal_source_acronyms") or [])
+        + list(dynamic_anchors.get("literal_source_phrases") or [])
+        + core
+        + methods
+        + phenomena
+        + tools,
+        24,
+    )
     out["key_terms_en"] = dedupe_keep_order(core + methods + phenomena + list(out.get("key_terms_en") or []), 28)
     out["intent_scope"] = "v149_current_verrou_problem_evidence_roles"
     out["query_builder_version"] = "v149_problem_evidence_intent"

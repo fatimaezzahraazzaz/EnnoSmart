@@ -10,10 +10,12 @@ import {
   Building2,
   CheckCircle2,
   FileText,
+  FilePenLine,
   FolderKanban,
   Loader2,
   RefreshCw,
   Sparkles,
+  Upload,
 } from "lucide-react"
 
 import { AppPage } from "@/components/ennosmart/app-shell"
@@ -22,33 +24,18 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 import {
-  getArticles,
-  getDiagnosticLatest,
-  getDocuments,
-  getMe,
-  getProjects,
-  getScholarLatest,
-  getVerrous,
-  type ArticleRead,
-  type DocumentRead,
-  type ProjectRead,
+  getProjectOverviews,
+  type ProjectOverview,
   type UserRead,
-  type VerrouRead,
 } from "@/lib/api"
 import { setCurrentProjectId } from "@/lib/project-session"
 
 interface DashboardPageProps {
   navigateTo: (page: AppPage) => void
+  user: UserRead
 }
 
-type ProjectDashboard = {
-  project: ProjectRead
-  documents: DocumentRead[]
-  verrous: VerrouRead[]
-  articles: ArticleRead[]
-  diagnosticLatest: any | null
-  scholarLatest: any | null
-}
+type ProjectDashboard = ProjectOverview
 
 function firstName(fullName?: string) {
   if (!fullName) return "consultant"
@@ -74,15 +61,9 @@ function statusBadgeClass(status: string) {
 }
 
 function riskFromProject(item: ProjectDashboard) {
-  const pertinent = item.verrous.filter((verrou) =>
-    (verrou.tag_cir || "").toUpperCase().includes("PERTINENT")
-  ).length
+  const { count, pertinent, moyen } = item.diagnostic.verrous
 
-  const moyen = item.verrous.filter((verrou) =>
-    (verrou.tag_cir || "").toUpperCase().includes("MOYEN")
-  ).length
-
-  if (item.verrous.length === 0) return "Non évalué"
+  if (count === 0) return "Non évalué"
   if (pertinent >= 3 && moyen <= 3) return "Faible"
   return "Moyen"
 }
@@ -101,32 +82,11 @@ function riskBadgeClass(risk: string) {
 }
 
 function diagnosticIsCompleted(item: ProjectDashboard) {
-  return item.verrous.length > 0 || Boolean(item.diagnosticLatest)
+  return item.diagnostic.verrous.count > 0 || item.diagnostic.available
 }
 
 function scholarIsCompleted(item: ProjectDashboard) {
-  return item.articles.length > 0 || Boolean(item.scholarLatest)
-}
-
-function countUsefulArticles(articles: ArticleRead[]) {
-  return articles.filter((article) => {
-    const tag = (article.tag_article || "").toLowerCase()
-    return !tag.includes("hors")
-  }).length
-}
-
-function countDirectArticles(articles: ArticleRead[]) {
-  return articles.filter((article) =>
-    (article.tag_article || "").toLowerCase().includes("direct")
-  ).length
-}
-
-function countPendingVerrous(verrous: VerrouRead[]) {
-  return verrous.filter((verrou) => verrou.consultant_status === "en_attente").length
-}
-
-function countPendingArticles(articles: ArticleRead[]) {
-  return articles.filter((article) => article.consultant_status === "en_attente").length
+  return item.scholar.articles.count > 0 || item.scholar.available
 }
 
 function formatScore(value: number | null) {
@@ -134,16 +94,6 @@ function formatScore(value: number | null) {
 
   const normalized = value <= 1 ? value * 100 : value
   return `${Math.round(normalized)}%`
-}
-
-function averageVerrouScore(verrous: VerrouRead[]) {
-  const scores = verrous
-    .map((verrou) => verrou.score)
-    .filter((score): score is number => typeof score === "number")
-
-  if (scores.length === 0) return null
-
-  return scores.reduce((sum, score) => sum + score, 0) / scores.length
 }
 
 function getRecentProjects(items: ProjectDashboard[]) {
@@ -169,40 +119,40 @@ function getActivity(items: ProjectDashboard[]) {
   for (const item of items) {
     const label = `${item.project.organisme} / ${item.project.project_name}`
 
-    if (item.verrous.length > 0) {
+    if (item.diagnostic.verrous.count > 0) {
       activities.push({
         id: `diagnostic-${item.project.id}`,
         icon: "diagnostic",
-        title: `EnnoDiagnostic a détecté ${item.verrous.length} verrou(s)`,
+        title: `EnnoDiagnostic a détecté ${item.diagnostic.verrous.count} verrou(s)`,
         subtitle: label,
         projectId: item.project.id,
         target: "diagnosis",
       })
     }
 
-    if (item.articles.length > 0) {
+    if (item.scholar.articles.count > 0) {
       activities.push({
         id: `scholar-${item.project.id}`,
         icon: "scholar",
-        title: `EnnoScholar a synchronisé ${item.articles.length} article(s)`,
-        subtitle: `${countDirectArticles(item.articles)} direct(s) · ${countUsefulArticles(item.articles)} utile(s)`,
+        title: `EnnoScholar a synchronisé ${item.scholar.articles.count} article(s)`,
+        subtitle: `${item.scholar.articles.direct} direct(s) · ${item.scholar.articles.useful} utile(s)`,
         projectId: item.project.id,
         target: "scholar",
       })
     }
 
-    if (item.documents.length > 0) {
+    if (item.documents.count > 0) {
       activities.push({
         id: `documents-${item.project.id}`,
         icon: "document",
-        title: `${item.documents.length} document(s) lié(s) au dossier`,
+        title: `${item.documents.count} document(s) lié(s) au dossier`,
         subtitle: label,
         projectId: item.project.id,
         target: "project-detail",
       })
     }
 
-    if (item.verrous.length === 0 && item.articles.length === 0 && item.documents.length === 0) {
+    if (item.diagnostic.verrous.count === 0 && item.scholar.articles.count === 0 && item.documents.count === 0) {
       activities.push({
         id: `project-${item.project.id}`,
         icon: "project",
@@ -217,8 +167,7 @@ function getActivity(items: ProjectDashboard[]) {
   return activities.slice(0, 6)
 }
 
-export default function DashboardPage({ navigateTo }: DashboardPageProps) {
-  const [user, setUser] = useState<UserRead | null>(null)
+export default function DashboardPage({ navigateTo, user }: DashboardPageProps) {
   const [items, setItems] = useState<ProjectDashboard[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -228,41 +177,7 @@ export default function DashboardPage({ navigateTo }: DashboardPageProps) {
     setError("")
 
     try {
-      const [currentUser, projects] = await Promise.all([
-        getMe(),
-        getProjects(),
-      ])
-
-      setUser(currentUser)
-
-      const dashboardItems = await Promise.all(
-        projects.map(async (project) => {
-          const [
-            documents,
-            verrous,
-            articles,
-            diagnosticLatest,
-            scholarLatest,
-          ] = await Promise.all([
-            getDocuments(project.id).catch(() => []),
-            getVerrous(project.id).catch(() => []),
-            getArticles(project.id).catch(() => []),
-            getDiagnosticLatest(project.id).catch(() => null),
-            getScholarLatest(project.id).catch(() => null),
-          ])
-
-          return {
-            project,
-            documents,
-            verrous,
-            articles,
-            diagnosticLatest,
-            scholarLatest,
-          }
-        })
-      )
-
-      setItems(dashboardItems)
+      setItems(await getProjectOverviews())
     } catch (err) {
       setError(
         err instanceof Error
@@ -285,19 +200,19 @@ export default function DashboardPage({ navigateTo }: DashboardPageProps) {
     const completedScholars = items.filter(scholarIsCompleted).length
 
     const pendingVerrous = items.reduce(
-      (sum, item) => sum + countPendingVerrous(item.verrous),
+      (sum, item) => sum + item.diagnostic.verrous.pending,
       0
     )
 
     const pendingArticles = items.reduce(
-      (sum, item) => sum + countPendingArticles(item.articles),
+      (sum, item) => sum + item.scholar.articles.pending,
       0
     )
 
-    const documents = items.reduce((sum, item) => sum + item.documents.length, 0)
-    const articles = items.reduce((sum, item) => sum + item.articles.length, 0)
+    const documents = items.reduce((sum, item) => sum + item.documents.count, 0)
+    const articles = items.reduce((sum, item) => sum + item.scholar.articles.count, 0)
     const usefulArticles = items.reduce(
-      (sum, item) => sum + countUsefulArticles(item.articles),
+      (sum, item) => sum + item.scholar.articles.useful,
       0
     )
 
@@ -356,34 +271,31 @@ export default function DashboardPage({ navigateTo }: DashboardPageProps) {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground tracking-tight">
-            Bonjour, {firstName(user?.full_name)}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Aperçu réel de vos dossiers CIR, diagnostics et recherches scientifiques.
-          </p>
+    <div className="mx-auto max-w-7xl space-y-6 p-5 sm:p-7 lg:p-9">
+      <section className="relative overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_10%_10%,rgba(216,180,254,.32),transparent_30%),linear-gradient(125deg,#260953,#5115a6_52%,#7e22ce)] px-6 py-9 text-center text-white shadow-xl shadow-violet-950/15 sm:px-10 sm:py-12">
+        <div className="absolute -right-20 -top-24 size-72 rounded-full border border-white/10" />
+        <div className="absolute -bottom-32 -left-20 size-80 rounded-full border border-white/10" />
+        <button type="button" onClick={loadDashboard} className="absolute right-4 top-4 flex size-9 items-center justify-center rounded-full border border-white/15 bg-white/10 text-violet-100 transition hover:bg-white/20" aria-label="Actualiser le tableau de bord"><RefreshCw className="size-4" /></button>
+        <div className="relative mx-auto max-w-3xl">
+          <div className="mx-auto mb-4 flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-violet-100 backdrop-blur"><Sparkles className="size-3.5" />Espace de pilotage multi-agents</div>
+          <h1 className="text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-5xl">Bonjour {firstName(user?.full_name)},<br/><span className="text-violet-200">quel dossier allons-nous faire avancer ?</span></h1>
+          <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-violet-100/75 sm:text-base">Créez un dossier, centralisez les preuves puis laissez chaque agent spécialisé intervenir au bon moment.</p>
+          <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Button size="lg" className="h-12 min-w-52 bg-white text-violet-950 shadow-lg hover:bg-violet-50" onClick={() => navigateTo("new-project")}><Sparkles className="size-4" />Créer un nouveau dossier</Button>
+            <Button size="lg" variant="outline" className="h-12 border-white/25 bg-white/5 text-white hover:bg-white/15 hover:text-white" onClick={() => navigateTo("projects")}><FolderKanban className="size-4" />Ouvrir mes projets</Button>
+          </div>
         </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={loadDashboard}>
-            <RefreshCw className="size-4 mr-2" />
-            Actualiser
-          </Button>
-
-          <Button
-            className="bg-brand hover:bg-brand/90"
-            onClick={() => navigateTo("new-project")}
-          >
-            <Sparkles className="size-4 mr-2" />
-            Nouveau dossier
-          </Button>
+        <div className="relative mx-auto mt-9 grid max-w-4xl grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { page: "upload" as AppPage, label: "Déposer", detail: "Documents", icon: Upload },
+            { page: "diagnosis" as AppPage, label: "Diagnostiquer", detail: "Verrous CIR", icon: BrainCircuit },
+            { page: "scholar" as AppPage, label: "Rechercher", detail: "État de l’art", icon: BookOpen },
+            { page: "improvement" as AppPage, label: "Améliorer", detail: "Rédaction", icon: FilePenLine },
+          ].map((action) => <button key={action.page} onClick={() => navigateTo(action.page)} className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.07] p-3 text-left backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white/15"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/10"><action.icon className="size-4" /></span><span><span className="block text-sm font-semibold">{action.label}</span><span className="block text-[11px] text-violet-200/75">{action.detail}</span></span></button>)}
         </div>
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card className="hover-lift">
           <CardContent className="p-5 flex items-center justify-between">
             <div>
@@ -487,9 +399,9 @@ export default function DashboardPage({ navigateTo }: DashboardPageProps) {
 
             <div className="space-y-3">
               {recentProjects.map((item) => {
-                const score = averageVerrouScore(item.verrous)
+                const score = item.diagnostic.verrous.average_score
                 const risk = riskFromProject(item)
-                const direct = countDirectArticles(item.articles)
+                const direct = item.scholar.articles.direct
 
                 return (
                   <Card
@@ -513,11 +425,11 @@ export default function DashboardPage({ navigateTo }: DashboardPageProps) {
                             </Badge>
 
                             <Badge variant="outline">
-                              {item.documents.length} document(s)
+                              {item.documents.count} document(s)
                             </Badge>
 
                             <Badge variant="outline">
-                              {item.verrous.length} verrou(s)
+                              {item.diagnostic.verrous.count} verrou(s)
                             </Badge>
 
                             <Badge variant="outline">
@@ -541,7 +453,7 @@ export default function DashboardPage({ navigateTo }: DashboardPageProps) {
                               Articles utiles
                             </p>
                             <p className="text-lg font-bold text-success mt-1">
-                              {countUsefulArticles(item.articles)}
+                              {item.scholar.articles.useful}
                             </p>
                           </div>
 

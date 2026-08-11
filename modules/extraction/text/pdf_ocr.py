@@ -118,8 +118,14 @@ def _discover_tesseract_cmd() -> str:
         / "Tesseract-OCR" / "tesseract.exe",
     ]
     for candidate in candidates:
-        if str(candidate) and candidate.is_file():
-            return str(candidate)
+        try:
+            if str(candidate) and candidate.is_file():
+                return str(candidate)
+        except OSError:
+            # Un dossier utilisateur peut être visible mais interdit par le
+            # sandbox/service Windows. Ce candidat ne doit pas casser l'import
+            # du routeur d'extraction.
+            continue
     return ""
 
 

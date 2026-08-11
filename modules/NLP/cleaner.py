@@ -8,7 +8,7 @@ TEMPLATE_PATTERNS = [
     r'quelles? sont les questions', r'quels? sont les enjeux', r'quels? environnements',
     r'quelles? démarches envisagez', r'quelles? sont les difficultés opérationnelles',
     r'décrire précisément', r'pour information', r'tapez ici', r'nom de la présentation',
-    r'document security', r'charte graphique', r'diffusion', r'nom prénom', r'nombre d.exemplaire',
+    r'document security', r'charte graphique', r'^\s*diffusion\s*(?::.*)?$', r'nom prénom', r'nombre d.exemplaire',
     r'erreur\s*!\s*nom de propriété', r'tableau obligatoire', r'écrivez le nom',
 ]
 

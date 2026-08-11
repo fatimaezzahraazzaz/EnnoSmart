@@ -132,8 +132,8 @@ export default function ProjectListPage({ navigateTo }: ProjectListPageProps) {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex items-start justify-between gap-4">
+    <div className="mx-auto max-w-7xl space-y-6 p-5 sm:p-7 lg:p-9">
+      <div className="ennoma-page-header flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground tracking-tight">
             Projets CIR
@@ -208,7 +208,7 @@ export default function ProjectListPage({ navigateTo }: ProjectListPageProps) {
         <div className="space-y-6">
           {filteredOrganizations.map((org) => (
             <div key={org.id} className="space-y-3">
-              <div className="w-full flex items-center justify-between gap-3 p-4 bg-muted/30 hover:bg-muted/50 rounded-lg border border-border transition-colors">
+              <div className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-brand/25 hover:shadow-md">
                 <button
                   type="button"
                   onClick={() => toggleOrg(org.id)}

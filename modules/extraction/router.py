@@ -1003,13 +1003,17 @@ def _run_pdf(
     formula_mode: str = "off",
 ) -> ExtractionResult:
     from modules.extraction.text.pdf_native import extract_pdf_native
-    from modules.extraction.text.pdf_ocr import extract_pdf_ocr, merge_native_and_ocr
 
     native = extract_pdf_native(str(path))
     final_chunks = native.text_chunks
     confidence = native.confidence_score
 
     if native.ocr_needed_pages:
+        # L'import OCR initialise les backends locaux (Surya/Tesseract). Il ne
+        # doit pas pouvoir faire échouer un PDF 100 % natif qui n'en a pas
+        # besoin.
+        from modules.extraction.text.pdf_ocr import extract_pdf_ocr, merge_native_and_ocr
+
         ocr = extract_pdf_ocr(
             str(path),
             target_pages=native.ocr_needed_pages,
@@ -1038,10 +1042,26 @@ def _run_pdf(
             doc = fitz.open(str(path))
 
             for pr in [p for p in native.pages if getattr(p, "has_images", False)]:
-                for img_info in doc[pr.page_number - 1].get_images(full=True):
+                pdf_page = doc[pr.page_number - 1]
+                for img_info in pdf_page.get_images(full=True):
+                    xref = img_info[0]
+                    body_bbox = getattr(pr, "body_bbox", None)
+                    if body_bbox:
+                        try:
+                            rects = pdf_page.get_image_rects(xref)
+                            if rects and not any(
+                                rect.x1 >= body_bbox[0]
+                                and rect.x0 <= body_bbox[2]
+                                and rect.y1 >= body_bbox[1]
+                                and rect.y0 <= body_bbox[3]
+                                for rect in rects
+                            ):
+                                continue
+                        except Exception:
+                            pass
                     image_items.append(
                         {
-                            "bytes": doc.extract_image(img_info[0])["image"],
+                            "bytes": doc.extract_image(xref)["image"],
                             "page": pr.page_number,
                             "slide": None,
                         }
@@ -1093,6 +1113,35 @@ def _run_pdf(
         ),
         text_chunks=enriched,
         visual_chunks=orphans,
+        structured_data={
+            "version": "pdf_native_structured_v2",
+            "pages": [
+                {
+                    "page_number": page.page_number,
+                    "body_bbox": list(page.body_bbox) if page.body_bbox else None,
+                    "boundary_removed": bool(page.body_bbox),
+                    "layout_mode": page.layout_mode,
+                    "column_count": page.column_count,
+                    "layout_confidence": page.layout_confidence,
+                    "table_count": len(page.tables_as_text),
+                    "tables_markdown": list(page.tables_as_text),
+                    "table_bboxes": [list(bbox) for bbox in page.table_bboxes],
+                    "figure_captions": list(page.figure_captions),
+                    "table_captions": list(page.table_captions),
+                    "body_image_count": page.body_image_count,
+                    "has_body_images": page.has_images,
+                }
+                for page in native.pages
+            ],
+            "summary": {
+                "pages": len(native.pages),
+                "tables": sum(len(page.tables_as_text) for page in native.pages),
+                "figure_captions": sum(len(page.figure_captions) for page in native.pages),
+                "table_captions": sum(len(page.table_captions) for page in native.pages),
+                "pages_with_body_images": sum(1 for page in native.pages if page.has_images),
+                "pages_with_boundaries_removed": sum(1 for page in native.pages if page.body_bbox),
+            },
+        },
         title=native.metadata.title,
         author=native.metadata.author,
         creation_date=native.metadata.creation_date,
@@ -2034,6 +2083,15 @@ def extract(
             len(result.text_chunks),
             len(result.visual_chunks),
             result.tags,
+        )
+
+        # V188 - nettoyage post-extraction
+        from modules.extraction.post_cleaner import (
+            post_clean_extraction_result,
+        )
+
+        result = post_clean_extraction_result(
+            result
         )
 
         return result

@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 """
-EnnoDiagnostic Agent - V186 mémoire CIR + réparation LLM ciblée du titre
+EnnoDiagnostic Agent - V189 groupes NLP transmis sans regroupement aval
 
 Architecture respectée :
 - Les groupes de preuves NLP qualifiés sont lus directement depuis nlp_result.json en complément de Chroma.
 - Le score Frascati est calculé en amont par le NLP / Frascati. Le JSON NLP est
   la source officielle ; les métadonnées RAG/Chroma servent de contrôle.
+- Le regroupement des verrous est effectué une seule fois dans le NLP, avant
+  Frascati ; le RAG et cet agent conservent chaque ``lock_group_id`` tel quel.
 - Cet agent ne recalcule jamais le score Frascati.
 - Le LLM sert uniquement à reformuler le diagnostic et à justifier le score à partir des preuves du projet.
 - La mémoire de style et les projets similaires ne servent jamais de preuve factuelle.
@@ -185,6 +187,31 @@ def truncate(text: Any, max_chars: int = 700) -> str:
     if len(text) <= max_chars:
         return text
     return text[:max_chars].rstrip() + "..."
+
+
+def compact_demarche_audit(value: Any) -> Dict[str, Any]:
+    """Conserve uniquement le verdict utile au diagnostic et au prompt LLM."""
+    audit = value if isinstance(value, dict) else {}
+    keys = (
+        "version",
+        "label",
+        "readability_score",
+        "readability_score_semantics",
+        "method_steps_count",
+        "research_justified_steps_count",
+        "routine_engineering_steps_count",
+        "unexplained_steps_count",
+        "redundant_steps_count",
+        "groups_with_possible_direct_final_solution_shortcut",
+        "direct_final_solution_risk",
+        "eligibility_impact",
+        "llm_review_recommended",
+        "llm_review_reasons",
+        "llm_policy",
+        "questions_to_ask",
+        "human_validation_required",
+    )
+    return {key: audit.get(key) for key in keys if key in audit}
 
 
 def extract_markdown_section(content: str, title: str) -> str:
@@ -368,6 +395,17 @@ def source_path(src: Dict[str, Any]) -> str:
 def dedupe_sources(sources: List[Dict[str, Any]], max_items: int = 30) -> List[Dict[str, Any]]:
     seen = set()
     out: List[Dict[str, Any]] = []
+    positions: Dict[Any, int] = {}
+
+    def group_source_priority(source: Dict[str, Any]) -> int:
+        meta = meta_of(source)
+        if clean_text(meta.get("source_type")) == "nlp_result_direct_group":
+            return 3
+        if clean_text(meta.get("chunk_level")) == "nlp_main_item":
+            return 2
+        if bool(meta.get("is_supporting_passage")):
+            return 0
+        return 1
 
     for src in sources or []:
         if not isinstance(src, dict):
@@ -378,17 +416,27 @@ def dedupe_sources(sources: List[Dict[str, Any]], max_items: int = 30) -> List[D
             continue
 
         meta = meta_of(src)
-        key = (source_doc(src), clean_text(meta.get("role")), txt[:250])
+        lock_group_id = clean_text(meta.get("lock_group_id"))
+        key = (
+            ("nlp_lock_group", lock_group_id)
+            if lock_group_id
+            else (source_doc(src), clean_text(meta.get("role")), txt[:250])
+        )
         if key in seen:
+            if lock_group_id:
+                position = positions.get(key)
+                if (
+                    position is not None
+                    and group_source_priority(src) > group_source_priority(out[position])
+                ):
+                    out[position] = src
             continue
 
         seen.add(key)
+        positions[key] = len(out)
         out.append(src)
 
-        if len(out) >= max_items:
-            break
-
-    return out
+    return out[:max_items]
 
 
 
@@ -428,6 +476,12 @@ def rank_sources_for_agent(sources: List[Dict[str, Any]], max_items: int = 30) -
             value += 25.0
         if clean_text(meta.get("role")) == "verrou":
             value += 10.0
+        if clean_text(meta.get("source_type")) == "nlp_result_direct_group":
+            value += 50.0
+        if clean_text(meta.get("chunk_level")) == "nlp_main_item":
+            value += 8.0
+        elif bool(meta.get("is_supporting_passage")):
+            value -= 8.0
         for key, weight in [("rank_score", 2.0), ("confidence", 1.0), ("verrou_score", 1.5), ("frascati_score", 1.0)]:
             try:
                 value += float(meta.get(key) or 0) * weight
@@ -890,9 +944,18 @@ class EnnoDiagnosticAgent:
             return None
         if scope in {"local_technical_subproblem", "secondary", "supporting_measurement"}:
             return None
-        decision = clean_text(group.get("frascati_decision"))
-        if decision not in {"verrou_probable", "verrou_a_verifier"}:
-            return None
+        # Frascati V2 fournit une recommandation 0/1 mais ne filtre plus les
+        # verrous. La presence dans la vue principale NLP fait foi ; une
+        # recommandation negative reste un verrou potentiel a examiner.
+        assessment = group.get("frascati_assessment") or {}
+        if not isinstance(assessment, dict):
+            assessment = {}
+        recommendation = group.get("frascati_recommendation")
+        if recommendation is None:
+            recommendation = group.get("frascati_decision")
+        frascati_score = group.get("frascati_score")
+        if frascati_score in (None, ""):
+            frascati_score = assessment.get("eligibility_score")
 
         supports = [item for item in (group.get("supporting_passages") or []) if isinstance(item, dict)]
         representative = clean_text(
@@ -931,9 +994,12 @@ class EnnoDiagnosticAgent:
             "document": primary.get("document") or group.get("document"),
             "source_path": primary.get("source_path") or group.get("source_path"),
             "section_title": primary.get("section_title") or group.get("section_title"),
-            "frascati_score": group.get("frascati_score"),
-            "frascati_decision": decision,
-            "final_role": group.get("final_role") or decision,
+            "frascati_score": frascati_score,
+            "frascati_decision": recommendation,
+            "frascati_recommendation": recommendation,
+            "frascati_recommendation_label": group.get("frascati_recommendation_label"),
+            "frascati_assessment": assessment,
+            "final_role": group.get("final_role") or "verrou_potentiel",
             "evidence_count": group.get("evidence_count") or len(supports),
             "supporting_passages": supports,
             "supporting_documents": group.get("supporting_documents") or [],
@@ -1163,6 +1229,7 @@ class EnnoDiagnosticAgent:
                 group_assessments.append({
                     "group_id": group_id,
                     "eligibility_score": round(score, 4),
+                    "eligibility_assessment_score": raw.get("eligibility_assessment_score"),
                     "risk_level": clean_text(raw.get("risk_level")) or None,
                     "interpretation": clean_text(raw.get("interpretation")) or None,
                     "questions_to_ask": raw.get("questions_to_ask")
@@ -1210,11 +1277,26 @@ class EnnoDiagnosticAgent:
                 score_source = source
                 break
 
+        try:
+            eligibility_assessment_score = round(
+                float(assessment.get("eligibility_assessment_score")),
+                4,
+            )
+        except Exception:
+            eligibility_assessment_score = None
+        demarche_legibility = compact_demarche_audit(
+            assessment.get("demarche_legibility")
+        )
+
         return {
             "ok": global_score is not None or bool(group_assessments),
             "source_path": str(path),
             "score_source": score_source,
             "average_frascati_score": global_score,
+            "eligibility_assessment_score": eligibility_assessment_score,
+            "eligibility_assessment_score_semantics": assessment.get("eligibility_assessment_score_semantics"),
+            "eligibility_recommendation": assessment.get("eligibility_recommendation"),
+            "recommendation_label": assessment.get("recommendation_label"),
             "risk_level": clean_text(assessment.get("risk_level")) or None,
             "scores_count": len(group_assessments),
             "main_groups_scores_count": len(main_group_assessments),
@@ -1228,44 +1310,18 @@ class EnnoDiagnosticAgent:
             "main_group_assessments": main_group_assessments,
             "questions_to_ask": assessment.get("questions_to_ask")
             if isinstance(assessment.get("questions_to_ask"), list) else [],
+            "demarche_legibility": demarche_legibility,
         }
 
     def _load_rag_cluster_frascati_audit(self) -> Dict[str, Any]:
-        """Lit les scores réellement écrits dans ``rag/lock_clusters.json``."""
-        path = self.out_dir / "rag" / "lock_clusters.json"
-        if not path.exists():
-            return {"ok": False, "missing": True, "scores": [], "source_path": str(path)}
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8-sig"))
-        except Exception as exc:
-            return {"ok": False, "error": str(exc), "scores": [], "source_path": str(path)}
-        clusters = payload.get("clusters") or []
-        scores: List[float] = []
-        score_rows: List[Dict[str, Any]] = []
-        if isinstance(clusters, list):
-            for cluster in clusters:
-                if not isinstance(cluster, dict) or cluster.get("display_as_lock") is False:
-                    continue
-                try:
-                    score = float(cluster.get("frascati_score"))
-                except Exception:
-                    score = 0.0
-                if score <= 0:
-                    continue
-                scores.append(score)
-                score_rows.append({
-                    "cluster_id": clean_text(cluster.get("cluster_id")),
-                    "member_group_ids": cluster.get("member_group_ids") or [],
-                    "frascati_score": round(score, 4),
-                    "lock_scope": clean_text(cluster.get("lock_scope")),
-                })
+        """Compatibilité : l'audit de clusters RAG est désormais désactivé."""
         return {
-            "ok": bool(scores),
-            "missing": False,
-            "source_path": str(path),
-            "report_version": payload.get("version"),
-            "scores": scores,
-            "score_rows": score_rows,
+            "ok": False,
+            "disabled": True,
+            "reason": "single_lock_grouping_owned_by_nlp_before_frascati",
+            "scores": [],
+            "score_rows": [],
+            "source_path": None,
         }
 
     def frascati_summary_from_chroma(self, verrou_sources: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1294,8 +1350,7 @@ class EnnoDiagnosticAgent:
                 rag_levels[level] = rag_levels.get(level, 0) + 1
 
         cluster_audit = self._load_rag_cluster_frascati_audit()
-        cluster_scores = cluster_audit.get("scores") or []
-        rag_scores = cluster_scores if cluster_scores else source_chunk_scores
+        rag_scores = source_chunk_scores
         rag_average = round(statistics.mean(rag_scores), 4) if rag_scores else None
         official_score = official.get("average_frascati_score") if official.get("ok") else None
         official_main_score = official.get("main_groups_average_frascati_score") if official.get("ok") else None
@@ -1313,6 +1368,10 @@ class EnnoDiagnosticAgent:
 
         return {
             "average_frascati_score": average_score,
+            "eligibility_assessment_score": official.get("eligibility_assessment_score"),
+            "eligibility_assessment_score_semantics": official.get("eligibility_assessment_score_semantics"),
+            "eligibility_recommendation": official.get("eligibility_recommendation"),
+            "recommendation_label": official.get("recommendation_label"),
             "scores_count": official.get("scores_count", len(rag_scores)) if official.get("ok") else len(rag_scores),
             "risk_level": official.get("risk_level"),
             "score_source": official.get("score_source") if official.get("ok") else "rag_chroma_metadata_fallback",
@@ -1322,6 +1381,7 @@ class EnnoDiagnosticAgent:
             "main_groups_scores_count": official.get("main_groups_scores_count", 0),
             "main_groups_average_frascati_score": official.get("main_groups_average_frascati_score"),
             "questions_to_ask": official.get("questions_to_ask") or [],
+            "demarche_legibility": official.get("demarche_legibility") or {},
             "decisions_count": interpretation_counts or rag_decisions,
             "candidate_levels_count": risk_counts or rag_levels,
             "rag_audit": {
@@ -1329,8 +1389,7 @@ class EnnoDiagnosticAgent:
                 "average_frascati_score": rag_average,
                 "score_available": bool(rag_scores),
                 "score_source": (
-                    "rag.lock_clusters.json" if cluster_scores
-                    else "rag_chroma_source_metadata" if source_chunk_scores
+                    "rag_chroma_source_metadata" if source_chunk_scores
                     else None
                 ),
                 "source_path": cluster_audit.get("source_path"),
@@ -1356,6 +1415,9 @@ class EnnoDiagnosticAgent:
         return json.dumps(
             {
                 "average_frascati_score": frascati_summary.get("average_frascati_score"),
+                "eligibility_assessment_score": frascati_summary.get("eligibility_assessment_score"),
+                "eligibility_recommendation": frascati_summary.get("eligibility_recommendation"),
+                "recommendation_label": frascati_summary.get("recommendation_label"),
                 "scores_count": frascati_summary.get("scores_count"),
                 "risk_level": frascati_summary.get("risk_level"),
                 "score_source": frascati_summary.get("score_source"),
@@ -1363,6 +1425,9 @@ class EnnoDiagnosticAgent:
                 "main_groups_average_frascati_score": frascati_summary.get("main_groups_average_frascati_score"),
                 "decisions_count": frascati_summary.get("decisions_count"),
                 "candidate_levels_count": frascati_summary.get("candidate_levels_count"),
+                "demarche_legibility": compact_demarche_audit(
+                    frascati_summary.get("demarche_legibility")
+                ),
             },
             ensure_ascii=False,
             indent=2,
@@ -2011,10 +2076,10 @@ class EnnoDiagnosticAgent:
         frascati_summary: Dict[str, Any],
     ) -> List[Dict[str, Any]]:
         """
-        V169 : reformulation dédiée des clusters sémantiques produits par le RAG.
+        V189 : reformulation dédiée des groupes sémantiques produits par le NLP.
 
-        Le RAG fixe déjà la composition des clusters dans ``rag/lock_clusters.json``.
-        EnnoDiagnostic ne fusionne plus les groupes et ne fait que les reformuler.
+        Le NLP fixe la composition des groupes avant Frascati. Le RAG les
+        transmet sans consolidation et EnnoDiagnostic ne fait que les reformuler.
         Ce n'est plus le frontend qui fabrique les verrous depuis les chunks.
         L'agent crée une vraie sortie JSON : report["llm_reformulated_verrous"].
 
@@ -2023,7 +2088,8 @@ class EnnoDiagnosticAgent:
         - pas d'invention ;
         - les preuves sources restent attachées ;
         - les catégories universelles Frascati sont exclues des candidats ;
-        - plusieurs chunks proches sont fusionnés en un seul verrou candidat.
+        - plusieurs chunks d'un même ``lock_group_id`` restituent le même groupe,
+          mais deux identifiants NLP distincts ne sont jamais fusionnés.
         - aucun minimum ni maximum de verrous n'est imposé.
         """
         try:
@@ -2043,7 +2109,6 @@ class EnnoDiagnosticAgent:
             except Exception:
                 style_block = ""
 
-            lock_clusters_path = self.out_dir / "rag" / "lock_clusters.json"
             synthesis = synthesize_consultant_verrous(
                 sections=sections,
                 frascati_summary=frascati_summary,
@@ -2051,7 +2116,6 @@ class EnnoDiagnosticAgent:
                 style_block=style_block,
                 memory_v2_report=getattr(self, "_last_memory_v2_report", None),
                 previous_cir_context=getattr(self, "_last_previous_verrou_context", None),
-                lock_clusters_path=lock_clusters_path,
             )
             self._last_verrou_synthesis_report = synthesis
             items = synthesis.get("llm_reformulated_verrous") if isinstance(synthesis, dict) else []
@@ -2513,6 +2577,8 @@ class EnnoDiagnosticAgent:
         parts.append("- Pour chaque signal candidat : titre technique provisoire reformulé par le LLM, difficulté observée, phénomène possiblement non maîtrisé, preuves/documents, statut de validation.")
         parts.append("- Le titre doit être exploitable pour EnnoScholar après validation consultant : pas un simple mot-clé, pas un thème générique.")
         parts.append("- Dans la démarche : organiser par axe technique, sans inventer de protocole.")
+        parts.append("- Le nombre d'étapes ne prouve jamais la R&D. Distingue les étapes reliées à une incertitude, une hypothèse, une évaluation et un apprentissage des procédures d'ingénierie courante.")
+        parts.append("- Si l'audit de lisibilité signale un raccourci possible, explique uniquement à partir des preuves pourquoi la solution finale ne pouvait pas être choisie dès le départ ; sinon marque ce point à valider.")
         parts.append("- Dans les résultats : séparer résultats chiffrés, observations qualitatives, résultats insuffisants/à valider.")
         parts.append("- Ne fabrique jamais de valeur, de résultat ou de document source.")
 
@@ -2609,6 +2675,19 @@ class EnnoDiagnosticAgent:
         lines.append(f"- Source du score : {frascati_summary.get('score_source')}")
         lines.append(f"- Décisions détectées : {frascati_summary.get('decisions_count')}")
         lines.append(f"- Niveaux de signaux candidats : {frascati_summary.get('candidate_levels_count')}")
+        lines.append(
+            "- Score de l'étude d'éligibilité (critères Frascati + démarche) : "
+            f"{frascati_summary.get('eligibility_assessment_score')}"
+        )
+        demarche = compact_demarche_audit(frascati_summary.get("demarche_legibility"))
+        if demarche:
+            lines.append(
+                "- Pertinence de la démarche : "
+                f"{demarche.get('label')} ; "
+                f"étapes R&D justifiées={demarche.get('research_justified_steps_count', 0)}, "
+                f"ingénierie classique={demarche.get('routine_engineering_steps_count', 0)}, "
+                f"à expliquer={demarche.get('unexplained_steps_count', 0)}."
+            )
         lines.append("")
         lines.append(
             "Ce score reprend les métadonnées produites pendant le NLP et le contrôle Frascati. "
@@ -3317,7 +3396,7 @@ Contraintes :
             presenter_error = str(exc)
             print(f"[EnnoDiagnostic][V182_PRESENTER][WARN] {exc}")
 
-        # La composition des verrous vient du RAG. Le LLM ne fait que reformuler.
+        # La composition des verrous vient du NLP. Le LLM ne fait que reformuler.
         llm_reformulated_verrous = self.build_llm_reformulated_verrous(
             content="",
             sections=sections,
@@ -3440,7 +3519,7 @@ Contraintes :
         report: Dict[str, Any] = {
             "ok": True,
             "status": "completed",
-            "version": "ennodiagnostic_v186_previous_cir_context_title_only_llm_repair",
+            "version": "ennodiagnostic_v189_nlp_group_passthrough_cir_reformulation",
             "mode": core_result.get("status") or "fast_prompt_fallback",
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "organisme": self.organisme,
@@ -3458,6 +3537,7 @@ Contraintes :
             "consultant_verrous_cir": llm_reformulated_verrous,
             "verrou_synthesis_report": getattr(self, "_last_verrou_synthesis_report", {}),
             "frascati_summary": frascati_summary,
+            "demarche_legibility": frascati_summary.get("demarche_legibility") or {},
             "ai_detection_report": ai_detection_report,
             "style_memory_report": style_memory_report,
             "memory_v2_report": memory_v2_report,
@@ -3481,6 +3561,10 @@ Contraintes :
                 "previous_verrou_examples_count": int(previous_verrou_context.get("examples_count") or 0),
                 "previous_verrou_context_in_prompt": bool(previous_verrou_context.get("available")),
                 "previous_verrou_context_factual_use_allowed": False,
+                "demarche_llm_review_recommended": bool(
+                    (frascati_summary.get("demarche_legibility") or {}).get("llm_review_recommended")
+                ),
+                "demarche_llm_review_policy": "reuse_existing_demarche_section_call_no_extra_call",
             },
             "output_path": str(self.report_path),
         }

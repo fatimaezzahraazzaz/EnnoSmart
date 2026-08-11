@@ -54,5 +54,5 @@ export default function Page() {
     return <LoginPage onLogin={(connectedUser) => setUser(connectedUser)} />
   }
 
-  return <AppShell user={user} onLogout={handleLogout} />
+  return <AppShell user={user} onLogout={handleLogout} onUserUpdated={setUser} />
 }

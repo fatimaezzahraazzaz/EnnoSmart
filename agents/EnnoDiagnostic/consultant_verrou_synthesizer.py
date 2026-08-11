@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-"""Reformulation consultant des clusters sémantiques produits par le RAG.
+"""Reformulation consultant des groupes de verrous produits par le NLP.
 
 V172 sépare strictement les responsabilités :
 - le NLP construit les groupes techniques ;
 - Frascati évalue l’éligibilité sans filtrer les groupes ;
-- le RAG consolide sémantiquement ces groupes dans ``rag/lock_clusters.json`` ;
-- EnnoDiagnostic ne fusionne plus et ne rejette plus les groupes ;
-- le LLM reformule uniquement chaque cluster déjà déterminé.
+- le regroupement sémantique unique est exécuté dans le NLP avant Frascati ;
+- le RAG indexe chaque groupe sans le consolider ;
+- EnnoDiagnostic reformule uniquement chaque groupe NLP déjà déterminé.
 
 Aucun nombre de verrous n'est imposé. Toute preuve et tout identifiant de groupe
 restent traçables. Une sortie LLM invalide déclenche une relance ciblée puis une
@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 
-VERSION = "v186_previous_cir_context_title_only_llm_repair"
+VERSION = "v189_nlp_group_passthrough_cir_reformulation"
 
 VISIBLE_FIELDS = (
     "title",
@@ -382,19 +382,175 @@ def _singleton_clusters_from_sections(sections: Dict[str, Any]) -> Dict[str, Any
     }
 
 
+def _nlp_group_report_from_sections(
+    sections: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Projette chaque ``lock_group_id`` NLP en une fiche, sans regroupement.
+
+    Plusieurs chunks peuvent representer le meme groupe (chunk principal et
+    passages de preuve). Ils sont reunis uniquement par leur identifiant NLP
+    deja existant. Deux identifiants NLP distincts ne sont jamais fusionnes.
+    """
+
+    preferred = sections.get("_nlp_verrou_candidates")
+    if not isinstance(preferred, list) or not preferred:
+        preferred = sections.get("verrous")
+    raw_sources = [
+        source
+        for source in (preferred or [])
+        if isinstance(source, dict)
+    ]
+
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for source in raw_sources:
+        meta = _metadata(source)
+        role = _norm(meta.get("role") or source.get("role"))
+        if role != "verrou":
+            continue
+        if meta.get("display_as_main_lock") is False:
+            continue
+        scope = _norm(meta.get("technical_scope") or meta.get("lock_scope"))
+        if scope in {"local_technical_subproblem", "secondary", "supporting_measurement"}:
+            continue
+
+        group_id = _clean(
+            meta.get("lock_group_id")
+            or source.get("lock_group_id")
+            or meta.get("passage_id")
+            or source.get("id")
+        )
+        if not group_id:
+            group_id = "nlp_group_" + hashlib.sha1(
+                f"{meta.get('document')}|{_source_text(source)}".encode(
+                    "utf-8",
+                    errors="ignore",
+                )
+            ).hexdigest()[:16]
+        groups.setdefault(group_id, []).append(source)
+
+    projected: List[Dict[str, Any]] = []
+    for group_id, sources in groups.items():
+        passages: List[Dict[str, Any]] = []
+        labels: List[str] = []
+        semantic_parts: List[str] = []
+        scores: List[float] = []
+        recommendations: List[int] = []
+
+        for source in sources:
+            meta = _metadata(source)
+            labels.append(_clean(meta.get("candidate_group_label") or meta.get("section_title")))
+            semantic_parts.append(_source_text(source))
+
+            score = _safe_float(meta.get("frascati_score"), 0.0)
+            assessment = meta.get("frascati_assessment") or {}
+            if score <= 0 and isinstance(assessment, Mapping):
+                score = _safe_float(
+                    assessment.get("eligibility_score")
+                    or assessment.get("documentary_coverage"),
+                    0.0,
+                )
+            if score > 0:
+                scores.append(score)
+
+            recommendation = meta.get("frascati_recommendation")
+            if recommendation is None:
+                recommendation = meta.get("frascati_decision")
+            try:
+                recommendations.append(int(recommendation))
+            except Exception:
+                pass
+
+            nested = meta.get("supporting_passages") or source.get("supporting_passages") or []
+            if isinstance(nested, list):
+                for passage in nested:
+                    if isinstance(passage, Mapping):
+                        passages.append(dict(passage))
+
+        if not passages:
+            for source in sources:
+                meta = _metadata(source)
+                passages.append({
+                    "passage_id": _clean(meta.get("passage_id") or source.get("id")),
+                    "document": _clean(meta.get("document") or source.get("document")),
+                    "source_path": _clean(meta.get("source_path") or source.get("source_path")),
+                    "section_title": _clean(meta.get("section_title")),
+                    "text": _source_text(source),
+                })
+
+        deduped_passages: List[Dict[str, Any]] = []
+        seen_passages: Set[Tuple[str, str]] = set()
+        for passage in passages:
+            key = (
+                _clean(passage.get("passage_id") or passage.get("id")),
+                _norm(passage.get("text") or passage.get("excerpt"))[:360],
+            )
+            if key in seen_passages:
+                continue
+            seen_passages.add(key)
+            deduped_passages.append(passage)
+
+        representative_text = next(
+            (_source_text(source) for source in sources if _source_text(source)),
+            "",
+        )
+        projected.append({
+            "cluster_id": group_id,
+            "member_group_ids": [group_id],
+            "support_group_ids": [],
+            "display_as_lock": True,
+            "display_as_main_lock": True,
+            "lock_scope": "project_structuring_lock",
+            "cluster_role": "verrou_a_verifier",
+            "cluster_role_confidence": 1.0,
+            "cluster_role_reasons": ["groupe principal finalise par le NLP avant Frascati"],
+            "related_cluster_ids": [],
+            "group_count": 1,
+            "representative_label": next((value for value in labels if value), group_id),
+            "representative_text": representative_text,
+            "semantic_text": "\n".join(_dedupe_texts(semantic_parts))[:5000],
+            "concept_profile": {},
+            "frascati_score": round(sum(scores) / len(scores), 4) if scores else 0.0,
+            "frascati_recommendations": recommendations,
+            "frascati_decisions": ["verrou_a_verifier"],
+            "supporting_documents": [],
+            "supporting_passages": deduped_passages,
+            "member_groups": [],
+            "needs_human_validation": True,
+            "not_final_cir": True,
+            "grouping_owner": "nlp_before_frascati",
+            "downstream_regrouping_applied": False,
+        })
+
+    group_ids = list(groups.keys())
+    return {
+        "ok": True,
+        "version": "nlp_group_passthrough_v189",
+        "mode": "nlp_group_passthrough_no_regrouping",
+        "groups_count": len(projected),
+        "display_clusters_count": len(projected),
+        "support_only_clusters_count": 0,
+        "clusters": projected,
+        "coverage": {
+            "input_group_ids": group_ids,
+            "covered_group_ids": group_ids,
+            "uncovered_group_ids": [],
+        },
+        "downstream_regrouping_applied": False,
+    }
+
+
 def _resolve_cluster_report(
     sections: Dict[str, Any],
     lock_clusters: Optional[Dict[str, Any]],
     lock_clusters_path: str | Path | None,
 ) -> Tuple[Dict[str, Any], str, Optional[str]]:
-    if isinstance(lock_clusters, dict) and isinstance(lock_clusters.get("clusters"), list):
-        return lock_clusters, "argument", None
-
-    loaded, error = _load_json_file(lock_clusters_path)
-    if isinstance(loaded, dict) and isinstance(loaded.get("clusters"), list):
-        return loaded, "rag_lock_clusters_file", error
-
-    return _singleton_clusters_from_sections(sections), "safe_singleton_fallback", error
+    # Les deux arguments historiques sont volontairement ignores. Un ancien
+    # ``lock_clusters.json`` peut encore exister sur disque, mais il ne doit
+    # plus modifier la composition produite par le NLP.
+    report = _nlp_group_report_from_sections(sections)
+    legacy_ignored = bool(lock_clusters is not None or lock_clusters_path not in (None, ""))
+    report["legacy_cluster_input_ignored"] = legacy_ignored
+    return report, "nlp_groups_from_sections", None
 
 
 
@@ -535,9 +691,10 @@ def _build_prompt(
     return f"""
 Tu es EnnoDiagnostic, consultant CIR senior.
 
-Les regroupements ont déjà été calculés par le moteur sémantique du RAG.
-Tu ne dois ni fusionner, ni séparer, ni supprimer, ni reclasser les clusters.
-Ton unique tâche est de REFORMULER chaque cluster comme un verrou candidat CIR.
+Les regroupements ont déjà été calculés une seule fois par le NLP, avant
+l'évaluation Frascati. Chaque cluster reçu correspond exactement à un groupe NLP.
+Tu ne dois ni fusionner, ni séparer, ni supprimer, ni reclasser ces groupes.
+Ton unique tâche est de REFORMULER chaque groupe comme un verrou candidat CIR.
 
 SÉPARATION ABSOLUE DES SOURCES
 - Le tableau "evidence" de chaque cluster contient les seules preuves factuelles
@@ -1340,7 +1497,7 @@ def _candidate_output(cluster: Mapping[str, Any], analysis: Mapping[str, Any], l
         "risk_level": "à évaluer",
         "source_ids": source_ids,
         "sources": sources,
-        "source": "rag_semantic_lock_cluster",
+        "source": "nlp_semantic_lock_group",
         "needs_human_validation": True,
         "llm_generated": bool(llm_generated),
         "llm_generated_fields": list(analysis.get("_llm_generated_fields") or []),
@@ -1349,8 +1506,8 @@ def _candidate_output(cluster: Mapping[str, Any], analysis: Mapping[str, Any], l
         "llm_is_cir_lock": _clean(cluster.get("cluster_role")) in LOCK_ROLES,
         "llm_classification": upstream_decision,
         "classification_contract_valid": True,
-        "qualification_source": "nlp_frascati_then_rag_semantic_cluster",
-        "grouping_policy": "rag_semantic_complete_linkage_no_llm_merge",
+        "qualification_source": "nlp_single_grouping_then_frascati",
+        "grouping_policy": "nlp_only_before_frascati_no_downstream_regrouping",
         "concept_profile": cluster.get("concept_profile") or {},
         "upstream_frascati_score": round(_safe_float(cluster.get("frascati_score")), 4),
         "semantic_similarity_min": cluster.get("semantic_similarity_min"),
@@ -1368,8 +1525,8 @@ def _candidate_output(cluster: Mapping[str, Any], analysis: Mapping[str, Any], l
             "semantic_similarity_mean": cluster.get("semantic_similarity_mean"),
         },
         "principle": (
-            "La composition du cluster est calculée par le RAG. Le LLM reformule "
-            "uniquement les preuves sans modifier la couverture."
+            "La composition du groupe est calculée par le NLP avant Frascati. "
+            "Le LLM reformule uniquement les preuves sans modifier la couverture."
         ),
     }
     return output
@@ -1389,7 +1546,7 @@ def _support_output(cluster: Mapping[str, Any]) -> Dict[str, Any]:
         "not_final_cir": True,
         "sources": sources,
         "source_ids": [_source_identity(source) for source in sources],
-        "source": "rag_semantic_lock_cluster_support",
+        "source": "nlp_semantic_lock_group_support",
         "needs_human_validation": True,
     }
 
@@ -1420,7 +1577,7 @@ def _context_output(cluster: Mapping[str, Any]) -> Dict[str, Any]:
         "score": round(_safe_float(cluster.get("frascati_score")), 4),
         "sources": sources,
         "source_ids": [_source_identity(source) for source in sources],
-        "source": "rag_semantic_cluster_context",
+        "source": "nlp_semantic_lock_group_context",
         "needs_human_validation": True,
         "not_final_cir": True,
     }
@@ -1437,7 +1594,7 @@ def synthesize_consultant_verrous(
     lock_clusters_path: str | Path | None = None,
     **legacy_arguments: Any,
 ) -> Dict[str, Any]:
-    """Reformule les clusters RAG avec mémoire antérieure de style uniquement."""
+    """Reformule les groupes NLP avec mémoire antérieure de style uniquement."""
     sections = sections if isinstance(sections, dict) else {}
     report, cluster_source, cluster_load_error = _resolve_cluster_report(
         sections=sections,
@@ -1466,7 +1623,7 @@ def synthesize_consultant_verrous(
         return {
             "ok": True,
             "version": VERSION,
-            "mode": "no_displayable_rag_cluster",
+            "mode": "no_displayable_nlp_group",
             "principle": "Aucun verrou n'est forcé.",
             "cluster_source": cluster_source,
             "cluster_load_error": cluster_load_error,
@@ -1842,10 +1999,10 @@ def synthesize_consultant_verrous(
     return {
         "ok": True,
         "version": VERSION,
-        "mode": "rag_clusters_llm_reformulation_with_title_only_repair",
+        "mode": "nlp_groups_cir_reformulation_with_title_only_repair",
         "principle": (
-            "Le NLP/Frascati qualifie les groupes ; le RAG fixe les clusters ; "
-            "EnnoDiagnostic charge avant reformulation des exemples CIR antérieurs "
+            "Le NLP groupe les verrous avant Frascati ; le RAG les transmet sans "
+            "consolidation ; EnnoDiagnostic charge avant reformulation des exemples CIR antérieurs "
             "utilisés uniquement pour le style, puis préserve les champs LLM valides. "
             "Si le titre seul échoue, une relance LLM dédiée au titre est exécutée "
             "avant toute complétion sûre, sans utiliser concept_profile.top_terms."
@@ -1853,7 +2010,7 @@ def synthesize_consultant_verrous(
         "cluster_source": cluster_source,
         "cluster_report_version": report.get("version"),
         "cluster_report_mode": report.get("mode"),
-        "cluster_report_path": str(lock_clusters_path or ""),
+        "cluster_report_path": "",
         "cluster_load_error": cluster_load_error,
         "sources_count": sum(len(_cluster_sources(cluster)) for cluster in clusters),
         "groups_count": int(report.get("groups_count") or len(input_group_ids)),
@@ -1877,7 +2034,8 @@ def synthesize_consultant_verrous(
         "parse_error": " | ".join(parse_errors) or None,
         "classification_validation_errors": validation_errors,
         "consolidation_error": None,
-        "consolidation_mode": "rag_semantic_complete_linkage",
+        "consolidation_mode": "disabled_nlp_group_passthrough",
+        "downstream_regrouping_applied": False,
         "legacy_limit_arguments_ignored": sorted(legacy_arguments.keys()),
         "memory_v2_used_for_context": bool(isinstance(memory_v2_report, dict) and memory_v2_report.get("ok")),
         "previous_cir_context": previous_summary,

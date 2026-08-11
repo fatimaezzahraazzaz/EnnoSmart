@@ -1,20 +1,49 @@
 # -*- coding: utf-8 -*-
 from pathlib import Path
 import hashlib
+import logging
 import mimetypes
+import re
+import tempfile
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import Response
+from fpdf import FPDF
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from core.config import settings
 from core.deps import get_current_user, get_db
 from db.models import Document, User
+from modules.extraction.router import extract
 from schemas.document import DocumentRead
 from services.file_service import project_output_dir
 from services.project_service import get_project_for_user
 
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/projects/{project_id}/documents", tags=["documents"])
+
+
+AUDIO_VIDEO_EXTENSIONS = {
+    ".mp3",
+    ".wav",
+    ".m4a",
+    ".aac",
+    ".flac",
+    ".ogg",
+    ".opus",
+    ".wma",
+    ".mp4",
+    ".mov",
+    ".avi",
+    ".mkv",
+    ".webm",
+    ".mpeg",
+    ".mpg",
+    ".3gp",
+}
 
 
 def _normalise_path(path: str | Path | None) -> str:
@@ -62,6 +91,235 @@ def _make_stored_filename(original_filename: str, sha256: str) -> str:
     )
 
     return f"{safe_stem}_{sha256[:12]}{suffix}"
+
+
+def _safe_download_stem(filename: str | None) -> str:
+    stem = Path(filename or "media").stem or "media"
+
+    safe = (
+        stem.replace("\\", "_")
+        .replace("/", "_")
+        .replace(":", "_")
+        .replace("*", "_")
+        .replace("?", "_")
+        .replace('"', "_")
+        .replace("<", "_")
+        .replace(">", "_")
+        .replace("|", "_")
+        .strip()
+    )
+
+    return safe or "media"
+
+
+def _pdf_safe_text(value: object) -> str:
+    """
+    PyFPDF 1.7.2 utilise les polices core en encodage latin-1.
+    Cette fonction conserve les accents français compatibles et remplace
+    les caractères typographiques Unicode qui feraient planter pdf.output().
+    """
+    text = str(value or "")
+
+    replacements = {
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201a": "'",
+        "\u201b": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u201e": '"',
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2212": "-",
+        "\u2192": "->",
+        "\u2022": "-",
+        "\u2026": "...",
+        "\u00a0": " ",
+    }
+
+    for source, target in replacements.items():
+        text = text.replace(source, target)
+
+    return text.encode("latin-1", errors="replace").decode("latin-1")
+
+
+def _parse_transcription_chunk(chunk: str) -> tuple[str, str, str]:
+    """
+    Parse le format produit par audio_transcriber_optimized.py :
+
+    [00:12:31 - 00:13:08]
+    Interlocuteur 1 :
+    Texte...
+
+    Retourne : (horodatage, interlocuteur, texte)
+    """
+    cleaned = str(chunk or "").strip()
+    if not cleaned:
+        return "", "", ""
+
+    lines = [line.strip() for line in cleaned.splitlines()]
+    lines = [line for line in lines if line]
+
+    timestamp = ""
+    speaker = ""
+    text_lines: list[str] = []
+
+    if lines and re.match(r"^\[\d{2}:\d{2}:\d{2}\s*-\s*\d{2}:\d{2}:\d{2}\]$", lines[0]):
+        timestamp = lines.pop(0)
+
+    if lines:
+        speaker_match = re.match(
+            r"^(Interlocuteur\s+\d+|Transcription)\s*:\s*$",
+            lines[0],
+            flags=re.IGNORECASE,
+        )
+        if speaker_match:
+            speaker = speaker_match.group(1)
+            lines.pop(0)
+
+    text_lines = lines
+
+    return timestamp, speaker, " ".join(text_lines).strip()
+
+
+def _speaker_palette(speaker: str) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
+    """
+    Retourne (couleur_titre, couleur_fond).
+
+    Les fonds restent volontairement très clairs pour conserver
+    un PDF professionnel et facilement imprimable.
+    """
+    match = re.search(r"(\d+)", str(speaker or ""))
+
+    if match:
+        speaker_number = int(match.group(1))
+    else:
+        speaker_number = 0
+
+    palettes = [
+        ((31, 78, 121), (232, 241, 250)),   # bleu
+        ((46, 125, 92), (232, 247, 239)),   # vert
+        ((132, 78, 150), (244, 235, 247)),  # violet
+        ((174, 100, 35), (252, 241, 226)),  # orange
+    ]
+
+    if speaker_number <= 0:
+        return (70, 70, 70), (245, 245, 245)
+
+    return palettes[(speaker_number - 1) % len(palettes)]
+
+
+def _build_transcription_pdf(
+    *,
+    filename: str,
+    text_chunks: list[str],
+    duration_seconds: float | None,
+    language: str | None,
+    model_name: str | None = None,
+    engine: str | None = None,
+) -> bytes:
+    """
+    Génère un PDF lisible avec un bloc coloré par interlocuteur.
+
+    model_name / engine restent dans la signature pour compatibilité avec
+    l'appel existant, mais ne sont volontairement plus affichés dans le PDF.
+    """
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    # Titre
+    pdf.set_text_color(25, 25, 25)
+    pdf.set_font("Arial", "B", 16)
+    pdf.multi_cell(
+        0,
+        9,
+        _pdf_safe_text(f"Transcription de {filename}"),
+        align="C",
+    )
+    pdf.ln(3)
+
+    # Métadonnées : seulement durée + langue.
+    if duration_seconds is None:
+        duration_label = "inconnue"
+    else:
+        total_seconds = max(0, int(round(float(duration_seconds))))
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        duration_label = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    pdf.set_text_color(90, 90, 90)
+    pdf.set_font("Arial", "I", 10)
+    pdf.multi_cell(
+        0,
+        6,
+        _pdf_safe_text(
+            f"Durée : {duration_label} | Langue : {language or 'auto'}"
+        ),
+        align="C",
+    )
+    pdf.ln(7)
+
+    for index, chunk in enumerate(text_chunks, start=1):
+        timestamp, speaker, text = _parse_transcription_chunk(chunk)
+
+        if not text and not speaker:
+            continue
+
+        if index > 1:
+            pdf.ln(3)
+
+        title_color, fill_color = _speaker_palette(speaker)
+
+        # Horodatage discret
+        if timestamp:
+            pdf.set_text_color(115, 115, 115)
+            pdf.set_font("Arial", "I", 9)
+            pdf.multi_cell(
+                0,
+                5,
+                _pdf_safe_text(timestamp),
+                align="L",
+            )
+
+        # Nom de l'interlocuteur
+        if speaker:
+            pdf.set_text_color(*title_color)
+            pdf.set_font("Arial", "B", 11)
+            pdf.multi_cell(
+                0,
+                6,
+                _pdf_safe_text(f"{speaker} :"),
+                align="L",
+            )
+
+        # Texte sur fond coloré clair
+        pdf.set_fill_color(*fill_color)
+        pdf.set_text_color(30, 30, 30)
+        pdf.set_font("Arial", size=11)
+
+        body = text or str(chunk or "").strip()
+        pdf.multi_cell(
+            0,
+            6,
+            _pdf_safe_text(body),
+            border=0,
+            align="L",
+            fill=True,
+        )
+
+        pdf.ln(1)
+
+    # Réinitialisation
+    pdf.set_text_color(0, 0, 0)
+
+    raw_output = pdf.output(dest="S")
+
+    if isinstance(raw_output, str):
+        return raw_output.encode("latin-1")
+
+    return bytes(raw_output)
 
 
 def _existing_file_paths_for_project(project) -> list[Path]:
@@ -187,6 +445,143 @@ async def upload_document(
     db.refresh(document)
 
     return document
+
+
+@router.post("/transcribe-video", status_code=status.HTTP_200_OK)
+async def transcribe_video(
+    project_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Reçoit un fichier audio/vidéo, le transcrit avec le routeur EnnoSmart
+    (faster-whisper), génère un PDF et le retourne en téléchargement.
+
+    URL finale :
+    POST /projects/{project_id}/documents/transcribe-video
+    """
+    # Vérifie que le projet existe et appartient au consultant connecté.
+    get_project_for_user(db, project_id, current_user)
+
+    original_filename = file.filename or "media"
+    suffix = Path(original_filename).suffix.lower()
+
+    if suffix not in AUDIO_VIDEO_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=(
+                "Format audio/vidéo non supporté. "
+                "Formats acceptés : MP3, WAV, M4A, AAC, FLAC, OGG, OPUS, WMA, "
+                "MP4, MOV, AVI, MKV, WEBM, MPEG, MPG, 3GP."
+            ),
+        )
+
+    file_bytes = await file.read()
+
+    if not file_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Fichier vide ou illisible.",
+        )
+
+    tmp_path: Path | None = None
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(file_bytes)
+            tmp.flush()
+            tmp_path = Path(tmp.name)
+
+        # extract() est synchrone et potentiellement coûteux.
+        # On l'exécute dans un thread pour ne pas bloquer la boucle FastAPI.
+        result = await run_in_threadpool(
+            extract,
+            tmp_path,
+            enable_transcription=True,
+            transcription_model="turbo",
+            transcription_language="fr",
+            transcription_beam_size=1,
+            transcription_group_chunks=False,
+            transcription_chunk_seconds=90,
+            transcription_chunk_max_chars=2500,
+        )
+
+        text_chunks = [
+            str(chunk).strip()
+            for chunk in (getattr(result, "text_chunks", None) or [])
+            if str(chunk or "").strip()
+        ]
+
+        if not text_chunks:
+            extraction_errors = getattr(result, "extraction_errors", None) or []
+            detail = (
+                " | ".join(str(item) for item in extraction_errors if item)
+                or "Aucune transcription obtenue. Vérifie le fichier et faster-whisper."
+            )
+
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=detail,
+            )
+
+        pdf_bytes = _build_transcription_pdf(
+            filename=original_filename,
+            text_chunks=text_chunks,
+            duration_seconds=getattr(result, "media_duration_seconds", None),
+            language=getattr(result, "transcription_language", None),
+            model_name=getattr(result, "transcription_model", None),
+            engine=getattr(result, "transcription_engine", None),
+        )
+
+        download_name = f"transcription_{_safe_download_stem(original_filename)}.pdf"
+
+        logger.info(
+            "Transcription terminée project_id=%s file=%s chunks=%s pdf_bytes=%s",
+            project_id,
+            original_filename,
+            len(text_chunks),
+            len(pdf_bytes),
+        )
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{download_name}"',
+                "Cache-Control": "no-store",
+            },
+        )
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        logger.exception(
+            "Erreur transcription project_id=%s file=%s",
+            project_id,
+            original_filename,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erreur pendant la transcription : {exc}",
+        ) from exc
+
+    finally:
+        try:
+            await file.close()
+        except Exception:
+            pass
+
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception as exc:
+                logger.warning(
+                    "Impossible de supprimer le fichier temporaire %s : %s",
+                    tmp_path,
+                    exc,
+                )
 
 
 @router.post("/import-existing", response_model=list[DocumentRead])

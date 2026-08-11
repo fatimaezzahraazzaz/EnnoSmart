@@ -5,9 +5,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-heading: var(--font-inter);
-  --font-sans: var(--font-inter), 'Inter Fallback', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), 'Geist Mono Fallback';
+  --font-heading: 'Segoe UI Variable', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Segoe UI Variable', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Cascadia Code', 'SFMono-Regular', Consolas, ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -219,8 +219,62 @@
   }
   body {
     @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(circle at 12% -10%, oklch(0.91 0.07 295 / 0.38), transparent 32rem),
+      radial-gradient(circle at 95% 0%, oklch(0.94 0.045 275 / 0.3), transparent 28rem);
+    background-attachment: fixed;
   }
   html {
     @apply font-sans bg-background;
   }
+}
+
+::selection {
+  background: oklch(0.68 0.18 295 / 0.28);
+}
+
+@layer components {
+  .ennoma-workspace {
+    background:
+      radial-gradient(circle at 85% -8%, oklch(0.92 0.055 290 / 0.32), transparent 28rem),
+      linear-gradient(180deg, oklch(0.99 0.003 295 / 0.88), var(--background));
+  }
+
+  .ennoma-workspace select {
+    @apply rounded-xl border border-input bg-card px-3 shadow-sm outline-none transition-all;
+  }
+
+  .ennoma-workspace select:hover {
+    border-color: color-mix(in oklch, var(--brand) 30%, var(--input));
+  }
+
+  .ennoma-workspace select:focus {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand) 12%, transparent);
+  }
+
+  .ennoma-workspace table thead {
+    background: color-mix(in oklch, var(--muted) 75%, white);
+  }
+
+  .ennoma-workspace table th {
+    @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground;
+  }
+
+  .ennoma-workspace table tbody tr {
+    @apply transition-colors;
+  }
+
+  .ennoma-workspace table tbody tr:hover {
+    background: color-mix(in oklch, var(--brand) 3.5%, transparent);
+  }
+
+  .ennoma-page-header {
+    @apply rounded-3xl border border-border/70 bg-card/85 p-6 shadow-sm backdrop-blur-xl;
+  }
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--brand) 25%, transparent) transparent;
 }

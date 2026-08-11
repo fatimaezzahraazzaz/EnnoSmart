@@ -113,7 +113,7 @@ SUMMARY_TOP_N = int(os.getenv("ENNOSCHOLAR_SUMMARY_MAX_ARTICLES_PER_VERROU", "0"
 # Ce cache-ci est plus haut niveau : si le payload + la configuration n'ont pas changé,
 # on réutilise directement le rapport complet, sans refaire les appels API, le ranking,
 # le reranking BGE ni les résumés/abstracts.
-RUN_CACHE_VERSION = "v150_problem_evidence_year_cutoff"
+RUN_CACHE_VERSION = "v152_cir_n_minus_1_dynamic_window"
 
 
 def _env_bool_value(name: str, default: bool = False) -> bool:
@@ -229,22 +229,49 @@ def _filter_free_fulltext_articles(
     }
 
 
-def _filter_articles_after_project_year(
+def _cir_publication_window(project_year: Any) -> Tuple[int | None, int | None, int]:
+    """Fenêtre métier CIR : littérature disponible avant l'année du projet.
+
+    Pour un projet d'année N, la borne haute est N-1. La borne basse est
+    dynamique (par défaut 30 ans avant N) afin d'éviter des résultats très
+    anciens sans coder une année absolue comme 1900. Le recul reste configurable
+    via ENNOSCHOLAR_CIR_LOOKBACK_YEARS.
+    """
+
+    match = re.search(r"\b(19|20)\d{2}\b", str(project_year or ""))
+    year = int(match.group(0)) if match else None
+    try:
+        lookback = max(1, min(int(os.getenv("ENNOSCHOLAR_CIR_LOOKBACK_YEARS", "30") or 30), 100))
+    except Exception:
+        lookback = 30
+    if year is None:
+        return None, None, lookback
+    return year - lookback, year - 1, lookback
+
+
+def _filter_articles_to_cir_window(
     articles: List[Dict[str, Any]],
     project_year: Any,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Applique la règle métier temporelle de la recherche CIR.
+
+    - projet N -> publications au plus tard N-1 ;
+    - borne basse dynamique N-lookback ;
+    - si l'année d'un article est inconnue, il est exclu par défaut lorsque le
+      projet a une année connue, car sa compatibilité temporelle n'est pas
+      vérifiable. Ce comportement est configurable.
     """
-    Un état de l'art d'une année donnée ne peut pas être défendu avec une
-    publication postérieure. Les articles sans année restent candidats, mais
-    toute année connue strictement supérieure est écartée.
-    """
-    enabled = _env_bool_value("ENNOSCHOLAR_ENFORCE_PROJECT_YEAR_CUTOFF", True)
-    match = re.search(r"\b(19|20)\d{2}\b", str(project_year or ""))
-    cutoff = int(match.group(0)) if match else None
-    if not enabled or cutoff is None:
+
+    enabled = _env_bool_value("ENNOSCHOLAR_ENFORCE_CIR_YEAR_WINDOW", True)
+    min_year, max_year, lookback = _cir_publication_window(project_year)
+    require_known_year = _env_bool_value("ENNOSCHOLAR_CIR_REQUIRE_KNOWN_YEAR", True)
+    if not enabled or max_year is None:
         return articles, {
             "enabled": False,
-            "cutoff_year": cutoff,
+            "project_year": _year_from_any(project_year),
+            "min_year": min_year,
+            "max_year": max_year,
+            "lookback_years": lookback,
             "input_count": len(articles or []),
             "kept_count": len(articles or []),
             "removed_count": 0,
@@ -252,32 +279,66 @@ def _filter_articles_after_project_year(
 
     kept: List[Dict[str, Any]] = []
     removed: List[Dict[str, Any]] = []
+    removed_reasons: Dict[str, int] = {"too_recent": 0, "too_old": 0, "unknown_year": 0}
     for article in articles or []:
         if not isinstance(article, dict):
             continue
         raw_year = article.get("year") or article.get("publication_year")
         year_match = re.search(r"\b(19|20)\d{2}\b", str(raw_year or ""))
         article_year = int(year_match.group(0)) if year_match else None
-        if article_year is not None and article_year > cutoff:
-            removed.append(article)
+        reason = None
+        if article_year is None and require_known_year:
+            reason = "unknown_year"
+        elif article_year is not None and article_year > max_year:
+            reason = "too_recent"
+        elif article_year is not None and min_year is not None and article_year < min_year:
+            reason = "too_old"
+
+        if reason:
+            item = dict(article)
+            item["cir_year_filter_reason"] = reason
+            removed.append(item)
+            removed_reasons[reason] += 1
         else:
-            kept.append(article)
+            item = dict(article)
+            item["cir_year_window"] = {"min_year": min_year, "max_year": max_year}
+            kept.append(item)
 
     return kept, {
         "enabled": True,
-        "cutoff_year": cutoff,
+        "policy": "project_year_N_search_publications_between_N_minus_lookback_and_N_minus_1",
+        "project_year": _year_from_any(project_year),
+        "min_year": min_year,
+        "max_year": max_year,
+        "lookback_years": lookback,
+        "require_known_year": require_known_year,
         "input_count": len(articles or []),
         "kept_count": len(kept),
         "removed_count": len(removed),
+        "removed_reasons": removed_reasons,
         "removed_examples": [
             {
                 "title": clean_text(item.get("title"), 220),
                 "year": item.get("year"),
                 "source": clean_text(item.get("source"), 80),
+                "reason": item.get("cir_year_filter_reason"),
             }
-            for item in removed[:10]
+            for item in removed[:15]
         ],
     }
+
+
+def _year_from_any(value: Any) -> int | None:
+    match = re.search(r"\b(19|20)\d{2}\b", str(value or ""))
+    return int(match.group(0)) if match else None
+
+
+# Compatibilité interne avec les anciens appels/tests.
+def _filter_articles_after_project_year(
+    articles: List[Dict[str, Any]],
+    project_year: Any,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    return _filter_articles_to_cir_window(articles, project_year)
 
 
 def _cache_root_for_scholar() -> Path:
@@ -342,7 +403,10 @@ def _run_cache_config_fingerprint(agent: Any) -> Dict[str, Any]:
         "translate_abstract_fr": os.getenv("ENNOSCHOLAR_TRANSLATE_ABSTRACT_FR", ""),
         "cache_ttl_days": os.getenv("ENNOSCHOLAR_RUN_CACHE_TTL_DAYS", ""),
         "require_free_fulltext": os.getenv("ENNOSCHOLAR_REQUIRE_FREE_FULLTEXT", "false"),
-        "enforce_project_year_cutoff": os.getenv("ENNOSCHOLAR_ENFORCE_PROJECT_YEAR_CUTOFF", "true"),
+        "enforce_cir_year_window": os.getenv("ENNOSCHOLAR_ENFORCE_CIR_YEAR_WINDOW", "true"),
+        "cir_lookback_years": os.getenv("ENNOSCHOLAR_CIR_LOOKBACK_YEARS", "30"),
+        "cir_require_known_year": os.getenv("ENNOSCHOLAR_CIR_REQUIRE_KNOWN_YEAR", "true"),
+        "presentation_top_k": os.getenv("ENNOSCHOLAR_PRESENTATION_TOP_K", "15"),
         "keep_memory_v2_without_pdf": os.getenv("ENNOSCHOLAR_KEEP_MEMORY_V2_WITHOUT_PDF", "false"),
         "source_router_version": "v148_fast_tiered_source_router",
         "use_doaj": os.getenv("ENNOSCHOLAR_USE_DOAJ", "true"),
@@ -1744,43 +1808,84 @@ def _select_relevant_articles_for_output(
     ranked: List[Dict[str, Any]],
     top_n: int,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Expose uniquement un Top-K scientifiquement défendable.
+
+    Le classement interne peut rester large pour le reranking, mais l'interface
+    consultant ne doit pas recevoir des dizaines de résultats génériques.
     """
-    Conserve le classement interne complet, mais limite la liste affichée aux
-    articles utiles pour expliquer et défendre le verrou.
-    """
+
     ranked = [item for item in (ranked or []) if isinstance(item, dict)]
-    limit = max(1, int(top_n or len(ranked) or 1))
+    requested = max(1, int(top_n or len(ranked) or 1))
+    try:
+        presentation_cap = max(3, min(int(os.getenv("ENNOSCHOLAR_PRESENTATION_TOP_K", "15") or 15), 30))
+    except Exception:
+        presentation_cap = 15
+    limit = min(requested, presentation_cap)
+
+    thresholds = {
+        "Direct": float(os.getenv("ENNOSCHOLAR_MIN_SCORE_DIRECT", "0.55") or 0.55),
+        "Connexe": float(os.getenv("ENNOSCHOLAR_MIN_SCORE_CONNEXE", "0.45") or 0.45),
+        "Fondamental": float(os.getenv("ENNOSCHOLAR_MIN_SCORE_FONDAMENTAL", "0.28") or 0.28),
+    }
     limits = {
         "Direct": max(0, int(os.getenv("ENNOSCHOLAR_MAX_DIRECT", str(limit)) or limit)),
         "Connexe": max(0, int(os.getenv("ENNOSCHOLAR_MAX_CONNEXE", str(limit)) or limit)),
-        "Fondamental": max(0, int(os.getenv("ENNOSCHOLAR_MAX_FONDAMENTAL", "5") or 5)),
-        "Hors sujet": max(0, int(os.getenv("ENNOSCHOLAR_MAX_HORS_SUJET_EXAMPLES", "0") or 0)),
+        "Fondamental": max(0, int(os.getenv("ENNOSCHOLAR_MAX_FONDAMENTAL", "3") or 3)),
+        "Hors sujet": 0,
     }
 
-    before = {
-        tag: sum(1 for item in ranked if item.get("tag") == tag)
-        for tag in limits
-    }
+    before = {tag: sum(1 for item in ranked if item.get("tag") == tag) for tag in limits}
+    accepted: List[Dict[str, Any]] = []
+    rejected_low_precision: List[Dict[str, Any]] = []
+    for item in ranked:
+        tag = str(item.get("tag") or "")
+        if tag not in thresholds:
+            continue
+        score = float(item.get("relevance_score") or 0.0)
+        details = item.get("score_details") if isinstance(item.get("score_details"), dict) else {}
+        specific_n = int(details.get("specific_anchor_count") or 0)
+        primary_n = int(details.get("primary_core_hit_count") or 0)
+
+        # Garde supplémentaire pour les articles « Fondamental » : un simple mot
+        # générique partagé (deep learning, synthetic data, etc.) ne suffit pas.
+        precise_enough = True
+        if tag == "Fondamental":
+            precise_enough = specific_n >= 2 or primary_n >= 1
+        elif tag == "Connexe" and details:
+            precise_enough = primary_n >= 1 or specific_n >= 2
+
+        if score < thresholds[tag] or not precise_enough:
+            if len(rejected_low_precision) < 15:
+                rejected_low_precision.append({
+                    "title": clean_text(item.get("title"), 220),
+                    "tag": tag,
+                    "score": score,
+                    "specific_anchor_count": specific_n,
+                    "primary_core_hit_count": primary_n,
+                })
+            continue
+        accepted.append(item)
+
     selected: List[Dict[str, Any]] = []
-    for tag in ["Direct", "Connexe", "Fondamental", "Hors sujet"]:
+    for tag in ["Direct", "Connexe", "Fondamental"]:
         tag_limit = limits[tag]
         if tag_limit > 0:
-            selected.extend(
-                [item for item in ranked if item.get("tag") == tag][:tag_limit]
-            )
+            selected.extend([item for item in accepted if item.get("tag") == tag][:tag_limit])
     selected = selected[:limit]
-    after = {
-        tag: sum(1 for item in selected if item.get("tag") == tag)
-        for tag in limits
-    }
+    after = {tag: sum(1 for item in selected if item.get("tag") == tag) for tag in limits}
     return selected, {
-        "policy": "v149_direct_connexe_first_fundamental_context_only",
+        "policy": "v152_precision_gate_top_k",
         "input_count": len(ranked),
+        "accepted_before_top_k": len(accepted),
         "output_count": len(selected),
+        "presentation_cap": presentation_cap,
+        "thresholds": thresholds,
         "limits": limits,
         "counts_before": before,
         "counts_after": after,
+        "rejected_low_precision_examples": rejected_low_precision,
     }
+
 
 
 class EnnoScholarAgent:
@@ -2179,7 +2284,7 @@ class EnnoScholarAgent:
         # que le pipeline direct puis le MCP légal puissent retrouver sa copie.
         all_papers_before_free_filter = len(all_papers)
         all_papers, free_fulltext_filter_report = _filter_free_fulltext_articles(all_papers)
-        all_papers, project_year_filter_report = _filter_articles_after_project_year(
+        all_papers, project_year_filter_report = _filter_articles_to_cir_window(
             all_papers,
             self.current_payload_meta.get("year"),
         )
@@ -2200,6 +2305,7 @@ class EnnoScholarAgent:
             "raw_papers_retrieved_before_free_filter": all_papers_before_free_filter,
             "raw_papers_retrieved": len(all_papers),
             "free_fulltext_filter": free_fulltext_filter_report,
+            "cir_year_window_filter": project_year_filter_report,
             "project_year_filter": project_year_filter_report,
             "memory_v2_candidates": int(memory_v2_report.get("candidates_count") or 0),
             "external_calls_planned": external_calls_planned,
@@ -2326,6 +2432,45 @@ class EnnoScholarAgent:
 
         return result
 
+    def search_for_research_target(
+        self,
+        research_target: Dict[str, Any],
+        domain_detection: Dict[str, Any],
+        research_context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Recherche un axe scientifique qui n'est pas nécessairement un verrou.
+
+        Le moteur de construction d'intention, de requêtes et de reranking est
+        partagé avec la recherche historique. Le contrat public reste distinct :
+        EnnoAmel transmet ``research_targets`` sans fabriquer de faux verrou.
+        """
+
+        target = dict(research_target or {})
+        target_id = clean_text(
+            target.get("research_target_id") or target.get("target_id"), 120
+        )
+        target_title = clean_text(
+            target.get("research_target_title") or target.get("title"), 320
+        )
+        target_type = clean_text(
+            target.get("research_target_type") or "scientific_enrichment", 120
+        )
+        result = self.search_for_verrou(target, domain_detection, research_context)
+        result.update(
+            {
+                "subject_kind": "research_target",
+                "research_target_id": target_id,
+                "research_target_title": target_title,
+                "research_target_type": target_type,
+                "research_target_text": target.get("text"),
+                "verrou_id": None,
+                "verrou_title": None,
+                "verrou_text": None,
+                "frascati": None,
+            }
+        )
+        return result
+
     def run_search(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         payload = payload or {}
         domain_detection = payload.get("domain_detection") or {}
@@ -2335,6 +2480,8 @@ class EnnoScholarAgent:
             "organisme": payload.get("organisme") or payload.get("organization") or "",
             "project": payload.get("project") or payload.get("projet") or "",
             "year": payload.get("year") or payload.get("annee") or payload.get("année") or "",
+            "publication_year_min": payload.get("publication_year_min"),
+            "publication_year_max": payload.get("publication_year_max"),
         }
 
         # V141 — cache global de run complet.
@@ -2368,9 +2515,18 @@ class EnnoScholarAgent:
                 cached_report["served_at"] = _now_iso()
                 return cached_report
 
+        research_target_items = [
+            target for target in (payload.get("research_targets") or [])
+            if isinstance(target, dict)
+        ]
         verrou_items = [
             verrou for verrou in (payload.get("verrous") or [])
             if isinstance(verrou, dict)
+        ]
+        work_items = [
+            ("research_target", target) for target in research_target_items
+        ] + [
+            ("diagnostic_lock", verrou) for verrou in verrou_items
         ]
         results: List[Dict[str, Any]] = []
         search_started = time.perf_counter()
@@ -2378,23 +2534,29 @@ class EnnoScholarAgent:
         # Les verrous sont indépendants. En mode rapide, deux verrous peuvent
         # chercher en parallèle ; les appels vers une même API restent régulés
         # par _source_lock pour éviter les limitations 429.
-        effective_verrou_workers = min(self.verrou_workers, len(verrou_items))
+        effective_verrou_workers = min(self.verrou_workers, len(work_items))
+
+        def _search_subject(kind: str, item: Dict[str, Any]) -> Dict[str, Any]:
+            if kind == "research_target":
+                return self.search_for_research_target(
+                    item,
+                    domain_detection,
+                    payload.get("research_context") or diagnostic_context or {},
+                )
+            return self.search_for_verrou(item, domain_detection, diagnostic_context)
+
         if effective_verrou_workers <= 1:
-            results = [
-                self.search_for_verrou(verrou, domain_detection, diagnostic_context)
-                for verrou in verrou_items
-            ]
+            results = [_search_subject(kind, item) for kind, item in work_items]
         else:
-            ordered_results: List[Dict[str, Any] | None] = [None] * len(verrou_items)
+            ordered_results: List[Dict[str, Any] | None] = [None] * len(work_items)
             with ThreadPoolExecutor(max_workers=effective_verrou_workers) as executor:
                 future_map = {
                     executor.submit(
-                        self.search_for_verrou,
-                        verrou,
-                        domain_detection,
-                        diagnostic_context,
+                        _search_subject,
+                        kind,
+                        item,
                     ): index
-                    for index, verrou in enumerate(verrou_items)
+                    for index, (kind, item) in enumerate(work_items)
                 }
                 for future in as_completed(future_map):
                     ordered_results[future_map[future]] = future.result()
@@ -2402,7 +2564,20 @@ class EnnoScholarAgent:
 
         search_elapsed_seconds = round(time.perf_counter() - search_started, 3)
 
-        multi_verrou_coverage_report = _annotate_multi_verrou_coverage(results)
+        diagnostic_results = [
+            row for row in results
+            if row.get("subject_kind") != "research_target"
+        ]
+        multi_verrou_coverage_report = (
+            _annotate_multi_verrou_coverage(diagnostic_results)
+            if diagnostic_results
+            else {
+                "enabled": False,
+                "reason": "research_targets_are_not_diagnostic_locks",
+                "articles_with_multi_verrou": 0,
+                "links_count": 0,
+            }
+        )
 
         decision_counts = {}
 
@@ -2412,7 +2587,7 @@ class EnnoScholarAgent:
 
         report = {
             "agent": "EnnoScholar",
-            "version": "v150_problem_evidence_year_cutoff",
+            "version": "v152_typed_targets_cir_year_window",
             "mode": "search",
             "generated_at": _now_iso(),
             "project": payload.get("project"),
@@ -2421,7 +2596,11 @@ class EnnoScholarAgent:
             "domain_detection": domain_detection,
             "diagnostic_context": diagnostic_context,
             "diagnostic_context_used": bool(diagnostic_context),
-            "verrous_analyzed": len(results),
+            "research_context": payload.get("research_context") or {},
+            "research_context_used": bool(payload.get("research_context")),
+            "research_targets_analyzed": len(research_target_items),
+            "verrous_analyzed": len(verrou_items),
+            "subjects_analyzed": len(results),
             "search_elapsed_seconds": search_elapsed_seconds,
             "verrou_workers": effective_verrou_workers,
             "decision_counts": decision_counts,

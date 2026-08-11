@@ -1,0 +1,599 @@
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
+import contextvars
+import csv
+import functools
+import json
+import os
+import re
+import threading
+import time
+import uuid
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Mapping, Optional
+
+# USD par million de tokens, tarifs OpenAI vérifiés le 31/07/2026.
+PRICES = {
+    "gpt-4.1": {"input": 2.00, "cached": 0.50, "output": 8.00},
+    "gpt-4.1-mini": {"input": 0.40, "cached": 0.10, "output": 1.60},
+    "gpt-4.1-nano": {"input": 0.10, "cached": 0.025, "output": 0.40},
+    "gpt-5.6": {"input": 5.00, "cached": 0.50, "output": 30.00},
+    "gpt-5.6-sol": {"input": 5.00, "cached": 0.50, "output": 30.00},
+    "gpt-5.6-terra": {"input": 2.50, "cached": 0.25, "output": 15.00},
+    "gpt-5.6-luna": {"input": 1.00, "cached": 0.10, "output": 6.00},
+}
+
+PHASES = [
+    "phase_1_selection",
+    "phase_2d_article_cards",
+    "phase_3_style_memory",
+    "phase_4_scientific_gap",
+    "phase_4_5_scientific_reasoning",
+    "phase_4_6_project_argumentation",
+    "phase_4_7_scientific_narrative",
+    "phase_5_writer",
+    "guided_research",
+    "other",
+]
+
+_CURRENT_RUN: contextvars.ContextVar[Optional["BudgetRun"]] = contextvars.ContextVar(
+    "ennosmart_budget_run", default=None
+)
+_HOOK_DEPTH: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "ennosmart_budget_hook_depth", default=0
+)
+_LOCK = threading.RLock()
+
+
+def _enabled() -> bool:
+    return os.getenv("ENNOSMART_BUDGET_LOG_ENABLED", "1").lower() in {
+        "1", "true", "yes", "oui", "on"
+    }
+
+
+def _root() -> Path:
+    return Path(os.getenv("ENNOSMART_ROOT") or "C:/EnnoSmart")
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except Exception:
+        return 0
+
+
+def _safe_float(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except Exception:
+        return 0.0
+
+
+def _slug(value: Any) -> str:
+    text = str(value or "unknown").strip().lower()
+    for source, target in {
+        "à": "a", "â": "a", "ä": "a", "ç": "c", "é": "e", "è": "e",
+        "ê": "e", "ë": "e", "î": "i", "ï": "i", "ô": "o", "ö": "o",
+        "ù": "u", "û": "u", "ü": "u", "-": "_", " ": "_", "'": "_",
+        "’": "_",
+    }.items():
+        text = text.replace(source, target)
+    text = re.sub(r"[^a-z0-9_]+", "_", text)
+    return re.sub(r"_+", "_", text).strip("_") or "unknown"
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+
+
+def _canonical_model(value: Any) -> str:
+    model = str(value or "unknown").lower().strip().split("/")[-1]
+    for name in sorted(PRICES, key=len, reverse=True):
+        if model == name or model.startswith(name + "-"):
+            return name
+    return model
+
+
+def infer_phase(request_name: Any) -> str:
+    name = str(request_name or "").lower().replace("-", "_")
+    if any(x in name for x in ("phase5", "phase_5", "full_writer", "section_writer", "evidence_verifier", "state_of_art_writer")):
+        return "phase_5_writer"
+    if any(x in name for x in ("phase4_7", "phase_4_7", "scientific_narrative", "narrative_architect", "guided_narrative")):
+        return "phase_4_7_scientific_narrative"
+    if any(x in name for x in ("phase4_6", "phase_4_6", "project_rd_argumentation")):
+        return "phase_4_6_project_argumentation"
+    if any(x in name for x in ("phase4_5", "phase_4_5", "scientific_reasoning")):
+        return "phase_4_5_scientific_reasoning"
+    if any(x in name for x in ("phase4", "phase_4", "scientific_gap", "gap_builder")):
+        return "phase_4_scientific_gap"
+    if any(x in name for x in ("phase3", "phase_3", "fewshot", "style_memory", "style_signature")):
+        return "phase_3_style_memory"
+    if any(x in name for x in ("article_card", "phase2d", "phase_2d")):
+        return "phase_2d_article_cards"
+    if any(x in name for x in ("selection_payload", "phase1", "phase_1")):
+        return "phase_1_selection"
+    if "guided_research" in name:
+        return "guided_research"
+    return "other"
+
+
+def _nested(meta: Mapping[str, Any], *paths: tuple[str, ...]) -> int:
+    for path in paths:
+        value: Any = meta
+        valid = True
+        for key in path:
+            if not isinstance(value, Mapping) or key not in value:
+                valid = False
+                break
+            value = value[key]
+        if valid:
+            result = _safe_int(value)
+            if result >= 0:
+                return result
+    return 0
+
+
+def normalize_usage(meta: Mapping[str, Any]) -> Dict[str, Any]:
+    input_tokens = _nested(meta, ("input_tokens",), ("prompt_tokens",), ("usage", "input_tokens"), ("usage", "prompt_tokens"))
+    output_tokens = _nested(meta, ("output_tokens",), ("completion_tokens",), ("usage", "output_tokens"), ("usage", "completion_tokens"))
+    total_tokens = _nested(meta, ("total_tokens",), ("usage", "total_tokens"))
+    cached_tokens = _nested(
+        meta,
+        ("cached_input_tokens",),
+        ("cached_tokens",),
+        ("input_tokens_details", "cached_tokens"),
+        ("prompt_tokens_details", "cached_tokens"),
+        ("usage", "input_tokens_details", "cached_tokens"),
+        ("usage", "prompt_tokens_details", "cached_tokens"),
+    )
+    estimated = False
+    if input_tokens == 0 and output_tokens == 0 and total_tokens > 0:
+        input_tokens = round(total_tokens * 0.80)
+        output_tokens = total_tokens - input_tokens
+        estimated = True
+    if total_tokens == 0:
+        total_tokens = input_tokens + output_tokens
+    cached_tokens = min(cached_tokens, input_tokens)
+    return {
+        "input_tokens": input_tokens,
+        "cached_input_tokens": cached_tokens,
+        "uncached_input_tokens": max(0, input_tokens - cached_tokens),
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+        "usage_split_estimated": estimated,
+    }
+
+
+def compute_cost(model: Any, provider: Any, usage: Mapping[str, Any]) -> Dict[str, Any]:
+    canonical = _canonical_model(model)
+    provider_name = str(provider or "unknown").lower()
+    price = PRICES.get(canonical)
+    if provider_name != "openai" or price is None:
+        return {"canonical_model": canonical, "price_known": False, "cost_usd": 0.0}
+
+    input_rate = price["input"]
+    cached_rate = price["cached"]
+    output_rate = price["output"]
+    long_context = canonical.startswith("gpt-5.6") and _safe_int(usage.get("input_tokens")) > 272000
+    if long_context:
+        input_rate *= 2
+        cached_rate *= 2
+        output_rate *= 1.5
+
+    cost = (
+        _safe_int(usage.get("uncached_input_tokens")) * input_rate
+        + _safe_int(usage.get("cached_input_tokens")) * cached_rate
+        + _safe_int(usage.get("output_tokens")) * output_rate
+    ) / 1_000_000
+    return {
+        "canonical_model": canonical,
+        "price_known": True,
+        "cost_usd": round(cost, 8),
+        "prices_per_mtok": {"input": input_rate, "cached_input": cached_rate, "output": output_rate},
+        "long_context_multiplier_applied": long_context,
+    }
+
+
+@dataclass
+class BudgetRun:
+    project_id: Any
+    organisme: str
+    project_name: str
+    year: Any
+    run_type: str = "ennoscholar_state_of_art"
+    run_id: str = field(default_factory=lambda: datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:8])
+    events: list[Dict[str, Any]] = field(default_factory=list)
+    started_at: str = field(default_factory=_now)
+    started_perf: float = field(default_factory=time.perf_counter)
+    status: str = "running"
+    error: Optional[str] = None
+    finalized: bool = False
+
+    def __post_init__(self) -> None:
+        self.output_dir = (
+            _root() / "storage" / "organismes" / _slug(self.organisme)
+            / "projects" / _slug(self.project_name) / "years" / str(self.year)
+            / "ennoscholar" / "budget_logs"
+        )
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.jsonl_path = self.output_dir / f"budget_{self.run_id}.jsonl"
+        self.summary_path = self.output_dir / f"budget_{self.run_id}_summary.json"
+        self.csv_path = self.output_dir / f"budget_{self.run_id}.csv"
+        print(f"[BUDGET][RUN_START] run_id={self.run_id} project_id={self.project_id}", flush=True)
+
+    def total_cost(self) -> float:
+        return round(sum(_safe_float(e.get("cost_usd")) for e in self.events), 8)
+
+    def record(self, meta: Optional[Mapping[str, Any]] = None, *, request_name: Any = None,
+               provider: Any = None, model: Any = None, status: str = "ok", error: Any = None) -> Dict[str, Any]:
+        data = dict(meta or {})
+        request = str(request_name or data.get("request_name") or data.get("request") or "-")
+        provider_name = str(provider or data.get("provider") or "unknown")
+        model_name = str(model or data.get("model") or data.get("model_name") or "unknown")
+        usage = normalize_usage(data)
+        event = {
+            "timestamp": _now(), "run_id": self.run_id, "project_id": self.project_id,
+            "phase": infer_phase(request), "request_name": request,
+            "provider": provider_name, "model": model_name, "status": status,
+            "error": str(error)[:1000] if error else None,
+            "elapsed_seconds": data.get("elapsed_seconds"),
+            **usage, **compute_cost(model_name, provider_name, usage),
+        }
+        self.events.append(event)
+        with _LOCK:
+            with self.jsonl_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(event, ensure_ascii=False) + "\n")
+        print(
+            f"[BUDGET][CALL] phase={event['phase']} request={request} model={model_name} "
+            f"input={usage['input_tokens']} cached={usage['cached_input_tokens']} "
+            f"output={usage['output_tokens']} total={usage['total_tokens']} "
+            f"cost=${event['cost_usd']:.6f} run_cost=${self.total_cost():.6f}" +
+            (" estimated_split=1" if usage["usage_split_estimated"] else ""),
+            flush=True,
+        )
+        warn = _safe_float(os.getenv("ENNOSMART_BUDGET_WARN_USD", "0.75"))
+        if warn > 0 and self.total_cost() >= warn:
+            print(f"[BUDGET][WARNING] coût de la relance >= ${warn:.2f}", flush=True)
+        return event
+
+    def _aggregate(self, key: str) -> Dict[str, Dict[str, Any]]:
+        rows: Dict[str, Dict[str, Any]] = {}
+        for event in self.events:
+            name = str(event.get(key) or "unknown")
+            row = rows.setdefault(name, {key: name, "calls": 0, "failed_calls": 0,
+                                         "input_tokens": 0, "cached_input_tokens": 0,
+                                         "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0})
+            row["calls"] += 1
+            row["failed_calls"] += int(event.get("status") != "ok")
+            for token_key in ("input_tokens", "cached_input_tokens", "output_tokens", "total_tokens"):
+                row[token_key] += _safe_int(event.get(token_key))
+            row["cost_usd"] += _safe_float(event.get("cost_usd"))
+        for row in rows.values():
+            row["cost_usd"] = round(row["cost_usd"], 8)
+        return rows
+
+    def summary(self) -> Dict[str, Any]:
+        phase_rows = {phase: {"phase": phase, "calls": 0, "failed_calls": 0,
+                              "input_tokens": 0, "cached_input_tokens": 0,
+                              "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0}
+                      for phase in PHASES}
+        phase_rows.update(self._aggregate("phase"))
+        return {
+            "ok": self.status == "completed", "status": self.status, "error": self.error,
+            "run_id": self.run_id, "run_type": self.run_type,
+            "project": {"id": self.project_id, "organisme": self.organisme,
+                        "project_name": self.project_name, "year": self.year},
+            "started_at": self.started_at, "finished_at": _now() if self.finalized else None,
+            "elapsed_seconds": round(time.perf_counter() - self.started_perf, 3),
+            "pricing_version": "official_openai_2026-07-31",
+            "totals": {
+                "calls": len(self.events),
+                "failed_calls": sum(e.get("status") != "ok" for e in self.events),
+                "input_tokens": sum(_safe_int(e.get("input_tokens")) for e in self.events),
+                "cached_input_tokens": sum(_safe_int(e.get("cached_input_tokens")) for e in self.events),
+                "output_tokens": sum(_safe_int(e.get("output_tokens")) for e in self.events),
+                "total_tokens": sum(_safe_int(e.get("total_tokens")) for e in self.events),
+                "cost_usd": self.total_cost(),
+            },
+            "by_phase": list(phase_rows.values()),
+            "by_model": list(self._aggregate("model").values()),
+            "by_request": list(self._aggregate("request_name").values()),
+            "files": {"jsonl": str(self.jsonl_path), "summary_json": str(self.summary_path), "csv": str(self.csv_path)},
+        }
+
+    def finalize(self, status: str, error: Any = None) -> Dict[str, Any]:
+        if self.finalized:
+            return self.summary()
+        self.status, self.error, self.finalized = status, (str(error)[:2000] if error else None), True
+        report = self.summary()
+        with _LOCK:
+            self.summary_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            fields = ["timestamp", "phase", "request_name", "provider", "model", "status",
+                      "input_tokens", "cached_input_tokens", "output_tokens", "total_tokens",
+                      "cost_usd", "usage_split_estimated", "elapsed_seconds", "error"]
+            with self.csv_path.open("w", newline="", encoding="utf-8-sig") as f:
+                writer = csv.DictWriter(f, fieldnames=fields)
+                writer.writeheader()
+                for event in self.events:
+                    writer.writerow({name: event.get(name) for name in fields})
+        total = report["totals"]
+        print("=" * 100, flush=True)
+        print(f"[BUDGET][RUN_END] status={status} run_id={self.run_id} calls={total['calls']} "
+              f"tokens={total['total_tokens']} cost=${total['cost_usd']:.6f}", flush=True)
+        for row in report["by_phase"]:
+            print(f"[BUDGET][PHASE] {row['phase']} calls={row['calls']} "
+                  f"tokens={row['total_tokens']} cost=${row['cost_usd']:.6f}", flush=True)
+        print(f"[BUDGET][REPORT] {self.summary_path}", flush=True)
+        print(f"[BUDGET][CSV] {self.csv_path}", flush=True)
+        print("=" * 100, flush=True)
+        return report
+
+
+def budgeted_pipeline(func=None, *, run_type: str = "ennoscholar_state_of_art"):
+    def decorator(target):
+        if getattr(target, "_ennosmart_budgeted", False):
+            return target
+        @functools.wraps(target)
+        def wrapped(*args, **kwargs):
+            if not _enabled() or _CURRENT_RUN.get() is not None:
+                return target(*args, **kwargs)
+            project = kwargs.get("project")
+            if project is None:
+                project = next((x for x in args if hasattr(x, "project_name") and hasattr(x, "id")), None)
+            run = BudgetRun(
+                project_id=getattr(project, "id", "unknown"),
+                organisme=str(getattr(project, "organisme", "unknown")),
+                project_name=str(getattr(project, "project_name", "unknown")),
+                year=getattr(project, "year", "unknown"),
+                run_type=run_type,
+            )
+            token = _CURRENT_RUN.set(run)
+            try:
+                result = target(*args, **kwargs)
+                report = run.finalize("completed")
+                if isinstance(result, dict):
+                    result = dict(result)
+                    result["budget"] = report
+                return result
+            except Exception as exc:
+                run.finalize("failed", exc)
+                raise
+            finally:
+                _CURRENT_RUN.reset(token)
+        wrapped._ennosmart_budgeted = True
+        return wrapped
+    return decorator(func) if func is not None else decorator
+
+
+# BEGIN ENNOSMART_OPENAI_429_RETRY_V1
+_OPENAI_CALL_LOCKS: Dict[str, threading.RLock] = {}
+_OPENAI_CALL_LOCKS_GUARD = threading.RLock()
+_OPENAI_LAST_FINISH: Dict[str, float] = {}
+
+
+def _retry_env_int(name: str, default: int) -> int:
+    try:
+        return max(0, int(str(os.getenv(name, default)).strip()))
+    except Exception:
+        return default
+
+
+def _retry_env_float(name: str, default: float) -> float:
+    try:
+        return max(0.0, float(str(os.getenv(name, default)).strip()))
+    except Exception:
+        return default
+
+
+def _openai_model_from_call(args: tuple, kwargs: Mapping[str, Any]) -> str:
+    for key in ("model", "model_name", "current_model"):
+        value = kwargs.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip().split("/", 1)[-1]
+
+    for value in args:
+        if isinstance(value, str):
+            candidate = value.strip()
+            if candidate.startswith("gpt-") or candidate.startswith("openai/gpt-"):
+                return candidate.split("/", 1)[-1]
+    return "openai_unknown_model"
+
+
+def _openai_lock_for(model: str) -> threading.RLock:
+    key = str(model or "openai_unknown_model").lower()
+    with _OPENAI_CALL_LOCKS_GUARD:
+        lock = _OPENAI_CALL_LOCKS.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _OPENAI_CALL_LOCKS[key] = lock
+        return lock
+
+
+def _parse_retry_after_seconds(error: BaseException) -> Optional[float]:
+    text = str(error or "")
+    patterns = (
+        r"please\s+try\s+again\s+in\s+([0-9]+(?:\.[0-9]+)?)\s*s",
+        r"try\s+again\s+in\s+([0-9]+(?:\.[0-9]+)?)\s*seconds?",
+        r"retry[-_\s]*after[^0-9]*([0-9]+(?:\.[0-9]+)?)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            try:
+                return max(0.0, float(match.group(1)))
+            except Exception:
+                pass
+    return None
+
+
+def _is_openai_rate_limit(error: BaseException) -> bool:
+    text = str(error or "").lower()
+    return (
+        "http 429" in text
+        or "status code: 429" in text
+        or "rate_limit_exceeded" in text
+        or "rate limit reached" in text
+    )
+
+
+def _minimum_gap_for_model(model: str) -> float:
+    normalized = str(model or "").lower().split("/", 1)[-1]
+    if normalized == "gpt-4.1":
+        return _retry_env_float("ENNOSMART_GPT41_MIN_GAP_SECONDS", 20.0)
+    return _retry_env_float("ENNOSMART_OPENAI_MIN_GAP_SECONDS", 0.0)
+
+
+def _install_openai_429_retry(llm_class: Any) -> bool:
+    if getattr(llm_class, "_ennosmart_openai_429_retry_installed", False):
+        return True
+
+    method_name = None
+    original = None
+    for candidate in (
+        "_generate_openai",
+        "_call_openai",
+        "_openai_generate",
+        "generate_openai",
+        "_request_openai",
+    ):
+        method = getattr(llm_class, candidate, None)
+        if callable(method):
+            method_name = candidate
+            original = method
+            break
+
+    if method_name is None or original is None:
+        print(
+            "[LLM-RATE][WARN] Methode OpenAI interne introuvable. "
+            "Le retry 429 n'a pas ete installe.",
+            flush=True,
+        )
+        return False
+
+    @functools.wraps(original)
+    def wrapped_openai(self: Any, *args: Any, **kwargs: Any) -> Any:
+        model = _openai_model_from_call(args, kwargs)
+        model_key = str(model or "openai_unknown_model").lower()
+        lock = _openai_lock_for(model_key)
+        max_retries = _retry_env_int("ENNOSMART_OPENAI_429_MAX_RETRIES", 4)
+        buffer_seconds = _retry_env_float(
+            "ENNOSMART_OPENAI_429_RETRY_BUFFER_SECONDS",
+            1.5,
+        )
+
+        # Une seule requete par modele a la fois dans le processus backend.
+        with lock:
+            min_gap = _minimum_gap_for_model(model_key)
+            last_finish = _OPENAI_LAST_FINISH.get(model_key, 0.0)
+            remaining_gap = min_gap - (time.monotonic() - last_finish)
+            if remaining_gap > 0:
+                print(
+                    f"[LLM-RATE][QUEUE] model={model} "
+                    f"wait={remaining_gap:.2f}s reason=min_gap",
+                    flush=True,
+                )
+                time.sleep(remaining_gap)
+
+            for attempt in range(max_retries + 1):
+                try:
+                    result = original(self, *args, **kwargs)
+                    _OPENAI_LAST_FINISH[model_key] = time.monotonic()
+                    if attempt > 0:
+                        print(
+                            f"[LLM-RATE][RECOVERED] model={model} "
+                            f"attempt={attempt + 1}/{max_retries + 1}",
+                            flush=True,
+                        )
+                    return result
+                except Exception as exc:
+                    if not _is_openai_rate_limit(exc) or attempt >= max_retries:
+                        _OPENAI_LAST_FINISH[model_key] = time.monotonic()
+                        raise
+
+                    provider_delay = _parse_retry_after_seconds(exc)
+                    exponential_delay = min(60.0, 2.0 ** attempt)
+                    delay = max(
+                        provider_delay if provider_delay is not None else 0.0,
+                        exponential_delay,
+                    ) + buffer_seconds
+
+                    print(
+                        f"[LLM-RATE][429] model={model} "
+                        f"attempt={attempt + 1}/{max_retries + 1} "
+                        f"retry_after={provider_delay if provider_delay is not None else 'unknown'} "
+                        f"sleep={delay:.2f}s",
+                        flush=True,
+                    )
+                    time.sleep(delay)
+
+            raise RuntimeError("Boucle retry OpenAI terminee sans resultat.")
+
+    setattr(llm_class, method_name, wrapped_openai)
+    llm_class._ennosmart_openai_429_retry_installed = True
+    print(
+        f"[LLM-RATE] Retry 429 installe sur LLMClient.{method_name}",
+        flush=True,
+    )
+    return True
+# END ENNOSMART_OPENAI_429_RETRY_V1
+
+def install_llm_budget_hooks(llm_class: Any) -> None:
+    if not _enabled():
+        return
+
+    # Le retry réseau est centralisé dans LLMClient._post_with_retry afin de
+    # couvrir aussi la Responses API utilisée par la recherche Web. Ne pas
+    # ajouter ici une seconde boucle, qui multiplierait les appels après un 429.
+
+    if getattr(llm_class, "_budget_hook_installed", False):
+        return
+    original = getattr(llm_class, "generate", None)
+    if not callable(original):
+        print("[BUDGET][WARN] LLMClient.generate introuvable", flush=True)
+        return
+
+    @functools.wraps(original)
+    def wrapped(self, *args, **kwargs):
+        depth = _HOOK_DEPTH.get()
+        token = _HOOK_DEPTH.set(depth + 1)
+        started = time.perf_counter()
+        try:
+            output = original(self, *args, **kwargs)
+            if depth == 0 and _CURRENT_RUN.get() is not None:
+                meta: Dict[str, Any] = {}
+                getter = getattr(self, "get_last_generation_meta", None)
+                if callable(getter):
+                    candidate = getter()
+                    if isinstance(candidate, Mapping):
+                        meta = dict(candidate)
+                elif isinstance(getattr(self, "last_generation_meta", None), Mapping):
+                    meta = dict(self.last_generation_meta)
+                elif isinstance(getattr(self, "_last_generation_meta", None), Mapping):
+                    meta = dict(self._last_generation_meta)
+                meta.setdefault("elapsed_seconds", round(time.perf_counter() - started, 3))
+                _CURRENT_RUN.get().record(
+                    meta,
+                    request_name=kwargs.get("request_name") or meta.get("request_name"),
+                    provider=meta.get("provider") or getattr(self, "provider", None),
+                    model=meta.get("model") or getattr(self, "model_name", None),
+                )
+            return output
+        except Exception as exc:
+            if depth == 0 and _CURRENT_RUN.get() is not None:
+                _CURRENT_RUN.get().record(
+                    {"elapsed_seconds": round(time.perf_counter() - started, 3)},
+                    request_name=kwargs.get("request_name"),
+                    provider=getattr(self, "provider", None),
+                    model=getattr(self, "model_name", None),
+                    status="failed", error=exc,
+                )
+            raise
+        finally:
+            _HOOK_DEPTH.reset(token)
+
+    llm_class.generate = wrapped
+    llm_class._budget_hook_installed = True
+    print("[BUDGET] Hook LLMClient.generate installé", flush=True)

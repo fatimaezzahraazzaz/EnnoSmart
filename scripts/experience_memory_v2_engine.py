@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-"""
+r"""
 scripts/experience_memory_v2_engine.py
 
 EnnoSmart Memory V2 FINAL
@@ -680,6 +680,11 @@ def make_style_chunks_from_sections(
                 "source_path": source_path,
                 "section_title": title,
                 "section_type": section_type,
+                "page_number": sec.get("page_number") or sec.get("page_start") or sec.get("page"),
+                "page_start": sec.get("page_start") or sec.get("page_number") or sec.get("page"),
+                "page_end": sec.get("page_end") or sec.get("page_number") or sec.get("page"),
+                "page_numbers": list(sec.get("page_numbers") or []),
+                "content_kind": "section_style_example",
                 "source_policy": "validated_experience",
                 "content_origin": "cir_final_style",
                 "document_type": "cir_final_consultant",
@@ -696,6 +701,137 @@ def make_style_chunks_from_sections(
         })
 
     return out
+
+
+def make_document_asset_chunks(
+    extraction_json: Dict[str, Any],
+    nlp_result: Dict[str, Any],
+    *,
+    organisme: str,
+    project: str,
+    year: str,
+    source_file: str,
+    source_path: str,
+    source_id: str,
+) -> List[Dict[str, Any]]:
+    """Indexe séparément les tableaux et légendes de figures du PDF.
+
+    Ces chunks ne remplacent pas les sections NLP : ils rendent les résultats
+    tabulaires et les références visuelles directement récupérables avec une
+    provenance page/section précise.
+    """
+    structured = extraction_json.get("structured_data") or {}
+    pages = structured.get("pages") or [] if isinstance(structured, dict) else []
+    sections = nlp_result.get("sections") or []
+    if not isinstance(pages, list):
+        return []
+
+    def section_for_page(page_number: int) -> Dict[str, Any]:
+        candidates = []
+        for section in sections if isinstance(sections, list) else []:
+            if not isinstance(section, dict):
+                continue
+            start = section.get("page_start") or section.get("page_number") or section.get("page")
+            end = section.get("page_end") or start
+            try:
+                start_i, end_i = int(start), int(end)
+            except Exception:
+                continue
+            if start_i <= page_number <= end_i:
+                level = int(section.get("level") or 1)
+                candidates.append((level, -(end_i - start_i), section))
+        return max(candidates, key=lambda item: (item[0], item[1]))[2] if candidates else {}
+
+    def role_for(section: Dict[str, Any]) -> str:
+        return SECTION_TYPE_TO_ROLE.get(str(section.get("section_type") or ""), "autre")
+
+    output: List[Dict[str, Any]] = []
+    for page in pages:
+        if not isinstance(page, dict):
+            continue
+        try:
+            page_number = int(page.get("page_number"))
+        except Exception:
+            continue
+        section = section_for_page(page_number)
+        title = clean_text(section.get("title") or section.get("section_title") or "", 300)
+        section_id = clean_text(section.get("section_id") or "", 80)
+        role = role_for(section)
+        common_meta = {
+            "project_id": slugify(project),
+            "organisme": organisme,
+            "project": project,
+            "year": str(year),
+            "annee": str(year),
+            "role": role,
+            "pack_key": "document_assets",
+            "document": source_file,
+            "source_file": source_file,
+            "source_path": source_path,
+            "section_title": title,
+            "section_id": section_id,
+            "section_type": section.get("section_type") or "unknown",
+            "page_number": page_number,
+            "page_start": page_number,
+            "page_end": page_number,
+            "page_numbers": [page_number],
+            "source_policy": "validated_experience",
+            "content_origin": "cir_final_consultant",
+            "document_type": "cir_final_consultant",
+            "memory_status": "validated",
+            "memory_type": "experience",
+            "source_kind": "cir_final_consultant",
+            "can_use_as_fact": True,
+            "can_use_as_style": False,
+            "chunk_level": "document_asset",
+            "is_supporting_passage": False,
+        }
+
+        table_captions = [clean_text(value) for value in (page.get("table_captions") or []) if clean_text(value)]
+        for index, markdown in enumerate(page.get("tables_markdown") or []):
+            table_text = clean_text(markdown)
+            if not table_text:
+                continue
+            caption = table_captions[index] if index < len(table_captions) else f"Tableau page {page_number}"
+            text = f"{title}\n{caption}\n[TABLEAU STRUCTURÉ]\n{table_text}".strip()
+            chunk_id = f"asset_{slugify(source_id)}_p{page_number:04d}_table_{index + 1:02d}"
+            output.append({
+                "id": chunk_id,
+                "text": text,
+                "source_text": text,
+                "metadata": {
+                    **common_meta,
+                    "content_kind": "table",
+                    "asset_type": "table",
+                    "asset_index": index + 1,
+                    "asset_caption": caption,
+                    "rag_chunk_id": chunk_id,
+                },
+                "raw_item": {"caption": caption, "markdown": table_text, "page_number": page_number},
+            })
+
+        for index, caption_value in enumerate(page.get("figure_captions") or []):
+            caption = clean_text(caption_value)
+            if not caption:
+                continue
+            text = f"{title}\n[FIGURE PAGE {page_number}]\n{caption}".strip()
+            chunk_id = f"asset_{slugify(source_id)}_p{page_number:04d}_figure_{index + 1:02d}"
+            output.append({
+                "id": chunk_id,
+                "text": text,
+                "source_text": text,
+                "metadata": {
+                    **common_meta,
+                    "content_kind": "figure_caption",
+                    "asset_type": "figure",
+                    "asset_index": index + 1,
+                    "asset_caption": caption,
+                    "rag_chunk_id": chunk_id,
+                },
+                "raw_item": {"caption": caption, "page_number": page_number},
+            })
+
+    return output
 
 
 def enrich_chunk_v2(
@@ -745,6 +881,10 @@ def enrich_chunk_v2(
         "document_type_v2": meta.get("document_type") or meta.get("source_kind") or "cir_final_consultant",
         "source_section": clean_text(meta.get("section_number") or meta.get("section_id") or meta.get("section") or ""),
         "section_title": clean_text(meta.get("section_title") or meta.get("title") or ""),
+        "page_number": meta.get("page_number") if meta.get("page_number") not in (None, "", -1) else None,
+        "page_start": meta.get("page_start") if meta.get("page_start") not in (None, "", -1) else None,
+        "page_end": meta.get("page_end") if meta.get("page_end") not in (None, "", -1) else None,
+        "content_kind": clean_text(meta.get("content_kind") or ("table" if "[TABLEAU STRUCTURÉ]" in text else "prose")),
         "keywords": ", ".join(keywords),
         "keywords_list": keywords,
         "domains": ", ".join([d["domain"] for d in domains]),
@@ -789,6 +929,8 @@ def make_knowledge_card(enriched_chunk: Dict[str, Any]) -> Dict[str, Any]:
         "source_chunk_id": meta.get("chunk_id"),
         "source_section": meta.get("source_section"),
         "section_title": meta.get("section_title"),
+        "page_number": meta.get("page_number"),
+        "content_kind": meta.get("content_kind"),
         "keywords": meta.get("keywords_list") or [],
         "domains": meta.get("domains_list") or [],
         "main_domain": meta.get("main_domain"),
@@ -1028,12 +1170,15 @@ def keep_only_explicit_cir_final_chunks(chunks: List[Dict[str, Any]], logs: Opti
 # Build direct V2
 # ---------------------------------------------------------------------------
 
-def store_original_file(src_path: Path, organisme: str, project: str, year: str) -> Path:
+def original_file_target(src_path: Path, organisme: str, project: str, year: str) -> Path:
     target_dir = ORGANISMES_DIR / organisme / "projects" / project / "years" / str(year) / "cir_final_consultant" / "current"
-    target_dir.mkdir(parents=True, exist_ok=True)
-
     safe_name = re.sub(r"[^\w\-. àâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ]+", "_", src_path.name)
-    target = target_dir / safe_name
+    return target_dir / safe_name
+
+
+def store_original_file(src_path: Path, organisme: str, project: str, year: str) -> Path:
+    target = original_file_target(src_path, organisme, project, year)
+    target.parent.mkdir(parents=True, exist_ok=True)
 
     if src_path.resolve() != target.resolve():
         target.write_bytes(src_path.read_bytes())
@@ -1051,6 +1196,7 @@ def build_cir_final_v2(
     reset_chroma: bool = False,
     vision_mode: str = "text_only",
     formula_mode: str = "off",
+    rebuild_catalog: bool = True,
 ) -> Dict[str, Any]:
     ensure_dirs()
     t0 = time.time()
@@ -1071,15 +1217,19 @@ def build_cir_final_v2(
     if file_path.suffix.lower() not in SUPPORTED_EXTS:
         raise ValueError(f"Extension non supportée : {file_path.suffix}")
 
-    source_path = store_original_file(file_path, organisme, project, year) if copy_to_library else file_path
-    source_hash = sha256_file(source_path)
+    # L'extraction et la création des cartes se font avant de rendre le projet
+    # visible dans la bibliothèque. Un échec ne laisse donc plus une ligne à
+    # zéro carte dans l'interface.
+    extraction_input = file_path
+    source_path = original_file_target(file_path, organisme, project, year) if copy_to_library else file_path
+    source_hash = sha256_file(extraction_input)
     source_id = f"{slugify(source_path.stem)}_{source_hash[:10]}"
 
     add_log(logs, "start", "ok", "Build V2 direct démarré.", source_id=source_id, file=str(source_path))
 
     args = EngineArgs(mode="cir_final", vision_mode=vision_mode, formula_mode=formula_mode)
 
-    extraction_json, extracted_text = extract_file(source_path, logs, args)
+    extraction_json, extracted_text = extract_file(extraction_input, logs, args)
 
     document = {
     "document": source_path.name,
@@ -1121,7 +1271,28 @@ def build_cir_final_v2(
         source_id=source_id,
     )
 
-    all_chunks = normalized_chunks + style_chunks
+    asset_chunks = make_document_asset_chunks(
+        extraction_json,
+        nlp_result,
+        organisme=organisme,
+        project=project,
+        year=year,
+        source_file=source_path.name,
+        source_path=str(source_path),
+        source_id=source_id,
+    )
+
+    add_log(
+        logs,
+        "document_assets",
+        "ok",
+        "Tableaux et légendes de figures préparés pour l'index vectoriel.",
+        chunks_count=len(asset_chunks),
+        tables=sum(1 for chunk in asset_chunks if (chunk.get("metadata") or {}).get("asset_type") == "table"),
+        figures=sum(1 for chunk in asset_chunks if (chunk.get("metadata") or {}).get("asset_type") == "figure"),
+    )
+
+    all_chunks = normalized_chunks + style_chunks + asset_chunks
 
     chunks_v2 = [
         enrich_chunk_v2(
@@ -1136,6 +1307,14 @@ def build_cir_final_v2(
     ]
 
     cards = [make_knowledge_card(ch) for ch in chunks_v2]
+
+    if not chunks_v2 or not cards:
+        raise ValueError(
+            "Extraction sans passages/cartes exploitables : le CIR n'a pas été ajouté à Memory V2."
+        )
+
+    if copy_to_library:
+        source_path = store_original_file(extraction_input, organisme, project, year)
 
     role_counts = Counter((ch.get("metadata") or {}).get("role") for ch in chunks_v2)
     memory_counts = Counter((ch.get("metadata") or {}).get("memory_class") for ch in chunks_v2)
@@ -1162,7 +1341,15 @@ def build_cir_final_v2(
         cards_file=str(cards_file),
     )
 
-    catalog = rebuild_global_graph_and_catalog(reset_chroma=reset_chroma)
+    catalog = (
+        rebuild_global_graph_and_catalog(reset_chroma=reset_chroma)
+        if rebuild_catalog
+        else {
+            "ok": True,
+            "deferred": True,
+            "message": "Reconstruction globale différée jusqu'à la fin du lot.",
+        }
+    )
 
     run_report = {
         "ok": True,
@@ -1213,6 +1400,12 @@ def scan_library() -> List[Dict[str, Any]]:
 
         parts = list(f.parts)
         low = [p.lower() for p in parts]
+
+        # La mémoire V2 est exclusivement la mémoire des CIR finaux validés.
+        # Les documents bruts, articles Scholar et brouillons placés sous le
+        # même projet ne doivent jamais être proposés au batch mémoire.
+        if "cir_final_consultant" not in low or f.parent.name.lower() != "current":
+            continue
 
         try:
             i = low.index("organismes")
@@ -1295,6 +1488,7 @@ def main() -> int:
     parser.add_argument("--no-copy", action="store_true")
     parser.add_argument("--vision-mode", default="text_only")
     parser.add_argument("--formula-mode", default="off")
+    parser.add_argument("--defer-rebuild", action="store_true")
 
     parser.add_argument("--search", default="")
     parser.add_argument("--collection", default="ennosmart_memory_v2_global")
@@ -1330,6 +1524,7 @@ def main() -> int:
             reset_chroma=args.reset_chroma,
             vision_mode=args.vision_mode,
             formula_mode=args.formula_mode,
+            rebuild_catalog=not args.defer_rebuild,
         )
         print(json.dumps(rep, ensure_ascii=False, indent=2))
         return 0

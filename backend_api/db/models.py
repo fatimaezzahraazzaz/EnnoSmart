@@ -34,6 +34,63 @@ class User(Base):
         back_populates="consultant",
         cascade="all, delete-orphan",
     )
+    profile = relationship(
+        "UserProfile",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    preferences = relationship(
+        "UserPreference",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
+
+class UserProfile(Base):
+    """Informations métier séparées du compte pour préserver les utilisateurs existants."""
+
+    __tablename__ = "user_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
+    job_title = Column(String(255), nullable=True)
+    company = Column(String(255), nullable=True)
+    phone = Column(String(50), nullable=True)
+    bio = Column(Text, nullable=True)
+    avatar_url = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="profile")
+
+
+class UserPreference(Base):
+    __tablename__ = "user_preferences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
+    language = Column(String(10), default="fr", nullable=False)
+    timezone = Column(String(100), default="Africa/Casablanca", nullable=False)
+    theme = Column(String(20), default="system", nullable=False)
+    compact_sidebar = Column(Boolean, default=False, nullable=False)
+    email_notifications = Column(Boolean, default=True, nullable=False)
+    project_notifications = Column(Boolean, default=True, nullable=False)
+    weekly_summary = Column(Boolean, default=True, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="preferences")
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(String(36), primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = Column(String(64), unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class Project(Base):
@@ -67,6 +124,55 @@ class Project(Base):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+    improvement_sessions = relationship(
+        "ImprovementSession",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+    workflow = relationship(
+        "ProjectWorkflow",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
+
+class ProjectWorkflow(Base):
+    __tablename__ = "project_workflows"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), unique=True, nullable=False, index=True)
+    stage = Column(String(50), default="collecte", nullable=False)
+    progress_percent = Column(Integer, default=10, nullable=False)
+    priority = Column(String(20), default="normale", nullable=False)
+    due_date = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    project = relationship("Project", back_populates="workflow")
+
+
+class PlatformSetting(Base):
+    __tablename__ = "platform_settings"
+
+    key = Column(String(100), primary_key=True)
+    value_json = Column(JSON, nullable=False)
+    description = Column(Text, nullable=True)
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    actor_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    action = Column(String(100), nullable=False, index=True)
+    entity_type = Column(String(50), nullable=False)
+    entity_id = Column(String(100), nullable=True)
+    metadata_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
 class Document(Base):
@@ -190,3 +296,91 @@ class Article(Base):
 
     scholar_run = relationship("ScholarRun", back_populates="articles")
     verrou = relationship("Verrou", back_populates="articles")
+
+
+class ImprovementSession(Base):
+    """Conversation EnnoAmelioration rattachée à un projet.
+
+    Le texte publié n'est jamais remplacé implicitement : ``active_version_id``
+    ne change qu'après une décision explicite du consultant.
+    """
+
+    __tablename__ = "improvement_sessions"
+
+    id = Column(String(36), primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    title = Column(String(255), nullable=False, default="Nouvelle amélioration")
+    state = Column(String(50), nullable=False, default="target_identification")
+    target_scope = Column(String(50), nullable=False, default="section")
+    target_section_id = Column(String(80), nullable=True)
+    target_section_title = Column(Text, nullable=True)
+    source_document_id = Column(Integer, ForeignKey("documents.id"), nullable=True, index=True)
+    active_version_id = Column(String(36), nullable=True, index=True)
+    context_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    project = relationship("Project", back_populates="improvement_sessions")
+    source_document = relationship("Document")
+    messages = relationship(
+        "ImprovementMessage",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="ImprovementMessage.created_at",
+    )
+    versions = relationship(
+        "ImprovementVersion",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="ImprovementVersion.version_number",
+        foreign_keys="ImprovementVersion.session_id",
+    )
+
+
+class ImprovementMessage(Base):
+    __tablename__ = "improvement_messages"
+
+    id = Column(String(36), primary_key=True, index=True)
+    session_id = Column(
+        String(36),
+        ForeignKey("improvement_sessions.id"),
+        nullable=False,
+        index=True,
+    )
+    role = Column(String(30), nullable=False)
+    content = Column(Text, nullable=False)
+    intent = Column(String(80), nullable=True)
+    metadata_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    session = relationship("ImprovementSession", back_populates="messages")
+
+
+class ImprovementVersion(Base):
+    __tablename__ = "improvement_versions"
+
+    id = Column(String(36), primary_key=True, index=True)
+    session_id = Column(
+        String(36),
+        ForeignKey("improvement_sessions.id"),
+        nullable=False,
+        index=True,
+    )
+    version_number = Column(Integer, nullable=False)
+    status = Column(String(30), nullable=False, default="candidate")
+    content = Column(Text, nullable=False)
+    parent_version_id = Column(String(36), nullable=True, index=True)
+    instruction = Column(Text, nullable=True)
+    diff_json = Column(JSON, nullable=True)
+    audit_json = Column(JSON, nullable=True)
+    evidence_json = Column(JSON, nullable=True)
+    generation_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    decided_at = Column(DateTime, nullable=True)
+
+    session = relationship(
+        "ImprovementSession",
+        back_populates="versions",
+        foreign_keys=[session_id],
+    )

@@ -10,10 +10,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 
-from core.deps import get_current_user, get_db
+from core.deps import get_current_user, get_db, require_agent_enabled
 from db.models import Article, DiagnosticRun, ScholarRun, User, Verrou
 from schemas.scholar import ArticleDecisionRequest, ArticleRead, ScholarRead
 from services.project_service import get_project_for_user
@@ -29,7 +29,7 @@ from services.scholar_service import (
     sync_articles_from_scholar,
 )
 
-router = APIRouter(tags=["ennoscholar"])
+router = APIRouter(tags=["ennoscholar"], dependencies=[Depends(require_agent_enabled("scholar"))])
 
 
 # ============================================================
@@ -560,6 +560,7 @@ def _latest_scholar_run_for_project(db: Session, project_id: int) -> ScholarRun 
     """
     return (
         db.query(ScholarRun)
+        .options(defer(ScholarRun.raw_result_json))
         .filter(ScholarRun.project_id == project_id)
         .order_by(ScholarRun.created_at.desc())
         .first()
@@ -569,6 +570,7 @@ def _latest_scholar_run_for_project(db: Session, project_id: int) -> ScholarRun 
 @router.get("/projects/{project_id}/scholar/latest")
 def get_latest_scholar(
     project_id: int,
+    compact: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -587,9 +589,20 @@ def get_latest_scholar(
             "domain_label": project.domain_label,
             "status": project.status,
         },
-        "latest_run": ScholarRead.model_validate(latest_run).model_dump()
-        if latest_run
-        else None,
+        "latest_run": (
+            {
+                "id": latest_run.id,
+                "project_id": latest_run.project_id,
+                "status": latest_run.status,
+                "report_path": latest_run.report_path,
+                "created_at": latest_run.created_at,
+                "completed_at": latest_run.completed_at,
+            }
+            if compact and latest_run
+            else ScholarRead.model_validate(latest_run).model_dump()
+            if latest_run
+            else None
+        ),
         "bundle": bundle,
     }
 
@@ -769,6 +782,7 @@ def sync_articles(
 def list_articles(
     project_id: int,
     latest_only: bool = Query(True),
+    compact: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -796,6 +810,31 @@ def list_articles(
         if not latest_run:
             return []
         query = query.filter(Article.scholar_run_id == latest_run.id)
+
+    if compact:
+        rows = (
+            query.options(defer(Article.source_json))
+            .order_by(Article.created_at.desc())
+            .all()
+        )
+        return [
+            {
+                "id": article.id,
+                "scholar_run_id": article.scholar_run_id,
+                "verrou_id": article.verrou_id,
+                "title": article.title,
+                "year": article.year,
+                "source": article.source,
+                "tag_article": article.tag_article,
+                "score": article.score,
+                "url": article.url,
+                "doi": article.doi,
+                "consultant_status": article.consultant_status,
+                "source_json": {},
+                "created_at": article.created_at,
+            }
+            for article in rows
+        ]
 
     return query.order_by(Article.created_at.desc()).all()
 
@@ -1051,6 +1090,40 @@ def get_state_of_art_history(
 
     return get_state_of_art_history(project)
 
+
+@router.get(
+    "/projects/{project_id}/scholar/state-of-art/visuals/{visual_id}"
+)
+def get_state_of_art_visual(
+    project_id: int,
+    visual_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Diffuse une figure extraite après contrôle d'accès au projet."""
+
+    project = get_project_for_user(db, project_id, current_user)
+    from services.scholar_visual_evidence_service import resolve_visual_asset
+
+    path = resolve_visual_asset(project, visual_id)
+    if path is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Figure scientifique introuvable.",
+        )
+    media_types = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+    }
+    return FileResponse(
+        path=str(path),
+        media_type=media_types.get(path.suffix.casefold(), "application/octet-stream"),
+        filename=path.name,
+        content_disposition_type="inline",
+    )
+
 @router.get("/projects/{project_id}/scholar/fulltext/status")
 def get_scholar_fulltext_status(
     project_id: int,
@@ -1270,6 +1343,7 @@ async def upload_new_scholar_source(
     source_url: str | None = Form(None),
     year: int | None = Form(None),
     doi: str | None = Form(None),
+    guided_session_id: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1301,6 +1375,7 @@ async def upload_new_scholar_source(
         "candidate_kind": "scientific_article",
         "consultant_evidence_role": "connected_evidence",
         "uploaded_filename": filename,
+        "guided_session_id": str(guided_session_id or "").strip() or None,
     }
     article = Article(
         scholar_run_id=scholar_run.id,
@@ -1335,6 +1410,35 @@ async def upload_new_scholar_source(
             raise ValueError(
                 extraction.get("message")
                 or "Le PDF n'a pas pu être extrait."
+            )
+        db.refresh(article)
+        normalized_source_json = (
+            dict(article.source_json)
+            if isinstance(article.source_json, dict)
+            else {}
+        )
+        normalized_source_json["guided_candidate_id"] = (
+            normalized_source_json.get("guided_candidate_id")
+            or f"UPLOAD-{int(article.id)}"
+        )
+        normalized_source_json["guided_session_id"] = (
+            str(guided_session_id or "").strip() or None
+        )
+        article.source_json = normalized_source_json
+        db.add(article)
+        db.commit()
+        db.refresh(article)
+        if guided_session_id:
+            from services.guided_research_service import (
+                attach_uploaded_article_to_session,
+            )
+
+            attach_uploaded_article_to_session(
+                db,
+                project,
+                session_id=str(guided_session_id),
+                article=article,
+                extraction=extraction,
             )
     except Exception as exc:
         db.delete(article)
@@ -1493,6 +1597,7 @@ def _run_state_of_art_full_pipeline(
     enable_polish: bool | None,
     db: Session,
     current_user: User,
+    guided_session_id: str | None = None,
 ):
     project = get_project_for_user(db, project_id, current_user)
 
@@ -1501,18 +1606,79 @@ def _run_state_of_art_full_pipeline(
     )
 
     try:
-        return generate_state_of_art_after_consultant_selection(
+        result = generate_state_of_art_after_consultant_selection(
             db=db,
             project=project,
             force_phase3=force_phase3,
             force_article_cards=force_article_cards,
             enable_polish=enable_polish,
         )
+        if guided_session_id:
+            from services.guided_research_service import (
+                record_guided_pipeline_result,
+            )
+
+            record_guided_pipeline_result(
+                db,
+                project,
+                session_id=guided_session_id,
+                result=result,
+            )
+        return result
     except RuntimeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
+        # La commande consultant est valide : une indisponibilité LLM ou une
+        # tentative de rédaction non publiable est un état récupérable du
+        # pipeline, jamais une erreur HTTP 400 imputable au client.
+        internal_detail = str(exc)
+        print(
+            "[EnnoScholar][SOA][INTERNAL] Génération différée: "
+            f"{type(exc).__name__}: {internal_detail}"
         )
+        lowered = internal_detail.casefold()
+        provider_unavailable = any(
+            marker in lowered
+            for marker in (
+                "429",
+                "rate limit",
+                "rate_limit",
+                "quota",
+                "temporarily unavailable",
+                "timeout",
+            )
+        )
+        failure = {
+            "ok": False,
+            "status": (
+                "writing_service_temporarily_unavailable"
+                if provider_unavailable
+                else "evidence_revision_required"
+            ),
+            "assistant_message": (
+                "Le service de rédaction est momentanément saturé. Votre "
+                "corpus, votre plan et vos choix sont conservés ; relancez la "
+                "rédaction sans recommencer la recherche."
+                if provider_unavailable
+                else
+                "Je n'ai pas publié cette tentative, car certaines parties "
+                "doivent encore être mieux reliées aux publications validées. "
+                "Votre corpus et votre plan sont conservés ; vous pouvez "
+                "poursuivre directement dans le chat."
+            ),
+            "retryable": True,
+            "previous_draft_preserved": True,
+        }
+        if guided_session_id:
+            from services.guided_research_service import (
+                record_guided_pipeline_result,
+            )
+
+            record_guided_pipeline_result(
+                db,
+                project,
+                session_id=guided_session_id,
+                result=failure,
+            )
+        return failure
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1526,6 +1692,7 @@ def generate_scholar_state_of_art(
     force_phase3: bool = Query(True),
     force_article_cards: bool = Query(False),
     enable_polish: bool | None = Query(None),
+    guided_session_id: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1540,6 +1707,7 @@ def generate_scholar_state_of_art(
         enable_polish=enable_polish,
         db=db,
         current_user=current_user,
+        guided_session_id=guided_session_id,
     )
 
 
@@ -1549,6 +1717,7 @@ def run_full_scholar_state_of_art(
     force_phase3: bool = Query(True),
     force_article_cards: bool = Query(False),
     enable_polish: bool | None = Query(None),
+    guided_session_id: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1563,6 +1732,7 @@ def run_full_scholar_state_of_art(
         enable_polish=enable_polish,
         db=db,
         current_user=current_user,
+        guided_session_id=guided_session_id,
     )
 
 # ============================================================

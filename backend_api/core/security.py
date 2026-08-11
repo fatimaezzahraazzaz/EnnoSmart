@@ -17,6 +17,11 @@ def hash_password(password: str) -> str:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Le mot de passe doit contenir au moins 8 caractères.",
         )
+    if len(password.encode("utf-8")) > 72:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le mot de passe ne doit pas dépasser 72 octets.",
+        )
     return pwd_context.hash(password)
 
 

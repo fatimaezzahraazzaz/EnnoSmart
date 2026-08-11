@@ -291,7 +291,7 @@ def build_multi_document_pack_for_ennodiagnostic(
             "les sous-problèmes restent dans secondary_technical_groups."
         ),
     }
-    out["_contract_version"] = "nlp_evidence_v177_single_grouping"
+    out["_contract_version"] = "nlp_evidence_v189_single_grouping_before_frascati"
     return out
 
 

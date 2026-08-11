@@ -161,3 +161,43 @@ def test_reused_article_card_keeps_guided_source_context() -> None:
     assert card["section_ids"] == ["methods"]
     assert card["target_verrous"] == ["12", "13"]
     assert card["verrou_ids"] == ["12", "13"]
+
+
+def test_standalone_acceptance_creates_scholar_run_without_diagnostic(
+    monkeypatch,
+) -> None:
+    class FakeDb:
+        def __init__(self):
+            self.added = []
+
+        def add(self, value):
+            self.added.append(value)
+
+        def commit(self):
+            return None
+
+        def refresh(self, value):
+            value.id = 91
+
+    monkeypatch.setattr(service, "get_current_scholar_run", lambda *args: None)
+    db = FakeDb()
+    project = SimpleNamespace(id=7)
+
+    result = service.prepare_accepted_guided_sources(
+        db,
+        project,
+        sources=[],
+        candidate_ids=[],
+        rebuild_scientific_payloads=False,
+        standalone_context={
+            "operating_mode": "standalone_chat",
+            "standalone_project_brief": {"domain": "radar"},
+            "consultant_verrous": [{"id": "SV-1", "title": "Robustesse"}],
+        },
+        guided_session_id="session-1",
+    )
+
+    assert result["status"] == "all_scientific_sources_ready"
+    assert len(db.added) == 1
+    assert db.added[0].status == "guided_research_standalone"
+    assert db.added[0].raw_result_json["mode"] == "standalone_chat"

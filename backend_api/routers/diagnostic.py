@@ -1,7 +1,7 @@
 DIAGNOSTIC_ROUTER_VERSION = "v143_complete_db_persistence"
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 from typing import Any, Dict
 from pathlib import Path
 from datetime import datetime
@@ -11,7 +11,7 @@ import importlib.util
 import shutil
 import hashlib
 
-from core.deps import get_current_user, get_db
+from core.deps import get_current_user, get_db, require_agent_enabled
 from db.models import DiagnosticRun, User, Verrou
 from schemas.diagnostic import DiagnosticRead, VerrouDecisionRequest, VerrouRead
 from services.diagnostic_display_service import build_diagnostic_display
@@ -29,7 +29,7 @@ from services.diagnostic_service import (
 from services.project_service import get_project_for_user
 
 
-router = APIRouter(tags=["ennodiagnostic"])
+router = APIRouter(tags=["ennodiagnostic"], dependencies=[Depends(require_agent_enabled("diagnostic"))])
 
 
 # ============================================================
@@ -54,6 +54,7 @@ print(
 def _latest_run_for_project(db: Session, project_id: int) -> DiagnosticRun | None:
     return (
         db.query(DiagnosticRun)
+        .options(defer(DiagnosticRun.raw_result_json))
         .filter(DiagnosticRun.project_id == project_id)
         .order_by(DiagnosticRun.created_at.desc())
         .first()
@@ -418,7 +419,12 @@ def _run_timestamp(latest_run: DiagnosticRun | None, report: Dict[str, Any] | No
     return _report_timestamp(report or {}, 0.0)
 
 
-def _choose_latest_report_source(bundle: Dict[str, Any], latest_run: DiagnosticRun | None) -> Dict[str, Any]:
+def _choose_latest_report_source(
+    bundle: Dict[str, Any],
+    latest_run: DiagnosticRun | None,
+    *,
+    include_run_raw: bool = True,
+) -> Dict[str, Any]:
     """
     Décide quelle sortie EnnoDiagnostic est officielle pour l'affichage.
 
@@ -439,18 +445,36 @@ def _choose_latest_report_source(bundle: Dict[str, Any], latest_run: DiagnosticR
     file_path = bundle.get("report_path_used")
     file_ts = _report_timestamp(file_report, _path_mtime(file_path))
 
-    run_report, _run_content = _extract_latest_run_report(latest_run)
-    run_ts = _run_timestamp(latest_run, run_report)
+    run_report: Dict[str, Any] = {}
+    run_ts = _run_timestamp(latest_run)
+    # Si le fichier officiel est clairement plus récent, sa date suffit pour
+    # choisir la source. On évite alors de décompresser/lire un JSONB de run qui
+    # peut dépasser 30 Mo juste pour confirmer qu'il est ancien.
+    should_read_run_payload = bool(latest_run) and (
+        include_run_raw or not file_report or run_ts >= file_ts
+    )
+    if should_read_run_payload:
+        run_report, _run_content = _extract_latest_run_report(latest_run)
+        run_ts = _run_timestamp(latest_run, run_report)
 
     use_run = bool(run_report) and (not file_report or run_ts >= file_ts)
 
     raw_run_json = None
-    if latest_run and latest_run.raw_result_json:
-        raw_run_json = sanitize_json_value(latest_run.raw_result_json)
-        bundle["run_raw_result_json"] = raw_run_json
+    if latest_run and (include_run_raw or use_run) and latest_run.raw_result_json:
+        if include_run_raw:
+            raw_run_json = sanitize_json_value(latest_run.raw_result_json)
+            bundle["run_raw_result_json"] = raw_run_json
+        else:
+            raw_run_json = _as_dict(latest_run.raw_result_json)
+            snapshot = _as_dict(raw_run_json.get("diagnostic_snapshot"))
+            if snapshot:
+                bundle["diagnostic_snapshot"] = snapshot
 
     if use_run:
-        bundle = _merge_latest_run_into_bundle(bundle, latest_run)
+        if include_run_raw:
+            bundle = _merge_latest_run_into_bundle(bundle, latest_run)
+        else:
+            bundle["report"] = run_report
         bundle["official_report_source"] = "db_latest_run"
         bundle["official_report_timestamp"] = run_ts
         bundle["official_report_note"] = "Rapport DB plus récent ou aucun rapport fichier disponible."
@@ -705,7 +729,7 @@ def _find_run_with_same_report(
     db: Session,
     project_id: int,
     report: Dict[str, Any],
-    max_runs: int = 20,
+    max_runs: int = 3,
 ) -> DiagnosticRun | None:
     """
     Cherche un DiagnosticRun déjà lié exactement au même rapport fichier.
@@ -713,6 +737,26 @@ def _find_run_with_same_report(
     expected = _report_fingerprint(report)
     if not expected:
         return None
+
+    # Les runs créés par les versions récentes portent un fingerprint indexable
+    # dans leur JSON. Cette recherche évite de rapatrier puis désérialiser les
+    # rapports complets des 20 derniers runs (jusqu'à plusieurs centaines de Mo).
+    try:
+        fingerprint_match = (
+            db.query(DiagnosticRun)
+            .filter(
+                DiagnosticRun.project_id == project_id,
+                DiagnosticRun.raw_result_json["report_fingerprint"].as_string()
+                == expected,
+            )
+            .order_by(DiagnosticRun.created_at.desc())
+            .first()
+        )
+        if fingerprint_match is not None:
+            return fingerprint_match
+    except Exception:
+        # Compatibilité SQLite/anciens drivers JSON pendant les tests locaux.
+        pass
 
     runs = (
         db.query(DiagnosticRun)
@@ -751,6 +795,7 @@ def _materialize_filesystem_report_in_db(
     snapshot = extract_complete_diagnostic_snapshot(report)
     payload = sanitize_json_value({
         "persistence_version": "v143_complete_db_persistence",
+        "report_fingerprint": _report_fingerprint(report),
         "saved_at": datetime.utcnow().isoformat(),
         "button": "auto_materialize_filesystem_report_v142",
         "pipeline": "filesystem_report_to_complete_db",
@@ -1265,6 +1310,7 @@ def _merge_latest_run_into_bundle(bundle: dict, latest_run: DiagnosticRun | None
 @router.get("/projects/{project_id}/diagnostic/latest")
 def get_latest_diagnostic(
     project_id: int,
+    compact: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1280,8 +1326,12 @@ def get_latest_diagnostic(
     project = get_project_for_user(db, project_id, current_user)
     latest_run = _latest_run_for_project(db, project.id)
 
-    base_bundle = read_diagnostic_bundle(project)
-    bundle = _choose_latest_report_source(base_bundle, latest_run)
+    base_bundle = read_diagnostic_bundle(project, compact=compact)
+    bundle = _choose_latest_report_source(
+        base_bundle,
+        latest_run,
+        include_run_raw=not compact,
+    )
     official_source = bundle.get("official_report_source")
 
     display = build_diagnostic_display(project, bundle)
@@ -1306,7 +1356,18 @@ def get_latest_diagnostic(
                 latest_verrous = _sync_final_verrous_from_run(db, latest_run)
 
     latest_run_dump = (
-        DiagnosticRead.model_validate(latest_run).model_dump()
+        {
+            "id": latest_run.id,
+            "project_id": latest_run.project_id,
+            "status": latest_run.status,
+            "report_path": latest_run.report_path,
+            "nlp_result_path": latest_run.nlp_result_path,
+            "selected_verrous_path": latest_run.selected_verrous_path,
+            "created_at": latest_run.created_at,
+            "completed_at": latest_run.completed_at,
+        }
+        if compact and latest_run is not None
+        else DiagnosticRead.model_validate(latest_run).model_dump()
         if latest_run is not None
         else None
     )
@@ -1370,8 +1431,14 @@ def get_latest_diagnostic(
         "verrous": "display.validation_verrous",
         "frontend_rule": "Le frontend ne doit créer aucun id négatif pour une décision consultant.",
     }
-    persisted = _as_dict(getattr(latest_run, "raw_result_json", {}) if latest_run else {})
-    persisted_snapshot = _as_dict(persisted.get("diagnostic_snapshot"))
+    persisted = (
+        {}
+        if compact
+        else _as_dict(getattr(latest_run, "raw_result_json", {}) if latest_run else {})
+    )
+    persisted_snapshot = _as_dict(
+        bundle.get("diagnostic_snapshot") or persisted.get("diagnostic_snapshot")
+    )
     display["database_persistence"] = {
         "ok": bool(latest_run and persisted_snapshot and db_verrous_dump),
         "version": persisted.get("persistence_version"),
@@ -1394,7 +1461,7 @@ def get_latest_diagnostic(
                 "status": project.status,
             },
             "latest_run": latest_run_dump,
-            "bundle": bundle,
+            "bundle": {} if compact else bundle,
             "display": display,
             "validation_verrous": frontend_verrous,
             "source_policy": {
@@ -1994,8 +2061,12 @@ def list_verrous(
         # V141 : /verrous doit suivre la même sortie officielle que
         # /diagnostic/latest. Si un rapport CLI plus récent existe, on le
         # matérialise ici avant de lire les verrous.
-        base_bundle = read_diagnostic_bundle(project)
-        bundle = _choose_latest_report_source(base_bundle, latest_run)
+        base_bundle = read_diagnostic_bundle(project, compact=True)
+        bundle = _choose_latest_report_source(
+            base_bundle,
+            latest_run,
+            include_run_raw=False,
+        )
         if bundle.get("official_report_source") == "filesystem_report":
             materialized_run, _synced, _created = _materialize_filesystem_report_in_db(
                 db=db,

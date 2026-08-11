@@ -19,6 +19,15 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    PASSWORD_RESET_EXPIRE_MINUTES: int = 30
+    FRONTEND_URL: str = "http://127.0.0.1:3000"
+
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_FROM: str = "no-reply@ennoma.app"
+    SMTP_USE_TLS: bool = True
 
     DATABASE_URL: str = "sqlite:///./ennosmart_dev.db"
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
@@ -32,6 +41,12 @@ class Settings(BaseSettings):
     ENNODIAGNOSTIC_SCRIPT: str | None = None
     ENNOSCHOLAR_SCRIPT: str | None = None
     AI_RUN_TIMEOUT_SECONDS: int = 3600
+
+    # Bibliothèque professionnelle synchronisée, parcourue strictement en lecture seule.
+    POWER_AUTOMATE_IMPORT_ROOT: str = "C:/Users/dell/OneDrive - Ennodev/ENNODEV - Clients"
+    POWER_AUTOMATE_FAKE_ROOT: str = "C:/EnnoSmart/tests/fixtures/fake_power_automate_inbox"
+    POWER_AUTOMATE_AUDIT_ROOT: str = "C:/EnnoSmart/storage/power_automate_import"
+    POWER_AUTOMATE_MAX_FILE_MB: int = 100
 
     # IMPORTANT :
     # extra="ignore" évite que Pydantic bloque les variables IA/LLM/EnnoScholar

@@ -1919,6 +1919,91 @@ def build_state_of_art_selection_payload(
     verrous_by_id = _get_project_verrous(db, project)
     diagnostic_context = _extract_diagnostic_context(db, project)
     latest_run = _get_latest_scholar_run(db, project)
+    latest_run_context = (
+        _as_dict(latest_run.raw_result_json) if latest_run is not None else {}
+    )
+    standalone_mode = (
+        _safe_text(latest_run_context.get("mode"), 80).casefold()
+        == "standalone_chat"
+    )
+    standalone_brief = (
+        _as_dict(latest_run_context.get("project_brief"))
+        if standalone_mode
+        else {}
+    )
+    standalone_verrous = [
+        dict(row)
+        for row in _as_list(latest_run_context.get("consultant_verrous"))
+        if isinstance(row, dict)
+        and _safe_text(row.get("id"), 120)
+        and _safe_text(row.get("title"), 1600)
+    ]
+    standalone_verrous_by_id = {
+        _safe_text(row.get("id"), 120): row for row in standalone_verrous
+    }
+    standalone_active_ids = [
+        _safe_text(value, 120)
+        for value in _as_list(latest_run_context.get("active_verrou_ids"))
+        if _safe_text(value, 120) in standalone_verrous_by_id
+    ]
+
+    def standalone_project_context(
+        verrou: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        verrou = verrou or {}
+        objective = _safe_text(
+            standalone_brief.get("objective")
+            or standalone_brief.get("project_objective"),
+            2400,
+        )
+        description = _safe_text(
+            standalone_brief.get("description")
+            or standalone_brief.get("project_description"),
+            3000,
+        )
+        domain = _safe_text(
+            standalone_brief.get("domain") or project.domain_label,
+            1000,
+        )
+        verrou_title = _safe_text(verrou.get("title"), 2400)
+        verrou_justification = _safe_text(
+            verrou.get("justification") or verrou.get("supporting_context"),
+            3000,
+        )
+        return {
+            "available": True,
+            "source_priority": ["guided_consultant_conversation"],
+            "report_path": "",
+            "besoin_projet": description or objective,
+            "objectif_technique": objective,
+            "contexte_technique": " ".join(
+                value for value in (domain, description) if value
+            ),
+            "donnees_et_environnement": list(
+                standalone_brief.get("data_and_environment") or []
+            ),
+            "contraintes_projet": list(
+                standalone_brief.get("constraints") or []
+            ),
+            "criteres_validation": list(
+                standalone_brief.get("validation_criteria") or []
+            ),
+            "incertitude_rd": verrou_title or verrou_justification,
+            "points_de_preuve_projet": [
+                {"role": role, "text": value, "source": "guided_conversation"}
+                for role, value in (
+                    ("objectif", objective),
+                    ("verrou", verrou_title),
+                    ("justification", verrou_justification),
+                )
+                if value
+            ],
+            "trace": {
+                "from_guided_consultant_conversation": True,
+                "guided_session_id": latest_run_context.get("guided_session_id"),
+                "standalone_without_diagnostic": True,
+            },
+        }
 
     # Contexte projet global construit depuis EnnoDiagnostic final.
     # Il sera aussi spécialisé par verrou plus bas.
@@ -1927,6 +2012,8 @@ def build_state_of_art_selection_payload(
         diagnostic_context=diagnostic_context,
         verrou_title="",
     )
+    if standalone_mode and standalone_verrous:
+        project_context_global = standalone_project_context()
 
     groups: Dict[str, Dict[str, Any]] = {}
 
@@ -1949,11 +2036,57 @@ def build_state_of_art_selection_payload(
             })
             continue
 
-        source_json = _as_dict(article.source_json)
+        source_json = dict(_as_dict(article.source_json))
         if (
             source_json.get("guided_research_source")
             and article.verrou_id is None
         ):
+            if standalone_mode and standalone_verrous:
+                target_ids = [
+                    _safe_text(value, 120)
+                    for value in _as_list(
+                        source_json.get("target_verrous")
+                        or source_json.get("covered_verrou_ids")
+                    )
+                    if _safe_text(value, 120) in standalone_verrous_by_id
+                ]
+                target_ids = target_ids or standalone_active_ids or list(
+                    standalone_verrous_by_id
+                )
+                if not (
+                    source_json.get("target_verrous")
+                    or source_json.get("covered_verrou_ids")
+                ):
+                    source_json["target_verrous"] = target_ids
+                    source_json["covered_verrou_ids"] = target_ids
+                    source_json["guided_candidate_id"] = (
+                        source_json.get("guided_candidate_id")
+                        or (
+                            f"UPLOAD-{int(article.id)}"
+                            if source_json.get("manual_upload_source")
+                            else f"GUIDED-{int(article.id)}"
+                        )
+                    )
+                    article.source_json = source_json
+                    db.add(article)
+                    db.commit()
+                    db.refresh(article)
+                for target_id in target_ids:
+                    standalone_verrou = standalone_verrous_by_id[target_id]
+                    group_key = f"standalone::{target_id}"
+                    if group_key not in groups:
+                        groups[group_key] = {
+                            "_db_verrou": None,
+                            "_standalone_verrou": standalone_verrou,
+                            "_articles": [],
+                            "verrou_key": target_id,
+                            "verrou_id": target_id,
+                            "verrou_title": _safe_text(
+                                standalone_verrou.get("title"), 2400
+                            ),
+                        }
+                    groups[group_key]["_articles"].append(article)
+                continue
             # Une publication guidée sans rattachement explicite reste
             # disponible dans les Article Cards comme contexte scientifique
             # transversal. Elle ne doit pas créer un faux verrou canonique.
@@ -2021,6 +2154,7 @@ def build_state_of_art_selection_payload(
 
     for index, group in enumerate(groups.values(), start=1):
         db_verrou: Optional[Verrou] = group.get("_db_verrou")
+        standalone_verrou = _as_dict(group.get("_standalone_verrou"))
         group_articles: List[Article] = _sort_articles_for_writer(group.get("_articles") or [])
 
         direct_articles, direct_overflow = _limit_articles_by_type(group_articles, "Direct", max_direct)
@@ -2066,6 +2200,13 @@ def build_state_of_art_selection_payload(
             article_group=group_articles,
             diagnostic_context=diagnostic_context,
         )
+        if standalone_verrou:
+            objectif_rnd = _safe_text(
+                standalone_brief.get("objective")
+                or standalone_brief.get("project_objective")
+                or standalone_verrou.get("justification"),
+                3000,
+            )
 
         contexte_projet = _extract_contexte_projet(
             project=project,
@@ -2073,6 +2214,13 @@ def build_state_of_art_selection_payload(
             article_group=group_articles,
             diagnostic_context=diagnostic_context,
         )
+        if standalone_verrou:
+            contexte_projet = _safe_text(
+                standalone_project_context(standalone_verrou).get(
+                    "contexte_technique"
+                ),
+                4000,
+            )
 
         # Version structurée, exploitable par Phase 4.6 et Phase 5.
         # Elle utilise le rapport final EnnoDiagnostic, pas seulement le dump DB.
@@ -2081,6 +2229,10 @@ def build_state_of_art_selection_payload(
             diagnostic_context=diagnostic_context,
             verrou_title=group.get("verrou_title") or "",
         )
+        if standalone_verrou:
+            project_context_structured = standalone_project_context(
+                standalone_verrou
+            )
 
         scientific_intent = {}
         for article in group_articles:

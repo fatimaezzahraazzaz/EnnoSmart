@@ -22,20 +22,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 import {
-  getArticles,
-  getDiagnosticLatest,
   getDocuments,
-  getProject,
-  getProjects,
-  getScholarLatest,
-  getVerrous,
+  getProjectOverviews,
   importExistingDiagnostic,
   importExistingScholar,
   importExistingDocuments,
-  type ArticleRead,
   type DocumentRead,
+  type ProjectOverview,
   type ProjectRead,
-  type VerrouRead,
 } from "@/lib/api"
 import { getCurrentProjectId, setCurrentProjectId } from "@/lib/project-session"
 
@@ -95,20 +89,12 @@ function sourceFileName(doc: DocumentRead) {
   return doc.original_filename || doc.filename || doc.file_path || doc.storage_path || `Document #${doc.id}`
 }
 
-function countArticlesByTag(articles: ArticleRead[], tag: string) {
-  return articles.filter((article) =>
-    (article.tag_article || "").toLowerCase().includes(tag.toLowerCase())
-  ).length
-}
-
 export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps) {
   const [project, setProject] = useState<ProjectRead | null>(null)
   const [projects, setProjects] = useState<ProjectRead[]>([])
+  const [overviews, setOverviews] = useState<ProjectOverview[]>([])
+  const [overview, setOverview] = useState<ProjectOverview | null>(null)
   const [documents, setDocuments] = useState<DocumentRead[]>([])
-  const [verrous, setVerrous] = useState<VerrouRead[]>([])
-  const [articles, setArticles] = useState<ArticleRead[]>([])
-  const [diagnosticLatest, setDiagnosticLatest] = useState<any>(null)
-  const [scholarLatest, setScholarLatest] = useState<any>(null)
 
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<"diagnostic" | "scholar" | "documents" | null>(null)
@@ -117,42 +103,34 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
   const selectedProjectId = project?.id
 
   const stats = useMemo(() => {
-    const pertinent = verrous.filter((verrou) =>
-      (verrou.tag_cir || "").toUpperCase().includes("PERTINENT")
-    ).length
-
-    const moyen = verrous.filter((verrou) =>
-      (verrou.tag_cir || "").toUpperCase().includes("MOYEN")
-    ).length
-
-    const direct = countArticlesByTag(articles, "Direct")
-    const fondamental = countArticlesByTag(articles, "Fondamental")
-    const connexe = countArticlesByTag(articles, "Connexe")
-    const horsSujet = countArticlesByTag(articles, "Hors sujet")
+    const verrouStats = overview?.diagnostic.verrous
+    const articleStats = overview?.scholar.articles
 
     return {
-      pertinent,
-      moyen,
-      direct,
-      fondamental,
-      connexe,
-      horsSujet,
-      usefulArticles: articles.length - horsSujet,
+      pertinent: verrouStats?.pertinent || 0,
+      moyen: verrouStats?.moyen || 0,
+      direct: articleStats?.direct || 0,
+      fondamental: articleStats?.fondamental || 0,
+      connexe: articleStats?.connexe || 0,
+      horsSujet: articleStats?.hors_sujet || 0,
+      usefulArticles: articleStats?.useful || 0,
     }
-  }, [verrous, articles])
+  }, [overview])
 
   const diagnosticState: StatusState =
-    verrous.length > 0 ? "ok" : diagnosticLatest ? "warning" : "empty"
+    (overview?.diagnostic.verrous.count || 0) > 0 ? "ok" : overview?.diagnostic.available ? "warning" : "empty"
 
   const scholarState: StatusState =
-    articles.length > 0 ? "ok" : scholarLatest ? "warning" : "empty"
+    (overview?.scholar.articles.count || 0) > 0 ? "ok" : overview?.scholar.available ? "warning" : "empty"
 
   const loadData = async () => {
     setLoading(true)
     setError("")
 
     try {
-      const projectList = await getProjects()
+      const overviewList = await getProjectOverviews()
+      const projectList = overviewList.map((item) => item.project)
+      setOverviews(overviewList)
       setProjects(projectList)
 
       if (projectList.length === 0) {
@@ -166,28 +144,9 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
 
       setCurrentProjectId(selected.id)
 
-      const [
-        projectData,
-        documentsData,
-        verrousData,
-        articlesData,
-        diagnosticData,
-        scholarData,
-      ] = await Promise.all([
-        getProject(selected.id),
-        getDocuments(selected.id).catch(() => []),
-        getVerrous(selected.id).catch(() => []),
-        getArticles(selected.id).catch(() => []),
-        getDiagnosticLatest(selected.id).catch(() => null),
-        getScholarLatest(selected.id).catch(() => null),
-      ])
-
-      setProject(projectData)
-      setDocuments(documentsData)
-      setVerrous(verrousData)
-      setArticles(articlesData)
-      setDiagnosticLatest(diagnosticData)
-      setScholarLatest(scholarData)
+      setProject(selected)
+      setOverview(overviewList.find((item) => item.project.id === selected.id) || null)
+      setDocuments(await getDocuments(selected.id).catch(() => []))
     } catch (err) {
       setError(
         err instanceof Error
@@ -209,28 +168,10 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
     setError("")
 
     try {
-      const [
-        projectData,
-        documentsData,
-        verrousData,
-        articlesData,
-        diagnosticData,
-        scholarData,
-      ] = await Promise.all([
-        getProject(projectId),
-        getDocuments(projectId).catch(() => []),
-        getVerrous(projectId).catch(() => []),
-        getArticles(projectId).catch(() => []),
-        getDiagnosticLatest(projectId).catch(() => null),
-        getScholarLatest(projectId).catch(() => null),
-      ])
-
-      setProject(projectData)
-      setDocuments(documentsData)
-      setVerrous(verrousData)
-      setArticles(articlesData)
-      setDiagnosticLatest(diagnosticData)
-      setScholarLatest(scholarData)
+      const selected = projects.find((item) => item.id === projectId) || null
+      setProject(selected)
+      setOverview(overviews.find((item) => item.project.id === projectId) || null)
+      setDocuments(await getDocuments(projectId).catch(() => []))
     } catch (err) {
       setError(
         err instanceof Error
@@ -384,9 +325,9 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="mx-auto max-w-7xl space-y-6 p-5 sm:p-7 lg:p-9">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="ennoma-page-header flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
           <Button variant="ghost" size="sm" onClick={() => navigateTo("projects")}>
             <ArrowLeft className="size-4 mr-2" />
@@ -461,7 +402,7 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">Verrous</p>
             <p className="text-2xl font-bold text-brand mt-1">
-              {verrous.length}
+              {overview?.diagnostic.verrous.count || 0}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               {stats.pertinent} pertinents · {stats.moyen} moyens
@@ -511,7 +452,7 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
             <div className="grid grid-cols-3 gap-3">
               <div className="p-3 rounded-md bg-white border border-border text-center">
                 <p className="text-xs text-muted-foreground">Verrous</p>
-                <p className="text-xl font-bold text-foreground">{verrous.length}</p>
+                <p className="text-xl font-bold text-foreground">{overview?.diagnostic.verrous.count || 0}</p>
               </div>
 
               <div className="p-3 rounded-md bg-white border border-border text-center">
@@ -580,7 +521,7 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
             <div className="grid grid-cols-3 gap-3">
               <div className="p-3 rounded-md bg-white border border-border text-center">
                 <p className="text-xs text-muted-foreground">Articles</p>
-                <p className="text-xl font-bold text-foreground">{articles.length}</p>
+                <p className="text-xl font-bold text-foreground">{overview?.scholar.articles.count || 0}</p>
               </div>
 
               <div className="p-3 rounded-md bg-white border border-border text-center">

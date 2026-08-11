@@ -74,6 +74,24 @@ def _load_config() -> Dict[str, str]:
             except Exception:
                 continue
 
+    # Les réglages non secrets publiés depuis l'interface superadmin prennent
+    # effet sans modifier le .env. Les variables du processus gardent la
+    # priorité finale afin de respecter les contraintes de déploiement.
+    runtime_settings = root / "config" / "runtime_ai_settings.json"
+    try:
+        if runtime_settings.exists():
+            payload = json.loads(runtime_settings.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                for key, value in payload.items():
+                    if str(key).startswith("ENNOSMART_") or str(key) in {
+                        "OPENAI_FALLBACK_MODELS",
+                        "OPENROUTER_MODEL",
+                        "OPENROUTER_FALLBACK_MODELS",
+                    }:
+                        merged[str(key)] = str(value)
+    except Exception:
+        pass
+
     # Les variables du processus gardent la priorité pour les tests et déploiements.
     merged.update({str(k): str(v) for k, v in os.environ.items()})
     _CONFIG = merged
@@ -146,6 +164,29 @@ def _clean_api_key(value: Any) -> str:
     if key.lower().startswith("bearer "):
         key = key[7:].strip()
     return key
+
+
+def _retry_after_seconds(response: Any) -> Optional[float]:
+    """Lit Retry-After ou le délai annoncé dans le corps OpenAI."""
+    header = str(getattr(response, "headers", {}).get("Retry-After") or "").strip()
+    try:
+        if header:
+            return max(0.0, float(header))
+    except (TypeError, ValueError):
+        pass
+    text = str(getattr(response, "text", "") or "")
+    for pattern in (
+        r"please\s+try\s+again\s+in\s+([0-9]+(?:\.[0-9]+)?)\s*s",
+        r"try\s+again\s+in\s+([0-9]+(?:\.[0-9]+)?)\s*seconds?",
+        r"retry[-_\s]*after[^0-9]*([0-9]+(?:\.[0-9]+)?)",
+    ):
+        match = re.search(pattern, text, flags=re.I)
+        if match:
+            try:
+                return max(0.0, float(match.group(1)))
+            except (TypeError, ValueError):
+                continue
+    return None
 
 
 class LLMClient:
@@ -438,6 +479,18 @@ class LLMClient:
     ) -> str:
         if not str(prompt or "").strip():
             return ""
+
+        # Garde-fous globaux pilotables par le superadmin. Le plafond ne peut
+        # que réduire une demande d'agent, jamais l'augmenter implicitement.
+        runtime_temperature = _env("ENNOSMART_LLM_DEFAULT_TEMPERATURE")
+        if runtime_temperature:
+            try:
+                temperature = min(2.0, max(0.0, float(runtime_temperature)))
+            except (TypeError, ValueError):
+                pass
+        output_cap = _env_int("ENNOSMART_LLM_MAX_OUTPUT_TOKENS_CAP", 0, 0)
+        if output_cap:
+            max_output_tokens = min(int(max_output_tokens), output_cap)
 
         schema = dict(response_schema) if isinstance(response_schema, Mapping) else None
         json_mode = bool(json_mode or schema)
@@ -1021,7 +1074,15 @@ class LLMClient:
         label: str,
     ) -> Dict[str, Any]:
         last_error: Optional[Exception] = None
-        attempts = max(1, int(retries) + 1)
+        requested_attempts = max(1, int(retries) + 1)
+        openai_request = str(label or "").casefold().startswith("openai")
+        rate_limit_retries = (
+            _env_int("ENNOSMART_OPENAI_429_MAX_RETRIES", 4, 0)
+            if openai_request
+            else 0
+        )
+        attempts = max(requested_attempts, rate_limit_retries + 1)
+        rate_limit_attempt = 0
         for attempt in range(attempts):
             try:
                 response = requests.post(
@@ -1030,18 +1091,57 @@ class LLMClient:
                     json=payload,
                     timeout=(self.connect_timeout, self.read_timeout),
                 )
+                if response.status_code == 429 and openai_request:
+                    last_error = RuntimeError(
+                        f"HTTP 429: {response.text[:1600]}"
+                    )
+                    if attempt + 1 >= attempts:
+                        break
+                    provider_delay = _retry_after_seconds(response)
+                    exponential_delay = min(
+                        _env_float(
+                            "ENNOSMART_OPENAI_429_MAX_DELAY_SECONDS", 90.0
+                        ),
+                        2.0 ** rate_limit_attempt,
+                    )
+                    delay = max(
+                        provider_delay or 0.0,
+                        exponential_delay,
+                    ) + _env_float(
+                        "ENNOSMART_OPENAI_429_RETRY_BUFFER_SECONDS", 1.5
+                    )
+                    rate_limit_attempt += 1
+                    print(
+                        f"[LLM-RATE][429] label={label} "
+                        f"attempt={attempt + 1}/{attempts} "
+                        f"retry_after={provider_delay if provider_delay is not None else 'unknown'} "
+                        f"sleep={delay:.2f}s",
+                        flush=True,
+                    )
+                    time.sleep(delay)
+                    continue
                 if response.status_code != 200:
-                    raise RuntimeError(
+                    error = RuntimeError(
                         f"HTTP {response.status_code}: {response.text[:1600]}"
                     )
+                    if (
+                        response.status_code >= 500
+                        and attempt + 1 < requested_attempts
+                    ):
+                        last_error = error
+                        time.sleep(min(4.0, 1.0 * (attempt + 1)))
+                        continue
+                    raise error
                 data = response.json()
                 if not isinstance(data, dict):
                     raise RuntimeError("Réponse JSON fournisseur invalide.")
                 return data
             except Exception as exc:
                 last_error = exc
-                if attempt + 1 < attempts:
+                if attempt + 1 < requested_attempts:
                     time.sleep(min(4.0, 1.0 * (attempt + 1)))
+                    continue
+                break
         raise RuntimeError(f"{label}: {last_error}")
 
 
@@ -1050,3 +1150,11 @@ GeminiClient = LLMClient
 GeminiLLM = LLMClient
 OpenRouterClient = LLMClient
 OpenAIClient = LLMClient
+
+# BEGIN ENNOSMART_BUDGET_LOGGING_V1
+try:
+    from modules.LLM.usage_budget import install_llm_budget_hooks
+    install_llm_budget_hooks(LLMClient)
+except Exception as _budget_error:
+    print(f"[BUDGET][WARN] Hook non installé: {_budget_error}", flush=True)
+# END ENNOSMART_BUDGET_LOGGING_V1

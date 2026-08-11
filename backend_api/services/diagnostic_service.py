@@ -370,9 +370,30 @@ def diagnostic_paths(project: Project) -> Dict[str, Path]:
     }
 
 
-def read_diagnostic_bundle(project: Project) -> Dict[str, Any]:
+def read_diagnostic_bundle(project: Project, *, compact: bool = False) -> Dict[str, Any]:
     paths = diagnostic_paths(project)
     existing_reports = [str(p) for p in _report_candidates(project, paths["output_dir"]) if p.exists() and p.is_file()]
+
+    if compact:
+        # La vue React est reconstruite depuis le rapport officiel. Charger ici
+        # nlp_result/chunks/comparaisons (plusieurs dizaines de Mo) ne change pas
+        # l'affichage et bloquait inutilement chaque ouverture de page.
+        return sanitize_json_value({
+            "output_dir": str(paths["output_dir"]),
+            "report": load_json_file(paths["report"]),
+            "report_path_used": str(paths["report"]) if paths["report"].exists() else None,
+            "report_candidates_found": existing_reports,
+            "nlp_path_used": str(paths["nlp_result"]) if paths["nlp_result"].exists() else None,
+            "rag_chunks_path": str(paths["rag_chunks"]) if paths["rag_chunks"].exists() else None,
+            "files_found": {
+                "report": paths["report"].exists(),
+                "nlp_result": paths["nlp_result"].exists(),
+                "rag_chunks": paths["rag_chunks"].exists(),
+                "selected_verrous": paths["selected_verrous"].exists(),
+                "comparison_cir_vs_raw": paths["comparison_cir_vs_raw"].exists(),
+                "rag_report": paths["rag_report"].exists(),
+            },
+        })
 
     return sanitize_json_value({
         "output_dir": str(paths["output_dir"]),
@@ -453,6 +474,25 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
 
     if not documents:
         raise RuntimeError("Aucun texte exploitable extrait des documents bruts.")
+
+    # V7 - conserver le texte complet extrait avant la réduction NLP.
+    # Le chat RAG utilise ce corpus documentaire complet comme preuve primaire.
+    try:
+        from modules.RAG.full_document_corpus import persist_full_documents_for_chat
+        full_document_corpus_report = persist_full_documents_for_chat(
+            store=ps,
+            documents=documents,
+        )
+        print(
+            "[prepare-sources][fulltext] Corpus complet : "
+            f"documents={full_document_corpus_report.get('documents_count')}, "
+            f"chars={full_document_corpus_report.get('total_chars')}",
+            flush=True,
+        )
+    except Exception as exc:
+        # Le diagnostic principal reste disponible même si ce corpus auxiliaire
+        # ne peut pas être écrit.
+        print(f"[prepare-sources][fulltext] WARNING: {exc}", flush=True)
 
     documents_loaded_count = len(documents)
     print(

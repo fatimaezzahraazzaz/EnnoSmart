@@ -22,6 +22,9 @@ def get_current_scholar_run(
     return (
         db.query(ScholarRun)
         .filter(ScholarRun.project_id == project.id)
+        # Les recherches d'EnnoAmelioration appartiennent à une conversation,
+        # jamais au corpus canonique d'EnnoScholar du projet du tableau de bord.
+        .filter(ScholarRun.status != "improvement_corpus")
         .order_by(ScholarRun.created_at.desc(), ScholarRun.id.desc())
         .first()
     )

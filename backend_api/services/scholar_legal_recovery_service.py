@@ -80,6 +80,17 @@ def _project_ennoscholar_dir(project: Project) -> Path:
     )
 
 
+def _verified_legal_pdf_path(project: Project, article: Article) -> Path:
+    """Chemin de la copie légale, uniquement après vérification d'identité."""
+
+    return (
+        _project_ennoscholar_dir(project)
+        / "fulltext"
+        / "legal_pdf"
+        / f"article_{int(article.id)}_{_slug(article.title, 60)}.pdf"
+    )
+
+
 def _article_prefix(article: Article) -> str:
     return f"article_{article.id}_{_slug(article.title or 'article', 60)}"
 
@@ -577,6 +588,12 @@ def recover_legal_fulltext_for_article(
 
         attempt["status"] = "accepted_verified_fulltext"
         candidate_attempts.append(attempt)
+        # La copie n'est conservée qu'après les contrôles ``verified_pdf`` et
+        # ``same_article`` ci-dessus. Elle permet ensuite d'extraire les
+        # figures originales sans refaire une recherche ni une analyse vision.
+        local_pdf_path = _verified_legal_pdf_path(project, article)
+        local_pdf_path.parent.mkdir(parents=True, exist_ok=True)
+        local_pdf_path.write_bytes(content)
         result: Dict[str, Any] = {
             **extraction,
             "ok": True,
@@ -621,8 +638,9 @@ def recover_legal_fulltext_for_article(
             "fulltext_final_url": remote_info.get("final_url") or url,
             "remote_bytes_read": remote_info.get("content_bytes"),
             "remote_sha256": remote_info.get("remote_sha256") or hashlib.sha256(content).hexdigest(),
-            "storage_mode": "json_only_remote_source_not_saved",
-            "saved_pdf": False,
+            "storage_mode": "verified_legal_pdf_and_extracted_json",
+            "saved_pdf": True,
+            "local_pdf_path": str(local_pdf_path),
             "needs_legal_recovery": False,
             "needs_consultant_upload": False,
             "retry_recommended": False,

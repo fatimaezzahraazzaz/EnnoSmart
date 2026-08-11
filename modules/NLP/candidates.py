@@ -269,7 +269,7 @@ def make_candidates(
 # L'API historique make_candidates reste intégralement disponible.
 # ============================================================================
 
-VERSION = "lock_candidates_v178_domain_neutral_structuring_seeds"
+VERSION = "lock_candidates_v185_fastjudge_signal_project_seed_gate"
 
 SUPPORTING_ROLES = {
     "objectif", "methode", "parametre", "resultat", "limite",
@@ -343,78 +343,51 @@ def classify_candidate(
     direct_threshold: float = 0.60,
     evidence_threshold: float = 0.38,
 ) -> CandidateDecision:
-    """Distingue strictement une graine de verrou d'une preuve de support.
+    """Sépare une graine de verrou des preuves de support.
 
-    Une simple mention de validation ouverte ne crée plus un verrou. Elle ne
-    devient une graine que si le texte exprime explicitement une question non
-    résolue et si le score du détecteur est suffisamment élevé.
+    Nouvelle logique : seule une prédiction ``verrou`` du FastJudge unique peut
+    créer une graine de verrou. Les règles génériques servent uniquement à
+    qualifier/rattacher des preuves de support ; elles ne créent pas un verrou
+    supplémentaire et ne rejettent pas un verrou prédit par le modèle.
+
+    ``direct_threshold`` est conservé dans la signature pour compatibilité API,
+    mais il n'est plus utilisé pour filtrer une prédiction FastJudge ``verrou``.
     """
     features = item.get("lock_candidate_features") or {}
     if not isinstance(features, dict):
         features = {}
 
     role = _role(item)
+    original_role = str(item.get("original_model_role") or item.get("role") or "").strip().lower()
     text = _text(item)
     model_score = _float(
         item.get("lock_candidate_score")
         or item.get("verrou_score")
+        or (item.get("lock_model_scores") or {}).get("verrou")
         or (item.get("lock_model_scores") or {}).get("1")
     )
 
     active = sorted(str(name) for name, value in features.items() if bool(value))
-    strong_feature = any(bool(features.get(name)) for name in STRONG_DIRECT_FEATURES)
     explicit_unresolved = _has_explicit_unresolved_language(text)
-    open_validation = bool(features.get("open_validation"))
-    knowledge_gap = bool(features.get("knowledge_gap"))
-    routine_resolution = bool(features.get("routine_resolution"))
-    role_supports = role in SUPPORTING_ROLES
     has_content = len(text) >= 30
 
-    # Graine : une vraie inconnue explicite, un gap causal ou un compromis.
-    # Une hypothèse de calcul classée paramètre/méthode ne devient jamais une
-    # graine sur le seul signal générique ``uncertainty``.
+    # Une graine de verrou vient uniquement du FastJudge multiclasses.
+    fastjudge_verrou = bool(
+        original_role == "verrou"
+        and item.get("fastjudge_verrou_signal", item.get("lock_candidate", False))
+        and item.get("project_lock_seed", False)
+    )
+    direct = bool(has_content and fastjudge_verrou)
+
+    # Score descriptif/ranking uniquement, pas une probabilité calibrée.
     direct_score = model_score
-    if strong_feature:
-        direct_score += 0.12
-    if explicit_unresolved:
-        direct_score += 0.10
     if bool(features.get("technical")):
         direct_score += 0.03
-    if knowledge_gap or bool(features.get("tradeoff")):
-        direct_score += 0.05
+    if explicit_unresolved:
+        direct_score += 0.04
 
-    explicit_lock = bool(item.get("lock_candidate_explicit")) or role == "verrou"
-    causal_or_tradeoff = bool(features.get("causal_gap") or features.get("tradeoff"))
-    uncertainty_seed = bool(features.get("uncertainty")) and role in SEED_FRIENDLY_ROLES
-    method_parameter_seed = bool(
-        role in METHOD_PARAMETER_ROLES
-        and explicit_unresolved
-        and (open_validation or causal_or_tradeoff or knowledge_gap)
-        and bool(features.get("technical"))
-        and model_score >= 0.46
-    )
-
-    structuring_signal = any(bool(features.get(name)) for name in STRUCTURING_FEATURES)
-    routine_only = bool(
-        routine_resolution
-        and not knowledge_gap
-        and not bool(features.get("tradeoff"))
-        and not open_validation
-    )
-
-    direct = bool(
-        has_content
-        and direct_score >= direct_threshold
-        and not routine_only
-        and (
-            explicit_lock
-            or causal_or_tradeoff
-            or uncertainty_seed
-            or method_parameter_seed
-            or (structuring_signal and explicit_unresolved and bool(features.get("technical")))
-        )
-    )
-
+    # Les autres rôles peuvent servir de preuves pour documenter le verrou.
+    role_supports = role in SUPPORTING_ROLES
     evidence_score = model_score
     if role_supports:
         evidence_score += 0.07
@@ -426,6 +399,7 @@ def classify_candidate(
         evidence_score += 0.05
     if explicit_unresolved:
         evidence_score += 0.04
+
     document_type = str(item.get("document_type") or "").lower()
     source_policy = str(item.get("source_policy") or "").lower()
     if document_type in DESIGN_SUPPORT_TYPES:
@@ -435,23 +409,15 @@ def classify_candidate(
 
     supporting = bool(
         has_content
+        and not direct
         and role_supports
         and (bool(features.get("technical")) or document_type in DESIGN_SUPPORT_TYPES)
         and evidence_score >= evidence_threshold
     )
 
     if direct:
-        if causal_or_tradeoff:
-            seed_reason = "causal_gap_or_tradeoff_seed"
-        elif method_parameter_seed:
-            seed_reason = "explicit_unresolved_method_or_parameter_seed"
-        elif strong_feature:
-            seed_reason = "role_compatible_uncertainty_seed"
-        elif bool(item.get("lock_candidate_explicit")):
-            seed_reason = "explicit_lock_seed"
-        else:
-            seed_reason = "explicit_unresolved_validation_seed"
-        reason = "seed_candidate_for_technical_lock"
+        seed_reason = "fastjudge_verrou_seed"
+        reason = "seed_candidate_from_fastjudge"
     elif supporting:
         seed_reason = "not_a_seed"
         reason = "supporting_evidence_only"
@@ -469,7 +435,6 @@ def classify_candidate(
         reason=reason,
         seed_reason=seed_reason,
     )
-
 
 def enrich_candidate(item: Mapping[str, Any]) -> Dict[str, Any]:
     output = dict(item)

@@ -39,10 +39,10 @@ except Exception:
 STATIC_SECTION_DEFINITIONS: List[Dict[str, str]] = [
     {
         "key": "lecture_frascati",
-        "title": "Analyse Frascati",
+        "title": "Étude d'éligibilité",
         "description": (
-            "Lecture du score calculé par NLP/Frascati et justification "
-            "projet-spécifique générée par le LLM à partir des preuves du dossier."
+            "Score combinant les critères Frascati et la pertinence de la démarche, "
+            "avec justification projet-spécifique à partir des preuves du dossier."
         ),
     },
     {
@@ -68,7 +68,7 @@ STATIC_SECTION_DEFINITIONS: List[Dict[str, str]] = [
     {
         "key": "demarche_detectee",
         "title": "Démarche détectée",
-        "description": "Méthodes, protocoles, essais, simulations ou analyses détectés dans les sources.",
+        "description": "Méthodes détectées et contrôle de leur nécessité face aux incertitudes du projet.",
     },
     {
         "key": "resultats_metriques",
@@ -389,7 +389,10 @@ _SECTION_INSTRUCTIONS = {
     ),
     "demarche_detectee": (
         "Organise les travaux dans l'ordre logique sous forme de démarches numérotées. "
-        "Chaque démarche doit expliquer l'objectif de l'étape, la méthode appliquée et ce qu'elle cherche à vérifier."
+        "Chaque démarche doit expliquer l'objectif de l'étape, la méthode appliquée et ce qu'elle cherche à vérifier. "
+        "Ne considère jamais le nombre d'étapes comme une preuve de R&D. Distingue une étape de recherche justifiée "
+        "d'une procédure d'ingénierie courante ou sans lien causal explicite. Si l'audit signale un raccourci possible, "
+        "vérifie si les preuves expliquent pourquoi la solution finale ne pouvait pas être choisie dès le départ."
     ),
     "resultats_metriques": (
         "Rédige des paragraphes thématiques distinguant résultats chiffrés, observations qualitatives et portée limitée. "
@@ -497,8 +500,12 @@ def _compact_frascati_for_prompt(summary: Dict[str, Any]) -> Dict[str, Any]:
             "technical_scope": raw.get("technical_scope"),
         })
     audit = value.get("rag_audit") if isinstance(value.get("rag_audit"), dict) else {}
+    demarche = value.get("demarche_legibility") if isinstance(value.get("demarche_legibility"), dict) else {}
     return {
         "average_frascati_score": value.get("average_frascati_score"),
+        "eligibility_assessment_score": value.get("eligibility_assessment_score"),
+        "eligibility_recommendation": value.get("eligibility_recommendation"),
+        "recommendation_label": value.get("recommendation_label"),
         "scores_count": value.get("scores_count"),
         "main_groups_scores_count": value.get("main_groups_scores_count"),
         "main_groups_average_frascati_score": value.get("main_groups_average_frascati_score"),
@@ -507,6 +514,24 @@ def _compact_frascati_for_prompt(summary: Dict[str, Any]) -> Dict[str, Any]:
         "decisions_count": value.get("decisions_count"),
         "candidate_levels_count": value.get("candidate_levels_count"),
         "group_assessments": groups,
+        "demarche_legibility": {
+            key: demarche.get(key)
+            for key in (
+                "label",
+                "readability_score",
+                "method_steps_count",
+                "research_justified_steps_count",
+                "routine_engineering_steps_count",
+                "unexplained_steps_count",
+                "redundant_steps_count",
+                "direct_final_solution_risk",
+                "eligibility_impact",
+                "llm_review_recommended",
+                "llm_review_reasons",
+                "questions_to_ask",
+            )
+            if key in demarche
+        },
         "rag_audit": {
             "scores_count": audit.get("scores_count"),
             "average_frascati_score": audit.get("average_frascati_score"),
@@ -530,7 +555,9 @@ def build_section_context(
         "section": config.title,
         "instruction": _SECTION_INSTRUCTIONS[config.key],
         "format": _schema_for(config),
-        "frascati": _compact_frascati_for_prompt(frascati_summary) if config.key == "justification_frascati" else {},
+        "frascati": _compact_frascati_for_prompt(frascati_summary)
+        if config.key in {"justification_frascati", "demarche_detectee"}
+        else {},
     }
     base_prompt = f"""
 Tu es EnnoDiagnostic, agent d'analyse CIR. Rédige uniquement la section « {config.title} ».
@@ -1003,7 +1030,8 @@ def generate_structured_diagnostic_core(
 
 def frascati_summary_text(frascati_summary: Dict[str, Any]) -> str:
     summary = frascati_summary if isinstance(frascati_summary, dict) else {}
-    score = summary.get("average_frascati_score")
+    score = summary.get("eligibility_assessment_score")
+    documentary_coverage = summary.get("average_frascati_score")
     count = summary.get("scores_count")
     decisions = summary.get("decisions_count") if isinstance(summary.get("decisions_count"), dict) else {}
     candidate_levels = summary.get("candidate_levels_count") if isinstance(summary.get("candidate_levels_count"), dict) else {}
@@ -1012,7 +1040,15 @@ def frascati_summary_text(frascati_summary: Dict[str, Any]) -> str:
     )
     parts: List[str] = []
     if score is not None:
-        parts.append(f"Le score Frascati moyen du dossier est de {score}.")
+        parts.append(
+            f"Le score de l'étude d'éligibilité est de {score}. Il combine les cinq critères "
+            "Frascati avec la pertinence et la nécessité des étapes de la démarche."
+        )
+    if documentary_coverage is not None:
+        parts.append(
+            f"La couverture documentaire des critères Frascati, avant pondération par la démarche, "
+            f"est de {documentary_coverage}."
+        )
     if count is not None:
         parts.append(
             f"Il est calculé à partir de {count} groupe(s) technique(s) évalué(s) "
@@ -1043,6 +1079,60 @@ def frascati_summary_text(frascati_summary: Dict[str, Any]) -> str:
         "Il ne constitue ni une validation d'éligibilité CIR ni une validation définitive des verrous."
     )
     return clean_text(" ".join(parts), 1800)
+
+
+def demarche_legibility_text(frascati_summary: Dict[str, Any]) -> str:
+    """Rend le verdict deterministe lisible dans le frontend du diagnostic."""
+    summary = frascati_summary if isinstance(frascati_summary, dict) else {}
+    audit = summary.get("demarche_legibility") if isinstance(summary.get("demarche_legibility"), dict) else {}
+    if not audit:
+        return ""
+
+    labels = {
+        "clear_research_trajectory": "trajectoire de recherche clairement justifiée",
+        "routine_engineering_dominant": "ingénierie classique dominante",
+        "mixed_or_partially_justified_trajectory": "démarche mixte ou partiellement justifiée",
+        "insufficient_documentation": "documentation insuffisante pour qualifier la démarche",
+    }
+    label = labels.get(str(audit.get("label") or ""), str(audit.get("label") or "à qualifier"))
+    justified = int(audit.get("research_justified_steps_count") or 0)
+    routine = int(audit.get("routine_engineering_steps_count") or 0)
+    unexplained = int(audit.get("unexplained_steps_count") or 0)
+    redundant = int(audit.get("redundant_steps_count") or 0)
+    total = int(audit.get("method_steps_count") or 0)
+
+    parts = [
+        "Contrôle de pertinence des démarches",
+        (
+            f"Conclusion : {label}. Sur {total} étape(s) analysée(s), {justified} sont reliées "
+            f"à une incertitude, une évaluation et un apprentissage ; {routine} relèvent de "
+            f"l'ingénierie classique ; {unexplained} restent à expliquer et {redundant} paraissent redondantes."
+        ),
+    ]
+    if label == labels["routine_engineering_dominant"] and justified == 0:
+        parts.append(
+            "Décision automatique : non éligible potentiel et score d'étude d'éligibilité ramené à 0, "
+            "car aucune étape R&D justifiée n'est démontrée."
+        )
+    else:
+        parts.append(
+            "Le score d'étude d'éligibilité combine la couverture des cinq critères Frascati avec "
+            "la lisibilité causale de cette démarche ; les étapes non justifiées diminuent donc le score."
+        )
+    if audit.get("direct_final_solution_risk"):
+        parts.append(
+            "Raccourci possible : le dossier n'exclut pas encore que la solution finale aurait pu être "
+            "choisie dès le départ à partir des connaissances accessibles."
+        )
+    if audit.get("llm_review_recommended"):
+        parts.append(
+            "Le cas est ambigu : l'appel LLM déjà utilisé pour rédiger cette section approfondit les preuves, "
+            "sans appel supplémentaire et sans remplacer la validation du consultant."
+        )
+    questions = [str(value) for value in (audit.get("questions_to_ask") or []) if value]
+    if questions:
+        parts.append("Points à justifier : " + " ".join(f"{index}. {value}" for index, value in enumerate(questions[:3], 1)))
+    return clean_text("\n\n".join(parts), 3000)
 
 
 def memory_v2_usage_text(report: Optional[Dict[str, Any]]) -> str:
@@ -1214,6 +1304,15 @@ def build_final_static_diagnostic(
     sections_by_key["memoire_v2"] = memory_v2_usage_text(memory_v2_usage_report)
     sections_by_key["verrous_rnd"] = verrous_text_from_items(llm_reformulated_verrous or [])
 
+    demarche_audit = demarche_legibility_text(frascati_summary)
+    if demarche_audit:
+        generated_demarche = clean_text(sections_by_key.get("demarche_detectee"), 4200)
+        sections_by_key["demarche_detectee"] = clean_text(
+            demarche_audit
+            + ("\n\nDémarches relevées dans les preuves\n\n" + generated_demarche if generated_demarche else ""),
+            6000,
+        )
+
     for definition in STATIC_SECTION_DEFINITIONS:
         key = definition["key"]
         if not sections_by_key.get(key):
@@ -1225,6 +1324,7 @@ def build_final_static_diagnostic(
         if key in KEY_TO_TITLE
     }
     # Alias conservés pour les routes et composants historiques.
+    sections_by_title["Analyse Frascati"] = sections_by_key["lecture_frascati"]
     sections_by_title["Lecture Frascati du dossier"] = sections_by_key["lecture_frascati"]
     sections_by_title["Justification Frascati du score"] = sections_by_key["justification_frascati"]
     sections_by_title["Objectif global reformulé"] = sections_by_key["objectif_global"]

@@ -49,6 +49,9 @@ class ConsultantIntent(StrEnum):
     REMOVE_TOPIC = "remove_topic"
     CHANGE_PLAN = "change_plan"
 
+    # Ajout humain d'un verrou manquant, suivi d'une recherche scientifique.
+    ADD_VERROU_AND_SEARCH = "add_verrou_and_search"
+
     SEARCH_MORE = "search_more"
     SEARCH_ALTERNATIVE = "search_alternative"
     REPLACE_SOURCE = "replace_source"

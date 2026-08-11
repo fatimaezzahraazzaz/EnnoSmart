@@ -21,7 +21,15 @@ def get_embedding_model() -> SentenceTransformer:
     if _MODEL_CACHE is not None:
         return _MODEL_CACHE
     kwargs = {"local_files_only": True} if EMBEDDING_OFFLINE else {}
-    _MODEL_CACHE = SentenceTransformer(EMBEDDING_MODEL_NAME, **kwargs)
+    model_source = EMBEDDING_MODEL_NAME
+    if EMBEDDING_OFFLINE:
+        from huggingface_hub import snapshot_download
+
+        model_source = snapshot_download(
+            repo_id=EMBEDDING_MODEL_NAME,
+            local_files_only=True,
+        )
+    _MODEL_CACHE = SentenceTransformer(model_source, **kwargs)
     return _MODEL_CACHE
 
 

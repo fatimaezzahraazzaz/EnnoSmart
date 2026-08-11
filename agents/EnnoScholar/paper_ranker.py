@@ -720,6 +720,14 @@ def _v146_concept_hit(article_norm: str, concept: str, aliases: Dict[str, Any]) 
             continue
         if _v146_exact(article_norm, alias):
             return True
+        # Correspondance compositionnelle generique : les mots d'une
+        # expression peuvent etre separes par un qualificatif dans le titre ou
+        # le resume (par exemple A X B C au lieu de A B C). Aucun synonyme ni
+        # vocabulaire de domaine n'est ajoute.
+        alias_tokens = set(tokenize(alias))
+        article_tokens = set(tokenize(article_norm))
+        if len(alias_tokens) >= 2 and alias_tokens.issubset(article_tokens):
+            return True
     return False
 
 
@@ -783,6 +791,34 @@ def score_paper(article: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str, An
         return base
 
     roles = _v146_role_hits(article, intent)
+    article_norm = " " + norm(_article_text(article)) + " "
+    literal_source_acronyms = [
+        str(value)
+        for value in (intent.get("literal_source_acronyms") or [])
+        if str(value or "").strip()
+    ]
+    literal_source_acronym_hits = [
+        value
+        for value in literal_source_acronyms
+        if _v146_exact(article_norm, value)
+    ]
+    acronym_expansions = (
+        intent.get("acronym_expansions")
+        if isinstance(intent.get("acronym_expansions"), dict)
+        else {}
+    )
+    literal_source_identity_hits: List[str] = list(literal_source_acronym_hits)
+    for value in literal_source_acronyms:
+        expansion = clean_text(acronym_expansions.get(value), 120)
+        if (
+            value not in literal_source_acronym_hits
+            and expansion
+            and _v146_exact(article_norm, expansion)
+        ):
+            literal_source_identity_hits.append(expansion)
+    missing_literal_identity = bool(
+        literal_source_acronyms and not literal_source_identity_hits
+    )
     core_n = len(roles["core_concept_hits"])
     core_title_n = len(roles["core_title_hits"])
     primary_n = len(roles["primary_core_hits"])
@@ -836,7 +872,14 @@ def score_paper(article: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str, An
     year_bonus = min(_year_score(article.get("year")), 0.04)
     citation_bonus = min(_citation_score(article), 0.04)
 
-    if contradiction:
+    if missing_literal_identity:
+        tag = HORS_SUJET_TAG
+        score = 0.01
+        reason = (
+            "Article Hors sujet : aucune des ancres litterales repetees dans la "
+            "section source n'est presente dans la publication."
+        )
+    elif contradiction:
         tag = HORS_SUJET_TAG
         score = 0.01
         reason = "Article Hors sujet : un sens scientifique contradictoire a été détecté malgré des acronymes ou méthodes communes."
@@ -904,6 +947,10 @@ def score_paper(article: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str, An
         "project_tool_hits": roles["project_tool_hits"],
         "implementation_hits": roles["implementation_hits"],
         "domain_contradictions": roles["domain_contradictions"],
+        "literal_source_acronyms": literal_source_acronyms,
+        "literal_source_acronym_hits": literal_source_acronym_hits,
+        "literal_source_identity_hits": literal_source_identity_hits,
+        "literal_source_identity_required": bool(literal_source_acronyms),
         "core_concept_hit_count": core_n,
         "core_title_hit_count": core_title_n,
         "primary_core_hits": roles["primary_core_hits"],

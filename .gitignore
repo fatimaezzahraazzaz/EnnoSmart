@@ -149,3 +149,6 @@ modules/NLP_v1/
 modules/RAGv1/
 modules/chat/
 modules/llm_gateway/
+/tmp/
+/train/data_v2/
+/_debug/

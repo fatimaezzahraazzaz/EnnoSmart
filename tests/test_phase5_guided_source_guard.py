@@ -120,6 +120,29 @@ def test_baseline_policy_excludes_guided_research_cards() -> None:
     assert report["excluded_source_count"] == 1
 
 
+def test_legacy_hallucinated_exact_policy_recovers_current_validated_corpus() -> None:
+    cards = [
+        {"citation_label": "A1", "article_id": 1, "title": "Article 1"},
+        {"citation_label": "A2", "article_id": 2, "title": "Article 2"},
+    ]
+
+    selected, report = apply_writing_source_policy(
+        cards,
+        {
+            "writing_source_policy": {
+                "scope": "explicit_selection",
+                "source_identifiers": ["A1", "A30", "C1", "C3"],
+                "requested_source_count": 22,
+            }
+        },
+    )
+
+    assert [card["citation_label"] for card in selected] == ["A1", "A2"]
+    assert report["scope"] == "all_validated"
+    assert report["requested_source_count"] is None
+    assert report["legacy_policy_recovered"] is True
+
+
 def test_section_length_guard_uses_total_plan_size() -> None:
     body = " ".join(["Analyse scientifique étayée [A1]."] * 260)
     section = {

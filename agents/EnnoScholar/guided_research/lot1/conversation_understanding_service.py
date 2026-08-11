@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import unicodedata
 from typing import Any, Literal, Mapping, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -33,6 +34,7 @@ _SEARCH_PAYLOAD_INTENTS = {
     ConsultantIntent.SEARCH_MORE,
     ConsultantIntent.SEARCH_ALTERNATIVE,
     ConsultantIntent.REPLACE_SOURCE,
+    ConsultantIntent.ADD_VERROU_AND_SEARCH,
 }
 _WRITING_INTENTS = {
     ConsultantIntent.START_WRITING,
@@ -45,6 +47,7 @@ _SUPPORTED_TURN_INTENTS = {
     ConsultantIntent.ADD_TOPIC,
     ConsultantIntent.REMOVE_TOPIC,
     ConsultantIntent.CHANGE_PLAN,
+    ConsultantIntent.ADD_VERROU_AND_SEARCH,
     ConsultantIntent.SEARCH_MORE,
     ConsultantIntent.SEARCH_ALTERNATIVE,
     ConsultantIntent.REPLACE_SOURCE,
@@ -117,6 +120,28 @@ class _SearchRequestPayload(BaseModel):
     source_preferences: list[str] = Field(default_factory=list)
 
 
+class _ConsultantVerrouPayload(BaseModel):
+    """Verrou manquant déclaré explicitement par le consultant."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    title: str = Field(min_length=5, max_length=1200)
+    justification: str = Field(default="", max_length=4000)
+    supporting_context: str = Field(default="", max_length=8000)
+    source_document_ids: list[int] = Field(default_factory=list)
+    force_create_distinct: bool = False
+
+
+class _StandaloneProjectBriefPayload(BaseModel):
+    """Contexte déclaré par le consultant lorsqu'Agent 1 n'a pas été exécuté."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    project_name: str = Field(default="", max_length=500)
+    domain: str = Field(default="", max_length=1000)
+    objective: str = Field(default="", max_length=5000)
+    additional_context: str = Field(default="", max_length=8000)
+
 class _ActionPayload(BaseModel):
     """Arguments d'action produits seulement après sélection d'une capacité."""
 
@@ -125,6 +150,9 @@ class _ActionPayload(BaseModel):
     plan: list[dict[str, Any]] = Field(default_factory=list)
     topics: list[dict[str, Any]] = Field(default_factory=list)
     constraints: list[str] = Field(default_factory=list)
+    verrous: list[_ConsultantVerrouPayload] = Field(default_factory=list)
+    project_brief: _StandaloneProjectBriefPayload | None = None
+    review_scope: Literal["auto", "per_verrou", "global"] = "auto"
     search_requests: list[_SearchRequestPayload] = Field(default_factory=list)
 
 
@@ -205,10 +233,41 @@ def _compact_project_context(value: Mapping[str, Any]) -> dict[str, Any]:
         for history in selected_history
         if _compact_plan_snapshot(history.get("plan"))
     ]
+
+    current_verrous: list[dict[str, Any]] = []
+    for raw_verrou in value.get("current_verrous") or []:
+        if not isinstance(raw_verrou, Mapping):
+            continue
+        title = _clean(raw_verrou.get("title"), 700)
+        if not title:
+            continue
+        current_verrous.append({
+            "id": raw_verrou.get("id"),
+            "title": title,
+            "consultant_status": _clean(
+                raw_verrou.get("consultant_status"), 80
+            ),
+            "score": raw_verrou.get("score"),
+            "tag_cir": raw_verrou.get("tag_cir"),
+            "origin": _clean(raw_verrou.get("origin"), 120),
+            "supplementary_verrou": bool(
+                raw_verrou.get("supplementary_verrou")
+            ),
+        })
+        if len(current_verrous) >= 30:
+            break
+
     return {
         "project": project_row,
         "scientific_context": _clean(value.get("scientific_context"), 4200),
         "validated_article_cards": cards,
+        "current_verrous": current_verrous,
+        "operating_mode": _clean(value.get("operating_mode"), 80),
+        "standalone_project_brief": (
+            dict(value.get("standalone_project_brief") or {})
+            if isinstance(value.get("standalone_project_brief"), Mapping)
+            else {}
+        ),
         "previous_project_memories": previous_memories,
         "plan_history": plan_history,
         "writing_source_policy": (
@@ -500,6 +559,113 @@ def _normalize_turn_decision(decision: _TurnDecision) -> _TurnDecision:
     return decision
 
 
+def _ground_writing_source_policy(
+    consultant_message: str,
+    classification: IntentClassification,
+) -> IntentClassification:
+    """Ancre la portée du corpus dans le seul message consultant courant.
+
+    La mémoire contient volontairement les décisions historiques, mais elle ne
+    doit jamais transformer d'anciennes références A/C en sélection exacte pour
+    une nouvelle rédaction. Un nombre n'est contraignant que s'il est écrit à
+    côté de « source », « article » ou « publication » dans le tour courant.
+    """
+
+    normalized = unicodedata.normalize(
+        "NFKD", _clean(consultant_message, 12000).casefold()
+    )
+    normalized = "".join(
+        char for char in normalized if not unicodedata.combining(char)
+    )
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+
+    literal_identifiers: list[str] = []
+    seen: set[str] = set()
+    for match in re.finditer(
+        r"(?<![a-z0-9-])(?:[ac]\s*\d{1,4}|(?:src|web)-[a-z0-9]+)(?![a-z0-9-])",
+        normalized,
+        flags=re.I,
+    ):
+        value = re.sub(r"\s+", "", match.group(0)).upper()
+        if value not in seen:
+            seen.add(value)
+            literal_identifiers.append(value)
+
+    count_match = re.search(
+        r"(?<!\d)(\d{1,3})\s+(?:articles?|sources?|publications?)\b",
+        normalized,
+    )
+    explicit_count = int(count_match.group(1)) if count_match else None
+
+    source_language = bool(
+        re.search(r"\b(?:articles?|sources?|publications?|corpus)\b", normalized)
+    )
+    baseline_requested = source_language and any(
+        marker in normalized
+        for marker in (
+            "articles initiaux",
+            "sources initiales",
+            "corpus initial",
+            "corpus de base",
+            "sans les articles de recherche",
+            "sans les sources de recherche",
+            "hors recherche complementaire",
+        )
+    )
+    additions_requested = source_language and any(
+        marker in normalized
+        for marker in (
+            "articles ajoutes par la recherche",
+            "sources ajoutees par la recherche",
+            "recherche complementaire uniquement",
+            "nouveaux articles uniquement",
+            "nouvelles sources uniquement",
+        )
+    )
+    validated_corpus_requested = source_language and any(
+        marker in normalized
+        for marker in (
+            "articles selectionnes",
+            "sources selectionnees",
+            "articles valides",
+            "sources validees",
+            "articles retenus",
+            "sources retenues",
+            "corpus valide",
+            "corpus actuel",
+            "sources actuelles",
+            "articles actuels",
+        )
+    )
+
+    if literal_identifiers:
+        classification.writing_source_scope = "explicit_selection"
+        classification.writing_source_identifiers = literal_identifiers
+        classification.requested_source_count = explicit_count
+    elif baseline_requested:
+        classification.writing_source_scope = "baseline_verrou_corpus"
+        classification.writing_source_identifiers = []
+        classification.requested_source_count = explicit_count
+    elif additions_requested:
+        classification.writing_source_scope = "guided_research_additions"
+        classification.writing_source_identifiers = []
+        classification.requested_source_count = explicit_count
+    elif validated_corpus_requested:
+        classification.writing_source_scope = "all_validated"
+        classification.writing_source_identifiers = []
+        classification.requested_source_count = explicit_count
+    elif classification.writing_source_scope != "unspecified":
+        # Une politique non prouvée par le tour courant provient nécessairement
+        # du contexte ou d'une extrapolation du modèle : elle n'est pas retenue.
+        classification.writing_source_scope = "unspecified"
+        classification.writing_source_identifiers = []
+        classification.requested_source_count = None
+
+    if classification.writing_source_scope != "unspecified":
+        classification.use_current_sources_only = True
+    return classification
+
+
 def _decision_consistency_error(decision: _TurnDecision) -> str:
     """Ne bloque que les contradictions réellement dangereuses."""
     decision = _normalize_turn_decision(decision)
@@ -527,29 +693,56 @@ def _payload_consistency_error(
     intent: ConsultantIntent,
     payload: _ActionPayload,
     *,
+    allow_standalone_context: bool = False,
     reference_plan: list[dict[str, Any]] | None = None,
     require_reference_coverage: bool = False,
     require_distinct_from_current: bool = False,
     current_plan: list[dict[str, Any]] | None = None,
 ) -> str:
+    is_add_verrou = intent == ConsultantIntent.ADD_VERROU_AND_SEARCH
+
     if intent in _PLAN_PAYLOAD_INTENTS - {
         ConsultantIntent.DESCRIBE_REQUIREMENTS
-    } and (payload.topics or payload.constraints or payload.search_requests):
+    } and (
+        payload.topics
+        or payload.constraints
+        or payload.verrous
+        or payload.project_brief
+        or payload.search_requests
+    ):
         return "Une action de plan ne peut contenir aucun autre payload métier."
+
+    standalone_context_declaration = bool(
+        intent == ConsultantIntent.DESCRIBE_REQUIREMENTS
+        and allow_standalone_context
+        and (payload.verrous or payload.project_brief)
+    )
     if (
         intent == ConsultantIntent.DESCRIBE_REQUIREMENTS
         and not payload.topics
         and not payload.constraints
+        and not standalone_context_declaration
     ):
         return (
             "DESCRIBE_REQUIREMENTS exige au moins un sujet ou une contrainte "
-            "explicitement formulée."
+            "explicitement formulée, ou un contexte projet autonome explicite."
         )
     if (
         intent == ConsultantIntent.DESCRIBE_REQUIREMENTS
-        and (payload.plan or payload.search_requests)
+        and (
+            payload.plan
+            or payload.search_requests
+            or (
+                not allow_standalone_context
+                and (payload.verrous or payload.project_brief)
+            )
+        )
     ):
-        return "Une exigence ne peut contenir ni plan ni recherche."
+        return (
+            "Une exigence ne peut contenir ni plan ni recherche. Le contexte "
+            "projet et les verrous sans recherche sont réservés au mode autonome."
+        )
+
     if intent in {
         ConsultantIntent.PROPOSE_PLAN,
         ConsultantIntent.ADD_TOPIC,
@@ -557,12 +750,14 @@ def _payload_consistency_error(
         ConsultantIntent.CHANGE_PLAN,
     } and not payload.plan:
         return "L'action de plan sélectionnée exige un tableau plan non vide."
+
     if payload.plan and any(
         not _clean(row.get("title"), 400)
         for row in payload.plan
         if isinstance(row, Mapping)
     ):
         return "Chaque section du plan exige un titre non vide."
+
     if (
         require_reference_coverage
         and reference_plan
@@ -572,6 +767,7 @@ def _payload_consistency_error(
             "Le plan final doit conserver la structure de la version référencée "
             "et lui appliquer uniquement la modification demandée."
         )
+
     if (
         require_distinct_from_current
         and current_plan
@@ -581,23 +777,85 @@ def _payload_consistency_error(
             "Le consultant demande une autre proposition : l'organisation, "
             "la hiérarchie ou les axes doivent réellement changer."
         )
+
     if payload.topics and any(
         not _clean(row.get("name") or row.get("topic"), 400)
         for row in payload.topics
         if isinstance(row, Mapping)
     ):
         return "Chaque sujet exige un nom non vide."
+
+    if is_add_verrou:
+        if not 1 <= len(payload.verrous) <= 10:
+            return (
+                "ADD_VERROU_AND_SEARCH exige entre un et dix verrous explicites."
+            )
+        if any(not _clean(verrou.title, 1200) for verrou in payload.verrous):
+            return "Le verrou ajouté exige un titre non vide."
+        if payload.plan or payload.topics or payload.constraints:
+            return (
+                "L'ajout d'un verrou ne peut pas modifier silencieusement le plan "
+                "ou les exigences dans la même action."
+            )
+        if not payload.search_requests:
+            return (
+                "ADD_VERROU_AND_SEARCH exige des requêtes scientifiques pour le "
+                "verrou déclaré."
+            )
+    elif payload.verrous and not standalone_context_declaration:
+        return (
+            "Le payload verrous est réservé à ADD_VERROU_AND_SEARCH. "
+            "ADD_TOPIC ne crée qu'une section du plan."
+        )
+
+    if (
+        payload.project_brief
+        and intent != ConsultantIntent.ADD_VERROU_AND_SEARCH
+        and not standalone_context_declaration
+    ):
+        return (
+            "Le contexte projet autonome est réservé à la déclaration de verrous "
+            "quand la recherche doit être initialisée depuis le chat."
+        )
+
     if intent in _SEARCH_PAYLOAD_INTENTS and not payload.search_requests:
         return "L'action de recherche sélectionnée exige search_requests non vide."
+
+    if intent in _SEARCH_PAYLOAD_INTENTS and payload.search_requests:
+        overloaded_queries = [
+            request.query
+            for request in payload.search_requests
+            if len(re.findall(r"[A-Za-z0-9+#./-]+", request.query)) > 12
+        ]
+        if overloaded_queries:
+            return (
+                "Chaque requête scientifique doit rester concise (douze mots "
+                "significatifs au maximum). Répartis les concepts entre "
+                "plusieurs requêtes complémentaires."
+            )
+        multidimensional = any(
+            len(request.target_context_dimensions) >= 2
+            or len(request.requested_dimensions) >= 3
+            for request in payload.search_requests
+        )
+        if multidimensional and len(payload.search_requests) < 3:
+            return (
+                "Une recherche scientifique multidimensionnelle exige au moins "
+                "trois requêtes complémentaires et concises, au lieu d'une "
+                "requête unique qui concatène tous les concepts."
+            )
+
     if intent in _SEARCH_PAYLOAD_INTENTS and (
         payload.plan or payload.topics or payload.constraints
     ):
         return "Une recherche ne peut contenir aucun autre payload métier."
+
     if payload.search_requests and any(
         not _clean(row.query, 1000)
         for row in payload.search_requests
     ):
         return "Chaque recherche exige une requête non vide."
+
     if any(
         row.query_kind == "direct_scientific_evidence"
         and not row.require_direct_evidence
@@ -608,7 +866,6 @@ def _payload_consistency_error(
             "require_direct_evidence=true."
         )
     return ""
-
 
 def _plan_covers_reference(
     candidate: list[dict[str, Any]],
@@ -793,6 +1050,10 @@ SÉMANTIQUE DE DÉCISION
   demande d'action projet. requested_actions doit être vide et aucun effet projet
   ne doit être annoncé.
 - DESCRIBE_REQUIREMENTS : le consultant établit une exigence durable du livrable.
+  En operating_mode=standalone_chat, cette capacité enregistre aussi le nom du
+  projet, son domaine, son objectif et les verrous explicitement déclarés lorsque
+  le consultant demande de conserver ce contexte sans lancer de recherche ni de
+  rédaction. Ce tour n'est alors ni UNKNOWN ni ADD_VERROU_AND_SEARCH.
 - PROPOSE_PLAN : demande d'un premier plan complet ou d'une nouvelle proposition
   alternative. Le plan est recréé depuis le corpus et l'histoire scientifique.
 - ADD_TOPIC : ajout explicite d'une ou plusieurs sections/sous-sections sans
@@ -801,6 +1062,19 @@ SÉMANTIQUE DE DÉCISION
 - CHANGE_PLAN : réécriture, réorganisation ou modification d'une partie existante.
 - SEARCH_MORE, SEARCH_ALTERNATIVE, REPLACE_SOURCE : recherche réelle de sources.
   SEARCH_ALTERNATIVE concerne uniquement les sources, jamais un autre plan.
+- ADD_VERROU_AND_SEARCH : le consultant affirme explicitement qu'un verrou
+  scientifique ou technologique manque au projet, demande de l'ajouter et souhaite
+  rechercher des publications liées. C'est une action atomique : ne la sépare jamais
+  en ADD_TOPIC puis SEARCH_MORE. Dans operating_mode=standalone_chat, utilise aussi
+  cette capacité lorsqu'il demande de rechercher ou rédiger un état de l'art sur un
+  ou plusieurs verrous qu'il déclare lui-même : le serveur les conservera dans la
+  conversation sans créer de faux diagnostic. Une simple demande de section reste
+  ADD_TOPIC.
+- En standalone_chat, lorsqu'un verrou figure déjà dans current_verrous et que le
+  consultant demande de rechercher « sur ce verrou », « sur le verrou enregistré »
+  ou sur son identifiant/titre, choisis SEARCH_MORE. Ne recrée pas le verrou et ne
+  réannonce pas l'enregistrement du contexte. ADD_VERROU_AND_SEARCH reste réservé à
+  un verrou nouveau explicitement déclaré dans le tour actuel.
 - EXPLAIN_SOURCE : explication sans nouvelle recherche.
 - ACCEPT_PLAN, START_WRITING, REVISE_DRAFT et CANCEL : actions portant exactement
   leur nom. L'acceptation de sources et de brouillons exige leurs contrôles dédiés
@@ -819,6 +1093,12 @@ RÈGLES
   différées jusqu'à une validation intermédiaire, et assistant_message le dit clairement.
   Une mention, une hypothèse, une négation ou une action future n'en fait pas partie ;
   place les actions interdites dans forbidden_actions.
+- En mode standalone_chat, une demande « écris/rédige l'état de l'art du verrou X »
+  nécessite d'abord ADD_VERROU_AND_SEARCH si aucune source validée ni aucun verrou de
+  session n'existe. Si la rédaction est explicitement demandée, ajoute START_WRITING
+  après ADD_VERROU_AND_SEARCH dans requested_actions ; elle restera différée jusqu'à
+  la validation des sources. Pour plusieurs verrous ou « tous les verrous », la portée
+  de revue est globale. Pour un seul verrou nommé, elle est per_verrou.
 - explicit_write_command, explicit_plan_approval et explicit_research_command ne valent
   true que si le tour actuel autorise réellement l'action correspondante.
 - replace_current_plan indique que le plan demandé remplace la structure courante.
@@ -896,7 +1176,12 @@ INTENTION VALIDÉE
 
 Produis uniquement les arguments nécessaires à cette intention :
 - Pour DESCRIBE_REQUIREMENTS, topics et/ou constraints matérialisent précisément
-  les exigences durables du tour actuel ; plan reste vide.
+  les exigences durables du tour actuel ; plan reste vide. En
+  operating_mode=standalone_chat, si le consultant demande d'enregistrer son
+  contexte sans recherche, project_brief reprend uniquement le nom, le domaine,
+  l'objectif et le contexte explicitement fournis, et verrous reprend le ou les
+  verrous déclarés. Dans ce cas topics et constraints peuvent rester vides,
+  search_requests reste impérativement vide et aucune recherche n'est annoncée.
 - Pour PROPOSE_PLAN, crée une structure scientifique adaptée à ce projet précis :
   déduis librement le nombre de sections, leur hiérarchie et leurs objectifs des
   articles validés, de l'histoire scientifique et de la demande. Ne copie pas le
@@ -928,6 +1213,19 @@ Produis uniquement les arguments nécessaires à cette intention :
 - Chaque objet de plan contient section_id, title, objective, parent_id et level.
 - topics et constraints sont réservés à DESCRIBE_REQUIREMENTS. Pour une action
   de plan ou de recherche, ces tableaux restent vides.
+- Pour ADD_VERROU_AND_SEARCH, verrous contient un à dix objets avec title,
+  justification, supporting_context, source_document_ids et force_create_distinct.
+  source_document_ids contient uniquement des identifiants explicitement donnés.
+  force_create_distinct vaut true seulement si le consultant demande clairement de
+  créer un verrou distinct malgré un verrou proche. En operating_mode=standalone_chat,
+  project_brief contient les seuls éléments explicitement donnés : project_name,
+  domain, objective et additional_context. N'invente pas les champs absents.
+  review_scope vaut per_verrou pour un seul verrou ciblé, global pour plusieurs
+  verrous ou « tous les verrous », sinon auto. search_requests contient 2 à 8
+  recherches scientifiques couvrant les preuves favorables, les résultats contraires,
+  les limites et les conditions de validation. target_verrous reste vide pour un
+  nouveau verrou : le serveur injectera son identifiant DB ou de session après sa
+  création. plan, topics et constraints restent vides.
 - Pour une recherche, search_requests contient 2 à 5 objets avec query anglaise
   concise, entity_name, query_kind (scientific_evidence,
   direct_scientific_evidence ou official_documentation), required_terms,
@@ -939,6 +1237,11 @@ Produis uniquement les arguments nécessaires à cette intention :
   required_terms sépare les ancrages indispensables (méthode, domaine, tâche).
   Une publication qui emploie la méthode dans un domaine sans rapport ne doit
   pas être rendue pertinente par la seule présence du nom de la méthode.
+- Lorsque la demande comporte plusieurs conditions, mécanismes, types de preuve
+  ou dimensions d'évaluation, produis 3 à 5 requêtes complémentaires courtes :
+  une sur les preuves directes dans le domaine, une sur les méthodes de
+  généralisation ou d'adaptation, et une sur les protocoles, échecs ou limites.
+  Ne concatène jamais tous les axes dans une seule requête surchargée.
 - Tous les tableaux sans rapport avec l'intention restent vides.
 
 PLAN COURANT
@@ -988,6 +1291,10 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
                 consistency_check=_decision_consistency_error,
             )
             decision = _normalize_turn_decision(decision)
+            decision.classification = _ground_writing_source_policy(
+                consultant_message,
+                decision.classification,
+            )
             if decision.classification.intent in {
                 ConsultantIntent.CONVERSE,
                 ConsultantIntent.UNKNOWN,
@@ -1030,6 +1337,10 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
                     consistency_check=lambda payload: _payload_consistency_error(
                         intent,
                         payload,
+                        allow_standalone_context=(
+                            _clean(compact_context.get("operating_mode"), 80)
+                            == "standalone_chat"
+                        ),
                         reference_plan=reference_plan,
                         require_reference_coverage=(
                             decision.plan_reference
@@ -1050,6 +1361,16 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
                 plan=action.plan,
                 topics=action.topics,
                 constraints=action.constraints,
+                verrous=[
+                    verrou.model_dump(mode="json")
+                    for verrou in action.verrous
+                ],
+                project_brief=(
+                    action.project_brief.model_dump(mode="json")
+                    if action.project_brief is not None
+                    else {}
+                ),
+                review_scope=action.review_scope,
                 search_requests=[
                     request.model_dump(mode="json")
                     for request in action.search_requests
@@ -1078,4 +1399,7 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
             return None
 
 
-__all__ = ["ConversationUnderstandingService"]
+__all__ = [
+    "ConversationUnderstandingService",
+    "_ground_writing_source_policy",
+]

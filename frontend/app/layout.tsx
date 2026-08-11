@@ -1,35 +1,20 @@
-import { Analytics } from '@vercel/analytics/next'
-import type { Metadata } from 'next'
-import { Inter, Geist_Mono } from 'next/font/google'
-import './globals.css'
+import { Analytics } from "@vercel/analytics/next"
+import type { Metadata } from "next"
 
-const inter = Inter({
-  variable: '--font-inter',
-  subsets: ['latin'],
-  display: 'swap',
-})
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-})
+import "./globals.css"
 
 export const metadata: Metadata = {
-  title: 'EnnoSmart — Plateforme CIR IA',
-  description: 'Analysez et optimisez vos dossiers CIR avec l\'intelligence artificielle. Plateforme dédiée aux consultants.',
-  generator: 'v0.app',
+  title: "Ennoma — Plateforme CIR IA",
+  description: "Pilotez, analysez et améliorez vos dossiers CIR avec une plateforme multi-agents sécurisée.",
+  icons: { icon: "/ennoma-logo.png", apple: "/ennoma-logo.png" },
 }
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="fr" className={`${inter.variable} ${geistMono.variable} bg-background`}>
+    <html lang="fr" className="bg-background">
       <body className="font-sans antialiased">
         {children}
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        {process.env.NODE_ENV === "production" && <Analytics />}
       </body>
     </html>
   )

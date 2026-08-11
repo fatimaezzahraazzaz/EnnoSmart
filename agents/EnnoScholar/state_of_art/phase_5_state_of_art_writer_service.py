@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 """Phase 5 canonique — rédaction globale evidence-first.
@@ -228,6 +228,20 @@ def _env_flag(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on", "oui"}
 
 
+def _env_int(
+    name: str,
+    default: int,
+    *,
+    minimum: int,
+    maximum: int,
+) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
 def _tokens(value: Any) -> Set[str]:
     text = clean_text(value, 10000).lower()
     text = re.sub(r"[^a-z0-9à-öø-ÿ]+", " ", text)
@@ -397,6 +411,8 @@ def apply_writing_source_policy(
     raw_policy = plan_contract.get("writing_source_policy")
     policy = dict(raw_policy) if isinstance(raw_policy, Mapping) else {}
     scope = clean_text(policy.get("scope"), 80) or "all_validated"
+    policy_grounded = bool(policy.get("grounded_in_current_message"))
+    legacy_policy_recovered = False
     requested_identifiers = {
         clean_text(value, 1000).casefold()
         for value in as_list(policy.get("source_identifiers") or [])
@@ -469,6 +485,26 @@ def apply_writing_source_policy(
             {"scope": scope},
         )
 
+    if (
+        scope == "explicit_selection"
+        and not policy_grounded
+        and (
+            (requested_count is not None and len(selected) != requested_count)
+            or len(selected) != len(requested_identifiers)
+        )
+    ):
+        # Les anciennes conversations pouvaient recopier des références A/C
+        # historiques dans le contrat sans qu'elles figurent dans le message
+        # courant. Elles représentent alors une contrainte non fiable. Le
+        # corpus consultant actuellement validé reste la seule frontière sûre.
+        selected = list(cards)
+        normalized_scope = "all_validated"
+        scope = "all_validated"
+        requested_count = None
+        requested_identifiers = set()
+        require_all_selected_sources = False
+        legacy_policy_recovered = True
+
     if requested_count is not None and len(selected) != requested_count:
         raise ContractError(
             "writing_source_count_mismatch",
@@ -511,6 +547,8 @@ def apply_writing_source_policy(
         "eligible_citations": [
             card.get("citation_label") for card in selected
         ],
+        "policy_grounded_in_current_message": policy_grounded,
+        "legacy_policy_recovered": legacy_policy_recovered,
     }
     return selected, report
 
@@ -1523,17 +1561,70 @@ def _raw_extraction_fragments(value: Any) -> List[str]:
     un livrable.
     """
     fragments: List[str] = []
-    for paragraph in re.split(r"\n{1,}", clean_text(value, 500000)):
+    raw_value = clean_text(value, 500000)
+    for paragraph in re.split(r"\n{1,}", raw_value):
         paragraph = clean_sentence(paragraph, 4000)
         if not paragraph:
             continue
-        if re.search(
-            r"\b(?:page\s*)?\d{1,4}\s+of\s+\d{1,4}\b",
-            paragraph,
-            flags=re.I,
+        if (
+            re.search(
+                r"\b(?:page\s*)?\d{1,4}\s+of\s+\d{1,4}\b",
+                paragraph,
+                flags=re.I,
+            )
+            or re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", paragraph)
         ):
             fragments.append(paragraph)
     return unique(fragments)
+
+
+def _non_french_raw_fragments(value: Any) -> List[str]:
+    """Repère les extraits anglais copiés d'une Article Card.
+
+    Le contrôle s'appuie sur des mots fonctionnels génériques et sur les
+    formulations éditoriales typiques d'un article. Les noms de méthodes et le
+    vocabulaire scientifique anglais isolé ne suffisent jamais à déclencher le
+    signal.
+    """
+    english_words = {
+        "the", "this", "that", "these", "those", "with", "from", "into",
+        "where", "which", "while", "through", "using", "used", "only",
+        "also", "between", "their", "our", "we", "is", "are", "was",
+        "were", "has", "have", "can", "results", "paper", "section",
+    }
+    french_words = {
+        "le", "la", "les", "un", "une", "des", "du", "de", "dans",
+        "avec", "pour", "par", "sur", "qui", "que", "dont", "cette",
+        "ces", "est", "sont", "nous", "notre", "résultats", "section",
+    }
+    raw_markers = re.compile(
+        r"\b(?:this paper|in this (?:paper|work|part|section)|we (?:propose|"
+        r"present|demonstrate|show)|our approach|the proposed (?:method|"
+        r"approach)|section\s+\d+(?:\.\d+)*\s+(?:introduces|presents))\b",
+        flags=re.I,
+    )
+    fragments: List[str] = []
+    for paragraph in re.split(r"\n{1,}", clean_text(value, 500000)):
+        paragraph = clean_sentence(paragraph, 6000)
+        if not paragraph:
+            continue
+        words = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ']+", paragraph.casefold())
+        english_count = sum(word in english_words for word in words)
+        french_count = sum(word in french_words for word in words)
+        if raw_markers.search(paragraph) or (
+            english_count >= 8
+            and english_count >= max(8, french_count * 2)
+        ):
+            fragments.append(paragraph)
+    return unique(fragments)
+
+
+def _prompt_evidence_text(value: Any, limit: int = 850) -> str:
+    """Nettoie uniquement la copie envoyée au LLM, jamais la preuve archivée."""
+    text = clean_text(value, max(limit * 2, 2000))
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", " ", text)
+    text = re.sub(r"\b(?:page\s*)?\d{1,4}\s+of\s+\d{1,4}\b", " ", text, flags=re.I)
+    return clean_sentence(text, limit)
 
 
 def build_deterministic_unified_draft(
@@ -1661,7 +1752,7 @@ def _compact_evidence(
             for unit in rows:
                 if clean_text(unit.get("kind"), 80) != kind:
                     continue
-                text = clean_sentence(unit.get("text"), 850)
+                text = _prompt_evidence_text(unit.get("text"), 850)
                 key = text.casefold()
                 if not text or key in seen_text:
                     continue
@@ -1673,7 +1764,7 @@ def _compact_evidence(
                 break
         if len(local) < max_per_citation:
             for unit in rows:
-                text = clean_sentence(unit.get("text"), 850)
+                text = _prompt_evidence_text(unit.get("text"), 850)
                 key = text.casefold()
                 if not text or key in seen_text:
                     continue
@@ -1706,7 +1797,7 @@ def _compact_evidence(
             "article_title": unit.get("article_title"),
             "article_method_name": unit.get("article_method_name"),
             "kind": unit["kind"],
-            "text": clean_sentence(unit["text"], 850),
+            "text": _prompt_evidence_text(unit["text"], 850),
             "verrou_ids": unit.get("verrou_ids") or [],
             "source_kind": unit.get("source_kind") or "scientific_article",
             "evidence_scope": unit.get("evidence_scope") or [],
@@ -2394,8 +2485,18 @@ PREUVES AUTORISÉES
 {json.dumps(
     _compact_evidence(
         list(evidence_units),
-        max_units=180,
-        max_per_citation=12,
+        max_units=_env_int(
+            "ENNOSCHOLAR_PHASE5_VERIFIER_MAX_EVIDENCE_UNITS",
+            48,
+            minimum=16,
+            maximum=96,
+        ),
+        max_per_citation=_env_int(
+            "ENNOSCHOLAR_PHASE5_VERIFIER_MAX_EVIDENCE_PER_SOURCE",
+            4,
+            minimum=2,
+            maximum=8,
+        ),
     ),
     ensure_ascii=False,
 )}
@@ -2654,8 +2755,18 @@ PREUVES AUTORISÉES POUR CETTE SECTION
 {json.dumps(
     _compact_evidence(
         local_units,
-        max_units=110,
-        max_per_citation=9,
+        max_units=_env_int(
+            "ENNOSCHOLAR_PHASE5_WRITER_MAX_EVIDENCE_UNITS",
+            48,
+            minimum=16,
+            maximum=96,
+        ),
+        max_per_citation=_env_int(
+            "ENNOSCHOLAR_PHASE5_WRITER_MAX_EVIDENCE_PER_SOURCE",
+            4,
+            minimum=2,
+            maximum=8,
+        ),
     ),
     ensure_ascii=False,
     indent=2,
@@ -2755,14 +2866,19 @@ CONTRAT DE RÉDACTION
 - Évite les formulations « l'article A1 présente ». Fais une synthèse transversale.
 - Le titre, l'identifiant, l'ordre et les sous-sections sont immuables.
 
-{(
+{((
     "RÉPARATION DEMANDÉE\n"
     "Révise le brouillon rejeté fourni ci-dessous. Conserve sa structure, ses "
     "faits valides et ses citations obligatoires. Modifie uniquement les "
     "affirmations signalées par la validation, sans introduire de nouveau nom "
-    "de méthode, outil, jeu de données, sigle ou résultat.\n"
+    "de méthode, outil, jeu de données, sigle ou résultat. Pour chaque "
+    "citation_entity_mismatch, n'attribue jamais l'entité absente à la source : "
+    "supprime-la de la phrase citée ou sépare le fait établi, avec citation, de "
+    "la question propre au projet, sans citation. Une phrase d'insuffisance peut "
+    "nommer la cible absente seulement si elle dit explicitement que la source "
+    "citée ne la documente pas ou ne permet pas de conclure.\n"
     + json.dumps(repair_feedback, ensure_ascii=False)
-) if repair_feedback else ""}
+) if repair_feedback else "")}
 
 SORTIE JSON STRICTE
 {{
@@ -2778,6 +2894,219 @@ SORTIE JSON STRICTE
   ]
 }}
 """.strip()
+
+
+def _compact_section_validation_feedback(
+    validation: Mapping[str, Any],
+) -> Dict[str, Any]:
+    semantic = validation.get("semantic_claim_audit") or {}
+    verifier = validation.get("independent_semantic_verifier") or {}
+
+    def compact_issues(items: Any, limit: int = 12) -> List[Dict[str, Any]]:
+        output: List[Dict[str, Any]] = []
+        for item in items or []:
+            if not isinstance(item, Mapping):
+                continue
+            output.append(
+                {
+                    key: clean_text(value, 1200)
+                    if isinstance(value, str)
+                    else value
+                    for key, value in item.items()
+                    if key
+                    in {
+                        "type",
+                        "issue_type",
+                        "location",
+                        "claim",
+                        "citations",
+                        "unsupported_entity",
+                        "unsupported_value",
+                        "reason",
+                        "message",
+                        "verrou_id",
+                        "blocking",
+                    }
+                }
+            )
+            if len(output) >= limit:
+                break
+        return output
+
+    return {
+        "errors": list(validation.get("errors") or []),
+        "missing_required_citations": list(
+            validation.get("missing_required_citations") or []
+        ),
+        "missing_verrou_subsection_citations": list(
+            validation.get("missing_verrou_subsection_citations") or []
+        ),
+        "word_count": validation.get("word_count"),
+        "minimum_words": validation.get("minimum_words"),
+        "maximum_words": validation.get("maximum_words"),
+        "semantic_issues": compact_issues(semantic.get("issues")),
+        "verifier_issues": compact_issues(
+            verifier.get("blocking_issues") or verifier.get("issues")
+        ),
+        "non_french_fragments": [
+            clean_text(item, 700)
+            for item in validation.get("non_french_raw_fragments") or []
+        ][:6],
+        "raw_extraction_fragments": [
+            clean_text(item, 700)
+            for item in validation.get("raw_extraction_fragments") or []
+        ][:6],
+    }
+
+
+def _build_targeted_section_repair_prompt(
+    blueprint: Mapping[str, Any],
+    section: Mapping[str, Any],
+    current_draft: Mapping[str, Any],
+    validation: Mapping[str, Any],
+    local_evidence: Sequence[Mapping[str, Any]],
+) -> str:
+    feedback = _compact_section_validation_feedback(validation)
+    useful_citations = set(citations_from_obj(current_draft))
+    useful_citations.update(section.get("required_citations") or [])
+    for issue in [
+        *(feedback.get("semantic_issues") or []),
+        *(feedback.get("verifier_issues") or []),
+    ]:
+        useful_citations.update(citations_from_obj(issue))
+    if not useful_citations:
+        useful_citations.update(section.get("available_citations") or [])
+    repair_evidence = [
+        dict(unit)
+        for unit in local_evidence
+        if unit.get("citation_label") in useful_citations
+    ]
+    expected_subsections = [
+        {
+            "verrou_id": verrou.get("verrou_id"),
+            "title": verrou.get("verrou_title"),
+            "evidence_status": verrou.get("evidence_status"),
+            "direct_citations": verrou.get("direct_citations") or [],
+            "related_citations": verrou.get("related_citations") or [],
+            "methodological_citations": (
+                verrou.get("methodological_citations") or []
+            ),
+            "background_citations": verrou.get("background_citations") or [],
+            "requires_insufficiency_disclosure": bool(
+                verrou.get("requires_insufficiency_disclosure")
+            ),
+        }
+        for verrou in section.get("verrous") or []
+        if isinstance(verrou, Mapping)
+    ]
+    return f"""
+Tu corriges en français la NOUVELLE section que tu viens de rédiger. Il ne
+s'agit ni de reprendre une ancienne version ni de produire un extrait de
+sources. Conserve les paragraphes valides, l'argumentation et les citations
+correctes; modifie uniquement les passages signalés ci-dessous.
+
+SECTION IMMUABLE
+{json.dumps({
+    "section_id": section.get("section_id"),
+    "title": section.get("title"),
+    "objective": section.get("objective"),
+    "target_words": _section_target_words(
+        section,
+        len(blueprint.get("sections") or []),
+    ),
+    "available_citations": section.get("available_citations") or [],
+    "required_citations": section.get("required_citations") or [],
+    "subsections": expected_subsections,
+}, ensure_ascii=False, indent=2)}
+
+NOUVELLE RÉDACTION À CORRIGER
+{clean_text(json.dumps(dict(current_draft), ensure_ascii=False), 40000)}
+
+PROBLÈMES PRÉCIS À RÉPARER
+{json.dumps(feedback, ensure_ascii=False, indent=2)}
+
+PREUVES STRICTEMENT UTILES À LA RÉPARATION
+{json.dumps(
+    _compact_evidence(
+        repair_evidence,
+        max_units=32,
+        max_per_citation=4,
+    ),
+    ensure_ascii=False,
+    indent=2,
+)}
+
+CONTRAT
+- Rédige l'intégralité de la section en français naturel de niveau consultant.
+- Ne copie aucune phrase anglaise, formule OCR corrompue, en-tête ou légende.
+- N'ajoute aucune nouvelle affirmation : retire ou nuance seulement celles que
+  les preuves ne soutiennent pas.
+- Une absence de preuve dans le corpus est un constat de couverture : formule-la
+  explicitement comme telle, sans faire dire à une source ce qu'elle n'étudie pas.
+- Préserve les faits et citations non signalés.
+- Garde exactement section_id, title, l'ordre et les titres des sous-sections.
+- Utilise exclusivement les citations disponibles.
+
+SORTIE JSON STRICTE
+{{
+  "section_id": {json.dumps(section.get("section_id"), ensure_ascii=False)},
+  "title": {json.dumps(section.get("title"), ensure_ascii=False)},
+  "content": "section complète corrigée en français",
+  "subsections": [
+    {{
+      "verrou_id": "identifiant exact fourni",
+      "title": "titre exact fourni",
+      "content": "texte corrigé en français"
+    }}
+  ]
+}}
+""".strip()
+
+
+def _build_language_cleanup_prompt(
+    section: Mapping[str, Any],
+    current_draft: Mapping[str, Any],
+) -> str:
+    return f"""
+Révise la section JSON ci-dessous en français scientifique naturel. Traduis ou
+reformule uniquement les passages anglais et supprime les caractères OCR de
+contrôle. Ne change aucun fait, aucune citation, aucun identifiant, aucun titre
+et aucune structure. Ne crée aucune formule. Retourne la section JSON complète.
+
+CITATIONS AUTORISÉES
+{json.dumps(section.get("available_citations") or [], ensure_ascii=False)}
+
+SECTION
+{clean_text(json.dumps(dict(current_draft), ensure_ascii=False), 45000)}
+
+SORTIE JSON STRICTE
+{{
+  "section_id": {json.dumps(section.get("section_id"), ensure_ascii=False)},
+  "title": {json.dumps(section.get("title"), ensure_ascii=False)},
+  "content": "texte intégral en français",
+  "subsections": [
+    {{"verrou_id": "identifiant exact", "title": "titre exact", "content": "texte français"}}
+  ]
+}}
+""".strip()
+
+
+_SECTION_PUBLICATION_BLOCKERS = {
+    "section_id_mismatch",
+    "section_title_mismatch",
+    "subsections_mismatch",
+    "unknown_citations",
+    "raw_extraction_fragment",
+    "non_french_or_raw_source_fragment",
+}
+
+
+def _section_publication_blockers(
+    validation: Mapping[str, Any],
+) -> List[str]:
+    return sorted(
+        set(validation.get("errors") or []) & _SECTION_PUBLICATION_BLOCKERS
+    )
 
 
 def _validate_generated_section(
@@ -2821,6 +3150,9 @@ def _validate_generated_section(
     raw_extraction_fragments = _raw_extraction_fragments(body)
     if raw_extraction_fragments:
         errors.append("raw_extraction_fragment")
+    non_french_raw_fragments = _non_french_raw_fragments(body)
+    if non_french_raw_fragments:
+        errors.append("non_french_or_raw_source_fragment")
     used = set(citations_from_text(body))
     allowed = set(section.get("available_citations") or [])
     required = set(section.get("required_citations") or [])
@@ -2898,6 +3230,7 @@ def _validate_generated_section(
         "maximum_words": maximum_words,
         "target_words": target_words,
         "raw_extraction_fragments": raw_extraction_fragments,
+        "non_french_raw_fragments": non_french_raw_fragments,
         "semantic_claim_audit": semantic_claim_audit,
     }
 
@@ -3002,8 +3335,8 @@ PREUVES AUTORISÉES
 {json.dumps(
     _compact_evidence(
         local_evidence,
-        max_units=100,
-        max_per_citation=8,
+        max_units=36,
+        max_per_citation=4,
     ),
     ensure_ascii=False,
     indent=2,
@@ -3103,8 +3436,8 @@ def call_sectional_writer_llm(
         max_attempts = max(
             1,
             min(
-                3,
-                int(os.getenv("ENNOSCHOLAR_PHASE5_SECTION_ATTEMPTS", "3")),
+                2,
+                int(os.getenv("ENNOSCHOLAR_PHASE5_SECTION_ATTEMPTS", "2")),
             ),
         )
     except Exception:
@@ -3114,12 +3447,18 @@ def call_sectional_writer_llm(
     progress_path = Path(progress_markdown_path) if progress_markdown_path else None
     generated_sections: List[Dict[str, Any]] = []
     reports: List[Dict[str, Any]] = []
+    advisory_sections_count = 0
     previous_tail = ""
     total_sections = len(blueprint.get("sections") or [])
     for index, section in enumerate(blueprint.get("sections") or [], 1):
         accepted: Dict[str, Any] = {}
+        accepted_mode = ""
         feedback: Optional[Dict[str, Any]] = None
         attempts: List[Dict[str, Any]] = []
+        latest_llm_candidate: Dict[str, Any] = {}
+        latest_llm_validation: Dict[str, Any] = {}
+        latest_publishable_candidate: Dict[str, Any] = {}
+        latest_publishable_validation: Dict[str, Any] = {}
         section_id = clean_text(section.get("section_id"), 120) or f"section_{index}"
         safe_section_id = re.sub(r"[^a-zA-Z0-9_.-]+", "_", section_id).strip("_")
         local_evidence = [
@@ -3144,7 +3483,7 @@ def call_sectional_writer_llm(
                     },
                     "model": configured_model,
                     "scientific_validation_contract": (
-                        "atomic_evidence_roles_semantic_verifier_v9"
+                        "compact_targeted_llm_repair_no_raw_fallback_v10"
                     ),
                 },
                 ensure_ascii=False,
@@ -3157,7 +3496,14 @@ def call_sectional_writer_llm(
             if checkpoint_root
             else None
         )
-        if checkpoint_path and checkpoint_path.is_file():
+        if (
+            checkpoint_path
+            and checkpoint_path.is_file()
+            and _env_flag(
+                "ENNOSCHOLAR_PHASE5_REUSE_SECTION_CHECKPOINTS",
+                False,
+            )
+        ):
             cached = read_json(checkpoint_path, {}) or {}
             cached_section = cached.get("section")
             cached_validation = (
@@ -3187,6 +3533,7 @@ def call_sectional_writer_llm(
                 )
             ):
                 accepted = cached_section
+                accepted_mode = "llm_cached"
                 attempts.append(
                     {
                         "attempt": 0,
@@ -3203,13 +3550,21 @@ def call_sectional_writer_llm(
         for attempt in range(1, max_attempts + 1):
             if accepted:
                 break
-            prompt = _build_section_llm_prompt(
-                blueprint,
-                section,
-                evidence_units,
-                previous_tail=previous_tail,
-                repair_feedback=feedback,
-            )
+            if attempt == 1 or not feedback:
+                prompt = _build_section_llm_prompt(
+                    blueprint,
+                    section,
+                    evidence_units,
+                    previous_tail=previous_tail,
+                )
+            else:
+                prompt = _build_targeted_section_repair_prompt(
+                    blueprint,
+                    section,
+                    feedback.get("rejected_draft") or {},
+                    feedback.get("validation") or {},
+                    local_evidence,
+                )
             try:
                 raw = client.generate(
                     prompt,
@@ -3268,7 +3623,7 @@ def call_sectional_writer_llm(
                     }
                     and _env_flag(
                         "ENNOSCHOLAR_PHASE5_ENABLE_LLM_CITATION_REPAIR",
-                        True,
+                        False,
                     )
                 ):
                     try:
@@ -3526,10 +3881,16 @@ def call_sectional_writer_llm(
                             validation = repaired_validation
 
                 depth_enrichment: List[Dict[str, Any]] = []
-                if parsed and set(validation.get("errors") or []) == {
-                    "section_too_short"
-                }:
-                    for enrichment_round in range(1, 3):
+                if (
+                    parsed
+                    and set(validation.get("errors") or [])
+                    == {"section_too_short"}
+                    and _env_flag(
+                        "ENNOSCHOLAR_PHASE5_ENABLE_DEPTH_ENRICHMENT",
+                        False,
+                    )
+                ):
+                    for enrichment_round in range(1, 2):
                         missing_words = max(
                             300,
                             int(validation.get("minimum_words") or 0)
@@ -3668,6 +4029,12 @@ def call_sectional_writer_llm(
                             )
                         )
                         validation["ok"] = False
+                if parsed:
+                    latest_llm_candidate = parsed
+                    latest_llm_validation = validation
+                    if not _section_publication_blockers(validation):
+                        latest_publishable_candidate = parsed
+                        latest_publishable_validation = validation
                 attempts.append(
                     {
                         "attempt": attempt,
@@ -3686,6 +4053,7 @@ def call_sectional_writer_llm(
                 )
                 if validation.get("ok"):
                     accepted = parsed
+                    accepted_mode = "llm_verified"
                     if checkpoint_path:
                         write_json(
                             checkpoint_path,
@@ -3711,10 +4079,96 @@ def call_sectional_writer_llm(
                     {"attempt": attempt, "error": f"{type(exc).__name__}: {exc}"}
                 )
                 feedback = {"errors": ["llm_error"], "detail": str(exc)}
+        if not accepted and latest_llm_candidate:
+            language_errors = {
+                "raw_extraction_fragment",
+                "non_french_or_raw_source_fragment",
+            } & set(latest_llm_validation.get("errors") or [])
+            if language_errors:
+                try:
+                    cleanup_raw = client.generate(
+                        _build_language_cleanup_prompt(
+                            section,
+                            latest_llm_candidate,
+                        ),
+                        temperature=0.05,
+                        max_output_tokens=max(
+                            1400,
+                            min(
+                                4200,
+                                int(
+                                    _section_target_words(
+                                        section,
+                                        total_sections,
+                                    )
+                                    * 1.7
+                                ),
+                            ),
+                        ),
+                        retries=0,
+                        json_mode=True,
+                        request_name=(
+                            f"ennoscholar:phase5:section:{index}:"
+                            "french-cleanup"
+                        ),
+                    )
+                    cleanup_candidate = _extract_json_response(cleanup_raw)
+                    cleanup_validation = _validate_generated_section(
+                        cleanup_candidate,
+                        section,
+                        total_sections=total_sections,
+                        evidence_units=local_evidence,
+                    )
+                    attempts.append(
+                        {
+                            "attempt": "french_cleanup",
+                            "generated_section": cleanup_candidate,
+                            "validation": cleanup_validation,
+                            "llm": client.get_last_generation_meta(),
+                        }
+                    )
+                    if (
+                        cleanup_candidate
+                        and not _section_publication_blockers(
+                            cleanup_validation
+                        )
+                    ):
+                        latest_publishable_candidate = cleanup_candidate
+                        latest_publishable_validation = cleanup_validation
+                except Exception as cleanup_exc:
+                    attempts.append(
+                        {
+                            "attempt": "french_cleanup",
+                            "error": (
+                                f"{type(cleanup_exc).__name__}: "
+                                f"{cleanup_exc}"
+                            ),
+                        }
+                    )
+
+            if latest_publishable_candidate:
+                accepted = latest_publishable_candidate
+                accepted_mode = "llm_repaired_with_advisories"
+                advisory_sections_count += 1
+                attempts.append(
+                    {
+                        "attempt": "retain_new_llm_draft",
+                        "generated_section": accepted,
+                        "validation": latest_publishable_validation,
+                        "advisory_only": True,
+                        "reason": (
+                            "La nouvelle rédaction LLM est conservée; les "
+                            "contrôles restants sont consignés comme conseils "
+                            "et ne déclenchent aucun remplacement déterministe."
+                        ),
+                    }
+                )
+
         reports.append(
             {
                 "section_id": section.get("section_id"),
                 "ok": bool(accepted),
+                "writer_mode": accepted_mode or "llm_generation_failed",
                 "attempts": attempts,
             }
         )
@@ -3755,7 +4209,14 @@ def call_sectional_writer_llm(
     }, {
         "used": True,
         "status": "ok",
-        "mode": "sectional_long_form",
+        "mode": (
+            "sectional_llm_with_advisories"
+            if advisory_sections_count
+            else "sectional_long_form"
+        ),
+        "deterministic_fallback_sections_count": 0,
+        "advisory_sections_count": advisory_sections_count,
+        "all_sections_generated_by_llm": True,
         "sections": reports,
     }
 
@@ -3890,6 +4351,7 @@ def validate_draft(
     blueprint: Dict[str, Any],
     source_draft: Optional[Dict[str, Any]] = None,
     evidence_units: Optional[Sequence[Mapping[str, Any]]] = None,
+    enforce_consultant_language: bool = False,
 ) -> Dict[str, Any]:
     del source_draft
     errors: List[str] = []
@@ -3900,13 +4362,19 @@ def validate_draft(
     if actual_ids != expected_ids:
         errors.append("section_order_or_ids_mismatch")
 
-    expected_titles = [section["title"] for section in expected_sections]
+    expected_titles = [
+        clean_sentence(section.get("title"), 700)
+        for section in expected_sections
+    ]
     actual_titles = [clean_sentence(section.get("title"), 700) for section in actual_sections if isinstance(section, dict)]
     if actual_titles != expected_titles:
         errors.append("section_titles_mismatch")
 
     expected_verrous = [
-        (verrou["verrou_id"], verrou["verrou_title"])
+        (
+            clean_text(verrou.get("verrou_id"), 120),
+            clean_sentence(verrou.get("verrou_title"), 700),
+        )
         for section in expected_sections
         for verrou in section.get("verrous") or []
     ]
@@ -3939,6 +4407,13 @@ def validate_draft(
     raw_extraction_fragments = _raw_extraction_fragments(body)
     if raw_extraction_fragments:
         errors.append("raw_extraction_fragment")
+    non_french_raw_fragments = (
+        _non_french_raw_fragments(body)
+        if enforce_consultant_language
+        else []
+    )
+    if non_french_raw_fragments:
+        errors.append("non_french_or_raw_source_fragment")
     used = citations_from_text(body)
     allowed = set(blueprint.get("allowed_citations") or [])
     unknown = sorted(set(used) - allowed)
@@ -4097,6 +4572,49 @@ def validate_draft(
     }
 
 
+_LLM_PUBLICATION_ADVISORY_ERRORS = {
+    "unsupported_or_misattributed_claims",
+    "missing_required_citations",
+}
+
+
+def _publication_guard_for_new_llm(
+    strict_guard: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Sépare sécurité de publication et conseils scientifiques.
+
+    La structure, les citations inconnues, les marqueurs internes, les sections
+    vides et les fragments d'extraction restent bloquants. Un désaccord du
+    contrôleur sur une formulation scientifique reste visible dans le rapport,
+    mais ne remplace plus une nouvelle rédaction LLM par des preuves brutes.
+    """
+    strict_errors = list(strict_guard.get("errors") or [])
+    advisory_errors = [
+        error
+        for error in strict_errors
+        if error in _LLM_PUBLICATION_ADVISORY_ERRORS
+    ]
+    blocking_errors = [
+        error
+        for error in strict_errors
+        if error not in _LLM_PUBLICATION_ADVISORY_ERRORS
+    ]
+    output = dict(strict_guard)
+    output.update(
+        {
+            "ok": not blocking_errors,
+            "passed": not blocking_errors,
+            "errors": blocking_errors,
+            "strict_ok": bool(strict_guard.get("ok")),
+            "strict_errors": strict_errors,
+            "advisory_errors": advisory_errors,
+            "scientific_review_recommended": bool(advisory_errors),
+            "new_llm_draft_preserved": True,
+        }
+    )
+    return output
+
+
 def _editorial_quality_report(draft: Mapping[str, Any]) -> Dict[str, Any]:
     sections = [
         section
@@ -4172,6 +4690,7 @@ def _editorial_quality_report(draft: Mapping[str, Any]) -> Dict[str, Any]:
     near_duplicate_ratio = len(near_duplicates) / sentence_count
     catalogue_ratio = article_catalogue_markers / sentence_count
     raw_extraction_fragments = _raw_extraction_fragments(body)
+    non_french_raw_fragments = _non_french_raw_fragments(body)
     issues: List[str] = []
     if exact_duplicates:
         issues.append("exact_sentence_repetition")
@@ -4181,6 +4700,8 @@ def _editorial_quality_report(draft: Mapping[str, Any]) -> Dict[str, Any]:
         issues.append("article_catalogue_style")
     if raw_extraction_fragments:
         issues.append("raw_extraction_fragment")
+    if non_french_raw_fragments:
+        issues.append("non_french_or_raw_source_fragment")
     return {
         "passed": not issues,
         "issues": issues,
@@ -4191,6 +4712,8 @@ def _editorial_quality_report(draft: Mapping[str, Any]) -> Dict[str, Any]:
         "article_catalogue_markers": article_catalogue_markers,
         "article_catalogue_ratio": round(catalogue_ratio, 4),
         "raw_extraction_fragments": raw_extraction_fragments,
+        "non_french_raw_fragments": non_french_raw_fragments,
+        "non_french_raw_fragments": non_french_raw_fragments,
     }
 
 
@@ -4237,13 +4760,301 @@ def build_references_for_citations(
     return references
 
 
+def _visual_tokens(value: Any) -> Set[str]:
+    text = unicodedata.normalize("NFKD", clean_text(value, 30000).casefold())
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]{3,}", text)
+        if token
+        not in {
+            "the", "and", "for", "with", "from", "this", "that", "these",
+            "une", "des", "dans", "pour", "avec", "sur", "les", "est", "sont",
+            "figure", "table", "source", "article", "section",
+        }
+    }
+
+
+def _visual_similarity(left: Any, right: Any) -> float:
+    left_tokens = _visual_tokens(left)
+    right_tokens = _visual_tokens(right)
+    if not left_tokens or not right_tokens:
+        return 0.0
+    return len(left_tokens & right_tokens) / max(1, len(left_tokens | right_tokens))
+
+
+def _draft_section_visual_text(
+    section: Mapping[str, Any],
+    contract_section: Mapping[str, Any],
+) -> str:
+    return " ".join(
+        [
+            clean_text(section.get("title"), 1000),
+            clean_text(section.get("content"), 12000),
+            " ".join(
+                clean_text(item.get("content"), 5000)
+                for item in section.get("subsections") or []
+                if isinstance(item, Mapping)
+            ),
+            clean_text(contract_section.get("objective"), 3000),
+            clean_text(contract_section.get("instructions") or [], 3000),
+        ]
+    )
+
+
+def _multilingual_visual_similarities(
+    section_texts: Mapping[str, str],
+    candidate_texts: Mapping[str, str],
+) -> Dict[Tuple[str, str], float]:
+    """Similarité texte multilingue, sans appel LLM ni analyse de l'image."""
+
+    if not _env_flag("ENNOSCHOLAR_VISUAL_MULTILINGUAL_MATCHING", True):
+        return {}
+    section_ids = list(section_texts)
+    visual_ids = list(candidate_texts)
+    texts = [section_texts[key][:8000] for key in section_ids] + [
+        candidate_texts[key][:5000] for key in visual_ids
+    ]
+    if not texts:
+        return {}
+    try:
+        from modules.RAG.vector_store import encode_texts
+
+        vectors = encode_texts(texts)
+        if len(vectors) != len(texts):
+            return {}
+        split = len(section_ids)
+        output: Dict[Tuple[str, str], float] = {}
+        for section_index, section_id in enumerate(section_ids):
+            left = vectors[section_index]
+            for visual_index, visual_id in enumerate(visual_ids):
+                right = vectors[split + visual_index]
+                score = sum(float(a) * float(b) for a, b in zip(left, right))
+                output[(section_id, visual_id)] = max(0.0, min(1.0, score))
+        return output
+    except Exception:
+        return {}
+
+
+def build_visual_placements(
+    draft: Dict[str, Any],
+    blueprint: Dict[str, Any],
+    cards_payload: Dict[str, Any],
+    cards: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Place des figures originales sans changer l'explication du writer.
+
+    Une figure d'article n'est éligible que dans une section qui cite cet
+    article. Les figures des documents projet doivent, elles, présenter une
+    proximité textuelle explicite avec la section et ne deviennent jamais une
+    preuve scientifique.
+    """
+
+    if os.getenv("ENNOSCHOLAR_PHASE5_INCLUDE_ORIGINAL_FIGURES", "1").strip().lower() not in {
+        "1", "true", "yes", "on",
+    }:
+        return []
+
+    card_by_label = {
+        normalize_citation_label(card.get("citation_label")): card
+        for card in cards
+        if normalize_citation_label(card.get("citation_label"))
+    }
+    candidates: List[Dict[str, Any]] = []
+    seen_visual_ids: Set[str] = set()
+    for citation, card in card_by_label.items():
+        for raw in card.get("visual_evidence") or []:
+            if not isinstance(raw, dict):
+                continue
+            visual_id = clean_text(raw.get("visual_id"), 120)
+            if not visual_id or visual_id in seen_visual_ids:
+                continue
+            item = dict(raw)
+            item["citation_label"] = citation
+            candidates.append(item)
+            seen_visual_ids.add(visual_id)
+    for raw in cards_payload.get("project_visual_evidence") or []:
+        if not isinstance(raw, dict):
+            continue
+        visual_id = clean_text(raw.get("visual_id"), 120)
+        if not visual_id or visual_id in seen_visual_ids:
+            continue
+        candidates.append(dict(raw))
+        seen_visual_ids.add(visual_id)
+
+    if not candidates:
+        return []
+
+    blueprint_sections = {
+        clean_text(section.get("section_id"), 160): section
+        for section in blueprint.get("sections") or []
+        if isinstance(section, dict)
+    }
+    candidate_semantic_texts = {
+        clean_text(candidate.get("visual_id"), 120): " ".join(
+            [
+                clean_text(candidate.get("figure_label"), 100),
+                clean_text(candidate.get("caption"), 1800),
+                clean_text(candidate.get("context"), 2600),
+                clean_text(candidate.get("source_title"), 1000),
+            ]
+        )
+        for candidate in candidates
+        if clean_text(candidate.get("visual_id"), 120)
+    }
+    section_semantic_texts = {
+        clean_text(section.get("section_id"), 160): _draft_section_visual_text(
+            section,
+            blueprint_sections.get(
+                clean_text(section.get("section_id"), 160),
+                {},
+            ),
+        )
+        for section in draft.get("sections") or []
+        if isinstance(section, dict)
+        and clean_text(section.get("section_id"), 160)
+    }
+    multilingual_similarities = _multilingual_visual_similarities(
+        section_semantic_texts,
+        candidate_semantic_texts,
+    )
+    scored: List[tuple[float, int, Dict[str, Any]]] = []
+    for section_index, section in enumerate(draft.get("sections") or []):
+        if not isinstance(section, dict):
+            continue
+        section_id = clean_text(section.get("section_id"), 160)
+        contract_section = blueprint_sections.get(section_id) or {}
+        section_text = _draft_section_visual_text(section, contract_section)
+        used_citations = set(citations_from_text(section_text))
+        section_verrous = {
+            clean_text(value, 160)
+            for value in (
+                contract_section.get("verrou_ids")
+                or [
+                    verrou.get("verrou_id")
+                    for verrou in contract_section.get("verrous") or []
+                    if isinstance(verrou, dict)
+                ]
+            )
+            if clean_text(value, 160)
+        }
+        for candidate in candidates:
+            visual_id = clean_text(candidate.get("visual_id"), 120)
+            caption_text = " ".join(
+                [
+                    clean_text(candidate.get("figure_label"), 100),
+                    clean_text(candidate.get("caption"), 1800),
+                    clean_text(candidate.get("context"), 2600),
+                    clean_text(candidate.get("source_title"), 1000),
+                ]
+            )
+            quality = float(
+                candidate.get("ranking_score")
+                or candidate.get("quality_score")
+                or 0.0
+            )
+            token_similarity = _visual_similarity(caption_text, section_text)
+            similarity = max(
+                token_similarity,
+                multilingual_similarities.get((section_id, visual_id), 0.0),
+            )
+            citation = normalize_citation_label(candidate.get("citation_label"))
+            target_verrous = {
+                clean_text(value, 160)
+                for value in candidate.get("target_verrous") or []
+                if clean_text(value, 160)
+            }
+            if citation:
+                if citation not in used_citations:
+                    continue
+                score = 2.0 + quality + similarity
+                if section_verrous and target_verrous & section_verrous:
+                    score += 0.35
+            else:
+                # Un document projet n'est admis qu'avec une correspondance
+                # textuelle suffisante ; son image n'ajoute aucune citation.
+                if similarity < 0.055:
+                    continue
+                score = quality + similarity * 3.0
+                if score < 0.65:
+                    continue
+            scored.append(
+                (
+                    score,
+                    section_index,
+                    {
+                        "section_id": section_id,
+                        "visual_id": visual_id,
+                        "citation_label": citation,
+                        "source_kind": clean_text(candidate.get("source_kind"), 80),
+                        "source_title": clean_sentence(candidate.get("source_title"), 900),
+                        "page": candidate.get("page"),
+                        "figure_label": clean_sentence(candidate.get("figure_label"), 100),
+                        "caption": clean_sentence(candidate.get("caption"), 1800),
+                        "quality_score": quality,
+                        "semantic_similarity": round(similarity, 4),
+                        "selection_score": round(score, 4),
+                        "original_figure_preserved": True,
+                    },
+                )
+            )
+
+    max_visuals = max(
+        0,
+        min(
+            12,
+            _env_int(
+                "ENNOSCHOLAR_PHASE5_MAX_ORIGINAL_FIGURES",
+                5,
+                minimum=0,
+                maximum=12,
+            ),
+        ),
+    )
+    placements: List[Dict[str, Any]] = []
+    occupied_sections: Set[str] = set()
+    occupied_visuals: Set[str] = set()
+    for _, _, placement in sorted(scored, key=lambda item: (-item[0], item[1])):
+        if len(placements) >= max_visuals:
+            break
+        if placement["section_id"] in occupied_sections:
+            continue
+        if placement["visual_id"] in occupied_visuals:
+            continue
+        occupied_sections.add(placement["section_id"])
+        occupied_visuals.add(placement["visual_id"])
+        placements.append(placement)
+    return sorted(
+        placements,
+        key=lambda placement: next(
+            (
+                index
+                for index, section in enumerate(draft.get("sections") or [])
+                if isinstance(section, dict)
+                and clean_text(section.get("section_id"), 160)
+                == placement["section_id"]
+            ),
+            10_000,
+        ),
+    )
+
+
 def draft_to_markdown(
     draft: Dict[str, Any],
     guard: Dict[str, Any],
     references: Optional[List[Dict[str, Any]]] = None,
+    visual_placements: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     del guard
     lines = [f"# {clean_sentence(draft.get('title'), 1000)}", ""]
+    placements_by_section: Dict[str, List[Dict[str, Any]]] = {}
+    for placement in visual_placements or []:
+        if not isinstance(placement, dict):
+            continue
+        placements_by_section.setdefault(
+            clean_text(placement.get("section_id"), 160),
+            [],
+        ).append(placement)
     for section in draft.get("sections") or []:
         if not isinstance(section, dict):
             continue
@@ -4251,6 +5062,34 @@ def draft_to_markdown(
         content = clean_text(section.get("content"), 100000)
         if content:
             lines.extend([content, ""])
+        for placement in placements_by_section.get(
+            clean_text(section.get("section_id"), 160),
+            [],
+        ):
+            visual_id = clean_text(placement.get("visual_id"), 120)
+            if not visual_id:
+                continue
+            caption = clean_sentence(placement.get("caption"), 1800)
+            figure_label = clean_sentence(placement.get("figure_label"), 100)
+            alt = " — ".join(item for item in (figure_label, caption) if item)
+            alt = (alt or "Figure scientifique sourcée").replace("]", "").replace("[", "")
+            lines.extend([f"![{alt}](ennoscholar-visual://{visual_id})", ""])
+            provenance = []
+            citation = normalize_citation_label(placement.get("citation_label"))
+            if citation:
+                provenance.append(f"source [{citation}]")
+            else:
+                source_title = clean_sentence(placement.get("source_title"), 700)
+                if source_title:
+                    provenance.append(f"document projet « {source_title} »")
+            if placement.get("page"):
+                provenance.append(f"page {placement['page']}")
+            legend = " — ".join(
+                item for item in (figure_label, caption) if item
+            ).rstrip(" .")
+            if provenance:
+                legend = f"{legend}. {' ; '.join(provenance)}"
+            lines.extend([f"*{legend.strip().rstrip(' .')}.*", ""])
         for subsection in section.get("subsections") or []:
             if not isinstance(subsection, dict):
                 continue
@@ -4345,7 +5184,16 @@ def run_phase_5_state_of_art_writer(
     phase46_path = Path(phase46_project_argumentation_payload_path or default_phase46_payload_path(organisme, project, year))
     phase47_path = Path(phase47_scientific_narrative_payload_path or default_phase47_payload_path(organisme, project, year))
     out_path = Path(output_path or output_payload_path(organisme, project, year))
+    rejected_payload_path = out_path.with_name(
+        f"{out_path.stem}_rejected{out_path.suffix}"
+    )
     md_path = Path(markdown_output_path or output_markdown_path(organisme, project, year))
+    rejected_md_path = md_path.with_name(
+        f"{md_path.stem}_rejected{md_path.suffix}"
+    )
+    progress_md_path = md_path.with_name(
+        f"{md_path.stem}_in_progress{md_path.suffix}"
+    )
     # Les artefacts annexes suivent le dossier de sortie explicite afin
     # qu'une exécution ne soit jamais répartie entre le nom projet brut et
     # son chemin canonique.
@@ -4475,7 +5323,10 @@ def run_phase_5_state_of_art_writer(
             "output_path": str(out_path),
         }
         if not dry_run:
-            write_json(out_path, result)
+            result["rejected_payload_output_path"] = str(
+                rejected_payload_path
+            )
+            write_json(rejected_payload_path, result)
         return result
 
     plan_contract: Dict[str, Any] = (
@@ -4505,7 +5356,10 @@ def run_phase_5_state_of_art_writer(
             "markdown_output_path": "",
         }
         if not dry_run:
-            write_json(out_path, result)
+            result["rejected_payload_output_path"] = str(
+                rejected_payload_path
+            )
+            write_json(rejected_payload_path, result)
         return result
     scientific_article_cards_count = len(
         [
@@ -4527,7 +5381,10 @@ def run_phase_5_state_of_art_writer(
             "stats": {"article_cards_count": 0, "evidence_units_count": 0},
         }
         if not dry_run:
-            write_json(out_path, result)
+            result["rejected_payload_output_path"] = str(
+                rejected_payload_path
+            )
+            write_json(rejected_payload_path, result)
         return result
 
     evidence_units = extract_evidence_units(reasoning, phase47, cards)
@@ -4547,7 +5404,10 @@ def run_phase_5_state_of_art_writer(
             },
         }
         if not dry_run:
-            write_json(out_path, result)
+            result["rejected_payload_output_path"] = str(
+                rejected_payload_path
+            )
+            write_json(rejected_payload_path, result)
         return result
 
     approved_plan: Optional[List[Dict[str, Any]]] = None
@@ -4564,7 +5424,10 @@ def run_phase_5_state_of_art_writer(
                 "output_path": str(out_path),
             }
             if not dry_run:
-                write_json(out_path, result)
+                result["rejected_payload_output_path"] = str(
+                    rejected_payload_path
+                )
+                write_json(rejected_payload_path, result)
             return result
     elif require_plan:
         result = {
@@ -4577,7 +5440,10 @@ def run_phase_5_state_of_art_writer(
             "output_path": str(out_path),
         }
         if not dry_run:
-            write_json(out_path, result)
+            result["rejected_payload_output_path"] = str(
+                rejected_payload_path
+            )
+            write_json(rejected_payload_path, result)
         return result
     try:
         blueprint = build_unified_blueprint(
@@ -4608,7 +5474,10 @@ def run_phase_5_state_of_art_writer(
             "output_path": str(out_path),
         }
         if not dry_run:
-            write_json(out_path, result)
+            result["rejected_payload_output_path"] = str(
+                rejected_payload_path
+            )
+            write_json(rejected_payload_path, result)
         return result
     blueprint["evidence_units"] = evidence_units
 
@@ -4617,23 +5486,34 @@ def run_phase_5_state_of_art_writer(
         blueprint,
         evidence_units,
         checkpoint_dir=writer_output_dir / "section_checkpoints",
-        progress_markdown_path=md_path,
+        progress_markdown_path=progress_md_path,
     )
-    llm_guard = (
+    strict_llm_guard = (
         validate_draft(
             llm_draft,
             blueprint,
             evidence_units=evidence_units,
+            enforce_consultant_language=True,
         )
         if llm_draft
         else {"ok": False, "errors": ["llm_not_used"]}
     )
+    llm_guard = (
+        _publication_guard_for_new_llm(strict_llm_guard)
+        if llm_draft
+        else strict_llm_guard
+    )
 
     if llm_draft and llm_guard.get("ok"):
         draft = llm_draft
-        writer_used = "llm_sectional_long_form"
+        writer_used = (
+            "llm_sectional_with_advisories"
+            if llm_report.get("mode")
+            == "sectional_llm_with_advisories"
+            else "llm_sectional_long_form"
+        )
         guard = llm_guard
-    else:
+    elif llm_report.get("status") == "disabled":
         draft = build_deterministic_unified_draft(
             blueprint,
             cards,
@@ -4645,10 +5525,28 @@ def run_phase_5_state_of_art_writer(
             blueprint,
             evidence_units=evidence_units,
         )
+    else:
+        # Si le LLM a été demandé mais n'a produit aucune section publiable,
+        # aucune preuve brute n'est transformée en faux livrable. Le diagnostic
+        # reste interne et la dernière version publiée demeure inchangée.
+        draft = llm_draft or {"title": "", "sections": []}
+        writer_used = "llm_generation_failed_no_raw_fallback"
+        guard = llm_guard
 
     used_citations = guard.get("detected_citations") or citations_from_obj(draft)
     references = build_references_for_citations(used_citations, cards)
-    markdown = draft_to_markdown(draft, guard, references)
+    visual_placements = build_visual_placements(
+        draft,
+        blueprint,
+        cards_payload,
+        cards,
+    )
+    markdown = draft_to_markdown(
+        draft,
+        guard,
+        references,
+        visual_placements=visual_placements,
+    )
     ok = bool(guard.get("ok"))
 
     final_text = markdown or ""
@@ -4664,12 +5562,16 @@ def run_phase_5_state_of_art_writer(
         int(requested_words * 1.65),
     )
     editorial_quality = _editorial_quality_report(draft)
+    consultant_writer_mode = writer_used in {
+        "llm_sectional_long_form",
+        "llm_sectional_with_advisories",
+    }
     quality_issues: List[str] = []
     if word_count < minimum_expected_words:
         quality_issues.append("document_too_short_for_consultant_depth")
     if word_count > maximum_expected_words:
         quality_issues.append("document_too_long_or_repetitive")
-    if writer_used != "llm_sectional_long_form":
+    if not consultant_writer_mode:
         quality_issues.append("llm_draft_unavailable")
     if not guard.get("semantic_claims_ok", True):
         quality_issues.append(
@@ -4688,7 +5590,7 @@ def run_phase_5_state_of_art_writer(
             and guard.get("unused_allowed_citations")
         )
         and editorial_quality.get("passed")
-        and writer_used == "llm_sectional_long_form"
+        and consultant_writer_mode
     )
     consultant_quality_score = 100
     if not ok:
@@ -4703,7 +5605,7 @@ def run_phase_5_state_of_art_writer(
         consultant_quality_score -= 15
     if not (minimum_expected_words <= word_count <= maximum_expected_words):
         consultant_quality_score -= 10
-    if writer_used != "llm_sectional_long_form":
+    if not consultant_writer_mode:
         consultant_quality_score -= 10
     consultant_quality_score = max(0, consultant_quality_score)
 
@@ -4720,7 +5622,14 @@ def run_phase_5_state_of_art_writer(
         "writing_source_policy": source_policy_report,
         "input_paths": input_paths,
         "output_path": str(out_path),
+        "rejected_payload_output_path": (
+            str(rejected_payload_path) if not ok else ""
+        ),
         "markdown_output_path": str(md_path) if ok else "",
+        "rejected_markdown_output_path": (
+            str(rejected_md_path) if markdown and not ok else ""
+        ),
+        "progress_markdown_output_path": str(progress_md_path),
         "unified_writer_blueprint_path": str(blueprint_path),
         "normalized_evidence_units_path": str(evidence_path),
         "verrou_fingerprint": blueprint["verrou_fingerprint"],
@@ -4729,6 +5638,7 @@ def run_phase_5_state_of_art_writer(
         "writer_used": writer_used,
         "llm": llm_report,
         "llm_guard": llm_guard,
+        "strict_llm_guard": strict_llm_guard,
         "guard": guard,
         "quality": {
             "consultant_quality_ready": consultant_quality_ready,
@@ -4755,6 +5665,7 @@ def run_phase_5_state_of_art_writer(
         },
         "draft_json": draft,
         "references": references,
+        "visual_placements": visual_placements,
         "stats": {
             "article_cards_count": len(cards),
             "scientific_article_cards_count": scientific_article_cards_count,
@@ -4769,6 +5680,7 @@ def run_phase_5_state_of_art_writer(
             "verrous_count": len(blueprint["verrous"]),
             "sections_count": len(blueprint["sections"]),
             "citations_used_count": len(used_citations),
+            "original_figures_inserted_count": len(visual_placements),
         },
         "rules": {
             "single_global_document": True,
@@ -4787,6 +5699,10 @@ def run_phase_5_state_of_art_writer(
             "related_evidence_cannot_validate_a_verrou": True,
             "uncited_scientific_claims_rejected": True,
             "gpt5_temperature_omitted": True,
+            "original_figures_only": True,
+            "vision_rewrite_disabled_for_figures": True,
+            "article_figure_requires_same_section_citation": True,
+            "project_document_figure_is_context_not_scientific_proof": True,
         },
     }
 
@@ -4799,9 +5715,15 @@ def run_phase_5_state_of_art_writer(
                 "items": evidence_units,
             },
         )
-        write_json(out_path, result)
         if ok:
+            write_json(out_path, result)
             write_text(md_path, markdown)
+        else:
+            write_json(rejected_payload_path, result)
+        if markdown and not ok:
+            # Un brouillon refusé reste consultable pour diagnostic/réparation,
+            # mais ne doit jamais remplacer l'artefact final affiché au consultant.
+            write_text(rejected_md_path, markdown)
         if _env_flag("ENNOSCHOLAR_SAVE_PROMPTS", False):
             prompt_path = writer_prompts_dir / "global_writer_prompt.txt"
             write_text(prompt_path, prompt)

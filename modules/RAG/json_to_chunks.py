@@ -259,6 +259,8 @@ def _verrou_candidate_level(item: Dict[str, Any], role: str, pack_key: str) -> s
         return "strong_candidate"
     if "verifier" in final_role or "vérifier" in final_role or "validate" in q or decision == "verrou_a_verifier":
         return "to_validate"
+    if final_role in {"verrou_potentiel", "verrou_scientifique"} or decision in {"0", "1"}:
+        return "to_validate"
     if "implicite" in final_role or item.get("verrou_source") == "universal_theme_reconstruction":
         return "implicit_to_validate"
     if _is_pre_cir(item):

@@ -665,6 +665,10 @@ KIND_PRIORITY.update({
     "v148_primary_evidence_phenomenon": 1.68,
     "v149_secondary_problem_axis": 1.66,
     "v148_core_baseline": 1.05,
+    "dynamic_local_source_problem": 1.82,
+    "dynamic_local_source_relation": 1.86,
+    "dynamic_local_source_roles": 1.76,
+    "dynamic_local_source_terms": 1.68,
 })
 
 _V146_QUERY_GENERIC = {
@@ -713,6 +717,19 @@ def is_query_safe_for_intent(query: str, intent_or_profile: Dict[str, Any] | str
         return False
     if isinstance(intent_or_profile, dict):
         intent = intent_or_profile
+        literal_acronyms = [
+            str(value)
+            for value in (intent.get("literal_source_acronyms") or [])
+            if str(value or "").strip()
+        ]
+        if literal_acronyms and not any(
+            re.search(
+                rf"(?<![a-z0-9]){re.escape(norm(value))}(?![a-z0-9])",
+                qn,
+            )
+            for value in literal_acronyms
+        ):
+            return False
         core = _v146_list(intent, "core_concepts")
         if core and _v146_query_has_concept(q, intent) < 1:
             return False
@@ -740,6 +757,36 @@ def _v146_make_query(parts: List[Any], max_words: int = 11) -> str:
                 if len(words) >= max_words:
                     return clean_text(" ".join(words), 220)
     return clean_text(" ".join(words), 220)
+
+
+def _v146_relation_parts(intent: Dict[str, Any], concepts: List[str]) -> List[str]:
+    """Preserve a relation between extracted concepts within the word budget.
+
+    The canonical concept is kept for the first axis. For subsequent axes, the
+    first alternative name already produced by the intent extractor replaces
+    the longer canonical label so the whole relation survives the word budget.
+    This is entirely data-driven: no project, acronym or domain vocabulary is
+    introduced by the query builder.
+    """
+    aliases = intent.get("concept_aliases")
+    aliases = aliases if isinstance(aliases, dict) else {}
+    parts: List[str] = []
+    for index, concept in enumerate(concepts):
+        concept = clean_text(concept, 120)
+        if not concept:
+            continue
+        if index == 0:
+            parts.append(concept)
+            continue
+        canonical = norm(concept)
+        selected = concept
+        for candidate in aliases.get(concept) or []:
+            candidate = clean_text(candidate, 120)
+            if candidate and norm(candidate) != canonical:
+                selected = candidate
+                break
+        parts.append(selected)
+    return parts
 
 
 def build_queries_from_intent(intent: Dict[str, Any], max_queries: int = 14) -> List[Dict[str, Any]]:
@@ -800,6 +847,34 @@ def build_queries_from_intent(intent: Dict[str, Any], max_queries: int = 14) -> 
         for item in fallback:
             if is_query_safe_for_intent(item.get("query", ""), intent):
                 queries.append(item)
+
+    # Les requetes prioritaires sont derivees du passage courant. Aucun
+    # vocabulaire metier ou domaine client n'est ajoute ici.
+    literal_acronyms = _v146_list(intent, "literal_source_acronyms")
+    literal_phrases = _v146_list(intent, "literal_source_phrases")
+    literal_terms = _v146_list(intent, "literal_source_terms")
+    if literal_acronyms and len(secondary) >= 2:
+        add(
+            [literal_acronyms[:1], _v146_relation_parts(intent, secondary[:3])],
+            "dynamic_local_source_relation",
+            max_words=12,
+        )
+    if literal_acronyms or literal_phrases:
+        add(
+            [literal_acronyms[:2], literal_phrases[:2], primary[:1], phenomena[:1]],
+            "dynamic_local_source_problem",
+            max_words=12,
+        )
+        add(
+            [literal_acronyms[:2], literal_phrases[2:5], primary[:2], secondary[:2], phenomena[:2]],
+            "dynamic_local_source_roles",
+            max_words=12,
+        )
+        add(
+            [literal_acronyms[:2], literal_terms[:6], primary[:1]],
+            "dynamic_local_source_terms",
+            max_words=12,
+        )
 
     return queries[:max_queries]
 

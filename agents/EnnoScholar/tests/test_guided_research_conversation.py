@@ -16,11 +16,13 @@ from EnnoScholar.guided_research.application.guided_research_agent import (
     _plan_candidate_covers_current,
     _plan_history_from_session,
     _plan_materially_changed,
+    _resolve_candidate_display_identifiers,
     _resolve_effective_writing_source_identifiers,
     _resolve_routed_intent,
 )
 from EnnoScholar.guided_research.lot1.conversation_understanding_service import (
     ConversationUnderstandingService,
+    _ground_writing_source_policy,
 )
 from EnnoScholar.guided_research.lot1.domain.enums import (
     ConsultantIntent,
@@ -626,6 +628,90 @@ class GuidedResearchConversationTests(unittest.TestCase):
             ["Réponse en français."],
         )
         self.assertEqual(result.memory.current_focus, "Plan scientifique")
+
+    def test_multidimensional_search_is_repaired_into_concise_query_portfolio(self) -> None:
+        session = GuidedResearchSessionData(
+            project_id=3,
+            entry_module=GuidedResearchEntryModule.ENNOSCHOLAR,
+            target_mode=GuidedResearchTargetMode.PER_VERROU,
+            context={"operating_mode": "standalone_chat"},
+        )
+        decision = _decision(
+            ConsultantIntent.SEARCH_MORE,
+            "Je lance une recherche ciblée.",
+            requested_actions=[ConsultantIntent.SEARCH_MORE],
+            explicit_research_command=True,
+        )
+        common = {
+            "query_kind": "direct_scientific_evidence",
+            "entity_name": "predictive reliability under distribution shift",
+            "entity_type": "other",
+            "required_terms": ["predictive reliability", "distribution shift"],
+            "target_verrous": ["SV-1"],
+            "requested_dimensions": [
+                "experimental results",
+                "validation protocols",
+                "limitations",
+            ],
+            "target_context_dimensions": [
+                "industrial equipment",
+                "changing operating conditions",
+            ],
+            "require_direct_evidence": True,
+            "source_preferences": ["scientific_articles"],
+        }
+        llm = SequenceLLM(
+            decision,
+            {
+                "search_requests": [{
+                    **common,
+                    "query": (
+                        "out-of-distribution reliability predictive models limited "
+                        "historical data changing operating regimes thermal loads "
+                        "usage profiles equipment characteristics experimental "
+                        "evidence validation protocols limitations"
+                    ),
+                }],
+            },
+            {
+                "search_requests": [
+                    {
+                        **common,
+                        "query": "industrial time series distribution shift",
+                    },
+                    {
+                        **common,
+                        "query": "remaining useful life domain adaptation",
+                    },
+                    {
+                        **common,
+                        "query": "thermal anomaly transfer learning",
+                    },
+                ],
+            },
+        )
+
+        result = ConversationUnderstandingService(llm).understand(
+            session=session,
+            consultant_message=(
+                "Recherche les preuves, méthodes, protocoles et limites pour "
+                "le verrou enregistré, sans rédiger."
+            ),
+            project_context={
+                "project": {"name": "Projet autonome"},
+                "operating_mode": "standalone_chat",
+                "current_verrous": [{"id": "SV-1", "title": "Robustesse"}],
+            },
+            current_plan=[],
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(len(result.search_requests), 3)
+        self.assertEqual(
+            [row["valid"] for row in result.interpreter["action_attempts"]],
+            [False, True],
+        )
 
     def test_schema_error_is_repaired_by_the_llm_without_lexical_coercion(self) -> None:
         invalid = _decision(
@@ -1724,6 +1810,55 @@ class GuidedResearchConversationTests(unittest.TestCase):
             },
         )
 
+    def test_search_enforces_explicit_publication_year_ceiling(self) -> None:
+        class DatedResearchService(WebResearchService):
+            @staticmethod
+            def _candidate_matches_request(candidate):
+                return True
+
+            def _classify_and_filter_candidates(self, candidates, requests):
+                return list(candidates)
+
+            def _run_job(self, provider, request):
+                if provider != "arxiv":
+                    return []
+                return [
+                    {
+                        "candidate_id": "BEFORE",
+                        "candidate_kind": "scientific_article",
+                        "title": "Valid study",
+                        "year": 2024,
+                        "relevance_score": 0.9,
+                    },
+                    {
+                        "candidate_id": "AFTER",
+                        "candidate_kind": "scientific_article",
+                        "title": "Too recent study",
+                        "year": 2025,
+                        "relevance_score": 0.95,
+                    },
+                    {
+                        "candidate_id": "UNKNOWN",
+                        "candidate_kind": "scientific_article",
+                        "title": "Undated study",
+                        "relevance_score": 0.8,
+                    },
+                ]
+
+        result = DatedResearchService().search(
+            [{
+                "query": "experimental validation",
+                "query_kind": "scientific_evidence",
+                "publication_year_max": 2024,
+            }],
+            auto_refine=False,
+        )
+
+        self.assertEqual(
+            [row["candidate_id"] for row in result["candidates"]],
+            ["BEFORE"],
+        )
+
     def test_relevance_filter_rejects_out_of_domain_homonym(self) -> None:
         candidate = {
             "title": "Metal artifact reduction in X-ray tomography",
@@ -1856,6 +1991,79 @@ class GuidedResearchConversationTests(unittest.TestCase):
             WebResearchService._candidate_matches_request(candidate)
         )
 
+    def test_relevance_filter_preserves_broad_predictive_reliability_evidence(self) -> None:
+        candidate = {
+            "candidate_kind": "scientific_article",
+            "title": (
+                "Conditional reliability diagnostics for bearing remaining "
+                "useful life under operating-regime shift"
+            ),
+            "abstract": (
+                "A predictive model is evaluated under changing operating "
+                "conditions with strict train validation and test separation."
+            ),
+            "venue": "Reliability Engineering",
+            "url": "https://example.test/rul-regime-shift",
+            "query": (
+                "out-of-distribution reliability predictive models limited "
+                "historical data changing operating regimes validation limitations"
+            ),
+            "entity_name": "predictive model robustness under varying conditions",
+            "entity_type": "other",
+            "required_terms": [
+                "predictive model",
+                "limited historical data",
+                "out-of-distribution reliability",
+                "validation protocol",
+            ],
+            "target_context_dimensions": [
+                "changing operating regimes",
+                "thermal loads",
+                "equipment characteristics",
+            ],
+            "require_direct_evidence": True,
+        }
+
+        self.assertTrue(
+            WebResearchService._candidate_matches_request(candidate)
+        )
+
+    def test_predictive_control_is_not_promoted_to_direct_ood_evidence(self) -> None:
+        request = {
+            "query": "predictive model reliability operating regime shift",
+            "entity_name": "predictive model robustness under varying conditions",
+            "entity_type": "other",
+            "required_terms": [
+                "predictive model",
+                "limited historical data",
+                "out-of-distribution reliability",
+                "validation protocol",
+            ],
+            "target_context_dimensions": [
+                "changing operating regimes",
+                "thermal loads",
+                "equipment characteristics",
+            ],
+            "require_direct_evidence": True,
+        }
+        candidate = {
+            "candidate_kind": "scientific_article",
+            "title": "Model predictive control of electric motor drives",
+            "abstract": (
+                "The controller operates under fast-changing operating "
+                "conditions and limits thermal stress. Hardware-in-the-loop "
+                "validation demonstrates control feasibility."
+            ),
+            "query": request["query"],
+        }
+
+        role = WebResearchService._deterministic_relevance_role(
+            candidate,
+            [request],
+        )[0]
+
+        self.assertEqual(role, "connected_evidence")
+
     def test_documentation_is_limited_to_contextual_evidence(self) -> None:
         cards = extract_supplemental_source_cards(
             {
@@ -1882,6 +2090,65 @@ class GuidedResearchConversationTests(unittest.TestCase):
         self.assertEqual(len(cards), 1)
         self.assertTrue(cards[0]["documentation_scope_only"])
         self.assertFalse(cards[0]["scientific_evidence_eligible"])
+
+    def test_selected_articles_do_not_reuse_historical_identifiers(self) -> None:
+        classification = IntentClassification.model_validate(
+            _decision(
+                ConsultantIntent.START_WRITING,
+                "Je lance la rédaction.",
+            )["classification"]
+        )
+        classification.writing_source_scope = "explicit_selection"
+        classification.writing_source_identifiers = [
+            "A1",
+            "A2",
+            "A30",
+            "C1",
+            "C3",
+        ]
+        classification.requested_source_count = 22
+
+        grounded = _ground_writing_source_policy(
+            (
+                "Lance la rédaction complète en utilisant uniquement les "
+                "articles sélectionnés."
+            ),
+            classification,
+        )
+
+        self.assertEqual(grounded.writing_source_scope, "all_validated")
+        self.assertEqual(grounded.writing_source_identifiers, [])
+        self.assertIsNone(grounded.requested_source_count)
+
+    def test_exact_source_policy_uses_only_ids_from_current_message(self) -> None:
+        classification = IntentClassification.model_validate(
+            _decision(
+                ConsultantIntent.START_WRITING,
+                "Je lance la rédaction.",
+            )["classification"]
+        )
+        classification.writing_source_scope = "explicit_selection"
+        classification.writing_source_identifiers = ["A30", "C9"]
+        classification.requested_source_count = 22
+
+        grounded = _ground_writing_source_policy(
+            "Rédige uniquement avec A1, A7, C1 et C3.",
+            classification,
+        )
+
+        self.assertEqual(grounded.writing_source_scope, "explicit_selection")
+        self.assertEqual(
+            grounded.writing_source_identifiers,
+            ["A1", "A7", "C1", "C3"],
+        )
+        self.assertIsNone(grounded.requested_source_count)
+
+    def test_candidate_display_ids_resolve_to_persistent_candidate_ids(self) -> None:
+        resolved = _resolve_candidate_display_identifiers(
+            ["C1", "C3", "A7"],
+            ["WEB-111", "SRC-222", "SRC-333"],
+        )
+        self.assertEqual(resolved, ["WEB-111", "SRC-333", "A7"])
 
 
 if __name__ == "__main__":
