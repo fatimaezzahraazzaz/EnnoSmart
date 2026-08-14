@@ -790,6 +790,34 @@ def _candidate_from_article(
         score = float(score)
     except (TypeError, ValueError):
         score = None
+
+    # fulltext_candidate_v2
+    fulltext_candidate = bool(
+        _clean(
+            article.get("pdf_url")
+            or article.get("open_access_pdf_url")
+            or article.get("primary_pdf_url")
+            or article.get("fulltext_url")
+            or article.get("full_text_url"),
+            2000,
+        )
+        or article.get("free_fulltext_available") is True
+        or article.get("fulltext_available") is True
+        or _clean(article.get("full_text"), 20)
+    )
+    evidence_access_status = (
+        "FULLTEXT_CANDIDATE"
+        if fulltext_candidate
+        else "ABSTRACT_ONLY"
+        if _clean(
+            article.get("abstract")
+            or article.get("summary")
+            or article.get("tldr"),
+            50,
+        )
+        else "METADATA_ONLY"
+    )
+
     return {
         "candidate_id": _stable_candidate_id(article),
         "candidate_kind": "scientific_article",
@@ -805,8 +833,11 @@ def _candidate_from_article(
         ) or None,
         "venue": _clean(article.get("venue") or article.get("journal"), 500) or None,
         "source_providers": _providers(article),
-        "scientific_evidence_eligible": True,
+        "scientific_evidence_eligible": fulltext_candidate,
         "context_evidence_eligible": True,
+        "evidence_access_status": evidence_access_status,
+        "requires_fulltext_verification": True,
+        "abstract_only_is_not_complete_evidence": True,
         "evidence_scope": ["limitation", "comparison", "method", "result"],
         "section_ids": [request.target_section_id] if request.target_section_id else [],
         "section_titles": [request.target_section_title] if request.target_section_title else [],

@@ -59,7 +59,7 @@ from services.scholar_pdf_direct_extractor import (
 MAX_REMOTE_BYTES = int(os.getenv("ENNOSCHOLAR_REMOTE_CONTENT_MAX_BYTES", str(MAX_PDF_BYTES)))
 MIN_HTML_TEXT_CHARS = int(os.getenv("ENNOSCHOLAR_MIN_HTML_FULLTEXT_CHARS", "5000"))
 MIN_XML_TEXT_CHARS = int(os.getenv("ENNOSCHOLAR_MIN_XML_FULLTEXT_CHARS", "3000"))
-MAX_CANDIDATES = int(os.getenv("ENNOSCHOLAR_DIRECT_MAX_CANDIDATES", "30"))
+MAX_CANDIDATES = max(3, min(int(os.getenv("ENNOSCHOLAR_DIRECT_MAX_CANDIDATES", "8")), 15))
 SAVE_DEBUG_SOURCE = os.getenv("ENNOSCHOLAR_SAVE_REMOTE_DEBUG_SOURCE", "0").strip().lower() in {
     "1", "true", "yes", "on"
 }
@@ -584,6 +584,25 @@ def _extract_pdf_fulltext(content: bytes) -> Dict[str, Any]:
     payload["ok"] = bool((payload.get("quality") or {}).get("is_text_extractable")) and text_chars >= MIN_USEFUL_TEXT_CHARS
     payload["status"] = "pdf_fulltext_extracted" if payload["ok"] else "pdf_text_insufficient"
     payload["document_type"] = "pdf_scientific_article"
+
+    # >>> ENNOSMART_RESEARCH_UPGRADE_V1_GROBID
+    if not payload["ok"]:
+        try:
+            from services.grobid_client import GROBID
+            grobid_payload = GROBID.process_pdf(content)
+            if grobid_payload.get("ok") and int(grobid_payload.get("text_chars") or 0) > text_chars:
+                grobid_payload["fallback_after"] = payload.get("extraction_method")
+                return grobid_payload
+            payload["grobid_fallback"] = {
+                "attempted": True,
+                "status": grobid_payload.get("status"),
+            }
+        except Exception as exc:
+            payload["grobid_fallback"] = {
+                "attempted": True,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+    # <<< ENNOSMART_RESEARCH_UPGRADE_V1_GROBID
     return payload
 
 
@@ -638,9 +657,13 @@ def _is_mdpi_short_interstitial(content: bytes, final_url: str) -> bool:
 
 def _candidate_provenance(candidate: Dict[str, Any]) -> Dict[str, Any]:
     return {
-        "retrieval_stage": "direct_known_urls",
+        "retrieval_stage": candidate.get("retrieval_stage") or "direct_known_urls",
         "source_domain": candidate.get("source_domain"),
         "candidate_source": candidate.get("source"),
+        "legal_provider": candidate.get("provider"),
+        "license": candidate.get("license"),
+        "version": candidate.get("version"),
+        "discovered_via": candidate.get("discovered_via"),
     }
 
 

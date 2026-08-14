@@ -14,6 +14,7 @@ class ArticleIdentity(BaseModel):
     year: int | None = None
     known_urls: list[str] = Field(default_factory=list)
     source: str | None = None
+    deterministic_oa_checked: bool = False
 
     # Traçabilité de l'enrichissement sans casser le contrat existant.
     input_doi: str | None = None

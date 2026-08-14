@@ -1194,7 +1194,7 @@ def run_ennoscholar_from_selected_verrous(
     db: Session,
     project: Project,
     max_verrous: int = 8,
-    limit_per_query: int = 3,
+    limit_per_query: int = 50,
     offline_dry_run: bool = False,
 ) -> ScholarRun:
     """
@@ -1272,6 +1272,7 @@ def run_ennoscholar_from_selected_verrous(
             "report": report,
             "summary": summary,
             "payload": payload,
+            "results": report.get("results") or [],
         },
         completed_at=datetime.utcnow(),
     )
@@ -1284,13 +1285,31 @@ def run_ennoscholar_from_selected_verrous(
     # Synchroniser directement les articles pour que le frontend les voie.
     sync_articles_from_scholar(db, run)
 
+    # >>> ENNOSMART_RESEARCH_UPGRADE_V2_PREFLIGHT
+    try:
+        from services.scholar_evidence_preflight_service import run_or_queue_preflight
+        preflight_report = run_or_queue_preflight(db, project, run)
+        db.refresh(run)
+    except Exception as exc:
+        raw = dict(run.raw_result_json or {})
+        raw["evidence_preflight"] = {
+            "enabled": True,
+            "mode": "v2_error",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        run.raw_result_json = raw
+        db.add(run)
+        db.commit()
+        db.refresh(run)
+    # <<< ENNOSMART_RESEARCH_UPGRADE_V2_PREFLIGHT
+
     return run
 
 
 def run_ennoscholar(db: Session, project: Project) -> ScholarRun:
     offline = os.getenv("ENNOSCHOLAR_OFFLINE_DRY_RUN", "0").strip() == "1"
     max_verrous = int(os.getenv("ENNOSCHOLAR_MAX_VERROUS", "8"))
-    limit = int(os.getenv("ENNOSCHOLAR_LIMIT_PER_QUERY", "3"))
+    limit = int(os.getenv("ENNOSCHOLAR_LIMIT_PER_QUERY", "50"))
 
     return run_ennoscholar_from_selected_verrous(
         db=db,
@@ -1579,10 +1598,51 @@ def sync_articles_from_scholar(db: Session, run: ScholarRun) -> List[Article]:
     decision_memory = _consultant_project_decision_memory_v1(db, run)
 
     changed_or_created: List[Article] = []
-    existing_by_key = {
-        (a.title.lower().strip(), a.verrou_id): a
-        for a in db.query(Article).filter(Article.scholar_run_id == run.id).all()
-    }
+    changed_objects = set()
+    existing_rows = (
+        db.query(Article)
+        .filter(Article.scholar_run_id == run.id)
+        .order_by(Article.id.asc())
+        .all()
+    )
+    existing_by_identity = {}
+    for existing in existing_rows:
+        for identity_key in _consultant_model_identity_keys_v1(existing):
+            existing_by_identity.setdefault(identity_key, existing)
+
+    def mark_changed(article):
+        marker = id(article)
+        if marker not in changed_objects:
+            changed_objects.add(marker)
+            changed_or_created.append(article)
+
+    def merge_coverage(existing_source, incoming_item):
+        def coverage_score(value):
+            try:
+                return float(value or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        merged = {}
+        candidates = list(existing_source.get("covered_verrous") or [])
+        candidates.extend(incoming_item.get("covered_verrous") or [])
+        incoming_source = _consultant_source_json_v1(incoming_item.get("source_json"))
+        candidates.extend(incoming_source.get("covered_verrous") or [])
+        for coverage in candidates:
+            if not isinstance(coverage, dict):
+                continue
+            verrou_key = str(
+                coverage.get("verrou_id")
+                or coverage.get("verrou_number")
+                or coverage.get("verrou_title")
+                or ""
+            ).strip().lower()
+            if not verrou_key:
+                continue
+            old = merged.get(verrou_key)
+            if old is None or coverage_score(coverage.get("relevance_score")) > coverage_score(old.get("relevance_score")):
+                merged[verrou_key] = dict(coverage)
+        return list(merged.values())
 
     for result in results:
         verrou_id = result.get("verrou_id")
@@ -1610,8 +1670,15 @@ def sync_articles_from_scholar(db: Session, run: ScholarRun) -> List[Article]:
             if not title:
                 continue
 
-            key = (title.lower().strip(), verrou_id_int)
-            article = existing_by_key.get(key)
+            identity_keys = _consultant_item_identity_keys_v1(item, title)
+            article = next(
+                (
+                    existing_by_identity[identity_key]
+                    for identity_key in sorted(identity_keys)
+                    if identity_key in existing_by_identity
+                ),
+                None,
+            )
             preserved_status = _consultant_preserved_status_v1(
                 decision_memory,
                 item,
@@ -1636,18 +1703,28 @@ def sync_articles_from_scholar(db: Session, run: ScholarRun) -> List[Article]:
                     },
                 )
                 db.add(article)
-                changed_or_created.append(article)
-                existing_by_key[key] = article
+                mark_changed(article)
+                for identity_key in identity_keys:
+                    existing_by_identity[identity_key] = article
             else:
-                article.source_json = article.source_json or {}
-                article.source_json["verrou_scientific_validation"] = verrou_decision
+                source_json = dict(article.source_json or {})
+                source_json["verrou_scientific_validation"] = verrou_decision
+                coverage = merge_coverage(source_json, item)
+                if coverage:
+                    source_json["covered_verrous"] = coverage
+                    source_json["multi_verrou_article"] = len(coverage) > 1
+                    source_json["multi_verrou_count"] = len(coverage)
+                    source_json["multi_verrou_policy"] = "globally_deduped_backend_guard"
+                article.source_json = source_json
                 current_status = _consultant_status_v1(article.consultant_status)
                 if (
                     current_status == "en_attente"
                     and preserved_status != "en_attente"
                 ):
                     article.consultant_status = preserved_status
-                changed_or_created.append(article)
+                mark_changed(article)
+                for identity_key in identity_keys:
+                    existing_by_identity[identity_key] = article
 
     db.commit()
 

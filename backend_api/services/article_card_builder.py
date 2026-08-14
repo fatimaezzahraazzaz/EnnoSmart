@@ -23,7 +23,7 @@ Objectif :
 - extraire l'analyse technique profonde de la méthode/concept :
     problème -> chaîne de mécanisme -> flux données/modèle/validation -> résultat démontré -> limite -> transposition CIR ;
 - produire une capsule narrative exploitable par Phase 4.5 / 4.7 / 5 pour écrire comme un consultant ;
-- sauvegarder les cartes dans article_cards_payload.json.
+- sauvegarder les cartes et leur index uniquement dans PostgreSQL.
 
 Modes :
 - template : rapide, déterministe, sans LLM
@@ -603,16 +603,17 @@ def extract_scientific_entities(
     abstract: str,
     sections: Dict[str, str],
     full_text: str = "",
+    use_model: bool = True,
 ) -> Dict[str, Any]:
-    cache_key = f"{getattr(article, 'id', 'unknown')}:{len(full_text or '')}:{SCIENTIFIC_NER_MAX_CHARS}:{SCIENTIFIC_NER_TOP_K}:{SCIENTIFIC_NER_MODEL}:{SCIENTIFIC_NER_DEVICE_RAW}"
+    cache_key = f"{getattr(article, 'id', 'unknown')}:{len(full_text or '')}:{SCIENTIFIC_NER_MAX_CHARS}:{SCIENTIFIC_NER_TOP_K}:{SCIENTIFIC_NER_MODEL}:{SCIENTIFIC_NER_DEVICE_RAW}:model={int(bool(use_model))}"
     cached = _SCIENTIFIC_EXTRACTION_CACHE.get(cache_key)
     if isinstance(cached, dict):
         return cached
 
     blocks = _section_blocks_for_scientific_ner(article, abstract, sections, full_text=full_text)
-    ner = _get_scientific_ner_pipeline()
+    ner = _get_scientific_ner_pipeline() if use_model else None
     candidates: List[Dict[str, Any]] = []
-    source = "scibert_ner" if ner else "fallback_regex"
+    source = "scibert_ner" if ner else "instant_regex" if not use_model else "fallback_regex"
 
     if ner:
         # Le pipeline recevait auparavant un chunk à la fois : sur GPU, cela
@@ -687,9 +688,9 @@ def extract_scientific_entities(
             break
 
     extraction = {
-        "enabled": bool(SCIENTIFIC_NER_ENABLED),
-        "model": SCIENTIFIC_NER_MODEL,
-        "device": "cuda:0" if _resolve_scientific_ner_device() >= 0 else "cpu",
+        "enabled": bool(SCIENTIFIC_NER_ENABLED and use_model),
+        "model": SCIENTIFIC_NER_MODEL if use_model else None,
+        "device": ("cuda:0" if _resolve_scientific_ner_device() >= 0 else "cpu") if use_model else "not_used",
         "source": source,
         "entities_count": len(ranked),
         "technical_entities": ranked,
@@ -703,6 +704,7 @@ def extract_scientific_entities(
             "source_sentences_required_for_phase_4_5": True,
             "generic_terms_filtered": True,
             "cached_per_run": True,
+            "instant_mode_skips_model_loading": not use_model,
         },
     }
     _SCIENTIFIC_EXTRACTION_CACHE[cache_key] = extraction
@@ -727,8 +729,15 @@ def enrich_card_with_scientific_entities(
     abstract: str,
     sections: Dict[str, str],
     full_text: str,
+    use_model: bool = True,
 ) -> Dict[str, Any]:
-    extraction = extract_scientific_entities(article, abstract, sections, full_text=full_text)
+    extraction = extract_scientific_entities(
+        article,
+        abstract,
+        sections,
+        full_text=full_text,
+        use_model=use_model,
+    )
     card["scientific_entity_extraction"] = extraction
     card["scientific_entities"] = extraction.get("technical_entities") or []
     card["key_scientific_passages"] = extraction.get("key_passages") or []
@@ -753,8 +762,8 @@ def enrich_card_with_scientific_entities(
             break
 
     card["mots_cles"] = merged
-    card.setdefault("evidence", {})["scientific_ner_enabled"] = bool(SCIENTIFIC_NER_ENABLED)
-    card.setdefault("evidence", {})["scientific_ner_model"] = SCIENTIFIC_NER_MODEL
+    card.setdefault("evidence", {})["scientific_ner_enabled"] = bool(SCIENTIFIC_NER_ENABLED and use_model)
+    card.setdefault("evidence", {})["scientific_ner_model"] = SCIENTIFIC_NER_MODEL if use_model else None
     card.setdefault("evidence", {})["scientific_entities_count"] = extraction.get("entities_count", 0)
     return card
 
@@ -801,6 +810,48 @@ def _article_card_path(
         else f"{_article_file_prefix(article)}_card.json"
     )
     return _article_cards_dir(project, scope_id) / filename
+
+
+def _article_cards_db_uri(run_id: int, scope_id: str | None = None) -> str:
+    suffix = f"/scopes/{_slugify(scope_id, 100)}" if scope_id else ""
+    return f"db://scholar_runs/{int(run_id)}/article_cards_payload{suffix}"
+
+
+def _current_scholar_run_for_cards(db: Session, project: Project) -> ScholarRun | None:
+    return (
+        db.query(ScholarRun)
+        .filter(ScholarRun.project_id == int(project.id))
+        .filter(ScholarRun.status != "improvement_corpus")
+        .order_by(ScholarRun.created_at.desc(), ScholarRun.id.desc())
+        .first()
+    )
+
+
+def _save_article_cards_payload_to_db(
+    db: Session,
+    project: Project,
+    payload: Dict[str, Any],
+    scope_id: str | None = None,
+) -> Dict[str, Any]:
+    run = _current_scholar_run_for_cards(db, project)
+    if run is None:
+        raise RuntimeError("Aucun ScholarRun courant pour stocker les Article Cards.")
+    uri = _article_cards_db_uri(int(run.id), scope_id)
+    saved = dict(payload or {})
+    saved["payload_path"] = uri
+    saved["output_path"] = uri
+    saved["storage_mode"] = "database_only"
+    raw = dict(run.raw_result_json or {})
+    if scope_id:
+        scopes = dict(raw.get("article_cards_payload_by_scope") or {})
+        scopes[str(scope_id)] = saved
+        raw["article_cards_payload_by_scope"] = scopes
+    else:
+        raw["article_cards_payload"] = saved
+    run.raw_result_json = raw
+    db.add(run)
+    db.commit()
+    return saved
 
 
 # ============================================================
@@ -1092,6 +1143,56 @@ def _is_successful_fulltext_json(data: Dict[str, Any], raw_text: str) -> bool:
 
 def _load_fulltext(project: Project, article: Article) -> Dict[str, Any]:
     candidates_info: List[Dict[str, Any]] = []
+
+    # Le cache PostgreSQL global est prioritaire : il évite de dupliquer le
+    # même texte dans chaque projet/run lorsque le DOI est déjà connu.
+    try:
+        from db.database import SessionLocal
+        from services.scholar_fulltext_cache_service import get_cached_fulltext
+
+        cache_db = SessionLocal()
+        try:
+            cached = get_cached_fulltext(cache_db, article)
+        finally:
+            cache_db.close()
+    except Exception:
+        cached = None
+
+    if isinstance(cached, dict):
+        raw_text = _extract_text_from_fulltext_json(cached)
+        cleaned_text = clean_article_text(raw_text)
+        if _is_successful_fulltext_json(cached, cleaned_text):
+            retrieval_stage = _safe_text(cached.get("retrieval_stage"), 80).lower()
+            source_kind = "legal" if "legal" in retrieval_stage or cached.get("retrieved_via_mcp") else "direct"
+            return {
+                "found": True,
+                "source_kind": source_kind,
+                "path": f"db://scholar_fulltext_cache/{cached.get('fulltext_cache_id')}",
+                "text": cleaned_text,
+                "pages_count": cached.get("pages_count") or len(cached.get("pages") or []),
+                "text_chars": len(cleaned_text),
+                "text_words": _word_count(cleaned_text),
+                "source_status": cached.get("status"),
+                "storage_mode": "global_database_cache",
+                "quality": cached.get("quality") or {},
+                "fulltext_provenance": {
+                    "retrieved_via_mcp": bool(cached.get("retrieved_via_mcp")),
+                    "provider": cached.get("legal_provider"),
+                    "license": cached.get("license") or cached.get("legal_license"),
+                    "same_article": True,
+                    "verified_pdf": bool(cached.get("verified_pdf")),
+                    "cache_hit": True,
+                    "cache_key": cached.get("fulltext_cache_key"),
+                },
+                "fulltext_diagnostics": {"status": "global_database_cache_hit"},
+                "candidates_info": [{
+                    "source_kind": "global_database_cache",
+                    "path": f"db://scholar_fulltext_cache/{cached.get('fulltext_cache_id')}",
+                    "exists": True,
+                    "selected": True,
+                    "status": "cache_hit",
+                }],
+            }
 
     for source_kind, path in _candidate_fulltext_paths(project, article):
         data = _json_read(path)
@@ -4203,6 +4304,7 @@ def _build_card_template(
     citation_id: str,
     article: Article,
     fulltext_info: Dict[str, Any],
+    fast: bool = False,
 ) -> Dict[str, Any]:
     source_json = _as_dict(getattr(article, "source_json", None))
     full_text = fulltext_info.get("text") or ""
@@ -4309,6 +4411,7 @@ def _build_card_template(
         abstract=abstract,
         sections=sections,
         full_text=full_text,
+        use_model=not fast,
     )
 
     card = apply_limitation_layer(
@@ -4855,6 +4958,9 @@ def _repair_card_after_guard(card: Dict[str, Any]) -> Dict[str, Any]:
 def _effective_card_mode(mode: str = "auto") -> str:
     requested = (mode or CARD_MODE or "auto").lower()
 
+    if requested in {"instant", "fast", "template_fast"}:
+        return "template"
+
     if EXTRACTIVE_ONLY_PHASE2 or DISABLE_LLM or LLM_STRATEGY in {"off", "none", "template", "extractive", "no_llm", "paragraphs", "evidence_only"}:
         return "template"
 
@@ -4955,8 +5061,12 @@ def _load_reusable_card(
     citation_id: str,
     scope_id: str | None = None,
 ) -> Tuple[Optional[Dict[str, Any]], str]:
-    card_path = _article_card_path(project, article, scope_id)
-    saved = _json_read(card_path)
+    source_json = _as_dict(article.source_json)
+    saved = (
+        _as_dict(source_json.get("article_card"))
+        if scope_id is None
+        else _as_dict(_as_dict(source_json.get("article_cards_by_scope")).get(str(scope_id)))
+    )
     ok, reason = _existing_card_is_reusable(saved or {}, project, article)
 
     if not ok or not saved:
@@ -5029,6 +5139,7 @@ def build_article_card(
 ) -> Dict[str, Any]:
     fulltext_info = _load_fulltext(project, article)
     selected_mode = _effective_card_mode(mode)
+    instant_mode = str(mode or "").strip().lower() in {"instant", "fast", "template_fast"}
 
     print(
         f"[EnnoScholar][ArticleCards] BUILD article_id={article.id} citation={citation_id} "
@@ -5042,12 +5153,12 @@ def build_article_card(
         if card:
             return _repair_card_after_guard(card)
 
-        fallback = _build_card_template(citation_id, article, fulltext_info)
+        fallback = _build_card_template(citation_id, article, fulltext_info, fast=instant_mode)
         fallback["evidence"]["generation_mode"] = "template_fallback_after_llm_fail"
         fallback["evidence"]["llm_strategy"] = LLM_STRATEGY
         return _repair_card_after_guard(fallback)
 
-    card = _build_card_template(citation_id, article, fulltext_info)
+    card = _build_card_template(citation_id, article, fulltext_info, fast=instant_mode)
     card["evidence"]["generation_mode"] = "extractive_original_paragraphs" if EXTRACTIVE_ONLY_PHASE2 else "template"
     card["evidence"]["llm_strategy"] = LLM_STRATEGY
     return _repair_card_after_guard(card)
@@ -5063,7 +5174,10 @@ def build_article_cards_for_selected_articles(
     scope_id: str | None = None,
 ) -> Dict[str, Any]:
     started = time.time()
-    out_payload = _article_cards_payload_path(project, scope_id)
+    storage_run = _current_scholar_run_for_cards(db, project)
+    if storage_run is None:
+        raise RuntimeError("Aucun ScholarRun courant pour construire les Article Cards.")
+    out_payload = _article_cards_db_uri(int(storage_run.id), scope_id)
     mode_effective = _effective_card_mode(mode)
 
     print(
@@ -5212,7 +5326,20 @@ def build_article_cards_for_selected_articles(
             fulltext_info=current_fulltext,
         )
         cards.append(card)
-        _json_dump(_article_card_path(project, article, scope_id), card)
+        if scope_id is None:
+            source_json = _as_dict(article.source_json)
+            source_json["article_card"] = card
+            source_json["article_card_storage"] = "database_article_source_json"
+            article.source_json = source_json
+            db.add(article)
+        else:
+            source_json = _as_dict(article.source_json)
+            scoped_cards = _as_dict(source_json.get("article_cards_by_scope"))
+            scoped_cards[str(scope_id)] = card
+            source_json["article_cards_by_scope"] = scoped_cards
+            source_json["article_card_storage"] = "database_article_source_json"
+            article.source_json = source_json
+            db.add(article)
 
         elapsed_item = round(time.time() - item_started, 2)
         print(
@@ -5222,6 +5349,8 @@ def build_article_cards_for_selected_articles(
             f"elapsed={elapsed_item}s",
             flush=True,
         )
+
+    db.commit()
 
     try:
         from services.scholar_visual_evidence_service import (
@@ -5321,7 +5450,12 @@ def build_article_cards_for_selected_articles(
         },
     }
 
-    _json_dump(out_payload, payload)
+    payload = _save_article_cards_payload_to_db(
+        db,
+        project,
+        payload,
+        scope_id=scope_id,
+    )
     print(
         "=" * 90 + "\n"
         f"[EnnoScholar][ArticleCards] END project_id={project.id} selected={len(articles)} "
@@ -5334,20 +5468,152 @@ def build_article_cards_for_selected_articles(
     return payload
 
 
+def sync_article_cards_after_consultant_decision(
+    db: Session,
+    project: Project,
+    article: Article,
+) -> Dict[str, Any]:
+    """Crée la carte à la conservation et la supprime au rejet/attente."""
+    selected = str(article.consultant_status or "") == "garde"
+    source_json = _as_dict(article.source_json)
+
+    card: Dict[str, Any] | None = None
+    if selected:
+        evidence = _as_dict(source_json.get("evidence_preflight"))
+        if evidence.get("evidence_status") == "FULLTEXT_READY":
+            reusable, _ = _load_reusable_card(project, article, f"A{int(article.id)}")
+            card = reusable or build_article_card(
+                f"A{int(article.id)}",
+                article,
+                project,
+                mode="instant",
+            )
+            card = _sync_card_source_context(card, article)
+            source_json["article_card"] = card
+            source_json["article_card_storage"] = "database_article_source_json"
+            source_json.pop("article_card_sync_error", None)
+            article.source_json = source_json
+            db.add(article)
+            db.commit()
+
+    if not selected:
+        source_json.pop("article_card", None)
+        source_json.pop("article_card_storage", None)
+        article.source_json = source_json
+        db.add(article)
+        db.commit()
+
+        # Nettoyage des anciens artefacts disque ; les nouvelles cartes du
+        # corpus principal sont conservées uniquement en base.
+        base_dir = _article_cards_dir(project)
+        if base_dir.exists():
+            for path in base_dir.rglob(f"article_{int(article.id)}*_card.json"):
+                if path.is_file():
+                    path.unlink(missing_ok=True)
+
+    # Maintient l'index agrégé en base sans recalculer toutes les cartes.
+    current_run = _current_scholar_run_for_cards(db, project)
+    raw = dict(current_run.raw_result_json or {}) if current_run is not None else {}
+    payload = dict(raw.get("article_cards_payload") or {})
+    cards = [
+        item for item in (payload.get("cards") or [])
+        if int(item.get("article_id") or 0) != int(article.id)
+    ]
+    if card is not None:
+        cards.append(card)
+    payload.update({
+        "ok": True,
+        "project_id": int(project.id),
+        "cards": cards,
+        "cards_count": len(cards),
+        "writing_ready_cards_count": len(cards),
+        "writing_ready_article_ids": [
+            int(item.get("article_id"))
+            for item in cards
+            if item.get("article_id") is not None
+        ],
+        "generated_at": datetime.utcnow().isoformat(),
+        "storage_mode": "database_only",
+    })
+    _save_article_cards_payload_to_db(db, project, payload)
+
+    return {
+        "ok": True,
+        "decision_article_id": int(article.id),
+        "decision": article.consultant_status,
+        "article_card_created": card is not None,
+        "article_card_deleted": not selected,
+        "storage": "database_article_source_json",
+    }
+
+
 def get_article_cards_payload(
     project: Project,
     scope_id: str | None = None,
+    db: Session | None = None,
 ) -> Dict[str, Any]:
-    path = _article_cards_payload_path(project, scope_id)
-    saved = _json_read(path)
+    owned_session = db is None
+    if db is None:
+        from db.database import SessionLocal
 
-    if saved:
-        return saved
+        db = SessionLocal()
+    try:
+        run = _current_scholar_run_for_cards(db, project)
+        if run is None:
+            return {
+                "ok": False,
+                "project_id": project.id,
+                "status": "not_built",
+                "message": "Aucun run EnnoScholar courant.",
+            }
+        raw = dict(run.raw_result_json or {})
+        if scope_id:
+            saved = _as_dict(
+                _as_dict(raw.get("article_cards_payload_by_scope")).get(str(scope_id))
+            )
+        else:
+            saved = _as_dict(raw.get("article_cards_payload"))
+        if saved:
+            return saved
 
-    return {
-        "ok": False,
-        "project_id": project.id,
-        "status": "not_built",
-        "message": "Les fiches articles n'ont pas encore été générées.",
-        "expected_path": str(path),
-    }
+        articles = (
+            db.query(Article)
+            .filter(Article.scholar_run_id == int(run.id))
+            .filter(Article.consultant_status == "garde")
+            .order_by(Article.score.desc(), Article.year.desc(), Article.created_at.asc())
+            .all()
+        )
+        cards = []
+        for article in articles:
+            source_json = _as_dict(article.source_json)
+            card = (
+                _as_dict(source_json.get("article_card"))
+                if scope_id is None
+                else _as_dict(_as_dict(source_json.get("article_cards_by_scope")).get(str(scope_id)))
+            )
+            if card:
+                cards.append(card)
+        if cards:
+            return {
+                "ok": True,
+                "project_id": int(project.id),
+                "scholar_run_id": int(run.id),
+                "scope_id": scope_id,
+                "cards": cards,
+                "cards_count": len(cards),
+                "writing_ready_cards_count": len(cards),
+                "writing_ready_article_ids": [int(card["article_id"]) for card in cards],
+                "storage_mode": "database_only",
+                "payload_path": _article_cards_db_uri(int(run.id), scope_id),
+            }
+        return {
+            "ok": False,
+            "project_id": project.id,
+            "status": "not_built",
+            "message": "Les fiches articles n'ont pas encore été générées.",
+            "expected_path": _article_cards_db_uri(int(run.id), scope_id),
+            "storage_mode": "database_only",
+        }
+    finally:
+        if owned_session:
+            db.close()

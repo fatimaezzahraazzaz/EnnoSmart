@@ -717,21 +717,27 @@ def is_query_safe_for_intent(query: str, intent_or_profile: Dict[str, Any] | str
         return False
     if isinstance(intent_or_profile, dict):
         intent = intent_or_profile
+        core = _v146_list(intent, "core_concepts")
+        core_concept_hits = _v146_query_has_concept(q, intent) if core else 0
         literal_acronyms = [
             str(value)
             for value in (intent.get("literal_source_acronyms") or [])
             if str(value or "").strip()
         ]
+        # Un acronyme ambigu n'est pas obligatoire lorsque la requête contient
+        # déjà son concept scientifique développé. Par exemple, une preuve qui
+        # contient « SAR » doit pouvoir produire « synthetic aperture radar ... ».
+        # Exiger aussi le sigle supprimait entièrement les requêtes de certains
+        # verrous, avant même le premier appel aux sources bibliographiques.
         if literal_acronyms and not any(
             re.search(
                 rf"(?<![a-z0-9]){re.escape(norm(value))}(?![a-z0-9])",
                 qn,
             )
             for value in literal_acronyms
-        ):
+        ) and core_concept_hits < 1:
             return False
-        core = _v146_list(intent, "core_concepts")
-        if core and _v146_query_has_concept(q, intent) < 1:
+        if core and core_concept_hits < 1:
             return False
         # Une requête dominée par uncertainty/CPU/GPU n'est jamais envoyée.
         generic_count = sum(1 for x in _V146_QUERY_GENERIC if norm(x) in qn)
@@ -861,17 +867,17 @@ def build_queries_from_intent(intent: Dict[str, Any], max_queries: int = 14) -> 
         )
     if literal_acronyms or literal_phrases:
         add(
-            [literal_acronyms[:2], literal_phrases[:2], primary[:1], phenomena[:1]],
+            [literal_acronyms[:2], primary[:1], literal_phrases[:2], phenomena[:1]],
             "dynamic_local_source_problem",
             max_words=12,
         )
         add(
-            [literal_acronyms[:2], literal_phrases[2:5], primary[:2], secondary[:2], phenomena[:2]],
+            [literal_acronyms[:2], primary[:2], secondary[:2], literal_phrases[2:5], phenomena[:2]],
             "dynamic_local_source_roles",
             max_words=12,
         )
         add(
-            [literal_acronyms[:2], literal_terms[:6], primary[:1]],
+            [literal_acronyms[:2], primary[:1], literal_terms[:6]],
             "dynamic_local_source_terms",
             max_words=12,
         )
@@ -947,5 +953,5 @@ def attach_queries_to_intent(intent: Dict[str, Any], max_queries: int = 14) -> D
     out = dict(intent or {})
     out["cir_domain_profile"] = _profile_for_intent(out)
     out["search_queries"] = build_queries_from_intent(out, max_queries=max_queries)
-    out["query_builder_version"] = "v148_problem_evidence_queries"
+    out["query_builder_version"] = "v155_section_aware_lock_queries"
     return out

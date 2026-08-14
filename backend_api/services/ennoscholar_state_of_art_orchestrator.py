@@ -20,6 +20,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -812,18 +813,32 @@ def generate_state_of_art_after_consultant_selection(
             "Phase 1 existante introuvable. Retourne dans Préparation état de l'art : "
             f"{paths['selection_payload']}"
         )
-    if not paths["article_cards_payload"].exists():
+    from services.article_card_builder import get_article_cards_payload
+
+    article_cards_payload = get_article_cards_payload(project, db=db)
+    if not isinstance(article_cards_payload, dict) or not article_cards_payload.get("cards"):
         raise RuntimeError(
-            "Article Cards existantes introuvables. Termine la Phase 2 dans Préparation état de l'art : "
-            f"{paths['article_cards_payload']}"
+            "Article Cards existantes introuvables en base. "
+            "Conserve au moins un article avec texte intégral avant la rédaction."
         )
+    article_cards_db_uri = str(
+        article_cards_payload.get("payload_path")
+        or f"db://projects/{int(project.id)}/article_cards_payload"
+    )
+    runtime_dir = Path(tempfile.gettempdir()) / "ennosmart_runtime_article_cards"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    runtime_cards_path = runtime_dir / f"project_{int(project.id)}_article_cards_payload.json"
+    runtime_cards_path.write_text(
+        json.dumps(article_cards_payload, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+    paths["article_cards_payload"] = runtime_cards_path
 
     readonly_fingerprints_before = {
         "selection_sha256": _sha256(paths["selection_payload"]),
         "article_cards_sha256": _sha256(paths["article_cards_payload"]),
     }
     selection_payload = _read_json(paths["selection_payload"], {})
-    article_cards_payload = _read_json(paths["article_cards_payload"], {})
     if not isinstance(selection_payload, dict) or not selection_payload:
         raise RuntimeError("selection_payload.json existant est vide ou invalide.")
     if not isinstance(article_cards_payload, dict) or not article_cards_payload:
@@ -1221,6 +1236,7 @@ def generate_state_of_art_after_consultant_selection(
     print("=" * 90)
 
     summary = state_of_art_view.get("summary") or {}
+    runtime_cards_path.unlink(missing_ok=True)
     return {
         "ok": bool(phase5_payload.get("ok")) and bool(markdown),
         "project": {
@@ -1266,7 +1282,7 @@ def generate_state_of_art_after_consultant_selection(
         "report": state_of_art_view,
         "paths": {
             "selection_payload": str(paths["selection_payload"]),
-            "article_cards_payload": str(paths["article_cards_payload"]),
+            "article_cards_payload": article_cards_db_uri,
             "phase3_style_signature_payload": str(paths["phase3_style_signature_payload"]),
             "phase4_gap_payload": str(paths["phase4_gap_payload"]),
             "phase45_scientific_reasoning_payload": str(paths["phase45_scientific_reasoning_payload"]),

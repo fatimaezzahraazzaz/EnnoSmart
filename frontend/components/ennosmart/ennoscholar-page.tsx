@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useEffect, useMemo, useState } from "react"
 import {
@@ -108,6 +108,160 @@ function decisionLabel(status: string) {
       return "En attente"
   }
 }
+
+function getEvidencePresentation(article: ArticleRead) {
+  const sj: any = article.source_json || {}
+  const preflight: any = sj.evidence_preflight || {}
+  const status =
+    (article as any).evidence_status ||
+    preflight.evidence_status ||
+    "NOT_CHECKED"
+  const reasonDetail =
+    (article as any).evidence_reason_detail ||
+    preflight.reason_detail ||
+    ""
+  const recommendedAction =
+    (article as any).evidence_recommended_action ||
+    preflight.recommended_action ||
+    ""
+  const cause = [reasonDetail, recommendedAction].filter(Boolean).join(" ")
+
+  if (status === "FULLTEXT_READY") {
+    return {
+      status,
+      title: "Texte intégral extrait",
+      detail: "Preuve complète disponible pour méthodes, résultats et limites.",
+      className: "border-success/30 bg-success/5 text-success",
+    }
+  }
+  if (status === "ABSTRACT_READY") {
+    return {
+      status,
+      title: "Texte intégral à récupérer",
+      detail: cause || "Abstract uniquement — non utilisable comme preuve scientifique complète.",
+      className: "border-warning/30 bg-warning/5 text-warning",
+    }
+  }
+  if (status === "METADATA_ONLY") {
+    return {
+      status,
+      title: "Texte intégral indisponible automatiquement",
+      detail: cause || "Référence conservée, mais non utilisable comme preuve complète.",
+      className: "border-warning/30 bg-warning/5 text-warning",
+    }
+  }
+  if (status === "EXTRACTION_FAILED") {
+    return {
+      status,
+      title: "Extraction automatique échouée",
+      detail: cause || "L'article reste visible pour vérification consultant.",
+      className: "border-destructive/30 bg-destructive/5 text-destructive",
+    }
+  }
+  if (status === "ACCESS_AVAILABLE") {
+    return {
+      status,
+      title: "Texte intégral accessible",
+      detail: cause || "Cliquez sur cette fiche pour lancer uniquement l'extraction de cet article.",
+      className: "border-brand/30 bg-brand/5 text-brand",
+    }
+  }
+  if (status === "ACCESS_UNAVAILABLE") {
+    return {
+      status,
+      title: "Import du PDF nécessaire",
+      detail: cause || "Aucune copie publique exploitable n'a été trouvée automatiquement.",
+      className: "border-warning/30 bg-warning/5 text-warning",
+    }
+  }
+  if (status === "BROWSER_DOWNLOAD_REQUIRED") {
+    return {
+      status,
+      title: "PDF public trouvé — navigateur requis",
+      detail: cause || "Le site bloque le worker, mais le PDF officiel peut être téléchargé dans votre navigateur puis importé ici.",
+      className: "border-brand/30 bg-brand/5 text-brand",
+    }
+  }
+  if (status === "ACCESS_UNCONFIRMED") {
+    return {
+      status,
+      title: "Vérification MCP incomplète",
+      detail: cause || "Le MCP est temporairement indisponible ; aucune conclusion définitive n'est affichée.",
+      className: "border-destructive/30 bg-destructive/5 text-destructive",
+    }
+  }
+  if (status === "ACCESS_CHECKING" || status === "MCP_SEARCHING" || status === "EXTRACTION_QUEUED" || status === "EXTRACTION_RUNNING") {
+    return {
+      status,
+      title: status === "MCP_SEARCHING"
+        ? "Recherche MCP des copies légales"
+        : status === "ACCESS_CHECKING" ? "Vérification de l'accès en cours" : "Extraction du texte en cours",
+      detail: status === "MCP_SEARCHING"
+        ? "Les sources directes n'ont rien trouvé ; le MCP vérifie les fournisseurs restants avant la conclusion."
+        : status === "ACCESS_CHECKING"
+          ? "Le classement est déjà visible. EnnoScholar vérifie seulement si une copie publique existe."
+          : "EnnoScholar extrait uniquement cet article à votre demande.",
+      className: "border-brand/30 bg-brand/5 text-brand",
+    }
+  }
+  return {
+    status: "NOT_CHECKED",
+    title: "Vérification de l'accès en préparation",
+    detail: "Le classement est visible ; les décisions seront activées après le contrôle d'accès.",
+    className: "border-border bg-muted/30 text-muted-foreground",
+  }
+}
+
+// ENNOSMART_RESEARCH_UPGRADE_V1_UI
+function getEvidencePreflight(article: ArticleRead) {
+  const sj: any = article.source_json || {}
+  return sj?.evidence_preflight || ((article as any).evidence_status ? {
+    evidence_status: (article as any).evidence_status,
+    evidence_label: (article as any).evidence_label,
+  } : null)
+}
+
+function evidenceBadgeClass(status?: string) {
+  switch (status) {
+    case "FULLTEXT_READY":
+      return "bg-success/10 text-success border-success/30"
+    case "ACCESS_AVAILABLE":
+      return "bg-brand/10 text-brand border-brand/30"
+    case "ACCESS_UNAVAILABLE":
+      return "bg-warning/10 text-warning border-warning/30"
+    case "BROWSER_DOWNLOAD_REQUIRED":
+      return "bg-brand/10 text-brand border-brand/30"
+    case "ACCESS_UNCONFIRMED":
+      return "bg-destructive/10 text-destructive border-destructive/30"
+    case "ABSTRACT_READY":
+      return "bg-warning/10 text-warning border-warning/30"
+    case "METADATA_ONLY":
+      return "bg-muted text-muted-foreground border-border"
+    case "EXTRACTION_FAILED":
+      return "bg-destructive/10 text-destructive border-destructive/30"
+    default:
+      return "bg-muted text-muted-foreground border-border"
+  }
+}
+
+function evidenceShortLabel(status?: string) {
+  switch (status) {
+    case "FULLTEXT_READY": return "Texte intégral prêt"
+    case "ACCESS_AVAILABLE": return "Accessible · cliquer pour extraire"
+    case "ACCESS_UNAVAILABLE": return "PDF à importer"
+    case "BROWSER_DOWNLOAD_REQUIRED": return "PDF public · navigateur"
+    case "ACCESS_UNCONFIRMED": return "MCP à relancer"
+    case "ABSTRACT_READY": return "Résumé disponible"
+    case "METADATA_ONLY": return "Référence disponible"
+    case "EXTRACTION_FAILED": return "Texte non récupéré"
+    case "ACCESS_CHECKING":
+    case "MCP_SEARCHING":
+    case "EXTRACTION_QUEUED":
+    case "EXTRACTION_RUNNING": return "Texte en vérification"
+    default: return "Vérification à venir"
+  }
+}
+
 
 function getArticleReason(article: ArticleRead) {
   return (
@@ -243,6 +397,99 @@ function sortArticles(articles: ArticleRead[]) {
   })
 }
 
+function getArticleEvidenceStatus(article: ArticleRead | any): string {
+  const a: any = article || {}
+  const sj: any = a.source_json || {}
+  const evidence: any = sj.evidence_preflight || a.evidence_preflight || {}
+  return String(a.evidence_status || evidence.evidence_status || sj.evidence_status || "NOT_CHECKED").trim().toUpperCase()
+}
+
+function isArticleFulltextReady(article: ArticleRead | any): boolean {
+  return getArticleEvidenceStatus(article) === "FULLTEXT_READY"
+}
+
+function isArticleAccessAvailable(article: ArticleRead | any): boolean {
+  return getArticleEvidenceStatus(article) === "ACCESS_AVAILABLE"
+}
+
+function isArticleAccessUnavailable(article: ArticleRead | any): boolean {
+  return ["ACCESS_UNAVAILABLE", "BROWSER_DOWNLOAD_REQUIRED", "ABSTRACT_READY", "METADATA_ONLY", "EXTRACTION_FAILED"].includes(
+    getArticleEvidenceStatus(article),
+  )
+}
+
+function isArticleBrowserDownloadRequired(article: ArticleRead | any): boolean {
+  return getArticleEvidenceStatus(article) === "BROWSER_DOWNLOAD_REQUIRED"
+}
+
+function getArticleBrowserDownloadUrl(article: ArticleRead | any): string {
+  const sj: any = article?.source_json || {}
+  const preflight: any = sj.evidence_preflight || {}
+  const access: any = sj.access_probe_result || {}
+  const candidates: any[] = Array.isArray(sj.deterministic_oa_candidates)
+    ? sj.deterministic_oa_candidates
+    : []
+  const publicPdf = candidates.find((candidate) =>
+    candidate?.legal_access === true &&
+    String(candidate?.kind || "").toLowerCase() === "pdf" &&
+    /^https?:\/\//i.test(String(candidate?.url || "")),
+  )
+  return String(
+    preflight.browser_download_url ||
+    access.browser_download_url ||
+    publicPdf?.url ||
+    article?.url ||
+    "",
+  ).trim()
+}
+
+function isArticleAccessUnconfirmed(article: ArticleRead | any): boolean {
+  return getArticleEvidenceStatus(article) === "ACCESS_UNCONFIRMED"
+}
+
+function evidenceLabel(article: ArticleRead | any): string {
+  switch (getArticleEvidenceStatus(article)) {
+    case "FULLTEXT_READY": return "Texte intégral vérifié"
+    case "ACCESS_AVAILABLE": return "Accessible · extraction au clic"
+    case "ACCESS_UNAVAILABLE": return "PDF à importer"
+    case "BROWSER_DOWNLOAD_REQUIRED": return "PDF public · navigateur requis"
+    case "ACCESS_UNCONFIRMED": return "Accès non confirmé"
+    case "ABSTRACT_READY": return "Résumé disponible"
+    case "METADATA_ONLY": return "Référence disponible"
+    case "EXTRACTION_FAILED": return "Texte non récupéré"
+    case "ACCESS_CHECKING": return "Accès en vérification"
+    case "MCP_SEARCHING": return "Recherche MCP"
+    case "EXTRACTION_QUEUED":
+    case "EXTRACTION_RUNNING": return "Texte en vérification"
+    default: return "Vérification à venir"
+  }
+}
+
+function countEvidenceStatuses(articles: ArticleRead[]) {
+  const out = { fulltext: 0, available: 0, unavailable: 0, browserOnly: 0, unconfirmed: 0, abstract: 0, metadata: 0, failed: 0, queued: 0, notChecked: 0, total: 0 }
+  for (const article of articles || []) {
+    out.total += 1
+    const status = getArticleEvidenceStatus(article)
+    if (status === "FULLTEXT_READY") out.fulltext += 1
+    else if (status === "ACCESS_AVAILABLE") out.available += 1
+    else if (status === "ACCESS_UNAVAILABLE") out.unavailable += 1
+    else if (status === "BROWSER_DOWNLOAD_REQUIRED") {
+      out.browserOnly += 1
+      out.unavailable += 1
+    }
+    else if (status === "ACCESS_UNCONFIRMED") out.unconfirmed += 1
+    else if (status === "ABSTRACT_READY") out.abstract += 1
+    else if (status === "METADATA_ONLY") out.metadata += 1
+    else if (status === "EXTRACTION_FAILED") out.failed += 1
+    else if (status === "ACCESS_CHECKING" || status === "MCP_SEARCHING" || status === "EXTRACTION_QUEUED" || status === "EXTRACTION_RUNNING") {
+      out.queued += 1
+      out.notChecked += 1
+    }
+    else out.notChecked += 1
+  }
+  return out
+}
+
 function ArticleCard({
   article,
   projectId,
@@ -258,9 +505,39 @@ function ArticleCard({
   const [translationError, setTranslationError] = useState("")
   const [translating, setTranslating] = useState(false)
   const [translationForceMode, setTranslationForceMode] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [abstractMode, setAbstractMode] = useState<"fr" | "original">("fr")
 
   const reportOnly = isReportOnlyArticle(article)
+  const fulltextReady = isArticleFulltextReady(article)
+  const accessAvailable = isArticleAccessAvailable(article)
+  const accessUnavailable = isArticleAccessUnavailable(article)
+  const browserDownloadRequired = isArticleBrowserDownloadRequired(article)
+  const browserDownloadUrl = getArticleBrowserDownloadUrl(article)
+  const accessUnconfirmed = isArticleAccessUnconfirmed(article)
+  const evidencePending = ["NOT_CHECKED", "ACCESS_CHECKING", "MCP_SEARCHING", "EXTRACTION_QUEUED", "EXTRACTION_RUNNING"].includes(
+    getArticleEvidenceStatus(article)
+  )
+  const decisionBlocked = accessUnavailable || accessUnconfirmed || evidencePending
+
+  const uploadMissingPdf = async (file: File) => {
+    if (!file || uploading || reportOnly) return
+    setUploading(true)
+    setDecisionError("")
+    try {
+      const result = await uploadAndExtractArticlePdf(projectId, article.id, file)
+      if (result?.article) onUpdated(result.article as ArticleRead)
+      else {
+        const refreshed = await getArticles(projectId, false)
+        const updated = refreshed.find((item) => item.id === article.id)
+        if (updated) onUpdated(updated)
+      }
+    } catch (error: any) {
+      setDecisionError(error?.message || "Impossible d'importer et d'extraire ce PDF.")
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const updateDecision = async (decision: ArticleDecision) => {
     if (reportOnly) {
@@ -304,6 +581,7 @@ function ArticleCard({
   const displayedAbstract = getArticleAbstractDisplay(article, abstractMode)
   const displayedAbstractLabel = getArticleAbstractLabel(article, abstractMode)
   const coveredVerrous = getCoveredVerrous(article)
+  const evidencePresentation = getEvidencePresentation(article)
 
   return (
     <Card className="border border-border hover-lift">
@@ -341,6 +619,34 @@ function ArticleCard({
               >
                 {decisionLabel(getConsultantStatus(article))}
               </Badge>
+
+              <Badge
+                variant="outline"
+                className={`text-xs ${
+                  fulltextReady
+                    ? "bg-success/10 text-success border-success/30"
+                    : accessAvailable
+                      ? "bg-brand/10 text-brand border-brand/30"
+                    : evidencePending
+                      ? "bg-muted text-muted-foreground border-border"
+                      : "bg-warning/10 text-warning border-warning/30"
+                }`}
+              >
+                {evidenceLabel(article)}
+              </Badge>
+
+              {(() => {
+                const evidence = getEvidencePreflight(article)
+                return evidence ? (
+                  <Badge
+                    variant="outline"
+                    className={`text-xs ${evidenceBadgeClass(evidence?.evidence_status)}`}
+                    title={evidence?.evidence_label || "Statut de disponibilité"}
+                  >
+                    {evidenceShortLabel(evidence?.evidence_status)}
+                  </Badge>
+                ) : null
+              })()}
 
               {reportOnly && (
                 <Badge variant="outline" className="text-xs bg-warning/10 text-warning border-warning/30">
@@ -398,6 +704,58 @@ function ArticleCard({
           )}
         </div>
 
+        <div className={`rounded-md border p-3 ${evidencePresentation.className}`}>
+          <div className="flex items-start gap-2">
+            {["FULLTEXT_READY", "ACCESS_AVAILABLE"].includes(evidencePresentation.status) ? (
+              <CheckCircle2 className="size-4 mt-0.5 shrink-0" />
+            ) : ["NOT_CHECKED", "ACCESS_CHECKING", "MCP_SEARCHING", "EXTRACTION_QUEUED", "EXTRACTION_RUNNING"].includes(evidencePresentation.status) ? (
+              <Loader2 className="size-4 mt-0.5 shrink-0" />
+            ) : (
+              <AlertCircle className="size-4 mt-0.5 shrink-0" />
+            )}
+            <div>
+              <p className="text-xs font-semibold">{evidencePresentation.title}</p>
+              <p className="text-xs mt-0.5">{evidencePresentation.detail}</p>
+            </div>
+          </div>
+        </div>
+
+        {accessUnavailable && (
+          <div className="rounded-md border border-warning/30 bg-warning/5 p-3 space-y-2">
+            <p className="text-xs text-warning">
+              {browserDownloadRequired
+                ? "Le PDF public existe, mais sa protection anti-robot impose le téléchargement dans votre navigateur. Importez ensuite le fichier pour activer Garder et Rejeter."
+                : "Garder et Rejeter sont désactivés jusqu'à l'import d'une copie PDF autorisée."}
+            </p>
+            {browserDownloadRequired && browserDownloadUrl && (
+              <a
+                href={browserDownloadUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-8 items-center justify-center rounded-md border border-brand/30 px-3 text-xs font-medium text-brand hover:bg-brand/10"
+              >
+                <ExternalLink className="size-3 mr-2" />
+                Télécharger le PDF public
+              </a>
+            )}
+            <label className={`inline-flex h-8 items-center justify-center rounded-md border border-warning/30 px-3 text-xs font-medium text-warning ${uploading ? "pointer-events-none opacity-60" : "cursor-pointer hover:bg-warning/10"}`}>
+              {uploading ? <Loader2 className="size-3 mr-2 animate-spin" /> : <FileText className="size-3 mr-2" />}
+              {uploading ? "Import et extraction..." : "Importer le PDF"}
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                className="hidden"
+                disabled={uploading || reportOnly}
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) void uploadMissingPdf(file)
+                  event.currentTarget.value = ""
+                }}
+              />
+            </label>
+          </div>
+        )}
+
         {authors && (
           <p className="text-xs text-muted-foreground">
             Auteurs : {authors}
@@ -440,18 +798,22 @@ function ArticleCard({
           <Button
             size="sm"
             className="text-xs h-8 bg-brand hover:bg-brand/90"
-            disabled={loading || reportOnly}
+            disabled={loading || reportOnly || decisionBlocked}
             onClick={() => updateDecision("garde")}
           >
-            <CheckCircle2 className="size-3 mr-1" />
-            Garder
+            {loading ? (
+              <Loader2 className="size-3 mr-1 animate-spin" />
+            ) : (
+              <CheckCircle2 className="size-3 mr-1" />
+            )}
+            {loading && accessAvailable && !fulltextReady ? "Préparation..." : "Garder"}
           </Button>
 
           <Button
             size="sm"
             variant="outline"
             className="text-xs h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
-            disabled={loading || reportOnly}
+            disabled={loading || reportOnly || decisionBlocked}
             onClick={() => updateDecision("rejete")}
           >
             <XCircle className="size-3 mr-1" />
@@ -731,7 +1093,16 @@ function getArticleVerrouKey(article: ArticleRead, groupingGroups: any[] = []): 
 function getArticleUniqueKey(article: ArticleRead): string {
   const sj: any = article.source_json || {}
 
-  const doi = v46Norm(article.doi || sj?.doi)
+  // Le titre exact normalise passe avant le DOI : un meme papier arrive
+  // parfois d'une source avec DOI et d'une autre sans DOI.
+  const title = v46Norm(article.title || sj?.title || sj?.article_title)
+  if (title) return `title:${title}`
+
+  const doi = v46Norm(
+    v46Text(article.doi || sj?.doi)
+      .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
+      .replace(/^doi:\s*/i, "")
+  )
   if (doi) return `doi:${doi}`
 
   const url = v46Norm(article.url || sj?.url)
@@ -740,7 +1111,7 @@ function getArticleUniqueKey(article: ArticleRead): string {
   const paperId = v46Text(sj?.paper_id || sj?.paperId || sj?.id || "")
   if (paperId) return `paper:${paperId}`
 
-  return `title:${v46Norm(article.title).slice(0, 180)}:${article.year || ""}`
+  return `article:${article.id || "unknown"}`
 }
 
 function groupArticlesByScientificVerrou(articles: ArticleRead[], groupingGroups: any[] = []) {
@@ -1113,6 +1484,13 @@ function isUsableArticleForStateOfArtWriting(article: ArticleRead | any): boolea
 
   if (isTechnicalCatalogArticle(article)) return false
   if (!["Direct", "Connexe", "Fondamental"].includes(tag)) return false
+
+  const evidenceStatus =
+    (a as any).evidence_status ||
+    sj?.evidence_preflight?.evidence_status ||
+    null
+
+  if (evidenceStatus && evidenceStatus !== "FULLTEXT_READY") return false
 
   return isKeptForStateOfArt(article)
 }
@@ -1693,6 +2071,7 @@ function EnnoScholarByVerrouSection({
 
         const visibleCount = sections.reduce((total, section) => total + section.articles.length, 0)
         const usefulVisibleCount = direct.length + connexe.length + fondamental.length
+        const evidenceCounts = countEvidenceStatuses(group.articles)
         const realIndex = groups.findIndex((item) => item.key === group.key)
 
         return (
@@ -1772,6 +2151,22 @@ function EnnoScholarByVerrouSection({
                 {autres.length > 0 && (
                   <Badge variant="outline">
                     Autres {autres.length}
+                  </Badge>
+                )}
+                <Badge variant="outline" className="bg-success/10 text-success border-success/30">
+                  Texte intégral {evidenceCounts.fulltext}
+                </Badge>
+                {evidenceCounts.abstract > 0 && (
+                  <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">
+                    Abstract {evidenceCounts.abstract}
+                  </Badge>
+                )}
+                {evidenceCounts.metadata > 0 && (
+                  <Badge variant="outline">Métadonnées {evidenceCounts.metadata}</Badge>
+                )}
+                {evidenceCounts.notChecked > 0 && (
+                  <Badge variant="outline" className="bg-muted text-muted-foreground">
+                    Textes vérifiés {evidenceCounts.total - evidenceCounts.notChecked}/{evidenceCounts.total}
                   </Badge>
                 )}
               </div>
@@ -3322,6 +3717,16 @@ function mergeReportArticlesWithDbDecisions(reportArticles: ArticleRead[], dbArt
       scholar_run_id: dbArticle.scholar_run_id || reportArticle.scholar_run_id,
       verrou_id: dbArticle.verrou_id || reportArticle.verrou_id,
       consultant_status: dbStatus,
+      evidence_status: dbArticle.evidence_status || reportArticle.evidence_status,
+      evidence_label: dbArticle.evidence_label || reportArticle.evidence_label,
+      evidence_usable: dbArticle.evidence_usable ?? reportArticle.evidence_usable,
+      fulltext_ready: dbArticle.fulltext_ready ?? reportArticle.fulltext_ready,
+      candidate_only: dbArticle.candidate_only ?? reportArticle.candidate_only,
+      access_check_status: dbArticle.access_check_status || reportArticle.access_check_status,
+      evidence_reason_code: dbArticle.evidence_reason_code || reportArticle.evidence_reason_code,
+      evidence_reason_detail: dbArticle.evidence_reason_detail || reportArticle.evidence_reason_detail,
+      evidence_recommended_action: dbArticle.evidence_recommended_action || reportArticle.evidence_recommended_action,
+      evidence_access_kind: dbArticle.evidence_access_kind || reportArticle.evidence_access_kind,
       source_json: {
         ...(reportArticle.source_json || {}),
         ...(dbArticle.source_json || {}),
@@ -3509,6 +3914,9 @@ export function EnnoScholarPage({
     [databaseMultiVerrouArticles]
   )
 
+  const evidenceStats = useMemo(() => countEvidenceStatuses(articles), [articles])
+  const preflightPendingCount = evidenceStats.notChecked
+
   const selectedStateOfArtEntry = useMemo(() => {
     if (!stateOfArtHistory.length) return null
     return (
@@ -3591,6 +3999,33 @@ export function EnnoScholarPage({
   useEffect(() => {
     loadData()
   }, [])
+
+  useEffect(() => {
+    if (!project?.id || preflightPendingCount <= 0) return
+    let cancelled = false
+    const refreshEvidence = async () => {
+      try {
+        const fresh = await getArticles(project.id, true)
+        if (!cancelled) setArticles(fresh)
+      } catch {
+        // polling non bloquant
+      }
+    }
+    const timer = window.setInterval(refreshEvidence, 4000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [project?.id, preflightPendingCount])
+
+  useEffect(() => {
+    if (
+      preflightPendingCount > 0 &&
+      ["preparation-etat-art", "etat-art-rediges"].includes(activeTab)
+    ) {
+      setActiveTab("par-verrou")
+    }
+  }, [activeTab, preflightPendingCount])
 
   useEffect(() => {
     onImmersiveModeChange?.(activeTab === "etat-art-rediges")
@@ -3987,6 +4422,42 @@ export function EnnoScholarPage({
         </div>
       </div>
 
+      {preflightPendingCount > 0 && (
+        <Card className="border-brand/30 bg-brand/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Loader2 className="size-5 animate-spin text-brand" />
+              Articles classés — vérification rapide des accès
+            </CardTitle>
+            <CardDescription>
+              Le catalogue classé est déjà consultable. Les liens directs sont vérifiés d'abord, puis le MCP recherche une copie légale pour chaque échec avant d'afficher la conclusion. Aucune extraction lourde n'est lancée automatiquement.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full bg-brand transition-all duration-500"
+                style={{
+                  width: `${evidenceStats.total > 0
+                    ? Math.round(((evidenceStats.total - preflightPendingCount) / evidenceStats.total) * 100)
+                    : 0}%`,
+                }}
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span className="font-medium text-foreground">
+                {evidenceStats.total - preflightPendingCount} / {evidenceStats.total} accès vérifiés
+              </span>
+              <span className="text-muted-foreground">
+                {preflightPendingCount} restant{preflightPendingCount > 1 ? "s" : ""}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              EnnoScholar classe les articles, vérifie les accès directs, puis appelle le MCP seulement pour les textes encore introuvables. L'extraction lourde ne démarre qu'au clic ; l'import PDF n'est proposé qu'après l'échec final du MCP.
+            </p>
+          </CardContent>
+        </Card>
+      )}
       {activeTab !== "etat-art-rediges" && (
         <>
       {/* Stats */}
@@ -4106,8 +4577,12 @@ export function EnnoScholarPage({
         <TabsList className="grid h-auto grid-cols-2 gap-1 rounded-2xl bg-muted/60 p-1 lg:grid-cols-4">
           <TabsTrigger value="par-verrou">Sélection articles</TabsTrigger>
           <TabsTrigger value="selection">Sélection consultant</TabsTrigger>
-          <TabsTrigger value="preparation-etat-art">Préparation état de l’art</TabsTrigger>
-          <TabsTrigger value="etat-art-rediges">État de l’art rédigé</TabsTrigger>
+          <TabsTrigger value="preparation-etat-art" disabled={preflightPendingCount > 0}>
+            Préparation état de l’art
+          </TabsTrigger>
+          <TabsTrigger value="etat-art-rediges" disabled={preflightPendingCount > 0}>
+            État de l’art rédigé
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="par-verrou">
@@ -4165,7 +4640,9 @@ export function EnnoScholarPage({
                 <Button
                   size="sm"
                   className="bg-brand hover:bg-brand/90"
+                  disabled={preflightPendingCount > 0}
                   onClick={launchStateOfArtPreparationTab}
+                  title={preflightPendingCount > 0 ? "Disponible après la vérification finale de tous les articles." : undefined}
                 >
                   Suivant : préparer l’état de l’art
                 </Button>

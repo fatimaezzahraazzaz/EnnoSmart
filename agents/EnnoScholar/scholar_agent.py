@@ -35,6 +35,14 @@ import threading
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+# ENNOSMART_RESEARCH_UPGRADE_V1_AGENT
+try:
+    from .opencitations_client import OpenCitationsClient
+    from .deep_discovery_service import DeepDiscoveryService
+except Exception:
+    OpenCitationsClient = None
+    DeepDiscoveryService = None
+
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -113,7 +121,7 @@ SUMMARY_TOP_N = int(os.getenv("ENNOSCHOLAR_SUMMARY_MAX_ARTICLES_PER_VERROU", "0"
 # Ce cache-ci est plus haut niveau : si le payload + la configuration n'ont pas changé,
 # on réutilise directement le rapport complet, sans refaire les appels API, le ranking,
 # le reranking BGE ni les résumés/abstracts.
-RUN_CACHE_VERSION = "v152_cir_n_minus_1_dynamic_window"
+RUN_CACHE_VERSION = "v156_all_locks_section_aware_manual_validation"
 
 
 def _env_bool_value(name: str, default: bool = False) -> bool:
@@ -408,7 +416,7 @@ def _run_cache_config_fingerprint(agent: Any) -> Dict[str, Any]:
         "cir_require_known_year": os.getenv("ENNOSCHOLAR_CIR_REQUIRE_KNOWN_YEAR", "true"),
         "presentation_top_k": os.getenv("ENNOSCHOLAR_PRESENTATION_TOP_K", "15"),
         "keep_memory_v2_without_pdf": os.getenv("ENNOSCHOLAR_KEEP_MEMORY_V2_WITHOUT_PDF", "false"),
-        "source_router_version": "v148_fast_tiered_source_router",
+        "source_router_version": "v149_relevance_routed_technical_artifacts",
         "use_doaj": os.getenv("ENNOSCHOLAR_USE_DOAJ", "true"),
         "use_crossref": os.getenv("ENNOSCHOLAR_USE_CROSSREF", "true"),
         "use_hal": os.getenv("ENNOSCHOLAR_USE_HAL", "true"),
@@ -524,7 +532,19 @@ def _now_iso() -> str:
 
 
 def _paper_stable_key(article: Dict[str, Any]) -> str:
+    # Certaines sources fournissent le DOI et d'autres non pour le meme
+    # article. Le titre scientifique normalise evite alors deux cartes.
+    title = re.sub(
+        r"[\W_]+",
+        " ",
+        clean_text(article.get("title"), 320).casefold(),
+        flags=re.UNICODE,
+    ).strip()
+    if title:
+        return "title:" + title
+
     doi = clean_text(article.get("doi")).lower()
+    doi = re.sub(r"^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)", "", doi).strip()
     if doi:
         return "doi:" + doi
 
@@ -532,9 +552,7 @@ def _paper_stable_key(article: Dict[str, Any]) -> str:
     if paper_id:
         return "id:" + paper_id
 
-    title = clean_text(article.get("title"), 240).lower()
-    year = str(article.get("year") or "")
-    return f"title:{title}:{year}"
+    return ""
 
 
 
@@ -606,9 +624,8 @@ def _annotate_multi_verrou_coverage(results: List[Dict[str, Any]]) -> Dict[str, 
     V144 — vérification agent des articles multi-verrous.
 
     Principe important :
-    - on déduplique seulement les doublons internes à un verrou dans paper_ranker ;
-    - on ne supprime jamais un article parce qu'il est aussi ressorti pour un autre verrou ;
-    - si le même DOI/paper_id/titre est classé dans plusieurs verrous, on l'enrichit avec
+    - le même article n'est conservé qu'une fois dans le catalogue global ;
+    - ses classements dans plusieurs verrous sont fusionnés dans
       source_json.covered_verrous pour que le frontend affiche « couvre V1, V3, ... » ;
     - aucune règle métier ou hardcoding domaine : la preuve vient uniquement du fait que
       le ranker/reranker l'a retenu dans la liste de chaque verrou.
@@ -702,7 +719,7 @@ def _annotate_multi_verrou_coverage(results: List[Dict[str, Any]]) -> Dict[str, 
             article["covered_verrous"] = coverage
             article["multi_verrou_article"] = count > 1
             article["multi_verrou_count"] = count
-            article["multi_verrou_policy"] = "kept_per_verrou_not_globally_deduped"
+            article["multi_verrou_policy"] = "globally_deduped_with_merged_coverage"
             article["verrou_id"] = article.get("verrou_id") or verrou_id
             article["verrou_title"] = article.get("verrou_title") or verrou_title
             article["verrou_number"] = article.get("verrou_number") or verrou_number
@@ -711,21 +728,83 @@ def _annotate_multi_verrou_coverage(results: List[Dict[str, Any]]) -> Dict[str, 
             sj["covered_verrous"] = coverage
             sj["multi_verrou_article"] = count > 1
             sj["multi_verrou_count"] = count
-            sj["multi_verrou_policy"] = "agent_verified_from_ranker_results"
+            sj["multi_verrou_policy"] = "globally_deduped_agent_verified_coverage"
             sj.setdefault("verrou_id", verrou_id)
             sj.setdefault("verrou_title", verrou_title)
             sj.setdefault("verrou_number", verrou_number)
             article["source_json"] = sj
 
+    # Une seule carte globale par article. Les doublons trouves sous d'autres
+    # verrous enrichissent la couverture du premier article au lieu de creer
+    # une nouvelle ligne visible et un nouveau travail d'extraction/MCP.
+    duplicates_removed = 0
+    canonical_by_key: Dict[str, Dict[str, Any]] = {}
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        unique_articles: List[Dict[str, Any]] = []
+        for article in result.get("articles") or []:
+            if not isinstance(article, dict):
+                continue
+            paper_key = _paper_stable_key(article)
+            canonical = canonical_by_key.get(paper_key) if paper_key else None
+            if canonical is None:
+                unique_articles.append(article)
+                if paper_key:
+                    canonical_by_key[paper_key] = article
+                continue
+
+            duplicates_removed += 1
+            coverage = _merge_coverage_items(
+                _article_existing_coverage(canonical)
+                + _article_existing_coverage(article)
+            )
+            canonical_score = _safe_float(
+                canonical.get("bge_reranker_score")
+                or canonical.get("relevance_score")
+                or canonical.get("score")
+            )
+            duplicate_score = _safe_float(
+                article.get("bge_reranker_score")
+                or article.get("relevance_score")
+                or article.get("score")
+            )
+            canonical_source = dict(canonical.get("source_json") or {})
+            duplicate_source = dict(article.get("source_json") or {})
+            if duplicate_score > canonical_score:
+                # L'objet canonique garde sa place sous le premier verrou mais
+                # recupere les meilleures metadonnees de classement.
+                preserved_verrou = {
+                    key: canonical.get(key)
+                    for key in ("verrou_id", "verrou_title", "verrou_number")
+                }
+                canonical.clear()
+                canonical.update(article)
+                for key, value in preserved_verrou.items():
+                    if value not in (None, ""):
+                        canonical[key] = value
+            merged_source = {**duplicate_source, **canonical_source}
+            merged_source["covered_verrous"] = coverage
+            merged_source["multi_verrou_article"] = len(coverage) > 1
+            merged_source["multi_verrou_count"] = len(coverage)
+            merged_source["multi_verrou_policy"] = "globally_deduped_agent_verified_coverage"
+            canonical["covered_verrous"] = coverage
+            canonical["multi_verrou_article"] = len(coverage) > 1
+            canonical["multi_verrou_count"] = len(coverage)
+            canonical["multi_verrou_policy"] = "globally_deduped_with_merged_coverage"
+            canonical["source_json"] = merged_source
+        result["articles"] = unique_articles
+
     return {
         "enabled": True,
-        "version": "v146_agent_verified_multi_verrou_coverage",
-        "policy": "dedupe_inside_each_verrou_only_keep_same_article_across_verrous",
+        "version": "v153_global_article_dedupe_merged_coverage",
+        "policy": "dedupe_globally_keep_one_article_merge_all_verrous",
         "source_of_truth": "ranker_and_reranker_results_per_verrou",
         "no_frontend_inference_required": True,
         "papers_seen": len(coverage_by_paper),
         "articles_with_multi_verrou": articles_with_multi,
         "links_count": total_links,
+        "duplicates_removed": duplicates_removed,
     }
 
 def _citation_label(article: Dict[str, Any]) -> str:
@@ -1808,18 +1887,13 @@ def _select_relevant_articles_for_output(
     ranked: List[Dict[str, Any]],
     top_n: int,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    """Expose uniquement un Top-K scientifiquement défendable.
-
-    Le classement interne peut rester large pour le reranking, mais l'interface
-    consultant ne doit pas recevoir des dizaines de résultats génériques.
-    """
-
+    """V153 — garde universelle centrée sur le verrou, sans remplissage."""
     ranked = [item for item in (ranked or []) if isinstance(item, dict)]
     requested = max(1, int(top_n or len(ranked) or 1))
     try:
-        presentation_cap = max(3, min(int(os.getenv("ENNOSCHOLAR_PRESENTATION_TOP_K", "15") or 15), 30))
+        presentation_cap = max(3, min(int(os.getenv("ENNOSCHOLAR_PRESENTATION_TOP_K", "60") or 60), 80))
     except Exception:
-        presentation_cap = 15
+        presentation_cap = 60
     limit = min(requested, presentation_cap)
 
     thresholds = {
@@ -1830,51 +1904,76 @@ def _select_relevant_articles_for_output(
     limits = {
         "Direct": max(0, int(os.getenv("ENNOSCHOLAR_MAX_DIRECT", str(limit)) or limit)),
         "Connexe": max(0, int(os.getenv("ENNOSCHOLAR_MAX_CONNEXE", str(limit)) or limit)),
-        "Fondamental": max(0, int(os.getenv("ENNOSCHOLAR_MAX_FONDAMENTAL", "3") or 3)),
+        "Fondamental": max(0, int(os.getenv("ENNOSCHOLAR_MAX_FONDAMENTAL", "20") or 20)),
         "Hors sujet": 0,
     }
 
     before = {tag: sum(1 for item in ranked if item.get("tag") == tag) for tag in limits}
     accepted: List[Dict[str, Any]] = []
     rejected_low_precision: List[Dict[str, Any]] = []
+
     for item in ranked:
         tag = str(item.get("tag") or "")
         if tag not in thresholds:
             continue
         score = float(item.get("relevance_score") or 0.0)
         details = item.get("score_details") if isinstance(item.get("score_details"), dict) else {}
-        specific_n = int(details.get("specific_anchor_count") or 0)
+
         primary_n = int(details.get("primary_core_hit_count") or 0)
+        secondary_n = int(details.get("secondary_core_hit_count") or 0)
+        method_n = int(details.get("method_anchor_hit_count") or 0)
+        phenomenon_n = int(details.get("phenomenon_anchor_hit_count") or 0)
+        specific_n = int(details.get("specific_anchor_count") or 0)
+        problem_evidence = bool(details.get("problem_evidence"))
+        support_n = secondary_n + method_n + phenomenon_n
+        has_role_fields = any(
+            key in details
+            for key in [
+                "primary_core_hit_count", "secondary_core_hit_count",
+                "method_anchor_hit_count", "phenomenon_anchor_hit_count",
+                "problem_evidence",
+            ]
+        )
 
-        # Garde supplémentaire pour les articles « Fondamental » : un simple mot
-        # générique partagé (deep learning, synthetic data, etc.) ne suffit pas.
-        precise_enough = True
-        if tag == "Fondamental":
-            precise_enough = specific_n >= 2 or primary_n >= 1
-        elif tag == "Connexe" and details:
-            precise_enough = primary_n >= 1 or specific_n >= 2
+        if tag == "Direct":
+            precise = (primary_n >= 1 and (problem_evidence or support_n >= 1)) if has_role_fields else specific_n >= 2
+        elif tag == "Connexe":
+            precise = (primary_n >= 1 and support_n >= 1) if has_role_fields else specific_n >= 2
+        else:
+            precise = (primary_n >= 1 or support_n >= 1) if has_role_fields else specific_n >= 1
 
-        if score < thresholds[tag] or not precise_enough:
-            if len(rejected_low_precision) < 15:
+        if score < thresholds[tag] or not precise:
+            if len(rejected_low_precision) < 30:
                 rejected_low_precision.append({
                     "title": clean_text(item.get("title"), 220),
                     "tag": tag,
                     "score": score,
-                    "specific_anchor_count": specific_n,
                     "primary_core_hit_count": primary_n,
+                    "secondary_core_hit_count": secondary_n,
+                    "method_anchor_hit_count": method_n,
+                    "phenomenon_anchor_hit_count": phenomenon_n,
+                    "problem_evidence": problem_evidence,
+                    "reason": "score_below_threshold" if score < thresholds[tag] else "insufficient_lock_specific_support",
                 })
             continue
         accepted.append(item)
 
     selected: List[Dict[str, Any]] = []
-    for tag in ["Direct", "Connexe", "Fondamental"]:
-        tag_limit = limits[tag]
-        if tag_limit > 0:
-            selected.extend([item for item in accepted if item.get("tag") == tag][:tag_limit])
-    selected = selected[:limit]
+    tag_counts = {"Direct": 0, "Connexe": 0, "Fondamental": 0}
+    for item in accepted:
+        tag = str(item.get("tag") or "")
+        if tag not in tag_counts:
+            continue
+        if tag_counts[tag] >= limits[tag]:
+            continue
+        selected.append(item)
+        tag_counts[tag] += 1
+        if len(selected) >= limit:
+            break
+
     after = {tag: sum(1 for item in selected if item.get("tag") == tag) for tag in limits}
     return selected, {
-        "policy": "v152_precision_gate_top_k",
+        "policy": "v153_lock_specific_quality_gate_no_padding",
         "input_count": len(ranked),
         "accepted_before_top_k": len(accepted),
         "output_count": len(selected),
@@ -1883,10 +1982,85 @@ def _select_relevant_articles_for_output(
         "limits": limits,
         "counts_before": before,
         "counts_after": after,
+        "no_padding": True,
         "rejected_low_precision_examples": rejected_low_precision,
     }
 
 
+def _adaptive_rescue_queries(
+    intent: Dict[str, Any],
+    existing_queries: List[Any],
+    max_queries: int = 6,
+) -> List[str]:
+    """Requêtes de rappel dérivées uniquement du verrou courant."""
+    def key(value: Any) -> str:
+        """Clé stable locale utilisée pour la déduplication des requêtes."""
+        text = clean_text(value, 240).casefold()
+        text = re.sub(r"[^a-z0-9àâäéèêëîïôöùûüç]+", " ", text)
+        return re.sub(r"\s+", " ", text).strip()
+
+    def as_list(key: str) -> List[str]:
+        value = intent.get(key)
+        if isinstance(value, list):
+            return [clean_text(v, 120) for v in value if clean_text(v, 120)]
+        if value:
+            return [clean_text(value, 120)]
+        return []
+
+    primary = as_list("primary_core_concepts")
+    core = as_list("core_concepts")
+    primary_norm = {key(x) for x in primary}
+    secondary = [x for x in core if key(x) not in primary_norm]
+    methods = as_list("method_anchors") or as_list("methods")
+    phenomena = as_list("phenomenon_anchors")
+    constraints = as_list("constraints")
+    key_terms = as_list("key_terms_en") + as_list("key_terms_fr")
+    technical_object = clean_text(intent.get("technical_object"), 160)
+    phenomenon = clean_text(intent.get("phenomenon"), 160)
+
+    existing = set()
+    for raw in existing_queries or []:
+        q = raw.get("query") if isinstance(raw, dict) else str(raw)
+        if q:
+            existing.add(key(q))
+
+    candidates: List[str] = []
+    seen_candidates = set()
+
+    def add(parts: List[Any]) -> None:
+        words: List[str] = []
+        seen = set()
+        for part in parts:
+            values = part if isinstance(part, list) else [part]
+            for value in values:
+                for token in str(value or "").split():
+                    token = token.strip(" ,;:()[]{}")
+                    nt = key(token)
+                    if len(nt) < 3 or nt in seen:
+                        continue
+                    seen.add(nt)
+                    words.append(token)
+                    if len(words) >= 10:
+                        break
+                if len(words) >= 10:
+                    break
+            if len(words) >= 10:
+                break
+        q = clean_text(" ".join(words), 220)
+        nq = key(q)
+        if len(q.split()) >= 2 and nq and nq not in existing and nq not in seen_candidates:
+            seen_candidates.add(nq)
+            candidates.append(q)
+
+    if primary and phenomena: add([primary[:1], phenomena[:1]])
+    if primary and secondary: add([primary[:1], secondary[:1]])
+    if primary and methods: add([primary[:1], methods[:1]])
+    if primary and constraints: add([primary[:1], constraints[:1]])
+    if technical_object and phenomenon: add([technical_object, phenomenon])
+    if len(core) >= 2: add([core[:2]])
+    if primary and key_terms: add([primary[:1], key_terms[:2]])
+    if methods and phenomena: add([methods[:1], phenomena[:1]])
+    return candidates[:max(1, int(max_queries or 6))]
 
 class EnnoScholarAgent:
     def __init__(
@@ -1964,16 +2138,32 @@ class EnnoScholarAgent:
         self.github_client = GitHubClient(timeout=api_timeout, max_retries=api_retries)
         self.huggingface_client = HuggingFaceClient(timeout=api_timeout, max_retries=api_retries)
 
+        # >>> ENNOSMART_RESEARCH_UPGRADE_V1_BEGIN
+        self.opencitations_client = OpenCitationsClient() if OpenCitationsClient is not None else None
+        self.deep_discovery = (
+            DeepDiscoveryService(self.opencitations_client)
+            if DeepDiscoveryService is not None and self.opencitations_client is not None
+            else None
+        )
+        # <<< ENNOSMART_RESEARCH_UPGRADE_V1_END
+
         self.current_payload_meta: Dict[str, Any] = {}
-        self._source_locks: Dict[str, threading.Lock] = {}
+        self.source_concurrency_per_api = max(
+            1,
+            min(
+                int(os.getenv("ENNOSCHOLAR_SOURCE_CONCURRENCY_PER_API", "2") or 2),
+                3,
+            ),
+        )
+        self._source_locks: Dict[str, threading.BoundedSemaphore] = {}
         self._source_locks_guard = threading.Lock()
 
-    def _source_lock(self, source_name: str) -> threading.Lock:
-        """Évite les rafales simultanées vers une même API et donc les 429."""
+    def _source_lock(self, source_name: str) -> threading.BoundedSemaphore:
+        """Autorise un petit parallélisme contrôlé par API scientifique."""
         with self._source_locks_guard:
             lock = self._source_locks.get(source_name)
             if lock is None:
-                lock = threading.Lock()
+                lock = threading.BoundedSemaphore(self.source_concurrency_per_api)
                 self._source_locks[source_name] = lock
             return lock
 
@@ -2244,6 +2434,39 @@ class EnnoScholarAgent:
 
             _execute_jobs(jobs)
 
+            # V153 — rescue adaptatif universel pour verrou pauvre/difficile.
+            rescue_enabled = _env_bool_value("ENNOSCHOLAR_ADAPTIVE_RESCUE_ENABLED", True)
+            if rescue_enabled and queries:
+                rescue_min_relevant = max(1, int(os.getenv("ENNOSCHOLAR_RESCUE_MIN_RELEVANT", "30") or 30))
+                rescue_target_raw = max(rescue_min_relevant, int(os.getenv("ENNOSCHOLAR_RESCUE_TARGET_RAW", "100") or 100))
+
+                preliminary_ranked = rank_papers_for_intent(
+                    all_papers, intent, top_n=self.max_articles_per_verrou
+                )
+                preliminary_visible, _ = _select_relevant_articles_for_output(
+                    preliminary_ranked, self.max_articles_per_verrou
+                )
+                unique_before_rescue = len(dedupe_papers(all_papers))
+
+                if len(preliminary_visible) < rescue_min_relevant or unique_before_rescue < rescue_target_raw:
+                    rescue_queries = _adaptive_rescue_queries(
+                        intent,
+                        queries,
+                        max_queries=int(os.getenv("ENNOSCHOLAR_RESCUE_MAX_QUERIES", "6") or 6),
+                    )
+                    rescue_sources = list(dict.fromkeys(scientific_sources + fallback_scientific_sources))
+                    rescue_jobs: List[Tuple[str, str, Any, bool, int]] = []
+                    for rescue_query in rescue_queries:
+                        for source_name in rescue_sources:
+                            func = source_functions.get(source_name)
+                            if func is not None:
+                                rescue_jobs.append((source_name, rescue_query, func, False, self.limit_per_query))
+                    if rescue_jobs:
+                        _execute_jobs(rescue_jobs)
+                        external_calls_planned += len(rescue_jobs)
+                        fallback_calls_planned += len(rescue_jobs)
+                        fallback_triggered = True
+
             # Deuxième niveau à la demande : HAL, Zenodo et CORE ne sont appelés
             # que si les sources rapides n'ont pas fourni assez de candidats
             # uniques pour remplir le Top N demandé.
@@ -2262,17 +2485,27 @@ class EnnoScholarAgent:
                 and queries
             ):
                 fallback_triggered = True
-                fallback_query = clean_text(
-                    queries[0].get("query") if isinstance(queries[0], dict) else queries[0],
-                    220,
-                )
+
+                # 50+ generic coverage:
+                # for sparse/difficult locks, secondary sources must not receive
+                # only the first query. Reuse up to the best 3 selected queries.
+                fallback_queries: List[str] = []
+                for fallback_q in queries[:3]:
+                    q_text = clean_text(
+                        fallback_q.get("query") if isinstance(fallback_q, dict) else fallback_q,
+                        220,
+                    )
+                    if q_text and q_text not in fallback_queries:
+                        fallback_queries.append(q_text)
+
                 fallback_jobs: List[Tuple[str, str, Any, bool, int]] = []
-                for source_name in fallback_scientific_sources:
-                    func = source_functions.get(source_name)
-                    if func is not None and fallback_query:
-                        fallback_jobs.append(
-                            (source_name, fallback_query, func, False, self.limit_per_query)
-                        )
+                for fallback_query in fallback_queries:
+                    for source_name in fallback_scientific_sources:
+                        func = source_functions.get(source_name)
+                        if func is not None:
+                            fallback_jobs.append(
+                                (source_name, fallback_query, func, False, self.limit_per_query)
+                            )
                 fallback_calls_planned = len(fallback_jobs)
                 external_calls_planned += fallback_calls_planned
                 _execute_jobs(fallback_jobs)
@@ -2366,6 +2599,52 @@ class EnnoScholarAgent:
             "Hors sujet": sum(1 for a in ranked if a.get("tag") == "Hors sujet"),
         }
 
+        # >>> ENNOSMART_RESEARCH_UPGRADE_V1_DEEP_DISCOVERY
+        deep_discovery_report = {"enabled": False, "reason": "service_unavailable"}
+        if self.deep_discovery is not None and self.deep_discovery.enabled:
+            try:
+                deep_candidates, deep_discovery_report = self.deep_discovery.discover(
+                    ranked,
+                    core_search=(
+                        self.core_client.search_works
+                        if getattr(self, "core_client", None) is not None
+                        else None
+                    ),
+                    openalex_search=self.openalex_client.search_works,
+                    crossref_search=self.crossref_client.search_works,
+                )
+                if deep_candidates:
+                    all_papers = dedupe_papers(list(all_papers) + list(deep_candidates))
+                    deterministic_ranked = rank_papers_for_intent(
+                        all_papers, intent, top_n=self.max_articles_per_verrou
+                    )
+                    ranked = deterministic_ranked
+                    if rerank_papers_with_bge is not None:
+                        ranked, reranker_report = rerank_papers_with_bge(
+                            deterministic_ranked,
+                            intent,
+                            top_n=self.max_articles_per_verrou,
+                        )
+                    ranked, memory_post_report = _filter_memory_v2_after_rerank(
+                        ranked, memory_v2_report
+                    )
+                    ranked, relevance_output_report = _select_relevant_articles_for_output(
+                        ranked, self.max_articles_per_verrou
+                    )
+                    precision_counts = {
+                        "Direct": sum(1 for a in ranked if a.get("tag") == "Direct"),
+                        "Connexe": sum(1 for a in ranked if a.get("tag") == "Connexe"),
+                        "Fondamental": sum(1 for a in ranked if a.get("tag") == "Fondamental"),
+                        "Hors sujet": sum(1 for a in ranked if a.get("tag") == "Hors sujet"),
+                    }
+            except Exception as exc:
+                deep_discovery_report = {
+                    "enabled": True,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "new_candidates_resolved": 0,
+                }
+        # <<< ENNOSMART_RESEARCH_UPGRADE_V1_DEEP_DISCOVERY
+
         # 3) Résumé court des Top N articles pour aider le consultant à sélectionner.
         #    Le module utilise un cache et fallback sans LLM si Gemini/OpenRouter est indisponible.
         summary_report = {
@@ -2392,6 +2671,7 @@ class EnnoScholarAgent:
         search_status["relevance_output_filter"] = relevance_output_report
         search_status["precision_tag_counts"] = precision_counts
         search_status["article_summaries"] = summary_report
+        search_status["deep_discovery"] = deep_discovery_report
 
         validation = validate_verrou_scientifically(
             intent,
@@ -2537,13 +2817,51 @@ class EnnoScholarAgent:
         effective_verrou_workers = min(self.verrou_workers, len(work_items))
 
         def _search_subject(kind: str, item: Dict[str, Any]) -> Dict[str, Any]:
-            if kind == "research_target":
-                return self.search_for_research_target(
-                    item,
-                    domain_detection,
-                    payload.get("research_context") or diagnostic_context or {},
+            try:
+                if kind == "research_target":
+                    return self.search_for_research_target(
+                        item,
+                        domain_detection,
+                        payload.get("research_context") or diagnostic_context or {},
+                    )
+                return self.search_for_verrou(item, domain_detection, diagnostic_context)
+            except Exception as exc:
+                is_target = kind == "research_target"
+                subject_id = (
+                    item.get("research_target_id") or item.get("target_id") or item.get("id")
+                    if is_target
+                    else item.get("verrou_id") or item.get("db_verrou_id") or item.get("id")
                 )
-            return self.search_for_verrou(item, domain_detection, diagnostic_context)
+                subject_title = (
+                    item.get("research_target_title") or item.get("title")
+                    if is_target
+                    else item.get("verrou_title") or item.get("title")
+                )
+                return {
+                    "subject_kind": kind,
+                    "research_target_id": subject_id if is_target else None,
+                    "research_target_title": subject_title if is_target else None,
+                    "verrou_id": None if is_target else subject_id,
+                    "verrou_title": None if is_target else subject_title,
+                    "articles_found": 0,
+                    "raw_articles_retrieved": 0,
+                    "technical_sources_added": 0,
+                    "articles": [],
+                    "technical_sources": [],
+                    "technical_artifacts": [],
+                    "decision": "aucun_article_trouve",
+                    "subject_search_failed": True,
+                    "search_status": {
+                        "all_sources_failed": True,
+                        "execution_error": f"{type(exc).__name__}: {exc}",
+                    },
+                    "errors": [{
+                        "stage": "subject_search",
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    }],
+                    "state_of_art_preview": "",
+                }
 
         if effective_verrou_workers <= 1:
             results = [_search_subject(kind, item) for kind, item in work_items]
@@ -2587,7 +2905,7 @@ class EnnoScholarAgent:
 
         report = {
             "agent": "EnnoScholar",
-            "version": "v152_typed_targets_cir_year_window",
+            "version": "v153_global_article_dedupe_fast_fulltext",
             "mode": "search",
             "generated_at": _now_iso(),
             "project": payload.get("project"),
@@ -2601,6 +2919,7 @@ class EnnoScholarAgent:
             "research_targets_analyzed": len(research_target_items),
             "verrous_analyzed": len(verrou_items),
             "subjects_analyzed": len(results),
+            "subjects_failed": sum(1 for row in results if row.get("subject_search_failed")),
             "search_elapsed_seconds": search_elapsed_seconds,
             "verrou_workers": effective_verrou_workers,
             "decision_counts": decision_counts,

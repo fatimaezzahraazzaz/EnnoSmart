@@ -635,6 +635,12 @@ class EnnoScholarGuidedResearchAgent:
         )
 
     @staticmethod
+    def _cards_payload(project: Any, db: Session | None = None) -> dict[str, Any]:
+        from services.article_card_builder import get_article_cards_payload
+
+        return get_article_cards_payload(project, db=db)
+
+    @staticmethod
     def _sources_path(project: Any) -> Path:
         return guided_sources_path(
             str(project.organisme),
@@ -669,7 +675,7 @@ class EnnoScholarGuidedResearchAgent:
         project: Any,
         session: GuidedResearchSessionData,
     ) -> dict[str, Any]:
-        cards_payload = read_json(self._cards_path(project))
+        cards_payload = self._cards_payload(project, db=db)
         cards: list[dict[str, Any]] = []
         for key in ("cards", "article_cards", "items", "articles"):
             value = cards_payload.get(key)
@@ -2702,7 +2708,7 @@ class EnnoScholarGuidedResearchAgent:
                     selected_sources=list(
                         snapshot.get("selected_sources") or []
                     ),
-                    cards_payload=read_json(self._cards_path(project)),
+                    cards_payload=self._cards_payload(project, db=db),
                     output_dir=(
                         state_of_art_root(
                             str(project.organisme),
@@ -3313,7 +3319,7 @@ CONSIGNES IMPÉRATIVES
         project: Any,
         brief: ConsultantBrief,
     ) -> dict[str, Any]:
-        cards_payload = read_json(self._cards_path(project))
+        cards_payload = self._cards_payload(project)
         cards = []
         for key in ("cards", "article_cards", "items", "articles"):
             value = cards_payload.get(key)

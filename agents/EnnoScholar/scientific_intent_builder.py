@@ -445,7 +445,16 @@ def source_passages(verrou: Dict[str, Any]) -> List[str]:
 
     for s in (verrou.get("sources") or [])[:8]:
         if isinstance(s, dict):
-            passages.append(str(s.get("excerpt") or ""))
+            # Le titre de section contient souvent le début indispensable de
+            # la phrase (méthode, configuration, paramètre), tandis que
+            # ``excerpt`` commence juste après. Les séparer faisait disparaître
+            # des ancres comme « ray-launch density » ou « bistatic radar ».
+            section_title = clean_text(s.get("section_title"), 500)
+            excerpt = clean_text(s.get("excerpt") or s.get("text"), 3500)
+            if section_title and excerpt:
+                passages.append(f"{section_title}. {excerpt}")
+            elif section_title or excerpt:
+                passages.append(section_title or excerpt)
 
     # fallback
     for k in ["text", "title", "research_target_title", "verrou_title"]:
@@ -790,7 +799,10 @@ _V146_METHOD_ONTOLOGY = [
     (["multilevel fast multipole method", "multi level fast multipole", "mlfmm", "mflmm"], "multilevel fast multipole method"),
     (["uniform theory of diffraction", "théorie uniforme de la diffraction", "theorie uniforme de la diffraction", " utd ", " tud "], "uniform theory of diffraction"),
     (["physical optics", "optique physique", " op ", " po "], "physical optics"),
-    (["ray tracing", "ray launching", "lancer de rayon", "lancer de rayons", "tracé de rayons", "trace de rayons"], "electromagnetic ray tracing"),
+    ([
+        "ray tracing", "ray launching", "ray launch", "ray-launch",
+        "lancer de rayon", "lancer de rayons", "tracé de rayons", "trace de rayons",
+    ], "electromagnetic ray tracing"),
     (["finite-difference time-domain", "finite difference time domain", "différences finies dans le domaine temporel", "differences finies dans le domaine temporel", " fdtd "], "finite-difference time-domain"),
     (["finite element method", "finite-element method", "éléments finis", "elements finis", " fem "], "finite element method"),
     (["full-wave", "full wave", "méthodes exactes", "methodes exactes"], "full-wave electromagnetic method"),
@@ -804,6 +816,14 @@ _V146_CONCEPT_ALIASES = {
     "electromagnetic scattering": ["electromagnetic scattering", "diffusion électromagnétique", "diffusion electromagnetique"],
     "edge diffraction": ["edge diffraction", "diffraction des arêtes", "diffraction des aretes"],
     "electromagnetic ray tracing": ["electromagnetic ray tracing", "ray tracing", "ray launching", "lancer de rayons", "lancer de rayon"],
+    "ray-launch density": [
+        "ray-launch density", "ray launch density", "ray density",
+        "densité des rayons", "densite des rayons",
+    ],
+    "bistatic radar simulation": [
+        "bistatic radar simulation", "bistatic radar", "bistatic SAR",
+        "radar bistatique", "radar bistatiques",
+    ],
     "large complex electromagnetic structures": ["large complex electromagnetic structures", "large electromagnetic structures", "structures de grande taille", "très grands systèmes", "tres grands systemes"],
     "canonical electromagnetic targets": ["canonical electromagnetic targets", "canonical target", "objet canonique", "cible canonique", "sphere", "plaque", "dièdre", "diedre", "trièdre", "triedre"],
     "mesh discretization": ["mesh discretization", "mesh approximation", "maillage", "objet 3d maillé", "objet 3d maille"],
@@ -890,7 +910,12 @@ def _v146_scientific_roles(local_text: str, previous: Dict[str, Any]) -> Dict[st
     # SAR/ATR sont eux aussi ambigus : expansion conditionnée au contexte radar/cible.
     if has_sar_token:
         ambiguous.append("SAR")
-        if has_atr_token or radar_context >= 2 or _v146_has_exact(n, "synthetic aperture radar"):
+        if (
+            has_atr_token
+            or radar_context >= 2
+            or _v146_has_exact(n, "synthetic aperture radar")
+            or _v146_has_exact(n, "radar")
+        ):
             acronym_expansions["SAR"] = "synthetic aperture radar"
             _v146_add_unique(concepts, "synthetic aperture radar")
     if has_atr_token:
@@ -913,8 +938,20 @@ def _v146_scientific_roles(local_text: str, previous: Dict[str, Any]) -> Dict[st
     if any(_v146_has_exact(n, t) for t in ["diffraction des arêtes", "diffraction des aretes", "edge diffraction"]):
         _v146_add_unique(concepts, "edge diffraction")
         _v146_add_unique(phenomena, "omitted edge-diffraction phenomena")
-    if any(_v146_has_exact(n, t) for t in ["lancer de rayon", "lancer de rayons", "ray tracing", "ray launching"]):
+    if any(_v146_has_exact(n, t) for t in [
+        "lancer de rayon", "lancer de rayons", "ray tracing", "ray launching",
+        "ray launch", "ray-launch",
+    ]):
         _v146_add_unique(concepts, "electromagnetic ray tracing")
+    if any(_v146_has_exact(n, t) for t in [
+        "ray-launch density", "ray launch density", "ray density",
+        "densité des rayons", "densite des rayons",
+    ]):
+        _v146_add_unique(concepts, "ray-launch density")
+    if any(_v146_has_exact(n, t) for t in [
+        "bistatic radar", "bistatic sar", "radar bistatique", "radar bistatiques",
+    ]):
+        _v146_add_unique(concepts, "bistatic radar simulation")
     if any(_v146_has_exact(n, t) for t in ["très grands systèmes", "tres grands systemes", "structures de grande taille", "large structures"]):
         if em_context >= 1:
             _v146_add_unique(concepts, "large complex electromagnetic structures")
@@ -936,9 +973,18 @@ def _v146_scientific_roles(local_text: str, previous: Dict[str, Any]) -> Dict[st
         _v146_add_unique(phenomena, "synthetic-to-real distribution shift")
 
     # Phénomènes/contraintes centrales.
-    if any(_v146_has_exact(n, t) for t in ["ressources computationnelles", "computational resources", "temps de calcul", "mémoire", "memoire", "computational cost"]):
+    if any(_v146_has_exact(n, t) for t in [
+        "ressources computationnelles", "computational resources", "temps de calcul",
+        "mémoire", "memoire", "computational cost", "computing speed",
+        "computational speed", "performance calculatoire",
+    ]):
         _v146_add_unique(phenomena, "computational cost and memory requirements")
-    if any(_v146_has_exact(n, t) for t in ["compromis précision", "compromis precision", "accuracy trade-off", "précision mais", "precision mais"]):
+    if any(_v146_has_exact(n, t) for t in [
+        "compromis précision", "compromis precision", "accuracy trade-off",
+        "trade-off between accuracy and computing",
+        "trade off between accuracy and computing",
+        "accuracy and computing speed", "précision mais", "precision mais",
+    ]):
         _v146_add_unique(phenomena, "accuracy-computational cost trade-off")
     if any(_v146_has_exact(n, t) for t in ["non modélisés", "non modelises", "non-modélisation", "non-modelisation", "simplifying assumptions"]):
         _v146_add_unique(phenomena, "model-form error from omitted physical phenomena")
@@ -977,7 +1023,11 @@ def _v146_scientific_roles(local_text: str, previous: Dict[str, Any]) -> Dict[st
     # Concepts primaires : objet physique/métier indispensable. Les concepts comme
     # synthetic data, real measurements ou computational cost restent secondaires.
     if "synthetic aperture radar" in concepts or "automatic target recognition" in concepts:
-        primary = [c for c in ["synthetic aperture radar", "automatic target recognition"] if c in concepts]
+        primary = [c for c in [
+            "synthetic aperture radar", "automatic target recognition",
+            "electromagnetic ray tracing", "ray-launch density",
+            "bistatic radar simulation",
+        ] if c in concepts]
     elif "radar cross section" in concepts:
         primary = [c for c in ["radar cross section", "electromagnetic scattering"] if c in concepts]
     elif any(c in concepts for c in ["edge diffraction", "electromagnetic ray tracing"]):
@@ -1128,8 +1178,8 @@ def build_scientific_intent(
         24,
     )
     out["key_terms_en"] = dedupe_keep_order(core + methods + phenomena + list(out.get("key_terms_en") or []), 28)
-    out["intent_scope"] = "v149_current_verrou_problem_evidence_roles"
-    out["query_builder_version"] = "v149_problem_evidence_intent"
+    out["intent_scope"] = "v155_current_verrou_section_aware_roles"
+    out["query_builder_version"] = "v155_section_aware_problem_evidence_intent"
     if isinstance(out.get("source_basis"), dict):
         out["source_basis"]["context_filter"] = "v146_local_evidence_roles_and_acronym_disambiguation"
     return out

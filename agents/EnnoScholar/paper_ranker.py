@@ -682,13 +682,32 @@ _V146_PHENOMENON_ALIASES = {
     ],
 }
 
+
+def _v155_phenomenon_hit(text: str, phenomenon: str) -> bool:
+    """Valide les phénomènes composés sans les réduire à un mot générique."""
+    if phenomenon == "accuracy-computational cost trade-off":
+        accuracy = any(_v146_exact(text, alias) for alias in [
+            "accuracy", "precision", "précision", "error", "erreur",
+        ])
+        computational = any(_v146_exact(text, alias) for alias in [
+            "computational cost", "computation time", "computing speed",
+            "computational speed", "runtime", "faster", "memory requirements",
+            "temps de calcul", "coût calculatoire", "cout calculatoire",
+        ])
+        return accuracy and computational
+    return any(
+        _v146_exact(text, alias)
+        for alias in _V146_PHENOMENON_ALIASES.get(phenomenon, [phenomenon])
+    )
+
 _V146_RADAR_CONTRADICTIONS = [
     "specific absorption rate", "w/kg", "human exposure", "tissue", "water container",
     "raman spectroscopy", "surface-enhanced raman", "sers", "plasmonic", "photocatalysis",
     "biosensor", "biomedical imaging", "survival analysis", "game theory", "technical debt",
     "text-symbol", "cognitive model", "gene expression", "genomic", "genome-wide",
     "yeast datasets", "biological datasets", "bioinformatics", "protein", "clinical",
-    "medical", "retinal", "ultrasound", "photonic crystal",
+    "medical", "retinal", "ultrasound", "acoustic", "acoustics", "sonar",
+    "photonic crystal",
 ]
 
 
@@ -750,10 +769,7 @@ def _v146_role_hits(article: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str
         m for m in methods
         if any(_v146_exact(text, alias) for alias in _V146_METHOD_ALIASES.get(m, [m]))
     ]
-    phenomenon_hits = [
-        p for p in phenomena
-        if any(_v146_exact(text, alias) for alias in _V146_PHENOMENON_ALIASES.get(p, [p]))
-    ]
+    phenomenon_hits = [p for p in phenomena if _v155_phenomenon_hit(text, p)]
     tool_hits = [t for t in tools if _v146_exact(text, t)]
     implementation_hits = [t for t in implementation if _v146_exact(text, t)]
 

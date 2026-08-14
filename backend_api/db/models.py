@@ -298,6 +298,30 @@ class Article(Base):
     verrou = relationship("Verrou", back_populates="articles")
 
 
+class ScholarFulltextCache(Base):
+    """Cache global dédupliqué des textes scientifiques extraits.
+
+    Il n'est rattaché à aucun projet : un DOI déjà vérifié peut être réutilisé
+    par tous les runs sans retélécharger ni réextraire le document.
+    """
+
+    __tablename__ = "scholar_fulltext_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cache_key = Column(String(500), nullable=False, unique=True, index=True)
+    doi = Column(Text, nullable=True, index=True)
+    normalized_title = Column(Text, nullable=True)
+    year = Column(Integer, nullable=True)
+    content_sha256 = Column(String(64), nullable=True, index=True)
+    text_chars = Column(Integer, nullable=False, default=0)
+    extraction_method = Column(String(100), nullable=True)
+    source_kind = Column(String(50), nullable=True)
+    source_url = Column(Text, nullable=True)
+    payload_json = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class ImprovementSession(Base):
     """Conversation EnnoAmelioration rattachée à un projet.
 

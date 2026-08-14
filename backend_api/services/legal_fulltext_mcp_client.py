@@ -16,6 +16,7 @@ import time
 from typing import Any
 
 import requests
+from requests.adapters import HTTPAdapter
 
 
 REST_URL = os.getenv(
@@ -25,8 +26,22 @@ REST_URL = os.getenv(
 MCP_ENABLED = os.getenv("ENNOSCHOLAR_LEGAL_MCP_ENABLED", "1").lower() in {
     "1", "true", "yes", "on"
 }
-TIMEOUT_SECONDS = float(os.getenv("ENNOSCHOLAR_LEGAL_MCP_CLIENT_TIMEOUT_SECONDS", "300"))
-MAX_RETRIES = max(1, int(os.getenv("ENNOSCHOLAR_LEGAL_MCP_CLIENT_MAX_RETRIES", "2")))
+TARGETED_TIMEOUT_SECONDS = float(
+    os.getenv("ENNOSCHOLAR_LEGAL_MCP_TARGETED_TIMEOUT_SECONDS", "40")
+)
+BROAD_TIMEOUT_SECONDS = float(
+    os.getenv("ENNOSCHOLAR_LEGAL_MCP_BROAD_TIMEOUT_SECONDS", "75")
+)
+MAX_RETRIES = max(
+    1,
+    min(int(os.getenv("ENNOSCHOLAR_LEGAL_MCP_CLIENT_MAX_RETRIES", "1")), 2),
+)
+
+_SESSION = requests.Session()
+_SESSION.trust_env = False
+_ADAPTER = HTTPAdapter(pool_connections=20, pool_maxsize=20, max_retries=0, pool_block=True)
+_SESSION.mount("http://", _ADAPTER)
+_SESSION.mount("https://", _ADAPTER)
 
 
 def _fallback(status: str, reason: str | None = None) -> dict[str, Any]:
@@ -61,6 +76,7 @@ def resolve_article_fulltext(
     known_urls: list[str] | None = None,
     article_id: int | str | None = None,
     source: str | None = None,
+    deterministic_oa_checked: bool = False,
     search_all: bool = False,
     force_refresh: bool = False,
 ) -> dict[str, Any]:
@@ -80,6 +96,7 @@ def resolve_article_fulltext(
         "known_urls": known_urls or [],
         "article_id": article_id,
         "source": source,
+        "deterministic_oa_checked": deterministic_oa_checked,
         "search_all": search_all,
         "force_refresh": force_refresh,
     }
@@ -87,10 +104,11 @@ def resolve_article_fulltext(
     last_error: str | None = None
     for attempt in range(MAX_RETRIES):
         try:
-            response = requests.post(
+            timeout_seconds = BROAD_TIMEOUT_SECONDS if search_all else TARGETED_TIMEOUT_SECONDS
+            response = _SESSION.post(
                 REST_URL,
                 json=payload,
-                timeout=TIMEOUT_SECONDS,
+                timeout=(3.0, timeout_seconds),
                 headers={"Accept": "application/json"},
             )
             if response.status_code in {429, 500, 502, 503, 504}:

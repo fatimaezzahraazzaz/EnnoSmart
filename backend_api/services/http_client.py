@@ -10,39 +10,58 @@ pour être classifiées par le pipeline EnnoScholar.
 from __future__ import annotations
 
 import os
+import threading
 import time
 from typing import Any, Dict, Optional, Tuple
 
 import requests
+from requests.adapters import HTTPAdapter
 
 
-TIMEOUT = float(os.getenv("ENNOSMART_HTTP_TIMEOUT", "30"))
+TIMEOUT = float(os.getenv("ENNOSMART_HTTP_TIMEOUT", "15"))
+CONNECT_TIMEOUT = float(os.getenv("ENNOSMART_HTTP_CONNECT_TIMEOUT", "4"))
 USER_AGENT = os.getenv(
     "ENNOSMART_HTTP_USER_AGENT",
     "EnnoScholar/1.0 (legal open-access full-text retrieval)",
 )
+POOL_CONNECTIONS = max(4, int(os.getenv("ENNOSMART_HTTP_POOL_CONNECTIONS", "32")))
+POOL_MAXSIZE = max(4, int(os.getenv("ENNOSMART_HTTP_POOL_MAXSIZE", "32")))
 
 
 class HTTPFetcher:
     """Session HTTP standard réutilisable, sans proxy ni stratégie furtive."""
 
     def __init__(self) -> None:
-        self._session: Optional[requests.Session] = None
+        self._local = threading.local()
+        self._sessions: list[requests.Session] = []
+        self._sessions_lock = threading.Lock()
         self._closed = False
 
     def _get_session(self) -> requests.Session:
-        if self._session is None:
-            self._session = requests.Session()
+        session = getattr(self._local, "session", None)
+        if session is None:
+            session = requests.Session()
             # Ignore aussi les variables d'environnement HTTP(S)_PROXY du
             # système : ce chemin doit rester une requête directe standard.
-            self._session.trust_env = False
-            self._session.headers.update(
+            session.trust_env = False
+            session.headers.update(
                 {
                     "User-Agent": USER_AGENT,
                     "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
                 }
             )
-        return self._session
+            adapter = HTTPAdapter(
+                pool_connections=POOL_CONNECTIONS,
+                pool_maxsize=POOL_MAXSIZE,
+                max_retries=0,
+                pool_block=True,
+            )
+            session.mount("http://", adapter)
+            session.mount("https://", adapter)
+            self._local.session = session
+            with self._sessions_lock:
+                self._sessions.append(session)
+        return session
 
     @staticmethod
     def _read_limited(response: requests.Response, max_bytes: int) -> Tuple[bytes, bool]:
@@ -94,7 +113,7 @@ class HTTPFetcher:
             response = self._get_session().get(
                 url,
                 headers=headers or {},
-                timeout=TIMEOUT,
+                timeout=(CONNECT_TIMEOUT, TIMEOUT),
                 allow_redirects=True,
                 stream=max_bytes > 0,
             )
@@ -192,9 +211,11 @@ class HTTPFetcher:
         if self._closed:
             return
         self._closed = True
-        if self._session is not None:
-            self._session.close()
-            self._session = None
+        with self._sessions_lock:
+            sessions = list(self._sessions)
+            self._sessions.clear()
+        for session in sessions:
+            session.close()
 
     def __del__(self) -> None:
         self.close()

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-"""EnnoDiagnostic V182 — sections structurées avec validation factuelle.
+"""EnnoDiagnostic V191 — sections structurées, projet courant et PydanticAI robuste.
 
 Ce module remplace `agents/EnnoDiagnostic/diagnostic_static_presenter.py`.
 Il conserve les deux fonctions attendues par `ennodiagnostic_agent.py` :
@@ -142,7 +142,7 @@ _SOURCE_LINE_RE = re.compile(
 )
 
 
-_INTERNAL_EVIDENCE_TOKEN_RE = re.compile(r"\b(?:E\d+|G\d+\.S\d+)\b", flags=re.I)
+_INTERNAL_EVIDENCE_TOKEN_RE = re.compile(r"\b(?:E\d+|F\d+|G\d+\.S\d+)\b", flags=re.I)
 
 
 # Termes signalant souvent un changement de domaine ou d'objet technique. Ils
@@ -316,9 +316,17 @@ def meta_of(source: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def source_text(source: Dict[str, Any]) -> str:
+    """Retourne le passage avec son contexte local quand le NLP l'a conservé.
+
+    Les extractions PDF/MSG découpent parfois une phrase juste avant le nom du
+    paramètre ou de l'objectif. ``analysis_text`` contient alors le fragment
+    avec ``context_before``/``context_after`` et est plus fidèle que ``text``
+    seul. On ne va jamais chercher du contenu hors du projet courant.
+    """
     if not isinstance(source, dict):
         return ""
-    return clean_text(
+    meta = source.get("metadata") if isinstance(source.get("metadata"), dict) else {}
+    raw = clean_text(
         source.get("text")
         or source.get("source_text")
         or source.get("content")
@@ -326,6 +334,18 @@ def source_text(source: Dict[str, Any]) -> str:
         or "",
         max_chars=4000,
     )
+    analysis = clean_text(
+        source.get("analysis_text")
+        or meta.get("analysis_text")
+        or "",
+        max_chars=5200,
+    )
+    if analysis and len(analysis) >= max(60, int(len(raw) * 0.8)):
+        return analysis
+    before = clean_text(source.get("context_before") or meta.get("context_before") or "", 1200)
+    after = clean_text(source.get("context_after") or meta.get("context_after") or "", 1200)
+    expanded = clean_text(" ".join(part for part in (before, raw, after) if part), 5200)
+    return expanded or raw
 
 
 def source_value(source: Dict[str, Any], *keys: str) -> Any:
@@ -405,46 +425,46 @@ def get_sources(
 # ---------------------------------------------------------------------------
 
 _SECTION_REFERENCE_RE = re.compile(
-    r"(?:\\bet\\s+al\\.\\b|\\bdoi\\s*:?|https?://doi\\.org|\\bbibliograph(?:y|ie)\\b|"
-    r"\\breferences?\\b|\\btravaux connexes\\b|\\brelated works?\\b|"
-    r"\\bvol\\.\\s*\\d+|\\bpp?\\.\\s*\\d+|\\bproceedings\\b|\\bjournal\\b)",
+    r"(?:\bet\s+al\.\b|\bdoi\s*:?|https?://doi\.org|\bbibliograph(?:y|ie)\b|"
+    r"\breferences?\b|\btravaux connexes\b|\brelated works?\b|"
+    r"\bvol\.\s*\d+|\bpp?\.\s*\d+|\bproceedings\b|\bjournal\b)",
     re.I,
 )
 _SECTION_METADATA_RE = re.compile(
     r"^(?:to cite this version|authors?|auteurs?|affiliations?|references?|bibliograph(?:y|ie)|"
-    r"table of contents|table des mati[eè]res|list of figures|table des illustrations)\\s*:?$",
+    r"table of contents|table des mati[eè]res|list of figures|table des illustrations)\s*:?$",
     re.I,
 )
 _OBJECTIVE_MARKERS_RE = re.compile(
-    r"\\b(?:objectif|but|finalit[eé]|vise [aà]|aims? to|goal|purpose|this work aims|"
+    r"\b(?:objectif|but|finalit[eé]|vise [aà]|aims? to|goal|purpose|this work aims|"
     r"we propose|nous proposons|contribution|chercher [aà]|[eé]valuer|comparer|d[eé]terminer|"
-    r"quantifier|valider|d[eé]montrer|caract[eé]riser)\\b",
+    r"quantifier|valider|d[eé]montrer|caract[eé]riser)\b",
     re.I,
 )
 _PROJECT_ACTION_RE = re.compile(
-    r"\\b(?:nous avons|nous utilisons|nous proposons|nous comparons|nous [eé]valuons|"
+    r"\b(?:nous avons|nous utilisons|nous proposons|nous comparons|nous [eé]valuons|"
     r"we (?:use|used|propose|proposed|compare|compared|evaluate|evaluated|train|trained|"
-    r"measure|measured|conduct|conducted|perform|performed)|dans ce projet|our (?:work|study|method|approach))\\b",
+    r"measure|measured|conduct|conducted|perform|performed)|dans ce projet|our (?:work|study|method|approach))\b",
     re.I,
 )
 _PARAMETER_RE = re.compile(
-    r"\\b(?:param[eè]tre|configuration|condition|angle|incidence|azimut|gisement|densit[eé]|"
+    r"\b(?:param[eè]tre|configuration|condition|angle|incidence|azimut|gisement|densit[eé]|"
     r"maillage|mesh|ray|rayon|fr[eé]quence|seuil|tol[eé]rance|nombre|pas de|step|"
     r"dataset|jeu de donn[eé]es|mat[eé]riau|material|mod[eè]le 3d|cad|cao|"
-    r"temp[eé]rature|pression|d[eé]bit|dimension|taille|r[eé]solution)\\b",
+    r"temp[eé]rature|pression|d[eé]bit|dimension|taille|r[eé]solution)\b",
     re.I,
 )
 _RESULT_RE = re.compile(
-    r"\\b(?:r[eé]sultat|result|accuracy|pr[eé]cision|performance|score|gain|[eé]cart|"
-    r"augmentation|diminution|improvement|increase|decrease|confusion|mesur[eé]|observ[eé])\\b",
+    r"\b(?:r[eé]sultat|result|accuracy|pr[eé]cision|performance|score|gain|[eé]cart|"
+    r"augmentation|diminution|improvement|increase|decrease|confusion|mesur[eé]|observ[eé])\b",
     re.I,
 )
 _METHOD_RE = re.compile(
-    r"\\b(?:m[eé]thode|protocole|exp[eé]rience|exp[eé]rimentation|essai|test|entra[iî]nement|"
-    r"training|simulation|comparaison|ablation|validation|mesure|production param[eé]trique)\\b",
+    r"\b(?:m[eé]thode|protocole|exp[eé]rience|exp[eé]rimentation|essai|test|entra[iî]nement|"
+    r"training|simulation|comparaison|ablation|validation|mesure|production param[eé]trique)\b",
     re.I,
 )
-_QUANT_RE = re.compile(r"(?<![A-Za-z0-9])[-+]?\\d+(?:[.,]\\d+)?(?:\\s*%|\\s*°|\\s*[A-Za-z]{1,5})?")
+_QUANT_RE = re.compile(r"(?<![A-Za-z0-9])[-+]?\d+(?:[.,]\d+)?(?:\s*%|\s*°|\s*[A-Za-z]{1,5})?")
 
 
 def _source_role(source: Dict[str, Any]) -> str:
@@ -497,8 +517,13 @@ def _section_source_score(source: Dict[str, Any], section_key: str) -> float:
             score += 15.0
         if _PROJECT_ACTION_RE.search(joined):
             score += 10.0
+        # Un titre contenant « objectifs » ne suffit pas : le passage lui-même
+        # doit porter une intention/action projet. Cela écarte les listes de
+        # documents et métadonnées placées sous une section « Contexte et objectifs ».
+        if not _OBJECTIVE_MARKERS_RE.search(text) and not _PROJECT_ACTION_RE.search(text):
+            score -= 24.0
         # Un pur résultat chiffré ne doit pas devenir l'objectif du projet.
-        if "resultat" in role and not _OBJECTIVE_MARKERS_RE.search(joined):
+        if "resultat" in role and not _OBJECTIVE_MARKERS_RE.search(text):
             score -= 10.0
 
     elif section_key == "parametres_contraintes":
@@ -675,7 +700,9 @@ _SECTION_INSTRUCTIONS = {
         "les preuves marquées primary_result_evidence et les scopes global_comparison, global_metric, observed_gain ou observed_metric. Une métrique "
         "par classe/cible ne doit jamais être présentée comme performance globale. Une marge théorique vers une borne (par exemple vers 100 %) n'est "
         "pas un résultat expérimental principal. Ne calcule aucun gain ni écart : il doit être explicitement écrit dans une preuve. Ignore références "
-        "bibliographiques, auteurs, affiliations, titres et métadonnées. Chaque valeur doit être associée à son sujet, sa métrique et sa condition."
+        "bibliographiques, auteurs, affiliations, titres et métadonnées. Une comparaison explicitement faite avec un travail précédent/une ancienne "
+        "version est un résultat historique séparé : ne la transforme jamais en comparaison entre les méthodes du protocole courant. Si le contexte "
+        "d'une valeur est ambigu, omets-la plutôt que de l'attribuer à la mauvaise expérience. Chaque valeur doit être associée à son sujet, sa métrique et sa condition."
     ),
     "parametres_contraintes": (
         "Organise les paramètres et contraintes en éléments numérotés. Pour chacun, indique d'abord sa nature : paramètre du protocole, "
@@ -683,7 +710,8 @@ _SECTION_INSTRUCTIONS = {
         "propre à un jeu de référence en paramètre général du projet. Reprends les valeurs exactement telles qu'elles figurent dans les preuves. "
         "Explique une influence sur validité, robustesse, représentativité ou coût seulement si ce lien est explicitement soutenu par la preuve ; "
         "sinon indique simplement que le paramètre doit être contrôlé/interprété. Ne déduis pas qu'une densité, un nombre de configurations ou une "
-        "plage 'augmente la représentativité' sans preuve explicite."
+        "plage 'augmente la représentativité' sans preuve explicite. Le nom du paramètre (azimut, incidence, dépression, densité, etc.) doit être "
+        "explicitement présent dans le texte contextualisé de la preuve ; ne le déduis jamais du titre de section seul."
     ),
 }
 
@@ -953,7 +981,7 @@ def _official_frascati_evidence(
     result_proofs = [
         proof for proof in (report.get("prioritized_result_evidence") or [])
         if isinstance(proof, dict)
-    ][:4]
+    ][:3]
     operations = [item for item in (report.get("operations") or []) if isinstance(item, dict)]
 
     def operation_proofs_round_robin() -> List[Dict[str, Any]]:
@@ -1298,6 +1326,35 @@ PREUVES :
 {{evidence_json}}
 """.strip()
 
+    # Les petites sections n'ont pas besoin du très long contrat de la conclusion
+    # Frascati. Un prompt compact réserve réellement le budget aux PREUVES ;
+    # auparavant l'objectif pouvait partir avec zéro preuve parce que les règles
+    # consommaient presque tout max_input_tokens.
+    if config.key != "justification_frascati":
+        base_prompt = f"""
+Tu es EnnoDiagnostic. Rédige uniquement « {config.title} » en français.
+
+CONTRAT :
+- Utilise exclusivement les PREUVES numérotées du projet courant.
+- Aucun autre projet, Memory V2, CIR précédent ou exemple de style ne peut fournir un fait.
+- N'invente ni objet, ni méthode, ni paramètre, ni résultat, ni causalité, ni chiffre.
+- Chaque paragraphe/élément doit citer au moins un evidence_id autorisé.
+- Un nombre visible doit exister tel quel dans la preuve citée ; ne calcule aucun écart ou gain.
+- Ne transforme pas un résultat en objectif ni une contrainte de benchmark en paramètre général du projet.
+- Pour une preuve fragmentée, utilise son texte contextualisé ; le titre de section sert de localisation, pas de preuve sémantique.
+- Ne cite aucun nom de fichier ni identifiant E/F/G dans le texte visible.
+- Retourne uniquement le JSON correspondant au schéma.
+
+Instruction métier :
+{_SECTION_INSTRUCTIONS[config.key]}
+
+Schéma :
+{json.dumps(_schema_for(config), ensure_ascii=False)}
+
+PREUVES :
+{{evidence_json}}
+""".strip()
+
     # Pour la justification, la démarche et les résultats, les preuves officielles
     # ont déjà été classées par fonction et rattachées aux opérations. Si elles sont
     # disponibles, ne pas réinjecter ensuite des chunks RAG génériques : c'était la
@@ -1377,6 +1434,43 @@ def _valid_evidence_ids(values: Any, allowed: Iterable[str]) -> List[str]:
     return output
 
 
+def _infer_evidence_ids_for_text(
+    text: Any,
+    evidence: Sequence[Dict[str, Any]],
+    max_ids: int = 2,
+) -> List[str]:
+    """Répare un evidence_id omis par le LLM sans deviner le contenu.
+
+    On rattache uniquement si le texte généré partage des termes techniques ou
+    des valeurs numériques avec la preuve. Si aucun recouvrement crédible n'est
+    trouvé, on laisse la liste vide et le garde signale le problème.
+    """
+    norm = _grounding_norm(text)
+    tokens = {tok for tok in norm.split() if len(tok) >= 4 and tok not in _PROJECT_SCOPE_STOPWORDS}
+    numbers = set(_number_tokens(text)) if '_number_tokens' in globals() else set()
+    ranked: List[Tuple[float, str]] = []
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        eid = clean_text(item.get("evidence_id"), 30)
+        if not eid:
+            continue
+        excerpt = str(item.get("excerpt") or "")
+        ev_tokens = {tok for tok in _grounding_norm(excerpt).split() if len(tok) >= 4 and tok not in _PROJECT_SCOPE_STOPWORDS}
+        if not ev_tokens:
+            continue
+        common = tokens & ev_tokens
+        overlap = len(common) / max(1, min(len(tokens), 30))
+        ev_numbers = set(_number_tokens(excerpt)) if '_number_tokens' in globals() else set()
+        number_bonus = 0.35 if numbers and numbers.issubset(ev_numbers) else (0.12 if numbers & ev_numbers else 0.0)
+        operation_bonus = 0.08 if item.get("operation_group_id") else 0.0
+        score = overlap + number_bonus + operation_bonus
+        if score >= 0.10 or (numbers and numbers & ev_numbers):
+            ranked.append((score, eid))
+    ranked.sort(reverse=True)
+    return [eid for _, eid in ranked[:max_ids]]
+
+
 def _label_for(config: SectionContextConfig, index: int, proposed: Any) -> str:
     if config.key == "demarche_detectee":
         return f"Démarche {index}"
@@ -1403,32 +1497,73 @@ _PROJECT_SCOPE_STOPWORDS = {
 
 
 def _technical_tokens(value: Any) -> List[str]:
-    """Extrait surtout les identifiants/acronymes/technologies susceptibles de révéler une contamination inter-projet."""
+    """Extrait les identifiants techniques utiles au contrôle anti-contamination.
+
+    Les identifiants de preuve E1/F2/G1.S3 sont ignorés : ce sont des marqueurs
+    internes, pas des technologies du projet.
+    """
     raw = str(value or "")
     tokens: List[str] = []
-    # Acronymes / identifiants : ATR, SAR, GPT-4, MOCEM, etc.
     for token in re.findall(r"\b[A-Z][A-Z0-9_-]{1,}(?:s)?\b", raw):
+        if re.fullmatch(r"(?:E|F)\d+|G\d+\.S\d+", token, flags=re.I):
+            continue
         if len(token) >= 2 and token not in tokens:
             tokens.append(token)
-    # CamelCase / noms technologiques : JUnit, PyTorch, FastAPI, etc.
     for token in re.findall(r"\b[A-Z][a-z]+[A-Z][A-Za-z0-9_-]*\b|\b[A-Z][a-z]{2,}[0-9]+\b", raw):
+        if re.fullmatch(r"(?:E|F)\d+|G\d+\.S\d+", token, flags=re.I):
+            continue
         if token not in tokens:
             tokens.append(token)
     return tokens
+
+
+def _project_scope_text_from_sections(
+    sections: Dict[str, List[Dict[str, Any]]],
+    max_chars: int = 80000,
+) -> str:
+    """Corpus lexical du projet courant utilisé uniquement comme garde anti-fuite.
+
+    Il n'est jamais exposé comme preuve. Les affirmations restent contrôlées
+    contre les evidence_ids cités ; ce corpus sert seulement à savoir qu'un
+    acronyme/outil appartient bien au projet courant.
+    """
+    parts: List[str] = []
+    total = 0
+    seen = set()
+    for key, values in (sections or {}).items():
+        if str(key).startswith("_") or not isinstance(values, list):
+            continue
+        for item in values:
+            if not isinstance(item, dict):
+                continue
+            text = source_text(item)
+            if not text:
+                continue
+            sig = _grounding_norm(text[:500])
+            if not sig or sig in seen:
+                continue
+            seen.add(sig)
+            remaining = max_chars - total
+            if remaining <= 0:
+                return " ".join(parts)
+            chunk = text[:remaining]
+            parts.append(chunk)
+            total += len(chunk)
+    return " ".join(parts)
 
 
 def _current_project_scope_errors(
     body: Any,
     evidence: Sequence[Dict[str, Any]],
     section_key: str,
+    project_scope_text: str = "",
 ) -> List[str]:
-    """
-    Empêche une section de faire entrer des technologies d'un autre projet.
+    """Empêche une section d'introduire des technologies d'un autre projet.
 
-    Le contrôle est générique : aucun nom de domaine/projet n'est codé en dur.
-    Les identifiants techniques nommés dans la sortie doivent exister dans les
-    preuves courantes citées au prompt. Pour l'objectif et la synthèse, on exige
-    en plus un recouvrement lexical minimal avec les preuves du projet courant.
+    Important : le contrôle anti-contamination compare les termes au corpus du
+    PROJET COURANT, pas seulement aux 2-8 preuves sélectionnées pour la section.
+    Cela évite les faux rejets du type ATR/SER absents du petit sous-ensemble de
+    preuves alors qu'ils sont bien présents ailleurs dans le dossier courant.
     """
     if not _current_project_only_mode():
         return []
@@ -1440,38 +1575,38 @@ def _current_project_scope_errors(
         for item in evidence
         if isinstance(item, dict)
     )
-    norm_evidence = " " + _grounding_norm(evidence_text) + " "
+    scope_text = clean_text(project_scope_text, 90000) or evidence_text
+    norm_scope = " " + _grounding_norm(scope_text) + " "
     errors: List[str] = []
 
+    visible_text = _INTERNAL_EVIDENCE_TOKEN_RE.sub(" ", text)
     missing_technical = []
-    for token in _technical_tokens(text):
+    for token in _technical_tokens(visible_text):
         normalized = _grounding_norm(token)
-        if normalized and not re.search(rf"(?<![a-z0-9]){re.escape(normalized)}(?![a-z0-9])", norm_evidence):
+        if normalized and not re.search(rf"(?<![a-z0-9]){re.escape(normalized)}(?![a-z0-9])", norm_scope):
             missing_technical.append(token)
     if missing_technical:
         errors.append(
-            "identifiants techniques absents des preuves du projet courant : "
+            "identifiants techniques absents du projet courant : "
             + ", ".join(sorted(set(missing_technical)))
         )
 
     if section_key in {"objectif_global", "synthese_strategique"}:
         generated_tokens = {
-            tok for tok in _grounding_norm(text).split()
+            tok for tok in _grounding_norm(visible_text).split()
             if len(tok) >= 5 and tok not in _PROJECT_SCOPE_STOPWORDS
         }
-        evidence_tokens = {
-            tok for tok in _grounding_norm(evidence_text).split()
+        scope_tokens = {
+            tok for tok in _grounding_norm(scope_text).split()
             if len(tok) >= 5 and tok not in _PROJECT_SCOPE_STOPWORDS
         }
         if generated_tokens:
-            overlap = len(generated_tokens & evidence_tokens) / max(1, len(generated_tokens))
-            # Seuil volontairement bas : on cherche seulement les contaminations franches.
-            if overlap < 0.22:
+            overlap = len(generated_tokens & scope_tokens) / max(1, len(generated_tokens))
+            if overlap < 0.16:
                 errors.append(
-                    f"faible ancrage dans les preuves du projet courant (recouvrement lexical={overlap:.2f})"
+                    f"faible ancrage dans le projet courant (recouvrement lexical={overlap:.2f})"
                 )
     return errors
-
 
 def _unsupported_domain_terms(body: Any, evidence: Sequence[Dict[str, Any]]) -> List[str]:
     """Détecte un changement de domaine absent des preuves sélectionnées."""
@@ -1939,6 +2074,7 @@ def parse_section_result(
     raw: Any,
     config: SectionContextConfig,
     evidence: List[Dict[str, Any]],
+    project_scope_text: str = "",
 ) -> Dict[str, Any]:
     parsed = _normalize_llm_section_payload(
         raw,
@@ -1957,10 +2093,13 @@ def parse_section_result(
             text = sanitize_generated_text(raw_item.get("text"), max_chars=900)
             if not text:
                 continue
+            evidence_ids = _valid_evidence_ids(raw_item.get("evidence_ids"), allowed)
+            if not evidence_ids:
+                evidence_ids = _infer_evidence_ids_for_text(text, evidence, max_ids=2)
             items.append({
                 "label": _label_for(config, index, raw_item.get("label")),
                 "text": text,
-                "evidence_ids": _valid_evidence_ids(raw_item.get("evidence_ids"), allowed),
+                "evidence_ids": evidence_ids,
             })
     else:
         raw_paragraphs = parsed.get("paragraphs") if isinstance(parsed.get("paragraphs"), list) else []
@@ -2009,7 +2148,7 @@ def parse_section_result(
     used_ids = list(dict.fromkeys(used_ids))
     used_evidence = [item for item in evidence if item["evidence_id"] in used_ids]
     grounding_errors: List[str] = []
-    grounding_errors.extend(_current_project_scope_errors(body, evidence, config.key))
+    grounding_errors.extend(_current_project_scope_errors(body, evidence, config.key, project_scope_text))
     unsupported_terms = _unsupported_domain_terms(body, evidence)
     if unsupported_terms:
         grounding_errors.append(
@@ -2209,6 +2348,7 @@ def generate_one_section(
         style_memory_report=style_memory_report,
         memory_v2_report=memory_v2_report,
     )
+    project_scope_text = _project_scope_text_from_sections(sections)
     telemetry: Dict[str, Any] = {
         "configured_max_input_tokens": config.max_input_tokens,
         "configured_max_output_tokens": config.max_output_tokens,
@@ -2236,12 +2376,21 @@ def generate_one_section(
             )
             return structured, clean_text(structured.get("framework_prompt") or prompt, 30000)
         except Exception as exc:
-            # Le framework gère déjà les retries de structure/validation.
-            # Ce fallback ne sert qu'en cas de problème d'installation/API.
             print(
                 "[EnnoDiagnostic][PYDANTIC_AI_ERROR] "
                 f"section={config.key} error={type(exc).__name__}: {exc}"
             )
+            # Ne jamais retomber sur l'ancien gros JSON libre : c'est ce chemin
+            # qui tronquait la sortie puis produisait parsed_keys=[]. Si le
+            # framework échoue encore, on conserve immédiatement la lecture
+            # déterministe et les preuves cliquables, sans deux appels LLM inutiles.
+            fallback = _eligibility_fallback_from_report(frascati_summary, evidence)
+            fallback.update({
+                "status": "pydantic_ai_failed_deterministic_fallback",
+                "error": f"{type(exc).__name__}: {exc}",
+                "telemetry": telemetry,
+            })
+            return fallback, prompt
 
     if llm is None:
         result = _section_fallback(config, frascati_summary, evidence)
@@ -2258,7 +2407,7 @@ def generate_one_section(
             json_mode=True,
             request_name=f"ennodiagnostic:{config.key}",
         )
-        parsed = parse_section_result(raw, config, evidence)
+        parsed = parse_section_result(raw, config, evidence, project_scope_text=project_scope_text)
         llm_meta = {}
         try:
             llm_meta = llm.get_last_generation_meta()
@@ -2297,7 +2446,7 @@ def generate_one_section(
                 json_mode=True,
                 request_name=f"ennodiagnostic:{config.key}:grounding_retry",
             )
-            retry_parsed = parse_section_result(raw_retry, config, evidence)
+            retry_parsed = parse_section_result(raw_retry, config, evidence, project_scope_text=project_scope_text)
             telemetry["grounding_retry"] = True
             telemetry["first_validation_errors"] = validation_errors
             retry_validation_errors = retry_parsed.get("validation_errors") or []
@@ -2314,9 +2463,19 @@ def generate_one_section(
                 })
                 return retry_parsed, retry_prompt
 
-            # Les contrôles sont des avertissements après le retry : le consultant
-            # doit toujours voir une proposition dès qu'un texte LLM exploitable existe.
-            # Les erreurs restent disponibles dans le payload pour l'audit.
+            # Pour l'objectif global, un rejet d'ancrage ne doit jamais être
+            # accepté en warning_only : on préfère un extrait directement sourcé
+            # du projet courant à un objectif potentiellement contaminé.
+            if config.key == "objectif_global" and retry_validation_errors:
+                grounded = _fallback_from_evidence(config, evidence)
+                grounded.update({
+                    "status": "grounded_evidence_fallback_after_objective_reject",
+                    "validation_errors": retry_validation_errors,
+                    "telemetry": telemetry,
+                })
+                return grounded, retry_prompt
+
+            # Les contrôles sont des avertissements après le retry pour les autres sections.
             if clean_text(retry_parsed.get("body"), 5200):
                 retry_parsed.update({
                     "valid": True,
@@ -2421,7 +2580,7 @@ def generate_structured_diagnostic_core(
         "section_payloads_by_key": section_payloads,
         "token_usage_by_section": token_usage,
         "section_statuses": statuses,
-        "context_engineering_version": "v187_robust_json_parser_warning_only",
+        "context_engineering_version": "v191_current_project_nlp_pack_pydantic_relaxed",
     }
 
 

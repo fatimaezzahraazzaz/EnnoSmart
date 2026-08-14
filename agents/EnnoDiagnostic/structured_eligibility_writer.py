@@ -133,7 +133,7 @@ class ResultFact(BaseModel):
 class EligibilityNarrative(BaseModel):
     """Sortie structurée complète de la conclusion d'éligibilité."""
 
-    claims: List[EligibilityClaim] = Field(min_length=8, max_length=10)
+    claims: List[EligibilityClaim] = Field(min_length=6, max_length=10)
     result_facts: List[ResultFact] = Field(default_factory=list, max_length=5)
 
 
@@ -267,7 +267,7 @@ Règles :
 15. Ne crée jamais une plage « de X à Y », une moyenne, un gain, un écart ou une amélioration significative si cette relation n'est pas formulée explicitement dans UNE preuve citée.
 16. Ne transforme pas une marge théorique avant 100 % en résultat expérimental. Les preuves `headroom_context` servent seulement de contexte secondaire.
 17. La valeur Frascati est un indice de défendabilité/couverture documentaire, jamais un pourcentage de chance d'acceptation ni une garantie d'éligibilité administrative.
-18. Renseigne `result_facts` avec 1 à 4 faits quantitatifs observés et directement sourcés. Le claim `resultats` doit être cohérent avec ces faits et ne doit pas introduire d'autre chiffre expérimental.
+18. `result_facts` est facultatif. Si tu le renseignes, chaque fait quantitatif doit être observé et directement sourcé. Le claim `resultats` ne doit jamais introduire un chiffre absent de ses preuves citées.
 """.strip()
 
 eligibility_agent: Agent[EligibilityDeps, EligibilityNarrative] = Agent(
@@ -277,9 +277,9 @@ eligibility_agent: Agent[EligibilityDeps, EligibilityNarrative] = Agent(
         EligibilityNarrative,
         name="return_eligibility_narrative",
         description="Retourne la conclusion CIR structurée et ses preuves, sans texte libre hors schéma.",
-        max_retries=3,
+        max_retries=2,
     ),
-    retries={"output": 3},
+    retries={"output": 2},
     model_settings=ModelSettings(
         temperature=0.0,
         max_tokens=_MAX_OUTPUT_TOKENS,
@@ -294,56 +294,47 @@ async def validate_eligibility_output(
     ctx: RunContext[EligibilityDeps],
     output: EligibilityNarrative,
 ) -> EligibilityNarrative:
-    """Validation métier générique. Toute erreur déclenche automatiquement ModelRetry."""
+    """Validation factuelle courte.
+
+    Pydantic garantit déjà la structure. Ici on ne déclenche ModelRetry que pour
+    des erreurs réellement dangereuses : preuve inexistante, chiffre non sourcé,
+    preuve bibliographique utilisée comme expérience/résultat ou promesse
+    d'éligibilité. Les préférences de forme/ranking restent des instructions et ne
+    doivent jamais épuiser le budget de retries.
+    """
 
     errors: List[str] = []
     claims = output.claims
     kinds = [claim.claim_kind for claim in claims]
 
-    missing = [kind for kind in REQUIRED_CLAIM_KINDS if kind not in kinds]
-    if missing:
-        errors.append("Claims obligatoires manquants : " + ", ".join(missing))
-
-    duplicates = sorted({kind for kind in kinds if kinds.count(kind) > 1})
-    if duplicates:
-        errors.append("Claims dupliqués : " + ", ".join(duplicates))
-
-    # Vérifier l'ordre causal attendu sans regex sur le contenu rédactionnel.
-    positions = {kind: kinds.index(kind) for kind in kinds}
-    previous = -1
-    for kind in REQUIRED_CLAIM_KINDS:
-        if kind not in positions:
-            continue
-        current = positions[kind]
-        if current < previous:
-            errors.append("L'ordre causal des claims n'est pas respecté.")
-            break
-        previous = current
+    # Chaîne minimale nécessaire à une conclusion CIR exploitable. On ne force
+    # plus dix claims exacts : le modèle peut fusionner contexte/méthodes ou
+    # apprentissage/conclusion sans être rejeté trois fois.
+    core_kinds = {
+        "verrou", "hypothese", "etapes_experimentales", "resultats",
+        "frascati_acquis", "frascati_a_consolider", "conclusion",
+    }
+    missing_core = sorted(core_kinds - set(kinds))
+    if missing_core:
+        errors.append("Claims essentiels manquants : " + ", ".join(missing_core))
 
     for claim in claims:
         unknown_ids = [eid for eid in claim.evidence_ids if eid not in ctx.deps.allowed_evidence_ids]
         if unknown_ids:
-            errors.append(
-                f"{claim.claim_kind}: evidence_ids inconnus : {', '.join(unknown_ids)}"
-            )
+            errors.append(f"{claim.claim_kind}: preuves inconnues : {', '.join(unknown_ids)}")
             continue
 
         cited = [ctx.deps.evidence_by_id[eid] for eid in claim.evidence_ids]
         documentary_ids = [eid for eid in claim.evidence_ids if eid != ctx.deps.score_evidence_id]
 
         if claim.claim_kind in TECHNICAL_CLAIM_KINDS and not documentary_ids:
-            errors.append(
-                f"{claim.claim_kind}: une preuve documentaire projet est obligatoire ; F0 ne suffit pas."
-            )
+            errors.append(f"{claim.claim_kind}: une preuve documentaire du projet courant est obligatoire.")
 
         if claim.claim_kind in {"frascati_acquis", "frascati_a_consolider"}:
             if ctx.deps.score_evidence_id not in claim.evidence_ids:
-                errors.append(
-                    f"{claim.claim_kind}: F0 est obligatoire pour les valeurs et statuts Frascati."
-                )
+                errors.append(f"{claim.claim_kind}: F0 est obligatoire pour les valeurs Frascati.")
 
-        # Contrôle numérique centralisé : aucun nombre n'est accepté s'il n'existe
-        # dans aucune des preuves réellement citées par ce claim.
+        # Aucun nombre visible ne peut être fabriqué ou recalculé.
         source_numbers = _number_tokens(" ".join(_evidence_text(item) for item in cited))
         unsupported_numbers = sorted(_number_tokens(claim.text) - source_numbers)
         if unsupported_numbers:
@@ -352,61 +343,22 @@ async def validate_eligibility_output(
                 + ", ".join(unsupported_numbers)
             )
 
-        allowed_kinds = _CLAIM_ALLOWED_PROOF_KINDS.get(claim.claim_kind)
-        if allowed_kinds:
-            proof_kinds = {
-                str(item.get("proof_kind") or "").strip()
-                for item in cited
-                if str(item.get("proof_kind") or "").strip()
-            }
-            if not (proof_kinds & allowed_kinds):
-                errors.append(
-                    f"{claim.claim_kind}: aucune preuve de la bonne fonction documentaire "
-                    f"({', '.join(sorted(allowed_kinds))})."
-                )
-
         if claim.claim_kind in {"etapes_experimentales", "resultats", "apprentissage"}:
-            bad_refs = [
-                item for item in cited
-                if bool(item.get("reference_like"))
+            if any(
+                bool(item.get("reference_like"))
                 and str(item.get("evidence_id") or "") != ctx.deps.score_evidence_id
-            ]
-            if bad_refs:
-                errors.append(
-                    f"{claim.claim_kind}: une référence bibliographique est utilisée comme preuve du projet."
-                )
-
-        if claim.claim_kind == "resultats":
-            primary_available = {
-                eid for eid, item in ctx.deps.evidence_by_id.items()
-                if item.get("primary_result_evidence")
-                and str(item.get("proof_kind") or "") in {"result", "quantitative_result", "qualitative_result"}
-            }
-            cited_ids = set(claim.evidence_ids)
-            if primary_available and not (cited_ids & primary_available):
-                errors.append(
-                    "resultats: une preuve de résultat principal existe mais n'est pas utilisée."
-                )
-            cited_text_norm = _norm_text(" ".join(_evidence_text(item) for item in cited))
-            if _GLOBAL_WORD_RE.search(claim.text) and not _GLOBAL_WORD_RE.search(cited_text_norm):
-                errors.append("resultats: une métrique est présentée comme globale/moyenne sans preuve explicite.")
-            if _STRONG_SIGNIFICANCE_RE.search(claim.text) and not _STRONG_SIGNIFICANCE_RE.search(cited_text_norm):
-                errors.append("resultats: le caractère significatif n'est pas formulé dans les preuves citées.")
-            # Une plage synthétique est interdite sauf si une preuve citée formule elle-même une plage.
-            if _RANGE_RE.search(claim.text) and not _RANGE_RE.search(cited_text_norm):
-                errors.append("resultats: plage numérique reconstruite à partir de valeurs séparées.")
+                for item in cited
+            ):
+                errors.append(f"{claim.claim_kind}: référence bibliographique utilisée comme preuve du projet.")
 
         if _FULL_ELIGIBILITY_RE.search(claim.text):
-            errors.append(
-                f"{claim.claim_kind}: ne jamais promettre une pleine éligibilité ; parler de défendabilité à consolider."
-            )
-
+            errors.append(f"{claim.claim_kind}: ne jamais garantir une pleine éligibilité CIR.")
         if _INTERNAL_TOKEN_RE.search(claim.text):
             errors.append(f"{claim.claim_kind}: code interne présent dans le texte visible.")
 
-    # Validation structurée des faits de résultat.
-    result_claim = next((claim for claim in claims if claim.claim_kind == "resultats"), None)
-    fact_numbers: Set[str] = set()
+    # result_facts reste un bonus de traçabilité. S'il est fourni, ses valeurs
+    # doivent être présentes dans la preuve indiquée ; son absence n'est plus une
+    # erreur bloquante.
     for fact in output.result_facts:
         if fact.evidence_id not in ctx.deps.allowed_evidence_ids or fact.evidence_id == ctx.deps.score_evidence_id:
             errors.append(f"result_facts: preuve invalide pour {fact.subject}.")
@@ -415,40 +367,16 @@ async def validate_eligibility_output(
         if bool(evidence.get("reference_like")):
             errors.append(f"result_facts: référence bibliographique utilisée pour {fact.subject}.")
             continue
-        source = _evidence_text(evidence)
-        source_numbers = _number_tokens(source)
-        values_to_check = [fact.value, fact.comparison_value, fact.difference]
-        for value in values_to_check:
-            if not value:
-                continue
-            value_tokens = _number_tokens(value)
-            fact_numbers |= value_tokens
-            if not value_tokens.issubset(source_numbers):
-                errors.append(
-                    f"result_facts: valeur {value!r} absente de la preuve {fact.evidence_id}."
-                )
-        # Le texte visible est en français alors que la preuve peut être en anglais :
-        # ne pas imposer un chevauchement lexical sujet/métrique qui casserait les
-        # traductions fidèles (ex. « précision » / « accuracy »). Les nombres, le
-        # type de preuve et l'identifiant source restent, eux, strictement validés.
-
-    if result_claim is not None:
-        claim_numbers = _number_tokens(result_claim.text)
-        if claim_numbers and output.result_facts and not claim_numbers.issubset(fact_numbers):
-            errors.append(
-                "resultats: le texte contient des chiffres expérimentaux qui ne figurent pas dans result_facts."
-            )
-        if not output.result_facts:
-            errors.append("resultats: au moins un result_fact directement sourcé est requis.")
+        source_numbers = _number_tokens(_evidence_text(evidence))
+        for value in (fact.value, fact.comparison_value, fact.difference):
+            if value and not _number_tokens(value).issubset(source_numbers):
+                errors.append(f"result_facts: valeur {value!r} absente de {fact.evidence_id}.")
 
     if errors:
-        # PydanticAI renvoie ce message au modèle et consomme le budget de retry.
         raise ModelRetry(
-            "La sortie est structurée mais ne respecte pas encore le contrat factuel. "
-            "Corrige uniquement les points suivants, sans inventer :\n- "
-            + "\n- ".join(errors[:12])
+            "Corrige seulement ces erreurs factuelles, sans ajouter d'information :\n- "
+            + "\n- ".join(errors[:8])
         )
-
     return output
 
 

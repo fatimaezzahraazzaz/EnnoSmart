@@ -812,31 +812,46 @@ def list_articles(
         query = query.filter(Article.scholar_run_id == latest_run.id)
 
     if compact:
-        rows = (
-            query.options(defer(Article.source_json))
-            .order_by(Article.created_at.desc())
-            .all()
-        )
-        return [
-            {
-                "id": article.id,
-                "scholar_run_id": article.scholar_run_id,
-                "verrou_id": article.verrou_id,
-                "title": article.title,
-                "year": article.year,
-                "source": article.source,
-                "tag_article": article.tag_article,
-                "score": article.score,
-                "url": article.url,
-                "doi": article.doi,
-                "consultant_status": article.consultant_status,
-                "source_json": {},
-                "created_at": article.created_at,
-            }
-            for article in rows
-        ]
+        # compact_evidence_v2
+        rows = query.order_by(Article.score.desc().nullslast(), Article.id.asc()).all()
+        output = []
+        for article in rows:
+            source_json = article.source_json if isinstance(article.source_json, dict) else {}
+            evidence = (
+                source_json.get("evidence_preflight")
+                if isinstance(source_json.get("evidence_preflight"), dict)
+                else {}
+            )
+            output.append(
+                {
+                    "id": article.id,
+                    "scholar_run_id": article.scholar_run_id,
+                    "verrou_id": article.verrou_id,
+                    "title": article.title,
+                    "year": article.year,
+                    "source": article.source,
+                    "tag_article": article.tag_article,
+                    "score": article.score,
+                    "url": article.url,
+                    "doi": article.doi,
+                    "consultant_status": article.consultant_status,
+                    "source_json": {},
+                    "evidence_status": evidence.get("evidence_status") or "NOT_CHECKED",
+                    "evidence_label": evidence.get("evidence_label") or "Texte intégral non pré-vérifié",
+                    "evidence_usable": bool(evidence.get("evidence_usable")),
+                    "fulltext_ready": bool(evidence.get("fulltext_ready")),
+                    "candidate_only": bool(evidence.get("candidate_only", True)),
+                    "access_check_status": evidence.get("access_check_status"),
+                    "evidence_reason_code": evidence.get("reason_code"),
+                    "evidence_reason_detail": evidence.get("reason_detail"),
+                    "evidence_recommended_action": evidence.get("recommended_action"),
+                    "evidence_access_kind": evidence.get("access_kind"),
+                    "created_at": article.created_at,
+                }
+            )
+        return output
 
-    return query.order_by(Article.created_at.desc()).all()
+    return query.order_by(Article.score.desc().nullslast(), Article.id.asc()).all()
 
 
 @router.patch("/projects/{project_id}/articles/{article_id}/decision", response_model=ArticleRead)
@@ -869,9 +884,103 @@ def update_article_decision(
             detail=f"Statut invalide. Valeurs autorisées : {sorted(allowed)}",
         )
 
+    evidence = (
+        (article.source_json or {}).get("evidence_preflight")
+        if isinstance(article.source_json, dict)
+        else {}
+    )
+    evidence_status = str((evidence or {}).get("evidence_status") or "").upper()
+    unavailable_statuses = {
+        "ACCESS_UNAVAILABLE",
+        "BROWSER_DOWNLOAD_REQUIRED",
+        "ABSTRACT_READY",
+        "METADATA_ONLY",
+        "EXTRACTION_FAILED",
+    }
+    if payload.consultant_status in {"garde", "rejete"} and evidence_status in {
+        "",
+        "NOT_CHECKED",
+        "ACCESS_CHECKING",
+        "MCP_SEARCHING",
+        "EXTRACTION_QUEUED",
+        "EXTRACTION_RUNNING",
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La vérification d'accès doit se terminer avant cette décision.",
+        )
+    if payload.consultant_status in {"garde", "rejete"} and evidence_status == "ACCESS_UNCONFIRMED":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Le MCP n'a pas pu conclure. Relance la vérification avant cette décision.",
+        )
+    if payload.consultant_status in {"garde", "rejete"} and evidence_status in unavailable_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Le texte intégral n'est pas accessible automatiquement. "
+                "Importe le PDF autorisé avant d'activer Garder ou Rejeter."
+            ),
+        )
+
+    # Le clic Garder est maintenant l'unique action de preparation : si le
+    # preflight a deja verifie l'acces, on extrait le texte ici puis la carte
+    # est construite juste apres la conservation. Aucun second clic n'est requis.
+    if payload.consultant_status == "garde" and evidence_status == "ACCESS_AVAILABLE":
+        from services.scholar_evidence_preflight_service import _process_one
+
+        extraction = _process_one(
+            int(project.id),
+            int(article.id),
+            allow_legal_recovery=False,
+        )
+        db.expire_all()
+        article = (
+            db.query(Article)
+            .join(ScholarRun, Article.scholar_run_id == ScholarRun.id)
+            .filter(Article.id == article_id, ScholarRun.project_id == project.id)
+            .first()
+        )
+        refreshed_evidence = (
+            (article.source_json or {}).get("evidence_preflight")
+            if article is not None and isinstance(article.source_json, dict)
+            else {}
+        )
+        refreshed_status = str(
+            (refreshed_evidence or {}).get("evidence_status") or "EXTRACTION_FAILED"
+        ).upper()
+        if article is None or refreshed_status != "FULLTEXT_READY":
+            detail = str(
+                (refreshed_evidence or {}).get("reason_detail")
+                or extraction.get("reason_detail")
+                or "L'extraction du texte integral a echoue."
+            ).strip()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Article non garde : {detail}",
+            )
+
     article.consultant_status = payload.consultant_status
     db.commit()
     db.refresh(article)
+
+    # Les Article Cards n'existent que pour la sélection consultant courante.
+    # Une conservation crée/réutilise la carte ; un rejet ou retour en attente
+    # retire immédiatement la carte et reconstruit l'index des cartes gardées.
+    try:
+        from services.article_card_builder import (
+            sync_article_cards_after_consultant_decision,
+        )
+
+        sync_article_cards_after_consultant_decision(db, project, article)
+        db.refresh(article)
+    except Exception as exc:
+        source_json = dict(article.source_json or {})
+        source_json["article_card_sync_error"] = f"{type(exc).__name__}: {exc}"
+        article.source_json = source_json
+        db.add(article)
+        db.commit()
+        db.refresh(article)
     return article
 
 
@@ -1159,6 +1268,56 @@ def fetch_scholar_article_fulltext(
         refresh_resolution=force,
         force_reextract=False,
     )
+
+
+@router.post(
+    "/projects/{project_id}/scholar/articles/{article_id}/fulltext/extract-on-demand",
+    response_model=ArticleRead,
+)
+def extract_scholar_article_fulltext_on_demand(
+    project_id: int,
+    article_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Extrait un seul article après un clic explicite du consultant."""
+    project = get_project_for_user(db, project_id, current_user)
+    article = (
+        db.query(Article)
+        .join(ScholarRun, Article.scholar_run_id == ScholarRun.id)
+        .filter(Article.id == article_id, ScholarRun.project_id == project.id)
+        .first()
+    )
+    if article is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article introuvable.")
+
+    evidence = (
+        (article.source_json or {}).get("evidence_preflight")
+        if isinstance(article.source_json, dict)
+        else {}
+    )
+    evidence_status = str((evidence or {}).get("evidence_status") or "NOT_CHECKED").upper()
+    if evidence_status in {"ACCESS_CHECKING", "MCP_SEARCHING"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La vérification d'accès est encore en cours pour cet article.",
+        )
+    if evidence_status in {"ACCESS_UNAVAILABLE", "BROWSER_DOWNLOAD_REQUIRED", "ACCESS_UNCONFIRMED", "ABSTRACT_READY", "METADATA_ONLY", "EXTRACTION_FAILED"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Aucune copie exploitable n'est accessible automatiquement. "
+                "Importe le PDF autorisé pour lancer l'extraction."
+            ),
+        )
+
+    from services.scholar_evidence_preflight_service import _process_one
+    _process_one(int(project.id), int(article.id))
+    db.expire_all()
+    refreshed = db.get(Article, int(article.id))
+    if refreshed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article introuvable après extraction.")
+    return refreshed
 
 
 @router.post("/projects/{project_id}/scholar/fulltext/fetch-selected")
@@ -1588,7 +1747,7 @@ def get_scholar_article_cards(
 
     from services.article_card_builder import get_article_cards_payload
 
-    return get_article_cards_payload(project)
+    return get_article_cards_payload(project, db=db)
 
 def _run_state_of_art_full_pipeline(
     project_id: int,
@@ -1600,6 +1759,44 @@ def _run_state_of_art_full_pipeline(
     guided_session_id: str | None = None,
 ):
     project = get_project_for_user(db, project_id, current_user)
+
+    latest_run = _latest_scholar_run_for_project(db, project.id)
+    if latest_run is not None:
+        run_articles = (
+            db.query(Article)
+            .filter(Article.scholar_run_id == latest_run.id)
+            .all()
+        )
+        pending_statuses = {"", "NOT_CHECKED", "EXTRACTION_QUEUED", "EXTRACTION_RUNNING"}
+        pending_count = 0
+        kept_without_fulltext = []
+        for article in run_articles:
+            source_json = article.source_json if isinstance(article.source_json, dict) else {}
+            evidence = source_json.get("evidence_preflight")
+            evidence = evidence if isinstance(evidence, dict) else {}
+            evidence_status = str(evidence.get("evidence_status") or "NOT_CHECKED").upper()
+            if evidence_status in pending_statuses:
+                pending_count += 1
+            if article.consultant_status == "garde" and evidence_status != "FULLTEXT_READY":
+                kept_without_fulltext.append(article)
+
+        if pending_count:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Rédaction bloquée : la vérification de {pending_count} article(s) "
+                    "est encore en cours. Les décisions consultant restent possibles."
+                ),
+            )
+        if kept_without_fulltext:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Rédaction bloquée : {len(kept_without_fulltext)} article(s) gardé(s) "
+                    "n'ont pas encore de texte intégral extrait. Importez leur PDF ou "
+                    "retirez-les de la sélection avant la rédaction."
+                ),
+            )
 
     from services.ennoscholar_state_of_art_orchestrator import (
         generate_state_of_art_after_consultant_selection,

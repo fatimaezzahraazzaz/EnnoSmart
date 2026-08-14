@@ -229,6 +229,16 @@ export type ArticleRead = {
   doi: string | null
   consultant_status: string
   source_json: any
+  evidence_status?: string | null
+  evidence_label?: string | null
+  evidence_usable?: boolean | null
+  fulltext_ready?: boolean | null
+  candidate_only?: boolean | null
+  access_check_status?: string | null
+  evidence_reason_code?: string | null
+  evidence_reason_detail?: string | null
+  evidence_recommended_action?: string | null
+  evidence_access_kind?: string | null
   created_at: string
 }
 
@@ -951,6 +961,16 @@ export async function getScholarDirectExtractStatus(projectId: number) {
   return apiRequest<any>(`/projects/${projectId}/scholar/fulltext/direct-extract-status`)
 }
 
+export async function extractScholarArticleFulltextOnDemand(
+  projectId: number,
+  articleId: number,
+) {
+  return apiRequest<ArticleRead>(
+    `/projects/${projectId}/scholar/articles/${articleId}/fulltext/extract-on-demand`,
+    { method: "POST" },
+  )
+}
+
 export async function extractScholarSelectedFulltextDirect(
   projectId: number,
   force = false,
@@ -1160,7 +1180,6 @@ export async function prepareStateOfArtPhase1And2(
   options: PrepareStateOfArtOptions = {},
 ): Promise<PrepareStateOfArtResult> {
   const force = options.force ?? false
-  const maxArticles = options.maxArticles ?? null
   const articleCardMode = options.articleCardMode || "auto"
   const onProgress = options.onProgress
   const steps = makePrepareInitialSteps()
@@ -1176,17 +1195,17 @@ export async function prepareStateOfArtPhase1And2(
   await runPrepareStep(
     steps,
     "phase2a_fulltext_resolve",
-    "Accès et extraction depuis les liens déjà connus.",
+    "Lecture des extractions déjà terminées pendant EnnoScholar.",
     onProgress,
-    () => fetchScholarSelectedFulltext(projectId, force, maxArticles),
+    () => getScholarDirectExtractStatus(projectId),
   )
 
   await runPrepareStep(
     steps,
     "phase2b_direct_extract",
-    "Récupération légale MCP des seuls échecs directs.",
+    "Lecture des statuts MCP déjà qualifiés pendant EnnoScholar.",
     onProgress,
-    () => recoverScholarSelectedFulltextLegally(projectId, force, maxArticles),
+    () => getScholarFulltextStatus(projectId),
   )
 
   await runPrepareStep(

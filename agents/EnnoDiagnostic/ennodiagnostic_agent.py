@@ -2294,6 +2294,10 @@ def rank_sources_for_agent(sources: List[Dict[str, Any]], max_items: int = 30) -
             value += 10.0
         if clean_text(meta.get("source_type")) == "nlp_result_direct_group":
             value += 50.0
+        elif clean_text(meta.get("source_type")) == "nlp_result_current_project":
+            # Le pack NLP du projet/année courants est la source documentaire
+            # la plus directe pour les petites sections du diagnostic.
+            value += 35.0
         if clean_text(meta.get("chunk_level")) == "nlp_main_item":
             value += 8.0
         elif bool(meta.get("is_supporting_passage")):
@@ -2417,6 +2421,8 @@ def _diag_objective_score(src: Dict[str, Any]) -> float:
     score += 7.0 * _diag_marker_count(blob, _DIAG_PROJECT_LEVEL_MARKERS)
     if "objectif" in role or "objectif" in pack:
         score += 10.0
+    if clean_text(meta.get("source_type")) == "nlp_result_current_project":
+        score += 6.0
     if any(x in role or x in pack for x in ["methode", "resultat", "limite", "contribution"]):
         score += 3.0
     try:
@@ -2430,6 +2436,9 @@ def _diag_objective_score(src: Dict[str, Any]) -> float:
     # Ne pas laisser une validation locale/unitaire écraser le vrai objectif projet.
     if _diag_marker_count(blob, _DIAG_LOCAL_PROOF_MARKERS) and not _diag_marker_count(blob, _DIAG_PROJECT_LEVEL_MARKERS):
         score -= 10.0
+    normalized_blob = _diag_norm(blob)
+    if any(marker in normalized_blob for marker in ("but de cette partie", "objectif de cette partie", "sensibilite du parametrage")):
+        score -= 18.0
     if _diag_has_noise(src):
         score -= 10.0
     if is_universal_reconstruction_source(src):
@@ -2889,6 +2898,123 @@ class EnnoDiagnosticAgent:
             )
         return sources
 
+    def _nlp_pack_item_to_source(
+        self,
+        item: Dict[str, Any],
+        *,
+        pack_key: str,
+        role: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Convertit une preuve du NLP COURANT en source EnnoDiagnostic.
+
+        Aucun autre projet ni mémoire n'est consulté ici. ``analysis_text`` est
+        privilégié car il restaure le contexte local autour des fragments NLP
+        (par exemple le nom réel d'un angle juste avant sa valeur).
+        """
+        if not isinstance(item, dict):
+            return None
+        raw = clean_text(item.get("text"))
+        analysis = clean_text(item.get("analysis_text"))
+        before = clean_text(item.get("context_before"))
+        after = clean_text(item.get("context_after"))
+        contextual = analysis or clean_text(" ".join(x for x in (before, raw, after) if x)) or raw
+        if len(contextual) < 35:
+            return None
+
+        # Écarter seulement le bruit documentaire évident, sans règle métier.
+        normalized = _diag_norm(contextual)
+        noise_markers = (
+            "table des matieres", "documents applicables remis",
+            "documents de reference remis", "personne fonction organisme",
+        )
+        if any(marker in normalized for marker in noise_markers) and len(contextual) < 700:
+            return None
+
+        try:
+            rank_score = float(item.get("rank_score") or 0.0)
+        except Exception:
+            rank_score = 0.0
+        try:
+            confidence = float(item.get("confidence") or 0.0)
+        except Exception:
+            confidence = 0.0
+
+        meta = {
+            "passage_id": clean_text(item.get("passage_id")),
+            "document": clean_text(item.get("document")),
+            "document_id": clean_text(item.get("document_id")),
+            "source_path": clean_text(item.get("source_path")),
+            "source_type": "nlp_result_current_project",
+            "content_origin": clean_text(item.get("content_origin")) or "project_core",
+            "pack_key": pack_key,
+            "role": clean_text(item.get("role")) or role,
+            "section_title": clean_text(item.get("section_title")),
+            "section_path": item.get("section_path"),
+            "sentence_start": item.get("sentence_start"),
+            "page_number": item.get("page_number"),
+            "rank_score": rank_score + 0.35,
+            "confidence": max(confidence, 0.72),
+            "analysis_text": contextual,
+            "context_before": before,
+            "context_after": after,
+            "source_text_original": raw,
+            "current_project_only": True,
+        }
+        return {
+            "text": contextual,
+            "analysis_text": contextual,
+            "context_before": before,
+            "context_after": after,
+            "document": meta["document"],
+            "source_path": meta["source_path"],
+            "metadata": meta,
+        }
+
+    def _load_current_nlp_evidence_sections(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Charge directement le pack de preuves du ``nlp_result.json`` courant.
+
+        Cette lecture évite qu'un rôle Chroma manquant fasse disparaître un objectif,
+        un résultat ou un paramètre pourtant déjà extrait par le NLP.
+        """
+        path = self._find_current_nlp_result_path()
+        empty = {key: [] for key in ("objectifs", "methodes", "resultats", "parametres", "limites", "contributions")}
+        if path is None or not path.exists():
+            return empty
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        except Exception as exc:
+            print(f"[EnnoDiagnostic][CURRENT_NLP_PACK][WARN] lecture impossible: {exc}")
+            return empty
+        pack = payload.get("multi_document_evidence_pack_for_ennodiagnostic") or {}
+        if not isinstance(pack, dict):
+            return empty
+
+        mapping = {
+            "objectifs": ("objectifs_locaux", "objectif"),
+            "methodes": ("methodes_locales", "methode"),
+            "resultats": ("resultats_locaux", "resultat"),
+            "parametres": ("parametres_locaux", "parametre"),
+            "limites": ("limites_locales", "limite"),
+            "contributions": ("contributions_locales", "contribution"),
+        }
+        output: Dict[str, List[Dict[str, Any]]] = {}
+        for section_key, (pack_key, role) in mapping.items():
+            converted: List[Dict[str, Any]] = []
+            for item in pack.get(pack_key) or []:
+                source = self._nlp_pack_item_to_source(item, pack_key=pack_key, role=role)
+                if source is not None:
+                    converted.append(source)
+            # Le ranking est générique et dédupliqué ; on garde assez de contexte
+            # pour laisser le presenter faire sa sélection propre à chaque section.
+            output[section_key] = merge_ranked_sources(converted, max_items=30)
+
+        print(
+            "[EnnoDiagnostic][CURRENT_NLP_PACK] "
+            + " ".join(f"{key}={len(value)}" for key, value in output.items())
+            + f" source={path}"
+        )
+        return output
+
     def retrieve_all_sections(self) -> Dict[str, List[Dict[str, Any]]]:
         sections: Dict[str, List[Dict[str, Any]]] = {}
 
@@ -2956,6 +3082,27 @@ class EnnoDiagnosticAgent:
             query="limites contraintes problèmes points bloquants données manquantes risques à vérifier incertitudes",
             top_k=10,
         )
+
+        # Source de vérité documentaire : preuves déjà extraites par le NLP du
+        # projet/année COURANTS. Chroma reste un complément, jamais l'inverse.
+        current_nlp_sections = self._load_current_nlp_evidence_sections()
+        merge_limits = {
+            "objectifs": 24, "methodes": 30, "resultats": 30,
+            "parametres": 24, "limites": 24, "contributions": 24,
+        }
+        for section_key, limit in merge_limits.items():
+            direct = current_nlp_sections.get(section_key) or []
+            existing = sections.get(section_key) or []
+            if direct:
+                sections[section_key] = merge_ranked_sources(direct, existing, max_items=limit)
+
+        # Le contexte global reçoit lui aussi les preuves du projet courant afin
+        # que l'objectif ne dépende jamais d'un index Chroma incomplet.
+        direct_global: List[Dict[str, Any]] = []
+        for key in ("objectifs", "contributions", "limites", "methodes", "resultats"):
+            direct_global.extend((current_nlp_sections.get(key) or [])[:8])
+        if direct_global:
+            sections["global"] = merge_ranked_sources(direct_global, sections.get("global", []), max_items=30)
 
         # On conserve les sources qui portent le score Frascati séparément.
         # Elles peuvent être très synthétiques ; elles ne doivent pas écraser
@@ -5467,7 +5614,7 @@ Contraintes :
                 "items": llm_reformulated_verrous,
             })
         print(
-            f"✅ EnnoDiagnostic V186 terminé | sections={len(diagnostic_sections_by_key)} "
+            f"✅ EnnoDiagnostic V191 terminé | sections={len(diagnostic_sections_by_key)} "
             f"| verrous={len(llm_reformulated_verrous)} | N-1={bool(cir_memory_report.get('has_previous_cir'))} "
             f"| temps={elapsed}s",
             flush=True,

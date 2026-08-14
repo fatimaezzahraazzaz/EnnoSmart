@@ -36,6 +36,7 @@ async def resolve_legal_fulltext(
     known_urls: list[str] | None = None,
     article_id: int | str | None = None,
     source: str | None = None,
+    deterministic_oa_checked: bool = False,
     search_all: bool = False,
     force_refresh: bool = False,
 ) -> dict:
@@ -48,6 +49,7 @@ async def resolve_legal_fulltext(
         year=year,
         known_urls=known_urls or [],
         source=source,
+        deterministic_oa_checked=deterministic_oa_checked,
     )
     result = await resolver.resolve(article, search_all=search_all, force_refresh=force_refresh)
     return result.model_dump(mode="json")
@@ -133,6 +135,7 @@ async def resolve_rest(request: Request) -> JSONResponse:
             year=payload.get("year"),
             known_urls=payload.get("known_urls") or [],
             source=payload.get("source"),
+            deterministic_oa_checked=bool(payload.get("deterministic_oa_checked", False)),
         )
         result = await resolver.resolve(
             article,

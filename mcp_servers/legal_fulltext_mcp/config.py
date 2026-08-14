@@ -98,6 +98,10 @@ class Settings(BaseSettings):
         "unpaywall,openalex,crossref,core,hal,arxiv,europe_pmc,zenodo",
         alias="ENNOSCHOLAR_LEGAL_MCP_PROVIDER_ORDER",
     )
+    deep_provider_order_raw: str = Field(
+        "hal,arxiv,europe_pmc,zenodo",
+        alias="ENNOSCHOLAR_LEGAL_MCP_DEEP_PROVIDER_ORDER",
+    )
 
     user_agent: str = Field(
         "EnnoSmart-EnnoScholar-LegalFulltext/1.5 (+mailto:contact@example.invalid)",
@@ -122,6 +126,21 @@ class Settings(BaseSettings):
             "europe_pmc",
             "zenodo",
         ]
+
+    @property
+    def deep_provider_order(self) -> List[str]:
+        """Providers MCP de dernier recours.
+
+        OpenAlex, Unpaywall, Crossref et CORE sont déjà interrogés par le
+        résolveur déterministe du backend. Les répéter article par article dans
+        la recherche profonde multipliait inutilement le temps total.
+        """
+        values = [
+            x.strip().lower()
+            for x in self.deep_provider_order_raw.split(",")
+            if x.strip()
+        ]
+        return values or ["hal", "arxiv", "europe_pmc", "zenodo"]
 
     @property
     def effective_crossref_mailto(self) -> str:

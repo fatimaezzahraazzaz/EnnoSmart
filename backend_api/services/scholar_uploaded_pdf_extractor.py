@@ -370,7 +370,41 @@ async def upload_and_extract_pdf_for_article(
         }
     )
     article.source_json = source_json
+
+    # L'upload remplace le statut indisponible par une preuve utilisable et
+    # réactive immédiatement les décisions Garder/Rejeter dans l'interface.
+    try:
+        from services.scholar_evidence_preflight_service import _classify, _set_article_evidence
+        from services.scholar_fulltext_cache_service import store_cached_fulltext
+
+        evidence = _classify(article, result)
+        _set_article_evidence(db, article, evidence, result)
+        cache_row = store_cached_fulltext(db, article, result)
+        if cache_row is not None:
+            source_json = dict(article.source_json or {})
+            source_json["fulltext_cache_id"] = int(cache_row.id)
+            source_json["fulltext_cache_key"] = cache_row.cache_key
+            article.source_json = source_json
+    except Exception as exc:
+        source_json = dict(article.source_json or {})
+        source_json["evidence_update_error"] = f"{type(exc).__name__}: {exc}"
+        article.source_json = source_json
     db.add(article)
     db.commit()
     db.refresh(article)
+    result["article"] = {
+        "id": int(article.id),
+        "scholar_run_id": int(article.scholar_run_id),
+        "verrou_id": article.verrou_id,
+        "title": article.title,
+        "year": article.year,
+        "source": article.source,
+        "tag_article": article.tag_article,
+        "score": article.score,
+        "url": article.url,
+        "doi": article.doi,
+        "consultant_status": article.consultant_status,
+        "source_json": article.source_json,
+        "created_at": article.created_at.isoformat() if article.created_at else None,
+    }
     return result

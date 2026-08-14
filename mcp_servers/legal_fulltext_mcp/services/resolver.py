@@ -44,7 +44,7 @@ from .generic_publisher_discovery import (
     to_mcp_location,
     to_provider_attempt,
 )
-RESOLVER_VERSION = "1.9.2-html-parser-fallback"
+RESOLVER_VERSION = "1.11.0-fast-preflight-no-duplicate-probes"
 
 
 class LegalFulltextResolver:
@@ -101,6 +101,16 @@ class LegalFulltextResolver:
             for name in self.provider_map
         }
 
+    def _providers_for_request(
+        self,
+        search_all: bool,
+        article: ArticleIdentity,
+    ) -> list[FulltextProvider]:
+        if not search_all or not article.deterministic_oa_checked:
+            return self.providers
+        names = set(self.settings.deep_provider_order)
+        return [provider for provider in self.providers if provider.name in names]
+
     def _cache_key(self, article: ArticleIdentity, search_all: bool) -> str:
         payload = {
             "resolver_version": RESOLVER_VERSION,
@@ -110,6 +120,7 @@ class LegalFulltextResolver:
             "year": article.year,
             "known_urls": sorted(article.known_urls),
             "search_all": search_all,
+            "deterministic_oa_checked": article.deterministic_oa_checked,
         }
         raw = json.dumps(payload, ensure_ascii=False, sort_keys=True)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -515,7 +526,27 @@ class LegalFulltextResolver:
             max_landing_pdf_links=self.settings.max_landing_pdf_links,
             validate_public_network_urls=self.settings.validate_public_network_urls,
         ) as http:
-            effective_article, enrichment_attempt = await self.metadata_enricher.enrich(input_article, http)
+            identity_is_complete = bool(
+                normalize_doi(input_article.doi)
+                and normalize_title(input_article.title)
+                and input_article.authors
+                and input_article.year
+            )
+            if identity_is_complete:
+                effective_article = input_article
+                enrichment_attempt = ProviderAttempt(
+                    provider="metadata_enrichment",
+                    enabled=True,
+                    ok=True,
+                    status="skipped_identity_already_complete",
+                    candidates_count=0,
+                    elapsed_seconds=0.0,
+                )
+            else:
+                effective_article, enrichment_attempt = await self.metadata_enricher.enrich(
+                    input_article,
+                    http,
+                )
             attempts.append(enrichment_attempt)
 
             # Étape générique prioritaire :
@@ -530,97 +561,112 @@ class LegalFulltextResolver:
             generic_transient = False
             generic_result: dict = {}
 
-            try:
-                generic_result = await asyncio.to_thread(
-                    resolve_publisher_fulltext,
-                    {
-                        "article_id": effective_article.article_id,
-                        "title": effective_article.title,
-                        "doi": effective_article.doi,
-                        "authors": list(effective_article.authors),
-                        "year": effective_article.year,
-                        "known_urls": list(effective_article.known_urls),
-                        "source": getattr(effective_article, "source", None),
-                    },
-                    timeout=self.settings.timeout_seconds,
-                )
-
-                generic_location = to_mcp_location(generic_result)
-                if generic_location:
-                    generic_candidate = self._candidate_from_generic_location(
-                        effective_article,
-                        generic_location,
-                    )
-                    generic_candidates.append(generic_candidate)
-                    all_candidates.append(generic_candidate)
-
-                    if self._is_verified_fulltext(generic_candidate):
-                        accepted.append(generic_candidate)
-                        generic_verified_count = 1
-
-                generic_transient = bool(
-                    generic_result.get("retry_recommended")
-                    or any(
-                        item.get("status") in {
-                            "timeout",
-                            "temporary_error",
-                            "rate_limited",
-                            "request_error",
-                        }
-                        for item in (generic_result.get("attempts") or [])
+            # Le backend positionne ``deterministic_oa_checked`` seulement
+            # apres avoir sonde les URLs connues et les fournisseurs OA. Les
+            # refaire ici doublait le cout (jusqu'a 40 s/article) sans gain.
+            # Le MCP passe alors directement aux depots profonds restants.
+            if effective_article.deterministic_oa_checked:
+                attempts.append(
+                    ProviderAttempt(
+                        provider="known_url_publisher_discovery",
+                        enabled=False,
+                        ok=True,
+                        status="skipped_already_checked_by_backend",
+                        candidates_count=0,
+                        elapsed_seconds=0.0,
                     )
                 )
-            except Exception as exc:
-                generic_error = f"{type(exc).__name__}: {exc}"
+            else:
+                try:
+                    generic_result = await asyncio.to_thread(
+                        resolve_publisher_fulltext,
+                        {
+                            "article_id": effective_article.article_id,
+                            "title": effective_article.title,
+                            "doi": effective_article.doi,
+                            "authors": list(effective_article.authors),
+                            "year": effective_article.year,
+                            "known_urls": list(effective_article.known_urls),
+                            "source": getattr(effective_article, "source", None),
+                        },
+                        timeout=self.settings.timeout_seconds,
+                    )
 
-            generic_attempt_data = to_provider_attempt(
-                generic_result,
-                elapsed_seconds=time.perf_counter() - generic_started,
-            ) if generic_result else {}
+                    generic_location = to_mcp_location(generic_result)
+                    if generic_location:
+                        generic_candidate = self._candidate_from_generic_location(
+                            effective_article,
+                            generic_location,
+                        )
+                        generic_candidates.append(generic_candidate)
+                        all_candidates.append(generic_candidate)
 
-            attempts.append(
-                ProviderAttempt(
-                    provider="known_url_publisher_discovery",
-                    enabled=True,
-                    ok=bool(generic_result.get("ok")) and not generic_error,
-                    status=(
-                        "verified_candidate_found"
-                        if generic_verified_count
-                        else "provider_error"
-                        if generic_error
-                        else "searched_no_verified_candidate"
-                    ),
-                    candidates_count=int(
-                        generic_attempt_data.get("candidates_count")
-                        or len(generic_candidates)
-                    ),
-                    elapsed_seconds=round(
-                        time.perf_counter() - generic_started,
-                        3,
-                    ),
-                    error=generic_error,
-                    identity_rejected_count=sum(
-                        1
-                        for candidate in generic_candidates
-                        if candidate.resolution_status == "identity_rejected"
-                    ),
-                    access_blocked_count=int(
-                        generic_attempt_data.get("access_blocked_count") or 0
-                    ),
-                    landing_only_count=int(
-                        generic_attempt_data.get("landing_only_count") or 0
-                    ),
-                    verified_count=generic_verified_count,
-                    transient=generic_transient,
+                        if self._is_verified_fulltext(generic_candidate):
+                            accepted.append(generic_candidate)
+                            generic_verified_count = 1
+
+                    generic_transient = bool(
+                        generic_result.get("retry_recommended")
+                        or any(
+                            item.get("status") in {
+                                "timeout",
+                                "temporary_error",
+                                "rate_limited",
+                                "request_error",
+                            }
+                            for item in (generic_result.get("attempts") or [])
+                        )
+                    )
+                except Exception as exc:
+                    generic_error = f"{type(exc).__name__}: {exc}"
+
+                generic_attempt_data = to_provider_attempt(
+                    generic_result,
+                    elapsed_seconds=time.perf_counter() - generic_started,
+                ) if generic_result else {}
+
+                attempts.append(
+                    ProviderAttempt(
+                        provider="known_url_publisher_discovery",
+                        enabled=True,
+                        ok=bool(generic_result.get("ok")) and not generic_error,
+                        status=(
+                            "verified_candidate_found"
+                            if generic_verified_count
+                            else "provider_error"
+                            if generic_error
+                            else "searched_no_verified_candidate"
+                        ),
+                        candidates_count=int(
+                            generic_attempt_data.get("candidates_count")
+                            or len(generic_candidates)
+                        ),
+                        elapsed_seconds=round(
+                            time.perf_counter() - generic_started,
+                            3,
+                        ),
+                        error=generic_error,
+                        identity_rejected_count=sum(
+                            1
+                            for candidate in generic_candidates
+                            if candidate.resolution_status == "identity_rejected"
+                        ),
+                        access_blocked_count=int(
+                            generic_attempt_data.get("access_blocked_count") or 0
+                        ),
+                        landing_only_count=int(
+                            generic_attempt_data.get("landing_only_count") or 0
+                        ),
+                        verified_count=generic_verified_count,
+                        transient=generic_transient,
+                    )
                 )
-            )
 
             if not (
                 generic_verified_count
                 and self.settings.stop_on_first_verified
-                and not search_all
             ):
-                for provider in self.providers:
+                for provider in self._providers_for_request(search_all, effective_article):
                     started = time.perf_counter()
                     if not provider.enabled():
                         attempts.append(
@@ -711,7 +757,7 @@ class LegalFulltextResolver:
                                 verified_count=len(valid_from_provider),
                             )
                         )
-                        if valid_from_provider and self.settings.stop_on_first_verified and not search_all:
+                        if valid_from_provider and self.settings.stop_on_first_verified:
                             break
                     except HttpRequestError as exc:
                         self._record_provider_error(provider.name, exc)

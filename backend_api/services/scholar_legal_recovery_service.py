@@ -39,8 +39,8 @@ LEGAL_PIPELINE = "legal_mcp_fulltext_v4_generic_publisher_discovery"
 DIRECT_PIPELINE = "direct_known_urls_fulltext_v1"
 MIN_USEFUL_TEXT_CHARS = int(os.getenv("ENNOSCHOLAR_MIN_USEFUL_FULLTEXT_CHARS", "1000"))
 MAX_REMOTE_BYTES = int(os.getenv("ENNOSCHOLAR_REMOTE_CONTENT_MAX_BYTES", str(100 * 1024 * 1024)))
-MAX_RECOVERY_ATTEMPTS = max(1, int(os.getenv("ENNOSCHOLAR_LEGAL_RECOVERY_MAX_ATTEMPTS", "3")))
-RETRY_DELAYS_SECONDS = (0.0, 2.0, 6.0)
+MAX_RECOVERY_ATTEMPTS = max(1, min(int(os.getenv("ENNOSCHOLAR_LEGAL_RECOVERY_MAX_ATTEMPTS", "1")), 2))
+RETRY_DELAYS_SECONDS = (0.0, 1.0)
 
 _TRANSIENT_FAILURE_CODES = {
     "provider_temporarily_unavailable",
@@ -362,6 +362,8 @@ def recover_legal_fulltext_for_article(
     *,
     force_refresh: bool = False,
     search_all: bool = False,
+    expand_on_failure: bool = True,
+    pre_resolved_mcp_result: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     article = _article_for_project(db, project, article_id)
     paths = _fulltext_paths(project, article)
@@ -423,28 +425,38 @@ def recover_legal_fulltext_for_article(
 
     mcp_result: Dict[str, Any] = {}
     mcp_run_attempts: List[Dict[str, Any]] = []
-    for attempt_number in range(1, MAX_RECOVERY_ATTEMPTS + 1):
-        delay = RETRY_DELAYS_SECONDS[min(attempt_number - 1, len(RETRY_DELAYS_SECONDS) - 1)]
-        if delay > 0:
-            time.sleep(delay)
-        mcp_result = resolve_mcp_for_article(
-            article,
-            force=True if attempt_number > 1 else force_refresh,
-            search_all=search_all,
-        )
-        mcp_run_attempts.append(
-            {
+
+    if isinstance(pre_resolved_mcp_result, dict):
+        mcp_result = dict(pre_resolved_mcp_result)
+        mcp_run_attempts.append({
+            "attempt_number": 0,
+            "status": mcp_result.get("status"),
+            "failure_code": mcp_result.get("failure_code"),
+            "found": bool(mcp_result.get("found")),
+            "retry_recommended": bool(mcp_result.get("retry_recommended")),
+            "pre_resolved": True,
+        })
+    else:
+        for attempt_number in range(1, MAX_RECOVERY_ATTEMPTS + 1):
+            delay = RETRY_DELAYS_SECONDS[min(attempt_number - 1, len(RETRY_DELAYS_SECONDS) - 1)]
+            if delay > 0:
+                time.sleep(delay)
+            mcp_result = resolve_mcp_for_article(
+                article,
+                force=True if attempt_number > 1 else force_refresh,
+                search_all=search_all,
+            )
+            mcp_run_attempts.append({
                 "attempt_number": attempt_number,
                 "status": mcp_result.get("status"),
                 "failure_code": mcp_result.get("failure_code"),
                 "found": bool(mcp_result.get("found")),
                 "retry_recommended": bool(mcp_result.get("retry_recommended")),
-            }
-        )
-        if _mcp_candidates(mcp_result):
-            break
-        if not _transient_mcp_failure(mcp_result):
-            break
+            })
+            if _mcp_candidates(mcp_result):
+                break
+            if not _transient_mcp_failure(mcp_result):
+                break
 
     mcp_diagnostic = build_mcp_diagnostic(mcp_result, max_attempts=40, max_locations=60)
     mcp_diagnostic["backend_recovery_attempts"] = mcp_run_attempts
@@ -571,10 +583,14 @@ def recover_legal_fulltext_for_article(
             candidate_attempts.append(attempt)
             continue
 
+        # _extract_pdf_fulltext() exécute déjà la chaîne native -> OCR si
+        # nécessaire -> GROBID fallback. Ne jamais rappeler GROBID ici :
+        # l'ancien double fallback pouvait doubler le coût d'un PDF difficile.
         extraction = _extract_pdf_fulltext(content)
         if not extraction.get("ok"):
             attempt["status"] = extraction.get("status") or "candidate_extraction_failed"
             attempt["text_chars"] = extraction.get("text_chars")
+            attempt["grobid_fallback"] = extraction.get("grobid_fallback")
             candidate_attempts.append(attempt)
             continue
 
@@ -653,6 +669,24 @@ def recover_legal_fulltext_for_article(
         }
         return _save_legal_result(project, article, result)
 
+    # V5.3 — seconde passe légale élargie automatique.
+    # La première passe peut trouver un mauvais PDF. On élargit une seule fois.
+    if expand_on_failure and not search_all:
+        expanded_result = recover_legal_fulltext_for_article(
+            db,
+            project,
+            article.id,
+            force_refresh=True,
+            search_all=True,
+            expand_on_failure=False,
+        )
+        if isinstance(expanded_result, dict):
+            expanded_result = dict(expanded_result)
+            expanded_result["expanded_search_triggered"] = True
+            expanded_result["initial_candidate_attempts"] = candidate_attempts
+            expanded_result["initial_mcp_status"] = mcp_result.get("status")
+            return _save_legal_result(project, article, expanded_result)
+
     verified_candidate_count = sum(
         1
         for item in (mcp_result.get("locations") or [])
@@ -660,7 +694,20 @@ def recover_legal_fulltext_for_article(
         and item.get("verified_pdf") is True
         and item.get("same_article") is True
     )
-    if verified_candidate_count > 0 or candidates:
+    mismatch_attempts = [
+        item for item in candidate_attempts
+        if isinstance(item, dict) and str(item.get("status") or "").endswith("identity_mismatch")
+    ]
+    identity_mismatch_only = bool(candidate_attempts) and len(mismatch_attempts) == len(candidate_attempts)
+
+    if identity_mismatch_only:
+        final_status = "legal_candidates_identity_mismatch"
+        final_failure_code = "candidate_identity_mismatch"
+        message = (
+            "Des documents légaux ont été trouvés et lus, mais aucun ne correspond "
+            "avec une identité suffisante à l'article recherché."
+        )
+    elif verified_candidate_count > 0 or candidates:
         final_status = "legal_pdf_found_but_extraction_failed"
         final_failure_code = "verified_pdf_extraction_failed"
         message = (

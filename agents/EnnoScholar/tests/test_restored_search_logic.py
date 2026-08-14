@@ -73,6 +73,93 @@ class RestoredSearchLogicTests(unittest.TestCase):
         )
         self.assertFalse(any("quant elle" in query for query in queries))
 
+    def test_bistatic_radar_lock_is_not_dropped_when_sar_is_ambiguous(self) -> None:
+        intent = {
+            "verrou_id": "805",
+            "verrou_title": (
+                "Incertitude sur l'impact du controle de densite des rayons "
+                "sur la precision et la performance calculatoire des "
+                "simulations radar bistatiques"
+            ),
+            "core_concepts": ["synthetic aperture radar"],
+            "primary_core_concepts": ["synthetic aperture radar"],
+            "concept_aliases": {
+                "synthetic aperture radar": ["synthetic aperture radar", "SAR"],
+            },
+            "ambiguous_acronyms": ["SAR"],
+            "literal_source_acronyms": ["SAR"],
+            "literal_source_phrases": [
+                "simulations radar bistatiques",
+                "radar bistatic configurations",
+            ],
+            "literal_source_terms": [
+                "radar",
+                "simulations",
+                "precision",
+                "densite",
+                "rayons",
+            ],
+            "phenomenon_anchors": [
+                "validation against reference methods or measurements",
+            ],
+        }
+
+        enriched = attach_queries_to_intent(intent, max_queries=8)
+        queries = [
+            item["query"].lower()
+            for item in enriched.get("search_queries") or []
+        ]
+
+        self.assertGreater(len(queries), 0)
+        self.assertTrue(any("synthetic aperture radar" in query for query in queries))
+        self.assertTrue(
+            any("bistatic" in query or "ray" in query for query in queries)
+        )
+
+    def test_section_title_preserves_bistatic_ray_density_problem(self) -> None:
+        verrou = {
+            "verrou_id": "805",
+            "verrou_title": (
+                "Incertitude sur l'impact du controle de densite des rayons "
+                "sur la precision et la performance calculatoire des "
+                "simulations radar bistatiques"
+            ),
+            "raw_item": {
+                "source_text": (
+                    "plays a critical role in controlling the trade-off "
+                    "between accuracy and computing speed."
+                ),
+            },
+            "sources": [
+                {
+                    "section_title": (
+                        "and bistatic radar configurations. The ray-launch density"
+                    ),
+                    "excerpt": (
+                        "plays a critical role in controlling the trade-off "
+                        "between accuracy and computing speed. SAR image formation."
+                    ),
+                },
+            ],
+        }
+
+        intent = build_scientific_intent(verrou)
+        enriched = attach_queries_to_intent(intent, max_queries=8)
+        queries = [
+            item["query"].lower()
+            for item in enriched.get("search_queries") or []
+        ]
+
+        self.assertIn("electromagnetic ray tracing", intent["core_concepts"])
+        self.assertIn("electromagnetic ray tracing", intent["method_anchors"])
+        self.assertIn("ray-launch density", intent["core_concepts"])
+        self.assertIn("bistatic radar simulation", intent["core_concepts"])
+        self.assertIn(
+            "accuracy-computational cost trade-off",
+            intent["phenomenon_anchors"],
+        )
+        self.assertTrue(any("ray tracing" in query for query in queries))
+
 
 if __name__ == "__main__":
     unittest.main()

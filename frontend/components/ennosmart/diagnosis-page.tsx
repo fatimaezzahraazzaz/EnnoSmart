@@ -1967,6 +1967,197 @@ function BackendSectionRendererV93({
   )
 }
 
+
+// V194_INLINE_CLICKABLE_SOURCES_NO_CARDS
+
+
+// ===============================
+// V194 - Citations inline cliquables pour les sections EnnoDiagnostic
+// Les preuves restent dans le payload backend ; l'UI n'affiche que [n].
+// Le clic réutilise SourceEvidenceCitations / SourceDocumentDialog et donc
+// le surlignage déjà présent dans EnnoSmart.
+// ===============================
+function getBackendSectionPayloadV194(payload: any, display: any, key: string): any {
+  const report = unwrapBackendDiagnosticReportV93(payload)
+  const candidates = [
+    report?.static_diagnostic?.section_payloads_by_key,
+    report?.context_engineering?.section_payloads_by_key,
+    report?.section_payloads_by_key,
+    payload?.static_diagnostic?.section_payloads_by_key,
+    payload?.context_engineering?.section_payloads_by_key,
+    payload?.report?.static_diagnostic?.section_payloads_by_key,
+    payload?.report?.context_engineering?.section_payloads_by_key,
+    payload?.bundle?.report?.static_diagnostic?.section_payloads_by_key,
+    payload?.bundle?.report?.context_engineering?.section_payloads_by_key,
+    display?.static_diagnostic?.section_payloads_by_key,
+    display?.context_engineering?.section_payloads_by_key,
+    display?.section_payloads_by_key,
+  ]
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== "object") continue
+    const section = candidate?.[key]
+    if (section && typeof section === "object") return section
+  }
+
+  return null
+}
+
+function sectionProofKeyV194(proof: any, fallbackIndex = 0) {
+  return String(
+    proof?.passage_id ||
+      proof?.rag_chunk_id ||
+      proof?.evidence_id ||
+      `${proof?.document || proof?.document_name || "source"}:${proof?.sentence_start ?? proof?.char_start ?? fallbackIndex}:${String(
+        proof?.source_text_original || proof?.excerpt || proof?.text || "",
+      ).slice(0, 160)}`,
+  )
+}
+
+function sectionUnitProofsV194(unit: any, section: any): any[] {
+  const explicitProofs = Array.isArray(unit?.proofs)
+    ? unit.proofs.filter((proof: any) => proof && String(proof?.evidence_id || "") !== "F0")
+    : []
+
+  if (explicitProofs.length > 0) return explicitProofs
+
+  const ids = new Set(
+    (Array.isArray(unit?.evidence_ids) ? unit.evidence_ids : [])
+      .map((value: any) => String(value || "").trim())
+      .filter((value: string) => value && value !== "F0"),
+  )
+
+  if (ids.size === 0) return []
+
+  return (Array.isArray(section?.evidence) ? section.evidence : []).filter((proof: any) =>
+    ids.has(String(proof?.evidence_id || "").trim()),
+  )
+}
+
+function InlineSourcedSectionV194({
+  text,
+  structuredSection,
+  projectId,
+  sourceDocuments,
+  preserveDemarcheAudit = false,
+}: {
+  text: string
+  structuredSection: any
+  projectId: number | string
+  sourceDocuments: DbSourceDocument[]
+  preserveDemarcheAudit?: boolean
+}) {
+  const rawItems = Array.isArray(structuredSection?.items) ? structuredSection.items : []
+  const rawParagraphs = Array.isArray(structuredSection?.paragraphs) ? structuredSection.paragraphs : []
+  const units = rawItems.length > 0 ? rawItems : rawParagraphs
+
+  if (units.length === 0) {
+    return (
+      <BackendSectionRendererV93
+        text={text}
+        projectId={projectId}
+        sourceDocuments={sourceDocuments}
+      />
+    )
+  }
+
+  // Numérotation locale, stable, dans l'ordre de première apparition des preuves.
+  // La même preuve garde le même numéro partout dans la section.
+  const numberByProof = new Map<string, number>()
+  let nextNumber = 1
+
+  const rows = units
+    .map((unit: any, index: number) => {
+      const proofs = sectionUnitProofsV194(unit, structuredSection)
+      const evidence: SourceEvidence[] = []
+      const citationNumbers: number[] = []
+      const seenUnitProofs = new Set<string>()
+
+      proofs.forEach((proof: any, proofIndex: number) => {
+        const key = sectionProofKeyV194(proof, proofIndex)
+        if (!key || seenUnitProofs.has(key)) return
+        seenUnitProofs.add(key)
+
+        if (!numberByProof.has(key)) {
+          numberByProof.set(key, nextNumber)
+          nextNumber += 1
+        }
+
+        evidence.push(eligibilityProofToEvidenceV191(proof))
+        citationNumbers.push(Number(numberByProof.get(key)))
+      })
+
+      return {
+        label: cleanDisplayText(String(unit?.label || "")),
+        text: cleanDisplayText(String(unit?.text || "")),
+        evidence,
+        citationNumbers,
+        index,
+      }
+    })
+    .filter((row: any) => row.text)
+
+  if (rows.length === 0) {
+    return (
+      <BackendSectionRendererV93
+        text={text}
+        projectId={projectId}
+        sourceDocuments={sourceDocuments}
+      />
+    )
+  }
+
+  let auditPrefix = ""
+  if (preserveDemarcheAudit) {
+    const marker = "Démarches relevées dans les preuves"
+    const markerIndex = String(text || "").indexOf(marker)
+    if (markerIndex >= 0) {
+      auditPrefix = String(text || "").slice(0, markerIndex).trim()
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {auditPrefix ? (
+        <BackendSectionRendererV93
+          text={auditPrefix}
+          projectId={projectId}
+          sourceDocuments={sourceDocuments}
+        />
+      ) : null}
+
+      {preserveDemarcheAudit ? (
+        <p className="pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Démarches relevées dans les preuves
+        </p>
+      ) : null}
+
+      {rows.map((row: any) => (
+        <p
+          key={`${row.label || "section"}:${row.index}`}
+          className="text-sm leading-7 text-muted-foreground"
+        >
+          {row.label ? (
+            <>
+              <span className="font-medium text-foreground">{row.label}</span>
+              {" — "}
+            </>
+          ) : null}
+          {row.text}
+          {row.evidence.length > 0 ? (
+            <SourceEvidenceCitations
+              projectId={projectId}
+              documents={sourceDocuments}
+              evidence={row.evidence}
+              citationNumbers={row.citationNumbers}
+            />
+          ) : null}
+        </p>
+      ))}
+    </div>
+  )
+}
+
 function BackendSectionCardV93({
   title,
   description,
@@ -1977,6 +2168,8 @@ function BackendSectionCardV93({
   projectId,
   sourceDocuments = [],
   enableSourceDocs = false,
+  structuredSection = null,
+  preserveDemarcheAudit = false,
 }: {
   title: string
   description?: string
@@ -1987,6 +2180,8 @@ function BackendSectionCardV93({
   projectId?: number | string
   sourceDocuments?: DbSourceDocument[]
   enableSourceDocs?: boolean
+  structuredSection?: any
+  preserveDemarcheAudit?: boolean
 }) {
   const Icon = icon
   const toneClass =
@@ -2014,7 +2209,22 @@ function BackendSectionCardV93({
       <CardContent>
         <div className="rounded-xl border bg-white/80 p-4">
           {text?.trim() ? (
-            <BackendSectionRendererV93 text={text} projectId={projectId} sourceDocuments={sourceDocuments} enableSourceDocs={enableSourceDocs} />
+            structuredSection && projectId ? (
+              <InlineSourcedSectionV194
+                text={text}
+                structuredSection={structuredSection}
+                projectId={projectId}
+                sourceDocuments={sourceDocuments}
+                preserveDemarcheAudit={preserveDemarcheAudit}
+              />
+            ) : (
+              <BackendSectionRendererV93
+                text={text}
+                projectId={projectId}
+                sourceDocuments={sourceDocuments}
+                enableSourceDocs={enableSourceDocs}
+              />
+            )
           ) : (
             <p className="text-sm text-muted-foreground">{emptyText}</p>
           )}
@@ -2771,65 +2981,6 @@ function UnifiedEligibilityStudyCardV191({
           </p>
         </div>
 
-        <div className="rounded-xl border bg-white p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Sources et passages</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Les numéros correspondent aux citations du paragraphe. Chaque lien ouvre le passage dans le document et tente de le surligner.
-              </p>
-            </div>
-            <Badge variant="secondary">{sourceProofs.length} preuve(s)</Badge>
-          </div>
-
-          {sourceProofs.length > 0 ? (
-            <div className="mt-4 divide-y rounded-lg border">
-              {sourceProofs.map((proof: any, index: number) => {
-                const evidence = sourceEvidence[index]
-                const sourceLabel = [
-                  cleanSourceDocumentName(String(proof?.document_name || proof?.document || "Document source")),
-                  proof?.page_number != null ? `page ${proof.page_number}` : "",
-                  proof?.section_title ? `section « ${cleanDisplayText(String(proof.section_title))} »` : "",
-                ].filter(Boolean).join(" · ")
-                return (
-                  <div key={proof?.passage_id || proof?.evidence_id || index} className="p-4">
-                    <div className="flex items-start gap-3">
-                      <span className="shrink-0 rounded bg-brand/10 px-2 py-1 text-xs font-semibold text-brand">[{index + 1}]</span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm leading-6 text-foreground">
-                          {cleanDisplayText(String(proof?.summary_fr || "Preuve documentaire reliée à l’étude d’éligibilité."))}
-                        </p>
-                        {proof?.justification_bridge_fr ? (
-                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                            {cleanDisplayText(String(proof.justification_bridge_fr))}
-                          </p>
-                        ) : null}
-                        <p className="mt-2 text-xs font-medium text-muted-foreground">Source : {sourceLabel}</p>
-                        {projectId ? (
-                          <div className="mt-2">
-                            <SourceTextWithDocuments
-                              projectId={projectId}
-                              text={sourceLabel}
-                              documents={sourceDocuments}
-                              evidence={[evidence]}
-                              compact
-                              hideTextWhenMatched
-                              actionLabel={`Voir le passage [${index + 1}] dans le document`}
-                            />
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <p className="mt-4 text-sm text-warning">
-              Aucun passage localisable n’est encore disponible ; la validation documentaire reste nécessaire.
-            </p>
-          )}
-        </div>
 
         <p className="text-xs leading-6 text-muted-foreground">
           L’indice mesure la défendabilité documentaire interne et non une probabilité d’acceptation administrative. La décision finale reste celle du consultant CIR.
@@ -3410,7 +3561,7 @@ async function runScholarFromSelectedVerrous(projectId: number) {
   }
 
   const response = await fetch(
-    `${API_BASE_URL}/projects/${projectId}/scholar/run-from-selected-verrous?max_verrous=8&limit_per_query=3&offline_dry_run=false`,
+    `${API_BASE_URL}/projects/${projectId}/scholar/run-from-selected-verrous?max_verrous=8&limit_per_query=50&offline_dry_run=false`,
     {
       method: "POST",
       headers: {
@@ -4167,6 +4318,18 @@ export function DiagnosisPage() {
       "Paramètres techniques",
     ])
   }, [backendSectionsV93, backendMarkdownV93])
+
+  const demarcheStructuredSectionV194 = useMemo(() => {
+    return getBackendSectionPayloadV194(diagnosticBundle, display, "demarche_detectee")
+  }, [diagnosticBundle, display])
+
+  const resultatsStructuredSectionV194 = useMemo(() => {
+    return getBackendSectionPayloadV194(diagnosticBundle, display, "resultats_metriques")
+  }, [diagnosticBundle, display])
+
+  const parametresStructuredSectionV194 = useMemo(() => {
+    return getBackendSectionPayloadV194(diagnosticBundle, display, "parametres_contraintes")
+  }, [diagnosticBundle, display])
 
 
   const hasDiagnostic = Boolean(backendMarkdownV93 || latestRun || verrousForDisplay.length > 0 || reportMarkdown)
@@ -5466,6 +5629,10 @@ Chaque verrou candidat est relié à ses documents sources. Le consultant peut r
               icon={Search}
               text={demarcheText}
               emptyText="Aucune démarche détectée."
+              projectId={project.id}
+              sourceDocuments={sourceDocuments}
+              structuredSection={demarcheStructuredSectionV194}
+              preserveDemarcheAudit
             />
 
             <BackendSectionCardV93
@@ -5475,6 +5642,9 @@ Chaque verrou candidat est relié à ses documents sources. Le consultant peut r
               text={resultatsText}
               emptyText="Aucun résultat ou métrique disponible."
               tone="success"
+              projectId={project.id}
+              sourceDocuments={sourceDocuments}
+              structuredSection={resultatsStructuredSectionV194}
             />
 
             <BackendSectionCardV93
@@ -5483,6 +5653,9 @@ Chaque verrou candidat est relié à ses documents sources. Le consultant peut r
               icon={FileText}
               text={parametresText}
               emptyText="Aucun paramètre technique disponible."
+              projectId={project.id}
+              sourceDocuments={sourceDocuments}
+              structuredSection={parametresStructuredSectionV194}
             />
           </div>
 

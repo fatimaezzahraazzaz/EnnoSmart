@@ -224,6 +224,11 @@ def _is_antibot_html(content: bytes | str) -> bool:
         "captcha",
         "anubis",
         "cloudflare",
+        "akamai/interstitial",
+        "akamai bot manager",
+        "bm-verify",
+        "/_sec/verify",
+        "provider=interstitial",
         "robot",
         "bot detection",
     ]
@@ -277,6 +282,21 @@ def _looks_like_direct_pdf_url(url: Any) -> bool:
             "download=pdf" in query,
         )
     )
+
+
+def _known_content_kind(url: Any) -> str:
+    normalized = _normalize_url(url)
+    if _looks_like_direct_pdf_url(normalized):
+        return "pdf"
+    try:
+        parsed = urlparse(normalized)
+        path = (parsed.path or "").casefold()
+        query = (parsed.query or "").casefold()
+        if path.endswith((".xml", ".jats", ".nxml")) or "format=xml" in query:
+            return "xml"
+    except Exception:
+        pass
+    return "landing"
 
 
 def _dedupe_urls(urls: List[str]) -> List[str]:
@@ -724,6 +744,61 @@ def build_candidate_urls_for_article(
     sj = _as_dict(getattr(article, "source_json", None))
     candidates: List[Dict[str, Any]] = []
 
+    # Repli editeur sans navigateur : les PDF OA de MDPI sont aussi publies
+    # sur leur CDN statique, qui ne depend pas du challenge Akamai de
+    # ``www.mdpi.com``. Cette voie reste validee par magic byte et identite.
+    try:
+        from services.scholar_deterministic_oa_service import (
+            mdpi_static_pdf_candidates_for_article,
+        )
+        candidates.extend(mdpi_static_pdf_candidates_for_article(article))
+    except Exception:
+        pass
+
+    # Candidats légaux déjà vérifiés par le MCP pendant le contrôle d'accès.
+    # Ils sont prioritaires lors de l'extraction déclenchée au clic et ne
+    # provoquent aucun nouvel appel MCP dans ce service direct.
+    mcp_candidates = sj.get("mcp_fulltext_candidates")
+    if isinstance(mcp_candidates, list):
+        for raw in mcp_candidates[:20]:
+            if not isinstance(raw, dict):
+                continue
+            if raw.get("legal_access") is not True or raw.get("same_article") is not True:
+                continue
+            url = _normalize_url(raw.get("final_url") or raw.get("pdf_url") or raw.get("url"))
+            if not url:
+                continue
+            item = dict(raw)
+            item["url"] = url
+            item.setdefault("kind", _known_content_kind(url))
+            item.setdefault("source", f"legal_mcp:{str(item.get('provider') or 'unknown')}")
+            item.setdefault("retrieval_stage", "legal_mcp_access_probe")
+            candidates.append(item)
+
+    # URLs OA préparées en une passe déterministe globale (OpenAlex batch,
+    # Unpaywall, Crossref, CORE). Elles sont déjà qualifiées comme publiques ;
+    # le téléchargement et le contrôle d'identité restent effectués ci-après.
+    deterministic_oa = sj.get("deterministic_oa_candidates")
+    if isinstance(deterministic_oa, list):
+        for raw in deterministic_oa[:20]:
+            if not isinstance(raw, dict) or raw.get("legal_access") is not True:
+                continue
+            url = _normalize_url(raw.get("url"))
+            if not url:
+                continue
+            item = dict(raw)
+            item["url"] = url
+            item.setdefault(
+                "kind",
+                _known_content_kind(url),
+            )
+            item.setdefault(
+                "source",
+                f"{str(item.get('provider') or 'oa')}_deterministic",
+            )
+            item.setdefault("retrieval_stage", "deterministic_oa")
+            candidates.append(item)
+
     article_url = _normalize_url(getattr(article, "url", None) or sj.get("url"))
     doi = _safe_text(getattr(article, "doi", None) or sj.get("doi"), 300)
 
@@ -741,7 +816,7 @@ def build_candidate_urls_for_article(
         )
 
     for url in _extract_pdf_candidates_from_source_json(sj):
-        kind = "pdf" if _looks_like_direct_pdf_url(url) else "landing"
+        kind = _known_content_kind(url)
         candidates.append(
             {
                 "kind": kind,
@@ -760,16 +835,20 @@ def build_candidate_urls_for_article(
             candidates.append({"kind": "landing", "source": "doi", "url": f"https://doi.org/{doi_clean}"})
 
     if article_url:
-        candidates.append({"kind": "landing", "source": "article_url", "url": article_url})
+        candidates.append({"kind": _known_content_kind(article_url), "source": "article_url", "url": article_url})
 
     return _dedupe_candidates(candidates)
 
 
 def _candidate_provenance(candidate: Dict[str, Any]) -> Dict[str, Any]:
     return {
-        "retrieval_stage": "direct_known_urls",
+        "retrieval_stage": candidate.get("retrieval_stage") or "direct_known_urls",
         "source_domain": candidate.get("source_domain"),
         "candidate_source": candidate.get("source"),
+        "legal_provider": candidate.get("provider"),
+        "license": candidate.get("license"),
+        "version": candidate.get("version"),
+        "discovered_via": candidate.get("discovered_via"),
     }
 
 
@@ -801,10 +880,17 @@ def _fetch_html(url: str) -> Tuple[bool, Dict[str, Any]]:
 
     # Normalisation du retour pour correspondre à l'ancienne signature
     if ok:
-        info["status"] = "html_fetched"
-        info["html"] = html_text
-        info["paywall_detected"] = _is_probably_paywall_or_login(html_text)
-        info["antibot_detected"] = _is_antibot_html(html_text)
+        content_type = str(info.get("content_type") or "").casefold()
+        if "application/pdf" in content_type:
+            info["status"] = "html_fetch_is_pdf"
+            info["html"] = ""
+            info["paywall_detected"] = False
+            info["antibot_detected"] = False
+        else:
+            info["status"] = "html_fetched"
+            info["html"] = html_text
+            info["paywall_detected"] = _is_probably_paywall_or_login(html_text)
+            info["antibot_detected"] = _is_antibot_html(html_text)
     else:
         # Si l'échec est dû à une erreur HTTP, on le remonte proprement
         if "http_status" in info and info["http_status"] >= 400:
@@ -813,6 +899,37 @@ def _fetch_html(url: str) -> Tuple[bool, Dict[str, Any]]:
         else:
             info["status"] = "html_fetch_failed"
     return ok, info
+
+
+def _looks_like_scientific_fulltext_html(html: str, article_title: str = "") -> bool:
+    """Distingue une page article complete d'une simple notice/abstract."""
+    if not html or _is_antibot_html(html) or _is_probably_paywall_or_login(html):
+        return False
+    soup = BeautifulSoup(html, "html.parser")
+    for node in soup(["script", "style", "noscript", "svg", "nav", "header", "footer"]):
+        node.decompose()
+    text = _strip_accents(_safe_text(soup.get_text(" ", strip=True), 0)).casefold()
+    if len(text) < 5_000:
+        return False
+    markers = sum(
+        marker in text
+        for marker in (
+            "abstract", "introduction", "method", "methods", "results",
+            "discussion", "conclusion", "references", "bibliography",
+        )
+    )
+    title_words = {
+        word
+        for word in re.sub(
+            r"[^a-z0-9]+",
+            " ",
+            _strip_accents(str(article_title or "")).casefold(),
+        ).split()
+        if len(word) >= 5
+    }
+    text_words = set(re.sub(r"[^a-z0-9]+", " ", text[:8_000]).split())
+    title_match = not title_words or bool(title_words.intersection(text_words))
+    return markers >= 3 and title_match
 
 def _probe_pdf_url_without_saving(
     url: str,
@@ -1057,6 +1174,46 @@ def fetch_fulltext_pdf_for_article(
     candidates = build_candidate_urls_for_article(article)
     attempts: List[Dict[str, Any]] = []
 
+    # 0. Les sources XML/JATS publiques sont extractibles au clic, comme les
+    # PDF et les pages HTML scientifiques completes.
+    for candidate in candidates:
+        if candidate.get("kind") != "xml":
+            continue
+        ok, info, content = GLOBAL_FETCHER.fetch_bytes(
+            url=candidate["url"],
+            headers=HEADERS,
+            max_bytes=256 * 1024,
+        )
+        attempts.append({**info, "candidate_source": candidate.get("source"), "candidate_kind": "xml"})
+        content_type = str(info.get("content_type") or "").casefold()
+        head = content[:500].lstrip().casefold()
+        if ok and content and ("xml" in content_type or head.startswith(b"<?xml") or b"<article" in head):
+            status = {
+                "ok": True,
+                "article_id": article.id,
+                "title": article.title,
+                "doi": article.doi,
+                "url": article.url,
+                "status": "xml_fulltext_available",
+                "full_text_status": "xml_fulltext_available",
+                "evidence_level": "fulltext_url",
+                "content_source_kind": "xml",
+                "storage_mode": "json_only_no_remote_source_saved",
+                "saved_pdf": False,
+                "fulltext_source_url": candidate["url"],
+                "fulltext_final_url": info.get("final_url") or candidate["url"],
+                "resolver": candidate.get("source"),
+                **_candidate_provenance(candidate),
+                "needs_consultant_upload": False,
+                "next_step": "run_direct_extraction",
+                "message": "Texte integral XML/JATS public trouve ; extraction au clic.",
+                "attempts": attempts,
+                "candidates": candidates,
+                "generated_at": datetime.utcnow().isoformat(),
+            }
+            _json_dump(status_file, status)
+            return status
+
     # 1. Tester les candidats PDF directs sans stockage.
     for candidate in candidates:
         if candidate.get("kind") != "pdf":
@@ -1119,6 +1276,39 @@ def fetch_fulltext_pdf_for_article(
             continue
 
         html = html_info.get("html") or ""
+
+        # Une page HTML scientifique complete est elle-meme une source de
+        # texte integral. La phase legere la marque disponible sans lancer ici
+        # l'extraction, qui restera une action explicite du consultant.
+        if _looks_like_scientific_fulltext_html(html, article.title or ""):
+            status = {
+                "ok": True,
+                "article_id": article.id,
+                "title": article.title,
+                "doi": article.doi,
+                "url": article.url,
+                "status": "html_fulltext_available",
+                "full_text_status": "html_fulltext_available",
+                "evidence_level": "fulltext_url",
+                "content_source_kind": "html",
+                "storage_mode": "json_only_no_remote_source_saved",
+                "saved_pdf": False,
+                "fulltext_source_url": url,
+                "fulltext_final_url": html_info.get("final_url") or url,
+                "resolver": candidate.get("source"),
+                **_candidate_provenance(candidate),
+                "needs_consultant_upload": False,
+                "next_step": "run_direct_extraction",
+                "message": (
+                    "Texte integral HTML public trouve. "
+                    "L'extraction sera lancee uniquement au clic du consultant."
+                ),
+                "attempts": attempts,
+                "candidates": candidates,
+                "generated_at": datetime.utcnow().isoformat(),
+            }
+            _json_dump(status_file, status)
+            return status
 
         # 2A. DOI/landing redirige vers PDF.
         if html_info.get("status") == "html_fetch_is_pdf":

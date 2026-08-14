@@ -490,8 +490,25 @@ def resolve_mcp_for_article(
     *,
     force: bool = False,
     search_all: bool | None = None,
+    retry_deterministic_providers: bool = False,
 ) -> dict[str, Any]:
     identity = build_article_identity(article)
+    source_json = getattr(article, "source_json", None)
+    deterministic_oa = (
+        source_json.get("deterministic_oa_discovery")
+        if isinstance(source_json, dict)
+        else None
+    )
+    deterministic_oa_checked = bool(
+        isinstance(deterministic_oa, dict)
+        and deterministic_oa.get("providers")
+        and deterministic_oa.get("mcp_called") is False
+    )
+    if retry_deterministic_providers:
+        # La premiere passe peut avoir trouve une URL officielle qui renvoie
+        # ensuite un interstitiel. Dans ce cas le MCP doit refaire Crossref /
+        # Unpaywall afin de chercher l'asset statique ou une autre copie OA.
+        deterministic_oa_checked = False
 
     if search_all is None:
         search_all = os.getenv("ENNOSCHOLAR_LEGAL_MCP_SEARCH_ALL", "1").lower() in {
@@ -506,6 +523,7 @@ def resolve_mcp_for_article(
         year=identity.get("year"),
         known_urls=list(identity.get("known_urls") or []),
         source=identity.get("source"),
+        deterministic_oa_checked=deterministic_oa_checked,
         search_all=bool(search_all),
         force_refresh=force,
     )
@@ -526,6 +544,9 @@ def resolve_mcp_for_article(
     # Champs privés au pont backend, utilisés pour la traçabilité des diagnostics.
     result["_backend_identity_sent"] = identity
     result["_backend_search_all"] = bool(search_all)
+    result["_backend_retried_deterministic_providers"] = bool(
+        retry_deterministic_providers
+    )
     return result
 
 

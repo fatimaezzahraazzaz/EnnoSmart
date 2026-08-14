@@ -34,6 +34,16 @@ class ArticleRead(BaseModel):
     doi: str | None
     consultant_status: str
     source_json: Any | None
+    evidence_status: str | None = None
+    evidence_label: str | None = None
+    evidence_usable: bool | None = None
+    fulltext_ready: bool | None = None
+    candidate_only: bool | None = None
+    access_check_status: str | None = None
+    evidence_reason_code: str | None = None
+    evidence_reason_detail: str | None = None
+    evidence_recommended_action: str | None = None
+    evidence_access_kind: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

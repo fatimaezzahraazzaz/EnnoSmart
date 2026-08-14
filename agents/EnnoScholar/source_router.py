@@ -62,7 +62,15 @@ def build_source_plan(intent: Dict[str, Any]) -> Dict[str, Any]:
     if profile in BIOMED_PROFILES or any(x in text for x in ["biomedical","clinical","protein","cell","pharma","medical device"]):
         scientific.append("europe_pmc"); reasons.append("europe_pmc_domain_match")
     search_artifacts=(not fast_mode) or env_bool("ENNOSCHOLAR_FAST_SEARCH_ARTIFACTS",False)
-    if search_artifacts and profile in GITHUB_PROFILES:
+    github_relevance_hints = {
+        "software", "code", "algorithm", "simulation", "simulator", "model",
+        "dataset", "repository", "open source", "reproducibility", "benchmark",
+        "pipeline", "framework", "implementation",
+    }
+    if search_artifacts and (
+        profile in GITHUB_PROFILES
+        or any(hint in text for hint in github_relevance_hints)
+    ):
         artifacts.append("github")
     if search_artifacts and (profile in HF_PROFILES or any(x in text for x in ["machine learning","deep learning","dataset","neural network","classification","segmentation"])):
         artifacts.append("huggingface")
@@ -100,7 +108,7 @@ def build_source_plan(intent: Dict[str, Any]) -> Dict[str, Any]:
     ))
     artifacts=list(dict.fromkeys(x for x in artifacts if flags.get(x,False)))
     return {
-        "version":"v148_fast_tiered_source_router",
+        "version":"v149_relevance_routed_technical_artifacts",
         "profile":profile,
         "fast_mode":fast_mode,
         "secondary_sources_deferred":bool(fast_mode and not include_secondary),
@@ -108,5 +116,5 @@ def build_source_plan(intent: Dict[str, Any]) -> Dict[str, Any]:
         "fallback_scientific_sources":fallback_scientific,
         "artifact_sources":artifacts,
         "reasons":reasons,
-        "policy":"scientific_sources_are_ranked_artifacts_are_separate",
+        "policy":"scientific_sources_are_ranked_artifacts_are_separate_and_relevance_routed",
     }
