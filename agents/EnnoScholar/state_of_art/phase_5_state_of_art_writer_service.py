@@ -2021,6 +2021,11 @@ def _salient_entities(sentence: str) -> List[str]:
             continue
         if word in acronym_prefix_terms:
             continue
+        # Un mot commun mis en capitales pour l'emphase n'est pas une entité
+        # scientifique. Les vrais sigles ASCII ont déjà été capturés par
+        # l'expression spécialisée ci-dessus.
+        if word.isupper():
+            continue
         # Un mot simplement capitalisé en tête de phrase est le plus souvent
         # un connecteur ou un verbe, pas une entité scientifique. Les sigles,
         # CamelCase et noms avec chiffres sont déjà capturés par l'expression
@@ -2429,6 +2434,117 @@ def _independent_verifier_schema() -> Dict[str, Any]:
         },
     }
 
+
+# BEGIN ENNOSCHOLAR_COST_AWARE_VERIFIER_V1
+def _section_requires_independent_llm_verifier(
+    generated: Mapping[str, Any],
+    section: Mapping[str, Any],
+    validation: Mapping[str, Any],
+    source_roles: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Réserve le second LLM aux sections réellement risquées.
+
+    Les contrôles déterministes gratuits ont déjà été exécutés avant.
+    """
+    if not _env_flag(
+        "ENNOSCHOLAR_PHASE5_ENABLE_INDEPENDENT_VERIFIER",
+        True,
+    ):
+        return {
+            "required": False,
+            "status": "disabled",
+            "reasons": [],
+        }
+
+    if not _env_flag(
+        "ENNOSCHOLAR_PHASE5_VERIFIER_RISK_ONLY",
+        True,
+    ):
+        return {
+            "required": True,
+            "status": "forced_all_sections",
+            "reasons": ["risk_only_disabled"],
+        }
+
+    reasons: List[str] = []
+    content = clean_text(
+        generated.get("content"), 200000
+    )
+    content += " " + " ".join(
+        clean_text(row.get("content"), 100000)
+        for row in generated.get("subsections") or []
+        if isinstance(row, Mapping)
+    )
+
+    if _numeric_claim_tokens(content):
+        reasons.append("numeric_claims")
+
+    if len(citations_from_text(content)) >= 7:
+        reasons.append("many_sources_combined")
+
+    for verrou in section.get("verrous") or []:
+        if not isinstance(verrou, Mapping):
+            continue
+        evidence_status = clean_text(
+            verrou.get("evidence_status"), 120
+        ).casefold()
+        if (
+            evidence_status
+            and evidence_status
+            not in {
+                "directly_supported",
+                "direct",
+                "fulltext_ready",
+                "supported",
+            }
+        ):
+            reasons.append("non_direct_evidence")
+        if verrou.get(
+            "requires_insufficiency_disclosure"
+        ):
+            reasons.append(
+                "insufficient_direct_evidence"
+            )
+
+    risky_role_markers = (
+        "related",
+        "connex",
+        "methodolog",
+        "background",
+        "supplemental",
+        "context",
+        "documentation",
+    )
+    for role in source_roles.values():
+        role_text = clean_text(role, 160).casefold()
+        if any(
+            marker in role_text
+            for marker in risky_role_markers
+        ):
+            reasons.append(
+                "secondary_or_context_source"
+            )
+            break
+
+    semantic = validation.get(
+        "semantic_claim_audit"
+    )
+    if (
+        isinstance(semantic, Mapping)
+        and semantic.get("issues")
+    ):
+        reasons.append("semantic_audit_signal")
+
+    return {
+        "required": bool(reasons),
+        "status": (
+            "risk_detected"
+            if reasons
+            else "low_risk"
+        ),
+        "reasons": list(dict.fromkeys(reasons)),
+    }
+# END ENNOSCHOLAR_COST_AWARE_VERIFIER_V1
 
 def _call_independent_semantic_verifier(
     client: LLMClient,
@@ -3100,12 +3216,36 @@ _SECTION_PUBLICATION_BLOCKERS = {
     "non_french_or_raw_source_fragment",
 }
 
+_SECTION_ESCALATION_BLOCKERS = {
+    *_SECTION_PUBLICATION_BLOCKERS,
+    "missing_required_citations",
+    "missing_verrou_subsection_citations",
+    "unsupported_or_misattributed_claims",
+    "independent_semantic_verifier_rejected",
+}
+
 
 def _section_publication_blockers(
     validation: Mapping[str, Any],
 ) -> List[str]:
     return sorted(
         set(validation.get("errors") or []) & _SECTION_PUBLICATION_BLOCKERS
+    )
+
+
+def _section_escalation_blockers(
+    validation: Mapping[str, Any],
+) -> List[str]:
+    """Retourne uniquement les défauts justifiant une nouvelle génération.
+
+    La longueur cible reste un indicateur éditorial : elle ne doit jamais, à
+    elle seule, acheter une seconde rédaction premium. Les défauts de contrat,
+    de langue, de citations et d'attribution scientifique restent bloquants.
+    """
+
+    return sorted(
+        set(validation.get("errors") or [])
+        & _SECTION_ESCALATION_BLOCKERS
     )
 
 
@@ -3418,12 +3558,52 @@ def call_sectional_writer_llm(
     if not _env_flag("ENNOSCHOLAR_PHASE5_ENABLE_LLM", True):
         return {}, {"used": False, "status": "disabled"}
     llm_runtime_config = reload_config()
+
+    # Coût-first :
+    # - mini pour le premier draft ;
+    # - mini pour une correction ciblée si un vrai blocage subsiste ;
+    # - premium seulement après l'échec de ces tentatives économiques.
     configured_model = clean_text(
-        os.getenv("ENNOSCHOLAR_PHASE5_WRITER_MODEL")
-        or llm_runtime_config.get("ENNOSCHOLAR_PHASE5_WRITER_MODEL"),
+        os.getenv("ENNOSCHOLAR_PHASE5_DRAFT_MODEL")
+        or llm_runtime_config.get(
+            "ENNOSCHOLAR_PHASE5_DRAFT_MODEL"
+        )
+        or "gpt-4.1-mini",
         200,
     )
-    client = LLMClient(model=configured_model or None)
+    escalation_model = clean_text(
+        os.getenv(
+            "ENNOSCHOLAR_PHASE5_ESCALATION_MODEL"
+        )
+        or llm_runtime_config.get(
+            "ENNOSCHOLAR_PHASE5_ESCALATION_MODEL"
+        )
+        or os.getenv(
+            "ENNOSCHOLAR_PHASE5_WRITER_MODEL"
+        )
+        or "gpt-4.1",
+        200,
+    )
+    verifier_model = clean_text(
+        os.getenv(
+            "ENNOSCHOLAR_PHASE5_VERIFIER_MODEL"
+        )
+        or llm_runtime_config.get(
+            "ENNOSCHOLAR_PHASE5_VERIFIER_MODEL"
+        )
+        or "gpt-4.1-mini",
+        200,
+    )
+
+    client = LLMClient(
+        model=configured_model or None
+    )
+    escalation_client = LLMClient(
+        model=escalation_model or None
+    )
+    verifier_client = LLMClient(
+        model=verifier_model or None
+    )
     try:
         section_timeout = max(
             30,
@@ -3431,23 +3611,56 @@ def call_sectional_writer_llm(
         )
     except Exception:
         section_timeout = 240
-    client.read_timeout = min(client.read_timeout, section_timeout)
-    try:
-        max_attempts = max(
-            1,
-            min(
-                2,
-                int(os.getenv("ENNOSCHOLAR_PHASE5_SECTION_ATTEMPTS", "2")),
-            ),
+    client.read_timeout = min(
+        client.read_timeout,
+        section_timeout,
+    )
+    escalation_client.read_timeout = min(
+        escalation_client.read_timeout,
+        section_timeout,
+    )
+    verifier_client.read_timeout = min(
+        verifier_client.read_timeout,
+        section_timeout,
+    )
+    legacy_attempts = _env_int(
+        "ENNOSCHOLAR_PHASE5_SECTION_ATTEMPTS",
+        2,
+        minimum=1,
+        maximum=3,
+    )
+    mini_attempts = _env_int(
+        "ENNOSCHOLAR_PHASE5_MINI_ATTEMPTS",
+        legacy_attempts,
+        minimum=1,
+        maximum=3,
+    )
+    premium_enabled = (
+        _env_flag(
+            "ENNOSCHOLAR_PHASE5_ENABLE_PREMIUM_ESCALATION",
+            True,
         )
-    except Exception:
-        max_attempts = 2
+        and bool(escalation_model)
+        and clean_text(escalation_model, 200).casefold()
+        != clean_text(configured_model, 200).casefold()
+    )
+    attempt_plan: List[Tuple[str, LLMClient]] = [
+        ("mini_draft", client),
+        *[
+            ("mini_repair", client)
+            for _ in range(max(0, mini_attempts - 1))
+        ],
+    ]
+    if premium_enabled:
+        attempt_plan.append(("premium_escalation", escalation_client))
 
     checkpoint_root = Path(checkpoint_dir) if checkpoint_dir else None
     progress_path = Path(progress_markdown_path) if progress_markdown_path else None
     generated_sections: List[Dict[str, Any]] = []
     reports: List[Dict[str, Any]] = []
     advisory_sections_count = 0
+    mini_repairs_count = 0
+    premium_escalations_count = 0
     previous_tail = ""
     total_sections = len(blueprint.get("sections") or [])
     for index, section in enumerate(blueprint.get("sections") or [], 1):
@@ -3467,9 +3680,11 @@ def call_sectional_writer_llm(
             if unit.get("citation_label")
             in set(section.get("available_citations") or [])
         ]
-        checkpoint_fingerprint = hashlib.sha256(
-            json.dumps(
-                {
+        # BEGIN ENNOSCHOLAR_CROSS_MODEL_CHECKPOINT_RESUME_V3_1
+        def _section_checkpoint_fingerprint_for_model(
+            fingerprint_model: Any,
+        ) -> str:
+            checkpoint_fingerprint_payload = {
                     "section": section,
                     "evidence": local_evidence,
                     "previous_tail": previous_tail,
@@ -3481,16 +3696,25 @@ def call_sectional_writer_llm(
                         )
                         for citation in section.get("available_citations") or []
                     },
-                    "model": configured_model,
+                    "model": clean_text(fingerprint_model, 200),
                     "scientific_validation_contract": (
                         "compact_targeted_llm_repair_no_raw_fallback_v10"
                     ),
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-                default=str,
-            ).encode("utf-8")
-        ).hexdigest()
+                }
+            return hashlib.sha256(
+                json.dumps(
+                    checkpoint_fingerprint_payload,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    default=str,
+                ).encode("utf-8")
+            ).hexdigest()
+
+        checkpoint_fingerprint = (
+            _section_checkpoint_fingerprint_for_model(
+                configured_model
+            )
+        )
         checkpoint_path = (
             checkpoint_root / f"{index:02d}_{safe_section_id}.json"
             if checkpoint_root
@@ -3505,6 +3729,52 @@ def call_sectional_writer_llm(
             )
         ):
             cached = read_json(checkpoint_path, {}) or {}
+
+            # Compatibilité avec les checkpoints produits avant un
+            # changement de modèle de coût. Tous les éléments scientifiques
+            # restent identiques ; seul le modèle générateur peut différer.
+            checkpoint_fingerprint_candidates = {
+                checkpoint_fingerprint
+            }
+            cached_llm_meta = (
+                cached.get("llm")
+                if isinstance(cached.get("llm"), dict)
+                else {}
+            )
+            legacy_model_candidates = {
+                clean_text(cached_llm_meta.get(key), 200)
+                for key in (
+                    "model",
+                    "model_name",
+                    "requested_model",
+                    "effective_model",
+                )
+            }
+            legacy_model_candidates.add(
+                clean_text(
+                    os.getenv(
+                        "ENNOSCHOLAR_PHASE5_WRITER_MODEL"
+                    )
+                    or llm_runtime_config.get(
+                        "ENNOSCHOLAR_PHASE5_WRITER_MODEL"
+                    ),
+                    200,
+                )
+            )
+            legacy_model_candidates.discard("")
+
+            for legacy_model in legacy_model_candidates:
+                checkpoint_fingerprint_candidates.add(
+                    _section_checkpoint_fingerprint_for_model(
+                        legacy_model
+                    )
+                )
+
+            checkpoint_fingerprint_compatible = (
+                cached.get("fingerprint")
+                in checkpoint_fingerprint_candidates
+            )
+
             cached_section = cached.get("section")
             cached_validation = (
                 _validate_generated_section(
@@ -3517,8 +3787,10 @@ def call_sectional_writer_llm(
                 else {"ok": False}
             )
             if (
-                cached.get("fingerprint") == checkpoint_fingerprint
-                and cached_validation.get("ok")
+                checkpoint_fingerprint_compatible
+                and not _section_escalation_blockers(
+                    cached_validation
+                )
                 and (
                     not _env_flag(
                         "ENNOSCHOLAR_PHASE5_ENABLE_INDEPENDENT_VERIFIER",
@@ -3538,6 +3810,25 @@ def call_sectional_writer_llm(
                     {
                         "attempt": 0,
                         "cached": True,
+                        "checkpoint_reused_without_llm": True,
+                        "checkpoint_generator_model": (
+                            cached_llm_meta.get("model")
+                            or cached_llm_meta.get("model_name")
+                            or cached_llm_meta.get("effective_model")
+                            or ""
+                        ),
+                        "current_draft_model": configured_model,
+                        "cross_model_checkpoint_compatibility": (
+                            clean_text(
+                                cached_llm_meta.get("model")
+                                or cached_llm_meta.get("model_name")
+                                or cached_llm_meta.get(
+                                    "effective_model"
+                                ),
+                                200,
+                            )
+                            != clean_text(configured_model, 200)
+                        ),
                         "validation": cached_validation,
                         "independent_semantic_verifier": cached.get(
                             "independent_semantic_verifier"
@@ -3547,7 +3838,10 @@ def call_sectional_writer_llm(
                     }
                 )
 
-        for attempt in range(1, max_attempts + 1):
+        for attempt, (attempt_stage, active_writer_client) in enumerate(
+            attempt_plan,
+            1,
+        ):
             if accepted:
                 break
             if attempt == 1 or not feedback:
@@ -3566,7 +3860,11 @@ def call_sectional_writer_llm(
                     local_evidence,
                 )
             try:
-                raw = client.generate(
+                if attempt_stage == "mini_repair":
+                    mini_repairs_count += 1
+                elif attempt_stage == "premium_escalation":
+                    premium_escalations_count += 1
+                raw = active_writer_client.generate(
                     prompt,
                     temperature=0.08,
                     max_output_tokens=max(
@@ -3604,7 +3902,7 @@ def call_sectional_writer_llm(
                     total_sections=total_sections,
                     evidence_units=local_evidence,
                 )
-                base_llm_meta = client.get_last_generation_meta()
+                base_llm_meta = active_writer_client.get_last_generation_meta()
                 deterministic_repair: Dict[str, Any] = {}
                 citation_addition_repair: Dict[str, Any] = {
                     "applied": False,
@@ -3682,7 +3980,7 @@ def call_sectional_writer_llm(
                                 "missing_citations": missing_for_repair,
                                 "addition": addition,
                                 "validation": repaired_validation,
-                                "llm": client.get_last_generation_meta(),
+                                "llm": base_llm_meta,
                             }
                             parsed = repaired
                             validation = repaired_validation
@@ -3995,40 +4293,81 @@ def call_sectional_writer_llm(
                             break
                 independent_semantic_verifier: Dict[str, Any] = {
                     "used": False,
-                    "status": "not_run_due_to_deterministic_errors",
+                    "status": "not_run_due_to_blocking_errors",
                     "passed": False,
                     "issues": [],
                 }
-                if parsed and validation.get("ok"):
-                    independent_semantic_verifier = (
-                        _call_independent_semantic_verifier(
-                            client,
-                            generated=parsed,
-                            section=section,
-                            evidence_units=local_evidence,
-                            source_roles={
-                                citation: (
-                                    blueprint.get("source_roles") or {}
-                                ).get(citation)
-                                for citation in (
-                                    section.get("available_citations") or []
-                                )
-                            },
+                escalation_blockers = _section_escalation_blockers(
+                    validation
+                )
+                if parsed and not escalation_blockers:
+                    source_roles = {
+                        citation: (
+                            blueprint.get("source_roles") or {}
+                        ).get(citation)
+                        for citation in (
+                            section.get(
+                                "available_citations"
+                            )
+                            or []
+                        )
+                    }
+                    verifier_policy = (
+                        _section_requires_independent_llm_verifier(
+                            parsed,
+                            section,
+                            validation,
+                            source_roles,
                         )
                     )
-                    validation["independent_semantic_verifier"] = (
-                        independent_semantic_verifier
-                    )
-                    if not independent_semantic_verifier.get("passed"):
+
+                    if verifier_policy.get("required"):
+                        independent_semantic_verifier = (
+                            _call_independent_semantic_verifier(
+                                verifier_client,
+                                generated=parsed,
+                                section=section,
+                                evidence_units=local_evidence,
+                                source_roles=source_roles,
+                            )
+                        )
+                        independent_semantic_verifier[
+                            "policy"
+                        ] = verifier_policy
+                    else:
+                        independent_semantic_verifier = {
+                            "used": False,
+                            "status": "skipped_low_risk_deterministic_pass",
+                            "passed": True,
+                            "issues": [],
+                            "required": False,
+                            "policy": verifier_policy,
+                        }
+
+                    validation[
+                        "independent_semantic_verifier"
+                    ] = independent_semantic_verifier
+                    if not independent_semantic_verifier.get(
+                        "passed"
+                    ):
                         validation["errors"] = list(
                             dict.fromkeys(
                                 [
-                                    *(validation.get("errors") or []),
-                                    "independent_semantic_verifier_rejected",
+                                    *(
+                                        validation.get("errors")
+                                        or []
+                                    ),
+                                    (
+                                        "independent_semantic_"
+                                        "verifier_rejected"
+                                    ),
                                 ]
                             )
                         )
                         validation["ok"] = False
+                escalation_blockers = _section_escalation_blockers(
+                    validation
+                )
                 if parsed:
                     latest_llm_candidate = parsed
                     latest_llm_validation = validation
@@ -4038,6 +4377,11 @@ def call_sectional_writer_llm(
                 attempts.append(
                     {
                         "attempt": attempt,
+                        "attempt_stage": attempt_stage,
+                        "premium_escalation": (
+                            attempt_stage == "premium_escalation"
+                        ),
+                        "escalation_blockers": escalation_blockers,
                         "generated_section": parsed,
                         "validation": validation,
                         "independent_semantic_verifier": (
@@ -4051,9 +4395,17 @@ def call_sectional_writer_llm(
                         "llm": base_llm_meta,
                     }
                 )
-                if validation.get("ok"):
+                if parsed and not escalation_blockers:
                     accepted = parsed
-                    accepted_mode = "llm_verified"
+                    if validation.get("ok"):
+                        accepted_mode = "llm_verified"
+                    else:
+                        accepted_mode = (
+                            "llm_mini_with_advisories"
+                            if attempt_stage != "premium_escalation"
+                            else "llm_premium_with_advisories"
+                        )
+                        advisory_sections_count += 1
                     if checkpoint_path:
                         write_json(
                             checkpoint_path,
@@ -4066,19 +4418,60 @@ def call_sectional_writer_llm(
                                 "independent_semantic_verifier": (
                                     independent_semantic_verifier
                                 ),
-                                "llm": client.get_last_generation_meta(),
+                                "attempt_stage": attempt_stage,
+                                "llm": base_llm_meta,
                             },
                         )
                     break
                 feedback = {
                     "validation": validation,
+                    "escalation_blockers": escalation_blockers,
                     "rejected_draft": parsed,
                 }
             except Exception as exc:
                 attempts.append(
-                    {"attempt": attempt, "error": f"{type(exc).__name__}: {exc}"}
+                    {
+                        "attempt": attempt,
+                        "attempt_stage": attempt_stage,
+                        "premium_escalation": (
+                            attempt_stage == "premium_escalation"
+                        ),
+                        "error": (
+                            f"{type(exc).__name__}: {exc}"
+                        ),
+                    }
                 )
-                feedback = {"errors": ["llm_error"], "detail": str(exc)}
+                if type(exc).__name__ == "BudgetLimitExceeded":
+                    return {}, {
+                        "used": bool(
+                            generated_sections or attempts
+                        ),
+                        "status": "cost_budget_reached",
+                        "partial": bool(
+                            generated_sections
+                        ),
+                        "completed_sections_count": len(
+                            generated_sections
+                        ),
+                        "total_sections_count": total_sections,
+                        "failed_section_index": index,
+                        "failed_section_id": section_id,
+                        "progress_markdown_path": (
+                            str(progress_path)
+                            if progress_path
+                            else ""
+                        ),
+                        "sections": reports,
+                        "mini_repairs_count": mini_repairs_count,
+                        "premium_escalations_count": (
+                            premium_escalations_count
+                        ),
+                        "budget_guard_message": str(exc),
+                    }
+                feedback = {
+                    "errors": ["llm_error"],
+                    "detail": str(exc),
+                }
         if not accepted and latest_llm_candidate:
             language_errors = {
                 "raw_extraction_fragment",
@@ -4173,10 +4566,30 @@ def call_sectional_writer_llm(
             }
         )
         if not accepted:
+            # Le LLM a réellement été utilisé même si cette section n'a pas
+            # passé les validations. Les sections précédentes restent dans
+            # state_of_art_draft_in_progress.md et leurs checkpoints JSON.
+            had_llm_activity = bool(
+                generated_sections
+                or attempts
+                or any((row.get("attempts") or []) for row in reports)
+            )
             return {}, {
-                "used": False,
+                "used": had_llm_activity,
                 "status": "section_generation_failed",
+                "partial": bool(generated_sections),
+                "completed_sections_count": len(generated_sections),
+                "total_sections_count": total_sections,
+                "failed_section_index": index,
+                "failed_section_id": section_id,
+                "progress_markdown_path": (
+                    str(progress_path) if progress_path else ""
+                ),
                 "sections": reports,
+                "mini_repairs_count": mini_repairs_count,
+                "premium_escalations_count": (
+                    premium_escalations_count
+                ),
             }
         generated_sections.append(accepted)
         if progress_path:
@@ -4216,6 +4629,18 @@ def call_sectional_writer_llm(
         ),
         "deterministic_fallback_sections_count": 0,
         "advisory_sections_count": advisory_sections_count,
+        "mini_repairs_count": mini_repairs_count,
+        "premium_escalations_count": premium_escalations_count,
+        "model_policy": {
+            "draft_model": configured_model,
+            "mini_attempts_before_premium": mini_attempts,
+            "premium_enabled": premium_enabled,
+            "premium_model": (
+                escalation_model if premium_enabled else ""
+            ),
+            "length_only_never_escalates": True,
+            "escalation_requires_blocking_validation_error": True,
+        },
         "all_sections_generated_by_llm": True,
         "sections": reports,
     }
@@ -4836,48 +5261,195 @@ def _multilingual_visual_similarities(
         return {}
 
 
+def _normalize_writer_public_text(value: Any, limit: int = 100000) -> str:
+    """Nettoyage déterministe du texte public, sans appel LLM."""
+    text = clean_text(value, limit)
+
+    # Corrige les séparateurs littéraux observés dans certains drafts.
+    text = text.replace("\\n\\n", "\n\n")
+
+    # Si un bracket contient à la fois des citations A# valides et des IDs
+    # techniques hexadécimaux, ne conserver que les citations publiques A#.
+    def _clean_bracket(match: Any) -> str:
+        inside = str(match.group(1) or "")
+        labels = citation_sort(
+            re.findall(r"\bA\s*\d+\b", inside, flags=re.I)
+        )
+        has_internal_hex = bool(
+            re.search(r"\b[a-f0-9]{12,}\b", inside, flags=re.I)
+        )
+        if labels and has_internal_hex:
+            return "[" + ", ".join(labels) + "]"
+        return match.group(0)
+
+    text = re.sub(r"\[([^\[\]]+)\]", _clean_bracket, text)
+    return text.strip()
+
+
+def _split_visual_paragraphs(value: Any) -> List[str]:
+    text = _normalize_writer_public_text(value, 100000)
+    if not text:
+        return []
+    paragraphs = [
+        part.strip()
+        for part in re.split(r"\n\s*\n", text)
+        if part.strip()
+    ]
+    return paragraphs or [text]
+
+
+def _paragraph_visual_anchors(
+    draft: Mapping[str, Any],
+) -> List[Dict[str, Any]]:
+    anchors: List[Dict[str, Any]] = []
+
+    for section_index, section in enumerate(
+        draft.get("sections") or []
+    ):
+        if not isinstance(section, Mapping):
+            continue
+
+        section_id = clean_text(
+            section.get("section_id"), 160
+        )
+
+        for paragraph_index, paragraph in enumerate(
+            _split_visual_paragraphs(section.get("content"))
+        ):
+            anchor_key = (
+                f"{section_id}|section|0|{paragraph_index}"
+            )
+            anchors.append(
+                {
+                    "anchor_key": anchor_key,
+                    "section_id": section_id,
+                    "section_index": section_index,
+                    "content_scope": "section",
+                    "subsection_index": None,
+                    "paragraph_index": paragraph_index,
+                    "paragraph_text": paragraph,
+                    "citations": set(
+                        citations_from_text(paragraph)
+                    ),
+                }
+            )
+
+        for subsection_index, subsection in enumerate(
+            section.get("subsections") or []
+        ):
+            if not isinstance(subsection, Mapping):
+                continue
+
+            for paragraph_index, paragraph in enumerate(
+                _split_visual_paragraphs(
+                    subsection.get("content")
+                )
+            ):
+                anchor_key = (
+                    f"{section_id}|subsection|"
+                    f"{subsection_index}|{paragraph_index}"
+                )
+                anchors.append(
+                    {
+                        "anchor_key": anchor_key,
+                        "section_id": section_id,
+                        "section_index": section_index,
+                        "content_scope": "subsection",
+                        "subsection_index": subsection_index,
+                        "paragraph_index": paragraph_index,
+                        "paragraph_text": paragraph,
+                        "citations": set(
+                            citations_from_text(paragraph)
+                        ),
+                    }
+                )
+
+    return anchors
+
+
 def build_visual_placements(
     draft: Dict[str, Any],
     blueprint: Dict[str, Any],
     cards_payload: Dict[str, Any],
     cards: Sequence[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """Place des figures originales sans changer l'explication du writer.
+    """Place les figures au niveau du paragraphe qu'elles documentent.
 
-    Une figure d'article n'est éligible que dans une section qui cite cet
-    article. Les figures des documents projet doivent, elles, présenter une
-    proximité textuelle explicite avec la section et ne deviennent jamais une
-    preuve scientifique.
+    Règles article:
+    - la figure vient d'une Article Card sourcée ;
+    - le paragraphe cible doit citer CE MÊME article ;
+    - caption/context et paragraphe doivent dépasser le seuil sémantique ;
+    - au maximum une figure retenue par section ;
+    - aucun appel LLM n'est effectué pour le placement.
+
+    Règles document projet:
+    - aucune nouvelle preuve scientifique ;
+    - proximité sémantique obligatoire.
     """
 
-    if os.getenv("ENNOSCHOLAR_PHASE5_INCLUDE_ORIGINAL_FIGURES", "1").strip().lower() not in {
+    if os.getenv(
+        "ENNOSCHOLAR_PHASE5_INCLUDE_ORIGINAL_FIGURES",
+        "1",
+    ).strip().lower() not in {
         "1", "true", "yes", "on",
     }:
         return []
 
+    article_min_similarity = float(
+        os.getenv(
+            "ENNOSCHOLAR_PHASE5_ARTICLE_FIGURE_MIN_SIMILARITY",
+            "0.055",
+        )
+    )
+    project_min_similarity = float(
+        os.getenv(
+            "ENNOSCHOLAR_PHASE5_PROJECT_FIGURE_MIN_SIMILARITY",
+            "0.055",
+        )
+    )
+
     card_by_label = {
-        normalize_citation_label(card.get("citation_label")): card
+        normalize_citation_label(
+            card.get("citation_label")
+        ): card
         for card in cards
-        if normalize_citation_label(card.get("citation_label"))
+        if normalize_citation_label(
+            card.get("citation_label")
+        )
     }
+
     candidates: List[Dict[str, Any]] = []
     seen_visual_ids: Set[str] = set()
+
     for citation, card in card_by_label.items():
         for raw in card.get("visual_evidence") or []:
             if not isinstance(raw, dict):
                 continue
-            visual_id = clean_text(raw.get("visual_id"), 120)
-            if not visual_id or visual_id in seen_visual_ids:
+            visual_id = clean_text(
+                raw.get("visual_id"), 120
+            )
+            if (
+                not visual_id
+                or visual_id in seen_visual_ids
+            ):
                 continue
             item = dict(raw)
             item["citation_label"] = citation
             candidates.append(item)
             seen_visual_ids.add(visual_id)
-    for raw in cards_payload.get("project_visual_evidence") or []:
+
+    for raw in (
+        cards_payload.get("project_visual_evidence") or []
+    ):
         if not isinstance(raw, dict):
             continue
-        visual_id = clean_text(raw.get("visual_id"), 120)
-        if not visual_id or visual_id in seen_visual_ids:
+        visual_id = clean_text(
+            raw.get("visual_id"), 120
+        )
+        if (
+            not visual_id
+            or visual_id in seen_visual_ids
+        ):
             continue
         candidates.append(dict(raw))
         seen_visual_ids.add(visual_id)
@@ -4886,219 +5458,486 @@ def build_visual_placements(
         return []
 
     blueprint_sections = {
-        clean_text(section.get("section_id"), 160): section
+        clean_text(section.get("section_id"), 160):
+            section
         for section in blueprint.get("sections") or []
         if isinstance(section, dict)
     }
+
+    anchors = _paragraph_visual_anchors(draft)
+    if not anchors:
+        return []
+
     candidate_semantic_texts = {
-        clean_text(candidate.get("visual_id"), 120): " ".join(
-            [
-                clean_text(candidate.get("figure_label"), 100),
-                clean_text(candidate.get("caption"), 1800),
-                clean_text(candidate.get("context"), 2600),
-                clean_text(candidate.get("source_title"), 1000),
-            ]
-        )
+        clean_text(candidate.get("visual_id"), 120):
+            " ".join(
+                [
+                    clean_text(
+                        candidate.get("figure_label"),
+                        100,
+                    ),
+                    clean_text(
+                        candidate.get("caption"),
+                        1800,
+                    ),
+                    clean_text(
+                        candidate.get("context"),
+                        2600,
+                    ),
+                    clean_text(
+                        candidate.get("source_title"),
+                        1000,
+                    ),
+                ]
+            )
         for candidate in candidates
         if clean_text(candidate.get("visual_id"), 120)
     }
-    section_semantic_texts = {
-        clean_text(section.get("section_id"), 160): _draft_section_visual_text(
-            section,
-            blueprint_sections.get(
-                clean_text(section.get("section_id"), 160),
-                {},
-            ),
-        )
-        for section in draft.get("sections") or []
-        if isinstance(section, dict)
-        and clean_text(section.get("section_id"), 160)
+
+    paragraph_semantic_texts = {
+        anchor["anchor_key"]:
+            anchor["paragraph_text"]
+        for anchor in anchors
     }
-    multilingual_similarities = _multilingual_visual_similarities(
-        section_semantic_texts,
-        candidate_semantic_texts,
+
+    multilingual_similarities = (
+        _multilingual_visual_similarities(
+            paragraph_semantic_texts,
+            candidate_semantic_texts,
+        )
     )
-    scored: List[tuple[float, int, Dict[str, Any]]] = []
-    for section_index, section in enumerate(draft.get("sections") or []):
-        if not isinstance(section, dict):
-            continue
-        section_id = clean_text(section.get("section_id"), 160)
-        contract_section = blueprint_sections.get(section_id) or {}
-        section_text = _draft_section_visual_text(section, contract_section)
-        used_citations = set(citations_from_text(section_text))
+
+    scored: List[
+        tuple[float, int, Dict[str, Any]]
+    ] = []
+
+    for anchor in anchors:
+        section_id = anchor["section_id"]
+        contract_section = (
+            blueprint_sections.get(section_id) or {}
+        )
+
         section_verrous = {
             clean_text(value, 160)
             for value in (
                 contract_section.get("verrou_ids")
                 or [
                     verrou.get("verrou_id")
-                    for verrou in contract_section.get("verrous") or []
+                    for verrou in (
+                        contract_section.get("verrous")
+                        or []
+                    )
                     if isinstance(verrou, dict)
                 ]
             )
             if clean_text(value, 160)
         }
+
+        paragraph_text = anchor["paragraph_text"]
+
         for candidate in candidates:
-            visual_id = clean_text(candidate.get("visual_id"), 120)
+            visual_id = clean_text(
+                candidate.get("visual_id"), 120
+            )
+            if not visual_id:
+                continue
+
             caption_text = " ".join(
                 [
-                    clean_text(candidate.get("figure_label"), 100),
-                    clean_text(candidate.get("caption"), 1800),
-                    clean_text(candidate.get("context"), 2600),
-                    clean_text(candidate.get("source_title"), 1000),
+                    clean_text(
+                        candidate.get("figure_label"),
+                        100,
+                    ),
+                    clean_text(
+                        candidate.get("caption"),
+                        1800,
+                    ),
+                    clean_text(
+                        candidate.get("context"),
+                        2600,
+                    ),
+                    clean_text(
+                        candidate.get("source_title"),
+                        1000,
+                    ),
                 ]
             )
+
             quality = float(
                 candidate.get("ranking_score")
                 or candidate.get("quality_score")
                 or 0.0
             )
-            token_similarity = _visual_similarity(caption_text, section_text)
+
+            token_similarity = _visual_similarity(
+                caption_text,
+                paragraph_text,
+            )
             similarity = max(
                 token_similarity,
-                multilingual_similarities.get((section_id, visual_id), 0.0),
+                multilingual_similarities.get(
+                    (
+                        anchor["anchor_key"],
+                        visual_id,
+                    ),
+                    0.0,
+                ),
             )
-            citation = normalize_citation_label(candidate.get("citation_label"))
+
+            citation = normalize_citation_label(
+                candidate.get("citation_label")
+            )
+
             target_verrous = {
                 clean_text(value, 160)
-                for value in candidate.get("target_verrous") or []
+                for value in (
+                    candidate.get("target_verrous")
+                    or []
+                )
                 if clean_text(value, 160)
             }
+
             if citation:
-                if citation not in used_citations:
+                # Condition forte demandée:
+                # la source doit être citée DANS LE PARAGRAPHE,
+                # pas seulement quelque part dans la section.
+                if citation not in anchor["citations"]:
                     continue
-                score = 2.0 + quality + similarity
-                if section_verrous and target_verrous & section_verrous:
+                if similarity < article_min_similarity:
+                    continue
+
+                score = (
+                    2.0
+                    + quality
+                    + similarity * 3.0
+                )
+                if (
+                    section_verrous
+                    and target_verrous & section_verrous
+                ):
                     score += 0.35
             else:
-                # Un document projet n'est admis qu'avec une correspondance
-                # textuelle suffisante ; son image n'ajoute aucune citation.
-                if similarity < 0.055:
+                if similarity < project_min_similarity:
                     continue
                 score = quality + similarity * 3.0
                 if score < 0.65:
                     continue
+
             scored.append(
                 (
                     score,
-                    section_index,
+                    int(anchor["section_index"]),
                     {
                         "section_id": section_id,
                         "visual_id": visual_id,
                         "citation_label": citation,
-                        "source_kind": clean_text(candidate.get("source_kind"), 80),
-                        "source_title": clean_sentence(candidate.get("source_title"), 900),
+                        "source_kind": clean_text(
+                            candidate.get("source_kind"),
+                            80,
+                        ),
+                        "source_title": clean_sentence(
+                            candidate.get("source_title"),
+                            900,
+                        ),
                         "page": candidate.get("page"),
-                        "figure_label": clean_sentence(candidate.get("figure_label"), 100),
-                        "caption": clean_sentence(candidate.get("caption"), 1800),
+                        "figure_label": clean_sentence(
+                            candidate.get("figure_label"),
+                            100,
+                        ),
+                        "caption": clean_sentence(
+                            candidate.get("caption"),
+                            1800,
+                        ),
                         "quality_score": quality,
-                        "semantic_similarity": round(similarity, 4),
-                        "selection_score": round(score, 4),
+                        "semantic_similarity": round(
+                            similarity, 4
+                        ),
+                        "selection_score": round(
+                            score, 4
+                        ),
+                        "content_scope":
+                            anchor["content_scope"],
+                        "subsection_index":
+                            anchor["subsection_index"],
+                        "paragraph_index":
+                            anchor["paragraph_index"],
+                        "anchor_key":
+                            anchor["anchor_key"],
+                        "anchor_excerpt":
+                            clean_sentence(
+                                paragraph_text,
+                                420,
+                            ),
+                        "same_article_cited_in_paragraph":
+                            bool(citation),
                         "original_figure_preserved": True,
+                        "placement_policy":
+                            "paragraph_citation_plus_semantic_match",
                     },
                 )
             )
 
-    max_visuals = max(
+    # 0 = aucune limite globale.
+    # Le plan peut avoir 5, 30, 80, 150 sections.
+    configured_max_visuals = _env_int(
+        "ENNOSCHOLAR_PHASE5_MAX_ORIGINAL_FIGURES",
         0,
-        min(
-            12,
-            _env_int(
-                "ENNOSCHOLAR_PHASE5_MAX_ORIGINAL_FIGURES",
-                5,
-                minimum=0,
-                maximum=12,
-            ),
-        ),
+        minimum=0,
+        maximum=1000,
     )
+
     placements: List[Dict[str, Any]] = []
     occupied_sections: Set[str] = set()
     occupied_visuals: Set[str] = set()
-    for _, _, placement in sorted(scored, key=lambda item: (-item[0], item[1])):
-        if len(placements) >= max_visuals:
+
+    for _, _, placement in sorted(
+        scored,
+        key=lambda item: (-item[0], item[1]),
+    ):
+        if (
+            configured_max_visuals > 0
+            and len(placements)
+            >= configured_max_visuals
+        ):
             break
+
+        # Évite une rédaction visuellement chargée:
+        # une seule figure réellement utile par section.
         if placement["section_id"] in occupied_sections:
             continue
         if placement["visual_id"] in occupied_visuals:
             continue
-        occupied_sections.add(placement["section_id"])
-        occupied_visuals.add(placement["visual_id"])
+
+        occupied_sections.add(
+            placement["section_id"]
+        )
+        occupied_visuals.add(
+            placement["visual_id"]
+        )
         placements.append(placement)
+
     return sorted(
         placements,
-        key=lambda placement: next(
-            (
-                index
-                for index, section in enumerate(draft.get("sections") or [])
-                if isinstance(section, dict)
-                and clean_text(section.get("section_id"), 160)
-                == placement["section_id"]
+        key=lambda placement: (
+            next(
+                (
+                    index
+                    for index, section
+                    in enumerate(
+                        draft.get("sections") or []
+                    )
+                    if isinstance(section, dict)
+                    and clean_text(
+                        section.get("section_id"), 160
+                    )
+                    == placement["section_id"]
+                ),
+                10_000,
             ),
-            10_000,
+            0
+            if placement.get("content_scope")
+            == "section"
+            else 1,
+            int(
+                placement.get("subsection_index")
+                or 0
+            ),
+            int(
+                placement.get("paragraph_index")
+                or 0
+            ),
         ),
     )
+
+
+def _visual_markdown_lines(
+    placement: Mapping[str, Any],
+) -> List[str]:
+    visual_id = clean_text(
+        placement.get("visual_id"), 120
+    )
+    if not visual_id:
+        return []
+
+    caption = clean_sentence(
+        placement.get("caption"), 1800
+    )
+    figure_label = clean_sentence(
+        placement.get("figure_label"), 100
+    )
+    alt = " — ".join(
+        item
+        for item in (figure_label, caption)
+        if item
+    )
+    alt = (
+        alt or "Figure scientifique sourcée"
+    ).replace("]", "").replace("[", "")
+
+    output = [
+        f"![{alt}](ennoscholar-visual://{visual_id})",
+        "",
+    ]
+
+    provenance: List[str] = []
+    citation = normalize_citation_label(
+        placement.get("citation_label")
+    )
+
+    if citation:
+        provenance.append(f"source [{citation}]")
+    else:
+        source_title = clean_sentence(
+            placement.get("source_title"), 700
+        )
+        if source_title:
+            provenance.append(
+                f"document projet « {source_title} »"
+            )
+
+    if placement.get("page"):
+        provenance.append(
+            f"page {placement['page']}"
+        )
+
+    legend = " — ".join(
+        item
+        for item in (figure_label, caption)
+        if item
+    ).rstrip(" .")
+
+    if provenance:
+        legend = (
+            f"{legend}. {' ; '.join(provenance)}"
+        )
+
+    output.extend(
+        [
+            f"*{legend.strip().rstrip(' .')}.*",
+            "",
+        ]
+    )
+    return output
+
+
+def _render_paragraphs_with_visuals(
+    *,
+    lines: List[str],
+    content: Any,
+    section_id: str,
+    content_scope: str,
+    subsection_index: Optional[int],
+    placements_by_anchor:
+        Mapping[str, List[Dict[str, Any]]],
+) -> None:
+    paragraphs = _split_visual_paragraphs(content)
+
+    for paragraph_index, paragraph in enumerate(
+        paragraphs
+    ):
+        lines.extend([paragraph, ""])
+
+        anchor_key = (
+            f"{section_id}|{content_scope}|"
+            f"{0 if subsection_index is None else subsection_index}|"
+            f"{paragraph_index}"
+        )
+
+        for placement in placements_by_anchor.get(
+            anchor_key,
+            [],
+        ):
+            lines.extend(
+                _visual_markdown_lines(placement)
+            )
 
 
 def draft_to_markdown(
     draft: Dict[str, Any],
     guard: Dict[str, Any],
     references: Optional[List[Dict[str, Any]]] = None,
-    visual_placements: Optional[List[Dict[str, Any]]] = None,
+    visual_placements: Optional[
+        List[Dict[str, Any]]
+    ] = None,
 ) -> str:
     del guard
-    lines = [f"# {clean_sentence(draft.get('title'), 1000)}", ""]
-    placements_by_section: Dict[str, List[Dict[str, Any]]] = {}
+
+    lines = [
+        f"# {clean_sentence(draft.get('title'), 1000)}",
+        "",
+    ]
+
+    placements_by_anchor: Dict[
+        str,
+        List[Dict[str, Any]],
+    ] = {}
+
     for placement in visual_placements or []:
         if not isinstance(placement, dict):
             continue
-        placements_by_section.setdefault(
-            clean_text(placement.get("section_id"), 160),
-            [],
+        anchor_key = clean_text(
+            placement.get("anchor_key"),
+            260,
+        )
+        if not anchor_key:
+            continue
+        placements_by_anchor.setdefault(
+            anchor_key, []
         ).append(placement)
+
     for section in draft.get("sections") or []:
         if not isinstance(section, dict):
             continue
-        lines.extend([f"## {clean_sentence(section.get('title'), 700)}", ""])
-        content = clean_text(section.get("content"), 100000)
-        if content:
-            lines.extend([content, ""])
-        for placement in placements_by_section.get(
-            clean_text(section.get("section_id"), 160),
-            [],
+
+        section_id = clean_text(
+            section.get("section_id"), 160
+        )
+
+        lines.extend(
+            [
+                f"## {clean_sentence(section.get('title'), 700)}",
+                "",
+            ]
+        )
+
+        _render_paragraphs_with_visuals(
+            lines=lines,
+            content=section.get("content"),
+            section_id=section_id,
+            content_scope="section",
+            subsection_index=None,
+            placements_by_anchor=
+                placements_by_anchor,
+        )
+
+        for subsection_index, subsection in enumerate(
+            section.get("subsections") or []
         ):
-            visual_id = clean_text(placement.get("visual_id"), 120)
-            if not visual_id:
-                continue
-            caption = clean_sentence(placement.get("caption"), 1800)
-            figure_label = clean_sentence(placement.get("figure_label"), 100)
-            alt = " — ".join(item for item in (figure_label, caption) if item)
-            alt = (alt or "Figure scientifique sourcée").replace("]", "").replace("[", "")
-            lines.extend([f"![{alt}](ennoscholar-visual://{visual_id})", ""])
-            provenance = []
-            citation = normalize_citation_label(placement.get("citation_label"))
-            if citation:
-                provenance.append(f"source [{citation}]")
-            else:
-                source_title = clean_sentence(placement.get("source_title"), 700)
-                if source_title:
-                    provenance.append(f"document projet « {source_title} »")
-            if placement.get("page"):
-                provenance.append(f"page {placement['page']}")
-            legend = " — ".join(
-                item for item in (figure_label, caption) if item
-            ).rstrip(" .")
-            if provenance:
-                legend = f"{legend}. {' ; '.join(provenance)}"
-            lines.extend([f"*{legend.strip().rstrip(' .')}.*", ""])
-        for subsection in section.get("subsections") or []:
             if not isinstance(subsection, dict):
                 continue
-            lines.extend([f"### {clean_sentence(subsection.get('title'), 700)}", ""])
-            subcontent = clean_text(subsection.get("content"), 100000)
-            if subcontent:
-                lines.extend([subcontent, ""])
+
+            lines.extend(
+                [
+                    f"### {clean_sentence(subsection.get('title'), 700)}",
+                    "",
+                ]
+            )
+
+            _render_paragraphs_with_visuals(
+                lines=lines,
+                content=subsection.get("content"),
+                section_id=section_id,
+                content_scope="subsection",
+                subsection_index=subsection_index,
+                placements_by_anchor=
+                    placements_by_anchor,
+            )
+
     if references:
-        lines.extend(["## Références utilisées", ""])
+        lines.extend(
+            ["## Références utilisées", ""]
+        )
+
         for reference in references:
             label = reference["citation_label"]
             elements = [
@@ -5106,12 +5945,24 @@ def draft_to_markdown(
                 reference.get("title"),
                 str(reference.get("year") or ""),
                 reference.get("venue"),
-                f"DOI : {reference['doi']}" if reference.get("doi") else "",
+                (
+                    f"DOI : {reference['doi']}"
+                    if reference.get("doi")
+                    else ""
+                ),
                 reference.get("url"),
             ]
-            lines.append(f"[{label}] " + ". ".join(item for item in elements if item) + ".")
-    return "\n".join(lines).strip() + "\n"
+            lines.append(
+                f"[{label}] "
+                + ". ".join(
+                    item
+                    for item in elements
+                    if item
+                )
+                + "."
+            )
 
+    return "\n".join(lines).strip() + "\n"
 
 def _style_memory(*payloads: Dict[str, Any]) -> Dict[str, Any]:
     allowed_keys = {
@@ -5488,16 +6339,38 @@ def run_phase_5_state_of_art_writer(
         checkpoint_dir=writer_output_dir / "section_checkpoints",
         progress_markdown_path=progress_md_path,
     )
-    strict_llm_guard = (
-        validate_draft(
+    if llm_draft:
+        strict_llm_guard = validate_draft(
             llm_draft,
             blueprint,
             evidence_units=evidence_units,
             enforce_consultant_language=True,
         )
-        if llm_draft
-        else {"ok": False, "errors": ["llm_not_used"]}
-    )
+    else:
+        # Une génération partielle/échouée n'est pas "LLM non utilisé".
+        # Le statut réel du writer est propagé au guard et au diagnostic.
+        llm_failure_status = clean_text(
+            llm_report.get("status") or "llm_generation_failed",
+            120,
+        )
+        llm_was_used = bool(llm_report.get("used"))
+        strict_llm_guard = {
+            "ok": False,
+            "passed": False,
+            "errors": [
+                llm_failure_status if llm_was_used else "llm_not_used"
+            ],
+            "llm_used": llm_was_used,
+            "partial_draft_available": bool(llm_report.get("partial")),
+            "completed_sections_count": int(
+                llm_report.get("completed_sections_count") or 0
+            ),
+            "total_sections_count": int(
+                llm_report.get("total_sections_count") or 0
+            ),
+            "failed_section_index": llm_report.get("failed_section_index"),
+            "failed_section_id": llm_report.get("failed_section_id"),
+        }
     llm_guard = (
         _publication_guard_for_new_llm(strict_llm_guard)
         if llm_draft
@@ -5548,6 +6421,20 @@ def run_phase_5_state_of_art_writer(
         visual_placements=visual_placements,
     )
     ok = bool(guard.get("ok"))
+
+    # Si le writer s'arrête après plusieurs sections, llm_draft peut être vide
+    # alors que le fichier progress contient le vrai travail déjà généré.
+    rejected_markdown = markdown
+    if not ok and not llm_draft and progress_md_path.is_file():
+        try:
+            progress_text = progress_md_path.read_text(
+                encoding="utf-8",
+                errors="ignore",
+            )
+        except Exception:
+            progress_text = ""
+        if len(progress_text.strip()) > len(rejected_markdown.strip()):
+            rejected_markdown = progress_text
 
     final_text = markdown or ""
     word_count = len(re.findall(r"\b[\wÀ-ÿ'-]+\b", final_text))
@@ -5627,7 +6514,7 @@ def run_phase_5_state_of_art_writer(
         ),
         "markdown_output_path": str(md_path) if ok else "",
         "rejected_markdown_output_path": (
-            str(rejected_md_path) if markdown and not ok else ""
+            str(rejected_md_path) if rejected_markdown.strip() and not ok else ""
         ),
         "progress_markdown_output_path": str(progress_md_path),
         "unified_writer_blueprint_path": str(blueprint_path),
@@ -5718,12 +6605,15 @@ def run_phase_5_state_of_art_writer(
         if ok:
             write_json(out_path, result)
             write_text(md_path, markdown)
+            # Le snapshot de progression n'est plus nécessaire une fois le
+            # livrable final publié.
+            progress_md_path.unlink(missing_ok=True)
         else:
             write_json(rejected_payload_path, result)
-        if markdown and not ok:
-            # Un brouillon refusé reste consultable pour diagnostic/réparation,
-            # mais ne doit jamais remplacer l'artefact final affiché au consultant.
-            write_text(rejected_md_path, markdown)
+        if rejected_markdown.strip() and not ok:
+            # Un brouillon refusé ou partiel reste consultable. Il ne remplace
+            # jamais l'artefact final publié au consultant.
+            write_text(rejected_md_path, rejected_markdown)
         if _env_flag("ENNOSCHOLAR_SAVE_PROMPTS", False):
             prompt_path = writer_prompts_dir / "global_writer_prompt.txt"
             write_text(prompt_path, prompt)

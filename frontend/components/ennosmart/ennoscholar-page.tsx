@@ -4159,11 +4159,6 @@ export function EnnoScholarPage({
     await loadStateOfArtPreparationStatus()
   }
 
-  const launchStateOfArtPreparationTab = async () => {
-    setActiveTab("preparation-etat-art")
-    await refreshStateOfArtPreparation()
-  }
-
   // ============================================================
   // Préparation réelle :
   // sélection courante -> extraction directe/OCR -> récupération légale MCP
@@ -4273,16 +4268,30 @@ export function EnnoScholarPage({
       setSelectedStateOfArtRunId(stateArtReports[0]?.run_id ? String(stateArtReports[0].run_id) : null)
       setActiveTab("etat-art-rediges")
       return generated
-    } catch {
+    } catch (error: any) {
+      // V3 UX : apiRequest expose déjà le detail FastAPI dans error.message.
+      // Ne pas masquer un 409 métier par une fausse indisponibilité du service.
+      const rawMessage = String(error?.message || "").trim()
+      const writingBlocked =
+        /rédaction bloquée|redaction bloquee|aucun article.*gard|texte intégral|texte integral/i.test(
+          rawMessage,
+        )
+
       const deferred = {
         ok: false,
-        status: "writing_service_temporarily_unavailable",
+        status: writingBlocked
+          ? "writing_blocked_by_corpus"
+          : "writing_service_temporarily_unavailable",
         assistant_message:
-          "Le service de rédaction est momentanément indisponible. Votre corpus, votre plan et vos choix sont conservés ; relancez la rédaction sans recommencer la recherche.",
+          rawMessage ||
+          "La rédaction n'a pas pu démarrer. Votre corpus, votre plan et vos choix sont conservés ; corrigez le point signalé puis relancez.",
         retryable: true,
         previous_draft_preserved: true,
       }
-      setGenerateStateArtError(deferred.assistant_message)
+
+      // Le composant chat affiche déjà assistant_message comme bulle.
+      // Ne pas afficher le même texte une deuxième fois en encart.
+      setGenerateStateArtError("")
       return deferred
     } finally {
       setGeneratingStateArt(false)
@@ -4574,14 +4583,11 @@ export function EnnoScholarPage({
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid h-auto grid-cols-2 gap-1 rounded-2xl bg-muted/60 p-1 lg:grid-cols-4">
+        <TabsList className="grid h-auto grid-cols-1 gap-1 rounded-2xl bg-muted/60 p-1 sm:grid-cols-3">
           <TabsTrigger value="par-verrou">Sélection articles</TabsTrigger>
           <TabsTrigger value="selection">Sélection consultant</TabsTrigger>
-          <TabsTrigger value="preparation-etat-art" disabled={preflightPendingCount > 0}>
-            Préparation état de l’art
-          </TabsTrigger>
-          <TabsTrigger value="etat-art-rediges" disabled={preflightPendingCount > 0}>
-            État de l’art rédigé
+          <TabsTrigger value="etat-art-rediges">
+            Rédaction état de l’art
           </TabsTrigger>
         </TabsList>
 
@@ -4630,22 +4636,30 @@ export function EnnoScholarPage({
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
                   <CheckCircle2 className="size-4 text-brand" />
-                  Sélection consultant finalisée ?
+                  Sélection consultant finalisée
                 </CardTitle>
                 <CardDescription>
-                  Quand les articles utiles sont gardés, passe à la préparation de l’état de l’art pour construire le payload, les Article Cards et vérifier les PDFs.
+                  Les articles gardés sont déjà préparés individuellement : le texte intégral est vérifié/extrait au moment de la conservation et l’Article Card est synchronisée automatiquement. Passe directement à la rédaction.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex flex-wrap items-center gap-3">
                 <Button
                   size="sm"
                   className="bg-brand hover:bg-brand/90"
-                  disabled={preflightPendingCount > 0}
-                  onClick={launchStateOfArtPreparationTab}
-                  title={preflightPendingCount > 0 ? "Disponible après la vérification finale de tous les articles." : undefined}
+                  disabled={consultantSelectedArticles.length === 0}
+                  onClick={() => setActiveTab("etat-art-rediges")}
+                  title={
+                    consultantSelectedArticles.length === 0
+                      ? "Garde au moins un article avant de passer à la rédaction."
+                      : "Ouvrir l’espace de rédaction de l’état de l’art."
+                  }
                 >
-                  Suivant : préparer l’état de l’art
+                  Suivant : rédiger l’état de l’art
                 </Button>
+
+                <span className="text-xs text-muted-foreground">
+                  {consultantSelectedArticles.length} article(s) gardé(s)
+                </span>
               </CardContent>
             </Card>
 
@@ -4685,24 +4699,6 @@ export function EnnoScholarPage({
           </div>
         </TabsContent>
 
-        <TabsContent value="preparation-etat-art">
-          <StateOfArtPreparationSection
-            projectId={project.id}
-            selectedArticles={consultantSelectedArticles}
-            selectionPreview={selectionPreviewPayload}
-            articleCardsPayload={articleCardsPayload}
-            fulltextStatus={fulltextStatusPayload}
-            directExtractStatus={directExtractStatusPayload}
-            loading={preparingStateArt}
-            preparationStage={prepareStateArtStage}
-            uploadingArticleId={uploadingArticleId}
-            error={prepareStateArtError}
-            onRefresh={refreshStateOfArtPreparation}
-            onPrepareAll={launchCompleteStateOfArtPreparation}
-            onUploadArticlePdf={uploadPdfForSelectedArticle}
-            onNext={() => setActiveTab("etat-art-rediges")}
-          />
-        </TabsContent>
 
         <TabsContent value="etat-art-rediges">
           <div className="space-y-4">

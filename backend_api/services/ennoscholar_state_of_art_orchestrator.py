@@ -726,6 +726,15 @@ def _phase5_consultant_failure(
             "les sources actuellement validées."
         )
         next_action = "resolve_source_selection"
+    elif status == "cost_budget_reached":
+        message = (
+            "J'ai arrêté la génération avant un nouvel appel payant "
+            "parce que le plafond de coût configuré a été atteint. "
+            "Les sections déjà validées et les checkpoints sont "
+            "conservés. Vous pouvez reprendre sans recommencer les "
+            "étapes terminées, ou augmenter explicitement le plafond."
+        )
+        next_action = "resume_or_raise_cost_limit"
     elif status == "insufficient_evidence":
         message = (
             "Le corpus ne contient pas encore assez de textes intégraux et "
@@ -786,7 +795,25 @@ def generate_state_of_art_after_consultant_selection(
     Le retour est directement exploitable par le frontend.
     """
     _ensure_root_on_path()
+
+    # BEGIN ENNOSCHOLAR_CONVERSATION_SCOPE_V4
+    guided_session_id = str(
+        legacy_options.pop("guided_session_id", "") or ""
+    ).strip() or None
+    conversation_context = None
     paths = _phase_paths(project)
+
+    if guided_session_id:
+        from services.ennoscholar_conversation_state_service import prepare_conversation_run
+
+        conversation_context = prepare_conversation_run(
+            db,
+            project,
+            guided_session_id,
+        )
+        paths.update(conversation_context.get("path_overrides") or {})
+    # END ENNOSCHOLAR_CONVERSATION_SCOPE_V4
+
     base = paths["base"]
     if legacy_options:
         print(
@@ -816,6 +843,37 @@ def generate_state_of_art_after_consultant_selection(
     from services.article_card_builder import get_article_cards_payload
 
     article_cards_payload = get_article_cards_payload(project, db=db)
+
+    # BEGIN ENNOSCHOLAR_VERROU_SCOPE_LOCK_V4
+    if guided_session_id and conversation_context:
+        from services.ennoscholar_conversation_state_service import materialize_scoped_runtime
+
+        original_selection_payload = _read_json(
+            _state_of_art_base(project) / "selection_payload.json",
+            {},
+        )
+        scoped_runtime = materialize_scoped_runtime(
+            conversation_context=conversation_context,
+            selection_payload=original_selection_payload,
+            article_cards_payload=article_cards_payload,
+        )
+        article_cards_payload = scoped_runtime["article_cards_payload"]
+        paths["selection_payload"] = scoped_runtime["selection_path"]
+        paths["article_cards_payload"] = scoped_runtime["article_cards_path"]
+
+        scope_manifest = scoped_runtime.get("scope_manifest") or {}
+        if (
+            scope_manifest.get("active")
+            and int(scope_manifest.get("kept_cards_count") or 0) <= 0
+        ):
+            raise RuntimeError(
+                "verrou_scope_no_article: aucun Article Card rattaché "
+                "au verrou demandé dans cette conversation."
+            )
+    else:
+        scoped_runtime = None
+    # END ENNOSCHOLAR_VERROU_SCOPE_LOCK_V4
+
     if not isinstance(article_cards_payload, dict) or not article_cards_payload.get("cards"):
         raise RuntimeError(
             "Article Cards existantes introuvables en base. "
@@ -825,14 +883,17 @@ def generate_state_of_art_after_consultant_selection(
         article_cards_payload.get("payload_path")
         or f"db://projects/{int(project.id)}/article_cards_payload"
     )
-    runtime_dir = Path(tempfile.gettempdir()) / "ennosmart_runtime_article_cards"
-    runtime_dir.mkdir(parents=True, exist_ok=True)
-    runtime_cards_path = runtime_dir / f"project_{int(project.id)}_article_cards_payload.json"
-    runtime_cards_path.write_text(
-        json.dumps(article_cards_payload, ensure_ascii=False, indent=2, default=str),
-        encoding="utf-8",
-    )
-    paths["article_cards_payload"] = runtime_cards_path
+    if guided_session_id and conversation_context:
+        runtime_cards_path = Path(paths["article_cards_payload"])
+    else:
+        runtime_dir = Path(tempfile.gettempdir()) / "ennosmart_runtime_article_cards"
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+        runtime_cards_path = runtime_dir / f"project_{int(project.id)}_article_cards_payload.json"
+        runtime_cards_path.write_text(
+            json.dumps(article_cards_payload, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+        paths["article_cards_payload"] = runtime_cards_path
 
     readonly_fingerprints_before = {
         "selection_sha256": _sha256(paths["selection_payload"]),
@@ -1193,8 +1254,17 @@ def generate_state_of_art_after_consultant_selection(
             f"guard={json.dumps(phase5_guard, ensure_ascii=False)} "
             f"rejected={phase5_payload.get('rejected_markdown_output_path') or ''}"
         )
-        previous = read_latest_state_of_art(project)
-        previous_available = bool(previous.get("ok"))
+        if guided_session_id and conversation_context:
+            previous_draft = dict(
+                (conversation_context.get("snapshot") or {}).get("draft")
+                or {}
+            )
+            previous_available = bool(
+                str(previous_draft.get("markdown") or "").strip()
+            )
+        else:
+            previous = read_latest_state_of_art(project)
+            previous_available = bool(previous.get("ok"))
         public_failure = _phase5_consultant_failure(
             phase5_payload,
             previous_available=previous_available,
@@ -1220,6 +1290,93 @@ def generate_state_of_art_after_consultant_selection(
     markdown = _read_text(paths["phase5_markdown"])
     if not markdown.strip():
         raise RuntimeError("Phase 5 échouée : state_of_art_draft.md est vide.")
+
+    # BEGIN ENNOSCHOLAR_CIR_EDITORIAL_VALIDATOR_V4
+    editorial_result = None
+    state_of_art_version = None
+
+    if guided_session_id and conversation_context:
+        from agents.EnnoScholar.state_of_art.cir_editorial_validator_service import (
+            run_cir_editorial_validation,
+        )
+        from services.ennoscholar_conversation_state_service import (
+            archive_conversation_state_of_art,
+        )
+
+        evidence_payload = _read_json(
+            paths["phase5_dir"] / "normalized_evidence_units.json",
+            {},
+        )
+        evidence_units = (
+            evidence_payload.get("items")
+            if isinstance(evidence_payload, dict)
+            else []
+        ) or []
+
+        plan_contract_runtime = _read_json(
+            paths["consultant_plan_contract"],
+            {},
+        )
+
+        editorial_result = run_cir_editorial_validation(
+            phase5_payload=phase5_payload,
+            plan_contract=plan_contract_runtime,
+            article_cards_payload=article_cards_payload,
+            evidence_units=evidence_units,
+        )
+
+        editorial_report_path = (
+            paths["phase5_dir"] / "cir_editorial_report_v4.json"
+        )
+        editorial_report_path.parent.mkdir(parents=True, exist_ok=True)
+        editorial_report_path.write_text(
+            json.dumps(
+                editorial_result.get("report") or {},
+                ensure_ascii=False,
+                indent=2,
+                default=str,
+            ),
+            encoding="utf-8",
+        )
+
+        if not editorial_result.get("ok"):
+            raise RuntimeError(
+                "cir_editorial_validation_blocked: "
+                + json.dumps(
+                    (editorial_result.get("report") or {}).get("blocking_issues") or [],
+                    ensure_ascii=False,
+                )[:6000]
+            )
+
+        phase5_payload = dict(editorial_result.get("payload") or phase5_payload)
+        markdown = str(editorial_result.get("markdown") or markdown)
+
+        paths["phase5_payload"].write_text(
+            json.dumps(
+                phase5_payload,
+                ensure_ascii=False,
+                indent=2,
+                default=str,
+            ),
+            encoding="utf-8",
+        )
+        paths["phase5_markdown"].write_text(markdown, encoding="utf-8")
+
+        scope_manifest = (
+            scoped_runtime.get("scope_manifest")
+            if isinstance(scoped_runtime, dict)
+            else {}
+        ) or {}
+
+        state_of_art_version = archive_conversation_state_of_art(
+            project=project,
+            session_id=guided_session_id,
+            markdown=markdown,
+            payload=phase5_payload,
+            editorial_report=editorial_result.get("report") or {},
+            scope_manifest=scope_manifest,
+        )
+    # END ENNOSCHOLAR_CIR_EDITORIAL_VALIDATOR_V4
     readonly_fingerprints_after = {
         "selection_sha256": _sha256(paths["selection_payload"]),
         "article_cards_sha256": _sha256(paths["article_cards_payload"]),
@@ -1236,7 +1393,8 @@ def generate_state_of_art_after_consultant_selection(
     print("=" * 90)
 
     summary = state_of_art_view.get("summary") or {}
-    runtime_cards_path.unlink(missing_ok=True)
+    if not guided_session_id:
+        runtime_cards_path.unlink(missing_ok=True)
     return {
         "ok": bool(phase5_payload.get("ok")) and bool(markdown),
         "project": {
@@ -1280,6 +1438,18 @@ def generate_state_of_art_after_consultant_selection(
         "markdown": markdown,
         "state_of_art_view": state_of_art_view,
         "report": state_of_art_view,
+        "guided_session_id": guided_session_id,
+        "state_of_art_version": state_of_art_version,
+        "editorial_validation": (
+            editorial_result.get("report")
+            if isinstance(editorial_result, dict)
+            else None
+        ),
+        "scope_lock": (
+            scoped_runtime.get("scope_manifest")
+            if isinstance(scoped_runtime, dict)
+            else None
+        ),
         "paths": {
             "selection_payload": str(paths["selection_payload"]),
             "article_cards_payload": article_cards_db_uri,

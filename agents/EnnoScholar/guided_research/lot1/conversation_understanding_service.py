@@ -156,6 +156,70 @@ class _ActionPayload(BaseModel):
     search_requests: list[_SearchRequestPayload] = Field(default_factory=list)
 
 
+def _scope_action_payload(
+    intent: ConsultantIntent,
+    payload: _ActionPayload,
+    *,
+    allow_standalone_context: bool = False,
+) -> _ActionPayload:
+    """Conserve uniquement les arguments autorisés par l'intention retenue.
+
+    Le schéma d'action est commun à toutes les capacités. Certains fournisseurs
+    remplissent malgré tout des champs hors intention, surtout lorsqu'une phrase
+    combine un plan et une rédaction future. L'intention structurée reste la
+    source d'autorité : ces champs sont ignorés au lieu de faire échouer le tour,
+    sans jamais pouvoir devenir exécutables.
+    """
+
+    if intent in {
+        ConsultantIntent.PROPOSE_PLAN,
+        ConsultantIntent.ADD_TOPIC,
+        ConsultantIntent.REMOVE_TOPIC,
+        ConsultantIntent.CHANGE_PLAN,
+    }:
+        return _ActionPayload(plan=list(payload.plan or []))
+
+    if intent == ConsultantIntent.DESCRIBE_REQUIREMENTS:
+        return _ActionPayload(
+            topics=list(payload.topics or []),
+            constraints=list(payload.constraints or []),
+            verrous=(
+                list(payload.verrous or [])
+                if allow_standalone_context
+                else []
+            ),
+            project_brief=(
+                payload.project_brief
+                if allow_standalone_context
+                else None
+            ),
+            review_scope=(
+                payload.review_scope
+                if allow_standalone_context
+                else "auto"
+            ),
+        )
+
+    if intent == ConsultantIntent.ADD_VERROU_AND_SEARCH:
+        return _ActionPayload(
+            verrous=list(payload.verrous or []),
+            project_brief=payload.project_brief,
+            review_scope=payload.review_scope,
+            search_requests=list(payload.search_requests or []),
+        )
+
+    if intent in {
+        ConsultantIntent.SEARCH_MORE,
+        ConsultantIntent.SEARCH_ALTERNATIVE,
+        ConsultantIntent.REPLACE_SOURCE,
+    }:
+        return _ActionPayload(
+            search_requests=list(payload.search_requests or []),
+        )
+
+    return _ActionPayload()
+
+
 def _clean(value: Any, limit: int = 16000) -> str:
     return re.sub(r"\s+", " ", str(value or "").replace("\x00", " ")).strip()[:limit]
 
@@ -262,6 +326,12 @@ def _compact_project_context(value: Mapping[str, Any]) -> dict[str, Any]:
         "scientific_context": _clean(value.get("scientific_context"), 4200),
         "validated_article_cards": cards,
         "current_verrous": current_verrous,
+        "active_verrou_ids": [
+            _clean(value, 120)
+            for value in (value.get("active_verrou_ids") or [])
+            if _clean(value, 120)
+        ],
+        "review_scope": _clean(value.get("review_scope"), 40),
         "operating_mode": _clean(value.get("operating_mode"), 80),
         "standalone_project_brief": (
             dict(value.get("standalone_project_brief") or {})
@@ -313,6 +383,236 @@ def _compact_plan_snapshot(value: Any) -> list[dict[str, Any]]:
     return output
 
 
+
+# -----------------------------------------------------------------------------
+# V2 — Grounding conversationnel des références au plan
+# -----------------------------------------------------------------------------
+
+_PLAN_ORDINALS: dict[str, int] = {
+    "premier": 1, "premiere": 1, "1er": 1, "1ere": 1,
+    "deuxieme": 2, "second": 2, "seconde": 2, "2eme": 2,
+    "troisieme": 3, "3eme": 3,
+    "quatrieme": 4, "4eme": 4,
+    "cinquieme": 5, "5eme": 5,
+    "sixieme": 6, "6eme": 6,
+    "septieme": 7, "7eme": 7,
+    "huitieme": 8, "8eme": 8,
+    "neuvieme": 9, "9eme": 9,
+    "dixieme": 10, "10eme": 10,
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+}
+
+
+def _indexed_plan_rows(plan: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Ajoute un numéro d'affichage stable (1, 2, 3, 3.1...) au plan plat."""
+    rows: list[dict[str, Any]] = []
+    counters: list[int] = []
+    for raw in _compact_plan_snapshot(plan):
+        row = dict(raw)
+        level = max(1, int(row.get("level") or 1))
+        while len(counters) < level:
+            counters.append(0)
+        counters = counters[:level]
+        counters[-1] += 1
+        label = ".".join(str(value) for value in counters)
+        row["display_label"] = label
+        rows.append(row)
+    return rows
+
+
+def _indexed_plan_text(plan: list[dict[str, Any]]) -> str:
+    lines: list[str] = []
+    for row in _indexed_plan_rows(plan):
+        indent = "  " * (max(1, int(row.get("level") or 1)) - 1)
+        lines.append(
+            f"{indent}{row['display_label']} | section_id={_clean(row.get('section_id'), 120)} "
+            f"| title={_clean(row.get('title'), 320)}"
+        )
+    return "\n".join(lines)
+
+
+def _message_plan_labels(message: str) -> list[str]:
+    """Extrait uniquement les références structurelles explicitement formulées."""
+    normalized = unicodedata.normalize("NFKD", _clean(message, 12000).casefold())
+    normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    labels: list[str] = []
+
+    # section 3, partie 3.2, point 4, axe 2, chapitre 5...
+    for match in re.finditer(
+        r"\b(?:partie|section|sous[- ]?section|point|axe|chapitre|titre)\s+"
+        r"(\d{1,2}(?:\.\d{1,2})*)\b",
+        normalized,
+    ):
+        labels.append(match.group(1))
+
+    # la troisième partie / la deuxième section...
+    for word, number in _PLAN_ORDINALS.items():
+        if re.search(
+            rf"\b(?:partie|section|point|axe|chapitre)\s+{re.escape(word)}\b|"
+            rf"\b{re.escape(word)}\s+(?:partie|section|point|axe|chapitre)\b",
+            normalized,
+        ):
+            labels.append(str(number))
+
+    # Déduplication en conservant l'ordre du message.
+    return list(dict.fromkeys(labels))
+
+
+def _resolve_explicit_plan_targets(
+    message: str,
+    plan: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    by_label = {
+        str(row.get("display_label") or ""): row
+        for row in _indexed_plan_rows(plan)
+    }
+    return [by_label[label] for label in _message_plan_labels(message) if label in by_label]
+
+
+def _looks_like_structural_plan_edit(message: str) -> bool:
+    normalized = unicodedata.normalize("NFKD", _clean(message, 12000).casefold())
+    normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    markers = (
+        "modif", "change", "transform", "detail", "develop", "decompos", "decoup",
+        "reorganis", "structure", "sous section", "sous-section", "ajout", "ajoute",
+        "retire", "supprim", "enleve", "remplace", "deplace", "fusion",
+    )
+    return any(marker in normalized for marker in markers)
+
+
+def _looks_like_previous_edit_correction(message: str) -> bool:
+    normalized = unicodedata.normalize("NFKD", _clean(message, 12000).casefold())
+    normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    correction_markers = (
+        "non ", "pas la", "pas le", "au lieu", "je voulais", "j ai demande",
+        "je t ai demande", "tu as change", "tu as modifie", "corrige",
+    )
+    return any(marker in normalized for marker in correction_markers)
+
+
+def _ground_explicit_plan_edit_decision(
+    decision: _TurnDecision,
+    *,
+    consultant_message: str,
+    current_plan: list[dict[str, Any]],
+    history: list[dict[str, Any]],
+    project_context: Mapping[str, Any],
+) -> _TurnDecision:
+    """Sécurise les références explicites sans remplacer la compréhension LLM.
+
+    Le LLM reste responsable du sens général. Ce garde-fou n'intervient que lorsque
+    le consultant nomme sans ambiguïté une partie/section existante et formule une
+    modification structurelle. Il évite qu'une requête comme « transforme la partie 3
+    en sous-sections, pas la 5 » soit appliquée à une autre branche du plan.
+    """
+    targets = _resolve_explicit_plan_targets(consultant_message, current_plan)
+    if not targets or not _looks_like_structural_plan_edit(consultant_message):
+        return decision
+
+    classification = decision.classification
+    if classification.intent in {ConsultantIntent.UNKNOWN, ConsultantIntent.CONVERSE}:
+        classification.intent = ConsultantIntent.CHANGE_PLAN
+        classification.requested_actions = [ConsultantIntent.CHANGE_PLAN]
+        classification.forbidden_actions = [
+            action for action in (classification.forbidden_actions or [])
+            if action != ConsultantIntent.CHANGE_PLAN
+        ]
+        classification.needs_clarification = False
+        classification.corrected_message = _clean(consultant_message)
+        classification.extracted_text = _clean(consultant_message)
+        classification.classifier = (
+            f"{_clean(classification.classifier, 120) or 'llm'}+explicit_plan_grounding"
+        )
+
+    # Une correction explicite du DERNIER mauvais changement doit repartir du plan
+    # précédent afin de ne pas conserver les sous-sections créées au mauvais endroit.
+    if _looks_like_previous_edit_correction(consultant_message):
+        candidates = _plan_reference_candidates(
+            history=history,
+            project_context=project_context,
+        )
+        has_previous = len(candidates.get("recent") or []) > 1 or len(candidates.get("stored") or []) > 1
+        if has_previous:
+            decision.plan_reference = "previous"
+            classification.replace_current_plan = True
+        else:
+            decision.plan_reference = "current"
+            classification.replace_current_plan = False
+    elif decision.plan_reference == "none":
+        decision.plan_reference = "current"
+        classification.replace_current_plan = False
+
+    decision.plan_generation_mode = "none"
+    if decision.plan_document_scope == "none":
+        decision.plan_document_scope = "state_of_art"
+    return decision
+
+
+def _plan_target_consistency_error(
+    *,
+    consultant_message: str,
+    candidate_plan: list[dict[str, Any]],
+    grounding_plan: list[dict[str, Any]],
+    replace_current_plan: bool,
+) -> str:
+    """Refuse une réponse LLM rattachée à la mauvaise section explicite."""
+    targets = _resolve_explicit_plan_targets(consultant_message, grounding_plan)
+    if len(targets) != 1:
+        return ""
+
+    target = targets[0]
+    target_id = _clean(target.get("section_id"), 120)
+    target_title = _clean(target.get("title"), 320).casefold()
+    target_level = max(1, int(target.get("level") or 1))
+    normalized_message = unicodedata.normalize(
+        "NFKD", _clean(consultant_message, 12000).casefold()
+    )
+    normalized_message = "".join(
+        ch for ch in normalized_message if not unicodedata.combining(ch)
+    )
+    asks_children = bool(
+        re.search(r"\bsous[- ]?sections?\b", normalized_message)
+        or any(marker in normalized_message for marker in ("decompos", "decoup", "detaille en", "developpe en"))
+    )
+    if not asks_children:
+        return ""
+
+    rows = _compact_plan_snapshot(candidate_plan)
+    if not rows:
+        return "La modification demandée doit produire une structure de plan non vide."
+
+    # En remplacement complet, la section cible doit exister et avoir au moins un enfant.
+    # En delta local, un enfant rattaché au bon parent suffit.
+    children = [
+        row for row in rows
+        if _clean(row.get("parent_id"), 120) == target_id
+        and max(1, int(row.get("level") or 1)) == target_level + 1
+    ]
+    if not children:
+        return (
+            f"La demande vise explicitement la section {target.get('display_label')} "
+            f"« {target.get('title')} ». Les nouvelles sous-sections doivent avoir "
+            f"parent_id={target_id!r} et level={target_level + 1}. Ne modifie pas une autre partie."
+        )
+
+    # Si le modèle renvoie le parent lui-même, il doit bien s'agir de la cible.
+    parent_like = [
+        row for row in rows
+        if max(1, int(row.get("level") or 1)) == target_level
+        and not _clean(row.get("parent_id"), 120)
+    ]
+    if parent_like and not replace_current_plan:
+        wrong = [
+            row for row in parent_like
+            if _clean(row.get("section_id"), 120) not in {"", target_id}
+            and _clean(row.get("title"), 320).casefold() != target_title
+        ]
+        if wrong:
+            return "La modification locale ne doit pas créer ou réécrire une autre section principale."
+    return ""
+
+
 def _plan_snapshot_from_turn(turn: Any) -> dict[str, Any] | None:
     metadata = turn.metadata if isinstance(turn.metadata, Mapping) else {}
     contract = metadata.get("contract")
@@ -331,7 +631,7 @@ def _plan_snapshot_from_turn(turn: Any) -> dict[str, Any] | None:
 def _recent_history(session: GuidedResearchSessionData) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     snapshot_indexes: list[int] = []
-    for turn in session.messages[-10:]:
+    for turn in session.messages[-16:]:
         row: dict[str, Any] = {
             "role": str(turn.role),
             "content": _clean(turn.content, 900),
@@ -345,7 +645,10 @@ def _recent_history(session: GuidedResearchSessionData) -> list[dict[str, Any]]:
 
     # Suffisant pour résoudre « le premier plan » et « le plan précédent »
     # sans recopier chaque version intermédiaire dans le prompt.
-    keep_indexes = set(snapshot_indexes[:1] + snapshot_indexes[-1:])
+    # Conserver le premier plan et les trois versions les plus récentes.
+    # Cela permet de comprendre naturellement « le plan précédent »,
+    # « non, je voulais la partie 3, pas la 5 », etc.
+    keep_indexes = set(snapshot_indexes[:1] + snapshot_indexes[-3:])
     for index in snapshot_indexes:
         if index not in keep_indexes:
             rows[index].pop("plan_snapshot", None)
@@ -556,6 +859,20 @@ def _normalize_turn_decision(decision: _TurnDecision) -> _TurnDecision:
     if intent in _SEARCH_PAYLOAD_INTENTS:
         classification.explicit_research_command = True
 
+    if classification.verrou_scope == "global":
+        classification.target_verrou_ids = []
+    elif classification.verrou_scope == "per_verrou":
+        classification.target_verrou_ids = list(
+            dict.fromkeys(
+                _clean(value, 300)
+                for value in (classification.target_verrou_ids or [])
+                if _clean(value, 300)
+            )
+        )
+    else:
+        classification.verrou_scope = "unchanged"
+        classification.target_verrou_ids = []
+
     return decision
 
 
@@ -677,6 +994,16 @@ def _decision_consistency_error(decision: _TurnDecision) -> str:
     ):
         return "La version précise du plan doit être indiquée."
     classification = decision.classification
+    if (
+        classification.intent == ConsultantIntent.ADD_VERROU_AND_SEARCH
+        and not classification.explicit_new_verrou_declaration
+    ):
+        return (
+            "ADD_VERROU_AND_SEARCH exige que le tour actuel déclare "
+            "explicitement un verrou nouveau ou manquant. La sélection d'un "
+            "ou de plusieurs verrous déjà présents dans current_verrous ne "
+            "crée aucun verrou."
+        )
     if (
         classification.writing_source_scope == "explicit_selection"
         and not classification.writing_source_identifiers
@@ -1070,6 +1397,17 @@ SÉMANTIQUE DE DÉCISION
   ou plusieurs verrous qu'il déclare lui-même : le serveur les conservera dans la
   conversation sans créer de faux diagnostic. Une simple demande de section reste
   ADD_TOPIC.
+- En operating_mode=diagnostic_backed, current_verrous est le catalogue des verrous
+  scientifiques déjà retenus pour le projet. Une demande portant sur un verrou de ce
+  catalogue, sur plusieurs d'entre eux ou sur leur totalité réutilise ce catalogue :
+  elle ne crée aucun verrou et ne lance aucune recherche si le consultant ne la demande
+  pas. Le nombre de verrous mentionné décrit la portée attendue, pas un ajout.
+- Si le consultant demande de préparer ou rédiger un état de l'art sur les verrous
+  existants alors que PLAN COURANT est vide, sélectionne PROPOSE_PLAN comme première
+  action sûre. Ajoute START_WRITING dans requested_actions seulement si la rédaction
+  est explicitement demandée ; elle restera différée jusqu'à la validation du plan.
+  Si un plan exploitable existe déjà et que la rédaction est demandée, sélectionne
+  START_WRITING.
 - En standalone_chat, lorsqu'un verrou figure déjà dans current_verrous et que le
   consultant demande de rechercher « sur ce verrou », « sur le verrou enregistré »
   ou sur son identifiant/titre, choisis SEARCH_MORE. Ne recrée pas le verrou et ne
@@ -1086,6 +1424,17 @@ SÉMANTIQUE DE DÉCISION
 
 RÈGLES
 - Une correction ou un rejet dans le tour actuel remplace l'objectif antérieur concerné.
+- Quand le consultant référence « partie 3 », « section 3 », « 3.2 », « la troisième partie »
+  ou le titre exact d'une section, résous cette référence contre PLAN COURANT INDEXÉ et
+  conserve exactement son section_id comme cible. Ne choisis jamais une autre section
+  parce qu'elle contient des mots sémantiquement proches.
+- Les pronoms « cette partie », « cette section », « celle-ci », « la précédente » se
+  résolvent d'abord avec le dernier échange pertinent et les snapshots de plan récents.
+- Si le consultant corrige explicitement le dernier changement (« non », « pas la 5 mais
+  la 3 », « tu as changé la mauvaise section », « je voulais la partie X »), il s'agit
+  d'une correction du dernier edit : utilise plan_reference=previous et
+  replace_current_plan=true afin de repartir de la version antérieure puis appliquer
+  uniquement la correction demandée.
 - Une ancienne réponse assistant, un article ou une lacune du projet n'est jamais une
   demande actuelle. N'en parle pas spontanément.
 - requested_actions contient seulement les capacités effectivement demandées maintenant,
@@ -1101,6 +1450,10 @@ RÈGLES
   de revue est globale. Pour un seul verrou nommé, elle est per_verrou.
 - explicit_write_command, explicit_plan_approval et explicit_research_command ne valent
   true que si le tour actuel autorise réellement l'action correspondante.
+- explicit_new_verrou_declaration vaut true uniquement lorsque le tour actuel affirme
+  explicitement qu'un verrou nouveau ou manquant doit être ajouté. Il reste false pour
+  une demande concernant un, plusieurs ou tous les verrous déjà présents dans
+  current_verrous. ADD_VERROU_AND_SEARCH est invalide lorsque ce booléen vaut false.
 - replace_current_plan indique que le plan demandé remplace la structure courante.
   Il reste false pour un ajout ou une modification locale, même si l'intention
   principale est CHANGE_PLAN.
@@ -1131,6 +1484,13 @@ RÈGLES
   Par exemple, « les 11 articles qu'on avait pour les verrous, sans les articles
   de recherche » signifie baseline_verrou_corpus, requested_source_count=11 et
   use_current_sources_only=true.
+- verrou_scope décrit uniquement la portée explicitement demandée dans le tour
+  actuel : per_verrou pour un ou plusieurs verrous nommés comme seule cible,
+  global pour « tous les verrous », unchanged si le tour ne change pas la portée.
+- Pour per_verrou, target_verrou_ids contient les ID exacts lus dans current_verrous.
+  « verrou 1 » désigne le premier élément de cette liste, « verrou 2 » le deuxième,
+  etc. Un titre cité est résolu vers l'ID du titre correspondant. N'invente jamais
+  d'ID et ne confonds pas le numéro d'affichage avec l'ID technique.
 - extracted_text cite le fragment du tour actuel qui fonde l'intention.
 - assistant_message répond naturellement et proportionnellement au tour actuel. Ne récite
   pas l'état du projet et n'annonce aucune action non sélectionnée.
@@ -1145,7 +1505,10 @@ CONTEXTE RÉCENT
 MÉMOIRE VALIDÉE
 {memory.model_dump_json()}
 
-PLAN COURANT
+PLAN COURANT INDEXÉ — SOURCE DE VÉRITÉ POUR « PARTIE/SECTION N »
+{_indexed_plan_text(current_plan)}
+
+PLAN COURANT JSON
 {json.dumps(current_plan, ensure_ascii=False)}
 
 CONTEXTE PROJET COMPACT
@@ -1205,6 +1568,16 @@ Produis uniquement les arguments nécessaires à cette intention :
   replace_current_plan=false, renvoie uniquement les sections ajoutées ou modifiées.
   Pour CHANGE_PLAN avec replace_current_plan=true et pour REMOVE_TOPIC, renvoie
   l'intégralité de la structure finale.
+- IMPORTANT — références structurelles : lorsqu'un consultant nomme une partie/section
+  par son numéro ou son titre, PLAN COURANT INDEXÉ / PLAN DE RÉFÉRENCE INDEXÉ donne
+  l'identité exacte de la cible. Ne déplace jamais la demande vers une autre partie.
+- Si la demande transforme une section existante en sous-sections, chaque nouvelle
+  sous-section doit avoir parent_id égal EXACTEMENT au section_id de la section cible
+  et level égal au level du parent + 1. Ne crée pas les sous-sections sous une autre
+  section même si son titre contient des concepts proches.
+- Une correction « pas X, mais Y » annule l'édition précédente incorrecte : quand
+  plan_reference=previous, repars du PLAN DE RÉFÉRENCE RÉSOLU complet et applique la
+  modification à Y seulement.
 - Pour plan_document_scope=state_of_art, chaque section de fond doit analyser la
   littérature existante : familles de méthodes, données, résultats comparés,
   limites, contradictions, insuffisances et verrous. Exclue les sections consacrées
@@ -1244,10 +1617,16 @@ Produis uniquement les arguments nécessaires à cette intention :
   Ne concatène jamais tous les axes dans une seule requête surchargée.
 - Tous les tableaux sans rapport avec l'intention restent vides.
 
-PLAN COURANT
+PLAN COURANT INDEXÉ
+{_indexed_plan_text(current_plan)}
+
+PLAN COURANT JSON
 {json.dumps(current_plan, ensure_ascii=False)}
 
-PLAN DE RÉFÉRENCE RÉSOLU
+PLAN DE RÉFÉRENCE INDEXÉ
+{_indexed_plan_text(reference_plan)}
+
+PLAN DE RÉFÉRENCE RÉSOLU JSON
 {json.dumps(reference_plan, ensure_ascii=False)}
 
 HISTORIQUE RÉCENT, AVEC SNAPSHOTS DE PLANS SI DISPONIBLES
@@ -1290,6 +1669,13 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
                 max_output_tokens=2200,
                 consistency_check=_decision_consistency_error,
             )
+            decision = _ground_explicit_plan_edit_decision(
+                decision,
+                consultant_message=consultant_message,
+                current_plan=compact_plan,
+                history=history,
+                project_context=compact_context,
+            )
             decision = _normalize_turn_decision(decision)
             decision.classification = _ground_writing_source_policy(
                 consultant_message,
@@ -1311,8 +1697,13 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
 
             action = _ActionPayload()
             action_attempts: list[dict[str, Any]] = []
+            reference_plan: list[dict[str, Any]] = []
             intent = decision.classification.intent
             if intent in _PLAN_PAYLOAD_INTENTS | _SEARCH_PAYLOAD_INTENTS:
+                allow_standalone_context = (
+                    _clean(compact_context.get("operating_mode"), 80)
+                    == "standalone_chat"
+                )
                 reference_plan = _resolve_plan_reference(
                     decision=decision,
                     history=history,
@@ -1336,11 +1727,12 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
                     max_output_tokens=4200,
                     consistency_check=lambda payload: _payload_consistency_error(
                         intent,
-                        payload,
-                        allow_standalone_context=(
-                            _clean(compact_context.get("operating_mode"), 80)
-                            == "standalone_chat"
+                        _scope_action_payload(
+                            intent,
+                            payload,
+                            allow_standalone_context=allow_standalone_context,
                         ),
+                        allow_standalone_context=allow_standalone_context,
                         reference_plan=reference_plan,
                         require_reference_coverage=(
                             decision.plan_reference
@@ -1352,7 +1744,23 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
                             and decision.plan_generation_mode == "alternative"
                         ),
                         current_plan=compact_plan,
+                    ) or _plan_target_consistency_error(
+                        consultant_message=consultant_message,
+                        candidate_plan=_scope_action_payload(
+                            intent,
+                            payload,
+                            allow_standalone_context=allow_standalone_context,
+                        ).plan,
+                        grounding_plan=(reference_plan or compact_plan),
+                        replace_current_plan=bool(
+                            decision.classification.replace_current_plan
+                        ),
                     ),
+                )
+                action = _scope_action_payload(
+                    intent,
+                    action,
+                    allow_standalone_context=allow_standalone_context,
                 )
 
             return ConversationUnderstanding(
@@ -1377,7 +1785,19 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
                 ],
                 memory=decision.memory,
                 interpreter={
-                    "architecture": "decision_then_action_v1",
+                    "architecture": "decision_then_action_v2_grounded_plan",
+                    "explicit_plan_labels": _message_plan_labels(consultant_message),
+                    "resolved_plan_targets": [
+                        {
+                            "display_label": row.get("display_label"),
+                            "section_id": row.get("section_id"),
+                            "title": row.get("title"),
+                        }
+                        for row in _resolve_explicit_plan_targets(
+                            consultant_message,
+                            reference_plan or compact_plan,
+                        )
+                    ],
                     "decision_attempts": decision_attempts,
                     "action_attempts": action_attempts,
                     "prompt_chars": len(decision_prompt),

@@ -588,7 +588,6 @@ export function EnnoScholarPlanChat({
   onCorpusChanged,
   onGenerate,
   onRefreshDraft,
-  draftMarkdown = "",
   generating = false,
   generationError = null,
   immersive = false,
@@ -606,7 +605,7 @@ export function EnnoScholarPlanChat({
   const [decidingId, setDecidingId] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [artifactOpen, setArtifactOpen] = useState(Boolean(draftMarkdown.trim()))
+  const [artifactOpen, setArtifactOpen] = useState(false)
   const [corpusOpen, setCorpusOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [preparingCorpus, setPreparingCorpus] = useState(false)
@@ -614,13 +613,14 @@ export function EnnoScholarPlanChat({
   const [deletingSessionId, setDeletingSessionId] = useState("")
   const [operatingMode, setOperatingMode] = useState("")
   const [sessionDraftMarkdown, setSessionDraftMarkdown] = useState("")
-  const previousHasDraft = useRef(Boolean(draftMarkdown.trim()))
+  const previousHasDraft = useRef(false)
   const messagesViewportRef = useRef<HTMLDivElement | null>(null)
 
   const chatOnly = operatingMode === "standalone_chat"
-  const effectiveDraftMarkdown = chatOnly
-    ? sessionDraftMarkdown
-    : sessionDraftMarkdown || draftMarkdown
+  // L'artefact affiché appartient strictement à la conversation ouverte.
+  // Le dernier document global du projet ne doit jamais apparaître comme le
+  // brouillon d'une nouvelle conversation.
+  const effectiveDraftMarkdown = sessionDraftMarkdown
   const hasDraft = Boolean(effectiveDraftMarkdown.trim())
   const canSend = Boolean(sessionId && input.trim() && !loading && !generating)
   const wordCount = useMemo(

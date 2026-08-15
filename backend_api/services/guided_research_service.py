@@ -137,7 +137,7 @@ def attach_uploaded_article_to_session(
         if row.get("consultant_decision") == "accepted"
     ]
     write_json(
-        agent._sources_path(project),
+        agent._session_sources_path(project, session_id),
         {
             "ok": True,
             "payload_type": "guided_accepted_sources_v2_fulltext_gated",
@@ -175,6 +175,22 @@ def record_guided_pipeline_result(
         )
 
     if result.get("ok"):
+        # BEGIN ENNOSCHOLAR_SESSION_VERSION_HISTORY_V4
+        current_snapshot = agent.repository.snapshot(db, session_id)
+        current_context = dict(current_snapshot.get("context") or {})
+        version_history = [
+            dict(row)
+            for row in (current_context.get("state_of_art_versions") or [])
+            if isinstance(row, dict)
+        ]
+        new_version = result.get("state_of_art_version")
+        if isinstance(new_version, dict) and new_version.get("version_id"):
+            if not any(
+                row.get("version_id") == new_version.get("version_id")
+                for row in version_history
+            ):
+                version_history.append(dict(new_version))
+        # END ENNOSCHOLAR_SESSION_VERSION_HISTORY_V4
         agent.repository.update(
             db,
             session_id,
@@ -190,6 +206,12 @@ def record_guided_pipeline_result(
             context_updates={
                 "pipeline_execution_requested": False,
                 "standalone_full_pipeline_completed": True,
+                "state_of_art_versions": version_history,
+                "latest_state_of_art_version": (
+                    dict(new_version)
+                    if isinstance(new_version, dict)
+                    else current_context.get("latest_state_of_art_version")
+                ),
             },
         )
     else:
@@ -418,7 +440,7 @@ def decide_guided_research_sources(
     from agents.EnnoScholar.consultant_plan_service import write_json
 
     write_json(
-        agent._sources_path(project),
+        agent._session_sources_path(project, session_id),
         {
             "ok": True,
             "payload_type": "guided_accepted_sources_v2_fulltext_gated",

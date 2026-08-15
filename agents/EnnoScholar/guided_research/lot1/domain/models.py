@@ -170,11 +170,18 @@ class IntentClassification(BaseModel):
     rationale: str = ""
     target_topic: str | None = None
     target_source_id: str | None = None
+    target_verrou_ids: list[str] = Field(default_factory=list)
+    verrou_scope: Literal[
+        "unchanged",
+        "per_verrou",
+        "global",
+    ] = "unchanged"
     requested_actions: list[ConsultantIntent] = Field(default_factory=list)
     forbidden_actions: list[ConsultantIntent] = Field(default_factory=list)
     explicit_write_command: bool = False
     explicit_plan_approval: bool = False
     explicit_research_command: bool = False
+    explicit_new_verrou_declaration: bool = False
     replace_current_plan: bool = False
     use_current_sources_only: bool = False
     writing_source_scope: Literal[
@@ -208,6 +215,7 @@ class IntentClassification(BaseModel):
         "forbidden_actions",
         "context_references",
         "writing_source_identifiers",
+        "target_verrou_ids",
         mode="before",
     )
     @classmethod

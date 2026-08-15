@@ -1760,6 +1760,24 @@ def _run_state_of_art_full_pipeline(
 ):
     project = get_project_for_user(db, project_id, current_user)
 
+    # ENNOSMART_DEV_WALLET_RUN_PREFLIGHT_V1
+    try:
+        from services.ennosmart_dev_wallet_service import (
+            assert_dev_budget_for_state_of_art,
+        )
+
+        assert_dev_budget_for_state_of_art(
+            db=db,
+            project=project,
+        )
+    except Exception as budget_exc:
+        if type(budget_exc).__name__ == "BudgetLimitExceeded":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(budget_exc),
+            ) from budget_exc
+        raise
+
     latest_run = _latest_scholar_run_for_project(db, project.id)
     if latest_run is not None:
         run_articles = (
@@ -1767,49 +1785,149 @@ def _run_state_of_art_full_pipeline(
             .filter(Article.scholar_run_id == latest_run.id)
             .all()
         )
-        pending_statuses = {"", "NOT_CHECKED", "EXTRACTION_QUEUED", "EXTRACTION_RUNNING"}
-        pending_count = 0
+        # BEGIN ENNOSCHOLAR_SCOPE_AWARE_PREFLIGHT_V4
+        if guided_session_id:
+            from services.ennoscholar_conversation_state_service import (
+                filter_article_orm_rows_for_session,
+            )
+            run_articles = filter_article_orm_rows_for_session(
+                db,
+                project,
+                guided_session_id,
+                run_articles,
+            )
+        # END ENNOSCHOLAR_SCOPE_AWARE_PREFLIGHT_V4
+
+
+        # V3 UX : la rédaction dépend uniquement du corpus explicitement
+        # gardé par le consultant. Les autres candidats du dernier ScholarRun
+        # peuvent continuer leur preflight sans bloquer le writer.
+        pending_statuses = {
+            "",
+            "NOT_CHECKED",
+            "ACCESS_CHECKING",
+            "MCP_SEARCHING",
+            "EXTRACTION_QUEUED",
+            "EXTRACTION_RUNNING",
+        }
+        kept_articles = [
+            article
+            for article in run_articles
+            if str(article.consultant_status or "").strip().casefold() == "garde"
+        ]
+
+        if not kept_articles:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Rédaction bloquée : aucun article n'est actuellement gardé "
+                    "dans le corpus consultant."
+                ),
+            )
+
+        pending_kept = []
         kept_without_fulltext = []
-        for article in run_articles:
-            source_json = article.source_json if isinstance(article.source_json, dict) else {}
+        for article in kept_articles:
+            source_json = (
+                article.source_json
+                if isinstance(article.source_json, dict)
+                else {}
+            )
             evidence = source_json.get("evidence_preflight")
             evidence = evidence if isinstance(evidence, dict) else {}
-            evidence_status = str(evidence.get("evidence_status") or "NOT_CHECKED").upper()
+            evidence_status = str(
+                evidence.get("evidence_status") or "NOT_CHECKED"
+            ).upper()
+
             if evidence_status in pending_statuses:
-                pending_count += 1
-            if article.consultant_status == "garde" and evidence_status != "FULLTEXT_READY":
+                pending_kept.append(article)
+            elif evidence_status != "FULLTEXT_READY":
                 kept_without_fulltext.append(article)
 
-        if pending_count:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    f"Rédaction bloquée : la vérification de {pending_count} article(s) "
-                    "est encore en cours. Les décisions consultant restent possibles."
-                ),
+        if pending_kept:
+            preview = " ; ".join(
+                str(article.title or f"Article {article.id}")[:140]
+                for article in pending_kept[:4]
             )
-        if kept_without_fulltext:
+            suffix = f" (+{len(pending_kept) - 4})" if len(pending_kept) > 4 else ""
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    f"Rédaction bloquée : {len(kept_without_fulltext)} article(s) gardé(s) "
-                    "n'ont pas encore de texte intégral extrait. Importez leur PDF ou "
-                    "retirez-les de la sélection avant la rédaction."
+                    f"Rédaction bloquée : {len(pending_kept)} article(s) gardé(s) "
+                    "sont encore en cours de vérification/extraction"
+                    + (f" : {preview}{suffix}." if preview else ".")
                 ),
             )
 
-    from services.ennoscholar_state_of_art_orchestrator import (
-        generate_state_of_art_after_consultant_selection,
-    )
+        if kept_without_fulltext:
+            preview = " ; ".join(
+                str(article.title or f"Article {article.id}")[:140]
+                for article in kept_without_fulltext[:4]
+            )
+            suffix = (
+                f" (+{len(kept_without_fulltext) - 4})"
+                if len(kept_without_fulltext) > 4
+                else ""
+            )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Rédaction bloquée : {len(kept_without_fulltext)} article(s) "
+                    "gardé(s) n'ont pas de texte intégral exploitable"
+                    + (f" : {preview}{suffix}. " if preview else ". ")
+                    + "Importez leur PDF autorisé ou retirez-les du corpus avant "
+                    "de relancer la rédaction."
+                ),
+            )
 
     try:
-        result = generate_state_of_art_after_consultant_selection(
-            db=db,
-            project=project,
-            force_phase3=force_phase3,
-            force_article_cards=force_article_cards,
-            enable_polish=enable_polish,
+        # Une rédaction demandée depuis le chat possède un contrat, un corpus,
+        # des checkpoints et des versions propres à sa conversation. Le graphe
+        # historique reconstruit encore ses chemins depuis la racine globale du
+        # projet ; l'utiliser ici ferait donc relire ou écraser les artefacts
+        # d'une autre conversation. Le pipeline conversationnel applique déjà
+        # l'isolation complète et reste la seule voie autorisée dans ce cas.
+        use_langgraph = (
+            _env_bool("ENNOSCHOLAR_LANGGRAPH_ENABLED", True)
+            and not guided_session_id
         )
+        if use_langgraph:
+            from services.ennoscholar_langgraph_state_of_art_service import (
+                run_state_of_art_langgraph,
+            )
+
+            result = run_state_of_art_langgraph(
+                db=db,
+                project=project,
+                force_phase3=force_phase3,
+                force_article_cards=force_article_cards,
+                enable_polish=enable_polish,
+                guided_session_id=guided_session_id,
+                user_id=getattr(current_user, "id", None),
+            )
+        else:
+            from services.ennoscholar_state_of_art_orchestrator import (
+                generate_state_of_art_after_consultant_selection,
+            )
+
+            result = generate_state_of_art_after_consultant_selection(
+                db=db,
+                project=project,
+                force_phase3=force_phase3,
+                force_article_cards=force_article_cards,
+                enable_polish=enable_polish,
+                guided_session_id=guided_session_id,
+            )
+        if guided_session_id and result.get("ok"):
+            from services.ennoscholar_conversation_state_service import (
+                assert_conversation_result_is_isolated,
+            )
+
+            assert_conversation_result_is_isolated(
+                project,
+                guided_session_id,
+                result,
+            )
         if guided_session_id:
             from services.guided_research_service import (
                 record_guided_pipeline_result,
@@ -1843,23 +1961,47 @@ def _run_state_of_art_full_pipeline(
                 "timeout",
             )
         )
+        empty_conversation_scope = "verrou_scope_no_article" in lowered
+        conversation_scope_violation = "conversation_scope_violation" in lowered
         failure = {
             "ok": False,
             "status": (
                 "writing_service_temporarily_unavailable"
                 if provider_unavailable
-                else "evidence_revision_required"
+                else (
+                    "conversation_scope_empty"
+                    if empty_conversation_scope
+                    else (
+                        "conversation_scope_violation"
+                        if conversation_scope_violation
+                        else "evidence_revision_required"
+                    )
+                )
             ),
             "assistant_message": (
                 "Le service de rédaction est momentanément saturé. Votre "
                 "corpus, votre plan et vos choix sont conservés ; relancez la "
                 "rédaction sans recommencer la recherche."
                 if provider_unavailable
-                else
-                "Je n'ai pas publié cette tentative, car certaines parties "
-                "doivent encore être mieux reliées aux publications validées. "
-                "Votre corpus et votre plan sont conservés ; vous pouvez "
-                "poursuivre directement dans le chat."
+                else (
+                    "Je n'ai trouvé aucune Article Card validée rattachée au "
+                    "périmètre scientifique de cette conversation. Le plan est "
+                    "conservé ; vérifiez le rattachement des publications au "
+                    "verrou demandé avant de relancer."
+                    if empty_conversation_scope
+                    else (
+                        "La tentative a été arrêtée pour protéger l'isolation de "
+                        "cette conversation : le document produit ne lui était "
+                        "pas correctement rattaché. Aucun autre état de l'art "
+                        "n'a été publié dans ce chat."
+                        if conversation_scope_violation
+                        else
+                        "Je n'ai pas publié cette tentative, car certaines parties "
+                        "doivent encore être mieux reliées aux publications validées. "
+                        "Votre corpus et votre plan sont conservés ; vous pouvez "
+                        "poursuivre directement dans le chat."
+                    )
+                )
             ),
             "retryable": True,
             "previous_draft_preserved": True,
@@ -1908,6 +2050,52 @@ def generate_scholar_state_of_art(
     )
 
 
+
+
+@router.get("/projects/{project_id}/scholar/dev-budget-status")
+def get_scholar_dev_budget_status(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Budget DEV local + estimation, sans appel LLM."""
+    project = get_project_for_user(
+        db,
+        project_id,
+        current_user,
+    )
+    from services.ennosmart_dev_wallet_service import (
+        get_dev_budget_status,
+    )
+
+    return get_dev_budget_status(
+        db=db,
+        project=project,
+    )
+
+
+@router.get("/projects/{project_id}/scholar/state-of-art/cost-estimate")
+def estimate_scholar_state_of_art_cost(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Estime le coût sans lancer aucun appel LLM."""
+    project = get_project_for_user(
+        db,
+        project_id,
+        current_user,
+    )
+    from services.ennoscholar_cost_service import (
+        estimate_state_of_art_cost,
+    )
+
+    return estimate_state_of_art_cost(
+        db=db,
+        project=project,
+    )
+
+
 @router.post("/projects/{project_id}/scholar/state-of-art/run-full")
 def run_full_scholar_state_of_art(
     project_id: int,
@@ -1931,6 +2119,118 @@ def run_full_scholar_state_of_art(
         current_user=current_user,
         guided_session_id=guided_session_id,
     )
+
+
+@router.get("/projects/{project_id}/scholar/state-of-art/workflow-status")
+def get_scholar_state_of_art_workflow_status(
+    project_id: int,
+    guided_session_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """État LangGraph/checkpoint sans lancer de rédaction ni appel LLM."""
+    project = get_project_for_user(db, project_id, current_user)
+    from services.ennoscholar_langgraph_state_of_art_service import (
+        get_state_of_art_workflow_status,
+    )
+
+    return get_state_of_art_workflow_status(
+        db=db,
+        project=project,
+        user_id=getattr(current_user, "id", None),
+        guided_session_id=guided_session_id,
+    )
+
+
+# BEGIN ENNOSCHOLAR_CONVERSATION_VERSIONING_V4
+@router.get(
+    "/projects/{project_id}/scholar/state-of-art/conversations/{session_id}/versions"
+)
+def list_scholar_conversation_state_of_art_versions(
+    project_id: int,
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_project_for_user(db, project_id, current_user)
+    from services.guided_research_service import get_guided_research_agent
+    from services.ennoscholar_conversation_state_service import list_conversation_versions
+
+    snapshot = get_guided_research_agent().repository.snapshot(db, session_id)
+    if int(snapshot.get("project_id") or 0) != int(project.id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation introuvable pour ce projet.",
+        )
+    versions = list_conversation_versions(project, session_id)
+    return {
+        "ok": True,
+        "project_id": int(project.id),
+        "session_id": session_id,
+        "versions_count": len(versions),
+        "versions": versions,
+    }
+
+
+@router.get(
+    "/projects/{project_id}/scholar/state-of-art/conversations/{session_id}/versions/{version_id}"
+)
+def get_scholar_conversation_state_of_art_version(
+    project_id: int,
+    session_id: str,
+    version_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_project_for_user(db, project_id, current_user)
+    from services.guided_research_service import get_guided_research_agent
+    from services.ennoscholar_conversation_state_service import get_conversation_version
+
+    snapshot = get_guided_research_agent().repository.snapshot(db, session_id)
+    if int(snapshot.get("project_id") or 0) != int(project.id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation introuvable pour ce projet.",
+        )
+    try:
+        result = get_conversation_version(project, session_id, version_id)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Version d'état de l'art introuvable.",
+        )
+    return {"ok": True, **result}
+# END ENNOSCHOLAR_CONVERSATION_VERSIONING_V4
+
+
+
+# BEGIN ENNOSCHOLAR_CONVERSATION_COST_ESTIMATE_V4
+@router.get(
+    "/projects/{project_id}/scholar/state-of-art/conversations/{session_id}/cost-estimate"
+)
+def get_scholar_conversation_cost_estimate(
+    project_id: int,
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_project_for_user(db, project_id, current_user)
+    from services.ennoscholar_conversation_state_service import (
+        estimate_conversation_cost,
+    )
+    try:
+        return estimate_conversation_cost(
+            db,
+            project,
+            session_id,
+        )
+    except PermissionError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation introuvable pour ce projet.",
+        )
+# END ENNOSCHOLAR_CONVERSATION_COST_ESTIMATE_V4
+
 
 # ============================================================
 # EnnoScholar — récupération légale sélective via MCP

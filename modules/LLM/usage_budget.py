@@ -5,6 +5,7 @@ import contextvars
 import csv
 import functools
 import json
+import math
 import os
 import re
 import threading
@@ -196,6 +197,468 @@ def compute_cost(model: Any, provider: Any, usage: Mapping[str, Any]) -> Dict[st
         "long_context_multiplier_applied": long_context,
     }
 
+# BEGIN ENNOSMART_COST_GUARD_V1
+class BudgetLimitExceeded(RuntimeError):
+    """Arrêt volontaire avant un nouvel appel LLM payant."""
+
+
+def _budget_hard_limit_usd() -> float:
+    return _safe_float(
+        os.getenv("ENNOSMART_BUDGET_HARD_LIMIT_USD", "0.35")
+    )
+
+
+def _budget_max_calls() -> int:
+    try:
+        return max(
+            0,
+            int(
+                os.getenv(
+                    "ENNOSMART_BUDGET_MAX_LLM_CALLS_PER_RUN",
+                    "0",
+                )
+            ),
+        )
+    except Exception:
+        return 0
+def _estimate_next_call_cost(
+    *,
+    llm_client: Any,
+    prompt: Any,
+    request_name: Any,
+    max_output_tokens: Any,
+) -> Dict[str, Any]:
+    provider = str(
+        getattr(llm_client, "provider", "unknown") or "unknown"
+    )
+    model_getter = getattr(
+        llm_client,
+        "_default_model_for_request",
+        None,
+    )
+    if callable(model_getter):
+        try:
+            model = str(model_getter(request_name) or "unknown")
+        except Exception:
+            model = str(
+                getattr(llm_client, "model_name", "unknown")
+            )
+    else:
+        model = str(
+            getattr(llm_client, "model_name", "unknown")
+        )
+
+    estimated_input = max(
+        1,
+        int(math.ceil(len(str(prompt or "")) / 3.6)),
+    )
+    try:
+        max_output = max(1, int(max_output_tokens or 1400))
+    except Exception:
+        max_output = 1400
+
+    reserve_ratio = _safe_float(
+        os.getenv(
+            "ENNOSMART_BUDGET_OUTPUT_RESERVE_RATIO",
+            "0.35",
+        )
+    )
+    reserve_ratio = min(1.0, max(0.10, reserve_ratio))
+    estimated_output = max(
+        64,
+        int(max_output * reserve_ratio),
+    )
+
+    usage = {
+        "input_tokens": estimated_input,
+        "uncached_input_tokens": estimated_input,
+        "cached_input_tokens": 0,
+        "output_tokens": estimated_output,
+        "total_tokens": estimated_input + estimated_output,
+    }
+    priced = compute_cost(model, provider, usage)
+    return {
+        "provider": provider,
+        "model": model,
+        "estimated_input_tokens": estimated_input,
+        "estimated_output_tokens": estimated_output,
+        "estimated_cost_usd": _safe_float(
+            priced.get("cost_usd")
+        ),
+        "price_known": bool(priced.get("price_known")),
+    }
+
+
+def get_current_budget_snapshot() -> Dict[str, Any]:
+    run = _CURRENT_RUN.get()
+    hard = _budget_hard_limit_usd()
+    if run is None:
+        return {
+            "active": False,
+            "cost_usd": 0.0,
+            "hard_limit_usd": hard,
+            "remaining_usd": hard if hard > 0 else None,
+        }
+    current = run.total_cost()
+    return {
+        "active": True,
+        "run_id": run.run_id,
+        "calls": len(run.events),
+        "cost_usd": current,
+        "hard_limit_usd": hard,
+        "remaining_usd": (
+            round(max(0.0, hard - current), 8)
+            if hard > 0
+            else None
+        ),
+    }
+# END ENNOSMART_COST_GUARD_V1
+
+
+
+# BEGIN ENNOSMART_DEV_WALLET_ENV_READER_V1
+_DEV_WALLET_ENV_CACHE: Dict[str, str] | None = None
+
+
+def _dev_wallet_env_values() -> Dict[str, str]:
+    global _DEV_WALLET_ENV_CACHE
+    if _DEV_WALLET_ENV_CACHE is not None:
+        return dict(_DEV_WALLET_ENV_CACHE)
+
+    merged: Dict[str, str] = {}
+    root = _root()
+
+    for path in (
+        root / "backend_api" / ".env",
+        root / ".env",
+    ):
+        if not path.exists():
+            continue
+        try:
+            for raw_line in path.read_text(
+                encoding="utf-8",
+                errors="ignore",
+            ).splitlines():
+                line = raw_line.strip()
+                if (
+                    not line
+                    or line.startswith("#")
+                    or "=" not in line
+                ):
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key:
+                    merged[key] = value
+        except Exception:
+            continue
+
+    _DEV_WALLET_ENV_CACHE = merged
+    return dict(merged)
+
+
+def _dev_wallet_env(name: str, default: Any = "") -> str:
+    process_value = os.getenv(name)
+    if process_value is not None:
+        return str(process_value).strip()
+
+    file_value = _dev_wallet_env_values().get(name)
+    if file_value is not None:
+        return str(file_value).strip()
+
+    return str(default).strip()
+
+
+def reload_dev_wallet_config() -> Dict[str, str]:
+    global _DEV_WALLET_ENV_CACHE
+    _DEV_WALLET_ENV_CACHE = None
+    return _dev_wallet_env_values()
+# END ENNOSMART_DEV_WALLET_ENV_READER_V1
+
+# BEGIN ENNOSMART_DEV_WALLET_V1
+def _dev_wallet_enabled() -> bool:
+    return str(
+        _dev_wallet_env("ENNOSMART_DEV_WALLET_ENABLED", "0")
+    ).strip().casefold() in {"1", "true", "yes", "oui", "on"}
+
+
+def _dev_wallet_float(name: str, default: float) -> float:
+    try:
+        return max(0.0, float(str(_dev_wallet_env(name, default)).strip()))
+    except Exception:
+        return default
+
+
+def _dev_wallet_root() -> Path:
+    root = _root() / "storage" / "budget_control"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _dev_wallet_ledger_path() -> Path:
+    return _dev_wallet_root() / "global_llm_ledger.jsonl"
+
+
+def _dev_wallet_parse_time(value: Any) -> Optional[datetime]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _dev_wallet_baseline() -> Optional[datetime]:
+    return _dev_wallet_parse_time(
+        _dev_wallet_env("ENNOSMART_DEV_WALLET_BASELINE_AT")
+    )
+
+
+def _dev_wallet_read_events() -> list[Dict[str, Any]]:
+    path = _dev_wallet_ledger_path()
+    if not path.exists():
+        return []
+    baseline = _dev_wallet_baseline()
+    rows: list[Dict[str, Any]] = []
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    row = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                when = _dev_wallet_parse_time(row.get("timestamp"))
+                if baseline and when and when < baseline:
+                    continue
+                rows.append(row)
+    except Exception:
+        return []
+    return rows
+
+
+def get_dev_wallet_snapshot() -> Dict[str, Any]:
+    enabled = _dev_wallet_enabled()
+    start = _dev_wallet_float("ENNOSMART_DEV_WALLET_START_USD", 17.0)
+    reserve = _dev_wallet_float("ENNOSMART_DEV_WALLET_RESERVE_USD", 5.0)
+    daily_limit = _dev_wallet_float(
+        "ENNOSMART_DEV_WALLET_DAILY_LIMIT_USD", 2.0
+    )
+    low_warn = _dev_wallet_float(
+        "ENNOSMART_DEV_WALLET_LOW_WARN_USD", 8.0
+    )
+
+    rows = _dev_wallet_read_events()
+    spent = round(
+        sum(_safe_float(row.get("cost_usd")) for row in rows),
+        8,
+    )
+
+    today = datetime.now(timezone.utc).date()
+    spent_today = 0.0
+    for row in rows:
+        when = _dev_wallet_parse_time(row.get("timestamp"))
+        if when is not None and when.astimezone(timezone.utc).date() == today:
+            spent_today += _safe_float(row.get("cost_usd"))
+    spent_today = round(spent_today, 8)
+
+    estimated_balance = round(max(0.0, start - spent), 8)
+    spendable = round(max(0.0, estimated_balance - reserve), 8)
+    daily_remaining = (
+        round(max(0.0, daily_limit - spent_today), 8)
+        if daily_limit > 0
+        else spendable
+    )
+
+    return {
+        "enabled": enabled,
+        "mode": "local_dev_ledger",
+        "starting_balance_usd": start,
+        "baseline_at": _dev_wallet_env("ENNOSMART_DEV_WALLET_BASELINE_AT"),
+        "tracked_spend_usd": spent,
+        "tracked_spend_today_usd": spent_today,
+        "estimated_openai_balance_usd": estimated_balance,
+        "protected_reserve_usd": reserve,
+        "spendable_remaining_usd": spendable,
+        "daily_limit_usd": daily_limit,
+        "daily_remaining_usd": daily_remaining,
+        "low_balance_warning": estimated_balance <= low_warn,
+        "calls_tracked": len(rows),
+        "ledger_path": str(_dev_wallet_ledger_path()),
+        "authoritative_openai_balance": False,
+        "warning": (
+            "Estimation locale EnnoSmart uniquement. Toute dépense OpenAI "
+            "faite hors de ce backend n'est pas automatiquement déduite."
+        ),
+    }
+
+
+def _dev_wallet_estimated_call_cost(
+    llm_client: Any,
+    *,
+    prompt: Any,
+    request_name: Any,
+    max_output_tokens: Any,
+) -> Dict[str, Any]:
+    estimator = globals().get("_estimate_next_call_cost")
+    if callable(estimator):
+        result = estimator(
+            llm_client=llm_client,
+            prompt=prompt,
+            request_name=request_name,
+            max_output_tokens=max_output_tokens,
+        )
+        if isinstance(result, dict):
+            return result
+
+    unknown = _dev_wallet_float(
+        "ENNOSMART_DEV_WALLET_UNKNOWN_CALL_RESERVE_USD", 0.10
+    )
+    return {
+        "provider": str(
+            getattr(llm_client, "provider", "unknown") or "unknown"
+        ),
+        "model": str(
+            getattr(llm_client, "model_name", "unknown") or "unknown"
+        ),
+        "price_known": False,
+        "estimated_cost_usd": unknown,
+    }
+
+
+def _dev_wallet_preflight_call(
+    llm_client: Any,
+    *,
+    prompt: Any,
+    request_name: Any,
+    max_output_tokens: Any,
+) -> Dict[str, Any]:
+    snapshot = get_dev_wallet_snapshot()
+    if not snapshot.get("enabled"):
+        return snapshot
+
+    estimate = _dev_wallet_estimated_call_cost(
+        llm_client,
+        prompt=prompt,
+        request_name=request_name,
+        max_output_tokens=max_output_tokens,
+    )
+    next_cost = _safe_float(estimate.get("estimated_cost_usd"))
+    if not estimate.get("price_known"):
+        next_cost = max(
+            next_cost,
+            _dev_wallet_float(
+                "ENNOSMART_DEV_WALLET_UNKNOWN_CALL_RESERVE_USD",
+                0.10,
+            ),
+        )
+
+    if next_cost > _safe_float(snapshot.get("spendable_remaining_usd")):
+        raise BudgetLimitExceeded(
+            "Portefeuille DEV protégé : ce nouvel appel pourrait entamer "
+            f"la réserve de ${snapshot.get('protected_reserve_usd'):.2f}. "
+            f"Solde EnnoSmart estimé="
+            f"${snapshot.get('estimated_openai_balance_usd'):.4f}, "
+            f"prochain appel≈${next_cost:.4f}."
+        )
+
+    daily_remaining = _safe_float(snapshot.get("daily_remaining_usd"))
+    if next_cost > daily_remaining:
+        raise BudgetLimitExceeded(
+            "Limite journalière DEV atteinte : "
+            f"reste aujourd'hui=${daily_remaining:.4f}, "
+            f"prochain appel≈${next_cost:.4f}."
+        )
+
+    return {
+        **snapshot,
+        "next_call_estimate": estimate,
+    }
+
+
+def dev_wallet_preflight_run(
+    *,
+    estimated_run_cost_usd: float,
+    reason: str = "run",
+) -> Dict[str, Any]:
+    snapshot = get_dev_wallet_snapshot()
+    if not snapshot.get("enabled"):
+        return snapshot
+
+    expected = max(0.0, float(estimated_run_cost_usd or 0.0))
+    if expected > _safe_float(snapshot.get("spendable_remaining_usd")):
+        raise BudgetLimitExceeded(
+            f"Run bloqué avant démarrage ({reason}) : coût attendu "
+            f"≈${expected:.4f}, budget dépensable restant="
+            f"${snapshot.get('spendable_remaining_usd'):.4f}. "
+            f"La réserve de ${snapshot.get('protected_reserve_usd'):.2f} "
+            "reste protégée."
+        )
+
+    if expected > _safe_float(snapshot.get("daily_remaining_usd")):
+        raise BudgetLimitExceeded(
+            f"Run bloqué avant démarrage ({reason}) : coût attendu "
+            f"≈${expected:.4f}, budget journalier restant="
+            f"${snapshot.get('daily_remaining_usd'):.4f}."
+        )
+    return snapshot
+
+
+def _dev_wallet_record_success(
+    llm_client: Any,
+    *,
+    request_name: Any,
+    meta: Mapping[str, Any],
+    source: str = "generate",
+) -> Dict[str, Any]:
+    if not _dev_wallet_enabled():
+        return {"recorded": False}
+
+    usage = normalize_usage(meta)
+    provider = str(
+        meta.get("provider")
+        or getattr(llm_client, "provider", None)
+        or "unknown"
+    )
+    model = str(
+        meta.get("model")
+        or getattr(llm_client, "model_name", None)
+        or "unknown"
+    )
+    priced = compute_cost(model, provider, usage)
+    event = {
+        "timestamp": _now(),
+        "source": source,
+        "request_name": str(
+            request_name or meta.get("request_name") or "-"
+        ),
+        "provider": provider,
+        "model": model,
+        **usage,
+        **priced,
+    }
+
+    path = _dev_wallet_ledger_path()
+    with _LOCK:
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+    snapshot = get_dev_wallet_snapshot()
+    print(
+        "[DEV-WALLET] "
+        f"request={event['request_name']} "
+        f"cost=${_safe_float(event.get('cost_usd')):.6f} "
+        f"balance_est=${snapshot['estimated_openai_balance_usd']:.4f} "
+        f"spendable=${snapshot['spendable_remaining_usd']:.4f} "
+        f"daily_left=${snapshot['daily_remaining_usd']:.4f}",
+        flush=True,
+    )
+    return event
+# END ENNOSMART_DEV_WALLET_V1
+
 
 @dataclass
 class BudgetRun:
@@ -353,7 +816,13 @@ def budgeted_pipeline(func=None, *, run_type: str = "ennoscholar_state_of_art"):
             token = _CURRENT_RUN.set(run)
             try:
                 result = target(*args, **kwargs)
-                report = run.finalize("completed")
+                logical_status = (
+                    "completed"
+                    if not isinstance(result, dict)
+                    or result.get("ok", True)
+                    else "stopped"
+                )
+                report = run.finalize(logical_status)
                 if isinstance(result, dict):
                     result = dict(result)
                     result["budget"] = report
@@ -561,7 +1030,117 @@ def install_llm_budget_hooks(llm_class: Any) -> None:
         token = _HOOK_DEPTH.set(depth + 1)
         started = time.perf_counter()
         try:
+            current_run = _CURRENT_RUN.get()
+            if depth == 0:
+                _dev_wallet_preflight_call(
+                    self,
+                    prompt=(
+                        args[0]
+                        if args
+                        else kwargs.get("prompt", "")
+                    ),
+                    request_name=kwargs.get("request_name"),
+                    max_output_tokens=kwargs.get(
+                        "max_output_tokens",
+                        1400,
+                    ),
+                )
+            if depth == 0 and current_run is not None:
+                max_calls = _budget_max_calls()
+                if (
+                    max_calls > 0
+                    and len(current_run.events) >= max_calls
+                ):
+                    raise BudgetLimitExceeded(
+                        "Plafond d'appels LLM atteint avant "
+                        "la prochaine requête : "
+                        f"{len(current_run.events)}/{max_calls}."
+                    )
+
+                prompt = (
+                    args[0]
+                    if args
+                    else kwargs.get("prompt", "")
+                )
+                request_name = kwargs.get("request_name")
+                max_output_tokens = kwargs.get(
+                    "max_output_tokens", 1400
+                )
+                estimate = _estimate_next_call_cost(
+                    llm_client=self,
+                    prompt=prompt,
+                    request_name=request_name,
+                    max_output_tokens=max_output_tokens,
+                )
+                # ENNOSMART_DYNAMIC_COST_UNKNOWN_PRICE_V3
+                if (
+                    not estimate.get("price_known")
+                    and str(
+                        os.getenv(
+                            "ENNOSMART_BUDGET_BLOCK_UNKNOWN_PRICE",
+                            "1",
+                        )
+                    ).strip().casefold()
+                    in ('1', 'true', 'yes', 'oui', 'on')
+                ):
+                    raise BudgetLimitExceeded(
+                        "Coût du modèle inconnu : appel bloqué "
+                        "avant dépense. Configurez son prix dans "
+                        "usage_budget.py avant de l'autoriser."
+                    )
+
+                hard_limit = _budget_hard_limit_usd()
+                projected = (
+                    current_run.total_cost()
+                    + _safe_float(
+                        estimate.get("estimated_cost_usd")
+                    )
+                )
+                if (
+                    hard_limit > 0
+                    and estimate.get("price_known")
+                    and projected > hard_limit
+                ):
+                    print(
+                        "[BUDGET][BLOCK] "
+                        f"request={request_name or '-'} "
+                        f"model={estimate.get('model')} "
+                        f"spent=${current_run.total_cost():.6f} "
+                        f"estimated_next="
+                        f"${estimate.get('estimated_cost_usd'):.6f} "
+                        f"hard_limit=${hard_limit:.2f}",
+                        flush=True,
+                    )
+                    raise BudgetLimitExceeded(
+                        "Plafond financier EnnoScholar atteint "
+                        "avant un nouvel appel payant : "
+                        f"dépensé=${current_run.total_cost():.4f}, "
+                        f"prochain appel estimé="
+                        f"${estimate.get('estimated_cost_usd'):.4f}, "
+                        f"plafond=${hard_limit:.2f}."
+                    )
+
             output = original(self, *args, **kwargs)
+            if depth == 0:
+                wallet_meta: Dict[str, Any] = {}
+                wallet_getter = getattr(
+                    self,
+                    "get_last_generation_meta",
+                    None,
+                )
+                if callable(wallet_getter):
+                    candidate = wallet_getter()
+                    if isinstance(candidate, Mapping):
+                        wallet_meta = dict(candidate)
+                _dev_wallet_record_success(
+                    self,
+                    request_name=(
+                        kwargs.get("request_name")
+                        or wallet_meta.get("request_name")
+                    ),
+                    meta=wallet_meta,
+                    source="generate",
+                )
             if depth == 0 and _CURRENT_RUN.get() is not None:
                 meta: Dict[str, Any] = {}
                 getter = getattr(self, "get_last_generation_meta", None)
@@ -582,13 +1161,22 @@ def install_llm_budget_hooks(llm_class: Any) -> None:
                 )
             return output
         except Exception as exc:
-            if depth == 0 and _CURRENT_RUN.get() is not None:
+            if (
+                depth == 0
+                and _CURRENT_RUN.get() is not None
+                and not isinstance(exc, BudgetLimitExceeded)
+            ):
                 _CURRENT_RUN.get().record(
-                    {"elapsed_seconds": round(time.perf_counter() - started, 3)},
+                    {
+                        "elapsed_seconds": round(
+                            time.perf_counter() - started, 3
+                        )
+                    },
                     request_name=kwargs.get("request_name"),
                     provider=getattr(self, "provider", None),
                     model=getattr(self, "model_name", None),
-                    status="failed", error=exc,
+                    status="failed",
+                    error=exc,
                 )
             raise
         finally:
@@ -597,3 +1185,73 @@ def install_llm_budget_hooks(llm_class: Any) -> None:
     llm_class.generate = wrapped
     llm_class._budget_hook_installed = True
     print("[BUDGET] Hook LLMClient.generate installé", flush=True)
+
+    # DEV Wallet : web_search utilise Responses API directement.
+    web_original = getattr(llm_class, "web_search", None)
+    if (
+        callable(web_original)
+        and not getattr(
+            llm_class,
+            "_dev_wallet_web_hook_installed",
+            False,
+        )
+    ):
+        @functools.wraps(web_original)
+        def wrapped_web_search(self, *args, **kwargs):
+            depth = _HOOK_DEPTH.get()
+            token = _HOOK_DEPTH.set(depth + 1)
+            try:
+                if depth == 0:
+                    query = (
+                        args[0]
+                        if args
+                        else kwargs.get("query", "")
+                    )
+                    _dev_wallet_preflight_call(
+                        self,
+                        prompt=query,
+                        request_name=kwargs.get(
+                            "request_name",
+                            "ennoscholar:guided_research:web_search",
+                        ),
+                        max_output_tokens=kwargs.get(
+                            "max_output_tokens",
+                            1400,
+                        ),
+                    )
+
+                result = web_original(self, *args, **kwargs)
+
+                if depth == 0:
+                    getter = getattr(
+                        self,
+                        "get_last_generation_meta",
+                        None,
+                    )
+                    meta: Dict[str, Any] = {}
+                    if callable(getter):
+                        candidate = getter()
+                        if isinstance(candidate, Mapping):
+                            meta = dict(candidate)
+
+                    _dev_wallet_record_success(
+                        self,
+                        request_name=(
+                            kwargs.get("request_name")
+                            or meta.get("request_name")
+                            or "ennoscholar:guided_research:web_search"
+                        ),
+                        meta=meta,
+                        source="web_search",
+                    )
+                return result
+            finally:
+                _HOOK_DEPTH.reset(token)
+
+        llm_class.web_search = wrapped_web_search
+        llm_class._dev_wallet_web_hook_installed = True
+        print(
+            "[DEV-WALLET] Hook LLMClient.web_search installé",
+            flush=True,
+        )
+

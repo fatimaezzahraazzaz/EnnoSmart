@@ -68,6 +68,118 @@ def _norm(value: Any) -> str:
     return re.sub(r"[^a-z0-9+#./-]+", " ", text).strip()
 
 
+def _resolve_targeted_verrou_scope(
+    classification: IntentClassification,
+    current_verrous: Iterable[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Valide la portée sémantique LLM contre les verrous réellement connus."""
+
+    rows = [
+        dict(row)
+        for row in current_verrous
+        if isinstance(row, Mapping)
+        and _clean(row.get("id"), 120)
+        and _clean(row.get("title"), 700)
+    ]
+    scope = _clean(classification.verrou_scope, 40)
+    if scope == "global":
+        return {
+            "review_scope": "global",
+            # Une liste d'ID vide conserve la sémantique « tout le catalogue »
+            # pour les filtres aval. Les lignes rendent néanmoins les verrous
+            # connus explicites dans le contexte propre à la conversation.
+            "active_verrou_ids": [],
+            "active_verrous": rows,
+        }
+    if scope != "per_verrou":
+        return {}
+
+    if not rows:
+        return {}
+
+    by_id = {
+        _clean(row.get("id"), 120).casefold(): row
+        for row in rows
+    }
+    by_title = {
+        _norm(row.get("title")): row
+        for row in rows
+        if _norm(row.get("title"))
+    }
+    requested = [
+        _clean(value, 700)
+        for value in (classification.target_verrou_ids or [])
+        if _clean(value, 700)
+    ]
+    if _clean(classification.target_topic, 700):
+        requested.append(_clean(classification.target_topic, 700))
+
+    selected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw in requested:
+        row = by_id.get(raw.casefold())
+        normalized = _norm(raw)
+        if row is None:
+            row = by_title.get(normalized)
+        if row is None and normalized.isdigit():
+            ordinal = int(normalized)
+            if 1 <= ordinal <= len(rows):
+                row = rows[ordinal - 1]
+        if row is None and len(normalized) >= 12:
+            row = next(
+                (
+                    candidate
+                    for title, candidate in by_title.items()
+                    if normalized in title or title in normalized
+                ),
+                None,
+            )
+        if row is None:
+            continue
+        verrou_id = _clean(row.get("id"), 120)
+        if verrou_id and verrou_id.casefold() not in seen:
+            seen.add(verrou_id.casefold())
+            selected.append(row)
+
+    if not selected and len(rows) == 1:
+        selected = [rows[0]]
+    if not selected:
+        return {}
+
+    return {
+        "review_scope": "per_verrou",
+        "active_verrou_ids": [
+            _clean(row.get("id"), 120) for row in selected
+        ],
+        "active_verrous": selected,
+    }
+
+
+def _apply_verrou_scope_to_plan(
+    plan: Iterable[Mapping[str, Any]],
+    active_verrou_ids: Iterable[Any],
+) -> list[dict[str, Any]]:
+    """Rattache chaque section au sous-ensemble de verrous actif."""
+
+    active_ids = _unique(active_verrou_ids)
+    if not active_ids:
+        return [dict(row) for row in plan if isinstance(row, Mapping)]
+    active_keys = {value.casefold() for value in active_ids}
+    scoped_plan: list[dict[str, Any]] = []
+    for raw in plan:
+        if not isinstance(raw, Mapping):
+            continue
+        row = dict(raw)
+        existing = [
+            value
+            for value in _unique(row.get("verrou_ids") or [])
+            if value.casefold() in active_keys
+        ]
+        row["verrou_ids"] = existing or list(active_ids)
+        scoped_plan.append(row)
+    return scoped_plan
+
+
 _PLAN_ACTION_INTENTS = {
     ConsultantIntent.PROPOSE_PLAN,
     ConsultantIntent.ADD_TOPIC,
@@ -433,6 +545,27 @@ def _format_plan_for_review(plan: Iterable[Mapping[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _format_plan_outline_for_chat(
+    plan: Iterable[Mapping[str, Any]],
+) -> str:
+    # Affichage conversationnel compact : structure uniquement.
+    # Les objectifs restent dans le contrat interne.
+    counters: list[int] = []
+    lines: list[str] = []
+    for section in normalize_plan_sections(list(plan)):
+        level = max(1, int(section.get("level") or 1))
+        while len(counters) < level:
+            counters.append(0)
+        counters = counters[:level]
+        counters[-1] += 1
+        label = ".".join(str(value) for value in counters)
+        indent = "  " * (level - 1)
+        lines.append(
+            f"{indent}{label}. {_clean(section.get('title'), 300)}"
+        )
+    return "\n".join(lines)
+
+
 def _tokens(value: Any) -> set[str]:
     stop = {
         "avec", "dans", "des", "une", "pour", "par", "sur", "les", "the",
@@ -648,6 +781,38 @@ class EnnoScholarGuidedResearchAgent:
             str(project.year),
         )
 
+    def _session_contract_path(
+        self,
+        project: Any,
+        session_id: str,
+    ) -> Path:
+        safe_session_id = _clean(session_id, 120)
+        if not re.fullmatch(r"[A-Za-z0-9_-]{8,120}", safe_session_id):
+            raise ValueError("Identifiant de conversation invalide.")
+        return (
+            self._contract_path(project).parent
+            / "conversations"
+            / safe_session_id
+            / "inputs"
+            / "consultant_plan_contract.json"
+        )
+
+    def _session_sources_path(
+        self,
+        project: Any,
+        session_id: str,
+    ) -> Path:
+        safe_session_id = _clean(session_id, 120)
+        if not re.fullmatch(r"[A-Za-z0-9_-]{8,120}", safe_session_id):
+            raise ValueError("Identifiant de conversation invalide.")
+        return (
+            self._contract_path(project).parent
+            / "conversations"
+            / safe_session_id
+            / "inputs"
+            / "guided_research_sources.json"
+        )
+
     def _load_or_create_contract(self, project: Any) -> dict[str, Any]:
         path = self._contract_path(project)
         existing = read_json(path)
@@ -668,6 +833,45 @@ class EnnoScholarGuidedResearchAgent:
         if not proposed:
             return {}
         return create_contract(proposed)
+
+    def _diagnostic_project_context(
+        self,
+        db: Session,
+        project: Any,
+    ) -> tuple[bool, list[dict[str, Any]]]:
+        """Charge le diagnostic et son catalogue sans état conversationnel."""
+
+        try:
+            from services.consultant_verrou_service import get_latest_diagnostic_run
+            diagnostic_backed = bool(
+                get_latest_diagnostic_run(db, int(project.id))
+            )
+        except Exception as exc:
+            print(
+                "[EnnoScholar][GuidedResearch][WARN] "
+                f"lecture diagnostic chat impossible: {exc}"
+            )
+            return False, []
+        if not diagnostic_backed:
+            return False, []
+        try:
+            from services.consultant_verrou_service import (
+                list_latest_diagnostic_verrous_for_chat,
+            )
+            rows = [
+                dict(row)
+                for row in list_latest_diagnostic_verrous_for_chat(db, project)
+                if isinstance(row, Mapping)
+                and _clean(row.get("id"), 120)
+                and _clean(row.get("title"), 700)
+            ]
+            return True, rows
+        except Exception as exc:
+            print(
+                "[EnnoScholar][GuidedResearch][WARN] "
+                f"lecture catalogue des verrous impossible: {exc}"
+            )
+            return True, []
 
     def _conversation_project_context(
         self,
@@ -731,20 +935,15 @@ class EnnoScholarGuidedResearchAgent:
             18000,
         )
 
-        try:
-            from services.consultant_verrou_service import (
-                list_latest_diagnostic_verrous_for_chat,
-            )
-            current_verrous = list_latest_diagnostic_verrous_for_chat(
-                db, project
-            )
-        except Exception as exc:
-            current_verrous = []
-            print(
-                "[EnnoScholar][GuidedResearch][WARN] "
-                f"lecture verrous chat impossible: {exc}"
-            )
+        _, current_verrous = self._diagnostic_project_context(db, project)
 
+        persisted_project_verrous = [
+            dict(row)
+            for row in (session.context.get("project_verrous") or [])
+            if isinstance(row, Mapping)
+            and _clean(row.get("id"), 120)
+            and _clean(row.get("title"), 700)
+        ]
         standalone_verrous = [
             dict(row)
             for row in (session.context.get("consultant_verrous") or [])
@@ -755,6 +954,16 @@ class EnnoScholarGuidedResearchAgent:
             for row in current_verrous
             if _clean(row.get("id"), 120)
         }
+        current_verrous.extend(
+            row
+            for row in persisted_project_verrous
+            if _clean(row.get("id"), 120) not in known_ids
+        )
+        known_ids.update(
+            _clean(row.get("id"), 120)
+            for row in persisted_project_verrous
+            if _clean(row.get("id"), 120)
+        )
         current_verrous.extend(
             row
             for row in standalone_verrous
@@ -772,6 +981,12 @@ class EnnoScholarGuidedResearchAgent:
             "scientific_context": narrative_text,
             "validated_article_cards": article_context,
             "current_verrous": current_verrous,
+            "active_verrou_ids": list(
+                session.context.get("active_verrou_ids") or []
+            ),
+            "review_scope": _clean(
+                session.context.get("review_scope"), 40
+            ),
             "operating_mode": _clean(
                 session.context.get("operating_mode"), 80
             ),
@@ -814,30 +1029,15 @@ class EnnoScholarGuidedResearchAgent:
         target_mode: GuidedResearchTargetMode = GuidedResearchTargetMode.GLOBAL,
         entry_module: GuidedResearchEntryModule = GuidedResearchEntryModule.ENNOSCHOLAR,
     ) -> GuidedResearchSessionData:
-        try:
-            from services.consultant_verrou_service import (
-                get_latest_diagnostic_run,
-            )
-            diagnostic_backed = bool(
-                get_latest_diagnostic_run(db, int(project.id))
-            )
-        except Exception:
-            diagnostic_backed = False
-        contract = (
-            {}
-            if entry_module == GuidedResearchEntryModule.ENNOAMEL
-            else self._load_or_create_contract(project)
+        diagnostic_backed, project_verrous = (
+            self._diagnostic_project_context(db, project)
         )
-        brief = _brief_from_contract(contract) if contract else None
-        previous_memories: list[dict[str, Any]] = []
-        if entry_module != GuidedResearchEntryModule.ENNOAMEL:
-            for previous in self.state_manager.list_project_sessions(
-                db, int(project.id), limit=8
-            ):
-                memory = previous.context.get("conversation_memory")
-                if isinstance(memory, dict) and memory:
-                    previous_memories.append(memory)
-        latest_memory = previous_memories[0] if previous_memories else {}
+        # Une nouvelle conversation possède un document indépendant. Le plan,
+        # la mémoire et le brouillon d'une conversation antérieure ne sont jamais
+        # copiés implicitement ; le corpus scientifique du projet reste disponible
+        # comme contexte de lecture seulement.
+        contract: dict[str, Any] = {}
+        brief = None
         session = self.state_manager.create_session(
             db,
             project_id=int(project.id),
@@ -851,9 +1051,9 @@ class EnnoScholarGuidedResearchAgent:
                     "project_name": str(project.project_name),
                     "year": str(project.year),
                 },
-                "contract_path": str(self._contract_path(project)),
+                "contract_path": "",
                 "phase47_path": str(self._phase47_path(project)),
-                "guided_sources_path": str(self._sources_path(project)),
+                "guided_sources_path": "",
                 "research_enabled": True,
                 "conversation_mode": "natural_llm",
                 "operating_mode": (
@@ -862,13 +1062,33 @@ class EnnoScholarGuidedResearchAgent:
                     else "standalone_chat"
                 ),
                 "chat_only_interface": not diagnostic_backed,
+                # Le catalogue appartient au projet, pas au document rédigé.
+                # Il peut être mémorisé sans réutiliser le plan, le brouillon
+                # ou les décisions d'une autre conversation.
+                "project_verrous": project_verrous,
                 "consultant_verrous": [],
                 "standalone_project_brief": {},
-                "conversation_memory": latest_memory,
-                "previous_project_memories": previous_memories[:5],
+                "conversation_memory": {},
+                "previous_project_memories": [],
                 "created_at": datetime.now(timezone.utc).isoformat(),
             },
         )
+        isolated_contract_path = self._session_contract_path(
+            project, session.session_id
+        )
+        isolated_sources_path = self._session_sources_path(
+            project, session.session_id
+        )
+        self.repository.update(
+            db,
+            session.session_id,
+            context_updates={
+                "contract_path": str(isolated_contract_path),
+                "guided_sources_path": str(isolated_sources_path),
+                "conversation_storage_isolated": True,
+            },
+        )
+        session = self.state_manager.get_session(db, session.session_id)
         if brief and brief.requested_sections:
             session = self.state_manager.update_brief(db, session.session_id, brief)
         self.repository.update(
@@ -961,14 +1181,29 @@ class EnnoScholarGuidedResearchAgent:
         if not message:
             raise ValueError("Le message ne peut pas être vide.")
 
-        contract_path = self._contract_path(project)
-        contract = self._load_contract_snapshot(project)
+        contract_path = self._session_contract_path(project, session.session_id)
+        snapshot_reader = getattr(self.repository, "snapshot", None)
+        session_snapshot = (
+            snapshot_reader(db, session.session_id)
+            if callable(snapshot_reader)
+            else {
+                "writing_contract": (
+                    session.context.get("writing_contract")
+                    or session.context.get("contract")
+                    or {}
+                )
+            }
+        )
+        contract = dict(session_snapshot.get("writing_contract") or {})
+        conversation_project_context = (
+            self._resolved_conversation_project_context(
+                db, project, session
+            )
+        )
         understanding = self.understanding.understand(
             session=session,
             consultant_message=message,
-            project_context=self._resolved_conversation_project_context(
-                db, project, session
-            ),
+            project_context=conversation_project_context,
             current_plan=_contract_sections(contract),
         )
         understanding_failure: dict[str, Any] = {}
@@ -1055,6 +1290,19 @@ class EnnoScholarGuidedResearchAgent:
             interpretation["review_scope"] = "auto"
             interpretation["search_requests"] = []
 
+        resolved_verrou_scope = (
+            {}
+            if intent in _RESPONSE_ONLY_INTENTS or route_guard_applied
+            else _resolve_targeted_verrou_scope(
+                classification,
+                conversation_project_context.get("current_verrous") or [],
+            )
+        )
+        if resolved_verrou_scope:
+            interpretation["resolved_target_verrou_ids"] = list(
+                resolved_verrou_scope.get("active_verrou_ids") or []
+            )
+
         interpreter_metadata = interpretation.get("interpreter")
         context_updates: dict[str, Any] = {
             "last_intent_classification": classification.model_dump(mode="json"),
@@ -1068,6 +1316,16 @@ class EnnoScholarGuidedResearchAgent:
                 else None
             ),
         }
+        if resolved_verrou_scope:
+            context_updates.update({
+                "review_scope": resolved_verrou_scope["review_scope"],
+                "active_verrou_ids": list(
+                    resolved_verrou_scope.get("active_verrou_ids") or []
+                ),
+                "active_verrous": list(
+                    resolved_verrou_scope.get("active_verrous") or []
+                ),
+            })
         if classification.writing_source_scope != "unspecified":
             context_updates["writing_source_policy"] = {
                 "scope": classification.writing_source_scope,
@@ -2119,6 +2377,18 @@ class EnnoScholarGuidedResearchAgent:
             )
             else []
         )
+        explicit_scope_ids = list(
+            interpretation.get("resolved_target_verrou_ids") or []
+        )
+        stored_scope_ids = (
+            []
+            if _clean(session.context.get("review_scope"), 40) == "global"
+            else list(session.context.get("active_verrou_ids") or [])
+        )
+        proposed_plan = _apply_verrou_scope_to_plan(
+            proposed_plan,
+            explicit_scope_ids or stored_scope_ids,
+        )
         normalized_proposed_plan = normalize_plan_sections(proposed_plan)
         if allow_plan_change and not normalized_proposed_plan:
             return self._respond_only(
@@ -2322,7 +2592,15 @@ class EnnoScholarGuidedResearchAgent:
                 },
             )
 
-        coverage = self._coverage(project, brief)
+        coverage = self._coverage(
+            project,
+            brief,
+            supplemental_sources=(
+                self.repository.snapshot(db, session.session_id).get(
+                    "selected_sources"
+                ) or []
+            ),
+        )
         target_state = (
             GuidedResearchState.BRIEF_PARSED
             if plan_changed
@@ -2364,19 +2642,34 @@ class EnnoScholarGuidedResearchAgent:
                 },
             )
 
+        # V3 UX : conserver la réponse naturelle produite par le contrôleur.
+        # Avant, toute action de plan était écrasée par le même texte fixe.
         assistant = _clean(interpretation.get("assistant_message"), 6000)
+
         if action_intent in _PLAN_ACTION_INTENTS:
+            if not assistant:
+                assistant = {
+                    ConsultantIntent.PROPOSE_PLAN:
+                        "Voici la structure que je vous propose.",
+                    ConsultantIntent.ADD_TOPIC:
+                        "Oui, j'ai intégré cet ajout au plan.",
+                    ConsultantIntent.REMOVE_TOPIC:
+                        "C'est fait, j'ai retiré la partie demandée.",
+                    ConsultantIntent.CHANGE_PLAN:
+                        "Oui, j'ai repris le plan dans ce sens.",
+                }.get(action_intent, "J'ai mis le plan à jour.")
+
+            plan_view = (
+                _format_plan_for_review(_contract_sections(contract))
+                if action_intent == ConsultantIntent.PROPOSE_PLAN
+                else _format_plan_outline_for_chat(_contract_sections(contract))
+            )
             assistant = (
-                "Voici le plan détaillé proposé pour validation :\n\n"
-                + _format_plan_for_review(_contract_sections(contract))
-                + "\n\nConfirmez ce plan ou demandez un nouvel ajustement. "
-                "Aucune recherche ni rédaction n'a été lancée."
+                assistant.rstrip()
+                + ("\n\n" + plan_view if plan_view.strip() else "")
             )
         elif not assistant:
-            assistant = (
-                "J'ai intégré cette exigence au brief du document. "
-                "Aucune recherche ni rédaction n'a été lancée."
-            )
+            assistant = "C'est noté, j'ai intégré cette précision."
         return self._response(
             session.session_id,
             action_intent,
@@ -2429,7 +2722,15 @@ class EnnoScholarGuidedResearchAgent:
             constraints=session.brief.general_constraints if session.brief else [],
         )
         self.state_manager.update_brief(db, session.session_id, brief)
-        coverage = self._coverage(project, brief)
+        coverage = self._coverage(
+            project,
+            brief,
+            supplemental_sources=(
+                self.repository.snapshot(db, session.session_id).get(
+                    "selected_sources"
+                ) or []
+            ),
+        )
         weak = coverage.get("weak_sections") or []
         assistant = conversation_reply or (
             "Le plan est validé et devient la structure obligatoire du document. "
@@ -2905,7 +3206,15 @@ class EnnoScholarGuidedResearchAgent:
             )
         contract["writing_source_policy"] = source_policy
         brief = session.brief or _brief_from_contract(contract, raw_request=message)
-        coverage = self._coverage(project, brief)
+        coverage = self._coverage(
+            project,
+            brief,
+            supplemental_sources=(
+                self.repository.snapshot(db, session.session_id).get(
+                    "selected_sources"
+                ) or []
+            ),
+        )
         weak = coverage.get("weak_sections") or []
         bypass_search = bool(
             use_current_sources_only
@@ -3318,6 +3627,8 @@ CONSIGNES IMPÉRATIVES
         self,
         project: Any,
         brief: ConsultantBrief,
+        *,
+        supplemental_sources: Iterable[Mapping[str, Any]] | None = None,
     ) -> dict[str, Any]:
         cards_payload = self._cards_payload(project)
         cards = []
@@ -3333,9 +3644,16 @@ CONSIGNES IMPÉRATIVES
             "technical_documentation",
             "documentation",
         }
+        supplemental_payload = (
+            list(supplemental_sources)
+            if supplemental_sources is not None
+            else list(
+                read_json(self._sources_path(project)).get("sources") or []
+            )
+        )
         supplemental = [
             row
-            for row in (read_json(self._sources_path(project)).get("sources") or [])
+            for row in supplemental_payload
             if isinstance(row, dict)
             and str(row.get("candidate_kind") or "").strip().lower() in supplemental_source_kinds
         ]
@@ -3602,8 +3920,14 @@ CONSIGNES IMPÉRATIVES
                     "scientific_results_require_scientific_sources": True,
                 },
             }
-            write_json(self._sources_path(project), payload)
-            current_contract = read_json(self._contract_path(project))
+            write_json(
+                self._session_sources_path(project, session_id),
+                payload,
+            )
+            session_snapshot = self.repository.snapshot(db, session_id)
+            current_contract = dict(
+                session_snapshot.get("writing_contract") or {}
+            )
             previous_brief = session.brief
             brief = _brief_from_contract(
                 current_contract,
@@ -3627,9 +3951,13 @@ CONSIGNES IMPÉRATIVES
                 ),
             )
             self.state_manager.update_brief(db, session_id, brief)
-            coverage = self._coverage(project, brief)
+            coverage = self._coverage(
+                project,
+                brief,
+                supplemental_sources=sources,
+            )
             approved = bool(
-                read_json(self._contract_path(project)).get("approved_plan")
+                current_contract.get("approved_plan")
             )
             self.repository.update(
                 db,
@@ -3689,8 +4017,11 @@ CONSIGNES IMPÉRATIVES
         session = self.state_manager.get_session(db, session_id)
         if int(session.project_id) != int(project.id):
             raise PermissionError("Cette session n'appartient pas au projet demandé.")
-        contract_path = self._contract_path(project)
-        existing = read_json(contract_path)
+        contract_path = self._session_contract_path(project, session_id)
+        existing = dict(
+            self.repository.snapshot(db, session_id).get("writing_contract")
+            or {}
+        )
         contract = (
             update_edited_plan(existing, sections)
             if existing
@@ -3703,7 +4034,15 @@ CONSIGNES IMPÉRATIVES
             constraints=general_constraints or [],
         )
         self.state_manager.update_brief(db, session_id, brief)
-        coverage = self._coverage(project, brief)
+        coverage = self._coverage(
+            project,
+            brief,
+            supplemental_sources=(
+                self.repository.snapshot(db, session_id).get(
+                    "selected_sources"
+                ) or []
+            ),
+        )
         self.repository.update(
             db,
             session_id,

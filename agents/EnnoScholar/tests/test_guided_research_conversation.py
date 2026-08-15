@@ -5,6 +5,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -12,6 +13,7 @@ from sqlalchemy.orm import sessionmaker
 from EnnoScholar.guided_research.application.guided_research_agent import (
     EnnoScholarGuidedResearchAgent,
     _approve_for_combined_write,
+    _apply_verrou_scope_to_plan,
     _merge_additive_plan_update,
     _plan_candidate_covers_current,
     _plan_history_from_session,
@@ -19,6 +21,7 @@ from EnnoScholar.guided_research.application.guided_research_agent import (
     _resolve_candidate_display_identifiers,
     _resolve_effective_writing_source_identifiers,
     _resolve_routed_intent,
+    _resolve_targeted_verrou_scope,
 )
 from EnnoScholar.guided_research.lot1.conversation_understanding_service import (
     ConversationUnderstandingService,
@@ -69,6 +72,9 @@ def _decision(
     writing_source_scope: str = "unspecified",
     writing_source_identifiers: list[str] | None = None,
     requested_source_count: int | None = None,
+    target_verrou_ids: list[str] | None = None,
+    verrou_scope: str = "unchanged",
+    explicit_new_verrou_declaration: bool = False,
 ) -> dict:
     return {
         "classification": {
@@ -93,6 +99,11 @@ def _decision(
             "writing_source_scope": writing_source_scope,
             "writing_source_identifiers": writing_source_identifiers or [],
             "requested_source_count": requested_source_count,
+            "target_verrou_ids": target_verrou_ids or [],
+            "verrou_scope": verrou_scope,
+            "explicit_new_verrou_declaration": (
+                explicit_new_verrou_declaration
+            ),
             "needs_clarification": needs_clarification,
             "corrected_message": "",
             "extracted_text": "",
@@ -136,6 +147,107 @@ class SequenceLLM:
 
 
 class GuidedResearchConversationTests(unittest.TestCase):
+    def test_new_conversation_does_not_inherit_previous_document(self) -> None:
+        engine = create_engine("sqlite+pysqlite:///:memory:")
+        manager = GuidedResearchSessionStateManager()
+        manager.ensure_schema(engine)
+        db = sessionmaker(bind=engine)()
+        try:
+            agent = EnnoScholarGuidedResearchAgent(
+                state_manager=manager,
+                llm=SequenceLLM(),
+            )
+            agent._contract_path = lambda project: Path(
+                "C:/EnnoSmart/.nonexistent-tests/consultant_plan_contract.json"
+            )
+            # Même si un contrat projet historique existe, une nouvelle
+            # conversation ne doit jamais le copier.
+            agent._load_or_create_contract = lambda project: create_contract([
+                {"section_id": "old", "title": "Ancien document"},
+            ])
+            project = SimpleNamespace(
+                id=42,
+                organisme="Organisation",
+                project_name="Projet",
+                year=2026,
+                domain_label="Radar",
+            )
+
+            created = agent.create_session(
+                db,
+                project,
+                created_by_user_id=7,
+            )
+            snapshot = agent.repository.snapshot(db, created.session_id)
+
+            self.assertEqual(snapshot["writing_contract"], {})
+            self.assertEqual(snapshot["draft"], {})
+            self.assertFalse(snapshot["ready_to_write"])
+            self.assertEqual(snapshot["state"], GuidedResearchState.BRIEF_IN_PROGRESS.value)
+            self.assertEqual(
+                snapshot["context"]["conversation_memory"],
+                {},
+            )
+            self.assertTrue(
+                snapshot["context"]["conversation_storage_isolated"]
+            )
+            self.assertIn(
+                created.session_id,
+                snapshot["context"]["contract_path"],
+            )
+        finally:
+            db.close()
+            engine.dispose()
+
+    def test_new_conversation_snapshots_project_verrou_catalog_only(self) -> None:
+        engine = create_engine("sqlite+pysqlite:///:memory:")
+        manager = GuidedResearchSessionStateManager()
+        manager.ensure_schema(engine)
+        db = sessionmaker(bind=engine)()
+        known_verrous = [
+            {"id": 101, "title": "Robustesse hors distribution"},
+            {"id": 205, "title": "Traçabilité des données"},
+            {"id": 309, "title": "Validation en conditions réelles"},
+        ]
+        try:
+            agent = EnnoScholarGuidedResearchAgent(
+                state_manager=manager,
+                llm=SequenceLLM(),
+            )
+            agent._contract_path = lambda project: Path(
+                "C:/EnnoSmart/.nonexistent-tests/consultant_plan_contract.json"
+            )
+            project = SimpleNamespace(
+                id=42,
+                organisme="Organisation",
+                project_name="Projet",
+                year=2026,
+                domain_label="Domaine scientifique",
+            )
+
+            with patch.object(
+                agent,
+                "_diagnostic_project_context",
+                return_value=(True, known_verrous),
+            ):
+                created = agent.create_session(
+                    db,
+                    project,
+                    created_by_user_id=7,
+                )
+
+            snapshot = agent.repository.snapshot(db, created.session_id)
+            self.assertEqual(
+                snapshot["context"]["project_verrous"],
+                known_verrous,
+            )
+            self.assertEqual(snapshot["writing_contract"], {})
+            self.assertEqual(snapshot["draft"], {})
+            self.assertEqual(snapshot["context"]["conversation_memory"], {})
+        finally:
+            db.close()
+            engine.dispose()
+
     def test_saved_conversation_can_be_deleted(self) -> None:
         engine = create_engine("sqlite+pysqlite:///:memory:")
         manager = GuidedResearchSessionStateManager()
@@ -576,6 +688,232 @@ class GuidedResearchConversationTests(unittest.TestCase):
             service.get_last_failure()["stage"],
             "structured_conversation",
         )
+
+    def test_natural_targeted_plan_ignores_payloads_outside_selected_intent(
+        self,
+    ) -> None:
+        session = GuidedResearchSessionData(
+            project_id=1,
+            entry_module=GuidedResearchEntryModule.ENNOSCHOLAR,
+            target_mode=GuidedResearchTargetMode.GLOBAL,
+            context={"operating_mode": "diagnostic_backed"},
+        )
+        titles = [
+            "Contexte scientifique et recours aux données SAR synthétiques",
+            "Écart entre données synthétiques et données réelles",
+            "Limites des approches existantes et incertitude scientifique",
+            "Synthèse critique et positionnement du verrou",
+        ]
+        llm = SequenceLLM(
+            _decision(
+                ConsultantIntent.PROPOSE_PLAN,
+                "J'ai compris : ce plan portera uniquement sur le verrou 1.",
+                requested_actions=[
+                    ConsultantIntent.PROPOSE_PLAN,
+                    ConsultantIntent.START_WRITING,
+                ],
+                replace_current_plan=True,
+                plan_generation_mode="initial",
+                plan_document_scope="state_of_art",
+                target_verrou_ids=["803"],
+                verrou_scope="per_verrou",
+            ),
+            {
+                "plan": [
+                    {
+                        "section_id": f"sec{index}",
+                        "title": title,
+                        "objective": f"Analyser {title.casefold()}.",
+                        "parent_id": None,
+                        "level": 1,
+                    }
+                    for index, title in enumerate(titles, start=1)
+                ],
+                # Reproduit le défaut réel observé : le fournisseur avait rempli
+                # un champ secondaire malgré l'intention de plan sélectionnée.
+                "constraints": ["Rédiger uniquement en français."],
+                "project_brief": {
+                    "project_name": "AI-RADAR",
+                    "domain": "SAR ATR",
+                },
+            },
+        )
+
+        result = ConversationUnderstandingService(llm).understand(
+            session=session,
+            consultant_message=(
+                "je veut rediger une etat de l'art mais seulement du verrou 1 "
+                "et voici le plan que je veut\n" + "\n".join(titles)
+            ),
+            project_context={
+                "project": {"name": "AI-RADAR"},
+                "operating_mode": "diagnostic_backed",
+                "current_verrous": [{
+                    "id": 803,
+                    "title": (
+                        "Incertitude sur la généralisation des modèles ATR "
+                        "entraînés sur données SAR synthétiques aux données réelles"
+                    ),
+                }],
+            },
+            current_plan=[],
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.classification.intent, ConsultantIntent.PROPOSE_PLAN)
+        self.assertEqual(result.classification.target_verrou_ids, ["803"])
+        self.assertEqual([row["title"] for row in result.plan], titles)
+        self.assertEqual(result.constraints, [])
+        self.assertEqual(result.project_brief, {})
+        self.assertEqual(
+            [row["valid"] for row in result.interpreter["action_attempts"]],
+            [True],
+        )
+
+    def test_global_existing_verrous_are_not_treated_as_new_verrous(self) -> None:
+        session = GuidedResearchSessionData(
+            project_id=1,
+            entry_module=GuidedResearchEntryModule.ENNOSCHOLAR,
+            target_mode=GuidedResearchTargetMode.GLOBAL,
+            context={"operating_mode": "diagnostic_backed"},
+        )
+        known_verrous = [
+            {"id": 101, "title": "Robustesse hors distribution"},
+            {"id": 205, "title": "Traçabilité des données"},
+            {"id": 309, "title": "Validation en conditions réelles"},
+        ]
+        llm = SequenceLLM(
+            _decision(
+                ConsultantIntent.ADD_VERROU_AND_SEARCH,
+                "Indiquez le verrou à ajouter.",
+                requested_actions=[ConsultantIntent.ADD_VERROU_AND_SEARCH],
+                explicit_research_command=True,
+                verrou_scope="global",
+            ),
+            _decision(
+                ConsultantIntent.PROPOSE_PLAN,
+                "Je prépare un plan global couvrant les verrous retenus.",
+                requested_actions=[
+                    ConsultantIntent.PROPOSE_PLAN,
+                    ConsultantIntent.START_WRITING,
+                ],
+                replace_current_plan=True,
+                plan_generation_mode="initial",
+                plan_document_scope="state_of_art",
+                verrou_scope="global",
+            ),
+            {
+                "plan": [
+                    {
+                        "section_id": "synthese-transversale",
+                        "title": "Synthèse transversale des verrous",
+                        "objective": (
+                            "Comparer les preuves, limites et incertitudes "
+                            "associées aux verrous retenus."
+                        ),
+                        "parent_id": None,
+                        "level": 1,
+                    }
+                ]
+            },
+        )
+
+        result = ConversationUnderstandingService(llm).understand(
+            session=session,
+            consultant_message=(
+                "je veux rédiger l'état de l'art global de tous les verrous "
+                "déjà retenus pour ce projet"
+            ),
+            project_context={
+                "project": {"name": "Projet générique"},
+                "operating_mode": "diagnostic_backed",
+                "current_verrous": known_verrous,
+            },
+            current_plan=[],
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.classification.intent, ConsultantIntent.PROPOSE_PLAN)
+        self.assertEqual(result.classification.verrou_scope, "global")
+        self.assertEqual(result.verrous, [])
+        self.assertEqual(result.search_requests, [])
+        self.assertEqual(
+            [row["valid"] for row in result.interpreter["decision_attempts"]],
+            [False, True],
+        )
+        self.assertEqual(len(result.plan), 1)
+
+    def test_targeted_verrou_scope_is_verified_and_applied_to_every_section(
+        self,
+    ) -> None:
+        classification = IntentClassification.model_validate(
+            _decision(
+                ConsultantIntent.DESCRIBE_REQUIREMENTS,
+                "Je me limite au verrou demandé.",
+                target_verrou_ids=["1"],
+                verrou_scope="per_verrou",
+            )["classification"]
+        )
+        known = [
+            {"id": 803, "title": "Généralisation SAR synthétique-réel"},
+            {"id": 804, "title": "Calage des simulations SAR"},
+        ]
+
+        scope = _resolve_targeted_verrou_scope(classification, known)
+        scoped_plan = _apply_verrou_scope_to_plan(
+            [
+                {"section_id": "s1", "title": "Contexte", "verrou_ids": []},
+                {"section_id": "s2", "title": "Limites", "verrou_ids": ["804"]},
+            ],
+            scope["active_verrou_ids"],
+        )
+
+        self.assertEqual(scope["review_scope"], "per_verrou")
+        self.assertEqual(scope["active_verrou_ids"], ["803"])
+        self.assertEqual(
+            [row["verrou_ids"] for row in scoped_plan],
+            [["803"], ["803"]],
+        )
+
+    def test_global_scope_exposes_catalog_without_narrowing_ids(self) -> None:
+        classification = IntentClassification.model_validate(
+            _decision(
+                ConsultantIntent.PROPOSE_PLAN,
+                "Je couvre tous les verrous retenus.",
+                verrou_scope="global",
+            )["classification"]
+        )
+        known = [
+            {"id": 101, "title": "Robustesse"},
+            {"id": 205, "title": "Traçabilité"},
+        ]
+
+        scope = _resolve_targeted_verrou_scope(classification, known)
+
+        self.assertEqual(scope["review_scope"], "global")
+        self.assertEqual(scope["active_verrou_ids"], [])
+        self.assertEqual(scope["active_verrous"], known)
+
+    def test_conversation_contract_paths_are_isolated(self) -> None:
+        agent = object.__new__(EnnoScholarGuidedResearchAgent)
+        agent._contract_path = lambda project: Path(
+            "C:/EnnoSmart/.nonexistent-tests/consultant_plan_contract.json"
+        )
+
+        first = agent._session_contract_path(
+            SimpleNamespace(id=1),
+            "11111111-1111-1111-1111-111111111111",
+        )
+        second = agent._session_contract_path(
+            SimpleNamespace(id=1),
+            "22222222-2222-2222-2222-222222222222",
+        )
+
+        self.assertNotEqual(first, second)
+        self.assertIn("11111111-1111-1111-1111-111111111111", str(first))
+        self.assertIn("22222222-2222-2222-2222-222222222222", str(second))
 
     def test_empty_memory_delta_cannot_erase_existing_project_memory(self) -> None:
         session = GuidedResearchSessionData(
