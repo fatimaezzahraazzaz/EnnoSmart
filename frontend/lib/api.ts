@@ -239,6 +239,7 @@ export type ArticleRead = {
   evidence_reason_detail?: string | null
   evidence_recommended_action?: string | null
   evidence_access_kind?: string | null
+  manual_upload_required?: boolean
   created_at: string
 }
 
@@ -1027,13 +1028,17 @@ export async function uploadAndExtractArticlePdf(
   projectId: number,
   articleId: number,
   file: File,
-  sourceUrl?: string | null
+  sourceUrl?: string | null,
+  guidedSessionId?: string | null,
 ) {
   const formData = new FormData()
   formData.append("file", file)
 
   if (sourceUrl) {
     formData.append("source_url", sourceUrl)
+  }
+  if (guidedSessionId) {
+    formData.append("guided_session_id", guidedSessionId)
   }
 
   return apiRequest<any>(
@@ -1309,6 +1314,32 @@ export async function getGuidedResearchSession(projectId: number, sessionId: str
     session: GuidedResearchSession
     artifacts?: Record<string, any>
   }>(`/api/projects/${projectId}/guided-research/sessions/${encodeURIComponent(sessionId)}`)
+}
+
+export async function getGuidedResearchCorpus(
+  projectId: number,
+  sessionId: string,
+) {
+  return apiRequest<{
+    ok: boolean
+    session_id: string
+    corpus_scope_id: string
+    scholar_run_id: number | null
+    articles: ArticleRead[]
+  }>(
+    `/api/projects/${projectId}/guided-research/sessions/${encodeURIComponent(sessionId)}/corpus`,
+  )
+}
+
+export async function removeGuidedResearchCorpusArticle(
+  projectId: number,
+  sessionId: string,
+  articleId: number,
+) {
+  return apiRequest<any>(
+    `/api/projects/${projectId}/guided-research/sessions/${encodeURIComponent(sessionId)}/corpus/${articleId}`,
+    { method: "DELETE" },
+  )
 }
 
 export async function sendGuidedResearchMessage(

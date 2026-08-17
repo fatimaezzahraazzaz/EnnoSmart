@@ -152,3 +152,10 @@ modules/llm_gateway/
 /tmp/
 /train/data_v2/
 /_debug/
+
+# Local patch packages / backups
+/EnnoSmart_V5_*/
+/_ennosmart_patch_backups/
+
+# Temporary pytest folders
+/.pytest_tmp*/

@@ -53,6 +53,7 @@ from ..lot1.conversation_understanding_service import (
     ConversationUnderstandingService,
     _ground_writing_source_policy,
 )
+from ..lot1.grounded_request_resolver import repair_contextual_classification
 from ..lot1.session_state_manager import GuidedResearchSessionStateManager
 from .session_repository import GuidedResearchSessionRepository
 from .web_research_service import WebResearchService
@@ -334,6 +335,40 @@ def _reconcile_contextual_intent(
 
     return classification
 
+
+def _promote_safe_compound_action(
+    classification: IntentClassification,
+    contract: Mapping[str, Any],
+) -> IntentClassification:
+    # Autorise uniquement le chaînage plan déjà présent -> approbation -> écriture.
+    # Les validations de sources, recherches et créations de verrou ne passent jamais
+    # par ce raccourci. Le plan doit exister et ACCEPT_PLAN/START_WRITING doivent être
+    # explicitement présents dans les actions du tour.
+    actions = list(dict.fromkeys(classification.requested_actions or []))
+    forbidden = set(classification.forbidden_actions or [])
+    safe_pair = (
+        bool(_contract_sections(contract))
+        and ConsultantIntent.ACCEPT_PLAN in actions
+        and ConsultantIntent.START_WRITING in actions
+        and ConsultantIntent.ACCEPT_PLAN not in forbidden
+        and ConsultantIntent.START_WRITING not in forbidden
+        and classification.intent in {
+            ConsultantIntent.ACCEPT_PLAN,
+            ConsultantIntent.START_WRITING,
+        }
+    )
+    if not safe_pair:
+        return classification
+    classification.intent = ConsultantIntent.START_WRITING
+    classification.explicit_plan_approval = True
+    classification.explicit_write_command = True
+    classification.needs_clarification = False
+    current = _clean(classification.classifier, 300) or "llm_contextual"
+    if "safe_compound_router_v2" not in current:
+        classification.classifier = current + "+safe_compound_router_v2"
+    return classification
+
+
 def _approve_for_combined_write(
     contract: Mapping[str, Any],
     message: str,
@@ -436,6 +471,144 @@ def _merge_additive_plan_update(
         used_ids.add(section_id)
         merged.append(addition)
     return normalize_plan_sections(merged)
+
+
+def _apply_local_plan_edit_scope(
+    current: Iterable[Mapping[str, Any]],
+    candidate: Iterable[Mapping[str, Any]],
+    *,
+    target_section_ids: Iterable[Any],
+    operation: str,
+) -> list[dict[str, Any]]:
+    """Applique un patch de plan sans laisser le modèle toucher au reste.
+
+    La compréhension conversationnelle choisit les ``section_id`` cibles. Cette
+    fonction constitue la frontière d'écriture : les lignes extérieures à ces
+    branches sont reprises depuis le contrat courant, jamais depuis la proposition
+    du modèle. Elle ne dépend donc ni de mots-clés ni de la langue du consultant.
+    """
+
+    current_plan = normalize_plan_sections(list(current))
+    candidate_plan = normalize_plan_sections(list(candidate))
+    current_by_id = {
+        _clean(row.get("section_id"), 200): row
+        for row in current_plan
+        if _clean(row.get("section_id"), 200)
+    }
+    targets = {
+        _clean(value, 200)
+        for value in target_section_ids
+        if _clean(value, 200) in current_by_id
+    }
+    if not current_plan or not targets:
+        return current_plan
+
+    mutable_ids = set(targets)
+    expanded = True
+    while expanded:
+        expanded = False
+        for row in current_plan:
+            row_id = _clean(row.get("section_id"), 200)
+            parent_id = _clean(row.get("parent_id"), 200)
+            if row_id and parent_id in mutable_ids and row_id not in mutable_ids:
+                mutable_ids.add(row_id)
+                expanded = True
+
+    normalized_operation = _clean(operation, 40).casefold()
+
+    def finalize(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        normalized_rows = normalize_plan_sections(list(rows))
+        frozen_ids = (
+            set(current_by_id)
+            if normalized_operation == "add"
+            else set(current_by_id) - mutable_ids
+        )
+        return [
+            dict(current_by_id[row_id])
+            if row_id in frozen_ids
+            else dict(row)
+            for row in normalized_rows
+            for row_id in [_clean(row.get("section_id"), 200)]
+        ]
+
+    if normalized_operation == "remove":
+        return finalize(
+            [
+                dict(row)
+                for row in current_plan
+                if _clean(row.get("section_id"), 200) not in mutable_ids
+            ]
+        )
+
+    candidate_by_id = {
+        _clean(row.get("section_id"), 200): row
+        for row in candidate_plan
+        if _clean(row.get("section_id"), 200)
+    }
+    output: list[dict[str, Any]] = []
+    for row in current_plan:
+        row_id = _clean(row.get("section_id"), 200)
+        replacement = candidate_by_id.get(row_id)
+        if (
+            normalized_operation == "modify"
+            and row_id in mutable_ids
+            and replacement is not None
+        ):
+            patched = dict(replacement)
+            patched["section_id"] = row_id
+            output.append(patched)
+        else:
+            # Copie autoritaire du contrat : toute modification LLM hors portée
+            # est ignorée, même si le modèle a renvoyé un plan complet.
+            output.append(dict(row))
+
+    used_ids = {
+        _clean(row.get("section_id"), 200)
+        for row in output
+        if _clean(row.get("section_id"), 200)
+    }
+    anchored_ids = set(mutable_ids)
+    pending = [
+        dict(row)
+        for row in candidate_plan
+        if _clean(row.get("section_id"), 200) not in current_by_id
+    ]
+    additions: list[dict[str, Any]] = []
+    while pending:
+        progress = False
+        remaining: list[dict[str, Any]] = []
+        for row in pending:
+            parent_id = _clean(row.get("parent_id"), 200)
+            if parent_id not in anchored_ids:
+                remaining.append(row)
+                continue
+            addition = dict(row)
+            section_id = _clean(addition.get("section_id"), 200)
+            if not section_id or section_id in used_ids:
+                base_id = storage_slug(addition.get("title"))
+                section_id = base_id
+                suffix = 2
+                while section_id in used_ids:
+                    section_id = f"{base_id}_{suffix}"
+                    suffix += 1
+                addition["section_id"] = section_id
+            used_ids.add(section_id)
+            anchored_ids.add(section_id)
+            additions.append(addition)
+            progress = True
+        if not progress:
+            break
+        pending = remaining
+
+    if additions:
+        last_mutable_index = max(
+            index
+            for index, row in enumerate(output)
+            if _clean(row.get("section_id"), 200) in mutable_ids
+        )
+        output[last_mutable_index + 1:last_mutable_index + 1] = additions
+
+    return finalize(output)
 
 
 def _plan_candidate_covers_current(
@@ -912,6 +1085,29 @@ class EnnoScholarGuidedResearchAgent:
             for card in cards[:30]
         ]
 
+        # BEGIN ENNOSCHOLAR_HANDOFF_ARTICLE_SCOPE_V1
+        handoff = (
+            dict(session.context.get("handoff") or {})
+            if isinstance(session.context.get("handoff"), Mapping)
+            else {}
+        )
+        frozen_article_ids = {
+            str(value).strip()
+            for value in (
+                handoff.get("selected_article_ids")
+                or session.context.get("handoff_selected_article_ids")
+                or []
+            )
+            if str(value).strip()
+        }
+        if bool(handoff.get("frozen")) and frozen_article_ids:
+            article_context = [
+                row
+                for row in article_context
+                if str(row.get("article_id") or "").strip() in frozen_article_ids
+            ]
+        # END ENNOSCHOLAR_HANDOFF_ARTICLE_SCOPE_V1
+
         narrative = read_json(self._phase47_path(project))
         narrative_context = {
             key: narrative.get(key)
@@ -935,8 +1131,6 @@ class EnnoScholarGuidedResearchAgent:
             18000,
         )
 
-        _, current_verrous = self._diagnostic_project_context(db, project)
-
         persisted_project_verrous = [
             dict(row)
             for row in (session.context.get("project_verrous") or [])
@@ -949,6 +1143,26 @@ class EnnoScholarGuidedResearchAgent:
             for row in (session.context.get("consultant_verrous") or [])
             if isinstance(row, Mapping) and _clean(row.get("title"), 700)
         ]
+
+        # BEGIN ENNOSCHOLAR_HANDOFF_VERROU_SCOPE_V1
+        # Si un handoff a figé un DiagnosticRun, ce snapshot devient la source
+        # d'autorité de cette conversation. On ne mélange plus implicitement les
+        # verrous d'un DiagnosticRun créé plus tard.
+        if bool(handoff.get("frozen")) and persisted_project_verrous:
+            current_verrous = list(persisted_project_verrous)
+        else:
+            _, current_verrous = self._diagnostic_project_context(db, project)
+            known_ids = {
+                _clean(row.get("id"), 120)
+                for row in current_verrous
+                if _clean(row.get("id"), 120)
+            }
+            current_verrous.extend(
+                row
+                for row in persisted_project_verrous
+                if _clean(row.get("id"), 120) not in known_ids
+            )
+
         known_ids = {
             _clean(row.get("id"), 120)
             for row in current_verrous
@@ -956,19 +1170,10 @@ class EnnoScholarGuidedResearchAgent:
         }
         current_verrous.extend(
             row
-            for row in persisted_project_verrous
-            if _clean(row.get("id"), 120) not in known_ids
-        )
-        known_ids.update(
-            _clean(row.get("id"), 120)
-            for row in persisted_project_verrous
-            if _clean(row.get("id"), 120)
-        )
-        current_verrous.extend(
-            row
             for row in standalone_verrous
             if _clean(row.get("id"), 120) not in known_ids
         )
+        # END ENNOSCHOLAR_HANDOFF_VERROU_SCOPE_V1
 
         return {
             "project": {
@@ -999,6 +1204,14 @@ class EnnoScholarGuidedResearchAgent:
             "plan_history": list(
                 _plan_history_from_session(session)
             ),
+            # BEGIN ENNOSCHOLAR_HANDOFF_CONTEXT_V1
+            "handoff": handoff,
+            "selected_article_ids": list(
+                handoff.get("selected_article_ids")
+                or session.context.get("handoff_selected_article_ids")
+                or []
+            ),
+            # END ENNOSCHOLAR_HANDOFF_CONTEXT_V1
             "writing_source_policy": dict(
                 session.context.get("writing_source_policy") or {}
             ),
@@ -1086,6 +1299,10 @@ class EnnoScholarGuidedResearchAgent:
                 "contract_path": str(isolated_contract_path),
                 "guided_sources_path": str(isolated_sources_path),
                 "conversation_storage_isolated": True,
+                "corpus_scope_id": session.session_id,
+                "corpus_isolation_policy": (
+                    "one_guided_conversation_one_corpus"
+                ),
             },
         )
         session = self.state_manager.get_session(db, session.session_id)
@@ -1221,6 +1438,20 @@ class EnnoScholarGuidedResearchAgent:
             message,
             classification,
         )
+        # BEGIN ENNOSCHOLAR_GROUNDED_ROUTE_REPAIR_V1
+        # Deuxième niveau de sécurité : couvre aussi le fallback lorsque le
+        # contrôleur structuré n'a pas produit de ConversationUnderstanding.
+        classification = repair_contextual_classification(
+            classification,
+            consultant_message=message,
+            current_verrous=conversation_project_context.get("current_verrous") or [],
+            current_plan=_contract_sections(contract),
+            session_context=session.context,
+        )
+        # END ENNOSCHOLAR_GROUNDED_ROUTE_REPAIR_V1
+        # BEGIN ENNOSCHOLAR_SAFE_COMPOUND_ROUTER_V2
+        classification = _promote_safe_compound_action(classification, contract)
+        # END ENNOSCHOLAR_SAFE_COMPOUND_ROUTER_V2
         original_intent = classification.intent
         intent = _resolve_routed_intent(classification)
         classification.intent = intent
@@ -1229,6 +1460,11 @@ class EnnoScholarGuidedResearchAgent:
         if understanding is not None:
             interpretation = understanding.model_dump(mode="json")
             interpretation["classification"] = classification.model_dump(mode="json")
+            if "safe_compound_router_v2" in _clean(classification.classifier, 400):
+                interpretation["assistant_message"] = (
+                    "Le plan courant est validé dans ce même tour et la rédaction "
+                    "peut démarrer immédiatement avec le corpus autorisé."
+                )
             if route_guard_applied and not _clean(
                 interpretation.get("assistant_message"), 6000
             ):
@@ -1341,12 +1577,16 @@ class EnnoScholarGuidedResearchAgent:
             }
         if (
             understanding is not None
-            and intent not in _RESPONSE_ONLY_INTENTS
+            and intent != ConsultantIntent.UNKNOWN
             and not route_guard_applied
         ):
+            # BEGIN ENNOSCHOLAR_CONVERSATION_MEMORY_V2
+            # CONVERSE et EXPLAIN_SOURCE peuvent eux aussi établir un fait ou une
+            # préférence explicitement formulée par le consultant.
             context_updates["conversation_memory"] = (
                 understanding.memory.model_dump(mode="json")
             )
+            # END ENNOSCHOLAR_CONVERSATION_MEMORY_V2
         self.repository.update(
             db,
             session_id,
@@ -1489,10 +1729,65 @@ class EnnoScholarGuidedResearchAgent:
                 },
             )
 
+        # BEGIN ENNOSCHOLAR_PLAN_EDIT_THEN_WRITE_V2
+        # Cas naturel : « modifie X, garde/valide le nouveau plan et rédige ».
+        # La modification reste la première opération car son payload doit être
+        # matérialisé ; une fois réussie, l'approbation + rédaction peuvent être
+        # chaînées sans nouveau tour.
+        if (
+            intent in _PLAN_ACTION_INTENTS
+            and classification.explicit_plan_approval
+            and classification.explicit_write_command
+            and ConsultantIntent.START_WRITING in classification.requested_actions
+            and not route_guard_applied
+            and bool(response.metadata.get("plan_changed"))
+        ):
+            refreshed_session = self.state_manager.get_session(db, session_id)
+            refreshed_snapshot = self.repository.snapshot(db, session_id)
+            refreshed_contract = dict(
+                refreshed_snapshot.get("writing_contract") or {}
+            )
+            if _contract_sections(refreshed_contract):
+                write_response = self._start_writing(
+                    db,
+                    project,
+                    refreshed_session,
+                    refreshed_contract,
+                    contract_path,
+                    message,
+                    explicit_plan_approval=True,
+                    use_current_sources_only=classification.use_current_sources_only,
+                    writing_source_scope=classification.writing_source_scope,
+                    writing_source_identifiers=classification.writing_source_identifiers,
+                    requested_source_count=classification.requested_source_count,
+                    action_intent=ConsultantIntent.START_WRITING,
+                )
+                write_response.metadata["compound_actions_executed"] = [
+                    intent.value,
+                    ConsultantIntent.ACCEPT_PLAN.value,
+                    ConsultantIntent.START_WRITING.value,
+                ]
+                response = write_response
+        # END ENNOSCHOLAR_PLAN_EDIT_THEN_WRITE_V2
+
+        executed_actions = {intent}
+        if (
+            intent == ConsultantIntent.START_WRITING
+            and classification.explicit_plan_approval
+            and ConsultantIntent.ACCEPT_PLAN in classification.requested_actions
+        ):
+            executed_actions.add(ConsultantIntent.ACCEPT_PLAN)
+        for raw_action in response.metadata.get("compound_actions_executed") or []:
+            try:
+                executed_actions.add(ConsultantIntent(raw_action))
+            except Exception:
+                pass
+
         deferred_actions = [
             action
             for action in classification.requested_actions
-            if action != intent and action not in classification.forbidden_actions
+            if action not in executed_actions
+            and action not in classification.forbidden_actions
         ]
         if deferred_actions and not route_guard_applied:
             response.metadata["deferred_requested_actions"] = [
@@ -2390,7 +2685,19 @@ class EnnoScholarGuidedResearchAgent:
             explicit_scope_ids or stored_scope_ids,
         )
         normalized_proposed_plan = normalize_plan_sections(proposed_plan)
-        if allow_plan_change and not normalized_proposed_plan:
+        local_edit_requested = bool(
+            allow_plan_change
+            and classification.plan_edit_scope == "local_section"
+            and not classification.replace_current_plan
+        )
+        if (
+            allow_plan_change
+            and not normalized_proposed_plan
+            and not (
+                local_edit_requested
+                and classification.plan_edit_operation == "remove"
+            )
+        ):
             return self._respond_only(
                 session,
                 intent=ConsultantIntent.UNKNOWN,
@@ -2401,12 +2708,47 @@ class EnnoScholarGuidedResearchAgent:
                     )
                 },
             )
+        local_edit_scope_applied = False
+        if local_edit_requested:
+            known_section_ids = {
+                _clean(row.get("section_id"), 200)
+                for row in current_plan
+                if _clean(row.get("section_id"), 200)
+            }
+            requested_target_ids = {
+                _clean(value, 200)
+                for value in (classification.target_section_ids or [])
+                if _clean(value, 200)
+            }
+            if (
+                not requested_target_ids
+                or not requested_target_ids <= known_section_ids
+            ):
+                return self._respond_only(
+                    session,
+                    intent=ConsultantIntent.UNKNOWN,
+                    interpretation={
+                        "assistant_message": (
+                            "J'ai compris qu'une modification locale est demandée, "
+                            "mais je n'ai pas relié sa cible à une section unique du "
+                            "plan courant. Pouvez-vous préciser la partie concernée ?"
+                        )
+                    },
+                )
+            normalized_proposed_plan = _apply_local_plan_edit_scope(
+                current_plan,
+                normalized_proposed_plan,
+                target_section_ids=requested_target_ids,
+                operation=classification.plan_edit_operation,
+            )
+            local_edit_scope_applied = True
         if (
             action_intent in {
                 ConsultantIntent.ADD_TOPIC,
                 ConsultantIntent.CHANGE_PLAN,
             }
             and not classification.replace_current_plan
+            and not local_edit_scope_applied
             and not _plan_candidate_covers_current(
                 normalized_proposed_plan,
                 current_plan,
@@ -2684,6 +3026,15 @@ class EnnoScholarGuidedResearchAgent:
                 "plan_changed": plan_changed,
                 "trigger_state_of_art_generation": False,
                 "conversation_natural": True,
+                "edit_scope": {
+                    "applied": local_edit_scope_applied,
+                    "scope": classification.plan_edit_scope,
+                    "operation": classification.plan_edit_operation,
+                    "target_section_ids": list(
+                        classification.target_section_ids or []
+                    ),
+                    "other_sections_frozen": local_edit_scope_applied,
+                },
             },
         )
 
@@ -2786,6 +3137,38 @@ class EnnoScholarGuidedResearchAgent:
             if action_intent == ConsultantIntent.REVISE_DRAFT
             else ""
         )
+        # BEGIN ENNOSCHOLAR_WRITING_REQUEST_MEMORY_V2
+        # L'ordre de rédaction du consultant doit descendre jusqu'au writer, pas
+        # seulement servir au routage. On conserve le texte exact comme contrainte
+        # de cette version (ex. « bien défendre les verrous à partir des articles
+        # existants »), sans en déduire de faits supplémentaires.
+        writing_request = _clean(message, 6000)
+        if writing_request:
+            if session.brief is not None:
+                previous_raw = _clean(session.brief.raw_request, 10000)
+                merged_raw = _clean(
+                    "\n".join(value for value in (previous_raw, writing_request) if value),
+                    12000,
+                )
+                directive = (
+                    "Instruction de rédaction du consultant pour cette version : "
+                    + writing_request
+                )
+                enriched_brief = session.brief.model_copy(update={
+                    "raw_request": merged_raw,
+                    "general_constraints": _unique([
+                        *(session.brief.general_constraints or []),
+                        directive,
+                    ]),
+                })
+                self.state_manager.update_brief(db, session.session_id, enriched_brief)
+                session = self.state_manager.get_session(db, session.session_id)
+            self.repository.update(
+                db,
+                session.session_id,
+                context_updates={"last_writing_request": writing_request},
+            )
+        # END ENNOSCHOLAR_WRITING_REQUEST_MEMORY_V2
         if _clean(session.context.get("operating_mode"), 80) == "standalone_chat":
             snapshot = self.repository.snapshot(db, session.session_id)
             context = dict(snapshot.get("context") or {})
@@ -2903,27 +3286,67 @@ class EnnoScholarGuidedResearchAgent:
                     },
                 )
 
-            # Le mode autonome suit dÃ©sormais exactement le pipeline commun :
-            # reconstruction sans LLM des Phases 1/2, puis dÃ©clenchement des
-            # Phases 3, 4, 4.5, 4.6, 4.7 et 5 par le frontend.
+            # Le mode autonome utilise exclusivement le corpus privé de cette
+            # conversation. Le workflow 1 conserve, lui, son ScholarRun global
+            # et sa préparation scientifique historique inchangés.
             try:
-                from services.scholar_state_of_art_payload_service import (
-                    build_state_of_art_selection_payload,
-                )
                 from services.article_card_builder import (
                     build_article_cards_for_selected_articles,
+                    get_article_cards_payload,
                 )
 
-                selection_payload = build_state_of_art_selection_payload(
-                    db,
+                corpus_scope_id = _clean(
+                    context.get("corpus_scope_id") or session.session_id,
+                    160,
+                )
+                cards_payload = get_article_cards_payload(
                     project,
-                )
-                cards_payload = build_article_cards_for_selected_articles(
+                    scope_id=corpus_scope_id,
                     db=db,
-                    project=project,
-                    mode="auto",
-                    force=False,
                 )
+                corpus_run_id = cards_payload.get("scholar_run_id")
+                if not list(cards_payload.get("cards") or []):
+                    if corpus_run_id is None:
+                        raise RuntimeError(
+                            "Le corpus privé de cette conversation est introuvable."
+                        )
+                    cards_payload = build_article_cards_for_selected_articles(
+                        db=db,
+                        project=project,
+                        mode="auto",
+                        force=False,
+                        scholar_run_id=int(corpus_run_id),
+                        scope_id=corpus_scope_id,
+                    )
+                    corpus_run_id = cards_payload.get("scholar_run_id") or corpus_run_id
+
+                ready_cards_count = int(
+                    cards_payload.get("writing_ready_cards_count")
+                    or len(cards_payload.get("cards") or [])
+                )
+                if ready_cards_count < 1:
+                    raise RuntimeError(
+                        "Aucune Article Card exploitable dans cette conversation."
+                    )
+
+                selection_payload = {
+                    "ok": True,
+                    "selection_summary": {
+                        "selected_articles_count": int(
+                            cards_payload.get("selected_articles_count")
+                            or ready_cards_count
+                        ),
+                        "writing_ready_articles_count": ready_cards_count,
+                        "excluded_from_writing_count": int(
+                            cards_payload.get("excluded_from_writing_count") or 0
+                        ),
+                    },
+                    "scope_id": corpus_scope_id,
+                    "scholar_run_id": (
+                        int(corpus_run_id) if corpus_run_id is not None else None
+                    ),
+                    "policy": "conversation_ready_article_cards_only",
+                }
             except Exception as exc:
                 print(
                     "[EnnoScholar][STANDALONE][PHASE1_2][ERROR] "
@@ -2934,9 +3357,10 @@ class EnnoScholarGuidedResearchAgent:
                     action_intent,
                     GuidedResearchState.READY_TO_WRITE,
                     (
-                        "La prÃ©paration scientifique n'est pas encore complÃ¨te. "
-                        "Le plan et les sources sont conservÃ©s ; relancez la "
-                        "rÃ©daction sans refaire la recherche."
+                        "La préparation scientifique de cette conversation ne "
+                        "contient encore aucune Article Card exploitable. Le plan "
+                        "et les sources sont conservés ; ajoutez le PDF d'au moins "
+                        "un article indisponible, puis relancez la rédaction."
                     ),
                     NextAction.START_WRITING,
                     session.brief,
@@ -2972,10 +3396,11 @@ class EnnoScholarGuidedResearchAgent:
                 action_intent,
                 GuidedResearchState.WRITING_IN_PROGRESS,
                 (
-                    "Je lance la rÃ©daction avec le plan validÃ© et toutes les "
-                    "publications prÃªtes, y compris les PDF ajoutÃ©s depuis votre "
-                    "ordinateur. Le dossier va parcourir les Phases 1 Ã  5 sans "
-                    "nouvelle recherche."
+                    f"Je lance la rédaction avec le plan validé et les "
+                    f"{ready_cards_count} Article Card(s) exploitable(s) de cette "
+                    "conversation. Les publications sans texte intégral vérifié "
+                    "restent exclues sans bloquer la rédaction. Le dossier va "
+                    "parcourir les Phases 1 à 5 sans nouvelle recherche."
                 ),
                 NextAction.START_WRITING,
                 session.brief,
@@ -3798,10 +4223,70 @@ CONSIGNES IMPÉRATIVES
             state=GuidedResearchState.RESEARCH_IN_PROGRESS,
             ready_to_write=False,
         )
+        try:
+            research_project_context = (
+                self._resolved_conversation_project_context(
+                    db, project, session
+                )
+            )
+        except Exception:
+            # Les adaptateurs de test et certains appels hors requête HTTP
+            # utilisent une session SQLAlchemy minimale. La recherche conserve
+            # alors le contexte déjà figé dans la conversation.
+            snapshot_context = dict(snapshot.get("context") or {})
+            research_project_context = {
+                "project": {
+                    "id": int(getattr(project, "id", session.project_id)),
+                    "organisme": str(getattr(project, "organisme", "")),
+                    "name": str(getattr(project, "project_name", "")),
+                    "year": str(getattr(project, "year", "")),
+                    "domain": _clean(
+                        getattr(project, "domain_label", ""), 500
+                    ),
+                },
+                "current_verrous": [
+                    dict(row)
+                    for row in [
+                        *(snapshot_context.get("project_verrous") or []),
+                        *(snapshot_context.get("consultant_verrous") or []),
+                    ]
+                    if isinstance(row, Mapping)
+                ],
+                "active_verrou_ids": list(
+                    snapshot_context.get("active_verrou_ids") or []
+                ),
+                "operating_mode": _clean(
+                    snapshot_context.get("operating_mode"), 80
+                ),
+                "standalone_project_brief": dict(
+                    snapshot_context.get("standalone_project_brief") or {}
+                ),
+            }
         result = self.research.search(
             requests_payload,
             excluded_ids=excluded,
-            max_candidates=30,
+            # Le workflow chat EnnoScholar réutilise le moteur scientifique
+            # complet du workflow Agent 1 -> verrou -> Agent 2. La limite de
+            # présentation du moteur léger ne doit pas masquer des résultats.
+            max_candidates=60,
+            project_context={
+                **research_project_context,
+                "guided_session_id": session.session_id,
+                "corpus_scope_id": _clean(
+                    session.context.get("corpus_scope_id")
+                    or session.session_id,
+                    120,
+                ),
+                "entry_module": str(
+                    getattr(session.entry_module, "value", session.entry_module)
+                ),
+            },
+            full_ennoscholar=(
+                str(
+                    getattr(session.entry_module, "value", session.entry_module)
+                ).casefold()
+                == "ennoscholar"
+            ),
         )
         batch_id = (
             "BATCH-"

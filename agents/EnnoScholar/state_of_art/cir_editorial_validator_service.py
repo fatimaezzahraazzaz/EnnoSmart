@@ -478,8 +478,17 @@ def verify_numeric_claims(
                     for citation in citations
                 )
                 for number in numbers:
+                    # Les articles utilisent généralement le point décimal,
+                    # tandis que la rédaction française emploie la virgule.
+                    # Il s'agit de la même valeur scientifique : 0.787 == 0,787.
                     compact = re.sub(r"\s+", "", number.casefold())
                     compact_source = re.sub(r"\s+", "", source_text.casefold())
+                    compact = re.sub(r"(?<=\d),(?=\d)", ".", compact)
+                    compact_source = re.sub(
+                        r"(?<=\d),(?=\d)",
+                        ".",
+                        compact_source,
+                    )
                     if compact and compact not in compact_source:
                         issues.append(
                             {

@@ -18,6 +18,7 @@ from .domain.models import (
     GuidedResearchSessionData,
     IntentClassification,
 )
+from .grounded_request_resolver import repair_contextual_classification
 
 logger = logging.getLogger(__name__)
 
@@ -340,6 +341,18 @@ def _compact_project_context(value: Mapping[str, Any]) -> dict[str, Any]:
         ),
         "previous_project_memories": previous_memories,
         "plan_history": plan_history,
+        # BEGIN ENNOSCHOLAR_HANDOFF_CONTEXT_V1
+        "handoff": (
+            dict(value.get("handoff") or {})
+            if isinstance(value.get("handoff"), Mapping)
+            else {}
+        ),
+        "selected_article_ids": [
+            int(article_id)
+            for article_id in (value.get("selected_article_ids") or [])
+            if str(article_id).strip().isdigit()
+        ][:100],
+        # END ENNOSCHOLAR_HANDOFF_CONTEXT_V1
         "writing_source_policy": (
             dict(value.get("writing_source_policy") or {})
             if isinstance(value.get("writing_source_policy"), Mapping)
@@ -511,6 +524,24 @@ def _ground_explicit_plan_edit_decision(
         return decision
 
     classification = decision.classification
+    resolved_target_ids = [
+        _clean(target.get("section_id"), 120)
+        for target in targets
+        if _clean(target.get("section_id"), 120)
+    ]
+    if resolved_target_ids:
+        classification.target_section_ids = resolved_target_ids
+        classification.plan_edit_scope = "local_section"
+        if classification.plan_edit_operation == "none":
+            classification.plan_edit_operation = {
+                ConsultantIntent.ADD_TOPIC: "add",
+                ConsultantIntent.REMOVE_TOPIC: "remove",
+            }.get(classification.intent, "modify")
+        if classification.content_target not in {
+            "existing_section",
+            "existing_paragraph",
+        }:
+            classification.content_target = "existing_section"
     if classification.intent in {ConsultantIntent.UNKNOWN, ConsultantIntent.CONVERSE}:
         classification.intent = ConsultantIntent.CHANGE_PLAN
         classification.requested_actions = [ConsultantIntent.CHANGE_PLAN]
@@ -850,6 +881,32 @@ def _normalize_turn_decision(decision: _TurnDecision) -> _TurnDecision:
         decision.plan_generation_mode = "none"
         decision.plan_document_scope = "none"
 
+    plan_intents = {
+        ConsultantIntent.PROPOSE_PLAN,
+        ConsultantIntent.ADD_TOPIC,
+        ConsultantIntent.REMOVE_TOPIC,
+        ConsultantIntent.CHANGE_PLAN,
+    }
+    if intent not in plan_intents:
+        classification.plan_edit_scope = "none"
+        classification.plan_edit_operation = "none"
+        classification.target_section_ids = []
+    elif intent == ConsultantIntent.PROPOSE_PLAN:
+        classification.plan_edit_scope = "full_plan"
+        classification.plan_edit_operation = "none"
+        classification.target_section_ids = []
+    elif classification.plan_edit_scope == "local_section":
+        classification.target_section_ids = list(
+            dict.fromkeys(
+                _clean(value, 200)
+                for value in (classification.target_section_ids or [])
+                if _clean(value, 200)
+            )
+        )
+    elif classification.replace_current_plan:
+        classification.plan_edit_scope = "full_plan"
+        classification.target_section_ids = []
+
     if intent in _WRITING_INTENTS:
         classification.explicit_write_command = True
         if classification.writing_source_scope != "unspecified":
@@ -952,6 +1009,26 @@ def _ground_writing_source_policy(
             "corpus actuel",
             "sources actuelles",
             "articles actuels",
+            # BEGIN ENNOSCHOLAR_EXISTING_SOURCES_SYNONYMS_V2
+            "articles existants",
+            "sources existantes",
+            "publications existantes",
+            "articles deja existants",
+            "sources deja existantes",
+            "articles deja trouves",
+            "sources deja trouvees",
+            "publications deja trouvees",
+            "articles deja selectionnes",
+            "sources deja selectionnees",
+            "articles qu on a",
+            "sources qu on a",
+            "articles qu on a deja",
+            "sources qu on a deja",
+            "articles gardes",
+            "sources gardees",
+            "articles conserves",
+            "sources conservees",
+            # END ENNOSCHOLAR_EXISTING_SOURCES_SYNONYMS_V2
         )
     )
 
@@ -995,6 +1072,33 @@ def _decision_consistency_error(decision: _TurnDecision) -> str:
         return "La version précise du plan doit être indiquée."
     classification = decision.classification
     if (
+        classification.intent
+        in {
+            ConsultantIntent.ADD_TOPIC,
+            ConsultantIntent.REMOVE_TOPIC,
+            ConsultantIntent.CHANGE_PLAN,
+        }
+        and classification.content_target
+        in {"existing_section", "existing_paragraph"}
+        and classification.plan_edit_scope != "local_section"
+    ):
+        return (
+            "Une action visant une section ou un paragraphe existant doit être "
+            "déclarée comme plan_edit_scope=local_section et résoudre ses "
+            "target_section_ids depuis le plan indexé."
+        )
+    if classification.plan_edit_scope == "local_section":
+        if not classification.target_section_ids:
+            return (
+                "Une modification locale doit identifier la ou les sections "
+                "cibles par leur section_id exact du plan indexé."
+            )
+        if classification.plan_edit_operation == "none":
+            return (
+                "Une modification locale doit préciser si elle ajoute, modifie "
+                "ou supprime dans la section ciblée."
+            )
+    if (
         classification.intent == ConsultantIntent.ADD_VERROU_AND_SEARCH
         and not classification.explicit_new_verrou_declaration
     ):
@@ -1003,6 +1107,26 @@ def _decision_consistency_error(decision: _TurnDecision) -> str:
             "explicitement un verrou nouveau ou manquant. La sélection d'un "
             "ou de plusieurs verrous déjà présents dans current_verrous ne "
             "crée aucun verrou."
+        )
+    if classification.intent == ConsultantIntent.ADD_VERROU_AND_SEARCH and (
+        classification.scientific_scope_relation != "declares_new_verrou"
+        or classification.content_target != "new_verrou"
+    ):
+        return (
+            "ADD_VERROU_AND_SEARCH exige trois décisions sémantiques "
+            "cohérentes : explicit_new_verrou_declaration=true, "
+            "scientific_scope_relation=declares_new_verrou et "
+            "content_target=new_verrou. Si le sujet sert une section, un "
+            "paragraphe ou un verrou existant, choisis SEARCH_MORE."
+        )
+    if (
+        classification.scientific_scope_relation
+        == "supports_existing_verrou"
+        and classification.intent == ConsultantIntent.ADD_VERROU_AND_SEARCH
+    ):
+        return (
+            "Un complément destiné à soutenir un verrou existant ne peut pas "
+            "être matérialisé comme un nouveau verrou."
         )
     if (
         classification.writing_source_scope == "explicit_selection"
@@ -1397,6 +1521,16 @@ SÉMANTIQUE DE DÉCISION
   ou plusieurs verrous qu'il déclare lui-même : le serveur les conservera dans la
   conversation sans créer de faux diagnostic. Une simple demande de section reste
   ADD_TOPIC.
+- « nouveau » qualifie uniquement le nom qui le suit : « nouveau paragraphe »,
+  « nouvelle section », « nouveau passage » ou « nouveaux articles » ne déclarent
+  jamais un nouveau verrou. Si le consultant demande une recherche pour enrichir
+  ce paragraphe/section, choisis SEARCH_MORE et rattache les requêtes au verrou
+  actif. ADD_VERROU_AND_SEARCH exige une formulation explicite telle que
+  « ajoute un verrou », « nouveau verrou » ou « verrou manquant ».
+- Une méthode, un modèle ou un thème demandé « pour argumenter/renforcer/étayer le
+  verrou initial/existant » est un complément de preuve : choisis SEARCH_MORE,
+  explicit_new_verrou_declaration=false et conserve le verrou actif. Ne transforme
+  jamais le nom de cette méthode ou de ce thème en titre de verrou.
 - En operating_mode=diagnostic_backed, current_verrous est le catalogue des verrous
   scientifiques déjà retenus pour le projet. Une demande portant sur un verrou de ce
   catalogue, sur plusieurs d'entre eux ou sur leur totalité réutilise ce catalogue :
@@ -1420,6 +1554,14 @@ SÉMANTIQUE DE DÉCISION
 - START_WRITING couvre aussi une formulation naturelle qui constate que le plan
   et les sources sont prêts puis demande de commencer, poursuivre ou produire
   l'état de l'art. Ce n'est pas une simple conversation.
+- « garde le plan », « on peut garder ce plan », « ce plan me convient », « valide ce
+  plan » ou « conserve le même plan » constituent une approbation explicite lorsqu'elles
+  sont formulées dans le tour courant. Si la même phrase ordonne aussi de rédiger,
+  utilise la séquence atomique ACCEPT_PLAN -> START_WRITING décrite ci-dessus.
+- « articles existants », « articles déjà trouvés/sélectionnés/gardés », « sources
+  existantes/actuelles » ou formulations équivalentes désignent le corpus validé déjà
+  disponible : writing_source_scope=all_validated et use_current_sources_only=true ;
+  n'annonce aucune recherche complémentaire.
 - UNKNOWN : le tour ne peut pas être résolu de façon fiable ; pose une question courte.
 
 RÈGLES
@@ -1438,10 +1580,25 @@ RÈGLES
 - Une ancienne réponse assistant, un article ou une lacune du projet n'est jamais une
   demande actuelle. N'en parle pas spontanément.
 - requested_actions contient seulement les capacités effectivement demandées maintenant,
-  dans leur ordre. intent est la première action sûre à exécuter ; les suivantes seront
-  différées jusqu'à une validation intermédiaire, et assistant_message le dit clairement.
+  dans leur ordre. Pour des actions COMPATIBLES déjà autorisées par le même tour, ne force
+  pas artificiellement un aller-retour supplémentaire. En particulier, si un PLAN COURANT
+  existe et que le consultant dit naturellement « garde/conserve/valide ce plan et rédige »,
+  requested_actions=[ACCEPT_PLAN, START_WRITING], explicit_plan_approval=true,
+  explicit_write_command=true et intent=START_WRITING : le serveur approuvera le plan puis
+  lancera la rédaction de façon atomique. Une modification explicite de plan suivie de
+  « valide et rédige » garde l'action de plan comme intent et conserve ACCEPT_PLAN puis
+  START_WRITING dans requested_actions ; le serveur chaînera seulement après matérialisation
+  réussie du nouveau plan. Les actions nécessitant une vraie validation humaine (nouveaux
+  articles, nouveau verrou, sélection de sources) restent différées.
   Une mention, une hypothèse, une négation ou une action future n'en fait pas partie ;
   place les actions interdites dans forbidden_actions.
+- Analyse la phrase de manière compositionnelle avant de choisir l'intention :
+  (1) quel objet le consultant veut-il ajouter/modifier (plan, section, paragraphe,
+  source, verrou), (2) quel rôle joue le thème nommé par rapport au verrou
+  (complément de preuve, nouveau verrou, aucun lien), (3) quelle action est demandée
+  maintenant (chercher, modifier, rédiger, expliquer). Ne transfère jamais l'adjectif
+  « nouveau » d'un nom à un autre et ne transforme pas automatiquement le thème de
+  recherche en verrou.
 - En mode standalone_chat, une demande « écris/rédige l'état de l'art du verrou X »
   nécessite d'abord ADD_VERROU_AND_SEARCH si aucune source validée ni aucun verrou de
   session n'existe. Si la rédaction est explicitement demandée, ajoute START_WRITING
@@ -1454,6 +1611,29 @@ RÈGLES
   explicitement qu'un verrou nouveau ou manquant doit être ajouté. Il reste false pour
   une demande concernant un, plusieurs ou tous les verrous déjà présents dans
   current_verrous. ADD_VERROU_AND_SEARCH est invalide lorsque ce booléen vaut false.
+- scientific_scope_relation décrit le rôle sémantique du sujet demandé :
+  supports_existing_verrou si ce sujet sert à enrichir, comparer, nuancer, étayer,
+  argumenter ou documenter un verrou existant ; declares_new_verrou seulement si le
+  consultant demande explicitement d'en faire un verrou nouveau ; unrelated_to_verrou
+  si le tour n'a aucun rapport avec les verrous ; unspecified si rien ne permet de
+  trancher. Une nouvelle méthode/source/section est normalement un complément, pas un
+  verrou.
+- content_target indique l'objet réellement visé : existing_plan, existing_section,
+  existing_paragraph, existing_draft, existing_verrou ou new_verrou. Par exemple,
+  « ajoute un paragraphe sur X et cherche des articles » donne
+  content_target=existing_paragraph et scientific_scope_relation=supports_existing_verrou ;
+  « ajoute un verrou X et cherche » donne content_target=new_verrou et
+  scientific_scope_relation=declares_new_verrou.
+- plan_edit_scope décrit la portée de toute action de plan : local_section quand
+  l'ajout, la modification ou la suppression vise une partie précise ; full_plan
+  seulement lorsque le consultant demande réellement une refonte ou un remplacement
+  global ; none hors action de plan. Cette décision est sémantique et ne dépend pas
+  de mots-clés particuliers ni de la langue employée.
+- Pour plan_edit_scope=local_section, target_section_ids contient exclusivement les
+  section_id exacts résolus depuis PLAN COURANT INDEXÉ, y compris lorsque la cible est
+  exprimée par un titre, une paraphrase, un numéro, un pronom ou une correction dans
+  n'importe quelle langue. plan_edit_operation vaut add, modify ou remove selon
+  l'effet demandé. Toutes les sections hors cible doivent rester strictement figées.
 - replace_current_plan indique que le plan demandé remplace la structure courante.
   Il reste false pour un ajout ou une modification locale, même si l'intention
   principale est CHANGE_PLAN.
@@ -1568,6 +1748,10 @@ Produis uniquement les arguments nécessaires à cette intention :
   replace_current_plan=false, renvoie uniquement les sections ajoutées ou modifiées.
   Pour CHANGE_PLAN avec replace_current_plan=true et pour REMOVE_TOPIC, renvoie
   l'intégralité de la structure finale.
+- Pour plan_edit_scope=local_section, ne renvoie qu'un patch local : la section cible,
+  ses descendants réellement modifiés et les nouveaux descendants demandés. Recopie
+  exactement les section_id de target_section_ids. Ne réécris, ne renomme, ne déplace
+  et ne supprime aucune section extérieure à cette portée ; le serveur les figera.
 - IMPORTANT — références structurelles : lorsqu'un consultant nomme une partie/section
   par son numéro ou son titre, PLAN COURANT INDEXÉ / PLAN DE RÉFÉRENCE INDEXÉ donne
   l'identité exacte de la cible. Ne déplace jamais la demande vers une autre partie.
@@ -1681,19 +1865,57 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
                 consultant_message,
                 decision.classification,
             )
-            if decision.classification.intent in {
-                ConsultantIntent.CONVERSE,
-                ConsultantIntent.UNKNOWN,
-                ConsultantIntent.EXPLAIN_SOURCE,
-            }:
-                # Un tour sans mutation métier ne doit pas réécrire la mémoire
-                # durable à partir d'une simple réponse conversationnelle.
+            # BEGIN ENNOSCHOLAR_GROUNDED_ROUTE_REPAIR_V1
+            decision.classification = repair_contextual_classification(
+                decision.classification,
+                consultant_message=consultant_message,
+                current_verrous=compact_context.get("current_verrous") or [],
+                current_plan=compact_plan,
+                session_context=compact_context,
+            )
+            grounded_repair = (
+                "grounded_project_context_repair_v1"
+                in str(decision.classification.classifier or "")
+            )
+            if grounded_repair and decision.classification.intent == ConsultantIntent.PROPOSE_PLAN:
+                decision.plan_reference = "none"
+                decision.plan_generation_mode = "initial" if not compact_plan else "alternative"
+                decision.plan_document_scope = "state_of_art"
+                decision.assistant_message = (
+                    "J'ai compris : vous souhaitez couvrir l'ensemble des verrous "
+                    "déjà présents dans cette conversation. Je prépare d'abord "
+                    "un plan global à valider avant la rédaction."
+                )
+            elif grounded_repair and decision.classification.intent == ConsultantIntent.START_WRITING:
+                decision.assistant_message = (
+                    "J'ai compris : la rédaction doit utiliser le périmètre de "
+                    "verrous déjà établi, le plan courant et le corpus validé."
+                )
+            elif (
+                "existing_scope_research_repair_v3"
+                in str(decision.classification.classifier or "")
+                and decision.classification.intent
+                == ConsultantIntent.SEARCH_MORE
+            ):
+                decision.assistant_message = (
+                    "J'ai compris : le thème demandé sert à enrichir la section "
+                    "et à argumenter le verrou déjà actif. Je lance une recherche "
+                    "complémentaire sans créer de nouveau verrou."
+                )
+            # END ENNOSCHOLAR_GROUNDED_ROUTE_REPAIR_V1
+
+            # BEGIN ENNOSCHOLAR_CONVERSATION_MEMORY_V2
+            # Une phrase conversationnelle peut contenir un fait projet ou une
+            # préférence durable. On conserve le delta validé du modèle pour
+            # CONVERSE/EXPLAIN_SOURCE ; seul UNKNOWN reste non mémorisable.
+            if decision.classification.intent == ConsultantIntent.UNKNOWN:
                 decision.memory = memory
             else:
                 decision.memory = _merge_memory_delta(
                     memory,
                     decision.memory,
                 )
+            # END ENNOSCHOLAR_CONVERSATION_MEMORY_V2
 
             action = _ActionPayload()
             action_attempts: list[dict[str, Any]] = []

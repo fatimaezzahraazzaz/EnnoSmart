@@ -235,6 +235,18 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
     scope = _collect_session_scope(snapshot)
     contract = _contract_from_snapshot(snapshot)
     sources = _sources_from_snapshot(snapshot)
+    from services.guided_research_service import _guided_corpus_run
+
+    _, corpus_run, _ = _guided_corpus_run(
+        db,
+        project,
+        session_id=session_id,
+        create=False,
+    )
+    snapshot_context = dict(snapshot.get("context") or {})
+    corpus_scope_id = str(
+        snapshot_context.get("corpus_scope_id") or session_id
+    ).strip()
 
     contract_path = inputs / "consultant_plan_contract.json"
     sources_path = inputs / "guided_research_sources.json"
@@ -307,6 +319,10 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
 
     return {
         "session_id": session_id,
+        "corpus_scope_id": corpus_scope_id,
+        "scholar_run_id": (
+            int(corpus_run.id) if corpus_run is not None else None
+        ),
         "snapshot": snapshot,
         "scope": scope,
         "contract": contract,
@@ -469,6 +485,222 @@ def _verrou_item_matches(row: Mapping[str, Any], allowed_scope: set[str]) -> boo
     return bool(_normalized_verrou_identifiers(row) & allowed_scope)
 
 
+def build_conversation_phase1_payload(
+    *,
+    project: Any,
+    conversation_context: Mapping[str, Any],
+    article_cards_payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Matérialise le handoff Phase 1 propre à une conversation autonome.
+
+    Le chat autonome ne passe volontairement pas par la sélection canonique du
+    workflow 1. Son verrou confirmé et son corpus sont déjà enregistrés dans la
+    session et dans le ScholarRun privé. Ce payload adapte ces deux sources au
+    contrat attendu par les phases 3 à 5, sans écrire ni modifier le
+    ``selection_payload.json`` partagé du projet.
+    """
+
+    snapshot = (
+        dict(conversation_context.get("snapshot") or {})
+        if isinstance(conversation_context.get("snapshot"), Mapping)
+        else {}
+    )
+    snapshot_context = (
+        dict(snapshot.get("context") or {})
+        if isinstance(snapshot.get("context"), Mapping)
+        else {}
+    )
+    scope = (
+        dict(conversation_context.get("scope") or {})
+        if isinstance(conversation_context.get("scope"), Mapping)
+        else {}
+    )
+    project_brief = (
+        dict(snapshot_context.get("standalone_project_brief") or {})
+        if isinstance(snapshot_context.get("standalone_project_brief"), Mapping)
+        else {}
+    )
+
+    raw_cards = (
+        article_cards_payload.get("cards")
+        if isinstance(article_cards_payload.get("cards"), list)
+        else article_cards_payload.get("article_cards")
+    )
+    cards = [
+        dict(row)
+        for row in (raw_cards or [])
+        if isinstance(row, Mapping)
+    ]
+
+    # La sélection ne duplique pas le contenu scientifique des Article Cards :
+    # elle conserve seulement leurs identités et leur statut de sélection. Le
+    # texte probant reste lu depuis le payload Phase 2 privé de la conversation.
+    article_refs: list[dict[str, Any]] = []
+    for index, card in enumerate(cards, 1):
+        citation_id = _clean(
+            card.get("citation_id") or card.get("citation_label") or f"A{index}",
+            80,
+        )
+        article_refs.append({
+            "article_id": card.get("article_id") or card.get("id"),
+            "citation_id": citation_id,
+            "citation_label": citation_id,
+            "title": _clean(card.get("title") or card.get("article_title"), 1200),
+            "doi": _clean(card.get("doi"), 300),
+            "url": _clean(card.get("url"), 2000),
+            "tag": _clean(card.get("tag") or card.get("role") or "Connexe", 120),
+            "consultant_status": "garde",
+            "consultant_selected": True,
+            "selected": True,
+        })
+
+    verrous: list[dict[str, Any]] = []
+    seen_verrou_ids: set[str] = set()
+    for index, raw_verrou in enumerate(scope.get("consultant_verrous") or [], 1):
+        if not isinstance(raw_verrou, Mapping):
+            continue
+        row = dict(raw_verrou)
+        verrou_id = _clean(
+            row.get("verrou_id") or row.get("id") or row.get("lock_id"),
+            160,
+        )
+        verrou_title = _clean(
+            row.get("verrou_title")
+            or row.get("title")
+            or row.get("name")
+            or row.get("label"),
+            1200,
+        )
+        if (
+            not verrou_id
+            or not verrou_title
+            or verrou_id.casefold() in seen_verrou_ids
+        ):
+            continue
+        seen_verrou_ids.add(verrou_id.casefold())
+        objectif = _clean(
+            row.get("objectif_rd")
+            or row.get("justification")
+            or row.get("objectif")
+            or project_brief.get("objective"),
+            5000,
+        )
+        contexte = _clean(
+            row.get("contexte_projet")
+            or row.get("supporting_context")
+            or row.get("description")
+            or project_brief.get("additional_context")
+            or project_brief.get("domain"),
+            8000,
+        )
+        row.update({
+            "verrou_index": index,
+            "verrou_id": verrou_id,
+            "verrou_key": verrou_id,
+            "verrou_title": verrou_title,
+            "objectif_r&d": objectif,
+            "objectif_rd": objectif,
+            "contexte_projet": contexte,
+            # Liaison éphémère de runtime uniquement. Aucun Article.verrou_id
+            # ni artefact de sélection du workflow 1 n'est modifié.
+            "selected_articles": [dict(article) for article in article_refs],
+            "conversation_confirmed": True,
+            "contract_origin": "guided_conversation_consultant_verrou",
+        })
+        verrous.append(row)
+
+    project_name = _clean(
+        project_brief.get("project_name")
+        or getattr(project, "project_name", ""),
+        500,
+    )
+    domain = _clean(
+        project_brief.get("domain")
+        or getattr(project, "domain_label", ""),
+        1000,
+    )
+    objective = _clean(project_brief.get("objective"), 5000)
+    additional_context = _clean(
+        project_brief.get("additional_context"),
+        8000,
+    )
+    session_id = _clean(conversation_context.get("session_id"), 160)
+    scholar_run_id = conversation_context.get("scholar_run_id")
+    scope_id = _clean(conversation_context.get("corpus_scope_id") or session_id, 160)
+    excluded_count = int(
+        article_cards_payload.get("excluded_from_writing_count") or 0
+    )
+
+    return {
+        "ok": True,
+        "agent": "EnnoScholar",
+        "phase": "phase_1_selection_payload",
+        "payload_type": "state_of_art_selection_payload_v1",
+        "payload_version": "conversation_runtime_handoff_v1",
+        "generated_at": _now(),
+        "project_id": int(project.id),
+        "project": project_name,
+        "project_name": project_name,
+        "organisme": _clean(getattr(project, "organisme", ""), 500),
+        "year": _clean(getattr(project, "year", ""), 40),
+        "domain_label": domain,
+        "guided_session_id": session_id,
+        "scope_id": scope_id,
+        "scholar_run_id": int(scholar_run_id) if scholar_run_id is not None else None,
+        "materialized_from_guided_session": True,
+        "standalone_project_brief": project_brief,
+        "project_context_structured": {
+            "available": bool(objective or additional_context or domain),
+            "source_priority": ["guided_consultant_conversation"],
+            "report_path": "",
+            "besoin_projet": objective,
+            "objectif_technique": objective,
+            "contexte_technique": additional_context or domain,
+            "donnees_et_environnement": [],
+            "contraintes_projet": [],
+            "criteres_validation": [],
+            "incertitude_rd": " ; ".join(
+                _clean(row.get("verrou_title"), 1200) for row in verrous
+            ),
+            "points_de_preuve_projet": [
+                *(
+                    [{"role": "objectif", "text": objective, "source": "guided_conversation"}]
+                    if objective
+                    else []
+                ),
+                *[
+                    {
+                        "role": "verrou",
+                        "text": row["verrou_title"],
+                        "source": "guided_conversation",
+                    }
+                    for row in verrous
+                ],
+            ],
+            "trace": {
+                "from_guided_consultant_conversation": True,
+                "guided_session_id": session_id,
+                "standalone_without_diagnostic": True,
+            },
+        },
+        "selection_summary": {
+            "kept_articles_total": len(article_refs),
+            "usable_articles_total": len(article_refs),
+            "verrous_count": len(verrous),
+            "excluded_articles_count": excluded_count,
+            "excluded_by_limit_total": 0,
+            "can_write_without_force": bool(verrous and article_refs),
+        },
+        "verrous": verrous,
+        "verrous_count": len(verrous),
+        "selected_articles": article_refs,
+        "articles": article_refs,
+        "selected_articles_count": len(article_refs),
+        "articles_count": len(article_refs),
+        "policy": "guided_conversation_validated_article_cards_without_limit",
+    }
+
+
 def apply_verrou_scope_lock(
     *,
     selection_payload: Mapping[str, Any],
@@ -529,6 +761,59 @@ def apply_verrou_scope_lock(
             for row in verrous
             if isinstance(row, Mapping) and _verrou_item_matches(row, allowed_scope)
         ]
+
+        # Une conversation autonome peut porter un verrou créé et validé dans
+        # le chat sans verrou DB/canonique dans la sélection du workflow 1.
+        # Il s'agit ici de matérialiser ce verrou consultant explicite, jamais
+        # de le reconstruire par NLP. Les phases 4 à 5 reçoivent ainsi le même
+        # identifiant, le même titre et le même contexte que la conversation.
+        if not kept_verrous:
+            seen_verrou_ids: set[str] = set()
+            for raw_verrou in scope.get("consultant_verrous") or []:
+                if not isinstance(raw_verrou, Mapping):
+                    continue
+                if allowed_scope and not _verrou_item_matches(
+                    raw_verrou, allowed_scope
+                ):
+                    continue
+                row = dict(raw_verrou)
+                verrou_id = _clean(
+                    row.get("verrou_id") or row.get("id") or row.get("lock_id"),
+                    160,
+                )
+                verrou_title = _clean(
+                    row.get("verrou_title")
+                    or row.get("title")
+                    or row.get("name")
+                    or row.get("label"),
+                    900,
+                )
+                if (
+                    not verrou_id
+                    or not verrou_title
+                    or verrou_id.casefold() in seen_verrou_ids
+                ):
+                    continue
+                seen_verrou_ids.add(verrou_id.casefold())
+                row.update({
+                    "verrou_id": verrou_id,
+                    "verrou_title": verrou_title,
+                    "objectif_rd": _clean(
+                        row.get("objectif_rd")
+                        or row.get("justification")
+                        or row.get("objectif"),
+                        4000,
+                    ),
+                    "contexte_projet": _clean(
+                        row.get("contexte_projet")
+                        or row.get("supporting_context")
+                        or row.get("description"),
+                        6000,
+                    ),
+                    "conversation_confirmed": True,
+                    "contract_origin": "guided_conversation_consultant_verrou",
+                })
+                kept_verrous.append(row)
 
         def filter_nested_article_collections(value: Any) -> Any:
             if isinstance(value, Mapping):

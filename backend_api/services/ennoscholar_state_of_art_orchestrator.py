@@ -835,23 +835,65 @@ def generate_state_of_art_after_consultant_selection(
             "La reconstruction appartient à l'étape Préparation état de l'art."
         )
 
-    if not paths["selection_payload"].exists():
+    # Le workflow 1 exige toujours son artefact Phase 1 canonique. Une
+    # conversation guidée autonome possède en revanche un verrou et un corpus
+    # privés : son handoff Phase 1 est matérialisé plus bas dans son runtime.
+    if not guided_session_id and not paths["selection_payload"].exists():
         raise RuntimeError(
             "Phase 1 existante introuvable. Retourne dans Préparation état de l'art : "
             f"{paths['selection_payload']}"
         )
     from services.article_card_builder import get_article_cards_payload
 
-    article_cards_payload = get_article_cards_payload(project, db=db)
+    article_cards_payload = get_article_cards_payload(
+        project,
+        db=db,
+        scope_id=(
+            conversation_context.get("corpus_scope_id")
+            if conversation_context
+            else None
+        ),
+        scholar_run_id=(
+            conversation_context.get("scholar_run_id")
+            if conversation_context
+            else None
+        ),
+    )
 
     # BEGIN ENNOSCHOLAR_VERROU_SCOPE_LOCK_V4
     if guided_session_id and conversation_context:
-        from services.ennoscholar_conversation_state_service import materialize_scoped_runtime
+        from services.ennoscholar_conversation_state_service import (
+            build_conversation_phase1_payload,
+            materialize_scoped_runtime,
+        )
 
         original_selection_payload = _read_json(
             _state_of_art_base(project) / "selection_payload.json",
             {},
         )
+        snapshot_context = dict(
+            (conversation_context.get("snapshot") or {}).get("context") or {}
+        )
+        standalone_chat = (
+            str(snapshot_context.get("operating_mode") or "").strip().casefold()
+            == "standalone_chat"
+        )
+        if (
+            standalone_chat
+            or not isinstance(original_selection_payload, dict)
+            or not list(original_selection_payload.get("verrous") or [])
+        ):
+            original_selection_payload = build_conversation_phase1_payload(
+                project=project,
+                conversation_context=conversation_context,
+                article_cards_payload=article_cards_payload,
+            )
+            print(
+                "[EnnoScholar][SOA] Phase 1 SESSION HANDOFF materialized "
+                f"session_id={guided_session_id} "
+                f"verrous={len(original_selection_payload.get('verrous') or [])} "
+                f"articles={len(original_selection_payload.get('selected_articles') or [])}"
+            )
         scoped_runtime = materialize_scoped_runtime(
             conversation_context=conversation_context,
             selection_payload=original_selection_payload,
@@ -987,6 +1029,11 @@ def generate_state_of_art_after_consultant_selection(
         phase1_payload=selection_payload if isinstance(selection_payload, dict) else None,
         phase1_payload_path=paths["selection_payload"],
         force=force_phase3,
+        # Un nouveau projet lancé depuis le chat peut ne disposer d'aucun
+        # historique rédactionnel. Dans ce seul cas, la Phase 3 adopte les
+        # templates scientifiques neutres au lieu de bloquer les Phases 4/5.
+        # Le workflow 1 conserve le comportement strict historique.
+        allow_empty_style_memory=bool(guided_session_id),
     )
     if not isinstance(phase3_result, dict) or not phase3_result.get("ok"):
         raise RuntimeError(f"Phase 3 échouée : {phase3_result}")
@@ -1221,6 +1268,7 @@ def generate_state_of_art_after_consultant_selection(
         guided_research_sources_path=paths["guided_research_sources"],
         output_path=paths["phase5_payload"],
         markdown_output_path=paths["phase5_markdown"],
+        guided_conversation=bool(guided_session_id),
         dry_run=False,
     )
     if not isinstance(phase5_result, dict):
@@ -1276,6 +1324,12 @@ def generate_state_of_art_after_consultant_selection(
             "next_action": public_failure["next_action"],
             "previous_draft_preserved": previous_available,
             "retryable": True,
+            "guided_session_id": guided_session_id,
+            "failure_phase": "phase_5_state_of_art_writer",
+            "internal_status": (
+                phase5_payload.get("status")
+                or phase5_result.get("status")
+            ),
             "project": {
                 "id": project.id,
                 "organisme": project.organisme,
@@ -1339,17 +1393,21 @@ def generate_state_of_art_after_consultant_selection(
             encoding="utf-8",
         )
 
-        if not editorial_result.get("ok"):
-            raise RuntimeError(
-                "cir_editorial_validation_blocked: "
-                + json.dumps(
-                    (editorial_result.get("report") or {}).get("blocking_issues") or [],
-                    ensure_ascii=False,
-                )[:6000]
-            )
-
-        phase5_payload = dict(editorial_result.get("payload") or phase5_payload)
-        markdown = str(editorial_result.get("markdown") or markdown)
+        # Dans le workflow conversationnel, le rapport éditorial est un
+        # diagnostic interne. Le nouveau brouillon Phase 5 est publié tel qu'il
+        # a été généré : il n'est ni bloqué, ni remplacé par une version nettoyée
+        # ou sélectionnée par les contrôleurs. Le consultant peut ensuite le
+        # faire évoluer naturellement dans le chat.
+        phase5_payload = dict(phase5_payload)
+        phase5_payload["editorial_diagnostic"] = {
+            "internal_only": True,
+            "ok": bool(editorial_result.get("ok")),
+            "issues_count": len(
+                (editorial_result.get("report") or {}).get("blocking_issues")
+                or []
+            ),
+            "publication_policy": "guided_iterative_new_draft_as_generated",
+        }
 
         paths["phase5_payload"].write_text(
             json.dumps(

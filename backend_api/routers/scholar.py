@@ -562,9 +562,68 @@ def _latest_scholar_run_for_project(db: Session, project_id: int) -> ScholarRun 
         db.query(ScholarRun)
         .options(defer(ScholarRun.raw_result_json))
         .filter(ScholarRun.project_id == project_id)
+        # Les corpus guidés sont privés à leur conversation. Ils ne doivent
+        # jamais devenir le « dernier run » de la page Articles historique.
+        .filter(
+            ScholarRun.status.notin_([
+                "guided_conversation_corpus",
+                "guided_research_standalone",
+                "improvement_corpus",
+            ])
+        )
         .order_by(ScholarRun.created_at.desc())
         .first()
     )
+
+
+def _state_of_art_preflight_run(
+    db: Session,
+    project: Project,
+    guided_session_id: str | None,
+) -> ScholarRun | None:
+    """Résout le corpus que le writer va réellement lire.
+
+    La page Articles historique reste fondée sur le dernier run canonique. Une
+    rédaction lancée depuis une conversation doit toutefois contrôler le
+    ScholarRun privé de cette conversation ; sinon ses articles nouvellement
+    gardés sont absents du précontrôle et le backend annonce à tort un corpus
+    vide. Si la conversation n'a créé aucun corpus supplémentaire, son handoff
+    figé vers le workflow 1 est utilisé avant le fallback canonique.
+    """
+
+    canonical_run = _latest_scholar_run_for_project(db, int(project.id))
+    session_id = str(guided_session_id or "").strip()
+    if not session_id:
+        return canonical_run
+
+    from services.guided_research_service import _guided_corpus_run
+
+    _, conversation_run, snapshot = _guided_corpus_run(
+        db,
+        project,
+        session_id=session_id,
+        create=False,
+    )
+    if conversation_run is not None:
+        return conversation_run
+
+    context = dict(snapshot.get("context") or {})
+    handoff = (
+        dict(context.get("handoff") or {})
+        if isinstance(context.get("handoff"), dict)
+        else {}
+    )
+    handoff_run_id = handoff.get("scholar_run_id")
+    if handoff_run_id is not None:
+        candidate = db.get(ScholarRun, int(handoff_run_id))
+        if candidate is None or int(candidate.project_id) != int(project.id):
+            raise RuntimeError(
+                "Le ScholarRun figé par cette conversation est introuvable "
+                "ou appartient à un autre projet."
+            )
+        return candidate
+
+    return canonical_run
 
 
 @router.get("/projects/{project_id}/scholar/latest")
@@ -1515,16 +1574,36 @@ async def upload_new_scholar_source(
             detail="La nouvelle source doit être un fichier PDF.",
         )
 
-    scholar_run = _latest_scholar_run_for_project(db, project.id)
-    if scholar_run is None:
-        scholar_run = ScholarRun(
-            project_id=project.id,
-            status="manual_source_upload",
-            raw_result_json={},
+    conversation_scope_id: str | None = None
+    if guided_session_id:
+        from services.guided_research_service import _guided_corpus_run
+
+        _, scholar_run, guided_snapshot = _guided_corpus_run(
+            db,
+            project,
+            session_id=str(guided_session_id),
+            create=True,
         )
-        db.add(scholar_run)
-        db.commit()
-        db.refresh(scholar_run)
+        if scholar_run is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Corpus de conversation introuvable.",
+            )
+        guided_context = dict(guided_snapshot.get("context") or {})
+        conversation_scope_id = str(
+            guided_context.get("corpus_scope_id") or guided_session_id
+        ).strip()
+    else:
+        scholar_run = _latest_scholar_run_for_project(db, project.id)
+        if scholar_run is None:
+            scholar_run = ScholarRun(
+                project_id=project.id,
+                status="manual_source_upload",
+                raw_result_json={},
+            )
+            db.add(scholar_run)
+            db.commit()
+            db.refresh(scholar_run)
 
     fallback_title = re.sub(r"[_-]+", " ", Path(filename).stem).strip()
     article_title = str(title or fallback_title or "Source importée").strip()
@@ -1535,6 +1614,13 @@ async def upload_new_scholar_source(
         "consultant_evidence_role": "connected_evidence",
         "uploaded_filename": filename,
         "guided_session_id": str(guided_session_id or "").strip() or None,
+        "corpus_scope_id": conversation_scope_id,
+        "conversation_owned": bool(guided_session_id),
+        "origin": (
+            "guided_research_conversation"
+            if guided_session_id
+            else "manual_project_upload"
+        ),
     }
     article = Article(
         scholar_run_id=scholar_run.id,
@@ -1607,21 +1693,38 @@ async def upload_new_scholar_source(
             detail=str(exc),
         ) from exc
 
-    selection_payload = _synchronize_current_article_selection(
-        db=db,
-        project=project,
-    )
+    if guided_session_id:
+        from services.guided_research_service import (
+            rebuild_guided_research_corpus_cards,
+        )
 
-    from services.article_card_builder import (
-        build_article_cards_for_selected_articles,
-    )
+        selection_payload = {
+            "ok": True,
+            "scope_id": conversation_scope_id,
+            "policy": "conversation_scoped_no_global_selection_mutation",
+        }
+        article_cards = rebuild_guided_research_corpus_cards(
+            db,
+            project,
+            session_id=str(guided_session_id),
+            force=True,
+        )
+    else:
+        selection_payload = _synchronize_current_article_selection(
+            db=db,
+            project=project,
+        )
 
-    article_cards = build_article_cards_for_selected_articles(
-        db=db,
-        project=project,
-        mode="auto",
-        force=False,
-    )
+        from services.article_card_builder import (
+            build_article_cards_for_selected_articles,
+        )
+
+        article_cards = build_article_cards_for_selected_articles(
+            db=db,
+            project=project,
+            mode="auto",
+            force=False,
+        )
     db.refresh(article)
     return {
         "ok": True,
@@ -1642,6 +1745,7 @@ async def upload_and_extract_scholar_article_pdf(
     article_id: int,
     file: UploadFile = File(...),
     source_url: str | None = Form(None),
+    guided_session_id: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1651,13 +1755,48 @@ async def upload_and_extract_scholar_article_pdf(
         upload_and_extract_pdf_for_article,
     )
 
-    return await upload_and_extract_pdf_for_article(
+    result = await upload_and_extract_pdf_for_article(
         db=db,
         project=project,
         article_id=article_id,
         file=file,
         source_url=source_url,
     )
+    if guided_session_id and result.get("ok") is True:
+        from db.models import Article
+        from services.guided_research_service import (
+            attach_uploaded_article_to_session,
+            rebuild_guided_research_corpus_cards,
+        )
+
+        article = (
+            db.query(Article)
+            .filter(Article.id == article_id)
+            .first()
+        )
+        if article is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Article introuvable après import.",
+            )
+        attach_uploaded_article_to_session(
+            db,
+            project,
+            session_id=str(guided_session_id),
+            article=article,
+            extraction=result,
+        )
+        result["phase_1"] = {
+            "ok": True,
+            "policy": "conversation_scoped_no_global_selection_mutation",
+        }
+        result["phase_2"] = rebuild_guided_research_corpus_cards(
+            db,
+            project,
+            session_id=str(guided_session_id),
+            force=True,
+        )
+    return result
 
 
 @router.get("/projects/{project_id}/scholar/articles/{article_id}/uploaded-pdf")
@@ -1778,7 +1917,11 @@ def _run_state_of_art_full_pipeline(
             ) from budget_exc
         raise
 
-    latest_run = _latest_scholar_run_for_project(db, project.id)
+    latest_run = _state_of_art_preflight_run(
+        db,
+        project,
+        guided_session_id,
+    )
     if latest_run is not None:
         run_articles = (
             db.query(Article)

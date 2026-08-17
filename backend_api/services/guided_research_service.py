@@ -17,14 +17,9 @@ def _ensure_root() -> None:
 
 _ensure_root()
 
-try:
-    from agents.EnnoScholar.guided_research.application.guided_research_agent import (
-        EnnoScholarGuidedResearchAgent,
-    )
-except Exception:
-    from modules.EnnoScholar.guided_research.application.guided_research_agent import (  # type: ignore
-        EnnoScholarGuidedResearchAgent,
-    )
+from agents.EnnoScholar.guided_research.application.guided_research_agent import (
+    EnnoScholarGuidedResearchAgent,
+)
 
 
 _AGENT: EnnoScholarGuidedResearchAgent | None = None
@@ -58,6 +53,16 @@ def attach_uploaded_article_to_session(
 
     snapshot = agent.repository.snapshot(db, session_id)
     context = dict(snapshot.get("context") or {})
+    _, corpus_run, _ = _guided_corpus_run(
+        db,
+        project,
+        session_id=session_id,
+        create=True,
+    )
+    if corpus_run is None or int(article.scholar_run_id) != int(corpus_run.id):
+        raise PermissionError(
+            "Cet article n'appartient pas au corpus de cette conversation."
+        )
     all_verrous = [
         dict(row)
         for row in (context.get("consultant_verrous") or [])
@@ -74,6 +79,21 @@ def attach_uploaded_article_to_session(
         if str(row.get("id") or "").strip()
     ]
     source_json = dict(article.source_json) if isinstance(article.source_json, dict) else {}
+    corpus_scope_id = str(
+        context.get("corpus_scope_id") or session_id
+    ).strip()
+    source_json.update({
+        "guided_session_id": session_id,
+        "corpus_scope_id": corpus_scope_id,
+        "conversation_owned": True,
+        "origin": "guided_research_conversation",
+        "guided_research_source": True,
+    })
+    article.source_json = source_json
+    article.verrou_id = None
+    db.add(article)
+    db.commit()
+    db.refresh(article)
     candidate_id = str(
         source_json.get("guided_candidate_id") or f"UPLOAD-{int(article.id)}"
     )
@@ -96,6 +116,7 @@ def attach_uploaded_article_to_session(
         "target_verrous": target_verrous,
         "section_ids": list(source_json.get("section_ids") or []),
         "guided_session_id": session_id,
+        "corpus_scope_id": corpus_scope_id,
         "fulltext_verified": True,
         "fulltext_preparation": {
             "ok": True,
@@ -146,6 +167,250 @@ def attach_uploaded_article_to_session(
         },
     )
     return source
+
+
+def _guided_corpus_run(
+    db: Session,
+    project: Any,
+    *,
+    session_id: str,
+    create: bool = False,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Résout la session et son ScholarRun privé, sans corpus global implicite."""
+    from db.models import ScholarRun
+
+    agent = get_guided_research_agent()
+    session = agent.state_manager.get_session(
+        db, session_id, include_messages=False
+    )
+    if int(session.project_id) != int(project.id):
+        raise PermissionError("Cette conversation appartient à un autre projet.")
+    snapshot = agent.repository.snapshot(db, session_id)
+    context = dict(snapshot.get("context") or {})
+    scope_id = str(context.get("corpus_scope_id") or session_id).strip()
+    entry_module = str(snapshot.get("entry_module") or "").casefold()
+
+    rows = (
+        db.query(ScholarRun)
+        .filter(ScholarRun.project_id == project.id)
+        .filter(
+            ScholarRun.status.in_([
+                "guided_conversation_corpus",
+                "guided_research_standalone",
+                "improvement_corpus",
+            ])
+        )
+        .order_by(ScholarRun.created_at.desc(), ScholarRun.id.desc())
+        .all()
+    )
+    run = None
+    for candidate in rows:
+        raw = dict(candidate.raw_result_json or {})
+        session_ids = {
+            str(value).strip()
+            for value in (raw.get("guided_session_ids") or [])
+            if str(value).strip()
+        }
+        if (
+            str(raw.get("corpus_scope_id") or "").strip() == scope_id
+            or str(raw.get("guided_session_id") or "").strip() == session_id
+            or session_id in session_ids
+        ):
+            run = candidate
+            break
+
+    if run is None and create:
+        from services.guided_research_source_preparation_service import (
+            _get_or_create_improvement_scholar_run,
+            get_or_create_guided_conversation_scholar_run,
+        )
+
+        if entry_module == "ennoamel":
+            run = _get_or_create_improvement_scholar_run(
+                db, project, scope_id, session_id
+            )
+        else:
+            run = get_or_create_guided_conversation_scholar_run(
+                db,
+                project,
+                scope_id,
+                session_id,
+                context=context,
+            )
+    return session, run, snapshot
+
+
+def _serialize_guided_corpus_article(article: Any) -> dict[str, Any]:
+    from schemas.scholar import ArticleRead
+
+    payload = ArticleRead.model_validate(article).model_dump(mode="json")
+    source_json = (
+        dict(article.source_json)
+        if isinstance(article.source_json, dict)
+        else {}
+    )
+    evidence = (
+        dict(source_json.get("evidence_preflight") or {})
+        if isinstance(source_json.get("evidence_preflight"), dict)
+        else {}
+    )
+    status = str(evidence.get("evidence_status") or "NOT_CHECKED").upper()
+    manual_upload_required = status in {
+        "ACCESS_UNAVAILABLE",
+        "BROWSER_DOWNLOAD_REQUIRED",
+        "ABSTRACT_READY",
+        "METADATA_ONLY",
+        "EXTRACTION_FAILED",
+        "NOT_CHECKED",
+    } and not bool(evidence.get("fulltext_ready"))
+    payload.update({
+        "source_json": source_json,
+        "evidence_status": status,
+        "evidence_label": (
+            "PDF de l’article non récupéré"
+            if manual_upload_required
+            else evidence.get("evidence_label")
+        ),
+        "evidence_usable": bool(evidence.get("evidence_usable")),
+        "fulltext_ready": bool(evidence.get("fulltext_ready")),
+        "candidate_only": bool(evidence.get("candidate_only", True)),
+        "access_check_status": evidence.get("access_check_status"),
+        "evidence_reason_code": evidence.get("reason_code"),
+        "evidence_reason_detail": evidence.get("reason_detail"),
+        "evidence_recommended_action": evidence.get("recommended_action"),
+        "evidence_access_kind": evidence.get("access_kind"),
+        "manual_upload_required": manual_upload_required,
+    })
+    return payload
+
+
+def read_guided_research_corpus(
+    db: Session,
+    project: Any,
+    *,
+    session_id: str,
+) -> dict[str, Any]:
+    from db.models import Article
+
+    _, run, snapshot = _guided_corpus_run(
+        db, project, session_id=session_id, create=False
+    )
+    context = dict(snapshot.get("context") or {})
+    if run is None:
+        return {
+            "ok": True,
+            "session_id": session_id,
+            "corpus_scope_id": context.get("corpus_scope_id") or session_id,
+            "scholar_run_id": None,
+            "articles": [],
+        }
+    articles = (
+        db.query(Article)
+        .filter(Article.scholar_run_id == run.id)
+        .filter(Article.consultant_status == "garde")
+        .order_by(Article.score.desc().nullslast(), Article.id.asc())
+        .all()
+    )
+    return {
+        "ok": True,
+        "session_id": session_id,
+        "corpus_scope_id": context.get("corpus_scope_id") or session_id,
+        "scholar_run_id": int(run.id),
+        "articles": [
+            _serialize_guided_corpus_article(article) for article in articles
+        ],
+    }
+
+
+def rebuild_guided_research_corpus_cards(
+    db: Session,
+    project: Any,
+    *,
+    session_id: str,
+    force: bool = True,
+) -> dict[str, Any]:
+    from services.article_card_builder import (
+        build_article_cards_for_selected_articles,
+    )
+
+    _, run, snapshot = _guided_corpus_run(
+        db, project, session_id=session_id, create=True
+    )
+    if run is None:
+        raise LookupError("Corpus de conversation introuvable.")
+    context = dict(snapshot.get("context") or {})
+    scope_id = str(context.get("corpus_scope_id") or session_id).strip()
+    return build_article_cards_for_selected_articles(
+        db,
+        project,
+        mode="auto",
+        force=force,
+        scholar_run_id=int(run.id),
+        scope_id=scope_id,
+    )
+
+
+def remove_guided_research_corpus_article(
+    db: Session,
+    project: Any,
+    *,
+    session_id: str,
+    article_id: int,
+) -> dict[str, Any]:
+    from db.models import Article
+
+    agent = get_guided_research_agent()
+    _, run, snapshot = _guided_corpus_run(
+        db, project, session_id=session_id, create=False
+    )
+    if run is None:
+        raise LookupError("Corpus de conversation introuvable.")
+    article = (
+        db.query(Article)
+        .filter(Article.id == article_id)
+        .filter(Article.scholar_run_id == run.id)
+        .first()
+    )
+    if article is None:
+        raise LookupError("Article absent de cette conversation.")
+    article.consultant_status = "rejete"
+    db.add(article)
+    db.commit()
+
+    source_json = dict(article.source_json or {})
+    candidate_id = str(source_json.get("guided_candidate_id") or "").strip()
+    selected_sources = []
+    for raw in (snapshot.get("selected_sources") or []):
+        if not isinstance(raw, dict):
+            continue
+        source = dict(raw)
+        source_article_id = int(
+            (source.get("fulltext_preparation") or {}).get("article_id") or 0
+        )
+        if (
+            source_article_id == int(article_id)
+            or (
+                candidate_id
+                and str(source.get("candidate_id") or "") == candidate_id
+            )
+        ):
+            source["consultant_decision"] = "rejected"
+            source["consultant_reason"] = "Retiré du corpus de cette conversation."
+        selected_sources.append(source)
+    agent.repository.update(
+        db, session_id, selected_sources=selected_sources
+    )
+    cards = rebuild_guided_research_corpus_cards(
+        db, project, session_id=session_id, force=True
+    )
+    return {
+        "ok": True,
+        "article_id": int(article_id),
+        "phase_2": cards,
+        "corpus": read_guided_research_corpus(
+            db, project, session_id=session_id
+        ),
+    }
 
 
 def record_guided_pipeline_result(
@@ -239,6 +504,7 @@ def create_guided_research_session(
     target_mode: str = "global",
     entry_module: str = "ennoscholar",
     context_updates: dict[str, Any] | None = None,
+    handoff: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     try:
         from agents.EnnoScholar.guided_research.lot1.domain.enums import (
@@ -250,6 +516,22 @@ def create_guided_research_session(
             GuidedResearchEntryModule,
             GuidedResearchTargetMode,
         )
+    # BEGIN ENNOSCHOLAR_HANDOFF_V1
+    # Le snapshot est résolu AVANT le premier message consultant puis figé dans
+    # context_json. Sans payload explicite, on photographie automatiquement le
+    # dernier état du projet afin de rester compatible avec le frontend V5.
+    from services.ennoscholar_handoff_service import (
+        build_guided_research_handoff_context,
+    )
+
+    resolved_context_updates = build_guided_research_handoff_context(
+        db,
+        project,
+        requested_handoff=handoff,
+    )
+    if context_updates:
+        resolved_context_updates.update(dict(context_updates))
+
     session = get_guided_research_agent().create_session(
         db,
         project,
@@ -257,16 +539,17 @@ def create_guided_research_session(
         target_mode=GuidedResearchTargetMode(target_mode),
         entry_module=GuidedResearchEntryModule(entry_module),
     )
-    if context_updates:
+    if resolved_context_updates:
         get_guided_research_agent().repository.update(
             db,
             session.session_id,
-            context_updates=dict(context_updates),
+            context_updates=resolved_context_updates,
         )
         session = get_guided_research_agent().state_manager.get_session(
             db,
             session.session_id,
         )
+    # END ENNOSCHOLAR_HANDOFF_V1
     return session.model_dump(mode="json")
 
 

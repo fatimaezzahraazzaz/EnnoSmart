@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 """Phase 5 canonique — rédaction globale evidence-first.
@@ -40,6 +40,15 @@ from ..contracts import (
 from ..storage_paths import consultant_plan_path as default_consultant_plan_contract_path
 from ..storage_paths import guided_sources_path as default_guided_sources_path
 from ..storage_paths import state_of_art_root
+from .cir_quality_guard_v3 import (
+    apply_cir_postprocessing,
+    audit_cir_draft,
+    audit_cir_section,
+    build_cir_evidence_matrix,
+    build_cir_quality_report,
+    evidence_matrix_for_prompt,
+    filter_visual_placements,
+)
 
 
 PAYLOAD_TYPE = "state_of_art_draft_payload_canonical_global_v1"
@@ -2078,6 +2087,7 @@ def _semantic_claim_audit(
     citées, valeur numérique absente et verrou sans preuve directe présenté
     sans avertissement explicite.
     """
+    guided_conversation = bool(section.get("_guided_conversation"))
     evidence_by_citation: Dict[str, str] = {}
     for unit in evidence_units:
         citation = normalize_citation_label(unit.get("citation_label"))
@@ -2138,6 +2148,9 @@ def _semantic_claim_audit(
         r"(?:de|d['’])\b"
         r"|n['’]est\s+(?:donc\s+)?pas\s+possible\s+(?:de|d['’])\b"
         r"|(?:manque|défaut)\s+de\s+preuves?\s+directes?"
+        r"|insuffisance(?:\s+\w+){0,4}\s+de\s+preuves?\s+directes?"
+        r"|aucune\s+(?:publication|source|article|travail)[^.]{0,140}"
+        r"n['’]?(?:établit|démontre|documente|valide|fournit)\b"
         r"|aucune\s+preuve[^.]{0,100}\bn['’](?:établit|démontre|"
         r"documente|valide)\b"
         r"|(?:ne\s+|n['’])(?:apporte|présente|fournit)\s+"
@@ -2211,6 +2224,17 @@ def _semantic_claim_audit(
                         )
                         and not _numeric_claim_tokens(sentence)
                     )
+                    guided_lock_framing_statement = (
+                        guided_conversation
+                        and location == "section"
+                        and not _numeric_claim_tokens(sentence)
+                        and not _salient_entities(sentence)
+                        and not re.search(
+                            r"\b(?:d[ée]montre|prouve|atteint|surpasse|"
+                            r"valide|garantit|r[ée]duit|am[ée]liore)\w*\b",
+                            lower,
+                        )
+                    )
                     if (
                         scientific_signal.search(sentence)
                         and not disclosure_signal.search(sentence)
@@ -2218,6 +2242,7 @@ def _semantic_claim_audit(
                         and not project_intent_statement
                         and not non_evidentiary_question
                         and not document_navigation_statement
+                        and not guided_lock_framing_statement
                     ):
                         uncited_scientific_claims.append(
                             {
@@ -2453,6 +2478,13 @@ def _section_requires_independent_llm_verifier(
         return {
             "required": False,
             "status": "disabled",
+            "reasons": [],
+        }
+
+    if bool(section.get("_guided_conversation")):
+        return {
+            "required": False,
+            "status": "guided_iterative_publication",
             "reasons": [],
         }
 
@@ -2897,6 +2929,20 @@ RÔLE DES SOURCES
     for citation in section.get("available_citations") or []
 }, ensure_ascii=False, indent=2)}
 
+CONTRAT CIR V3 — FORCE DE DÉFENSE PAR VERROU
+{json.dumps(
+    evidence_matrix_for_prompt(
+        blueprint.get("cir_evidence_matrix") or {},
+        [
+            verrou.get("verrou_id")
+            for verrou in section.get("verrous") or []
+            if isinstance(verrou, dict)
+        ],
+    ),
+    ensure_ascii=False,
+    indent=2,
+)}
+
 STATUT DES PREUVES PAR VERROU
 {json.dumps({
     verrou.get("verrou_id"): {
@@ -2952,6 +2998,17 @@ CONTRAT DE RÉDACTION
   explicitement que le corpus sélectionné ne fournit pas de preuve directe.
   Présente les sources connexes comme des analogies ou éléments de cadrage,
   puis formule exactement ce qu'elles ne permettent pas de conclure.
+- CONTRAT CIR V3 : une source CONNECTED, METHODOLOGICAL ou BACKGROUND ne peut
+  jamais être formulée comme une démonstration causale du verrou.
+- Pour chaque verrou, construis la logique CIR suivante lorsque les preuves
+  existent : connaissances établies -> solutions existantes -> résultats
+  réellement rapportés -> limites -> ce que la littérature ne permet pas de
+  déterminer -> incertitude scientifique ou technique résiduelle.
+- Si le contrat CIR V3 classe un verrou FAIBLE ou INSUFFISANT, ne cherche pas
+  à le "défendre" artificiellement. Explique précisément ce que les sources
+  connexes apportent et ce qu'elles ne démontrent pas.
+- Évite les formulations de plaidoyer telles que « justifie pleinement » ou
+  « prouve définitivement ». Décris les connaissances et leurs limites.
 - N'attribue jamais à une citation la méthode, l'outil, le jeu de données ou le
   résultat d'une autre citation, même si les deux apparaissent dans la même
   famille scientifique.
@@ -3214,6 +3271,10 @@ _SECTION_PUBLICATION_BLOCKERS = {
     "unknown_citations",
     "raw_extraction_fragment",
     "non_french_or_raw_source_fragment",
+    # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
+    "cir_related_evidence_overclaim",
+    "cir_missing_insufficiency_disclosure",
+    # END ENNOSCHOLAR_CIR_QUALITY_V3
 }
 
 _SECTION_ESCALATION_BLOCKERS = {
@@ -3227,7 +3288,14 @@ _SECTION_ESCALATION_BLOCKERS = {
 
 def _section_publication_blockers(
     validation: Mapping[str, Any],
+    section: Optional[Mapping[str, Any]] = None,
 ) -> List[str]:
+    if section and bool(section.get("_guided_conversation")):
+        return (
+            []
+            if int(validation.get("word_count") or 0) > 0
+            else ["empty_generated_section"]
+        )
     return sorted(
         set(validation.get("errors") or []) & _SECTION_PUBLICATION_BLOCKERS
     )
@@ -3235,6 +3303,7 @@ def _section_publication_blockers(
 
 def _section_escalation_blockers(
     validation: Mapping[str, Any],
+    section: Optional[Mapping[str, Any]] = None,
 ) -> List[str]:
     """Retourne uniquement les défauts justifiant une nouvelle génération.
 
@@ -3242,6 +3311,13 @@ def _section_escalation_blockers(
     elle seule, acheter une seconde rédaction premium. Les défauts de contrat,
     de langue, de citations et d'attribution scientifique restent bloquants.
     """
+
+    if section and bool(section.get("_guided_conversation")):
+        return (
+            []
+            if int(validation.get("word_count") or 0) > 0
+            else ["empty_generated_section"]
+        )
 
     return sorted(
         set(validation.get("errors") or [])
@@ -3359,6 +3435,28 @@ def _validate_generated_section(
     )
     if not semantic_claim_audit.get("ok"):
         errors.append("unsupported_or_misattributed_claims")
+
+    # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
+    cir_matrix = (
+        section.get("_cir_evidence_matrix")
+        if isinstance(section.get("_cir_evidence_matrix"), Mapping)
+        else {}
+    )
+    cir_claim_audit = (
+        audit_cir_section(generated, section, cir_matrix)
+        if cir_matrix
+        else {
+            "ok": True,
+            "issues": [],
+            "skipped": "matrix_not_attached",
+        }
+    )
+    for issue in cir_claim_audit.get("issues") or []:
+        issue_type = clean_text(issue.get("type"), 120)
+        if issue_type and issue_type not in errors:
+            errors.append(issue_type)
+    # END ENNOSCHOLAR_CIR_QUALITY_V3
+
     return {
         "ok": not errors,
         "errors": errors,
@@ -3372,6 +3470,9 @@ def _validate_generated_section(
         "raw_extraction_fragments": raw_extraction_fragments,
         "non_french_raw_fragments": non_french_raw_fragments,
         "semantic_claim_audit": semantic_claim_audit,
+        # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
+        "cir_claim_audit": cir_claim_audit,
+        # END ENNOSCHOLAR_CIR_QUALITY_V3
     }
 
 
@@ -3433,6 +3534,62 @@ def _repair_uncited_taxonomy_claims(
     repaired = dict(generated)
     repaired["content"] = content
     return repaired, repaired_claims
+
+
+def _ensure_guided_insufficiency_disclosures(
+    generated: Mapping[str, Any],
+    section: Mapping[str, Any],
+) -> Tuple[Dict[str, Any], List[str]]:
+    """Ajoute la réserve scientifique exigée au brouillon du chat.
+
+    Cette réparation ne crée aucun fait et ne touche pas au workflow 1. Elle
+    matérialise seulement, dans la sous-section du verrou, la conclusion déjà
+    calculée par la matrice déterministe : aucune preuve directe confirmée.
+    """
+    output = dict(generated)
+    if not output or not section.get("_guided_conversation"):
+        return output, []
+    matrix = (
+        section.get("_cir_evidence_matrix")
+        if isinstance(section.get("_cir_evidence_matrix"), Mapping)
+        else {}
+    )
+    if not matrix:
+        return output, []
+    audit = audit_cir_section(output, section, matrix)
+    missing_ids = {
+        clean_text(issue.get("verrou_id"), 120)
+        for issue in audit.get("issues") or []
+        if isinstance(issue, Mapping)
+        and issue.get("type") == "cir_missing_insufficiency_disclosure"
+    }
+    missing_ids.discard("")
+    if not missing_ids:
+        return output, []
+
+    changed: List[str] = []
+    subsections: List[Dict[str, Any]] = []
+    for raw in output.get("subsections") or []:
+        if not isinstance(raw, Mapping):
+            continue
+        subsection = dict(raw)
+        verrou_id = clean_text(subsection.get("verrou_id"), 120)
+        if verrou_id in missing_ids:
+            disclosure = (
+                "Le corpus sélectionné ne fournit aucune preuve scientifique "
+                "directe permettant de conclure sur ce verrou ; les articles "
+                "disponibles apportent uniquement des éléments connexes qui "
+                "doivent être interprétés dans leur périmètre propre."
+            )
+            subsection["content"] = (
+                clean_text(subsection.get("content"), 200000)
+                + "\n\n"
+                + disclosure
+            ).strip()
+            changed.append(verrou_id)
+        subsections.append(subsection)
+    output["subsections"] = subsections
+    return output, changed
 
 
 def _build_section_enrichment_prompt(
@@ -3664,6 +3821,9 @@ def call_sectional_writer_llm(
     previous_tail = ""
     total_sections = len(blueprint.get("sections") or [])
     for index, section in enumerate(blueprint.get("sections") or [], 1):
+        guided_iterative_publication = bool(
+            section.get("_guided_conversation")
+        )
         accepted: Dict[str, Any] = {}
         accepted_mode = ""
         feedback: Optional[Dict[str, Any]] = None
@@ -3789,9 +3949,12 @@ def call_sectional_writer_llm(
             if (
                 checkpoint_fingerprint_compatible
                 and not _section_escalation_blockers(
-                    cached_validation
+                    cached_validation,
+                    section,
                 )
                 and (
+                    guided_iterative_publication
+                    or
                     not _env_flag(
                         "ENNOSCHOLAR_PHASE5_ENABLE_INDEPENDENT_VERIFIER",
                         True,
@@ -3896,6 +4059,15 @@ def call_sectional_writer_llm(
                     request_name=f"ennoscholar:phase5:section:{index}",
                 )
                 parsed = _extract_json_response(raw)
+                if guided_iterative_publication:
+                    disclosure_repairs = []
+                else:
+                    parsed, disclosure_repairs = (
+                        _ensure_guided_insufficiency_disclosures(
+                            parsed,
+                            section,
+                        )
+                    )
                 validation = _validate_generated_section(
                     parsed,
                     section,
@@ -3903,7 +4075,15 @@ def call_sectional_writer_llm(
                     evidence_units=local_evidence,
                 )
                 base_llm_meta = active_writer_client.get_last_generation_meta()
-                deterministic_repair: Dict[str, Any] = {}
+                deterministic_repair: Dict[str, Any] = (
+                    {
+                        "applied": True,
+                        "kind": "guided_insufficiency_disclosure",
+                        "verrou_ids": disclosure_repairs,
+                    }
+                    if disclosure_repairs
+                    else {}
+                )
                 citation_addition_repair: Dict[str, Any] = {
                     "applied": False,
                 }
@@ -3912,6 +4092,8 @@ def call_sectional_writer_llm(
                     validation.get("missing_required_citations") or []
                 )
                 if (
+                    not guided_iterative_publication
+                    and
                     parsed
                     and missing_for_repair
                     and initial_errors
@@ -4009,7 +4191,7 @@ def call_sectional_writer_llm(
                         section,
                         validation,
                     )
-                    if parsed
+                    if parsed and not guided_iterative_publication
                     else ({}, [])
                 )
                 if taxonomy_claims:
@@ -4029,6 +4211,8 @@ def call_sectional_writer_llm(
                     validation = taxonomy_validation
                 validation_errors = set(validation.get("errors") or [])
                 if (
+                    not guided_iterative_publication
+                    and
                     parsed
                     and validation_errors
                     and _env_flag(
@@ -4180,6 +4364,8 @@ def call_sectional_writer_llm(
 
                 depth_enrichment: List[Dict[str, Any]] = []
                 if (
+                    not guided_iterative_publication
+                    and
                     parsed
                     and set(validation.get("errors") or [])
                     == {"section_too_short"}
@@ -4298,7 +4484,8 @@ def call_sectional_writer_llm(
                     "issues": [],
                 }
                 escalation_blockers = _section_escalation_blockers(
-                    validation
+                    validation,
+                    section,
                 )
                 if parsed and not escalation_blockers:
                     source_roles = {
@@ -4366,12 +4553,13 @@ def call_sectional_writer_llm(
                         )
                         validation["ok"] = False
                 escalation_blockers = _section_escalation_blockers(
-                    validation
+                    validation,
+                    section,
                 )
                 if parsed:
                     latest_llm_candidate = parsed
                     latest_llm_validation = validation
-                    if not _section_publication_blockers(validation):
+                    if not _section_publication_blockers(validation, section):
                         latest_publishable_candidate = parsed
                         latest_publishable_validation = validation
                 attempts.append(
@@ -4397,7 +4585,11 @@ def call_sectional_writer_llm(
                 )
                 if parsed and not escalation_blockers:
                     accepted = parsed
-                    if validation.get("ok"):
+                    if guided_iterative_publication:
+                        accepted_mode = "llm_guided_new_draft_as_generated"
+                        if not validation.get("ok"):
+                            advisory_sections_count += 1
+                    elif validation.get("ok"):
                         accepted_mode = "llm_verified"
                     else:
                         accepted_mode = (
@@ -4523,7 +4715,8 @@ def call_sectional_writer_llm(
                     if (
                         cleanup_candidate
                         and not _section_publication_blockers(
-                            cleanup_validation
+                            cleanup_validation,
+                            section,
                         )
                     ):
                         latest_publishable_candidate = cleanup_candidate
@@ -4998,32 +5191,44 @@ def validate_draft(
 
 
 _LLM_PUBLICATION_ADVISORY_ERRORS = {
-    "unsupported_or_misattributed_claims",
+    # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
+    # Une citation obligatoire manquante peut encore être réparée par les
+    # mécanismes existants. Une sur-affirmation scientifique reste bloquante.
     "missing_required_citations",
+    # Le contrôleur sémantique déterministe repère aussi des formulations de
+    # cadrage ou de synthèse. Elles restent visibles pour révision, tandis que
+    # le garde CIR dédié continue de bloquer les vraies sur-affirmations.
+    "unsupported_or_misattributed_claims",
+    # END ENNOSCHOLAR_CIR_QUALITY_V3
 }
 
 
 def _publication_guard_for_new_llm(
     strict_guard: Mapping[str, Any],
+    *,
+    guided_conversation: bool = False,
 ) -> Dict[str, Any]:
-    """Sépare sécurité de publication et conseils scientifiques.
+    """Sépare publication du nouveau texte et diagnostics internes.
 
-    La structure, les citations inconnues, les marqueurs internes, les sections
-    vides et les fragments d'extraction restent bloquants. Un désaccord du
-    contrôleur sur une formulation scientifique reste visible dans le rapport,
-    mais ne remplace plus une nouvelle rédaction LLM par des preuves brutes.
+    Le workflow standard conserve ses validations de publication. Dans le chat
+    guidé, le nouveau brouillon non vide est rendu tel qu'il est et tous les
+    constats de qualité restent internes pour les futures demandes de révision.
     """
     strict_errors = list(strict_guard.get("errors") or [])
-    advisory_errors = [
-        error
-        for error in strict_errors
-        if error in _LLM_PUBLICATION_ADVISORY_ERRORS
-    ]
-    blocking_errors = [
-        error
-        for error in strict_errors
-        if error not in _LLM_PUBLICATION_ADVISORY_ERRORS
-    ]
+    if guided_conversation:
+        advisory_errors = strict_errors
+        blocking_errors: List[str] = []
+    else:
+        advisory_errors = [
+            error
+            for error in strict_errors
+            if error in _LLM_PUBLICATION_ADVISORY_ERRORS
+        ]
+        blocking_errors = [
+            error
+            for error in strict_errors
+            if error not in _LLM_PUBLICATION_ADVISORY_ERRORS
+        ]
     output = dict(strict_guard)
     output.update(
         {
@@ -5035,6 +5240,11 @@ def _publication_guard_for_new_llm(
             "advisory_errors": advisory_errors,
             "scientific_review_recommended": bool(advisory_errors),
             "new_llm_draft_preserved": True,
+            "publication_policy": (
+                "guided_iterative_new_draft_as_generated"
+                if guided_conversation
+                else "validated_document"
+            ),
         }
     )
     return output
@@ -6017,6 +6227,7 @@ def run_phase_5_state_of_art_writer(
     **kwargs: Any,
 ) -> Dict[str, Any]:
     mode = clean_text(kwargs.get("mode") or state_of_art_mode or "global", 40).lower()
+    guided_conversation = bool(kwargs.get("guided_conversation"))
     if mode not in {"global", "single", "unified", "unique"}:
         return {
             "ok": False,
@@ -6051,6 +6262,14 @@ def run_phase_5_state_of_art_writer(
     writer_output_dir = out_path.parent
     blueprint_path = writer_output_dir / "unified_writer_blueprint_used.json"
     evidence_path = writer_output_dir / "normalized_evidence_units.json"
+    # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
+    cir_evidence_matrix_path = (
+        writer_output_dir / "cir_evidence_matrix_v3.json"
+    )
+    cir_quality_report_path = (
+        writer_output_dir / "cir_quality_report_v3.json"
+    )
+    # END ENNOSCHOLAR_CIR_QUALITY_V3
     writer_prompts_dir = writer_output_dir / "prompts"
     plan_path = Path(
         consultant_plan_contract_path
@@ -6331,6 +6550,58 @@ def run_phase_5_state_of_art_writer(
             write_json(rejected_payload_path, result)
         return result
     blueprint["evidence_units"] = evidence_units
+    blueprint["guided_conversation"] = guided_conversation
+    if guided_conversation:
+        for section in blueprint.get("sections") or []:
+            if not isinstance(section, dict):
+                continue
+            section["_guided_conversation"] = True
+            # Un plan approuvé sans consigne chiffrée reste volontairement
+            # concis dans le chat. Une cible explicite du consultant est
+            # toujours conservée.
+            if not section.get("target_words"):
+                section["target_words"] = 650
+
+    # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
+    cir_evidence_matrix = build_cir_evidence_matrix(
+        blueprint,
+        evidence_units,
+    )
+    if guided_conversation:
+        cir_evidence_matrix.setdefault("policy", {}).update(
+            {
+                "guided_conversation": True,
+                "connected_claims_may_describe_documented_subproblem": True,
+            }
+        )
+    blueprint["cir_evidence_matrix"] = cir_evidence_matrix
+
+    matrix_rows_by_id = {
+        clean_text(row.get("verrou_id"), 120): row
+        for row in cir_evidence_matrix.get("verrous") or []
+        if isinstance(row, Mapping)
+    }
+    for _section in blueprint.get("sections") or []:
+        if not isinstance(_section, dict):
+            continue
+        _ids = [
+            clean_text(_verrou.get("verrou_id"), 120)
+            for _verrou in _section.get("verrous") or []
+            if isinstance(_verrou, Mapping)
+        ]
+        _section["_cir_evidence_matrix"] = {
+            "schema_version": cir_evidence_matrix.get("schema_version"),
+            "policy": cir_evidence_matrix.get("policy") or {},
+            "verrous": [
+                matrix_rows_by_id[_id]
+                for _id in _ids
+                if _id in matrix_rows_by_id
+            ],
+        }
+
+    if not dry_run:
+        write_json(cir_evidence_matrix_path, cir_evidence_matrix)
+    # END ENNOSCHOLAR_CIR_QUALITY_V3
 
     prompt = _build_llm_prompt(blueprint, evidence_units)
     llm_draft, llm_report = call_sectional_writer_llm(
@@ -6372,7 +6643,10 @@ def run_phase_5_state_of_art_writer(
             "failed_section_id": llm_report.get("failed_section_id"),
         }
     llm_guard = (
-        _publication_guard_for_new_llm(strict_llm_guard)
+        _publication_guard_for_new_llm(
+            strict_llm_guard,
+            guided_conversation=guided_conversation,
+        )
         if llm_draft
         else strict_llm_guard
     )
@@ -6406,14 +6680,82 @@ def run_phase_5_state_of_art_writer(
         writer_used = "llm_generation_failed_no_raw_fallback"
         guard = llm_guard
 
-    used_citations = guard.get("detected_citations") or citations_from_obj(draft)
+    # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
+    cir_postprocess = {
+        "changes_count": 0,
+        "changes": [],
+    }
+    if draft and draft.get("sections"):
+        if not guided_conversation:
+            draft, cir_postprocess = apply_cir_postprocessing(
+                draft,
+                blueprint,
+            )
+        postprocess_strict_guard = validate_draft(
+            draft,
+            blueprint,
+            evidence_units=evidence_units,
+            enforce_consultant_language=writer_used.startswith("llm_"),
+        )
+        guard = (
+            _publication_guard_for_new_llm(
+                postprocess_strict_guard,
+                guided_conversation=guided_conversation,
+            )
+            if writer_used.startswith("llm_")
+            else postprocess_strict_guard
+        )
+
+    cir_claim_audit = audit_cir_draft(
+        draft,
+        blueprint,
+        cir_evidence_matrix,
+    )
+    if not cir_claim_audit.get("ok"):
+        if guided_conversation:
+            guard["advisory_errors"] = list(
+                dict.fromkeys(
+                    [
+                        *(guard.get("advisory_errors") or []),
+                        "cir_evidence_strength_violation",
+                    ]
+                )
+            )
+            guard["scientific_review_recommended"] = True
+        else:
+            guard["errors"] = list(
+                dict.fromkeys(
+                    [
+                        *(guard.get("errors") or []),
+                        "cir_evidence_strength_violation",
+                    ]
+                )
+            )
+            guard["ok"] = False
+            guard["passed"] = False
+    guard["cir_claim_audit"] = cir_claim_audit
+    # END ENNOSCHOLAR_CIR_QUALITY_V3
+
+    used_citations = (
+        guard.get("detected_citations")
+        or citations_from_obj(draft)
+    )
     references = build_references_for_citations(used_citations, cards)
-    visual_placements = build_visual_placements(
+
+    raw_visual_placements = build_visual_placements(
         draft,
         blueprint,
         cards_payload,
         cards,
     )
+    # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
+    visual_placements, cir_visual_report = filter_visual_placements(
+        raw_visual_placements,
+        blueprint,
+        cir_evidence_matrix,
+    )
+    # END ENNOSCHOLAR_CIR_QUALITY_V3
+
     markdown = draft_to_markdown(
         draft,
         guard,
@@ -6443,7 +6785,11 @@ def run_phase_5_state_of_art_writer(
         _section_target_words(section, section_count)
         for section in blueprint.get("sections") or []
     )
-    minimum_expected_words = max(1800, int(requested_words * 0.72))
+    minimum_expected_words = (
+        max(750, int(requested_words * 0.60))
+        if guided_conversation
+        else max(1800, int(requested_words * 0.72))
+    )
     maximum_expected_words = max(
         minimum_expected_words + 800,
         int(requested_words * 1.65),
@@ -6496,6 +6842,16 @@ def run_phase_5_state_of_art_writer(
         consultant_quality_score -= 10
     consultant_quality_score = max(0, consultant_quality_score)
 
+    # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
+    cir_quality_report = build_cir_quality_report(
+        matrix=cir_evidence_matrix,
+        audit=cir_claim_audit,
+        postprocess=cir_postprocess,
+        visual_report=cir_visual_report,
+        final_guard=guard,
+    )
+    # END ENNOSCHOLAR_CIR_QUALITY_V3
+
     result = {
         "ok": ok,
         "status": "ok" if ok else "draft_rejected_by_guard",
@@ -6519,6 +6875,11 @@ def run_phase_5_state_of_art_writer(
         "progress_markdown_output_path": str(progress_md_path),
         "unified_writer_blueprint_path": str(blueprint_path),
         "normalized_evidence_units_path": str(evidence_path),
+        # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
+        "cir_evidence_matrix_path": str(cir_evidence_matrix_path),
+        "cir_quality_report_path": str(cir_quality_report_path),
+        "cir_quality": cir_quality_report,
+        # END ENNOSCHOLAR_CIR_QUALITY_V3
         "verrou_fingerprint": blueprint["verrou_fingerprint"],
         "plan_source": blueprint["plan_source"],
         "consultant_plan_approval_hash": plan_contract.get("approval_hash") if plan_contract else phase47.get("consultant_plan_approval_hash"),
@@ -6568,6 +6929,20 @@ def run_phase_5_state_of_art_writer(
             "sections_count": len(blueprint["sections"]),
             "citations_used_count": len(used_citations),
             "original_figures_inserted_count": len(visual_placements),
+            # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
+            "original_figures_rejected_by_cir_guard_count": int(
+                cir_visual_report.get("rejected_count") or 0
+            ),
+            "cir_weak_verrous_count": len(
+                [
+                    row
+                    for row in cir_evidence_matrix.get("verrous") or []
+                    if isinstance(row, Mapping)
+                    and row.get("strength")
+                    in {"FAIBLE", "INSUFFISANTE"}
+                ]
+            ),
+            # END ENNOSCHOLAR_CIR_QUALITY_V3
         },
         "rules": {
             "single_global_document": True,
@@ -6590,6 +6965,16 @@ def run_phase_5_state_of_art_writer(
             "vision_rewrite_disabled_for_figures": True,
             "article_figure_requires_same_section_citation": True,
             "project_document_figure_is_context_not_scientific_proof": True,
+            # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
+            "cir_evidence_matrix_required": True,
+            "direct_claim_requires_confirmed_atomic_evidence": True,
+            "weak_verrou_overclaim_is_blocking": True,
+            "semantic_claim_errors_are_not_advisory": True,
+            "context_or_decorative_visuals_filtered": True,
+            "project_visuals_excluded_from_state_of_art_by_default": True,
+            "anti_repetition_postprocess_enabled": True,
+            "cir_v3_additional_llm_calls": 0,
+            # END ENNOSCHOLAR_CIR_QUALITY_V3
         },
     }
 
@@ -6602,6 +6987,10 @@ def run_phase_5_state_of_art_writer(
                 "items": evidence_units,
             },
         )
+        # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
+        write_json(cir_evidence_matrix_path, cir_evidence_matrix)
+        write_json(cir_quality_report_path, cir_quality_report)
+        # END ENNOSCHOLAR_CIR_QUALITY_V3
         if ok:
             write_json(out_path, result)
             write_text(md_path, markdown)

@@ -498,10 +498,16 @@ def test_standalone_combined_approval_uses_plan_and_mapping_evidence(
         lambda *args: tmp_path,
     )
     monkeypatch.setattr(
-        "services.scholar_state_of_art_payload_service.build_state_of_art_selection_payload",
+        "services.article_card_builder.get_article_cards_payload",
         lambda *args, **kwargs: {
             "ok": True,
-            "selection_summary": {"verrous_count": 1},
+            "scholar_run_id": 902,
+            "scope_id": session.session_id,
+            "selected_articles_count": 2,
+            "cards_count": 1,
+            "writing_ready_cards_count": 1,
+            "excluded_from_writing_count": 1,
+            "cards": [{"article_id": 41}],
         },
     )
     monkeypatch.setattr(

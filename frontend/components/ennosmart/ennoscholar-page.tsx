@@ -4000,15 +4000,24 @@ export function EnnoScholarPage({
     loadData()
   }, [])
 
+  // ENNOSCHOLAR_STANDALONE_CHAT_CORPUS_V4
+  // Le workflow autonome reste dans le chat pendant la préparation.
+  // Le POST « Ajouter au corpus » attend déjà extraction + Article Card.
+  // On garde le polling historique uniquement hors de l'espace chat.
   useEffect(() => {
-    if (!project?.id || preflightPendingCount <= 0) return
+    if (
+      !project?.id ||
+      preflightPendingCount <= 0 ||
+      activeTab === "etat-art-rediges"
+    ) return
+
     let cancelled = false
     const refreshEvidence = async () => {
       try {
         const fresh = await getArticles(project.id, true)
         if (!cancelled) setArticles(fresh)
       } catch {
-        // polling non bloquant
+        // polling non bloquant hors chat
       }
     }
     const timer = window.setInterval(refreshEvidence, 4000)
@@ -4016,16 +4025,11 @@ export function EnnoScholarPage({
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [project?.id, preflightPendingCount])
+  }, [project?.id, preflightPendingCount, activeTab])
 
-  useEffect(() => {
-    if (
-      preflightPendingCount > 0 &&
-      ["preparation-etat-art", "etat-art-rediges"].includes(activeTab)
-    ) {
-      setActiveTab("par-verrou")
-    }
-  }, [activeTab, preflightPendingCount])
+  // IMPORTANT :
+  // ne jamais changer automatiquement d'onglet à cause d'un statut
+  // d'extraction. Le consultant reste dans sa conversation.
 
   useEffect(() => {
     onImmersiveModeChange?.(activeTab === "etat-art-rediges")
@@ -4154,9 +4158,12 @@ export function EnnoScholarPage({
 
   const refreshCorpusAfterChatAction = async () => {
     if (!project?.id) return
+
+    // ENNOSCHOLAR_STANDALONE_CHAT_CORPUS_V4
+    // Une seule relecture après le POST synchrone du chat.
+    // Pas de redirection ni de relance de l'ancien écran de préparation.
     const refreshedArticles = await getArticles(project.id, true)
     setArticles(refreshedArticles)
-    await loadStateOfArtPreparationStatus()
   }
 
   // ============================================================

@@ -16,7 +16,9 @@ from services.guided_research_service import (
     delete_guided_research_session,
     decide_guided_research_sources,
     list_guided_research_sessions,
+    read_guided_research_corpus,
     read_guided_research_session,
+    remove_guided_research_corpus_article,
     send_guided_research_message,
 )
 from services.project_service import get_project_for_user
@@ -73,8 +75,15 @@ def build_guided_research_router(
                 user_id=getattr(current_user, "id", None),
                 target_mode=payload.target_mode,
                 entry_module=payload.entry_module,
+                handoff=(
+                    payload.handoff.model_dump(mode="json", exclude_none=True)
+                    if payload.handoff is not None
+                    else None
+                ),
             )
             return {"ok": True, "session": session}
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -93,6 +102,53 @@ def build_guided_research_router(
             return {"ok": True, **result}
         except HTTPException:
             raise
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @router.get(
+        "/projects/{project_id}/guided-research/sessions/{session_id}/corpus"
+    )
+    def get_session_corpus(
+        project_id: int,
+        session_id: str,
+        db: Session = Depends(get_db_dependency),
+        current_user: Any = Depends(get_current_user_dependency),
+    ):
+        project = get_project_for_user(db, project_id, current_user)
+        try:
+            return read_guided_research_corpus(
+                db, project, session_id=session_id
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @router.delete(
+        "/projects/{project_id}/guided-research/sessions/{session_id}"
+        "/corpus/{article_id}"
+    )
+    def remove_session_corpus_article(
+        project_id: int,
+        session_id: str,
+        article_id: int,
+        db: Session = Depends(get_db_dependency),
+        current_user: Any = Depends(get_current_user_dependency),
+    ):
+        project = get_project_for_user(db, project_id, current_user)
+        try:
+            return remove_guided_research_corpus_article(
+                db,
+                project,
+                session_id=session_id,
+                article_id=article_id,
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except Exception as exc:

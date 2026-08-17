@@ -262,20 +262,145 @@ def _get_or_create_improvement_scholar_run(
     return row
 
 
+def get_or_create_guided_conversation_scholar_run(
+    db: Session,
+    project: Project,
+    corpus_scope_id: str,
+    guided_session_id: str | None,
+    *,
+    create: bool = True,
+    context: dict[str, Any] | None = None,
+) -> ScholarRun | None:
+    """Retourne le ScholarRun privé d'une conversation EnnoScholar.
+
+    Les anciens runs ``guided_research_standalone`` sont adoptés lorsqu'ils
+    appartiennent à la même session. Cela conserve les articles déjà préparés
+    tout en empêchant désormais leur mélange avec le corpus historique.
+    """
+    scope_id = _clean(corpus_scope_id, 120)
+    session_id = _clean(guided_session_id, 120)
+    if not scope_id:
+        return None
+    rows = (
+        db.query(ScholarRun)
+        .filter(ScholarRun.project_id == project.id)
+        .filter(
+            ScholarRun.status.in_([
+                "guided_conversation_corpus",
+                "guided_research_standalone",
+            ])
+        )
+        .order_by(ScholarRun.created_at.desc(), ScholarRun.id.desc())
+        .all()
+    )
+    row: ScholarRun | None = None
+    for candidate in rows:
+        raw = dict(candidate.raw_result_json or {})
+        candidate_scope = _clean(raw.get("corpus_scope_id"), 120)
+        candidate_session = _clean(
+            raw.get("guided_session_id"), 120
+        )
+        candidate_sessions = {
+            _clean(value, 120)
+            for value in (raw.get("guided_session_ids") or [])
+            if _clean(value, 120)
+        }
+        if (
+            candidate_scope == scope_id
+            or (session_id and candidate_session == session_id)
+            or (session_id and session_id in candidate_sessions)
+        ):
+            row = candidate
+            break
+
+    if row is None and not create:
+        return None
+    if row is None:
+        row = ScholarRun(
+            project_id=project.id,
+            status="guided_conversation_corpus",
+            raw_result_json={},
+        )
+
+    raw = dict(row.raw_result_json or {})
+    guided_ids = [
+        _clean(value, 120)
+        for value in (raw.get("guided_session_ids") or [])
+        if _clean(value, 120)
+    ]
+    if session_id and session_id not in guided_ids:
+        guided_ids.append(session_id)
+    standalone_context = dict(context or {})
+    raw.update({
+        "mode": "guided_conversation",
+        "corpus_scope_id": scope_id,
+        "guided_session_id": session_id or None,
+        "guided_session_ids": guided_ids,
+        "operating_mode": _clean(
+            standalone_context.get("operating_mode"), 80
+        ),
+        "project_brief": dict(
+            standalone_context.get("standalone_project_brief") or {}
+        ),
+        "consultant_verrous": list(
+            standalone_context.get("consultant_verrous") or []
+        ),
+        "project_verrous": list(
+            standalone_context.get("project_verrous") or []
+        ),
+        "active_verrou_ids": list(
+            standalone_context.get("active_verrou_ids") or []
+        ),
+        "review_scope": _clean(
+            standalone_context.get("review_scope"), 40
+        ),
+        "isolation_policy": "one_guided_conversation_one_corpus",
+        "updated_at": _utc_now(),
+    })
+    raw.setdefault("created_at", _utc_now())
+    row.status = "guided_conversation_corpus"
+    row.raw_result_json = raw
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 def _upsert_selected_article(
     db: Session,
     project: Project,
     scholar_run: ScholarRun,
     source: dict[str, Any],
+    *,
+    attach_to_db_verrou: bool = True,
+    guided_session_id: str | None = None,
+    corpus_scope_id: str | None = None,
 ) -> tuple[Article, bool]:
     article = _find_existing_article(db, scholar_run, source)
     created = article is None
-    valid_verrous = _valid_target_verrou_ids(
-        db,
-        project,
-        source.get("target_verrous") or [],
+    valid_verrous = (
+        _valid_target_verrou_ids(
+            db,
+            project,
+            source.get("target_verrous") or [],
+        )
+        if attach_to_db_verrou
+        else []
     )
     source_json = _known_source_urls(source)
+    if not attach_to_db_verrou:
+        source_json.update({
+            "guided_session_id": _clean(guided_session_id, 120) or None,
+            "corpus_scope_id": _clean(corpus_scope_id, 120) or None,
+            "conversation_owned": True,
+            "origin": "guided_research_conversation",
+        })
+    requested_tag = _clean(source.get("full_scholar_tag"), 80)
+    article_tag = (
+        requested_tag
+        if _norm(requested_tag) in {"direct", "connexe", "fondamental"}
+        else "Connexe"
+    )
 
     if article is None:
         article = Article(
@@ -284,7 +409,7 @@ def _upsert_selected_article(
             title=_clean(source.get("title"), 4000),
             year=_year(source.get("year")),
             source=_provider(source),
-            tag_article="Connexe",
+            tag_article=article_tag,
             score=_score(source.get("relevance_score")),
             url=_clean(source.get("url") or source.get("pdf_url"), 4000) or None,
             doi=_normalize_doi(source.get("doi")) or None,
@@ -300,7 +425,9 @@ def _upsert_selected_article(
         previous_json.update(source_json)
         article.source_json = previous_json
         article.consultant_status = "garde"
-        if article.verrou_id is None and valid_verrous:
+        if not attach_to_db_verrou:
+            article.verrou_id = None
+        elif article.verrou_id is None and valid_verrous:
             article.verrou_id = valid_verrous[0]
         if not article.url:
             article.url = _clean(source.get("url") or source.get("pdf_url"), 4000) or None
@@ -310,8 +437,8 @@ def _upsert_selected_article(
             article.year = _year(source.get("year"))
         if not article.source:
             article.source = _provider(source)
-        if not article.tag_article:
-            article.tag_article = "Connexe"
+        if not article.tag_article or requested_tag:
+            article.tag_article = article_tag
         if article.score is None:
             article.score = _score(source.get("relevance_score"))
 
@@ -416,6 +543,165 @@ def _compact_extraction_result(result: dict[str, Any] | None) -> dict[str, Any] 
     }
 
 
+# BEGIN ENNOSCHOLAR_GUIDED_TERMINAL_PREFLIGHT_V4
+def _guided_terminal_evidence_payload(
+    report: dict[str, Any],
+) -> dict[str, Any]:
+    # Traduit la préparation guidée en statut terminal lu par l'UI compacte.
+    #
+    # Le workflow guided écrit ses résultats dans les artefacts fulltext et
+    # selected_sources, alors que GET /articles?compact=true lit
+    # source_json.evidence_preflight. Sans ce pont, l'UI peut rester à
+    # NOT_CHECKED (0/1) après une préparation réellement terminée.
+    status = _norm(report.get("status"))
+    fulltext_ready = bool(report.get("fulltext_ready"))
+    card_ready = bool(report.get("article_card_ready"))
+    ready_for_writing = bool(report.get("ready_for_writing"))
+    mcp_called = bool(report.get("mcp_called"))
+    retrieval_stage = _clean(
+        report.get("retrieval_stage"),
+        80,
+    )
+
+    if fulltext_ready:
+        evidence_status = "FULLTEXT_READY"
+        label = (
+            "Texte intégral et Article Card prêts"
+            if card_ready
+            else "Texte intégral prêt — Article Card à reconstruire"
+        )
+        reason_code = (
+            "guided_fulltext_and_card_ready"
+            if card_ready
+            else "guided_fulltext_ready_card_missing"
+        )
+        reason_detail = (
+            "Le texte intégral a été vérifié et la fiche scientifique "
+            "est prête pour la rédaction."
+            if card_ready
+            else (
+                "Le texte intégral est vérifié, mais l'Article Card "
+                "n'a pas encore passé son contrôle de qualité."
+            )
+        )
+        recommended_action = (
+            "ready_for_writing"
+            if card_ready
+            else "rebuild_article_card"
+        )
+        candidate_only = not ready_for_writing
+
+    elif "exception" in status or "error" in status:
+        evidence_status = "EXTRACTION_FAILED"
+        label = "Extraction terminée avec erreur"
+        reason_code = "guided_source_preparation_failed"
+        reason_detail = (
+            "La tentative de préparation s'est terminée avec une erreur. "
+            "Le statut n'est plus en attente."
+        )
+        recommended_action = "retry_or_import_pdf"
+        candidate_only = True
+
+    else:
+        evidence_status = "ACCESS_UNAVAILABLE"
+        label = "Texte intégral non récupéré automatiquement"
+        reason_code = "guided_fulltext_unavailable_after_recovery"
+        reason_detail = (
+            "Les accès connus ont été testés"
+            + (
+                " ainsi que la récupération légale MCP"
+                if mcp_called
+                else ""
+            )
+            + ", sans obtenir de texte intégral vérifié."
+        )
+        recommended_action = "import_authorized_pdf"
+        candidate_only = True
+
+    return {
+        "evidence_status": evidence_status,
+        "evidence_label": label,
+        "evidence_usable": ready_for_writing,
+        "fulltext_ready": fulltext_ready,
+        "article_card_ready": card_ready,
+        "candidate_only": candidate_only,
+        "access_check_status": "completed",
+        "reason_code": reason_code,
+        "reason_detail": reason_detail,
+        "recommended_action": recommended_action,
+        "access_kind": retrieval_stage or "guided_preparation",
+        "guided_preparation_terminal": True,
+        "guided_preparation_status": report.get("status"),
+        "mcp_called": mcp_called,
+        "updated_at": _utc_now(),
+    }
+
+
+def _sync_guided_article_terminal_preflight(
+    db: Session,
+    project: Project,
+    report: dict[str, Any],
+) -> None:
+    try:
+        article_id = int(report.get("article_id"))
+    except (TypeError, ValueError):
+        return
+
+    article = (
+        db.query(Article)
+        .join(
+            ScholarRun,
+            Article.scholar_run_id == ScholarRun.id,
+        )
+        .filter(
+            Article.id == article_id,
+            ScholarRun.project_id == project.id,
+        )
+        .first()
+    )
+    if article is None:
+        return
+
+    source_json = (
+        dict(article.source_json)
+        if isinstance(article.source_json, dict)
+        else {}
+    )
+    previous = (
+        dict(source_json.get("evidence_preflight"))
+        if isinstance(
+            source_json.get("evidence_preflight"),
+            dict,
+        )
+        else {}
+    )
+    previous.update(
+        _guided_terminal_evidence_payload(report)
+    )
+    source_json["evidence_preflight"] = previous
+    source_json["guided_source_preparation"] = {
+        "candidate_id": report.get("candidate_id"),
+        "status": report.get("status"),
+        "retrieval_stage": report.get("retrieval_stage"),
+        "fulltext_ready": bool(
+            report.get("fulltext_ready")
+        ),
+        "article_card_ready": bool(
+            report.get("article_card_ready")
+        ),
+        "ready_for_writing": bool(
+            report.get("ready_for_writing")
+        ),
+        "mcp_called": bool(report.get("mcp_called")),
+        "synced_at": _utc_now(),
+    }
+    article.source_json = source_json
+    db.add(article)
+
+
+# END ENNOSCHOLAR_GUIDED_TERMINAL_PREFLIGHT_V4
+
+
 def prepare_accepted_guided_sources(
     db: Session,
     project: Project,
@@ -431,82 +717,26 @@ def prepare_accepted_guided_sources(
     """Prépare uniquement les candidats visés par la décision courante."""
     wanted = {_clean(value) for value in candidate_ids if _clean(value)}
     updated_sources = deepcopy(sources)
-    improvement_scope = _clean(corpus_scope_id, 120)
-    if _norm(entry_module) == "ennoamel" and improvement_scope:
+    conversation_scope = _clean(corpus_scope_id, 120)
+    if _norm(entry_module) == "ennoamel" and conversation_scope:
         scholar_run = _get_or_create_improvement_scholar_run(
             db,
             project,
-            improvement_scope,
+            conversation_scope,
             guided_session_id,
+        )
+    elif conversation_scope:
+        scholar_run = get_or_create_guided_conversation_scholar_run(
+            db,
+            project,
+            conversation_scope,
+            guided_session_id,
+            context=standalone_context,
         )
     else:
         scholar_run = get_current_scholar_run(db, project)
     reports: list[dict[str, Any]] = []
     ready_article_ids: list[int] = []
-
-    operating_mode = _clean(
-        (standalone_context or {}).get("operating_mode"), 80
-    )
-    created_standalone_run = False
-    if scholar_run is None and operating_mode == "standalone_chat":
-        scholar_run = ScholarRun(
-            project_id=project.id,
-            status="guided_research_standalone",
-            raw_result_json={
-                "mode": "standalone_chat",
-                "guided_session_id": _clean(guided_session_id, 100),
-                "project_brief": dict(
-                    (standalone_context or {}).get(
-                        "standalone_project_brief"
-                    )
-                    or {}
-                ),
-                "consultant_verrous": list(
-                    (standalone_context or {}).get("consultant_verrous")
-                    or []
-                ),
-                "created_by": "ennoscholar_guided_research",
-            },
-        )
-        db.add(scholar_run)
-        db.commit()
-        db.refresh(scholar_run)
-        created_standalone_run = True
-
-    # La conversation autonome reste la source canonique du contexte mÃªme si
-    # le ScholarRun a Ã©tÃ© crÃ©Ã© lors d'une recherche prÃ©cÃ©dente. Sans cette
-    # synchronisation, les Phases 4â†’5 voyaient un verrou ancien ou vide.
-    if scholar_run is not None and operating_mode == "standalone_chat":
-        raw_result = (
-            dict(scholar_run.raw_result_json)
-            if isinstance(scholar_run.raw_result_json, dict)
-            else {}
-        )
-        raw_result.update(
-            {
-                "mode": "standalone_chat",
-                "guided_session_id": _clean(guided_session_id, 100),
-                "project_brief": dict(
-                    (standalone_context or {}).get("standalone_project_brief")
-                    or {}
-                ),
-                "consultant_verrous": list(
-                    (standalone_context or {}).get("consultant_verrous") or []
-                ),
-                "active_verrou_ids": list(
-                    (standalone_context or {}).get("active_verrou_ids") or []
-                ),
-                "review_scope": _clean(
-                    (standalone_context or {}).get("review_scope"), 40
-                ),
-                "updated_by": "ennoscholar_guided_research",
-            }
-        )
-        scholar_run.raw_result_json = raw_result
-        if not created_standalone_run:
-            db.add(scholar_run)
-        db.commit()
-        db.refresh(scholar_run)
 
     if scholar_run is None:
         return {
@@ -552,6 +782,9 @@ def prepare_accepted_guided_sources(
                 project,
                 scholar_run,
                 source,
+                attach_to_db_verrou=not bool(conversation_scope),
+                guided_session_id=guided_session_id,
+                corpus_scope_id=conversation_scope or None,
             )
             extraction = prepare_article_fulltext_with_mcp_fallback(
                 db,
@@ -610,10 +843,10 @@ def prepare_accepted_guided_sources(
     article_cards_payload: dict[str, Any] | None = None
     rebuild_errors: list[dict[str, str]] = []
     if rebuild_scientific_payloads and reports:
-        if improvement_scope:
+        if conversation_scope:
             selection_payload = {
                 "ok": True,
-                "scope_id": improvement_scope,
+                "scope_id": conversation_scope,
                 "policy": "conversation_scoped_no_global_selection_mutation",
             }
         else:
@@ -629,8 +862,8 @@ def prepare_accepted_guided_sources(
                 project,
                 mode="auto",
                 force=False,
-                scholar_run_id=(int(scholar_run.id) if improvement_scope else None),
-                scope_id=improvement_scope or None,
+                scholar_run_id=(int(scholar_run.id) if conversation_scope else None),
+                scope_id=conversation_scope or None,
             )
         except Exception as exc:
             rebuild_errors.append(
@@ -704,6 +937,19 @@ def prepare_accepted_guided_sources(
         source["scientific_evidence_eligible"] = bool(
             report.get("ready_for_writing")
         )
+
+    # BEGIN ENNOSCHOLAR_GUIDED_TERMINAL_PREFLIGHT_V4
+    # Synchronise le statut réellement terminé avec la structure lue par
+    # GET /articles?compact=true. Cela arrête le faux 0/1 et le polling.
+    for report in reports:
+        _sync_guided_article_terminal_preflight(
+            db,
+            project,
+            report,
+        )
+    if reports:
+        db.commit()
+    # END ENNOSCHOLAR_GUIDED_TERMINAL_PREFLIGHT_V4
 
     writing_ready_article_ids = [
         int(report["article_id"])

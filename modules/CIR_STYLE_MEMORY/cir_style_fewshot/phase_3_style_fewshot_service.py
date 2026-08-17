@@ -209,6 +209,7 @@ def run_phase_3_style_fewshot_pipeline(
     run_retrieval: bool = True,
     allow_existing_style_memory: bool = True,
     run_argumentation_profile: bool = True,
+    allow_empty_style_memory: bool = False,
 ) -> Dict[str, Any]:
     """
     Lance la Phase 3 complète.
@@ -307,7 +308,11 @@ def run_phase_3_style_fewshot_pipeline(
 
     stages["extraction"] = _stage_summary(extraction_result)
 
-    if not extraction_result.get("ok"):
+    neutral_style_fallback = bool(
+        allow_empty_style_memory
+        and extraction_result.get("status") == "empty_style_memory"
+    )
+    if not extraction_result.get("ok") and not neutral_style_fallback:
         return _failure_result(
             organisme=organisme,
             project=project,
@@ -320,6 +325,9 @@ def run_phase_3_style_fewshot_pipeline(
             stages=stages,
             output_paths=output_paths,
         )
+    if neutral_style_fallback:
+        stages["extraction"]["fallback"] = "neutral_scientific_style"
+        stages["extraction"]["blocking"] = False
 
     # --------------------------------------------------------
     # 3. Style Profile Builder
@@ -333,6 +341,23 @@ def run_phase_3_style_fewshot_pipeline(
     )
 
     stages["style_profile"] = _stage_summary(profile_result)
+
+    if (
+        neutral_style_fallback
+        and not profile_result.get("ok")
+        and isinstance(profile_result.get("style_profile"), dict)
+        and profile_result.get("style_profile")
+    ):
+        profile_result = dict(profile_result)
+        profile_result["ok"] = True
+        profile_result["status"] = "neutral_scientific_style_fallback"
+        profile_result["message"] = (
+            "Nouveau projet sans mémoire de style : templates scientifiques "
+            "neutres utilisés."
+        )
+        profile_result["fallback_reason"] = "empty_style_memory"
+        _write_json(profile_path, profile_result)
+        stages["style_profile"] = _stage_summary(profile_result)
 
     if not profile_result.get("ok"):
         return _failure_result(
@@ -428,7 +453,9 @@ def run_phase_3_style_fewshot_pipeline(
         "phase": "phase_3_dynamic_fewshot_style",
         "step": "phase_3_style_fewshot_service",
         "payload_type": "phase_3_style_fewshot_pipeline_v3_reasoning_patterns",
-        "status": "success",
+        "status": (
+            "success_neutral_style" if neutral_style_fallback else "success"
+        ),
         "generated_at": _now(),
         "started_at": started_at,
         "elapsed_seconds": _elapsed(start_time),
@@ -460,6 +487,7 @@ def run_phase_3_style_fewshot_pipeline(
                 fewshot_result.get("rules", {}).get("fewshots_generated_from_style_profile_templates")
             ),
             "argumentation_profile_as_proof": False,
+            "neutral_style_fallback": neutral_style_fallback,
         },
         "stages": stages,
         "output_paths": output_paths,
@@ -479,6 +507,7 @@ def run_phase_3_style_fewshot_pipeline(
             "scientific_moves_available_for_phase5": True,
             "paragraph_blueprints_available_for_phase5": True,
             "placeholders_must_be_filled_from_current_project_and_article_cards": True,
+            "neutral_style_fallback": neutral_style_fallback,
         },
         "output_path": str(pipeline_path),
     }
@@ -501,6 +530,7 @@ def build_phase_3_style_memory(
     max_total_examples: int = 12,
     max_fewshot_examples: int = 5,
     run_argumentation_profile: bool = True,
+    allow_empty_style_memory: bool = False,
 ) -> Dict[str, Any]:
     """
     Wrapper de compatibilité attendu par l'orchestrateur EnnoScholar.
@@ -532,6 +562,7 @@ def build_phase_3_style_memory(
         run_retrieval=retrieval_required,
         allow_existing_style_memory=True,
         run_argumentation_profile=run_argumentation_profile,
+        allow_empty_style_memory=allow_empty_style_memory,
     )
 
 

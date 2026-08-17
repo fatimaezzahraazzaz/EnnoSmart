@@ -13,6 +13,8 @@ from agents.EnnoScholar.state_of_art.phase_5_state_of_art_writer_service import 
     _non_french_raw_fragments,
     _publication_guard_for_new_llm,
     _repair_uncited_taxonomy_claims,
+    _ensure_guided_insufficiency_disclosures,
+    _section_requires_independent_llm_verifier,
     _semantic_claim_audit,
     _validate_generated_section,
     build_unified_blueprint,
@@ -432,6 +434,34 @@ def test_publication_guard_still_blocks_structural_or_unknown_citation_errors() 
     ]
 
 
+def test_guided_publication_returns_new_draft_with_all_diagnostics_advisory() -> None:
+    report = _publication_guard_for_new_llm(
+        {
+            "ok": False,
+            "passed": False,
+            "errors": [
+                "unknown_citations",
+                "raw_extraction_fragment",
+                "unsupported_or_misattributed_claims",
+            ],
+        },
+        guided_conversation=True,
+    )
+
+    assert report["ok"] is True
+    assert report["errors"] == []
+    assert report["strict_errors"] == [
+        "unknown_citations",
+        "raw_extraction_fragment",
+        "unsupported_or_misattributed_claims",
+    ]
+    assert report["advisory_errors"] == report["strict_errors"]
+    assert (
+        report["publication_policy"]
+        == "guided_iterative_new_draft_as_generated"
+    )
+
+
 def test_targeted_repair_prompt_is_smaller_than_full_writer_prompt() -> None:
     section = {
         "section_id": "limits",
@@ -546,6 +576,10 @@ def test_sectional_writer_keeps_latest_new_llm_text_never_raw_fallback(
     monkeypatch.setattr(phase5, "reload_config", lambda: {})
     monkeypatch.setenv("ENNOSCHOLAR_PHASE5_ENABLE_LLM", "1")
     monkeypatch.setenv("ENNOSCHOLAR_PHASE5_SECTION_ATTEMPTS", "2")
+    monkeypatch.setenv(
+        "ENNOSCHOLAR_PHASE5_ENABLE_PREMIUM_ESCALATION",
+        "0",
+    )
     monkeypatch.setenv(
         "ENNOSCHOLAR_PHASE5_ENABLE_INDEPENDENT_VERIFIER",
         "0",
@@ -669,6 +703,86 @@ def test_specific_uncited_method_claim_is_not_auto_cited() -> None:
 
     assert claims == []
     assert repaired == generated
+
+
+def test_guided_writer_materializes_disclosure_and_accepts_lock_framing() -> None:
+    matrix = {
+        "policy": {"guided_conversation": True},
+        "verrous": [
+            {
+                "verrou_id": "V1",
+                "strength": "FAIBLE",
+                "allow_strong_verrou_conclusion": False,
+                "requires_insufficiency_disclosure": True,
+            }
+        ],
+    }
+    section = {
+        "section_id": "intro",
+        "title": "Introduction",
+        "_guided_conversation": True,
+        "_cir_evidence_matrix": matrix,
+        "available_citations": ["A6"],
+        "required_citations": [],
+        "target_words": 650,
+        "verrous": [
+            {
+                "verrou_id": "V1",
+                "verrou_title": "Robustesse avec peu de données",
+                "requires_insufficiency_disclosure": True,
+            }
+        ],
+    }
+    generated = {
+        "section_id": "intro",
+        "title": "Introduction",
+        "content": (
+            "La disponibilité limitée de données annotées complique le "
+            "développement des approches d’apprentissage automatique."
+        ),
+        "subsections": [
+            {
+                "verrou_id": "V1",
+                "title": "Robustesse avec peu de données",
+                "content": (
+                    "A6 décrit une extraction de caractéristiques à partir "
+                    "d’images partiellement étiquetées [A6]."
+                ),
+            }
+        ],
+    }
+
+    repaired, changed = _ensure_guided_insufficiency_disclosures(
+        generated,
+        section,
+    )
+    report = _semantic_claim_audit(
+        repaired,
+        section,
+        [
+            _unit(
+                "A6",
+                "Feature extraction uses partially labelled images.",
+            )
+        ],
+    )
+
+    assert changed == ["V1"]
+    assert "aucune preuve scientifique directe" in (
+        repaired["subsections"][0]["content"]
+    )
+    assert report["ok"] is True
+    verifier = _section_requires_independent_llm_verifier(
+        repaired,
+        section,
+        {
+            "semantic_claim_audit": report,
+            "cir_claim_audit": {"ok": True, "issues": []},
+        },
+        {"A6": "scientific_source"},
+    )
+    assert verifier["required"] is False
+    assert verifier["status"] == "guided_iterative_publication"
 
 
 def test_missing_citation_repair_prompt_is_evidence_bounded() -> None:

@@ -821,10 +821,53 @@ def _current_scholar_run_for_cards(db: Session, project: Project) -> ScholarRun 
     return (
         db.query(ScholarRun)
         .filter(ScholarRun.project_id == int(project.id))
-        .filter(ScholarRun.status != "improvement_corpus")
+        .filter(
+            ScholarRun.status.notin_([
+                "improvement_corpus",
+                "guided_conversation_corpus",
+                "guided_research_standalone",
+            ])
+        )
         .order_by(ScholarRun.created_at.desc(), ScholarRun.id.desc())
         .first()
     )
+
+
+def _resolve_scholar_run_for_cards(
+    db: Session,
+    project: Project,
+    *,
+    scholar_run_id: int | None = None,
+    scope_id: str | None = None,
+) -> ScholarRun | None:
+    if scholar_run_id is not None:
+        return (
+            db.query(ScholarRun)
+            .filter(
+                ScholarRun.id == int(scholar_run_id),
+                ScholarRun.project_id == int(project.id),
+            )
+            .first()
+        )
+    if scope_id:
+        # Compatibilité avec les corpus conversationnels existants : retrouve
+        # le run qui possède réellement ce compartiment, quel que soit son âge.
+        rows = (
+            db.query(ScholarRun)
+            .filter(ScholarRun.project_id == int(project.id))
+            .order_by(ScholarRun.created_at.desc(), ScholarRun.id.desc())
+            .all()
+        )
+        for row in rows:
+            raw = _as_dict(row.raw_result_json)
+            scopes = _as_dict(raw.get("article_cards_payload_by_scope"))
+            if str(scope_id) in scopes:
+                return row
+            if _safe_text(raw.get("corpus_scope_id"), 160) == str(scope_id):
+                return row
+            if _safe_text(raw.get("guided_session_id"), 160) == str(scope_id):
+                return row
+    return _current_scholar_run_for_cards(db, project)
 
 
 def _save_article_cards_payload_to_db(
@@ -832,8 +875,14 @@ def _save_article_cards_payload_to_db(
     project: Project,
     payload: Dict[str, Any],
     scope_id: str | None = None,
+    scholar_run_id: int | None = None,
 ) -> Dict[str, Any]:
-    run = _current_scholar_run_for_cards(db, project)
+    run = _resolve_scholar_run_for_cards(
+        db,
+        project,
+        scholar_run_id=scholar_run_id,
+        scope_id=scope_id,
+    )
     if run is None:
         raise RuntimeError("Aucun ScholarRun courant pour stocker les Article Cards.")
     uri = _article_cards_db_uri(int(run.id), scope_id)
@@ -5174,7 +5223,12 @@ def build_article_cards_for_selected_articles(
     scope_id: str | None = None,
 ) -> Dict[str, Any]:
     started = time.time()
-    storage_run = _current_scholar_run_for_cards(db, project)
+    storage_run = _resolve_scholar_run_for_cards(
+        db,
+        project,
+        scholar_run_id=scholar_run_id,
+        scope_id=scope_id,
+    )
     if storage_run is None:
         raise RuntimeError("Aucun ScholarRun courant pour construire les Article Cards.")
     out_payload = _article_cards_db_uri(int(storage_run.id), scope_id)
@@ -5455,6 +5509,11 @@ def build_article_cards_for_selected_articles(
         project,
         payload,
         scope_id=scope_id,
+        scholar_run_id=(
+            int(storage_run.id)
+            if storage_run is not None
+            else scholar_run_id
+        ),
     )
     print(
         "=" * 90 + "\n"
@@ -5551,6 +5610,7 @@ def get_article_cards_payload(
     project: Project,
     scope_id: str | None = None,
     db: Session | None = None,
+    scholar_run_id: int | None = None,
 ) -> Dict[str, Any]:
     owned_session = db is None
     if db is None:
@@ -5558,7 +5618,12 @@ def get_article_cards_payload(
 
         db = SessionLocal()
     try:
-        run = _current_scholar_run_for_cards(db, project)
+        run = _resolve_scholar_run_for_cards(
+            db,
+            project,
+            scholar_run_id=scholar_run_id,
+            scope_id=scope_id,
+        )
         if run is None:
             return {
                 "ok": False,
@@ -5574,6 +5639,10 @@ def get_article_cards_payload(
         else:
             saved = _as_dict(raw.get("article_cards_payload"))
         if saved:
+            saved = dict(saved)
+            saved.setdefault("project_id", int(project.id))
+            saved.setdefault("scholar_run_id", int(run.id))
+            saved.setdefault("scope_id", scope_id)
             return saved
 
         articles = (
@@ -5609,6 +5678,8 @@ def get_article_cards_payload(
         return {
             "ok": False,
             "project_id": project.id,
+            "scholar_run_id": int(run.id),
+            "scope_id": scope_id,
             "status": "not_built",
             "message": "Les fiches articles n'ont pas encore été générées.",
             "expected_path": _article_cards_db_uri(int(run.id), scope_id),

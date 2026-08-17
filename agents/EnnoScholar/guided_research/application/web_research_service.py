@@ -331,6 +331,311 @@ class WebResearchService:
             or "require_direct_evidence" in request
         )
 
+    @staticmethod
+    def _full_scholar_role(tag: Any) -> str:
+        normalized = _norm(tag)
+        if normalized == "direct":
+            return "direct_evidence"
+        if normalized in {"connexe", "fondamental"}:
+            return "connected_evidence"
+        return "implementation"
+
+    @staticmethod
+    def _full_scholar_score(value: Any) -> float:
+        try:
+            score = float(value or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+        return round(score / 100.0 if score > 1.0 else score, 6)
+
+    @classmethod
+    def _full_scholar_targets(
+        cls,
+        requests_list: list[dict[str, Any]],
+        project_context: Mapping[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Transforme les verrous figés du chat en cibles scientifiques privées.
+
+        Le moteur historique reçoit le même contenu qu'après Agent 1, mais sous
+        le contrat ``research_targets`` : il exécute exactement la même méthode
+        ``search_for_verrou`` sans fabriquer ni rattacher un Verrou en base.
+        """
+        current_verrous = [
+            dict(row)
+            for row in (project_context.get("current_verrous") or [])
+            if isinstance(row, Mapping) and _clean(row.get("title"), 700)
+        ]
+        requested_ids = {
+            _clean(value, 120).casefold()
+            for request in requests_list
+            for value in (request.get("target_verrous") or [])
+            if _clean(value, 120)
+        }
+        active_ids = {
+            _clean(value, 120).casefold()
+            for value in (project_context.get("active_verrou_ids") or [])
+            if _clean(value, 120)
+        }
+        selected_ids = requested_ids or active_ids
+        if selected_ids:
+            scoped = [
+                row
+                for row in current_verrous
+                if _clean(row.get("id"), 120).casefold() in selected_ids
+            ]
+            if scoped:
+                current_verrous = scoped
+
+        project = (
+            dict(project_context.get("project") or {})
+            if isinstance(project_context.get("project"), Mapping)
+            else {}
+        )
+        project_brief = (
+            dict(project_context.get("standalone_project_brief") or {})
+            if isinstance(project_context.get("standalone_project_brief"), Mapping)
+            else {}
+        )
+        scientific_context = _clean(
+            project_context.get("scientific_context")
+            or project_brief.get("scientific_context")
+            or project_brief.get("description"),
+            10000,
+        )
+        targets: list[dict[str, Any]] = []
+        for index, verrou in enumerate(current_verrous, start=1):
+            target_id = _clean(verrou.get("id"), 120) or f"CHAT-V{index}"
+            title = _clean(verrou.get("title"), 700)
+            matched_requests = [
+                request
+                for request in requests_list
+                if not request.get("target_verrous")
+                or target_id.casefold()
+                in {
+                    _clean(value, 120).casefold()
+                    for value in (request.get("target_verrous") or [])
+                }
+            ]
+            suggested_queries = [
+                _clean(request.get("query"), 500)
+                for request in matched_requests
+                if _clean(request.get("query"), 500)
+            ]
+            supporting = _clean(
+                verrou.get("justification")
+                or verrou.get("text")
+                or verrou.get("supporting_context"),
+                5000,
+            )
+            targets.append({
+                "research_target_id": target_id,
+                "research_target_title": title,
+                "research_target_type": "conversation_scientific_lock",
+                "title": title,
+                "verrou_title": title,
+                "text": "\n".join(
+                    value
+                    for value in (title, supporting, scientific_context)
+                    if value
+                )[:14000],
+                "suggested_queries": suggested_queries,
+                "raw_item": dict(verrou),
+                "source_json": dict(verrou.get("source_json") or {}),
+            })
+
+        if targets:
+            return targets
+
+        # Conversation sans diagnostic : chaque demande explicite joue le rôle
+        # du verrou scientifique confirmé par le consultant.
+        for index, request in enumerate(requests_list, start=1):
+            query = _clean(request.get("query"), 700)
+            if not query:
+                continue
+            target_id = _clean(
+                (request.get("target_verrous") or [None])[0], 120
+            ) or f"CHAT-T{index}"
+            targets.append({
+                "research_target_id": target_id,
+                "research_target_title": query,
+                "research_target_type": "conversation_scientific_lock",
+                "title": query,
+                "verrou_title": query,
+                "text": "\n".join(
+                    value for value in (query, scientific_context) if value
+                )[:14000],
+                "suggested_queries": [query],
+                "raw_item": dict(request),
+            })
+        return targets
+
+    @classmethod
+    def _map_full_scholar_report(
+        cls,
+        report: Mapping[str, Any],
+        requests_list: list[dict[str, Any]],
+        excluded: set[str],
+    ) -> list[dict[str, Any]]:
+        candidates: list[dict[str, Any]] = []
+        for result in (report.get("results") or []):
+            if not isinstance(result, Mapping):
+                continue
+            target_id = _clean(
+                result.get("research_target_id") or result.get("verrou_id"),
+                120,
+            )
+            target_title = _clean(
+                result.get("research_target_title")
+                or result.get("verrou_title"),
+                700,
+            )
+            for article in (result.get("articles") or []):
+                if not isinstance(article, Mapping):
+                    continue
+                title = _clean(article.get("title"), 1200)
+                if not title:
+                    continue
+                year = _year(article.get("year"))
+                doi = _clean(article.get("doi"), 500)
+                candidate_id = _stable_id("SRC", doi, title, year)
+                if candidate_id in excluded:
+                    continue
+                tag = _clean(
+                    article.get("tag") or article.get("tag_article"), 80
+                ) or "Connexe"
+                pdf_url = _clean(
+                    article.get("pdf_url")
+                    or article.get("primary_pdf_url")
+                    or article.get("open_access_pdf_url"),
+                    3000,
+                )
+                url = _clean(article.get("url") or pdf_url, 3000)
+                provider = _clean(article.get("source"), 120) or "ennoscholar"
+                covered_ids = [
+                    _clean(row.get("verrou_id"), 120)
+                    for row in (article.get("covered_verrous") or [])
+                    if isinstance(row, Mapping) and _clean(row.get("verrou_id"), 120)
+                ]
+                target_verrous = list(dict.fromkeys([
+                    *covered_ids,
+                    *([target_id] if target_id else []),
+                ]))
+                role = cls._full_scholar_role(tag)
+                score = cls._full_scholar_score(
+                    article.get("relevance_score") or article.get("score")
+                )
+                reason = _clean(article.get("reason"), 1800)
+                candidates.append({
+                    "candidate_id": candidate_id,
+                    "candidate_kind": "scientific_article",
+                    "title": title,
+                    "authors": _authors(article.get("authors")),
+                    "year": year,
+                    "doi": doi or None,
+                    "url": url or None,
+                    "pdf_url": pdf_url or None,
+                    "abstract": _clean(
+                        article.get("abstract") or article.get("tldr"), 8000
+                    ) or None,
+                    "venue": _clean(article.get("venue"), 500) or None,
+                    "publication_types": list(article.get("publication_types") or []),
+                    "source_providers": [provider],
+                    "source_authority": score,
+                    "relevance_score": score,
+                    "selection_priority_score": score,
+                    "relevance_role": role,
+                    "role_reason": reason or (
+                        f"Classé {tag} par le moteur complet EnnoScholar"
+                        + (f" pour « {target_title} »" if target_title else "")
+                        + "."
+                    ),
+                    "full_scholar_tag": tag,
+                    "open_access": bool(
+                        article.get("open_access")
+                        or article.get("is_open_access")
+                        or pdf_url
+                    ),
+                    "scientific_evidence_eligible": True,
+                    "evidence_scope": [
+                        "problem", "method", "result", "limitation"
+                    ],
+                    "query_kind": "scientific_evidence",
+                    "target_verrous": target_verrous,
+                    "consultant_decision": "proposed",
+                    "retrieval": dict(article.get("retrieval") or {}),
+                    "full_ennoscholar_source": True,
+                })
+        # Le moteur complet applique déjà son ranking scientifique. On déduplique
+        # sans réintroduire la limite de 30/60 du moteur léger du chat.
+        return cls._deduplicate(candidates)
+
+    def _search_with_full_ennoscholar(
+        self,
+        requests_list: list[dict[str, Any]],
+        project_context: Mapping[str, Any],
+        excluded: set[str],
+    ) -> dict[str, Any]:
+        from agents.EnnoScholar.scholar_agent import EnnoScholarAgent
+
+        targets = self._full_scholar_targets(requests_list, project_context)
+        if not targets:
+            return {"ok": False, "status": "missing_conversation_target", "candidates": []}
+        project = dict(project_context.get("project") or {})
+        research_context = {
+            "diagnostic_context_text": _clean(
+                project_context.get("scientific_context"), 18000
+            ),
+            "standalone_project_brief": dict(
+                project_context.get("standalone_project_brief") or {}
+            ),
+            "validated_article_cards": list(
+                project_context.get("validated_article_cards") or []
+            )[:30],
+        }
+        agent = EnnoScholarAgent(limit_per_query=50)
+        report = agent.run_search({
+            "organisme": project.get("organisme") or "",
+            "project": project.get("name") or project.get("project_name") or "",
+            "year": project.get("year") or "",
+            "domain_detection": {
+                "domain_label": project.get("domain") or "",
+            },
+            "diagnostic_context": research_context,
+            "research_context": research_context,
+            "research_targets": targets,
+            "source": "guided_conversation_full_ennoscholar",
+        })
+        candidates = self._map_full_scholar_report(
+            report, requests_list, excluded
+        )
+        return {
+            "ok": True,
+            "payload_type": "guided_full_ennoscholar_research_v1",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "seed_queries": requests_list,
+            "queries": requests_list,
+            "executions": [{
+                "provider": "full_ennoscholar_agent",
+                "ok": True,
+                "results": len(candidates),
+                "subjects_analyzed": report.get("subjects_analyzed"),
+                "subjects_failed": report.get("subjects_failed"),
+                "cache": report.get("cache"),
+            }],
+            "candidates": candidates,
+            "completeness": self._research_completeness(
+                requests_list, candidates
+            ),
+            "refinement_rounds": [],
+            "policy": {
+                "engine": "same_full_ennoscholar_agent_as_workflow_1",
+                "conversation_targets_are_not_database_verrous": True,
+                "all_ranked_candidates_returned": True,
+                "consultant_validation_required": True,
+                "no_paywall_bypass": True,
+            },
+        }
+
     def search(
         self,
         requests_payload: Iterable[Mapping[str, Any]],
@@ -338,6 +643,8 @@ class WebResearchService:
         excluded_ids: Iterable[str] | None = None,
         max_candidates: int = 30,
         auto_refine: bool = True,
+        project_context: Mapping[str, Any] | None = None,
+        full_ennoscholar: bool = False,
     ) -> dict[str, Any]:
         seed_requests = [
             dict(row) for row in requests_payload
@@ -346,6 +653,27 @@ class WebResearchService:
         seed_requests = self._expand_documentation_entities(seed_requests)[:8]
         requests_list = self._plan_provider_requests(seed_requests)[:8]
         excluded = {str(value) for value in (excluded_ids or [])}
+        if full_ennoscholar and any(
+            self._wants_scientific(request) for request in requests_list
+        ):
+            try:
+                full_result = self._search_with_full_ennoscholar(
+                    requests_list,
+                    project_context or {},
+                    excluded,
+                )
+                if full_result.get("candidates"):
+                    return full_result
+            except Exception as exc:
+                # Continuité de service : si une dépendance du moteur complet
+                # échoue, le moteur multisource léger reste un fallback sûr.
+                full_result = {
+                    "ok": False,
+                    "status": "full_ennoscholar_fallback",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+        else:
+            full_result = None
         jobs: list[tuple[str, dict[str, Any]]] = []
         for request in requests_list:
             wants_documentation = self._wants_documentation(request)
@@ -568,7 +896,7 @@ class WebResearchService:
                     requests_list,
                     ranked,
                 )
-        return {
+        response = {
             "ok": True,
             "payload_type": "guided_multisource_web_research_v1",
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -604,6 +932,13 @@ class WebResearchService:
                 "mcp_reserved_for_legal_fulltext_recovery": True,
             },
         }
+        if isinstance(full_result, dict):
+            response["full_ennoscholar_attempt"] = {
+                "ok": bool(full_result.get("ok")),
+                "status": full_result.get("status"),
+                "error": full_result.get("error"),
+            }
+        return response
 
     @staticmethod
     def _preference_tokens(request: Mapping[str, Any]) -> set[str]:

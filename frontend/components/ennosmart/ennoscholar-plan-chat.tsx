@@ -48,14 +48,15 @@ import {
   createGuidedResearchSession,
   deleteGuidedResearchSession,
   decideGuidedResearchSources,
+  getGuidedResearchCorpus,
   getGuidedResearchSession,
   getStateOfArtVisualBlob,
   getUploadedScholarArticlePdf,
   listGuidedResearchSessions,
-  prepareStateOfArtPhase1And2,
+  removeGuidedResearchCorpusArticle,
   sendGuidedResearchMessage,
+  uploadAndExtractArticlePdf,
   uploadNewScholarSource,
-  updateArticleDecision,
   type ArticleRead,
   type GuidedResearchConversationTurn,
   type GuidedResearchSession,
@@ -419,6 +420,7 @@ function CorpusDialog({
   onRemove,
   onSearch,
   onUpload,
+  onUploadMissing,
   onConsult,
 }: {
   open: boolean
@@ -429,6 +431,7 @@ function CorpusDialog({
   onRemove: (article: ArticleRead) => void
   onSearch: (query: string) => void
   onUpload: (file: File) => void
+  onUploadMissing: (article: ArticleRead, file: File) => void
   onConsult: (article: ArticleRead) => void
 }) {
   const [query, setQuery] = useState("")
@@ -522,7 +525,20 @@ function CorpusDialog({
             </div>
           ) : (
             <div className="space-y-2">
-              {articles.map((article, index) => (
+              {articles.map((article, index) => {
+                const missingPdf = Boolean(
+                  article.manual_upload_required ||
+                    (!article.fulltext_ready &&
+                      [
+                        "ACCESS_UNAVAILABLE",
+                        "BROWSER_DOWNLOAD_REQUIRED",
+                        "ABSTRACT_READY",
+                        "METADATA_ONLY",
+                        "EXTRACTION_FAILED",
+                        "NOT_CHECKED",
+                      ].includes(String(article.evidence_status || "").toUpperCase())),
+                )
+                return (
                 <div
                   key={article.id}
                   className="flex items-start gap-3 rounded-2xl border border-slate-200 p-3"
@@ -543,6 +559,37 @@ function CorpusDialog({
                       )}
                       {article.doi && <span className="truncate">DOI {article.doi}</span>}
                     </div>
+                    {missingPdf && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Badge className="border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-50">
+                          PDF de l’article non récupéré
+                        </Badge>
+                        <label
+                          className={`inline-flex h-8 cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 ${
+                            preparing || busyArticleId === article.id
+                              ? "pointer-events-none opacity-50"
+                              : ""
+                          }`}
+                        >
+                          {busyArticleId === article.id ? (
+                            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                          ) : (
+                            <UploadCloud className="mr-1.5 size-3.5" />
+                          )}
+                          Importer le PDF manuellement
+                          <input
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            className="hidden"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0]
+                              event.target.value = ""
+                              if (file) onUploadMissing(article, file)
+                            }}
+                          />
+                        </label>
+                      </div>
+                    )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     {(article.url ||
@@ -572,7 +619,7 @@ function CorpusDialog({
                     </Button>
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </div>
@@ -584,7 +631,6 @@ function CorpusDialog({
 export function EnnoScholarPlanChat({
   projectId,
   projectLabel = "Projet actif",
-  selectedArticles = [],
   onCorpusChanged,
   onGenerate,
   onRefreshDraft,
@@ -610,6 +656,7 @@ export function EnnoScholarPlanChat({
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [preparingCorpus, setPreparingCorpus] = useState(false)
   const [busyArticleId, setBusyArticleId] = useState<number | null>(null)
+  const [conversationArticles, setConversationArticles] = useState<ArticleRead[]>([])
   const [deletingSessionId, setDeletingSessionId] = useState("")
   const [operatingMode, setOperatingMode] = useState("")
   const [sessionDraftMarkdown, setSessionDraftMarkdown] = useState("")
@@ -646,10 +693,36 @@ export function EnnoScholarPlanChat({
     return rows
   }
 
+  async function refreshConversationCorpus(targetSessionId = sessionId) {
+    if (!targetSessionId) {
+      setConversationArticles([])
+      return []
+    }
+    const result = await getGuidedResearchCorpus(projectId, targetSessionId)
+    const rows = Array.isArray(result?.articles) ? result.articles : []
+    setConversationArticles(rows)
+    return rows
+  }
+
   function candidatesFromSession(current: any): ResearchCandidate[] {
     const currentBatch = current?.artifacts?.research_plan?.candidates
-    if (Array.isArray(currentBatch)) return currentBatch
     const selected = current?.artifacts?.selected_sources
+
+    if (Array.isArray(currentBatch)) {
+      const selectedById = new Map(
+        (Array.isArray(selected) ? selected : [])
+          .filter((row: ResearchCandidate) => row?.candidate_id)
+          .map((row: ResearchCandidate) => [row.candidate_id, row]),
+      )
+
+      // Le plan conserve l'ordre exact C1, C2, ... de la recherche courante.
+      // Les sources sélectionnées portent les décisions consultant à jour.
+      return currentBatch.map((row: ResearchCandidate) => ({
+        ...row,
+        ...(selectedById.get(row.candidate_id) || {}),
+      }))
+    }
+
     return Array.isArray(selected)
       ? selected.filter((row: ResearchCandidate) => row.current_research_batch)
       : []
@@ -665,6 +738,7 @@ export function EnnoScholarPlanChat({
       setCandidates(candidatesFromSession(current))
       setOperatingMode(String(current?.session?.context?.operating_mode || ""))
       setSessionDraftMarkdown(String(current?.artifacts?.draft?.markdown || ""))
+      await refreshConversationCorpus(id)
       localStorage.setItem(storageKey(projectId), id)
     } catch (err: any) {
       setError(err?.message || "Impossible d’ouvrir cette conversation.")
@@ -687,6 +761,7 @@ export function EnnoScholarPlanChat({
       setCandidates([])
       setOperatingMode(String(created?.session?.context?.operating_mode || ""))
       setSessionDraftMarkdown("")
+      setConversationArticles([])
       localStorage.setItem(storageKey(projectId), id)
       await refreshSessions()
     } catch (err: any) {
@@ -752,6 +827,7 @@ export function EnnoScholarPlanChat({
     setSessionId("")
     setMessages([])
     setCandidates([])
+    setConversationArticles([])
     void initialize()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
@@ -907,6 +983,7 @@ export function EnnoScholarPlanChat({
           "Source ajoutée : extraction et Article Card terminées ou signalées dans le message.",
         )
         await onCorpusChanged?.()
+        await refreshConversationCorpus()
       }
       await refreshSessions()
     } catch (err: any) {
@@ -927,12 +1004,12 @@ export function EnnoScholarPlanChat({
     setError(null)
       setNotice(null)
     try {
-      await updateArticleDecision(projectId, article.id, "rejete")
-      await prepareStateOfArtPhase1And2(projectId, {
-        force: false,
-        maxArticles: null,
-        articleCardMode: "auto",
-      })
+      await removeGuidedResearchCorpusArticle(
+        projectId,
+        sessionId,
+        article.id,
+      )
+      await refreshConversationCorpus()
       await onCorpusChanged?.()
       setNotice("Article retiré du corpus et artefacts de sélection actualisés.")
     } catch (err: any) {
@@ -958,6 +1035,7 @@ export function EnnoScholarPlanChat({
     setNotice(null)
     try {
       const result = await uploadNewScholarSource(projectId, file, sessionId)
+      await refreshConversationCorpus()
       await onCorpusChanged?.()
       const cardsCount = Number(result?.phase_2?.cards_count || 0)
       setNotice(
@@ -967,6 +1045,38 @@ export function EnnoScholarPlanChat({
     } catch (err: any) {
       setError(err?.message || "Impossible d’importer et préparer ce PDF.")
     } finally {
+      setPreparingCorpus(false)
+    }
+  }
+
+
+  async function uploadMissingArticlePdf(article: ArticleRead, file: File) {
+    setBusyArticleId(article.id)
+    setPreparingCorpus(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const result = await uploadAndExtractArticlePdf(
+        projectId,
+        article.id,
+        file,
+        article.url,
+        sessionId,
+      )
+      await refreshConversationCorpus()
+      await onCorpusChanged?.()
+      const cardsCount = Number(result?.phase_2?.cards_count || 0)
+      setNotice(
+        `Le PDF de « ${article.title} » a été extrait. ` +
+          `${cardsCount} Article Card(s) du corpus de cette conversation sont prêtes.`,
+      )
+    } catch (err: any) {
+      setError(
+        err?.message ||
+          "Impossible d’importer ce PDF pour l’article sélectionné.",
+      )
+    } finally {
+      setBusyArticleId(null)
       setPreparingCorpus(false)
     }
   }
@@ -1052,7 +1162,7 @@ export function EnnoScholarPlanChat({
                 <Library className="size-4 text-blue-600" />
                 Corpus
               </span>
-              <Badge variant="outline">{selectedArticles.length}</Badge>
+              <Badge variant="outline">{conversationArticles.length}</Badge>
             </button>
           </div>
 
@@ -1180,7 +1290,7 @@ export function EnnoScholarPlanChat({
               >
                 <Library className="size-4 text-blue-600" />
                 <span className="hidden sm:inline">Corpus de rédaction</span>
-                <Badge variant="outline">{selectedArticles.length}</Badge>
+                <Badge variant="outline">{conversationArticles.length}</Badge>
                 {preparingCorpus && <Loader2 className="size-3.5 animate-spin" />}
               </button>
               <Button
@@ -1267,10 +1377,10 @@ export function EnnoScholarPlanChat({
                 <div className="space-y-3 border-t border-slate-200 pt-5">
                   <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                     <Search className="size-3.5" />
-                    Sources proposées
+                    Sources proposées · {candidates.length}
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
-                    {candidates.slice(0, 12).map((candidate) => (
+                    {candidates.map((candidate) => (
                       <CandidateCard
                         key={candidate.candidate_id}
                         candidate={candidate}
@@ -1435,12 +1545,15 @@ export function EnnoScholarPlanChat({
       <CorpusDialog
         open={corpusOpen}
         onOpenChange={setCorpusOpen}
-        articles={selectedArticles}
+        articles={conversationArticles}
         busyArticleId={busyArticleId}
         preparing={preparingCorpus}
         onRemove={(article) => void removeArticle(article)}
         onSearch={(query) => void searchNewArticle(query)}
         onUpload={(file) => void uploadArticleFromComputer(file)}
+        onUploadMissing={(article, file) =>
+          void uploadMissingArticlePdf(article, file)
+        }
         onConsult={(article) => void consultArticle(article)}
       />
 
@@ -1476,7 +1589,7 @@ export function EnnoScholarPlanChat({
                 <Library className="size-4 text-blue-600" />
                 Corpus de rédaction
               </span>
-              <Badge variant="outline">{selectedArticles.length}</Badge>
+              <Badge variant="outline">{conversationArticles.length}</Badge>
             </Button>
             {onBackToArticles && !chatOnly && (
               <Button

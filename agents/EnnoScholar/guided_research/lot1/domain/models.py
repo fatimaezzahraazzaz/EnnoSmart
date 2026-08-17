@@ -182,6 +182,33 @@ class IntentClassification(BaseModel):
     explicit_plan_approval: bool = False
     explicit_research_command: bool = False
     explicit_new_verrou_declaration: bool = False
+    scientific_scope_relation: Literal[
+        "unspecified",
+        "supports_existing_verrou",
+        "declares_new_verrou",
+        "unrelated_to_verrou",
+    ] = "unspecified"
+    content_target: Literal[
+        "none",
+        "existing_plan",
+        "existing_section",
+        "existing_paragraph",
+        "existing_draft",
+        "existing_verrou",
+        "new_verrou",
+    ] = "none"
+    plan_edit_scope: Literal[
+        "none",
+        "local_section",
+        "full_plan",
+    ] = "none"
+    plan_edit_operation: Literal[
+        "none",
+        "add",
+        "modify",
+        "remove",
+    ] = "none"
+    target_section_ids: list[str] = Field(default_factory=list)
     replace_current_plan: bool = False
     use_current_sources_only: bool = False
     writing_source_scope: Literal[
@@ -216,6 +243,7 @@ class IntentClassification(BaseModel):
         "context_references",
         "writing_source_identifiers",
         "target_verrou_ids",
+        "target_section_ids",
         mode="before",
     )
     @classmethod

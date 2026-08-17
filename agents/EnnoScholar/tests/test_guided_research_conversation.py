@@ -13,6 +13,7 @@ from sqlalchemy.orm import sessionmaker
 from EnnoScholar.guided_research.application.guided_research_agent import (
     EnnoScholarGuidedResearchAgent,
     _approve_for_combined_write,
+    _apply_local_plan_edit_scope,
     _apply_verrou_scope_to_plan,
     _merge_additive_plan_update,
     _plan_candidate_covers_current,
@@ -45,6 +46,7 @@ from EnnoScholar.guided_research.lot1.session_state_manager import (
     GuidedResearchSessionStateManager,
 )
 from EnnoScholar.consultant_plan_service import authorize_writing, create_contract
+from EnnoScholar.contracts import normalize_plan_sections
 from EnnoScholar.guided_research.application.web_research_service import (
     WebResearchService,
     _looks_like_scientific_web_source,
@@ -75,6 +77,11 @@ def _decision(
     target_verrou_ids: list[str] | None = None,
     verrou_scope: str = "unchanged",
     explicit_new_verrou_declaration: bool = False,
+    scientific_scope_relation: str | None = None,
+    content_target: str | None = None,
+    plan_edit_scope: str = "none",
+    plan_edit_operation: str = "none",
+    target_section_ids: list[str] | None = None,
 ) -> dict:
     return {
         "classification": {
@@ -104,6 +111,25 @@ def _decision(
             "explicit_new_verrou_declaration": (
                 explicit_new_verrou_declaration
             ),
+            "scientific_scope_relation": (
+                scientific_scope_relation
+                or (
+                    "declares_new_verrou"
+                    if explicit_new_verrou_declaration
+                    else "unspecified"
+                )
+            ),
+            "content_target": (
+                content_target
+                or (
+                    "new_verrou"
+                    if explicit_new_verrou_declaration
+                    else "none"
+                )
+            ),
+            "plan_edit_scope": plan_edit_scope,
+            "plan_edit_operation": plan_edit_operation,
+            "target_section_ids": target_section_ids or [],
             "needs_clarification": needs_clarification,
             "corrected_message": "",
             "extracted_text": "",
@@ -547,6 +573,100 @@ class GuidedResearchConversationTests(unittest.TestCase):
                 "ennoscholar:guided_research:action_payload",
             ],
         )
+
+    def test_section_research_is_repaired_before_action_materialization(self) -> None:
+        message = (
+            "Dans la section « Analyse critique des approches existantes », "
+            "je veux ajouter un nouveau paragraphe pour parler de DINOv2. "
+            "Fais des recherches pour trouver les articles correspondants."
+        )
+        llm = SequenceLLM(
+            _decision(
+                ConsultantIntent.ADD_VERROU_AND_SEARCH,
+                "J'enregistre un nouveau verrou.",
+                requested_actions=[ConsultantIntent.ADD_VERROU_AND_SEARCH],
+                explicit_research_command=True,
+                explicit_new_verrou_declaration=True,
+            ),
+            {
+                "search_requests": [
+                    {
+                        "query": "DINOv2 few-shot industrial defect inspection",
+                        "query_kind": "direct_scientific_evidence",
+                        "entity_name": "DINOv2",
+                        "entity_type": "ai_model",
+                        "required_terms": ["DINOv2", "defect inspection"],
+                        "section_ids": ["analyse"],
+                        "section_titles": [
+                            "Analyse critique des approches existantes"
+                        ],
+                        "target_verrous": ["SV-INITIAL"],
+                        "requested_dimensions": ["few-shot", "robustness"],
+                        "target_context_dimensions": ["industrial inspection"],
+                        "require_direct_evidence": True,
+                    },
+                    {
+                        "query": "DINOv2 industrial anomaly detection limitations",
+                        "query_kind": "scientific_evidence",
+                        "entity_name": "DINOv2",
+                        "entity_type": "ai_model",
+                        "required_terms": ["DINOv2", "limitations"],
+                        "section_ids": ["analyse"],
+                        "section_titles": [
+                            "Analyse critique des approches existantes"
+                        ],
+                        "target_verrous": ["SV-INITIAL"],
+                        "requested_dimensions": ["limitations"],
+                        "target_context_dimensions": ["industrial inspection"],
+                        "require_direct_evidence": False,
+                    },
+                ]
+            },
+        )
+        result = ConversationUnderstandingService(llm).understand(
+            session=GuidedResearchSessionData(
+                project_id=1,
+                entry_module=GuidedResearchEntryModule.ENNOSCHOLAR,
+                target_mode=GuidedResearchTargetMode.PER_VERROU,
+            ),
+            consultant_message=message,
+            project_context={
+                "project": {"name": "Projet générique"},
+                "current_verrous": [
+                    {
+                        "id": "SV-INITIAL",
+                        "title": "Détection robuste avec peu de données",
+                    }
+                ],
+                "active_verrou_ids": ["SV-INITIAL"],
+                "review_scope": "per_verrou",
+            },
+            current_plan=[
+                {
+                    "section_id": "analyse",
+                    "title": "Analyse critique des approches existantes",
+                    "level": 1,
+                }
+            ],
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.classification.intent, ConsultantIntent.SEARCH_MORE)
+        self.assertFalse(result.classification.explicit_new_verrou_declaration)
+        self.assertEqual(
+            result.classification.target_verrou_ids,
+            ["SV-INITIAL"],
+        )
+        self.assertEqual(result.verrous, [])
+        self.assertEqual(len(result.search_requests), 2)
+        self.assertTrue(
+            all(
+                row["target_verrous"] == ["SV-INITIAL"]
+                for row in result.search_requests
+            )
+        )
+        self.assertIn("sans créer de nouveau verrou", result.assistant_message)
 
     def test_first_plan_reference_restores_snapshot_before_local_change(self) -> None:
         first_plan = [
@@ -1461,6 +1581,120 @@ class GuidedResearchConversationTests(unittest.TestCase):
             ["Introduction", "Méthodes", "Protocole de validation", "Conclusion"],
         )
         self.assertEqual(len({row["section_id"] for row in merged}), 4)
+
+    def test_local_edit_scope_freezes_every_other_section(self) -> None:
+        current = [
+            {
+                "section_id": "introduction",
+                "title": "Introduction",
+                "objective": "Contexte original.",
+                "parent_id": None,
+                "level": 1,
+            },
+            {
+                "section_id": "approches",
+                "title": "Analyse critique",
+                "objective": "Comparer les approches.",
+                "parent_id": None,
+                "level": 1,
+            },
+            {
+                "section_id": "limites",
+                "title": "Limites",
+                "objective": "Insuffisances originales.",
+                "parent_id": None,
+                "level": 1,
+            },
+        ]
+        # Le modèle a réécrit les trois sections, alors que le consultant ne
+        # visait que « approches ». Seul ce patch doit survivre.
+        candidate = [
+            {
+                "section_id": "introduction",
+                "title": "Introduction réécrite par erreur",
+                "objective": "Mauvaise mutation.",
+                "parent_id": None,
+                "level": 1,
+            },
+            {
+                "section_id": "approches",
+                "title": "Analyse critique",
+                "objective": "Comparer les approches et DINOv2.",
+                "parent_id": None,
+                "level": 1,
+            },
+            {
+                "section_id": "dinov2",
+                "title": "Apport de DINOv2",
+                "objective": "Argumenter le verrou initial.",
+                "parent_id": "approches",
+                "level": 2,
+            },
+            {
+                "section_id": "limites",
+                "title": "Conclusion inventée",
+                "objective": "Mauvaise mutation.",
+                "parent_id": None,
+                "level": 1,
+            },
+        ]
+
+        patched = _apply_local_plan_edit_scope(
+            current,
+            candidate,
+            target_section_ids=["approches"],
+            operation="modify",
+        )
+        by_id = {row["section_id"]: row for row in patched}
+        normalized_current = normalize_plan_sections(current)
+
+        self.assertEqual(by_id["introduction"], normalized_current[0])
+        self.assertEqual(by_id["limites"], normalized_current[2])
+        self.assertEqual(
+            by_id["approches"]["objective"],
+            "Comparer les approches et DINOv2.",
+        )
+        self.assertEqual(by_id["dinov2"]["parent_id"], "approches")
+
+    def test_local_remove_scope_deletes_only_target_branch(self) -> None:
+        current = [
+            {
+                "section_id": "s1",
+                "title": "Section 1",
+                "parent_id": None,
+                "level": 1,
+            },
+            {
+                "section_id": "s2",
+                "title": "Section 2",
+                "parent_id": None,
+                "level": 1,
+            },
+            {
+                "section_id": "s2_child",
+                "title": "Sous-section 2.1",
+                "parent_id": "s2",
+                "level": 2,
+            },
+            {
+                "section_id": "s3",
+                "title": "Section 3",
+                "parent_id": None,
+                "level": 1,
+            },
+        ]
+
+        patched = _apply_local_plan_edit_scope(
+            current,
+            [],
+            target_section_ids=["s2"],
+            operation="remove",
+        )
+
+        self.assertEqual(
+            [row["section_id"] for row in patched],
+            ["s1", "s3"],
+        )
 
     def test_combined_approve_and_write_command_approves_contract(self) -> None:
         contract = create_contract([{
