@@ -1150,6 +1150,18 @@ def build_scientific_intent(
     )
     out.update(dynamic_anchors)
 
+    # ENNOMEL_SECTION_ENTITIES_FROM_SOURCE_V3_8
+    raw_item = (verrou or {}).get("raw_item") or {}
+    if not isinstance(raw_item, dict):
+        raw_item = {}
+    section_entities = [
+        clean_text(value, 120)
+        for value in (raw_item.get("section_entities") or [])
+        if clean_text(value, 120)
+    ]
+    section_entities = dedupe_keep_order(section_entities, 20)
+    out["source_section_entities"] = list(section_entities)
+
     core = roles["core_concepts"]
     methods = roles["method_anchors"]
     phenomena = roles["phenomenon_anchors"]
@@ -1169,7 +1181,8 @@ def build_scientific_intent(
 
     # Les ancres fortes ne contiennent plus uncertainty/CPU/GPU/noms tronqués.
     out["strong_anchors"] = dedupe_keep_order(
-        list(dynamic_anchors.get("literal_source_acronyms") or [])
+        list(section_entities)
+        + list(dynamic_anchors.get("literal_source_acronyms") or [])
         + list(dynamic_anchors.get("literal_source_phrases") or [])
         + core
         + methods
@@ -1177,7 +1190,14 @@ def build_scientific_intent(
         + tools,
         24,
     )
-    out["key_terms_en"] = dedupe_keep_order(core + methods + phenomena + list(out.get("key_terms_en") or []), 28)
+    out["key_terms_en"] = dedupe_keep_order(
+        list(section_entities)
+        + core
+        + methods
+        + phenomena
+        + list(out.get("key_terms_en") or []),
+        32,
+    )
     out["intent_scope"] = "v155_current_verrou_section_aware_roles"
     out["query_builder_version"] = "v155_section_aware_problem_evidence_intent"
     if isinstance(out.get("source_basis"), dict):

@@ -1,5 +1,22 @@
 from __future__ import annotations
 
+from .visible_candidate_policy_v3181 import (
+    review_summary,
+    visible_candidate_message,
+)
+
+from .source_integrity_v318 import (
+    hard_conservation_issues,
+    integrity_issues_from_protection,
+    prepare_writer_request,
+    restore_protected_candidate,
+)
+from .revision_integrity_v318 import (
+    render_integrity_retry_instruction,
+    revision_block_message,
+    verify_revision_integrity,
+)
+
 from typing import Any
 import hashlib
 
@@ -34,12 +51,19 @@ from .research_orchestration_service import (
     launch_targeted_guided_research,
     research_choice_actions,
 )
+from .fresh_research_policy_v314 import (
+    MODE_FRESH as FRESH_RESEARCH_MODE,
+    MODE_REUSE as REUSE_RESEARCH_MODE,
+    POLICY_VERSION as FRESH_RESEARCH_POLICY_VERSION,
+    resolve_fresh_research_policy,
+)
 from .traceability_service import build_revision_trace
 from .writer_service import (
     ControlledWriter,
     _allowed_citation_ids,
     validate_conservative_revision,
 )
+from .evidence_coverage_v315 import build_coverage_report
 
 
 
@@ -237,11 +261,34 @@ class EnnoAmeliorationAgent:
                 ImprovementIntent.SCIENTIFIC_ENRICHMENT,
             )
         )
+
+        # V3.25 — les contrôles sont un audit destiné au consultant, pas un
+        # pare-feu de génération. Une seule rédaction est produite : aucune
+        # alerte d'intégrité ne déclenche une réécriture automatique susceptible
+        # d'effacer une bonne première candidate ou ses sources scientifiques.
+        max_attempts = 1
         attempts: list[dict[str, Any]] = []
         attempt_request = request
         last_issues: list[str] = []
-        for attempt in range(1, 3):
-            improved, meta = self.writer.rewrite(attempt_request, routing, audit, evidence)
+        last_integrity: dict[str, Any] = {}
+        improved = request.target_text
+        meta: dict[str, Any] = {}
+
+        for attempt in range(1, max_attempts + 1):
+            protected_request, protected_fragments = prepare_writer_request(
+                attempt_request
+            )
+            improved_masked, meta = self.writer.rewrite(
+                protected_request,
+                routing,
+                audit,
+                evidence,
+            )
+            improved, protection_report = restore_protected_candidate(
+                improved_masked,
+                protected_fragments,
+            )
+
             last_issues = validate_conservative_revision(
                 request.target_text,
                 improved,
@@ -249,98 +296,186 @@ class EnnoAmeliorationAgent:
                 allow_reduction=allow_reduction,
                 enrichment_requested=enrichment_requested,
             )
-            attempts.append({"attempt": attempt, "issues": last_issues, "llm": meta})
-            if routing.editorial_only or routing.strict_fact_preservation:
-                # Mode demandé par le consultant : toujours exposer la première
-                # réécriture. Les écarts éventuels restent des observations dans
-                # le comparatif ; ils ne déclenchent ni nouvelle génération ni
-                # retour automatique au texte source. L'original reste inchangé
-                # jusqu'à la validation humaine.
-                return improved, {
-                    **dict(meta),
-                    "strategy": "visible_editorial_candidate",
-                    "conservation_validation": (
-                        "passed" if not last_issues else "consultant_review"
-                    ),
-                    "conservation_issues": last_issues,
-                    "requires_consultant_review": bool(last_issues),
-                    "attempt_count": 1,
-                    "call_count": 1,
-                    "attempts": attempts,
-                }
-            if not last_issues:
-                if len(attempts) == 1:
-                    generation = dict(meta)
-                    generation.update(
-                        {
-                            "conservation_validation": "passed",
-                            "attempt_count": 1,
-                            "call_count": 1,
-                        }
+
+            protection_issues = integrity_issues_from_protection(
+                protection_report
+            )
+            for issue in protection_issues:
+                if issue not in last_issues:
+                    last_issues.append(issue)
+
+            coverage = build_coverage_report(evidence, improved)
+            missing_required = list(
+                coverage.get("missing_required_ids") or []
+            )
+            if missing_required:
+                last_issues.append(
+                    "preuves_validees_non_utilisees:"
+                    + ",".join(missing_required)
+                )
+
+            last_integrity = {}
+            hard_before_semantic = hard_conservation_issues(last_issues)
+
+            # Le contrôle sémantique coûte un appel LLM. On ne le lance que si
+            # les contrôles déterministes sont déjà propres et si le consultant
+            # a demandé un enrichissement/renforcement scientifique.
+            if (
+                enrichment_requested
+                and not missing_required
+                and not hard_before_semantic
+            ):
+                try:
+                    last_integrity = verify_revision_integrity(
+                        request.target_text,
+                        improved,
+                        evidence,
                     )
-                    return improved, generation
-                return improved, {
-                    **dict(meta),
-                    "strategy": "automatic_conservative_repair",
-                    "conservation_validation": "passed_after_retry",
-                    "attempt_count": len(attempts),
-                    "call_count": len(attempts),
-                    "attempts": attempts,
-                    "prompt_tokens": sum(
-                        int((row.get("llm") or {}).get("prompt_tokens") or 0)
-                        for row in attempts
-                    ),
-                    "completion_tokens": sum(
-                        int((row.get("llm") or {}).get("completion_tokens") or 0)
-                        for row in attempts
-                    ),
-                    "total_tokens": sum(
-                        int((row.get("llm") or {}).get("total_tokens") or 0)
-                        for row in attempts
-                    ),
-                }
-            attempt_request = request.model_copy(
-                update={
-                    "instruction": (
-                        request.instruction
-                        + (
-                            "\n\nCORRECTION AUTOMATIQUE OBLIGATOIRE : corrige la proposition "
-                            "courante sans enrichir ni repartir d'une autre version. "
-                            if routing.candidate_revision
-                            else "\n\nCORRECTION AUTOMATIQUE OBLIGATOIRE : repars du texte "
-                            "original et corrige ces violations de conservation. "
-                        )
-                        + "Violations détectées : "
-                        + "; ".join(last_issues)
-                    )
+                    for issue in last_integrity.get("issues") or []:
+                        if issue not in last_issues:
+                            last_issues.append(str(issue))
+                except Exception as exc:
+                    last_integrity = {
+                        "complete": False,
+                        "error": str(exc),
+                        "issues": [
+                            "integrity_verifier_unavailable:"
+                            + exc.__class__.__name__
+                        ],
+                    }
+                    last_issues.extend(last_integrity["issues"])
+
+            attempts.append(
+                {
+                    "attempt": attempt,
+                    "issues": list(last_issues),
+                    "llm": dict(meta or {}),
+                    "protected_source_integrity": protection_report,
+                    "accepted_source_coverage": coverage,
+                    "semantic_integrity": last_integrity,
                 }
             )
-        # Human-in-the-loop : après les tentatives automatiques, on ne jette pas
-        # la proposition. On renvoie la dernière version générée avec les alertes
-        # de conservation pour que le consultant puisse la voir, la comparer et
-        # demander une correction ciblée. L'original reste actif jusqu'à validation.
+
+            # Mode purement éditorial : une candidate reste visible tant qu'elle
+            # ne perd aucun élément protégé. Les alertes lexicales non bloquantes
+            # restent consultables par le consultant.
+            if routing.editorial_only or routing.strict_fact_preservation:
+                if not hard_conservation_issues(last_issues):
+                    return improved, {
+                        **dict(meta),
+                        "strategy": "visible_editorial_candidate_v318",
+                        "conservation_validation": (
+                            "passed" if not last_issues else "consultant_review"
+                        ),
+                        "conservation_issues": list(last_issues),
+                        "requires_consultant_review": bool(last_issues),
+                        "attempt_count": attempt,
+                        "call_count": attempt,
+                        "attempts": attempts,
+                        "protected_source_integrity": protection_report,
+                    }
+
+            if not last_issues:
+                return improved, {
+                    **dict(meta),
+                    "strategy": (
+                        "scientific_integrity_verified_v318"
+                        if enrichment_requested
+                        else "automatic_conservative_repair_v318"
+                    ),
+                    "conservation_validation": "passed",
+                    "scientific_integrity_validation": (
+                        "passed" if enrichment_requested else "not_required"
+                    ),
+                    "accepted_source_coverage": coverage,
+                    "semantic_integrity": last_integrity,
+                    "protected_source_integrity": protection_report,
+                    "attempt_count": attempt,
+                    "call_count": attempt,
+                    "attempts": attempts,
+                }
+
+            retry_instruction = (
+                request.instruction
+                + "\n\nCORRECTION AUTOMATIQUE OBLIGATOIRE V3.18\n"
+                + "Repars du texte source actif. Corrige toutes les violations "
+                  "sans supprimer de fait, référence, figure, mesure ou citation "
+                  "déjà correctement intégrée.\n"
+                + "Violations détectées : "
+                + "; ".join(last_issues)
+            )
+
+            if last_integrity:
+                retry_instruction += render_integrity_retry_instruction(
+                    last_integrity
+                )
+
+            if missing_required:
+                retry_instruction += (
+                    "\nToutes les preuves acceptées restent obligatoires. "
+                    "Intègre chaque citation manquante uniquement derrière une "
+                    "affirmation réellement soutenue par sa preuve. Si nécessaire, "
+                    "utilise un fait minimal mais exact."
+                )
+
+            attempt_request = request.model_copy(
+                update={"instruction": retry_instruction}
+            )
+
+        final_coverage = build_coverage_report(evidence, improved)
+        final_missing = list(
+            final_coverage.get("missing_required_ids") or []
+        )
+
+        scientific_failures = [
+            issue
+            for issue in last_issues
+            if str(issue).startswith(
+                (
+                    "citation_non_etayee:",
+                    "integrity_verifier_unavailable:",
+                )
+            )
+        ]
+
+        # V3.25 — politique « audit consultatif uniquement ». Les anomalies
+        # détectées restent détaillées dans le comparatif, mais ne deviennent
+        # jamais des statuts bloquants et ne provoquent aucun retry automatique.
+        review_issues = list(
+            dict.fromkeys(
+                [*last_issues]
+            )
+        )
+
         return improved, {
             **dict(meta),
-            "strategy": "candidate_with_conservation_warnings",
-            "conservation_validation": "warning_after_retry",
-            "conservation_issues": last_issues,
-            "requires_consultant_review": True,
+            "strategy": "visible_candidate_with_advisory_warnings_v325",
+            "conservation_validation": (
+                "passed" if not review_issues else "consultant_review_required"
+            ),
+            "scientific_integrity_validation": (
+                "passed"
+                if not scientific_failures
+                else "consultant_review_required"
+            ),
+            "accepted_source_coverage": final_coverage,
+            "semantic_integrity": last_integrity,
+            "quality_warnings": review_issues,
+            "conservation_issues": review_issues,
+            "requires_consultant_review": bool(review_issues),
+            "candidate_visibility_policy": "always_visible",
+            "quality_control_mode": "advisory_only",
+            "automatic_integrity_retry": False,
+            "controls_blocked_candidate": False,
+            "accepted_source_coverage_warning": final_missing,
+            "active_version_mutated": False,
             "attempt_count": len(attempts),
             "call_count": len(attempts),
             "attempts": attempts,
-            "prompt_tokens": sum(
-                int((row.get("llm") or {}).get("prompt_tokens") or 0)
-                for row in attempts
-            ),
-            "completion_tokens": sum(
-                int((row.get("llm") or {}).get("completion_tokens") or 0)
-                for row in attempts
-            ),
-            "total_tokens": sum(
-                int((row.get("llm") or {}).get("total_tokens") or 0)
-                for row in attempts
-            ),
         }
+
+
+
 
     @staticmethod
     def _collect_conservation_issues(generation: Any) -> list[str]:
@@ -637,32 +772,62 @@ class EnnoAmeliorationAgent:
             },
             "cir_style": cir_style_context(project),
         }
+        cached_diagnostic = request.diagnostic_context_override
+        if isinstance(cached_diagnostic, dict):
+            package["diagnostic"] = dict(cached_diagnostic)
+            package["diagnostic_orchestration"] = {
+                **dict(request.diagnostic_orchestration_override or {}),
+                "mode": "reuse_initial_cir_diagnostic",
+                "executed": False,
+                "cache_hit": True,
+            }
         needs_diagnostic_context = bool(
             routing.needs_diagnostic
             or routing.needs_project_evidence
         )
-        if needs_diagnostic_context:
-            try:
-                diagnostic, orchestration = ensure_diagnostic_context(
-                    db, project, request
-                )
-                package["diagnostic"] = diagnostic
-                package["diagnostic_orchestration"] = orchestration
-            except DiagnosticOrchestrationError as exc:
+        if needs_diagnostic_context and "diagnostic" not in package:
+            if not request.allow_scoped_diagnostic:
                 package["diagnostic"] = {
                     "available": False,
+                    "completed": False,
                     "agent": "EnnoDiagnostic",
-                    "reason": str(exc),
+                    "reason": (
+                        "Le diagnostic initial du CIR n'est pas disponible et "
+                        "la section n'est pas ambiguë : aucun diagnostic ciblé "
+                        "supplémentaire n'est autorisé."
+                    ),
                     "evidence_items": [],
                     "verrous": [],
                     "domain_detection": {},
                 }
                 package["diagnostic_orchestration"] = {
                     "agent": "EnnoDiagnostic",
-                    "mode": "failed",
+                    "mode": "scoped_not_authorized_for_unambiguous_section",
                     "executed": False,
-                    "error": str(exc),
                 }
+            else:
+                try:
+                    diagnostic, orchestration = ensure_diagnostic_context(
+                        db, project, request
+                    )
+                    package["diagnostic"] = diagnostic
+                    package["diagnostic_orchestration"] = orchestration
+                except DiagnosticOrchestrationError as exc:
+                    package["diagnostic"] = {
+                        "available": False,
+                        "completed": False,
+                        "agent": "EnnoDiagnostic",
+                        "reason": str(exc),
+                        "evidence_items": [],
+                        "verrous": [],
+                        "domain_detection": {},
+                    }
+                    package["diagnostic_orchestration"] = {
+                        "agent": "EnnoDiagnostic",
+                        "mode": "failed",
+                        "executed": False,
+                        "error": str(exc),
+                    }
         if routing.needs_scholar:
             package["scholar"] = scholar_context(
                 db,
@@ -775,6 +940,145 @@ class EnnoAmeliorationAgent:
             if (hard_forbid_research or hard_forbid_scholar)
             else detect_research_choice(request.research_choice or request.instruction)
         )
+
+        # BEGIN ENNOAMEL_FRESH_RESEARCH_V3_14
+        fresh_policy = resolve_fresh_research_policy(
+            instruction=request.instruction,
+            current_choice=research_choice,
+            intents=routing.intents,
+            needs_scholar=bool(routing.needs_scholar),
+            editorial_only=bool(routing.editorial_only),
+            hard_forbid_research=hard_forbid_research,
+            hard_forbid_scholar=hard_forbid_scholar,
+        )
+
+        if fresh_policy.mode == FRESH_RESEARCH_MODE:
+            fresh_needs_diagnostic = bool(
+                ImprovementIntent.CIR_ELIGIBILITY in routing.intents
+                and routing.needs_diagnostic
+            )
+            fresh_route = (
+                SpecialistRoute.DIAGNOSTIC_SCHOLAR
+                if fresh_needs_diagnostic
+                else SpecialistRoute.SCHOLAR
+            )
+            fresh_section_plan = [
+                plan.model_copy(
+                    update={
+                        "route": fresh_route,
+                        "needs_diagnostic": fresh_needs_diagnostic,
+                        "needs_scholar": True,
+                        "rationale": [
+                            *plan.rationale,
+                            f"{FRESH_RESEARCH_POLICY_VERSION}: renforcement du fond -> recherche ciblée",
+                        ],
+                    }
+                )
+                for plan in routing.section_plan
+            ]
+            research_choice = RESEARCH_LAUNCH_TARGETED
+            routing = routing.model_copy(
+                update={
+                    "needs_diagnostic": fresh_needs_diagnostic,
+                    "needs_project_evidence": fresh_needs_diagnostic,
+                    "needs_scholar": True,
+                    "needs_new_research": True,
+                    "forbids_new_research": False,
+                    "forbids_scholar": False,
+                    "specialist_route": fresh_route,
+                    "section_plan": fresh_section_plan,
+                    "rationale": [
+                        *routing.rationale,
+                        f"{FRESH_RESEARCH_POLICY_VERSION}: {fresh_policy.reason}",
+                    ],
+                }
+            )
+
+        elif fresh_policy.mode == REUSE_RESEARCH_MODE:
+            reuse_section_plan = [
+                plan.model_copy(
+                    update={
+                        "route": SpecialistRoute.SCHOLAR,
+                        "needs_diagnostic": False,
+                        "needs_scholar": True,
+                        "rationale": [
+                            *plan.rationale,
+                            f"{FRESH_RESEARCH_POLICY_VERSION}: réutilisation explicite",
+                        ],
+                    }
+                )
+                for plan in routing.section_plan
+            ]
+            research_choice = RESEARCH_USE_EXISTING
+            routing = routing.model_copy(
+                update={
+                    "needs_diagnostic": False,
+                    "needs_project_evidence": False,
+                    "needs_scholar": True,
+                    "needs_new_research": False,
+                    "forbids_new_research": True,
+                    "forbids_scholar": False,
+                    "specialist_route": SpecialistRoute.SCHOLAR,
+                    "section_plan": reuse_section_plan,
+                    "rationale": [
+                        *routing.rationale,
+                        f"{FRESH_RESEARCH_POLICY_VERSION}: {fresh_policy.reason}",
+                    ],
+                }
+            )
+        # END ENNOAMEL_FRESH_RESEARCH_V3_14
+
+        # BEGIN ENNOAMEL_FRESH_RESEARCH_V3_13
+        fresh_policy = resolve_fresh_research_policy(
+            instruction=request.instruction,
+            current_choice=research_choice,
+            intents=routing.intents,
+            needs_scholar=bool(routing.needs_scholar),
+            editorial_only=bool(routing.editorial_only),
+            hard_forbid_research=hard_forbid_research,
+            hard_forbid_scholar=hard_forbid_scholar,
+        )
+        if fresh_policy.mode == FRESH_RESEARCH_MODE:
+            research_choice = RESEARCH_LAUNCH_TARGETED
+            routing = routing.model_copy(
+                update={
+                    "needs_scholar": True,
+                    "needs_new_research": True,
+                    "forbids_new_research": False,
+                    "forbids_scholar": False,
+                    "needs_project_evidence": routing.needs_diagnostic,
+                    "specialist_route": (
+                        SpecialistRoute.DIAGNOSTIC_SCHOLAR
+                        if routing.needs_diagnostic
+                        else SpecialistRoute.SCHOLAR
+                    ),
+                    "rationale": [
+                        *routing.rationale,
+                        f"{FRESH_RESEARCH_POLICY_VERSION}: {fresh_policy.reason}",
+                    ],
+                }
+            )
+        elif fresh_policy.mode == REUSE_RESEARCH_MODE:
+            research_choice = RESEARCH_USE_EXISTING
+            routing = routing.model_copy(
+                update={
+                    "needs_scholar": True,
+                    "needs_new_research": False,
+                    "forbids_new_research": True,
+                    "forbids_scholar": False,
+                    "needs_project_evidence": routing.needs_diagnostic,
+                    "specialist_route": (
+                        SpecialistRoute.DIAGNOSTIC_SCHOLAR
+                        if routing.needs_diagnostic
+                        else SpecialistRoute.SCHOLAR
+                    ),
+                    "rationale": [
+                        *routing.rationale,
+                        f"{FRESH_RESEARCH_POLICY_VERSION}: {fresh_policy.reason}",
+                    ],
+                }
+            )
+        # END ENNOAMEL_FRESH_RESEARCH_V3_13
 
         if hard_forbid_scholar:
             routing = routing.model_copy(
@@ -950,7 +1254,11 @@ class EnnoAmeliorationAgent:
             routing.needs_diagnostic
             or routing.needs_project_evidence
         )
-        diagnostic_available = bool((evidence.get("diagnostic") or {}).get("available"))
+        diagnostic_payload = evidence.get("diagnostic") or {}
+        diagnostic_available = bool(
+            diagnostic_payload.get("available")
+            or diagnostic_payload.get("completed")
+        )
         if diagnostic_required and not diagnostic_available:
             reason = str((evidence.get("diagnostic") or {}).get("reason") or "Contexte EnnoDiagnostic indisponible.")
             if routing.needs_scholar and routing.needs_new_research:
@@ -1149,11 +1457,16 @@ class EnnoAmeliorationAgent:
         # à faits constants d'une section existante. Une recherche explicite est
         # déjà traitée plus haut via AWAITING_EVIDENCE.
 
+        print('[EnnoAmel][WriterOwnership] final_writer=EnnoAmelioration ' + f'intents={[getattr(i, "value", str(i)) for i in routing.intents]} ' + f'accepted_articles={list(request.evidence_article_ids or [])}')
         # EnnoScholar fournit uniquement les preuves scientifiques. La redaction
         # de toute section, y compris un etat de l'art, reste la responsabilite
         # d'EnnoAmelioration afin de conserver un seul comparatif et un seul
         # contrat de revision dans l'interface Agent 3.
-        delegated_to_scholar = False
+        # V3.5 — état de l'art existant + sources déjà validées :
+        # EnnoAmelioration reste l'orchestrateur et le propriétaire de la version,
+        # tandis qu'EnnoScholar ne produit que des AJOUTS SCIENTIFIQUES ANCRÉS.
+        # Le texte source n'est jamais réécrit/remplacé dans ce chemin.
+        delegated_to_scholar = False  # V3.17.1 Scholar=evidence, EnnoAmel=final writer
         try:
             if document_mode and routing.section_plan:
                 improved_target, improved_full_text, generation = (
@@ -1169,7 +1482,13 @@ class EnnoAmeliorationAgent:
                             + (
                                 "Aucune recherche n'est lancée conformément à l'instruction."
                                 if no_research
-                                else "Validez d'abord les sources candidates."
+                                else (
+                                    "Cette révision scientifique nécessite d'abord des "
+                                    "sources exploitables. Une recherche doit produire des "
+                                    "sources candidates avant que le consultant puisse les "
+                                    "valider ; aucune source inexistante n'est considérée "
+                                    "comme déjà sélectionnée."
+                                )
                             )
                         ),
                         routing=routing,
@@ -1209,6 +1528,8 @@ class EnnoAmeliorationAgent:
                     **generation,
                     "orchestrator": "EnnoAmelioration",
                     "merge_strategy": "anchored_additions_into_existing_version",
+                    "scientific_workflow_v3_5": "source_immutable_plus_validated_additions",
+                    "original_source_rewritten": False,
                     "conservation_validation": "warning" if issues else "passed",
                     "conservation_issues": issues,
                     "requires_consultant_review": bool(issues),
@@ -1221,10 +1542,7 @@ class EnnoAmeliorationAgent:
             return ImprovementResult(
                 ok=False,
                 state=ImprovementState.REVIEW,
-                assistant_message=(
-                    "La proposition a été écartée automatiquement car elle altérait "
-                    "des éléments protégés. La version active reste inchangée."
-                ),
+                assistant_message=revision_block_message(exc.issues),
                 routing=routing,
                 audit=audit,
                 evidence=evidence,

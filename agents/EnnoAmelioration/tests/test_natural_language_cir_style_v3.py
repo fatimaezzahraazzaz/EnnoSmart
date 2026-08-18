@@ -4,6 +4,9 @@ import json
 
 from agents.EnnoAmelioration.application.intention_service import understand_instruction
 from agents.EnnoAmelioration.application.agent import EnnoAmeliorationAgent
+from agents.EnnoAmelioration.application.markdown_service import (
+    normalize_llm_markdown_output,
+)
 from agents.EnnoAmelioration.application.semantic_routing_service import (
     SemanticRoutingService,
 )
@@ -14,6 +17,9 @@ from agents.EnnoAmelioration.application.traceability_service import (
 from agents.EnnoAmelioration.application.writer_service import (
     ControlledWriter,
     _compact_json,
+    _editorial_semantic_scope_risks,
+    _editorial_text_similarity,
+    _preserve_leading_heading,
 )
 from agents.EnnoAmelioration.domain.models import (
     ImprovementIntent,
@@ -266,3 +272,202 @@ def test_compact_json_remains_valid_when_payload_is_truncated():
 
     assert len(compacted) <= 900
     assert isinstance(json.loads(compacted), dict)
+
+
+
+def test_markdown_output_removes_html_space_entity():
+    value = "### 1.2.1. Contexte\n\nPremier paragraphe. &#x20;\n\n\nDeuxième paragraphe."
+    cleaned = normalize_llm_markdown_output(value)
+    assert "&#x20;" not in cleaned
+    assert cleaned == "### 1.2.1. Contexte\n\nPremier paragraphe.\n\nDeuxième paragraphe."
+
+
+def test_leading_section_heading_is_restored_if_writer_omits_it():
+    source = "### 1.2.1. Contexte de l’opération\n\nLe radar est un système actif."
+    candidate = "Le radar constitue un système actif."
+    restored = _preserve_leading_heading(source, candidate)
+    assert restored.startswith("### 1.2.1. Contexte de l’opération\n\n")
+    assert restored.endswith(candidate)
+
+
+def test_new_temporal_qualifier_is_detected():
+    source = (
+        "Cette technique est aujourd’hui employée dans des systèmes imageurs tels que "
+        "RADARSAT, TerraSAR-X ou le futur système Tandem-L."
+    )
+    candidate = (
+        "Cette technique est intégrée dans plusieurs systèmes imageurs actuels, tels que "
+        "RADARSAT, TerraSAR-X, ainsi que le futur système Tandem-L."
+    )
+    risks = _editorial_semantic_scope_risks(source, candidate)
+    assert "portee_semantique_nouvelle:actuels" in risks
+
+
+
+def test_editorial_similarity_ignores_whitespace_only():
+    source = (
+        "1.2.1. Contexte de l’opération\n"
+        "Le radar est un système actif."
+    )
+
+    visually_wrapped = (
+        "1.2.1. Contexte de l’opération\n\n"
+        "Le radar est un système actif."
+    )
+
+    similarity = _editorial_text_similarity(
+        source,
+        visually_wrapped,
+    )
+
+    assert similarity >= 0.995
+
+
+def test_semantic_review_must_not_collapse_to_original_source():
+    source = (
+        "1.2.1. Contexte de l’opération\n\n"
+        "Les radars sont des systèmes basés sur "
+        "l’émission et la réception d’ondes "
+        "électromagnétiques. Cette technique est "
+        "aujourd’hui employée dans des systèmes "
+        "imageurs tels que RADARSAT, TerraSAR-X "
+        "ou le futur système Tandem-L."
+    )
+
+    first_candidate = (
+        "1.2.1. Contexte de l’opération\n\n"
+        "Les radars reposent sur l’émission et la "
+        "réception d’ondes électromagnétiques. "
+        "Cette technique est intégrée dans plusieurs "
+        "systèmes imageurs actuels, notamment "
+        "RADARSAT, TerraSAR-X, ainsi que le futur "
+        "système Tandem-L."
+    )
+
+    collapsed_review = source
+
+    first_similarity = (
+        _editorial_text_similarity(
+            source,
+            first_candidate,
+        )
+    )
+
+    collapsed_similarity = (
+        _editorial_text_similarity(
+            source,
+            collapsed_review,
+        )
+    )
+
+    assert first_similarity < 0.995
+    assert collapsed_similarity >= 0.995
+
+    review_collapsed_to_source = (
+        collapsed_similarity >= 0.995
+        and first_similarity < 0.995
+    )
+
+    assert review_collapsed_to_source is True
+
+from agents.EnnoAmelioration.application.writer_service import (
+    _scientific_additive_review_is_safe,
+    _scientific_additive_review_prompt,
+    validate_conservative_revision,
+)
+
+
+
+def test_scientific_additive_review_rejects_collapse_to_source():
+    source = (
+        "La base SAMPLE contient des images mesurées et simulées. "
+        "Elle est comparée à MSTAR."
+    )
+    candidate = (
+        "La base SAMPLE contient des images mesurées et simulées. "
+        "Elle est comparée à MSTAR. "
+        "Des travaux montrent que le transfert synthétique-réel reste "
+        "une difficulté de généralisation [A3]."
+    )
+
+    safe, reasons = _scientific_additive_review_is_safe(
+        source,
+        candidate,
+        source,
+    )
+
+    assert safe is False
+    assert "review_collapsed_to_source" in reasons
+
+
+def test_scientific_additive_review_rejects_lost_validated_citation():
+    source = "MSTAR contient des mesures SAR réelles utilisées pour l'entraînement."
+    candidate = (
+        source
+        + " Les performances peuvent varier hors des conditions couvertes "
+        "pendant l'apprentissage [A2]."
+    )
+    reviewed = (
+        source
+        + " Les performances peuvent varier hors des conditions couvertes "
+        "pendant l'apprentissage."
+    )
+
+    safe, reasons = _scientific_additive_review_is_safe(
+        source,
+        candidate,
+        reviewed,
+    )
+
+    assert safe is False
+    assert any(
+        reason.startswith("review_lost_validated_citations:A2")
+        for reason in reasons
+    )
+
+
+def test_scientific_additive_review_accepts_source_plus_cited_argument():
+    source = "La base SAMPLE contient des paires d'images mesurées et simulées."
+    candidate = (
+        source
+        + " Cette structure permet d'étudier le passage entre données "
+        "synthétiques et mesurées, un enjeu traité dans la littérature [A1]."
+    )
+
+    safe, reasons = _scientific_additive_review_is_safe(
+        source,
+        candidate,
+        candidate,
+    )
+
+    assert safe is True
+    assert reasons == []
+
+
+def test_scientific_additive_prompt_requires_source_plus_additions():
+    prompt = _scientific_additive_review_prompt(
+        "Fait source à conserver.",
+        "Fait source à conserver. Argument nouveau [A1].",
+        ["A1"],
+    )
+
+    assert "SOURCE + AJOUTS" in prompt
+    assert "ne doivent pas remplacer" in prompt
+    assert "APPORT NOUVEAU" in prompt
+
+
+def test_enrichment_cannot_be_net_contraction():
+    source = " ".join(f"mot{i}" for i in range(130))
+    proposal = " ".join(f"mot{i}" for i in range(125))
+
+    issues = validate_conservative_revision(
+        source,
+        proposal,
+        enrichment_requested=True,
+        allow_reduction=False,
+    )
+
+    assert any(
+        issue.startswith("contraction_excessive:")
+        for issue in issues
+    )

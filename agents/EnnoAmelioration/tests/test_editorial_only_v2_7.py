@@ -134,3 +134,26 @@ La refonte d’ADASCA pour l’ATD s’est articulée autour de trois axes princ
 
     assert trace["changes"]
     assert all(change["operation"] == "replace" for change in trace["changes"])
+
+
+
+def test_split_of_long_source_sentence_is_not_reported_as_false_insert():
+    original = (
+        "La relative insensibilité des ondes électromagnétiques aux conditions climatiques "
+        "et le fait que les radars soient des systèmes actifs (le radar possède sa propre "
+        "source d’émission), donne un avantage au système radar par rapport à d’autres "
+        "systèmes d’imagerie (exemple d’un capteur optique dans les régions où les "
+        "conditions d’observation sont très réduites dues à la présence permanente de nuages)."
+    )
+    improved = (
+        "Leur avantage réside dans la faible sensibilité de ces ondes aux conditions "
+        "météorologiques, associée à leur nature de systèmes actifs disposant de leur "
+        "propre source d’émission. Cette caractéristique les distingue notamment des "
+        "capteurs optiques dont la performance est limitée dans des environnements "
+        "voilés par des nuages."
+    )
+    routing = understand_instruction(EDITORIAL_PROMPT, TargetScope.SECTION)
+    trace = build_revision_trace(original, improved, routing, {"cir_style": {"available": False}})
+    assert trace["changes"]
+    assert {change["operation"] for change in trace["changes"]} == {"replace"}
+    assert not any(claim.get("severity") == "review" for claim in trace["unsupported_claims"])

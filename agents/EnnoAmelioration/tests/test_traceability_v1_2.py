@@ -53,7 +53,7 @@ from agents.EnnoAmelioration.domain.models import (
 class _FixedContextRouter:
     def route(self, *args, **kwargs):
         return RoutingDecision(
-            intents=[ImprovementIntent.CLARITY, ImprovementIntent.ARGUMENTATION],
+            intents=[ImprovementIntent.CLARITY],
             target_scope=TargetScope.SECTION,
             needs_diagnostic=False,
             needs_scholar=False,
@@ -80,10 +80,15 @@ class _RepairingWriter:
         )
 
 
-def test_agent_keeps_candidate_visible_when_traceability_warns():
+def test_agent_keeps_candidate_visible_when_traceability_warns(monkeypatch):
     original = "Le recours aux données SAR synthétiques répond au manque de données réelles."
     writer = _RepairingWriter()
     agent = EnnoAmeliorationAgent(writer=writer, routing_service=_FixedContextRouter())
+    monkeypatch.setattr(
+        EnnoAmeliorationAgent,
+        "_evidence_package",
+        staticmethod(lambda *args, **kwargs: {"cir_style": {"available": False}}),
+    )
     request = ImprovementRequest(
         instruction="Améliore la clarté et l'argumentation de cette section à faits constants.",
         full_text=original,
@@ -124,10 +129,15 @@ class _AlwaysDropsProtectedMeasureWriter:
         }
 
 
-def test_conservation_issue_is_visible_as_candidate_warning_not_rejected():
+def test_conservation_issue_is_visible_as_candidate_warning_not_rejected(monkeypatch):
     original = "Le protocole a été évalué avec une précision mesurée de 97 %."
     writer = _AlwaysDropsProtectedMeasureWriter()
     agent = EnnoAmeliorationAgent(writer=writer, routing_service=_FixedContextRouter())
+    monkeypatch.setattr(
+        EnnoAmeliorationAgent,
+        "_evidence_package",
+        staticmethod(lambda *args, **kwargs: {"cir_style": {"available": False}}),
+    )
     request = ImprovementRequest(
         instruction="Améliore la clarté sans inventer de fait.",
         full_text=original,
@@ -147,10 +157,12 @@ def test_conservation_issue_is_visible_as_candidate_warning_not_rejected():
 
     assert result.ok
     assert result.state.value == "candidate_ready"
-    assert writer.calls == 2
+    assert writer.calls == 1
     assert result.improved_target == "Le protocole a été évalué sur les données disponibles."
     assert result.requires_confirmation is True
-    assert result.generation["conservation_validation"] == "warning_after_retry"
+    assert result.generation["conservation_validation"] == "consultant_review_required"
+    assert result.generation["quality_control_mode"] == "advisory_only"
+    assert result.generation["automatic_integrity_retry"] is False
     assert any(
         "mesures_perdues" in str(claim.get("reason") or "")
         for claim in result.unsupported_claims

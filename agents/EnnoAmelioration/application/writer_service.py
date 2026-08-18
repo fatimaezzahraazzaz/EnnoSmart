@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import difflib
 import json
 import re
 import unicodedata
@@ -14,8 +15,14 @@ from ..domain.models import (
     RoutingDecision,
     SectionFunction,
 )
+from .evidence_coverage_v315 import (
+    build_coverage_report,
+    build_mandatory_scholar_payload,
+    render_mandatory_evidence_contract,
+)
 from .section_improvement_policy import render_section_improvement_contract
 from .document_structure_service import immutable_document_blocks
+from .markdown_service import normalize_llm_markdown_output
 
 
 _NUMBERED_HEADING_RE = re.compile(
@@ -32,6 +39,26 @@ _MEASURE_RE = re.compile(
     r"(?=$|[\s.,;:)\]])"
 )
 _CITATION_ID_RE = re.compile(r"(?<![A-Za-z0-9])A\d+(?![A-Za-z0-9])", re.I)
+
+
+_EDITORIAL_SCOPE_RISK_TERMS = {
+    "actuel", "actuelle", "actuels", "actuelles", "actuellement",
+    "futur", "future", "futurs", "futures", "desormais",
+    "recent", "recente", "recents", "recentes",
+    "ancien", "ancienne", "anciens", "anciennes",
+    "principal", "principale", "principaux", "principales",
+    "majeur", "majeure", "majeurs", "majeures",
+    "essentiel", "essentielle", "essentiels", "essentielles",
+    "critique", "critiques", "significatif", "significative",
+    "significatifs", "significatives", "indispensable", "indispensables",
+    "robuste", "robustes", "systematique", "systematiques",
+    "total", "totale", "totaux", "totales", "totalement",
+    "garantit", "garantie", "garanties", "garantissent",
+    "certain", "certaine", "certains", "certaines", "toujours", "jamais",
+}
+
+_MARKDOWN_HEADING_LINE_RE = re.compile(r"^[ \t]*#{1,6}[ \t]+\S")
+_NUMBERED_HEADING_LINE_RE = re.compile(r"^[ \t]*\d+(?:\.\d+){1,6}\.?[ \t]+\S")
 
 # V3.0 — garde lexicale générique du mode éditorial strict.
 # Cette liste ne contient aucun terme métier/projet : uniquement des mots-outils
@@ -196,7 +223,7 @@ def validate_conservative_revision(
     proposal_words = len(proposal.split())
 
     if source_words >= 120 and not allow_reduction:
-        minimum_ratio = 0.90 if enrichment_requested else 0.82
+        minimum_ratio = 1.00 if enrichment_requested else 0.82
         ratio = proposal_words / max(1, source_words)
         if ratio < minimum_ratio:
             issues.append(
@@ -281,16 +308,77 @@ def _strip_fence(text: str) -> str:
 
 
 def _match_editorial_format(original: str, rewritten: str) -> str:
-    """Empêche le modèle d'imposer du Markdown à un texte consultant simple."""
+    return normalize_llm_markdown_output(rewritten)
 
-    value = str(rewritten or "").strip()
-    original_uses_markdown_headings = bool(
-        re.search(r"(?m)^[ \t]*#{1,6}[ \t]+\S", str(original or ""))
+
+def _heading_key(value: str) -> str:
+    line = re.sub(r"^[ \t]*#{1,6}[ \t]+", "", str(value or "").strip())
+    return _normalise_marker(line)
+
+
+def _leading_source_heading(original: str) -> str:
+    for line in str(original or "").splitlines():
+        if not line.strip():
+            continue
+        if _MARKDOWN_HEADING_LINE_RE.match(line) or _NUMBERED_HEADING_LINE_RE.match(line):
+            return line.rstrip()
+        return ""
+    return ""
+
+
+def _preserve_leading_heading(original: str, candidate: str) -> str:
+    heading = _leading_source_heading(original)
+    value = normalize_llm_markdown_output(candidate)
+    if not heading or not value:
+        return value
+    wanted = _heading_key(heading)
+    first_lines = [line for line in value.splitlines()[:6] if line.strip()]
+    if any(_heading_key(line) == wanted for line in first_lines):
+        return value
+    return f"{heading}\n\n{value}".strip()
+
+
+def _editorial_semantic_scope_risks(original: str, candidate: str) -> list[str]:
+    source_terms = {_lexical_normalize(token) for token in _content_tokens(original)}
+    candidate_terms = {_lexical_normalize(token) for token in _content_tokens(candidate)}
+    risky_added = sorted(
+        term for term in candidate_terms - source_terms
+        if term in _EDITORIAL_SCOPE_RISK_TERMS
     )
-    if not original_uses_markdown_headings:
-        value = re.sub(r"(?m)^[ \t]*#{1,6}[ \t]+", "", value)
-        value = value.replace("**", "").replace("__", "")
-    return value.strip()
+    return [f"portee_semantique_nouvelle:{term}" for term in risky_added]
+
+
+
+def _editorial_text_similarity(
+    left: str,
+    right: str,
+) -> float:
+    """
+    Compare deux versions en ignorant seulement
+    les différences d'espacement et de retours
+    à la ligne.
+
+    Cette fonction permet notamment de détecter
+    qu'un contrôle sémantique est revenu presque
+    mot pour mot au texte source.
+    """
+
+    left_value = re.sub(
+        r"\s+",
+        " ",
+        normalize_llm_markdown_output(left),
+    ).strip().casefold()
+
+    right_value = re.sub(
+        r"\s+",
+        " ",
+        normalize_llm_markdown_output(right),
+    ).strip().casefold()
+
+    return difflib.SequenceMatcher(
+        a=left_value,
+        b=right_value,
+    ).ratio()
 
 
 def _bounded_json_value(
@@ -506,7 +594,14 @@ PROCÉDURE
 1. Compare silencieusement chaque proposition avec le texte source.
 2. Supprime ou reformule toute micro-information non directement traçable au texte source.
 3. Conserve les améliorations de style qui n'altèrent pas le sens.
-4. Retourne UNIQUEMENT la version corrigée, sans commentaire, sans tableau, sans balise et sans Markdown ajouté.
+4. Retourne UNIQUEMENT la version corrigée en Markdown propre, sans commentaire et sans fence de code.
+5. Conserve exactement les titres/sous-titres et la structure Markdown déjà présents dans la source.
+6. N'écris jamais d'entité HTML technique telle que &nbsp; ou &#x20; : utilise des espaces et retours Markdown normaux.
+7. Corrige seulement les dérives signalées ; conserve les améliorations de fluidité qui restent fidèles à la source.
+8. Ne retourne JAMAIS simplement le texte source mot pour mot pour supprimer un risque.
+9. Corrige uniquement les phrases contenant les dérives signalées.
+10. Toutes les autres améliorations rédactionnelles de la candidate doivent être conservées.
+11. Une correction de temporalité, d'intensité ou de portée doit rester locale : elle ne doit pas annuler le travail rédactionnel réalisé sur le reste de la section.
 
 TEXTE SOURCE IMMUTABLE
 ---
@@ -521,6 +616,135 @@ VERSION À CONTRÔLER
 {candidate}
 ---
 """
+
+
+def _scientific_additive_mode(routing: RoutingDecision) -> bool:
+    """Renforcement scientifique = enrichissement additif, hors concision/correction ciblée."""
+    intent_values = {str(getattr(intent, "value", intent)) for intent in routing.intents}
+    return bool(
+        routing.needs_scholar
+        and "scientific_enrichment" in intent_values
+        and "concision" not in intent_values
+        and not routing.candidate_revision
+    )
+
+
+def _scientific_text_similarity(left: str, right: str) -> float:
+    left_value = re.sub(
+        r"\s+",
+        " ",
+        normalize_llm_markdown_output(left),
+    ).strip().casefold()
+    right_value = re.sub(
+        r"\s+",
+        " ",
+        normalize_llm_markdown_output(right),
+    ).strip().casefold()
+    return difflib.SequenceMatcher(a=left_value, b=right_value).ratio()
+
+
+def _scientific_additive_review_prompt(
+    original: str,
+    candidate: str,
+    allowed_citations: list[str],
+) -> str:
+    return f"""Tu es le contrôleur final d'un RENFORCEMENT SCIENTIFIQUE ADDITIF pour un dossier CIR.
+
+OBJECTIF
+La version candidate doit conserver TOUT le contenu informatif du texte source et
+l'enrichir avec les arguments scientifiques déjà introduits depuis les sources validées.
+
+RÈGLE ABSOLUE : SOURCE + AJOUTS, JAMAIS SOURCE REMPLACÉE PAR AJOUTS
+- Aucun fait, argument, exemple, réserve, condition, nom propre, chiffre, jeu de données,
+  relation logique ou précision technique du TEXTE SOURCE ne doit disparaître.
+- Une information source peut être reformulée localement pour la grammaire ou la fluidité,
+  mais elle doit rester explicitement reconnaissable et de portée équivalente.
+- Ne résume pas le texte source.
+- Ne compresse pas deux phrases sources si cette fusion risque de faire apparaître une
+  suppression dans le comparatif ou de rendre une information moins explicite.
+- Conserve l'ordre logique des informations source.
+- Les nouveaux arguments scientifiques doivent être AJOUTÉS après ou autour du passage
+  qu'ils renforcent ; ils ne doivent pas remplacer le passage source.
+- Une citation scientifique nouvelle doit porter sur un APPORT NOUVEAU issu des preuves
+  validées. Ne colle pas une nouvelle citation sur une phrase qui ne fait que reformuler
+  une information déjà présente dans la source.
+- Si un article validé n'apporte rien d'utile à ce passage, ne l'utilise pas artificiellement.
+- Conserve tous les identifiants de citation scientifique déjà présents dans la candidate,
+  sauf s'ils sont manifestement dupliqués à l'identique.
+- N'ajoute aucune autre source et aucun identifiant de citation non autorisé.
+- N'ajoute pas de liste finale "Preuves utilisées".
+- Ne supprime pas un argument source sous prétexte qu'un article fournit un argument
+  scientifiquement plus fort : garde le source puis ajoute l'argument étayé séparément.
+
+MÉTHODE DE CONTRÔLE
+1. Compare silencieusement chaque unité d'information du TEXTE SOURCE à la candidate.
+2. Repère toute information source absente, condensée au point de perdre sa précision,
+   ou remplacée par un nouvel argument.
+3. Réinsère cette information au bon endroit avec le minimum de modification.
+4. Conserve les nouveaux arguments et citations valides de la candidate.
+5. Retourne uniquement la version réparée, sans commentaire.
+
+CITATIONS AUTORISÉES
+{", ".join(allowed_citations) if allowed_citations else "Aucune"}
+
+TEXTE SOURCE — CONTENU À PRÉSERVER
+---
+{original}
+---
+
+CANDIDATE ENRICHIE — À RÉPARER SI NÉCESSAIRE
+---
+{candidate}
+---
+"""
+
+
+def _scientific_additive_review_is_safe(
+    original: str,
+    candidate: str,
+    reviewed: str,
+) -> tuple[bool, list[str]]:
+    """Empêche le contrôleur de supprimer l'enrichissement ou de revenir au source."""
+    reasons: list[str] = []
+    reviewed_value = normalize_llm_markdown_output(reviewed)
+    if not reviewed_value:
+        return False, ["review_empty"]
+
+    source_words = len(normalize_llm_markdown_output(original).split())
+    candidate_words = len(normalize_llm_markdown_output(candidate).split())
+    reviewed_words = len(reviewed_value.split())
+
+    if reviewed_words < max(int(source_words * 0.98), int(candidate_words * 0.88)):
+        reasons.append(
+            f"review_too_short:{reviewed_words}<source={source_words},candidate={candidate_words}"
+        )
+
+    source_similarity_candidate = _scientific_text_similarity(original, candidate)
+    source_similarity_reviewed = _scientific_text_similarity(original, reviewed_value)
+    if source_similarity_reviewed >= 0.995 and source_similarity_candidate < 0.995:
+        reasons.append("review_collapsed_to_source")
+
+    source_citations = {
+        value.upper() for value in _CITATION_ID_RE.findall(original)
+    }
+    candidate_new_citations = {
+        value.upper() for value in _CITATION_ID_RE.findall(candidate)
+    } - source_citations
+    reviewed_new_citations = {
+        value.upper() for value in _CITATION_ID_RE.findall(reviewed_value)
+    } - source_citations
+
+    missing_candidate_citations = sorted(
+        candidate_new_citations - reviewed_new_citations
+    )
+    if missing_candidate_citations:
+        reasons.append(
+            "review_lost_validated_citations:"
+            + ",".join(missing_candidate_citations)
+        )
+
+    return not reasons, reasons
+
 
 
 def _merge_generation_meta(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any]:
@@ -565,9 +789,12 @@ class ControlledWriter:
             "orchestration": evidence.get("diagnostic_orchestration") or {},
         }
         scholar_evidence = evidence.get("scholar") or {}
+        mandatory_evidence_contract = render_mandatory_evidence_contract(evidence)
+        mandatory_scholar_payload = build_mandatory_scholar_payload(evidence, max_chars=30000)
         conservative_mode = not any(
             intent.value == "concision" for intent in routing.intents
         )
+        scientific_additive_mode = _scientific_additive_mode(routing)
         context_structural_mode = bool(
             routing.section_function == SectionFunction.CONTEXT
             and not routing.candidate_revision
@@ -625,6 +852,36 @@ class ControlledWriter:
 - La réduction est autorisée, mais les faits, chiffres, réserves, citations et limites scientifiques doivent rester exacts.
 """
             )
+
+        scientific_additive_contract = (
+            """MODE RENFORCEMENT SCIENTIFIQUE ADDITIF — SOURCE + ARGUMENTS VALIDÉS
+- Le texte source constitue la COLONNE VERTÉBRALE de la version améliorée.
+- Ne supprime aucun fait, argument, exemple, réserve, condition, chiffre, nom propre,
+  jeu de données, relation logique ou précision technique présent dans la source.
+- Le renforcement ne remplace jamais le contenu source : il AJOUTE des arguments
+  scientifiques issus des seules preuves Scholar validées.
+- Garde les informations source dans le même ordre logique. Corrige la grammaire ou
+  la fluidité localement, mais n'efface pas une phrase en absorbant son contenu dans
+  une autre si cela rend l'information moins explicite.
+- Pour faciliter la traçabilité, évite de fusionner plusieurs phrases source en une
+  seule. Chaque information source doit rester reconnaissable dans le comparatif.
+- Insère les nouveaux arguments scientifiques immédiatement après le passage qu'ils
+  renforcent, dans des phrases distinctes lorsque c'est possible.
+- Une nouvelle citation [A#] doit être attachée à l'ARGUMENT NOUVEAU qu'elle étaye.
+  Ne transforme pas une simple reformulation d'un fait source en phrase "scientifique"
+  uniquement en lui ajoutant [A#].
+- Ne cite pas toutes les sources sélectionnées par principe : utilise uniquement une
+  source lorsqu'elle apporte un élément réellement utile au raisonnement.
+- Si plusieurs sources étayent exactement le même apport, évite l'empilement décoratif
+  de citations ; garde celles qui soutiennent effectivement l'affirmation.
+- Ne remplace jamais un argument source par un argument plus moderne, plus fort ou plus
+  général. Conserve l'argument source puis ajoute séparément l'apport scientifique.
+- La version enrichie ne doit pas être plus courte que la source, sauf suppression
+  explicitement demandée par le consultant dans son instruction.
+"""
+            if scientific_additive_mode
+            else ""
+        )
         strict_fact_contract = (
             """MODE ÉDITORIAL STRICT — FAITS CONSTANTS
 - Le consultant demande une amélioration de forme, pas un enrichissement de fond.
@@ -700,6 +957,8 @@ CONTRAT ABSOLU
 
 {preservation_contract}
 
+{scientific_additive_contract}
+
 {strict_fact_contract}
 
 {candidate_revision_contract}
@@ -714,6 +973,9 @@ GUIDE RÉDACTIONNEL CIR/R&D — NON FACTUEL
 - En mode reformulation éditoriale, utilise surtout le ton, la syntaxe, les transitions et le niveau de prudence ; n'impose jamais un canevas de verrou, de gap ou de travaux R&D absent du texte.
 - Un exemple ou un placeholder du guide ne doit jamais être recopié comme fait du projet.
 {_compact_json(style_guidance, 9000)}
+
+CONTRAT D'UTILISATION DES SOURCES SCIENTIFIQUES VALIDÉES
+{mandatory_evidence_contract}
 
 IDENTIFIANTS DE CITATION AUTORISÉS
 {', '.join(allowed_citations) if allowed_citations else 'Aucun nouvel identifiant de citation autorisé.'}
@@ -730,11 +992,26 @@ CONTEXTE PROJET AUTORISÉ
 PREUVES FACTUELLES ENNODIAGNOSTIC
 {_compact_json(diagnostic_evidence, 16000)}
 
-PREUVES FACTUELLES ENNOSCHOLAR
-{_compact_json(scholar_evidence, 18000)}
+PREUVES FACTUELLES ENNOSCHOLAR — TOUTES LES PREUVES ACCEPTÉES
+{mandatory_scholar_payload}
 
 MANQUES DOCUMENTAIRES SIGNALÉS
 {_compact_json(evidence.get('gaps') or [], 3000)}
+
+FORMAT DE SORTIE — MARKDOWN
+- Retourne uniquement le contenu amélioré, en Markdown UTF-8.
+- Ne retourne aucun commentaire avant ou après le texte.
+- N'entoure jamais le résultat d'une fence de code Markdown.
+- Du texte simple est déjà du Markdown valide : n'ajoute pas de décoration artificielle.
+- Conserve exactement les titres et sous-titres présents.
+- Conserve les listes, emphases et liens Markdown présents dans la source.
+- Utilise de vrais espaces et de vrais retours de paragraphe.
+- N'écris jamais d'entités HTML telles que &nbsp; ou &#x20;.
+- Un paragraphe est séparé par une seule ligne vide.
+- Ne fabrique pas de retour à la ligne au milieu d'une phrase.
+- Conserve strictement la temporalité attachée à chaque élément.
+- Ne transforme pas « futur » en « actuel » et inversement.
+- N'introduis pas de qualificatif d'intensité ou de certitude absent de la source : principal, majeur, essentiel, critique, garanti, robuste, etc.
 
 TEXTE CIBLE
 ---
@@ -749,7 +1026,10 @@ TEXTE CIBLE
             retries=1,
             request_name="ennoamelioration:writer:controlled_revision",
         )
-        improved = _match_editorial_format(target, _strip_fence(output))
+        improved = _preserve_leading_heading(
+            target,
+            _match_editorial_format(target, _strip_fence(output)),
+        )
         if not improved:
             raise RuntimeError("Le modèle de rédaction a renvoyé une proposition vide.")
 
@@ -761,19 +1041,104 @@ TEXTE CIBLE
             and not routing.candidate_revision
         )
         if strict_editorial_mode:
-            # La candidate reste séparée de l'original jusqu'à validation humaine.
-            # On conserve donc la première vraie réécriture au lieu de la faire
-            # repasser dans un contrôleur lexical qui pouvait revenir mot pour mot
-            # au texte source et donner l'impression trompeuse d'une amélioration.
             first_risks = _editorial_lexical_risks(target, improved)
+            semantic_scope_risks = _editorial_semantic_scope_risks(target, improved)
+            remaining_scope_risks = list(semantic_scope_risks)
+            review_attempted = False
+            review_applied = False
             meta = first_meta
+
+            if semantic_scope_risks:
+                review_attempted = True
+                reviewed_output = self.llm.generate(
+                    _strict_editorial_review_prompt(target, improved, semantic_scope_risks),
+                    temperature=0.0,
+                    max_output_tokens=max_output_tokens,
+                    max_input_tokens=60000,
+                    retries=1,
+                    request_name="ennoamelioration:writer:semantic_scope_review",
+                )
+                reviewed = _preserve_leading_heading(
+                    target,
+                    _match_editorial_format(target, _strip_fence(reviewed_output)),
+                )
+                reviewed_scope_risks = _editorial_semantic_scope_risks(target, reviewed)
+                reviewed_vs_source = _editorial_text_similarity(
+                    target,
+                    reviewed,
+                )
+
+                first_candidate_vs_source = _editorial_text_similarity(
+                    target,
+                    improved,
+                )
+
+                review_reduces_risk = (
+                    len(reviewed_scope_risks)
+                    < len(semantic_scope_risks)
+                )
+
+                review_collapsed_to_source = (
+                    reviewed_vs_source >= 0.995
+                    and first_candidate_vs_source < 0.995
+                )
+
+                # Le contrôleur sémantique ne doit jamais
+                # annuler toute l'amélioration simplement
+                # pour revenir au texte source.
+                #
+                # La seconde version est acceptée uniquement
+                # si elle réduit réellement les risques ET
+                # reste une vraie version améliorée.
+                if (
+                    reviewed
+                    and review_reduces_risk
+                    and not review_collapsed_to_source
+                ):
+                    improved = reviewed
+
+                    remaining_scope_risks = (
+                        reviewed_scope_risks
+                    )
+
+                    second_meta = dict(
+                        self.llm.get_last_generation_meta()
+                        or {}
+                    )
+
+                    meta = _merge_generation_meta(
+                        first_meta,
+                        second_meta,
+                    )
+
+                    review_applied = True
+
+                else:
+                    # Le contrôleur est revenu trop près de
+                    # l'original ou n'a pas réellement réduit
+                    # les risques.
+                    #
+                    # On garde donc la PREMIÈRE vraie
+                    # amélioration visible au consultant.
+                    remaining_scope_risks = (
+                        semantic_scope_risks
+                    )
+
+                    meta = first_meta
+
+            remaining_lexical_risks = _editorial_lexical_risks(target, improved)
             meta.update(
                 {
-                    "writer_internal_call_count": 1,
-                    "strict_editorial_review_applied": False,
+                    "writer_internal_call_count": int(
+                        meta.get("writer_internal_call_count") or (2 if review_attempted else 1)
+                    ),
+                    "strict_editorial_review_attempted": review_attempted,
+                    "strict_editorial_review_applied": review_applied,
                     "strict_editorial_lexical_repair_applied": False,
                     "strict_editorial_first_risks": first_risks,
-                    "strict_editorial_remaining_risks": first_risks,
+                    "strict_editorial_semantic_scope_risks": semantic_scope_risks,
+                    "strict_editorial_remaining_scope_risks": remaining_scope_risks,
+                    "strict_editorial_remaining_risks": remaining_lexical_risks,
                     "editorial_validation_policy": "consultant_reviews_visible_candidate",
                     "strict_editorial_safe_fallback_to_source": False,
                 }
@@ -782,6 +1147,71 @@ TEXTE CIBLE
             meta = first_meta
             meta.setdefault("writer_internal_call_count", 1)
             meta.setdefault("strict_editorial_review_applied", False)
+
+
+        if scientific_additive_mode:
+            additive_first_candidate = improved
+            additive_first_meta = dict(meta or {})
+            try:
+                reviewed_output = self.llm.generate(
+                    _scientific_additive_review_prompt(
+                        target,
+                        additive_first_candidate,
+                        allowed_citations,
+                    ),
+                    temperature=0.0,
+                    max_output_tokens=max_output_tokens,
+                    max_input_tokens=60000,
+                    retries=0,
+                    request_name="ennoamelioration:writer:additive_preservation_review",
+                )
+                additive_reviewed = _match_editorial_format(
+                    target,
+                    _strip_fence(reviewed_output),
+                )
+                review_safe, review_reasons = _scientific_additive_review_is_safe(
+                    target,
+                    additive_first_candidate,
+                    additive_reviewed,
+                )
+                additive_second_meta = dict(self.llm.get_last_generation_meta() or {})
+
+                meta["scientific_additive_review_attempted"] = True
+                meta["scientific_additive_review_reasons"] = review_reasons
+                meta["scientific_additive_first_candidate_words"] = len(
+                    additive_first_candidate.split()
+                )
+                meta["scientific_additive_reviewed_words"] = len(
+                    additive_reviewed.split()
+                )
+                meta["scientific_additive_review_pass"] = additive_second_meta
+                meta["writer_internal_call_count"] = int(
+                    additive_first_meta.get("writer_internal_call_count") or 1
+                ) + 1
+
+                for token_key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+                    meta[token_key] = int(
+                        additive_first_meta.get(token_key) or 0
+                    ) + int(additive_second_meta.get(token_key) or 0)
+
+                if review_safe:
+                    improved = additive_reviewed
+                    meta["scientific_additive_review_applied"] = True
+                    meta["scientific_additive_preservation"] = "passed"
+                else:
+                    improved = additive_first_candidate
+                    meta["scientific_additive_review_applied"] = False
+                    meta["scientific_additive_preservation"] = (
+                        "review_rejected_keep_first_candidate"
+                    )
+            except Exception as exc:
+                improved = additive_first_candidate
+                meta["scientific_additive_review_attempted"] = True
+                meta["scientific_additive_review_applied"] = False
+                meta["scientific_additive_preservation"] = (
+                    "review_error_keep_first_candidate"
+                )
+                meta["scientific_additive_review_error"] = str(exc)[:500]
 
         meta.update(
             {
@@ -806,4 +1236,6 @@ TEXTE CIBLE
                 ),
             }
         )
+        coverage = build_coverage_report(evidence, improved)
+        meta.update({"accepted_source_coverage": coverage, "accepted_source_coverage_complete": bool(coverage.get("complete"))})
         return improved, meta

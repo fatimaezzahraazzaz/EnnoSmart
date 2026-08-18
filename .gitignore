@@ -159,3 +159,14 @@ modules/llm_gateway/
 
 # Temporary pytest folders
 /.pytest_tmp*/
+
+# EnnoAmelioration local patch packages
+/EnnoAmelioration_*/
+/ennoamelioration_patch_markdown_v3_1/
+/_ennosmart_patch_backups/
+
+# Local runtime configuration
+/.ennosmart-cir-runtime.env
+
+# Pytest temporary folders
+/.pytest_tmp*/

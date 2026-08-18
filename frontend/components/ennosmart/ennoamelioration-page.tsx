@@ -36,6 +36,7 @@ import {
   decideImprovementVersion,
   deleteImprovementSession,
   getDocuments,
+  getImprovementBackgroundJob,
   getImprovementProjectContext,
   getImprovementSession,
   getImprovementSourceDocument,
@@ -45,6 +46,7 @@ import {
   sendImprovementMessage,
   uploadDocument,
   type DocumentRead,
+  type ImprovementBackgroundJob,
   type ImprovementSession,
   type ImprovementProjectContext,
   type ImprovementSection,
@@ -71,10 +73,91 @@ function publicationSiteUrl(source: Record<string, any>) {
   if (explicit) return explicit
   const doi = String(source.doi || "").trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
   if (doi) return `https://doi.org/${doi}`
-  const rawUrl = String(source.url || "").trim()
+  const rawUrl = String(source.source_url || source.url || "").trim()
   if (/arxiv\.org\/pdf\//i.test(rawUrl)) return rawUrl.replace(/\/pdf\//i, "/abs/").replace(/\.pdf$/i, "")
   if (/(?:hal\.science|hal\.archives-ouvertes\.fr)\/.+\/document$/i.test(rawUrl)) return rawUrl.replace(/\/document$/i, "")
   return rawUrl && !isDirectPdfUrl(rawUrl) ? rawUrl : ""
+}
+
+
+function articleConsultUrl(source: Record<string, any>) {
+  return publicationSiteUrl(source)
+    || String(source.pdf_url || source.source_url || source.url || "").trim()
+}
+
+
+function sourceEvidenceExcerpt(source: Record<string, any>) {
+  return String(
+    source.evidence_excerpt
+    || source.evidence_text
+    || source.quote
+    || source.abstract
+    || source.abstract_or_snippet
+    || "",
+  ).trim()
+}
+
+
+function sourceIdentity(source: Record<string, any>) {
+  return String(
+    source.article_id
+    || source.candidate_id
+    || source.evidence_id
+    || source.citation_id
+    || source.title
+    || "",
+  ).trim()
+}
+
+
+function uniqueComparisonSources(rows: Array<Record<string, any>>) {
+  const values = new Map<string, Record<string, any>>()
+  rows.forEach((source, index) => {
+    const key = sourceIdentity(source) || `source-${index}`
+    values.set(key, { ...(values.get(key) || {}), ...source })
+  })
+  return [...values.values()]
+}
+
+
+function progressiveEvidenceSources(version: ImprovementVersion | null) {
+  const sections = Array.isArray(version?.evidence?.sections) ? version?.evidence?.sections : []
+  return sections.flatMap((section: Record<string, any>) => {
+    const research = section?.research || {}
+    const finalEvidence = research?.final_evidence || {}
+    const selection = research?.auto_selection || {}
+    const rows = finalEvidence.auto_accepted?.length
+      ? finalEvidence.auto_accepted
+      : finalEvidence.advisory_sources?.length
+        ? finalEvidence.advisory_sources
+        : research.accepted_sources?.length
+          ? research.accepted_sources
+          : selection.selected || []
+    return (rows as Array<Record<string, any>>).map((source) => ({
+      ...source,
+      section_id: source.section_id || section.section_id,
+      section_ref: source.section_ref || section.section_ref,
+      section_title: source.section_title || section.section_title,
+    }))
+  })
+}
+
+
+function sourcesForComparisonChange(
+  change: Record<string, any>,
+  allSources: Array<Record<string, any>>,
+) {
+  if (Array.isArray(change.sources) && change.sources.length > 0) {
+    return uniqueComparisonSources(change.sources)
+  }
+  const refs = new Set((change.evidence_refs || []).map((value: unknown) => String(value || "")))
+  const matches = allSources.filter((source) => (
+    (change.section_id && source.section_id === change.section_id)
+    || (change.section_ref && source.section_ref === change.section_ref)
+    || refs.has(String(source.evidence_id || ""))
+    || refs.has(String(source.citation_id || ""))
+  ))
+  return uniqueComparisonSources(matches)
 }
 
 
@@ -153,6 +236,31 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Une erreur inattendue est survenue."
 }
 
+function isBackgroundJobActive(job?: ImprovementBackgroundJob | null) {
+  return ["queued", "running", "retrying"].includes(String(job?.status || "").toLowerCase())
+}
+
+function sessionBackgroundJob(session?: ImprovementSession | null) {
+  const job = session?.context?.cir_background_job
+  return job && typeof job === "object" ? job as ImprovementBackgroundJob : null
+}
+
+function backgroundProgressLabel(job?: ImprovementBackgroundJob | null) {
+  const status = String(job?.status || "queued").toLowerCase()
+  const cursor = Number(job?.progress?.cursor || 0)
+  const total = Number(job?.progress?.total || 0)
+  const currentSection = job?.progress?.current_section
+  const section = typeof currentSection === "string"
+    ? currentSection.trim()
+    : String(currentSection?.section_title || currentSection?.section_ref || "").trim()
+  if (status === "retrying") return "Une étape a échoué — reprise automatique en cours…"
+  if (status === "queued") return "Demande mise en file — démarrage du traitement…"
+  if (cursor > 0 && total > 0) {
+    return `Traitement du CIR — section ${Math.min(cursor + 1, total)}/${total}${section ? ` · ${section}` : ""}`
+  }
+  return "Demande reçue — analyse du CIR en cours…"
+}
+
 
 function evidenceReferenceLabel(reference: string) {
   const parts = String(reference || "").split(":")
@@ -184,6 +292,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
   const [documents, setDocuments] = useState<DocumentRead[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [backgroundJob, setBackgroundJob] = useState<ImprovementBackgroundJob | null>(null)
   const [error, setError] = useState("")
   const [draft, setDraft] = useState("")
   const [pendingMessage, setPendingMessage] = useState("")
@@ -229,6 +338,16 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
     || candidate?.generation?.trace
     || null
   ) as Record<string, any> | null
+  const comparisonChanges = (
+    (structuredResult?.changes || []).length > 0
+      ? structuredResult?.changes
+      : candidate?.diff?.changes || []
+  ) as Array<Record<string, any>>
+  const comparisonSources = uniqueComparisonSources([
+    ...((structuredResult?.sources_used || []) as Array<Record<string, any>>),
+    ...(((candidate?.evidence?.scholar?.evidence || []) as Array<Record<string, any>>)),
+    ...progressiveEvidenceSources(candidate),
+  ])
   const documentStructure = (current?.context?.document_structure || {}) as Record<string, any>
   const sourceDocument = documents.find((document) => document.id === current?.source_document_id) || null
   const sourceDocumentIsPdf = Boolean(
@@ -258,6 +377,22 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
     || current?.context?.scholar_handoff?.sources
     || []
   ) as Array<Record<string, any>>
+  const backgroundActive = isBackgroundJobActive(backgroundJob)
+  const backgroundStatus = String(backgroundJob?.status || "").toLowerCase()
+  const completedCandidateId = String(backgroundJob?.candidate_version_id || "").trim()
+  const currentSessionJob = sessionBackgroundJob(current)
+  const terminalResultStale = Boolean(
+    ["completed", "failed"].includes(backgroundStatus)
+    && (
+      pendingMessage
+      || String(currentSessionJob?.job_id || "") !== String(backgroundJob?.job_id || "")
+      || String(currentSessionJob?.status || "").toLowerCase() !== backgroundStatus
+      || (
+        completedCandidateId
+        && !versions.some((version) => version.version_id === completedCandidateId)
+      )
+    )
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -304,6 +439,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
     try {
       const response = await getImprovementSession(id, sessionId)
       setCurrent(response.session)
+      setBackgroundJob(sessionBackgroundJob(response.session))
       setCreating(false)
       const nextSectionId = response.session.target_section_id || null
       setSelectedSectionId(nextSectionId)
@@ -325,6 +461,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
     setProjectId(id)
     setCurrentProjectId(id)
     setCurrent(null)
+    setBackgroundJob(null)
     setSessions([])
     setDocuments([])
     setSelectedText("")
@@ -355,6 +492,60 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    const sessionId = current?.session_id
+    // Réconcilier aussi un job déjà terminé. Le worker local peut finir entre
+    // la réponse POST et le premier rendu : dans cette course, l'ancien code
+    // voyait ``completed`` (donc non actif) et ne rechargeait jamais la version
+    // candidate pourtant bien créée en base.
+    if (!projectId || !sessionId || (!backgroundActive && !terminalResultStale)) return
+
+    let cancelled = false
+    let polling = false
+    const poll = async () => {
+      if (polling) return
+      polling = true
+      try {
+        const response = await getImprovementBackgroundJob(projectId, sessionId)
+        if (cancelled) return
+        const nextJob = response.background_job || null
+        setBackgroundJob(nextJob)
+        const status = String(nextJob?.status || "").toLowerCase()
+        if (status === "completed" || status === "failed") {
+          const detail = await getImprovementSession(projectId, sessionId)
+          if (cancelled) return
+          setCurrent(detail.session)
+          setPendingMessage("")
+          if (status === "completed") {
+            setRightOpen(true)
+            setError("")
+          }
+          await refreshList(projectId)
+          if (status === "failed") {
+            setError(nextJob?.error || "Le traitement du CIR a échoué. Vous pouvez relancer la demande.")
+          }
+        }
+      } catch (pollError) {
+        if (!cancelled) setError(getErrorMessage(pollError))
+      } finally {
+        polling = false
+      }
+    }
+
+    void poll()
+    const intervalId = window.setInterval(poll, 2500)
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [
+    projectId,
+    current?.session_id,
+    backgroundJob?.job_id,
+    backgroundActive,
+    terminalResultStale,
+  ])
 
   useEffect(() => {
     onImmersiveModeChange?.(true)
@@ -407,6 +598,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
     }
     const instruction = newInstruction.trim()
     let sessionCreated = false
+    let backgroundQueued = false
     setBusy(true)
     setError("")
     try {
@@ -425,6 +617,8 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
         target_scope: targetMode,
       })
       setCurrent(improved.session)
+      backgroundQueued = Boolean(improved.background && isBackgroundJobActive(improved.background_job))
+      setBackgroundJob(improved.background_job || sessionBackgroundJob(improved.session))
       setNewTitle("")
       setNewText("")
       setNewDocumentId("")
@@ -439,7 +633,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
       setError(getErrorMessage(requestError))
       if (sessionCreated) setDraft(instruction)
     } finally {
-      setPendingMessage("")
+      if (!backgroundQueued) setPendingMessage("")
       setBusy(false)
     }
   }
@@ -463,7 +657,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
   }
 
   const sendMessage = async () => {
-    if (!projectId || !current || !draft.trim() || busy) return
+    if (!projectId || !current || !draft.trim() || busy || backgroundActive) return
     if (selectedText.length > MAX_INTERACTIVE_SELECTION_CHARS) {
       setError(
         `Le passage sélectionné contient ${selectedText.length.toLocaleString("fr-FR")} caractères. `
@@ -472,6 +666,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
       return
     }
     const outgoingMessage = draft.trim()
+    let backgroundQueued = false
     setBusy(true)
     setError("")
     setPendingMessage(outgoingMessage)
@@ -486,6 +681,8 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
         target_section_title: selectedText ? undefined : section?.title,
       })
       setCurrent(response.session)
+      backgroundQueued = Boolean(response.background && isBackgroundJobActive(response.background_job))
+      setBackgroundJob(response.background_job || sessionBackgroundJob(response.session))
       setSelectedText("")
       setRightOpen(true)
       await refreshList(projectId)
@@ -493,13 +690,13 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
       setError(getErrorMessage(requestError))
       setDraft((currentDraft) => currentDraft || outgoingMessage)
     } finally {
-      setPendingMessage("")
+      if (!backgroundQueued) setPendingMessage("")
       setBusy(false)
     }
   }
 
   const decide = async (decision: "accepted" | "rejected") => {
-    if (!projectId || !current || !candidate || busy) return
+    if (!projectId || !current || !candidate || busy || backgroundActive) return
     setBusy(true)
     setError("")
     try {
@@ -519,7 +716,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
   }
 
   const restore = async (version: ImprovementVersion) => {
-    if (!projectId || !current || busy) return
+    if (!projectId || !current || busy || backgroundActive) return
     setBusy(true)
     setError("")
     try {
@@ -538,7 +735,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
   }
 
   const decideSource = async (candidateId: string, decision: "accepted" | "rejected") => {
-    if (!projectId || !current || busy) return
+    if (!projectId || !current || busy || backgroundActive) return
     setBusy(true)
     setError("")
     try {
@@ -731,7 +928,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
           <div className="p-3">
             <Button
               className="w-full justify-start gap-2"
-              onClick={() => { setCreating(true); setCurrent(null); setSelectedText("") }}
+              onClick={() => { setCreating(true); setCurrent(null); setBackgroundJob(null); setSelectedText("") }}
             >
               <Plus className="size-4" /> Nouvelle amélioration
             </Button>
@@ -940,12 +1137,13 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                   <>
                     <div>
                       <label className="mb-2 block text-xs font-medium text-muted-foreground" htmlFor="improvement-source-text">
-                        Texte de la section
+                        Texte de la section · Markdown
                       </label>
                       <Textarea
                         id="improvement-source-text"
                         className="min-h-48 resize-y"
-                        placeholder="Collez ici la section à améliorer…"
+                        placeholder="Collez ici la section à améliorer. Le texte simple et le Markdown sont acceptés…"
+                        wrap="soft"
                         value={newText}
                         onChange={(event) => {
                           setNewText(event.target.value)
@@ -1036,10 +1234,19 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                     </div>
                   </div>
                 )}
-                {busy && (
+                {(busy || backgroundActive) && (
                   <div className="flex justify-start">
                     <div className="flex items-center gap-2 rounded-2xl border bg-card px-4 py-3 text-sm text-muted-foreground">
-                      <Loader2 className="size-4 animate-spin" /> Demande reçue — analyse en cours…
+                      <Loader2 className="size-4 animate-spin" /> {backgroundActive ? backgroundProgressLabel(backgroundJob) : "Demande reçue — analyse en cours…"}
+                    </div>
+                  </div>
+                )}
+                {!busy && !backgroundActive && backgroundStatus === "completed" && !terminalResultStale && (
+                  <div className="flex justify-start">
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                      {candidate
+                        ? `Traitement terminé — la proposition V${candidate.version_number} est disponible dans Artifact et Comparatif.`
+                        : "Traitement terminé — aucune modification sûre n'a été produite ; consultez le compte rendu ci-dessus."}
                     </div>
                   </div>
                 )}
@@ -1074,8 +1281,8 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                       }
                     }}
                   />
-                  <Button size="sm" className="size-10 shrink-0 rounded-xl p-0" disabled={!draft.trim() || busy} onClick={sendMessage}>
-                    {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                  <Button size="sm" className="size-10 shrink-0 rounded-xl p-0" disabled={!draft.trim() || busy || backgroundActive} onClick={sendMessage}>
+                    {(busy || backgroundActive) ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                   </Button>
                 </div>
               </div>
@@ -1123,6 +1330,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                   ref={artifactRef}
                   readOnly
                   value={(candidate || activeVersion)?.content || ""}
+                  wrap="soft"
                   onSelect={captureSelection}
                   className="min-h-0 flex-1 resize-none rounded-none border-0 p-5 font-sans text-sm leading-6 shadow-none focus-visible:ring-0"
                 />
@@ -1137,6 +1345,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                       <Textarea
                         readOnly
                         value={comparisonOriginal?.content || ""}
+                        wrap="soft"
                         className="min-h-72 resize-none rounded-none border-0 text-xs leading-5 shadow-none focus-visible:ring-0"
                       />
                     </div>
@@ -1145,6 +1354,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                       <Textarea
                         readOnly
                         value={(candidate || activeVersion)?.content || ""}
+                        wrap="soft"
                         className="min-h-72 resize-none rounded-none border-0 text-xs leading-5 shadow-none focus-visible:ring-0"
                       />
                     </div>
@@ -1154,20 +1364,74 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                       <h3 className="mr-auto text-sm font-semibold">Pourquoi ces modifications ?</h3>
                     </div>
                     <div className="mt-3 space-y-3">
-                      {((structuredResult?.changes || []) as Array<Record<string, any>>).map((change, index) => (
-                        <div key={change.change_id || index} className="rounded-xl border p-3">
+                      {comparisonChanges.map((change, index) => {
+                        const linkedSources = sourcesForComparisonChange(change, comparisonSources)
+                        return <div key={change.change_id || index} className="rounded-xl border p-3">
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className="text-[10px]">{change.operation || "modification"}</Badge>
+                            {(change.section_ref || change.section_title) && (
+                              <span className="text-xs font-medium text-muted-foreground">
+                                {[change.section_ref, change.section_title].filter(Boolean).join(" · ")}
+                              </span>
+                            )}
                             {(change.evidence_refs || []).map((reference: string) => (
                               <Badge key={reference} className="text-[10px]">{evidenceReferenceLabel(reference)}</Badge>
                             ))}
                             {(change.style_refs || []).length > 0 && <Badge variant="outline" className="text-[10px]">Pattern CIR</Badge>}
                           </div>
-                          {change.before && <p className="mt-2 line-clamp-4 rounded-lg bg-red-50/70 p-2 text-xs text-red-900">{change.before}</p>}
-                          {change.after && <p className="mt-2 line-clamp-5 rounded-lg bg-emerald-50/70 p-2 text-xs text-emerald-900">{change.after}</p>}
+                          {change.before && (
+                            <div className="mt-3 rounded-lg bg-red-50/70 p-2 text-xs text-red-900">
+                              <p className="mb-1 font-semibold uppercase tracking-wide">Passage original</p>
+                              <p className="whitespace-pre-wrap leading-5">{change.before}</p>
+                            </div>
+                          )}
+                          {change.after && (
+                            <div className="mt-2 rounded-lg bg-emerald-50/70 p-2 text-xs text-emerald-900">
+                              <p className="mb-1 font-semibold uppercase tracking-wide">Passage amélioré</p>
+                              <p className="whitespace-pre-wrap leading-5">{change.after}</p>
+                            </div>
+                          )}
                           <p className="mt-2 text-xs leading-5 text-muted-foreground">{change.reason}</p>
+                          {linkedSources.length > 0 && (
+                            <div className="mt-3 space-y-2 border-t pt-3">
+                              <p className="text-xs font-semibold">Articles mobilisés pour ce passage</p>
+                              {linkedSources.map((source, sourceIndex) => {
+                                const consultUrl = articleConsultUrl(source)
+                                const excerpt = sourceEvidenceExcerpt(source)
+                                return (
+                                  <div key={sourceIdentity(source) || sourceIndex} className="rounded-lg bg-primary/5 p-2.5 text-xs">
+                                    <p className="font-semibold">
+                                      {source.citation_id ? `[${source.citation_id}] ` : ""}{source.title || "Article scientifique"}
+                                    </p>
+                                    <p className="mt-1 text-muted-foreground">
+                                      {[Array.isArray(source.authors) ? source.authors.slice(0, 4).join(", ") : "", source.year].filter(Boolean).join(" · ")}
+                                    </p>
+                                    {excerpt && (
+                                      <div className="mt-2 rounded-md border-l-2 border-primary bg-background/80 px-2 py-1.5">
+                                        <p className="font-medium text-foreground">Passage justificatif extrait</p>
+                                        <p className="mt-1 whitespace-pre-wrap leading-5 text-muted-foreground">{excerpt}</p>
+                                      </div>
+                                    )}
+                                    {consultUrl && (
+                                      <a
+                                        href={consultUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="mt-2 inline-flex h-8 items-center rounded-lg border bg-background px-3 font-medium text-primary hover:bg-muted"
+                                      >
+                                        Consulter l’article
+                                      </a>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
                         </div>
-                      ))}
+                      })}
+                      {candidate && comparisonChanges.length === 0 && (
+                        <p className="text-sm text-muted-foreground">La proposition est disponible, mais aucun passage détaillé n’a été sérialisé pour cette ancienne version.</p>
+                      )}
                       {!candidate && <p className="text-sm text-muted-foreground">Aucune proposition en attente.</p>}
                     </div>
                   </div>
@@ -1227,8 +1491,10 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                     <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
                       <div className="flex items-center gap-2"><Library className="size-4 text-primary" /><p className="text-sm font-semibold">Sources effectivement reliées aux modifications</p></div>
                       <div className="mt-3 space-y-2">
-                        {((structuredResult?.sources_used || []) as Array<Record<string, any>>).map((source, index) => (
-                          <div key={source.evidence_id || index} className="rounded-lg bg-background p-2.5 text-xs">
+                        {((structuredResult?.sources_used || []) as Array<Record<string, any>>).map((source, index) => {
+                          const consultUrl = articleConsultUrl(source)
+                          const excerpt = sourceEvidenceExcerpt(source)
+                          return <div key={source.evidence_id || index} className="rounded-lg bg-background p-2.5 text-xs">
                             <p className="font-medium">{source.evidence_id} {source.title ? `· ${source.title}` : ""}</p>
                             <p className="mt-1 text-muted-foreground">
                               {[
@@ -1236,18 +1502,19 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                                 source.year,
                               ].filter(Boolean).join(" · ")}
                             </p>
-                            {(source.doi || source.url) && (
+                            {excerpt && <p className="mt-2 whitespace-pre-wrap rounded-md bg-muted/60 p-2 leading-5 text-muted-foreground">{excerpt}</p>}
+                            {consultUrl && (
                               <a
-                                href={source.doi ? `https://doi.org/${String(source.doi).replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")}` : source.url}
+                                href={consultUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="mt-1 inline-block font-medium text-primary hover:underline"
+                                className="mt-2 inline-flex h-8 items-center rounded-lg border bg-background px-3 font-medium text-primary hover:bg-muted"
                               >
-                                Ouvrir la source
+                                Consulter l’article
                               </a>
                             )}
                           </div>
-                        ))}
+                        })}
                       </div>
                     </div>
                   )}
@@ -1321,8 +1588,10 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                         : "Aucun renfort scientifique n'a été demandé pour cette version."}
                     </p>
                     <div className="mt-3 space-y-2">
-                      {(candidate?.evidence?.scholar?.evidence || []).map((source: any, index: number) => (
-                        <div key={`${source.article_id}-${index}`} className="rounded-lg bg-muted/50 p-2.5 text-xs">
+                      {(candidate?.evidence?.scholar?.evidence || []).map((source: any, index: number) => {
+                        const consultUrl = articleConsultUrl(source)
+                        const excerpt = sourceEvidenceExcerpt(source)
+                        return <div key={`${source.article_id}-${index}`} className="rounded-lg bg-muted/50 p-2.5 text-xs">
                           <p className="font-medium">{source.citation_id ? `[${source.citation_id}] ` : ""}{source.title}</p>
                           <p className="mt-1 text-muted-foreground">
                             {[
@@ -1330,25 +1599,14 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                               source.year,
                             ].filter(Boolean).join(" · ")}
                           </p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {source.doi && (
-                              <a
-                                href={`https://doi.org/${String(source.doi).replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="font-medium text-primary hover:underline"
-                              >
-                                DOI
-                              </a>
-                            )}
-                            {source.source_url && (
-                              <a href={source.source_url} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
-                                Source
-                              </a>
-                            )}
-                          </div>
+                          {excerpt && <p className="mt-2 whitespace-pre-wrap rounded-md bg-background p-2 leading-5 text-muted-foreground">{excerpt}</p>}
+                          {consultUrl && (
+                            <a href={consultUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex h-8 items-center rounded-lg border bg-background px-3 font-medium text-primary hover:bg-muted">
+                              Consulter l’article
+                            </a>
+                          )}
                         </div>
-                      ))}
+                      })}
                     </div>
                   </div>
                   <div className="rounded-xl border p-3">

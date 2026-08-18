@@ -3,8 +3,14 @@ from types import SimpleNamespace
 import pytest
 
 from EnnoAmelioration.application import diagnostic_orchestration_service as dos
+from EnnoAmelioration.application import agent as agent_module
 from EnnoAmelioration.application import research_orchestration_service as ros
-from EnnoAmelioration.domain.models import ImprovementRequest, TargetScope
+from EnnoAmelioration.domain.models import (
+    ImprovementRequest,
+    ImprovementIntent,
+    RoutingDecision,
+    TargetScope,
+)
 
 
 def _request(text: str = "données synthétiques SAR et généralisation ATR") -> ImprovementRequest:
@@ -100,3 +106,50 @@ def test_section_is_matched_to_specific_diagnostic_lock():
     assert ids[0] == "700"
     assert items[0]["evidence_id"] == "D:verrou:700"
     assert context["domain_detection"]["main_domain_label"] == "Radar"
+
+
+def test_cached_initial_diagnostic_prevents_new_scoped_execution(monkeypatch):
+    request = _request().model_copy(
+        update={
+            "diagnostic_context_override": {
+                "available": True,
+                "completed": True,
+                "diagnostic_run_id": "initial:cir",
+                "evidence_items": [],
+                "verrous": [],
+            },
+            "diagnostic_orchestration_override": {
+                "mode": "fresh_initial_cir_diagnostic",
+                "executed": True,
+            },
+            "allow_scoped_diagnostic": False,
+        }
+    )
+    routing = RoutingDecision(
+        intents=[ImprovementIntent.ARGUMENTATION],
+        target_scope=TargetScope.SECTION,
+        needs_diagnostic=True,
+        needs_project_evidence=True,
+    )
+
+    monkeypatch.setattr(
+        agent_module,
+        "ensure_diagnostic_context",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("ScopedDiagnostic must not run")
+        ),
+    )
+    package = agent_module.EnnoAmeliorationAgent._evidence_package(
+        object(),
+        SimpleNamespace(
+            id=1,
+            organisme="Org",
+            project_name="Projet",
+            year=2025,
+        ),
+        request,
+        routing,
+    )
+    assert package["diagnostic"]["diagnostic_run_id"] == "initial:cir"
+    assert package["diagnostic_orchestration"]["cache_hit"] is True
+    assert package["diagnostic_orchestration"]["executed"] is False

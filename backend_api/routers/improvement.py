@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+from services.cir_background_service_v321 import (
+    enqueue_full_cir_job,
+    read_background_status,
+    mirror_status_into_session,
+    redis_health,
+    should_background_message,
+)
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -125,17 +133,66 @@ def create_improvement_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_project_for_user(db, project_id, current_user)
+    project = get_project_for_user(
+        db,
+        project_id,
+        current_user,
+    )
     try:
-        session, candidate = send_message(db, project, session_id, **payload.model_dump())
+        # V3.21 : le CIR complet quitte la requête FastAPI immédiatement.
+        # Les demandes de SECTION restent totalement synchrones et conservent
+        # la validation humaine des sources.
+        if should_background_message(
+            db,
+            project.id,
+            session_id,
+            payload,
+        ):
+            job = enqueue_full_cir_job(
+                project_id=project.id,
+                session_id=session_id,
+                user_id=current_user.id,
+                payload=payload.model_dump(),
+            )
+            mirror_status_into_session(
+                db,
+                project.id,
+                session_id,
+                job,
+            )
+            session = get_session(
+                db,
+                project.id,
+                session_id,
+            )
+            return {
+                "ok": True,
+                "background": True,
+                "background_job": job,
+                "session": serialize_session(session),
+                "candidate_version_id": None,
+            }
+
+        session, candidate = send_message(
+            db,
+            project,
+            session_id,
+            **payload.model_dump(),
+        )
         return {
             "ok": True,
+            "background": False,
             "session": serialize_session(session),
-            "candidate_version_id": candidate.id if candidate else None,
+            "candidate_version_id": (
+                candidate.id
+                if candidate
+                else None
+            ),
         }
     except Exception as exc:
         db.rollback()
         raise _http_error(exc) from exc
+
 
 
 @router.post("/sessions/{session_id}/versions/{version_id}/decision")
@@ -203,3 +260,46 @@ def decide_improvement_sources(
     except Exception as exc:
         db.rollback()
         raise _http_error(exc) from exc
+
+@router.get("/sessions/{session_id}/background")
+def get_improvement_background_job(
+    project_id: int,
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_project_for_user(
+        db,
+        project_id,
+        current_user,
+    )
+    # Vérifie aussi que la session appartient au projet/utilisateur.
+    get_session(
+        db,
+        project.id,
+        session_id,
+    )
+    return {
+        "ok": True,
+        "background_job": read_background_status(
+            project.id,
+            session_id,
+        ),
+    }
+
+
+@router.get("/background/health")
+def get_improvement_background_health(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    get_project_for_user(
+        db,
+        project_id,
+        current_user,
+    )
+    return {
+        "ok": True,
+        "redis": redis_health(),
+    }

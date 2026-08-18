@@ -73,6 +73,7 @@ def test_context_from_scoped_nlp_exposes_scoped_lock_only():
         },
     )
     assert context["available"] is True
+    assert context["completed"] is True
     assert context["project_raw_documents_used"] is False
     assert context["verrous"][0]["title"].startswith("Incertitude")
     assert context["evidence_items"][0]["evidence_id"].startswith("D:verrou:scope-")
@@ -96,3 +97,31 @@ def test_ensure_diagnostic_context_never_calls_full_project_pipeline(monkeypatch
     monkeypatch.setattr(svc, "_diagnostic_service", lambda: BadService())
     got = svc.ensure_diagnostic_context(object(), project, req)
     assert got == expected
+
+
+def test_initial_document_diagnostic_accepts_and_caches_no_lock_result(monkeypatch):
+    req = _request().model_copy(
+        update={
+            "target_scope": TargetScope.FULL_DOCUMENT,
+            "target_text": _request().full_text,
+        }
+    )
+    captured = {}
+
+    def fake_run(*args, **kwargs):
+        captured.update(kwargs)
+        return (
+            {"available": False, "completed": True, "status": "scoped_no_lock"},
+            {"mode": "fresh_initial_cir_diagnostic", "executed": True},
+        )
+
+    monkeypatch.setattr(svc, "_run_scoped_diagnostic", fake_run)
+    context, meta = svc.ensure_initial_diagnostic_context(
+        object(),
+        SimpleNamespace(id=1),
+        req,
+    )
+    assert captured["allow_empty"] is True
+    assert context["completed"] is True
+    assert context["available"] is False
+    assert meta["executed"] is True

@@ -1399,6 +1399,21 @@ export type ImprovementVersion = {
   is_active?: boolean
 }
 
+export type ImprovementBackgroundJob = {
+  job_id?: string | null
+  status?: "queued" | "running" | "retrying" | "completed" | "failed" | string
+  stage?: string | null
+  updated_at_epoch?: number | null
+  error?: string | null
+  retry_number?: number | null
+  candidate_version_id?: string | null
+  progress?: {
+    cursor?: number | null
+    total?: number | null
+    current_section?: string | Record<string, any> | null
+  }
+}
+
 export type ImprovementProjectContext = {
   project: {
     id: number
@@ -1485,6 +1500,12 @@ export async function getImprovementSession(projectId: number, sessionId: string
   )
 }
 
+export async function getImprovementBackgroundJob(projectId: number, sessionId: string) {
+  return apiRequest<{ ok: boolean; background_job: ImprovementBackgroundJob | null }>(
+    `/api/projects/${projectId}/improvements/sessions/${encodeURIComponent(sessionId)}/background`,
+  )
+}
+
 export async function getImprovementSourceDocument(
   projectId: number,
   documentId: number,
@@ -1521,6 +1542,8 @@ export async function sendImprovementMessage(
 ) {
   return apiRequest<{
     ok: boolean
+    background?: boolean
+    background_job?: ImprovementBackgroundJob | null
     session: ImprovementSession
     candidate_version_id?: string | null
   }>(

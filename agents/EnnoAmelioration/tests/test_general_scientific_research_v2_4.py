@@ -18,6 +18,9 @@ from agents.EnnoAmelioration.domain.models import (
     TargetScope,
 )
 from agents.EnnoScholar.scientific_intent_builder import build_scientific_intent
+from backend_api.services.improvement_service import (
+    _pasted_section_is_whole_target,
+)
 
 
 def _request(**updates) -> ImprovementRequest:
@@ -304,3 +307,111 @@ def test_missing_scientific_arguments_offer_research_before_writing(monkeypatch)
     assert result.state == ImprovementState.AWAITING_EVIDENCE
     assert [row["id"] for row in result.actions] == [ros.RESEARCH_LAUNCH_TARGETED]
     assert "EnnoDiagnostic" not in result.agents_used
+
+
+
+class ConversationalRoutingLLM:
+    def generate(self, prompt: str, **kwargs):
+        if "INTENTION CONVERSATIONNELLE" in prompt:
+            if "sans nouvelle recherche" in prompt.casefold():
+                return (
+                    '{"goal":"scientific_strengthening",'
+                    '"evidence_mode":"existing_scientific",'
+                    '"wants_argumentation":true,'
+                    '"wants_scientific_strengthening":true,'
+                    '"wants_new_external_research":false,'
+                    '"forbids_external_research":true,'
+                    '"forbids_scholar":false,'
+                    '"confidence":0.97}'
+                )
+            return (
+                '{"goal":"scientific_strengthening",'
+                '"evidence_mode":"new_scientific",'
+                '"wants_argumentation":true,'
+                '"wants_scientific_strengthening":true,'
+                '"wants_new_external_research":true,'
+                '"forbids_external_research":false,'
+                '"forbids_scholar":false,'
+                '"confidence":0.97}'
+            )
+        if "FONCTION SÉMANTIQUE" in prompt:
+            return (
+                '{"sections":[{"section_id":"target",'
+                '"function":"scientific_landscape","confidence":0.96}]}'
+            )
+        raise AssertionError("Prompt inattendu")
+
+    def get_last_generation_meta(self):
+        return {"provider": "conversation-test"}
+
+
+def test_natural_scientific_strengthening_does_not_require_magic_keywords(monkeypatch):
+    service = SemanticRoutingService(llm=ConversationalRoutingLLM())
+    monkeypatch.setattr(service, "_fastjudge", lambda rows: {})
+
+    decision = service.route(
+        (
+            "Je veux que cette partie ait beaucoup plus de poids scientifique "
+            "et qu'elle apporte des arguments plus solides pour mieux la mettre en valeur."
+        ),
+        TargetScope.SECTION,
+        "La littérature actuelle présente plusieurs jeux de données SAR.",
+    )
+
+    assert ImprovementIntent.ARGUMENTATION in decision.intents
+    assert ImprovementIntent.SCIENTIFIC_ENRICHMENT in decision.intents
+    assert ImprovementIntent.RESEARCH in decision.intents
+    assert decision.needs_scholar is True
+    assert decision.needs_new_research is True
+    assert decision.specialist_route.value == "scholar"
+
+
+def test_explicit_no_new_research_stays_stronger_than_conversation(monkeypatch):
+    service = SemanticRoutingService(llm=ConversationalRoutingLLM())
+    monkeypatch.setattr(service, "_fastjudge", lambda rows: {})
+
+    decision = service.route(
+        (
+            "Renforce scientifiquement cette section avec les sources déjà validées, "
+            "sans nouvelle recherche."
+        ),
+        TargetScope.SECTION,
+        "La littérature actuelle présente plusieurs jeux de données SAR.",
+    )
+
+    assert decision.needs_scholar is True
+    assert decision.needs_new_research is False
+    assert decision.forbids_new_research is True
+
+
+def test_pasted_section_remains_one_target_even_with_detected_subsections():
+    assert _pasted_section_is_whole_target(
+        source_kind="pasted_text",
+        scope=TargetScope.SECTION,
+        selected_text=None,
+        requested_section_id=None,
+        requested_section_title=None,
+        inferred_section=None,
+    ) is True
+
+
+def test_explicit_subsection_selection_overrides_pasted_whole_section():
+    assert _pasted_section_is_whole_target(
+        source_kind="pasted_text",
+        scope=TargetScope.SECTION,
+        selected_text=None,
+        requested_section_id="sec-child",
+        requested_section_title="Donnée SAR publiquement disponible",
+        inferred_section=None,
+    ) is False
+
+
+def test_uploaded_document_is_never_treated_as_one_pasted_section():
+    assert _pasted_section_is_whole_target(
+        source_kind="document",
+        scope=TargetScope.SECTION,
+        selected_text=None,
+        requested_section_id=None,
+        requested_section_title=None,
+        inferred_section=None,
+    ) is False

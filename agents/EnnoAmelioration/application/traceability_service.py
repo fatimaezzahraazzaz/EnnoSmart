@@ -183,6 +183,22 @@ def _supporting_items(
     novel = _meaningful_tokens(after) - _meaningful_tokens(before)
     added_markers = _markers(after) - _markers(before)
     citations = {item.upper() for item in _CITATION_RE.findall(after)}
+
+    # V3.6 — lorsqu'un ajout contient des citations explicites, elles sont
+    # souveraines pour la traçabilité. On ne complète jamais le label avec
+    # d'autres Article Cards trouvées par simple proximité lexicale.
+    if citations:
+        exact_rows: list[dict[str, Any]] = []
+        for row in rows:
+            row_id = str(
+                row.get("citation_id")
+                or row.get("evidence_id")
+                or ""
+            ).strip().upper()
+            if row_id in citations:
+                exact_rows.append(row)
+        return exact_rows
+
     scored: list[tuple[float, dict[str, Any]]] = []
     for row in rows:
         row_text = str(row.get("text") or "")
@@ -332,7 +348,10 @@ def _replacement_pairs(
             operations.append(("insert", "", after_rows[pj]))
         i, j = pi, pj
 
-    return _coalesce_adjacent_gap_pairs(list(reversed(operations)))
+    operations = _coalesce_adjacent_gap_pairs(list(reversed(operations)))
+    if allow_local_grouping:
+        operations = _coalesce_editorial_split_rewrites(operations)
+    return operations
 
 def _gap_pair_is_rewrite(before: str, after: str) -> bool:
     """Reconnaît un INSERT+DELETE adjacent comme une reformulation déplacée.
@@ -373,6 +392,49 @@ def _coalesce_adjacent_gap_pairs(
                     output.append(("replace", before, after))
                     index += 2
                     continue
+        output.append(current)
+        index += 1
+    return output
+
+
+def _word_count(value: str) -> int:
+    return len(re.findall(r"\b[\wÀ-ÿ'-]+\b", str(value or ""), flags=re.U))
+
+
+def _looks_like_editorial_sentence_split(before: str, rewritten: str, extra: str) -> bool:
+    before_words = _word_count(before)
+    rewritten_words = _word_count(rewritten)
+    extra_words = _word_count(extra)
+    if before_words < 18 or extra_words < 4:
+        return False
+    if rewritten_words >= before_words * 0.78:
+        return False
+    combined_words = rewritten_words + extra_words
+    if combined_words < before_words * 0.65 or combined_words > before_words * 1.18:
+        return False
+    if _markers(extra) - _markers(before):
+        return False
+    return bool(_meaningful_tokens(extra) & _meaningful_tokens(before))
+
+
+def _coalesce_editorial_split_rewrites(
+    operations: list[tuple[str, str, str]],
+) -> list[tuple[str, str, str]]:
+    output: list[tuple[str, str, str]] = []
+    index = 0
+    while index < len(operations):
+        current = operations[index]
+        following = operations[index + 1] if index + 1 < len(operations) else None
+        if current[0] == "replace" and following and following[0] == "insert":
+            if _looks_like_editorial_sentence_split(current[1], current[2], following[2]):
+                output.append(("replace", current[1], f"{current[2].rstrip()} {following[2].lstrip()}"))
+                index += 2
+                continue
+        if current[0] == "insert" and following and following[0] == "replace":
+            if _looks_like_editorial_sentence_split(following[1], following[2], current[2]):
+                output.append(("replace", following[1], f"{current[2].rstrip()} {following[2].lstrip()}"))
+                index += 2
+                continue
         output.append(current)
         index += 1
     return output

@@ -44,6 +44,14 @@ NOISE_QUERY_TOKENS = {
 
 
 KIND_PRIORITY = {
+    # ENNOMEL_ACTIVE_SECTION_QUERY_PRIORITY_V3_9
+    "active_section_exact_v3_9": 1.64,
+    "active_section_semantic_v3_9": 1.56,
+
+    # ENNOMEL_SECTION_QUERY_PRIORITY_V3_8
+    "section_source_exact_v3_8": 1.62,
+    "section_source_semantic_v3_8": 1.54,
+
     # Requêtes ancrées projet/verrou : prioritaires.
     "local_object_anchors": 1.28,
     "local_phenomenon_anchors": 1.24,

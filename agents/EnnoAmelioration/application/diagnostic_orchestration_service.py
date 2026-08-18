@@ -32,7 +32,7 @@ from ..domain.models import ImprovementRequest, TargetScope
 from .agent_adapters import diagnostic_context
 
 
-SCOPED_DIAGNOSTIC_VERSION = "v2_3_ennoamel_scoped_cir_input"
+SCOPED_DIAGNOSTIC_VERSION = "v2_4_ennoamel_cached_initial_and_scoped"
 
 
 class DiagnosticOrchestrationError(RuntimeError):
@@ -438,6 +438,11 @@ def _context_from_scoped_run(
 
     return {
         "available": bool(verrou_payload or evidence_items),
+        # Un rapport sans verrou reste un diagnostic exécuté et exploitable
+        # comme conclusion négative. ``available`` continue d'indiquer la
+        # présence de signaux de verrou ; ``completed`` évite de relancer le
+        # pipeline simplement parce que la liste est vide.
+        "completed": True,
         "agent": "EnnoDiagnostic",
         "diagnostic_run_id": f"scoped:{scope_key}",
         "status": "scoped_complete" if (verrou_payload or evidence_items) else "scoped_no_lock",
@@ -471,6 +476,7 @@ def _run_scoped_diagnostic(
     request: ImprovementRequest,
     *,
     force_refresh: bool = False,
+    allow_empty: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Exécute le vrai NLP + RAG + EnnoDiagnostic sur le CIR courant d'EnnoAmel."""
 
@@ -506,11 +512,16 @@ def _run_scoped_diagnostic(
                     cache_hit=True,
                     project_background=background,
                 )
-                if context.get("available"):
+                if context.get("available") or allow_empty:
                     return context, {
                         "agent": "EnnoDiagnostic",
-                        "mode": "reuse_scoped_ennoamel_input",
+                        "mode": (
+                            "reuse_initial_cir_diagnostic"
+                            if request.target_scope == TargetScope.FULL_DOCUMENT
+                            else "reuse_scoped_ennoamel_input"
+                        ),
                         "executed": False,
+                        "cache_hit": True,
                         "scope_key": scope_key,
                         "project_raw_documents_used": False,
                         "diagnostic_run_id": context.get("diagnostic_run_id"),
@@ -621,7 +632,7 @@ def _run_scoped_diagnostic(
         cache_hit=False,
         project_background=background,
     )
-    if not context.get("available"):
+    if not context.get("available") and not allow_empty:
         raise DiagnosticOrchestrationError(
             "EnnoDiagnostic a bien analysé le texte/CIR courant, mais aucun signal de verrou "
             "exploitable n'a été identifié pour cette cible. EnnoScholar ne sera pas lancé "
@@ -630,8 +641,13 @@ def _run_scoped_diagnostic(
 
     return context, {
         "agent": "EnnoDiagnostic",
-        "mode": "fresh_scoped_ennoamel_input",
+        "mode": (
+            "fresh_initial_cir_diagnostic"
+            if request.target_scope == TargetScope.FULL_DOCUMENT
+            else "fresh_scoped_ennoamel_input"
+        ),
         "executed": True,
+        "cache_hit": False,
         "scope_key": scope_key,
         "scope_project": scope_project,
         "source_kind": "current_cir_or_section_supplied_to_ennoamel",
@@ -662,4 +678,36 @@ def ensure_diagnostic_context(
         project,
         request,
         force_refresh=force_refresh,
+    )
+
+
+def ensure_initial_diagnostic_context(
+    db: Any,
+    project: Any,
+    request: ImprovementRequest,
+    *,
+    force_refresh: bool = False,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Diagnostic structuré unique du CIR complet, résultat vide inclus.
+
+    Le hash porte sur la version active complète. Un rapport concluant à
+    l'absence de verrou est donc lui aussi mis en cache et ne déclenche jamais
+    une seconde exécution par section.
+    """
+
+    if request.target_scope != TargetScope.FULL_DOCUMENT:
+        request = request.model_copy(
+            update={
+                "target_scope": TargetScope.FULL_DOCUMENT,
+                "target_text": request.full_text,
+                "target_section_id": None,
+                "target_section_title": None,
+            }
+        )
+    return _run_scoped_diagnostic(
+        db,
+        project,
+        request,
+        force_refresh=force_refresh,
+        allow_empty=True,
     )

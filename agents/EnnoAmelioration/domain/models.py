@@ -138,6 +138,13 @@ class ImprovementRequest(BaseModel):
     # moteur de recherche. Chaque cible bibliographique reste ainsi liee a une
     # vraie section, sans reclasser le document ni construire une requete globale.
     research_section_plan: list[SectionRoutingPlan] = Field(default_factory=list)
+    # Le parcours CIR complet calcule un diagnostic structuré une seule fois
+    # sur la version active, puis le réinjecte dans chaque tour de section. Le
+    # flag scoped reste vrai par défaut pour préserver le comportement des
+    # demandes manuelles hors workflow progressif.
+    diagnostic_context_override: dict[str, Any] | None = None
+    diagnostic_orchestration_override: dict[str, Any] | None = None
+    allow_scoped_diagnostic: bool = True
     sections: list[ParsedSection] = Field(default_factory=list)
 
 

@@ -663,6 +663,7 @@ def decide_guided_research_sources(
     decision: str,
     reason: str = "",
     prepare_after_acceptance: bool = True,
+    decision_actor: str = "consultant",
 ) -> dict[str, Any]:
     agent = get_guided_research_agent()
     result = agent.decide_sources(
@@ -700,6 +701,24 @@ def decide_guided_research_sources(
         ),
     )
     updated_sources = list(preparation.pop("sources", []) or [])
+    normalized_actor = str(decision_actor or "consultant").strip() or "consultant"
+    decided_candidate_ids = {
+        str(value or "").strip()
+        for value in candidate_ids
+        if str(value or "").strip()
+    }
+    if normalized_actor != "consultant":
+        updated_sources = [
+            {
+                **dict(source),
+                "selection_origin": normalized_actor,
+                "auto_selected": True,
+            }
+            if str(source.get("candidate_id") or "").strip()
+            in decided_candidate_ids
+            else dict(source)
+            for source in updated_sources
+        ]
     refreshed_coverage = (
         agent._coverage(project, result.brief)
         if result.brief is not None
@@ -731,7 +750,9 @@ def decide_guided_research_sources(
             "sources": accepted_sources,
             "preparation": preparation,
             "policy": {
-                "consultant_validated": True,
+                "consultant_validated": normalized_actor == "consultant",
+                "selection_actor": normalized_actor,
+                "agent_auto_selected": normalized_actor != "consultant",
                 "direct_fulltext_attempt_first": True,
                 "mcp_fallback_after_direct_failure": True,
                 "scientific_evidence_requires_verified_fulltext": True,
@@ -740,6 +761,7 @@ def decide_guided_research_sources(
         },
     )
     response.setdefault("metadata", {})["source_preparation"] = preparation
+    response.setdefault("metadata", {})["selection_actor"] = normalized_actor
     response.setdefault("metadata", {})["coverage"] = refreshed_coverage
     reports = list(preparation.get("reports") or [])
     targeted_count = len(reports)

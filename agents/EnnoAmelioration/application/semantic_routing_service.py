@@ -68,6 +68,263 @@ class SemanticRoutingService:
     def __init__(self, llm: Any | None = None) -> None:
         self.llm = llm
 
+
+    def _semantic_instruction_intent(self, instruction: str) -> dict[str, Any]:
+        if self.llm is None or not str(instruction or "").strip():
+            return {}
+
+        prompt = f"""Tu classes l'INTENTION CONVERSATIONNELLE d'un consultant qui demande
+une amélioration de rédaction R&D/CIR.
+
+IMPORTANT
+- Comprends le SENS, pas des mots-clés exacts.
+- Le consultant peut faire des fautes, utiliser des synonymes, parler de façon courte,
+  indirecte ou familière.
+- N'exige jamais qu'il connaisse les noms EnnoScholar ou EnnoDiagnostic.
+- "donner plus de poids", "rendre plus solide", "mettre davantage en valeur",
+  "étayer", "apporter des arguments", "approfondir scientifiquement",
+  "mieux défendre", etc. peuvent exprimer un renforcement selon le contexte.
+- Une simple amélioration de style ne demande aucune nouvelle preuve.
+- Si le consultant demande de nouveaux arguments scientifiques, un renforcement
+  scientifique, des éléments issus de la littérature ou un meilleur étayage
+  scientifique, et qu'il ne limite pas le corpus, considère qu'une recherche
+  scientifique externe peut être nécessaire avant la rédaction.
+- Si le consultant demande d'utiliser seulement le dossier/projet, classe
+  evidence_mode="project_only".
+- S'il demande les sources déjà validées/existantes sans nouvelle recherche,
+  classe evidence_mode="existing_scientific".
+- S'il interdit la recherche externe, indique forbids_external_research=true.
+- Les négations sont prioritaires : "n'ajoute aucun argument scientifique"
+  n'est PAS un renforcement scientifique.
+
+Valeurs de goal :
+- small_talk
+- editorial_rewrite
+- project_argumentation
+- scientific_strengthening
+- mixed_strengthening
+- general_revision
+
+Valeurs de evidence_mode :
+- none
+- project_only
+- existing_scientific
+- new_scientific
+- unspecified
+
+Retourne UNIQUEMENT ce JSON :
+{{
+  "goal": "...",
+  "evidence_mode": "...",
+  "wants_argumentation": true,
+  "wants_scientific_strengthening": true,
+  "wants_new_external_research": true,
+  "forbids_external_research": false,
+  "forbids_scholar": false,
+  "confidence": 0.0
+}}
+
+DEMANDE CONSULTANT
+{instruction}
+"""
+        try:
+            raw = self.llm.generate(
+                prompt,
+                temperature=0.0,
+                max_output_tokens=450,
+                max_input_tokens=6000,
+                retries=0,
+                json_mode=True,
+                request_name="ennoamelioration:semantic_intent_routing",
+            )
+            payload = _json_object(raw)
+        except Exception:
+            return {}
+
+        try:
+            confidence = min(1.0, max(0.0, float(payload.get("confidence") or 0.0)))
+        except (TypeError, ValueError):
+            confidence = 0.0
+
+        allowed_goals = {
+            "small_talk",
+            "editorial_rewrite",
+            "project_argumentation",
+            "scientific_strengthening",
+            "mixed_strengthening",
+            "general_revision",
+        }
+        allowed_modes = {
+            "none",
+            "project_only",
+            "existing_scientific",
+            "new_scientific",
+            "unspecified",
+        }
+        goal = str(payload.get("goal") or "general_revision").strip()
+        evidence_mode = str(payload.get("evidence_mode") or "unspecified").strip()
+        if goal not in allowed_goals:
+            goal = "general_revision"
+        if evidence_mode not in allowed_modes:
+            evidence_mode = "unspecified"
+
+        return {
+            "goal": goal,
+            "evidence_mode": evidence_mode,
+            "wants_argumentation": bool(payload.get("wants_argumentation")),
+            "wants_scientific_strengthening": bool(
+                payload.get("wants_scientific_strengthening")
+            ),
+            "wants_new_external_research": bool(
+                payload.get("wants_new_external_research")
+            ),
+            "forbids_external_research": bool(
+                payload.get("forbids_external_research")
+            ),
+            "forbids_scholar": bool(payload.get("forbids_scholar")),
+            "confidence": confidence,
+        }
+
+    @staticmethod
+    def _merge_semantic_instruction(
+        base: RoutingDecision,
+        semantic: dict[str, Any],
+    ) -> RoutingDecision:
+        if float(semantic.get("confidence") or 0.0) < 0.68:
+            return base
+
+        intents = list(base.intents)
+        goal = str(semantic.get("goal") or "")
+        evidence_mode = str(semantic.get("evidence_mode") or "unspecified")
+        semantic_forbids_research = bool(
+            semantic.get("forbids_external_research")
+        )
+        semantic_forbids_scholar = bool(semantic.get("forbids_scholar"))
+
+        deterministic_scholar_guard = bool(
+            base.forbids_scholar and not base.candidate_revision
+        )
+        deterministic_research_guard = bool(
+            base.forbids_new_research and not base.candidate_revision
+        )
+
+        hard_forbid_scholar = bool(
+            deterministic_scholar_guard
+            or semantic_forbids_scholar
+            or evidence_mode == "project_only"
+        )
+        hard_forbid_research = bool(
+            deterministic_research_guard
+            or semantic_forbids_research
+            or evidence_mode in {"project_only", "existing_scientific"}
+        )
+
+        if base.strict_fact_preservation and base.editorial_only:
+            return base
+
+        if semantic.get("wants_argumentation") or goal in {
+            "project_argumentation",
+            "scientific_strengthening",
+            "mixed_strengthening",
+        }:
+            if ImprovementIntent.ARGUMENTATION not in intents:
+                intents.append(ImprovementIntent.ARGUMENTATION)
+
+        wants_science = bool(
+            semantic.get("wants_scientific_strengthening")
+            or goal in {"scientific_strengthening", "mixed_strengthening"}
+        )
+        if wants_science and not hard_forbid_scholar:
+            if ImprovementIntent.SCIENTIFIC_ENRICHMENT not in intents:
+                intents.append(ImprovementIntent.SCIENTIFIC_ENRICHMENT)
+
+        wants_new_research = bool(
+            semantic.get("wants_new_external_research")
+            or evidence_mode == "new_scientific"
+        )
+        if (
+            wants_new_research
+            and wants_science
+            and not hard_forbid_research
+            and not hard_forbid_scholar
+        ):
+            if ImprovementIntent.RESEARCH not in intents:
+                intents.append(ImprovementIntent.RESEARCH)
+
+        if (
+            wants_science
+            and evidence_mode == "unspecified"
+            and not hard_forbid_research
+            and not hard_forbid_scholar
+            and goal in {"scientific_strengthening", "mixed_strengthening"}
+        ):
+            if ImprovementIntent.RESEARCH not in intents:
+                intents.append(ImprovementIntent.RESEARCH)
+            wants_new_research = True
+
+        intent_set = set(intents)
+        editorial_only = bool(intent_set & _EDITORIAL_INTENTS) and not bool(
+            intent_set
+            & {
+                ImprovementIntent.ARGUMENTATION,
+                ImprovementIntent.CIR_ELIGIBILITY,
+                ImprovementIntent.SCIENTIFIC_ENRICHMENT,
+                ImprovementIntent.RESEARCH,
+            }
+        )
+
+        needs_scholar = bool(
+            not hard_forbid_scholar
+            and (
+                ImprovementIntent.SCIENTIFIC_ENRICHMENT in intents
+                or ImprovementIntent.RESEARCH in intents
+            )
+        )
+        needs_diagnostic = bool(
+            ImprovementIntent.ARGUMENTATION in intents
+            or ImprovementIntent.CIR_ELIGIBILITY in intents
+        )
+
+        if evidence_mode == "project_only":
+            needs_scholar = False
+            wants_new_research = False
+
+        rationale = list(base.rationale)
+        rationale.append(
+            "Compréhension conversationnelle zero-shot : "
+            f"goal={goal}, evidence_mode={evidence_mode}, "
+            f"confidence={float(semantic.get('confidence') or 0.0):.2f}."
+        )
+
+        return base.model_copy(
+            update={
+                "intents": list(dict.fromkeys(intents)),
+                "needs_diagnostic": needs_diagnostic,
+                "needs_project_evidence": needs_diagnostic,
+                "needs_scholar": needs_scholar,
+                "needs_new_research": bool(
+                    wants_new_research
+                    and not hard_forbid_research
+                    and not hard_forbid_scholar
+                ),
+                "forbids_new_research": hard_forbid_research,
+                "forbids_scholar": hard_forbid_scholar,
+                "editorial_only": editorial_only,
+                "revision_allows_evidence_enrichment": bool(
+                    base.revision_allows_evidence_enrichment
+                    or (
+                        base.candidate_revision
+                        and (
+                            wants_science
+                            or semantic.get("wants_argumentation")
+                            or wants_new_research
+                        )
+                    )
+                ),
+                "rationale": rationale,
+            }
+        )
+
     @staticmethod
     def _fastjudge(sections: list[ParsedSection]) -> dict[str, dict[str, Any]]:
         if not sections:
@@ -278,6 +535,10 @@ SECTIONS
         sections: list[ParsedSection] | None = None,
     ) -> RoutingDecision:
         base = understand_instruction(instruction, scope)
+
+        semantic_instruction = self._semantic_instruction_intent(instruction)
+        base = self._merge_semantic_instruction(base, semantic_instruction)
+
         is_document = base.target_scope in {TargetScope.MULTI_SECTION, TargetScope.FULL_DOCUMENT}
         if is_document:
             parsed = list(sections or [])

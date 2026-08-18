@@ -9,6 +9,12 @@ from typing import Any
 
 from ..domain.models import ImprovementRequest
 from .diagnostic_orchestration_service import ensure_diagnostic_context
+from .research_context_bridge_v310 import (
+    enrich_direct_research_context,
+    filter_candidates_against_section_context,
+)
+# ENNOMEL_CIR_RESEARCH_CONTEXT_BRIDGE_V3_7
+# ENNOMEL_CIR_SECTION_SOURCE_CONTRACT_V3_8
 from .research_context_service import build_lightweight_research_context
 
 
@@ -1145,6 +1151,7 @@ def launch_targeted_guided_research(
     *,
     diagnostic_package: dict[str, Any] | None = None,
     diagnostic_orchestration: dict[str, Any] | None = None,
+    conversation_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Lance une vraie recherche EnnoScholar précise, puis expose les candidats.
 
@@ -1178,6 +1185,11 @@ def launch_targeted_guided_research(
     matched_items: list[dict[str, Any]] = []
     research_target_ids: list[str] = []
     direct_context = build_lightweight_research_context(project, request)
+    direct_context = enrich_direct_research_context(
+        request,
+        direct_context,
+        conversation_context=dict(conversation_context or {}),
+    )
     target_type = str(
         direct_context.get("research_target_type") or "scientific_enrichment"
     )
@@ -1251,6 +1263,12 @@ def launch_targeted_guided_research(
         research_target_ids=research_target_ids,
         limit=15,
     )
+    candidates, section_context_gate = filter_candidates_against_section_context(
+        candidates,
+        direct_context=direct_context,
+        search_metadata=search_meta,
+    )
+    search_meta["section_context_gate"] = section_context_gate
     search_meta.update(
         {
             "matched_diagnostic_evidence": [
@@ -1290,6 +1308,9 @@ def launch_targeted_guided_research(
                 "diagnostic_fallback_reason": diagnostic_fallback_reason,
                 "search_strategy": search_strategy,
                 "search_readiness": direct_context.get("search_readiness") or {},
+                "conversation_refinement": dict(conversation_context or {}),
+                "active_version_section_contract": direct_context.get("v3_9_active_version_contract") or {},
+                "section_context_gate": section_context_gate,
             },
             "force_refresh": True,
             "excluded_existing_decided_count": len(excluded_keys),
