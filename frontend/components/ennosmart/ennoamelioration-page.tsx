@@ -55,6 +55,7 @@ import {
 } from "@/lib/api"
 import { getCurrentProjectId, setCurrentProjectId } from "@/lib/project-session"
 import { cn } from "@/lib/utils"
+import { LoadingState, WorkflowSteps } from "@/components/ennosmart/workspace-ui"
 
 function normalizeSourceDecision(value: unknown) {
   const decision = String(value || "").trim().toLowerCase()
@@ -821,7 +822,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
   }
 
   if (loading) {
-    return <div className="grid h-full place-items-center"><Loader2 className="size-7 animate-spin text-primary" /></div>
+    return <LoadingState label="Chargement de l'espace d'amélioration…" />
   }
 
   if (!projectId) {
@@ -842,7 +843,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
   }
 
   return (
-    <div className="relative flex h-full max-h-full min-h-0 overflow-hidden bg-[radial-gradient(circle_at_80%_0%,rgba(139,92,246,.08),transparent_28rem),var(--background)]">
+    <div className="improvement-workspace module-improvement relative flex h-full max-h-full min-h-0 overflow-hidden">
       <input
         ref={fileInputRef}
         type="file"
@@ -1089,10 +1090,25 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
           {current && (
             <Button variant="outline" size="sm" className="gap-2" onClick={() => setRightOpen((value) => !value)}>
               {rightOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
-              <span className="hidden xl:inline">Artifact</span>
+              <span className="hidden xl:inline">Proposition</span>
             </Button>
           )}
         </header>
+
+        {current && (
+          <div className="shrink-0 border-b bg-card/70 px-3 py-2">
+            <WorkflowSteps
+              className="border-0 bg-transparent p-0 shadow-none"
+              ariaLabel="Étapes de l'amélioration"
+              steps={[
+                { label: "Source", detail: "Original", status: "complete" },
+                { label: "Demande", detail: "Instruction", status: (busy || backgroundActive) ? "complete" : candidate || activeVersion ? "complete" : "current" },
+                { label: "Proposition", detail: "Comparaison", status: candidate ? "current" : activeVersion ? "complete" : "upcoming" },
+                { label: "Validation", detail: "Décision humaine", status: candidate ? "attention" : activeVersion ? "complete" : "upcoming" },
+              ]}
+            />
+          </div>
+        )}
 
         {error && (
           <div className="mx-4 mt-3 flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
@@ -1106,11 +1122,11 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
           <ScrollArea className="flex-1">
             <div className="mx-auto flex min-h-full max-w-3xl flex-col justify-center p-6 lg:p-10">
               <div className="mb-7 text-center">
-                <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary"><Sparkles className="size-6" /></div>
+                <div className="mx-auto grid size-12 place-items-center rounded-xl border border-brand/15 bg-brand/8 text-brand"><Sparkles className="size-6" /></div>
                 <h1 className="mt-4 text-2xl font-semibold">Nouvelle conversation</h1>
                 <p className="mt-2 text-sm text-muted-foreground">Importez un CIR complet ou collez une section, puis décrivez librement l'amélioration attendue. L'original reste conservé.</p>
               </div>
-              <div className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm">
+              <div className="space-y-4 rounded-xl border bg-card p-5 shadow-xs">
                 <div>
                   <p className="mb-2 text-xs font-medium text-muted-foreground">Portée du texte</p>
                   <div className="grid grid-cols-2 gap-2">
@@ -1243,9 +1259,9 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                 )}
                 {!busy && !backgroundActive && backgroundStatus === "completed" && !terminalResultStale && (
                   <div className="flex justify-start">
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                    <div className="rounded-xl border border-success/25 bg-success/8 px-4 py-3 text-sm text-success">
                       {candidate
-                        ? `Traitement terminé — la proposition V${candidate.version_number} est disponible dans Artifact et Comparatif.`
+                        ? `Traitement terminé — la proposition V${candidate.version_number} est disponible dans Proposition et Comparatif.`
                         : "Traitement terminé — aucune modification sûre n'a été produite ; consultez le compte rendu ci-dessus."}
                     </div>
                   </div>
@@ -1302,7 +1318,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
           <aside className="flex h-full min-h-0 w-[clamp(340px,36vw,620px)] min-w-[340px] shrink-0 flex-col overflow-hidden border-l bg-card max-xl:absolute max-xl:inset-y-0 max-xl:right-0 max-xl:z-30 max-xl:w-[min(92vw,620px)] max-xl:min-w-0 max-xl:shadow-[-18px_0_45px_rgb(45_20_80_/_0.12)]">
           <div className="flex h-14 items-center gap-2 border-b px-4">
             <Sparkles className="size-4 text-primary" />
-            <p className="flex-1 text-sm font-semibold">Artifact d'amélioration</p>
+            <p className="flex-1 text-sm font-semibold">Proposition d'amélioration</p>
             {candidate ? <Badge>Proposition V{candidate.version_number}</Badge> : <Badge variant="outline">Version active</Badge>}
           </div>
           <Tabs defaultValue="improved" className="min-h-0 flex-1 gap-0">

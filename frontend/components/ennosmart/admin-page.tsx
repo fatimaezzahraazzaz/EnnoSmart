@@ -17,7 +17,7 @@ import {
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -33,6 +33,7 @@ import {
   type AdminUser,
   type UserRead,
 } from "@/lib/api"
+import { LoadingState, PageHeader, StatusNotice } from "@/components/ennosmart/workspace-ui"
 
 const stages = [
   ["collecte", "Collecte des documents", 10],
@@ -129,17 +130,14 @@ export default function AdminPage({ user }: { user: UserRead }) {
     } catch (err) { setError(err instanceof Error ? err.message : "Mise à jour impossible.") } finally { setBusy(null) }
   }
 
-  if (loading && !overview) return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="size-6 animate-spin text-brand" /></div>
+  if (loading && !overview) return <LoadingState label="Chargement de l'administration…" />
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-5 sm:p-7 lg:p-9">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div><div className="mb-2 flex items-center gap-2 text-sm font-medium text-brand"><ShieldCheck className="size-4" />Pilotage administratif</div><h1 className="text-3xl font-semibold tracking-tight">Équipe & portefeuille</h1><p className="mt-2 text-sm text-muted-foreground">Affectez les consultants et suivez chaque dossier jusqu’à sa finalisation.</p></div>
-        <Button variant="outline" onClick={load} disabled={loading}><RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />Actualiser</Button>
-      </div>
+    <div className="workspace-page-wide space-y-6">
+      <PageHeader eyebrow="Pilotage administratif" title="Équipe & portefeuille" description="Affectez les consultants et suivez chaque dossier jusqu’à sa finalisation." icon={ShieldCheck} actions={<Button variant="outline" onClick={load} disabled={loading}><RefreshCw className={loading ? "animate-spin" : ""} data-icon="inline-start" />Actualiser</Button>} />
 
-      {message && <div className="flex items-center gap-2 rounded-xl border border-success/25 bg-success/10 p-3 text-sm text-success"><CheckCircle2 className="size-4" />{message}</div>}
-      {error && <div className="rounded-xl border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+      {message && <StatusNotice state="validated" title={message} />}
+      {error && <StatusNotice state="failed" title="Action administrative impossible" description={error} />}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={Users} label="Consultants" value={overview?.users.consultants || 0} detail={`${overview?.users.active || 0} comptes actifs`} />
@@ -185,7 +183,7 @@ export default function AdminPage({ user }: { user: UserRead }) {
                   <div className="space-y-1.5"><Label className="text-xs text-muted-foreground">Consultant affecté</Label><select value={project.consultant?.id || ""} onChange={(e) => assign(project.id, Number(e.target.value))} className="h-9 w-full rounded-lg border bg-background px-3 text-sm" disabled={busy === `project-${project.id}`}><option value="" disabled>Choisir</option>{users.filter((item) => item.is_active && item.role !== "superadmin").map((item) => <option key={item.id} value={item.id}>{item.full_name}</option>)}</select></div>
                   {edit && <div className="grid gap-2 sm:grid-cols-[1fr_120px]"><select value={edit.stage} onChange={(e) => { const stage = stages.find(([id]) => id === e.target.value); updateEdit(project.id, { stage: e.target.value, progress_percent: stage?.[2] || edit.progress_percent }) }} className="h-9 rounded-lg border bg-background px-3 text-sm">{stages.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select><select value={edit.priority} onChange={(e) => updateEdit(project.id, { priority: e.target.value })} className="h-9 rounded-lg border bg-background px-2 text-sm"><option value="basse">Basse</option><option value="normale">Normale</option><option value="haute">Haute</option><option value="urgente">Urgente</option></select><div className="flex items-center gap-3 sm:col-span-2"><input type="range" min={0} max={100} value={edit.progress_percent} onChange={(e) => updateEdit(project.id, { progress_percent: Number(e.target.value) })} className="h-2 flex-1 accent-violet-700" /><span className="w-10 text-right text-xs font-semibold">{edit.progress_percent}%</span></div></div>}
                   <Button size="sm" onClick={() => saveWorkflow(project.id)} disabled={busy === `workflow-${project.id}`}><UserCheck className="size-4" />Enregistrer</Button>
-                </div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[linear-gradient(90deg,#5b21b6,#9333ea)] transition-all" style={{ width: `${edit?.progress_percent || 0}%` }} /></div><p className="mt-2 text-xs text-muted-foreground">Étape : {stageLabels[edit?.stage || project.workflow.stage] || project.workflow.stage}</p></article>
+                </div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${edit?.progress_percent || 0}%` }} /></div><p className="mt-2 text-xs text-muted-foreground">Étape : {stageLabels[edit?.stage || project.workflow.stage] || project.workflow.stage}</p></article>
               })}
             </div>
           )}

@@ -13,14 +13,18 @@ import {
   Search,
   ArrowRight,
   ChevronDown,
-  Loader2,
-  AlertCircle,
   RefreshCw,
   PlusCircle,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { getProjects, type ProjectRead } from "@/lib/api"
 import { setCurrentProjectId } from "@/lib/project-session"
+import {
+  EmptyState,
+  LoadingState,
+  PageHeader,
+  StatusNotice,
+} from "@/components/ennosmart/workspace-ui"
 
 interface ProjectListPageProps {
   navigateTo: (page: AppPage, options?: NavigateOptions) => void
@@ -132,25 +136,16 @@ export default function ProjectListPage({ navigateTo }: ProjectListPageProps) {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-5 sm:p-7 lg:p-9">
-      <div className="ennoma-page-header flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground tracking-tight">
-            Projets CIR
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {organizations.length} organisme{organizations.length > 1 ? "s" : ""} ·{" "}
-            {projects.length} dossier{projects.length > 1 ? "s" : ""}
-          </p>
-        </div>
+    <div className="workspace-page-wide space-y-6">
+      <PageHeader
+        eyebrow="Portefeuille"
+        title="Projets CIR"
+        description={`${organizations.length} organisme${organizations.length > 1 ? "s" : ""} · ${projects.length} dossier${projects.length > 1 ? "s" : ""}`}
+        actions={<><Button variant="outline" onClick={loadProjects}><RefreshCw data-icon="inline-start" />Actualiser</Button><Button onClick={() => navigateTo("new-project")}><PlusCircle data-icon="inline-start" />Nouveau dossier</Button></>}
+      />
 
-        <Button variant="outline" size="sm" onClick={loadProjects}>
-          <RefreshCw className="size-4 mr-2" />
-          Actualiser
-        </Button>
-      </div>
-
-      <div className="relative">
+      <div className="workspace-toolbar">
+        <div className="relative w-full sm:max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
         <Input
           placeholder="Rechercher un organisme ou un dossier..."
@@ -158,57 +153,26 @@ export default function ProjectListPage({ navigateTo }: ProjectListPageProps) {
           onChange={(e) => setSearch(e.target.value)}
           className="pl-10"
         />
+        </div>
       </div>
 
       {loading && (
-        <Card className="border border-border">
-          <CardContent className="p-8 flex items-center justify-center gap-3 text-muted-foreground">
-            <Loader2 className="size-5 animate-spin" />
-            Chargement des projets depuis FastAPI...
-          </CardContent>
-        </Card>
+        <LoadingState label="Chargement des projets…" />
       )}
 
       {error && (
-        <Card className="border border-destructive/30 bg-destructive/10">
-          <CardContent className="p-4 flex items-start gap-3 text-destructive">
-            <AlertCircle className="size-5 mt-0.5" />
-            <div>
-              <p className="font-medium text-sm">
-                Impossible de charger les projets
-              </p>
-              <p className="text-xs mt-1">{error}</p>
-            </div>
-          </CardContent>
-        </Card>
+        <StatusNotice state="failed" title="Impossible de charger les projets" description={error} action={<Button size="sm" variant="outline" onClick={loadProjects}>Réessayer</Button>} />
       )}
 
       {!loading && !error && projects.length === 0 && (
-        <Card className="border border-border">
-          <CardContent className="p-8 text-center">
-            <p className="text-sm font-medium text-foreground">
-              Aucun projet pour ce consultant.
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Créez un nouveau dossier pour commencer.
-            </p>
-
-            <Button
-              className="mt-4 bg-brand hover:bg-brand/90"
-              onClick={() => navigateTo("new-project")}
-            >
-              <PlusCircle className="size-4 mr-2" />
-              Nouveau dossier
-            </Button>
-          </CardContent>
-        </Card>
+        <EmptyState icon={Building2} title="Aucun projet" description="Créez un dossier pour commencer à centraliser les sources CIR." action={<Button onClick={() => navigateTo("new-project")}><PlusCircle data-icon="inline-start" />Nouveau dossier</Button>} />
       )}
 
       {!loading && !error && (
         <div className="space-y-6">
           {filteredOrganizations.map((org) => (
             <div key={org.id} className="space-y-3">
-              <div className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-brand/25 hover:shadow-md">
+              <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 shadow-xs transition-colors hover:border-brand/25">
                 <button
                   type="button"
                   onClick={() => toggleOrg(org.id)}
@@ -231,7 +195,7 @@ export default function ProjectListPage({ navigateTo }: ProjectListPageProps) {
                     size="sm"
                     variant="outline"
                     onClick={() => addProjectForOrganization(org.name)}
-                    className="text-brand border-brand/30 hover:bg-brand/10"
+                    className="hidden border-brand/30 text-brand hover:bg-brand/10 sm:inline-flex"
                   >
                     <PlusCircle className="size-4 mr-2" />
                     Ajouter un projet
@@ -257,7 +221,7 @@ export default function ProjectListPage({ navigateTo }: ProjectListPageProps) {
                     return (
                       <Card
                         key={project.id}
-                        className="border border-border hover-lift animate-fadeIn cursor-pointer"
+                        className="cursor-pointer border border-border animate-fadeIn hover:border-brand/25"
                         onClick={() => openProjectDetail(project.id)}
                       >
                         <CardContent className="p-4">

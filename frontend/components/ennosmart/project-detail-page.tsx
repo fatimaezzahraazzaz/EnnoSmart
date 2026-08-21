@@ -10,6 +10,7 @@ import {
   Clock,
   Database,
   FileText,
+  FilePenLine,
   FolderKanban,
   Loader2,
   RefreshCw,
@@ -32,6 +33,7 @@ import {
   type ProjectRead,
 } from "@/lib/api"
 import { getCurrentProjectId, setCurrentProjectId } from "@/lib/project-session"
+import { WorkflowSteps } from "@/components/ennosmart/workspace-ui"
 
 interface ProjectDetailPageProps {
   navigateTo: (page: AppPage) => void
@@ -204,6 +206,13 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
     navigateTo("upload")
   }
 
+  const openImprovement = () => {
+    if (!selectedProjectId) return
+
+    setCurrentProjectId(selectedProjectId)
+    navigateTo("improvement")
+  }
+
   const importDiagnostic = async () => {
     if (!selectedProjectId) return
 
@@ -325,7 +334,7 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-5 sm:p-7 lg:p-9">
+    <div className="workspace-page-wide space-y-6">
       {/* Header */}
       <div className="ennoma-page-header flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
@@ -435,8 +444,18 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
         </Card>
       </div>
 
+      <WorkflowSteps
+        ariaLabel="Workflow du dossier"
+        steps={[
+          { label: "Sources", detail: `${documents.length} document(s)`, icon: Upload, status: documents.length > 0 ? "complete" : "current", onClick: openUpload },
+          { label: "Diagnostic", detail: "Verrous", icon: BrainCircuit, status: diagnosticState === "ok" ? "complete" : documents.length > 0 ? "current" : "upcoming", onClick: openDiagnosis },
+          { label: "Recherche", detail: "Preuves", icon: BookOpen, status: scholarState === "ok" ? "complete" : diagnosticState === "ok" ? "current" : "upcoming", onClick: openScholar },
+          { label: "Amélioration", detail: "Livrable", icon: FilePenLine, status: scholarState === "ok" ? "current" : "upcoming", onClick: openImprovement },
+        ]}
+      />
+
       {/* Action cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className={statusCardClass(diagnosticState)}>
           <CardHeader>
             <CardTitle className="text-sm flex items-center gap-2">
@@ -450,17 +469,17 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
 
           <CardContent className="space-y-4">
             <div className="grid grid-cols-3 gap-3">
-              <div className="p-3 rounded-md bg-white border border-border text-center">
+              <div className="p-3 rounded-md bg-card border border-border text-center">
                 <p className="text-xs text-muted-foreground">Verrous</p>
                 <p className="text-xl font-bold text-foreground">{overview?.diagnostic.verrous.count || 0}</p>
               </div>
 
-              <div className="p-3 rounded-md bg-white border border-border text-center">
+              <div className="p-3 rounded-md bg-card border border-border text-center">
                 <p className="text-xs text-muted-foreground">Pertinents</p>
                 <p className="text-xl font-bold text-success">{stats.pertinent}</p>
               </div>
 
-              <div className="p-3 rounded-md bg-white border border-border text-center">
+              <div className="p-3 rounded-md bg-card border border-border text-center">
                 <p className="text-xs text-muted-foreground">Moyens</p>
                 <p className="text-xl font-bold text-warning">{stats.moyen}</p>
               </div>
@@ -519,17 +538,17 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
 
           <CardContent className="space-y-4">
             <div className="grid grid-cols-3 gap-3">
-              <div className="p-3 rounded-md bg-white border border-border text-center">
+              <div className="p-3 rounded-md bg-card border border-border text-center">
                 <p className="text-xs text-muted-foreground">Articles</p>
                 <p className="text-xl font-bold text-foreground">{overview?.scholar.articles.count || 0}</p>
               </div>
 
-              <div className="p-3 rounded-md bg-white border border-border text-center">
+              <div className="p-3 rounded-md bg-card border border-border text-center">
                 <p className="text-xs text-muted-foreground">Directs</p>
                 <p className="text-xl font-bold text-success">{stats.direct}</p>
               </div>
 
-              <div className="p-3 rounded-md bg-white border border-border text-center">
+              <div className="p-3 rounded-md bg-card border border-border text-center">
                 <p className="text-xs text-muted-foreground">Hors sujet</p>
                 <p className="text-xl font-bold text-muted-foreground">{stats.horsSujet}</p>
               </div>
@@ -572,6 +591,27 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
                 Importer résultat existant
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <FilePenLine className="size-4 text-brand" />
+              EnnoAmelioration
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Révision contrôlée des sections et du CIR complet à partir des preuves disponibles.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-lg border border-brand/15 bg-brand/[0.045] p-4">
+              <p className="text-sm font-semibold text-foreground">Amélioration guidée</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Conservez l'original, comparez chaque proposition et validez explicitement la version retenue.
+              </p>
+            </div>
+            <Button onClick={openImprovement}>Continuer la rédaction</Button>
           </CardContent>
         </Card>
       </div>

@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import { cn } from "@/lib/utils"
 import {
@@ -11,9 +11,7 @@ import {
   BookOpen,
   Settings,
   LogOut,
-  ChevronRight,
   Menu,
-  Bell,
   PlusCircle,
   PanelLeftClose,
   PanelLeftOpen,
@@ -37,6 +35,12 @@ import AdminPage from "@/components/ennosmart/admin-page"
 import SystemSettingsPage from "@/components/ennosmart/system-settings-page"
 import CirMemoryPage from "@/components/ennosmart/cir-memory-page"
 import type { UserRead } from "@/lib/api"
+import { getProjects, type ProjectRead } from "@/lib/api"
+import {
+  CURRENT_PROJECT_CHANGE_EVENT,
+  getCurrentProjectId,
+} from "@/lib/project-session"
+import { ContextBadge } from "@/components/ennosmart/workspace-ui"
 
 const agentPageLoading = () => (
   <div className="grid min-h-[60vh] place-items-center text-sm text-muted-foreground">
@@ -91,7 +95,6 @@ interface AppShellProps {
 const baseNavItems = [
   { id: "dashboard" as AppPage, label: "Tableau de bord", icon: LayoutDashboard },
   { id: "projects" as AppPage, label: "Projets", icon: FolderKanban },
-  { id: "new-project" as AppPage, label: "Nouveau dossier", icon: PlusCircle },
   { id: "upload" as AppPage, label: "Dépôt de documents", icon: Upload },
   { id: "diagnosis" as AppPage, label: "EnnoDiagnostic", icon: BrainCircuit },
   { id: "scholar" as AppPage, label: "EnnoScholar", icon: BookOpen },
@@ -131,22 +134,84 @@ const secondaryPageLabels: Partial<Record<AppPage, string>> = {
   "project-detail": "Détail du projet",
 }
 
+const pageDescriptions: Partial<Record<AppPage, string>> = {
+  dashboard: "Vue d'ensemble de votre activité CIR",
+  projects: "Portefeuille des dossiers clients",
+  "project-detail": "Contexte, livrables et avancement du dossier",
+  "new-project": "Création d'un nouveau contexte de travail",
+  upload: "Sources documentaires du dossier actif",
+  diagnosis: "Qualification des verrous scientifiques et techniques",
+  scholar: "Recherche, sélection et validation des preuves",
+  improvement: "Amélioration guidée des livrables CIR",
+  admin: "Utilisateurs, rôles et supervision",
+  "cir-memory": "Mémoire contrôlée des connaissances CIR",
+  "system-settings": "Configuration des modèles et du système",
+  profile: "Identité et informations du compte",
+  settings: "Préférences de l'espace de travail",
+}
+
 export default function AppShell({ user, onLogout, onUserUpdated }: AppShellProps) {
   const [activePage, setActivePage] = useState<AppPage>("dashboard")
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [scholarImmersive, setScholarImmersive] = useState(false)
+  const [currentProject, setCurrentProject] = useState<ProjectRead | null>(null)
   const [newProjectPreset, setNewProjectPreset] =
     useState<NewProjectPreset | null>(null)
   const [newProjectReturnTo, setNewProjectReturnTo] =
     useState<AppPage | null>(null)
   const workspaceImmersive = activePage === "improvement" || scholarImmersive
-  const navItems = navigationForRole(user.role)
-  const navGroups = [
-    { label: "Espace", items: navItems.filter((item) => ["dashboard", "projects", "new-project", "upload"].includes(item.id)) },
-    { label: "Agents IA", items: navItems.filter((item) => ["diagnosis", "scholar", "improvement"].includes(item.id)) },
-    { label: "Pilotage", items: navItems.filter((item) => ["admin", "cir-memory", "system-settings"].includes(item.id)) },
-  ].filter((group) => group.items.length > 0)
+  const navItems = useMemo(() => navigationForRole(user.role), [user.role])
+  const navGroups = useMemo(() => {
+    const select = (ids: AppPage[]) => navItems.filter((item) => ids.includes(item.id))
+    if (user.role === "superadmin") {
+      return [
+        { label: "Pilotage", items: select(["dashboard", "projects", "admin"]) },
+        { label: "Intelligence système", items: select(["cir-memory", "system-settings"]) },
+        { label: "Production", items: select(["upload", "diagnosis", "scholar", "improvement"]) },
+      ]
+    }
+    if (user.role === "admin") {
+      return [
+        { label: "Pilotage", items: select(["dashboard", "projects", "admin"]) },
+        { label: "Production", items: select(["upload", "diagnosis", "scholar", "improvement"]) },
+      ]
+    }
+    return [
+      { label: "Mes dossiers", items: select(["dashboard", "projects", "upload"]) },
+      { label: "Workflow IA", items: select(["diagnosis", "scholar", "improvement"]) },
+    ]
+  }, [navItems, user.role])
+  const primarySidebarAction = user.role === "consultant"
+    ? { label: "Nouveau dossier", page: "new-project" as AppPage, icon: PlusCircle }
+    : user.role === "admin"
+      ? { label: "Piloter l'équipe", page: "admin" as AppPage, icon: UsersRound }
+      : { label: "Configurer la plateforme", page: "system-settings" as AppPage, icon: SlidersHorizontal }
+
+  useEffect(() => {
+    let active = true
+
+    const refreshProject = async () => {
+      const projectId = getCurrentProjectId()
+      if (!projectId) {
+        if (active) setCurrentProject(null)
+        return
+      }
+      try {
+        const projects = await getProjects()
+        if (active) setCurrentProject(projects.find((project) => project.id === projectId) ?? null)
+      } catch {
+        if (active) setCurrentProject(null)
+      }
+    }
+
+    void refreshProject()
+    window.addEventListener(CURRENT_PROJECT_CHANGE_EVENT, refreshProject)
+    return () => {
+      active = false
+      window.removeEventListener(CURRENT_PROJECT_CHANGE_EVENT, refreshProject)
+    }
+  }, [])
 
   const handleScholarImmersiveMode = useCallback((immersive: boolean) => {
     setScholarImmersive(immersive)
@@ -248,7 +313,7 @@ export default function AppShell({ user, onLogout, onUserUpdated }: AppShellProp
         <button
           type="button"
           onClick={() => setSidebarCollapsed((current) => !current)}
-          className="hidden size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground lg:inline-flex"
+          className="hidden size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground xl:inline-flex"
           title={collapsed ? "Ouvrir le menu principal" : "Fermer le menu principal"}
           aria-label={collapsed ? "Ouvrir le menu principal" : "Fermer le menu principal"}
         >
@@ -261,6 +326,17 @@ export default function AppShell({ user, onLogout, onUserUpdated }: AppShellProp
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+        <div className={cn("px-1", collapsed && "px-0")}>
+          <Button
+            size={collapsed ? "icon" : "default"}
+            className={cn("w-full", !collapsed && "justify-start")}
+            title={collapsed ? primarySidebarAction.label : undefined}
+            onClick={() => navigateTo(primarySidebarAction.page)}
+          >
+            <primarySidebarAction.icon data-icon="inline-start" />
+            {!collapsed && primarySidebarAction.label}
+          </Button>
+        </div>
         {navGroups.map((group) => (
           <div key={group.label} className="space-y-1">
             {!collapsed && <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">{group.label}</p>}
@@ -273,15 +349,16 @@ export default function AppShell({ user, onLogout, onUserUpdated }: AppShellProp
                   onClick={() => navigateTo(item.id)}
                   title={collapsed ? item.label : undefined}
                   className={cn(
-                    "relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                    "relative flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full",
                     collapsed && "justify-center px-2",
                     isActive
-                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/15"
+                      ? "bg-brand/8 text-brand before:bg-brand"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground",
                   )}
+                  aria-current={isActive ? "page" : undefined}
                 >
                   <Icon className="size-4 flex-shrink-0" />
-                  {!collapsed && <><span className="flex-1 text-left">{item.label}</span>{isActive && <ChevronRight className="size-3 opacity-60" />}</>}
+                  {!collapsed && <span className="flex-1 text-left">{item.label}</span>}
                 </button>
               )
             })}
@@ -352,10 +429,16 @@ export default function AppShell({ user, onLogout, onUserUpdated }: AppShellProp
   )
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-background">
+      <a
+        href="#main-content"
+        className="fixed left-3 top-3 z-[100] -translate-y-20 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground focus:translate-y-0"
+      >
+        Aller au contenu principal
+      </a>
       <aside
         className={cn(
-          "hidden lg:flex flex-col border-r border-border bg-card flex-shrink-0 transition-[width] duration-200",
+          "hidden flex-shrink-0 flex-col border-r border-sidebar-border bg-sidebar shadow-[4px_0_20px_rgb(45_30_70_/_0.035)] transition-[width] duration-200 xl:flex",
           sidebarCollapsed ? "w-[72px]" : "w-60",
         )}
       >
@@ -363,47 +446,52 @@ export default function AppShell({ user, onLogout, onUserUpdated }: AppShellProp
       </aside>
 
       {sidebarOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 xl:hidden">
           <div
-            className="absolute inset-0 bg-foreground/30 backdrop-blur-sm"
+            className="absolute inset-0 bg-slate-950/38 backdrop-blur-[2px]"
             onClick={() => setSidebarOpen(false)}
           />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-card border-r border-border z-10">
+          <aside className="absolute bottom-0 left-0 top-0 z-10 w-64 border-r border-sidebar-border bg-sidebar shadow-2xl">
             <SidebarContent />
           </aside>
         </div>
       )}
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header
           className={cn(
-            "h-16 border-b border-border/70 bg-card/80 backdrop-blur-xl flex items-center px-4 sm:px-6 gap-4 flex-shrink-0",
+            "flex h-16 flex-shrink-0 items-center gap-4 border-b border-border bg-card/95 px-4 backdrop-blur-sm sm:px-6",
             workspaceImmersive && "lg:hidden",
           )}
         >
           <Button
             variant="ghost"
             size="sm"
-            className="lg:hidden size-8 p-0"
+            className="size-8 p-0 xl:hidden"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="size-4" />
             <span className="sr-only">Menu</span>
           </Button>
 
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-foreground">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-foreground">
               {navItems.find((n) => n.id === activePage)?.label ?? secondaryPageLabels[activePage] ?? "Ennoma"}
+            </p>
+            <p className="hidden truncate text-xs text-muted-foreground sm:block">
+              {pageDescriptions[activePage]}
             </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="size-8 p-0 relative">
-              <Bell className="size-4 text-muted-foreground" />
-              <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-brand" />
-              <span className="sr-only">Notifications</span>
-            </Button>
-            <Avatar className="size-7 lg:hidden">
+            {currentProject && (
+              <ContextBadge
+                label="Dossier actif"
+                value={`${currentProject.organisme} · ${currentProject.project_name}`}
+                className="hidden max-w-[320px] md:flex"
+              />
+            )}
+            <Avatar className="size-7 xl:hidden">
               <AvatarFallback className="bg-brand text-brand-foreground text-[10px] font-semibold">
                 {initials}
               </AvatarFallback>
@@ -412,15 +500,17 @@ export default function AppShell({ user, onLogout, onUserUpdated }: AppShellProp
         </header>
 
         <main
+          id="main-content"
+          tabIndex={-1}
           className={cn(
-            "ennoma-workspace relative min-h-0 flex-1 bg-background",
+            "ennoma-workspace relative min-h-0 min-w-0 flex-1 bg-background",
             workspaceImmersive ? "overflow-hidden" : "overflow-y-auto",
           )}
         >
           <div
             key={activePage}
             className={cn(
-              "animate-fadeIn",
+              "w-full min-w-0 animate-fadeIn",
               workspaceImmersive ? "h-full min-h-0 overflow-hidden" : "min-h-full",
             )}
           >

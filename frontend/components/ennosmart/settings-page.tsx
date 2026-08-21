@@ -1,13 +1,14 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Bell, CheckCircle2, KeyRound, Languages, Loader2, MonitorCog, Save } from "lucide-react"
+import { Bell, KeyRound, Languages, Loader2, MonitorCog, Save } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { changePassword, getAccount, updatePreferences, type UserPreferences } from "@/lib/api"
+import { LoadingState, PageHeader, StatusNotice } from "@/components/ennosmart/workspace-ui"
 
 const defaultPreferences: UserPreferences = {
   language: "fr",
@@ -63,13 +64,13 @@ export default function SettingsPage() {
     } catch (err) { setError(err instanceof Error ? err.message : "Modification impossible.") } finally { setSaving(false) }
   }
 
-  if (loading) return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="size-6 animate-spin text-brand" /></div>
+  if (loading) return <LoadingState label="Chargement des paramètres…" />
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-5 sm:p-7 lg:p-9">
-      <div><p className="text-sm font-medium text-brand">Votre espace</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Paramètres</h1><p className="mt-2 text-sm text-muted-foreground">Adaptez Ennoma à votre manière de travailler.</p></div>
-      {message && <div className="flex items-center gap-2 rounded-xl border border-success/25 bg-success/10 p-3 text-sm text-success"><CheckCircle2 className="size-4" />{message}</div>}
-      {error && <div className="rounded-xl border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+    <div className="workspace-page space-y-6">
+      <PageHeader eyebrow="Votre espace" title="Paramètres" description="Adaptez Ennoma à votre manière de travailler." />
+      {message && <StatusNotice state="validated" title={message} />}
+      {error && <StatusNotice state="failed" title="Paramètres indisponibles" description={error} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

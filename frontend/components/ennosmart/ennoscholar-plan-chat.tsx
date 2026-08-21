@@ -137,7 +137,7 @@ function citationText(text: string) {
     /^\[A\d+(?:\s*,\s*A\d+)*\]$/.test(part) ? (
       <span
         key={index}
-        className="mx-0.5 rounded-md bg-blue-50 px-1.5 py-0.5 text-xs font-semibold text-blue-700"
+        className="mx-0.5 rounded-md bg-brand/8 px-1.5 py-0.5 text-xs font-semibold text-brand"
       >
         {part}
       </span>
@@ -187,7 +187,7 @@ function StateOfArtFigure({
     )
   }
   return (
-    <figure className="my-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+    <figure className="my-6 overflow-hidden rounded-xl border border-border bg-card shadow-xs">
       {source ? (
         <img
           src={source}
@@ -195,7 +195,7 @@ function StateOfArtFigure({
           className="mx-auto max-h-[560px] w-auto max-w-full object-contain"
         />
       ) : (
-        <div className="flex h-44 items-center justify-center text-slate-400">
+        <div className="flex h-44 items-center justify-center text-muted-foreground">
           <Loader2 className="size-5 animate-spin" />
         </div>
       )}
@@ -213,13 +213,13 @@ function DraftPreview({
   if (!markdown.trim()) {
     return (
       <div className="flex h-full min-h-[430px] flex-col items-center justify-center px-8 text-center">
-        <div className="rounded-2xl bg-slate-100 p-4 text-slate-500">
+        <div className="rounded-xl bg-muted p-4 text-muted-foreground">
           <FileText className="size-7" />
         </div>
-        <p className="mt-4 font-semibold text-slate-900">
+        <p className="mt-4 font-semibold text-foreground">
           Aucun état de l’art rédigé
         </p>
-        <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
+        <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
           Discutez du plan et des sources dans le chat. L’artefact s’ouvrira
           automatiquement dès qu’une rédaction sera disponible.
         </p>
@@ -229,7 +229,7 @@ function DraftPreview({
 
   return (
     <article className="mx-auto max-w-3xl px-6 py-8">
-      <div className="space-y-2 text-[14px] leading-7 text-slate-700">
+      <div className="space-y-2 text-[14px] leading-7 text-foreground/85">
         {markdown.split(/\n/).map((raw, index) => {
           const line = raw.trim()
           if (!line) return <div key={index} className="h-2" />
@@ -250,7 +250,7 @@ function DraftPreview({
             return (
               <h1
                 key={index}
-                className="mb-6 text-2xl font-bold tracking-tight text-slate-950"
+                className="mb-6 text-2xl font-bold tracking-tight text-foreground"
               >
                 {line.slice(2)}
               </h1>
@@ -260,7 +260,7 @@ function DraftPreview({
             return (
               <h2
                 key={index}
-                className="mb-3 mt-9 border-b border-slate-200 pb-2 text-xl font-semibold text-slate-950"
+                className="mb-3 mt-9 border-b border-border pb-2 text-xl font-semibold text-foreground"
               >
                 {line.slice(3)}
               </h2>
@@ -270,7 +270,7 @@ function DraftPreview({
             return (
               <h3
                 key={index}
-                className="mb-2 mt-7 text-base font-semibold text-slate-900"
+                className="mb-2 mt-7 text-base font-semibold text-foreground"
               >
                 {line.slice(4)}
               </h3>
@@ -278,14 +278,14 @@ function DraftPreview({
           }
           if (line.startsWith("- ")) {
             return (
-              <p key={index} className="ml-4 border-l-2 border-blue-200 pl-3">
+              <p key={index} className="ml-4 border-l-2 border-brand/25 pl-3">
                 {citationText(line.slice(2))}
               </p>
             )
           }
           if (line.startsWith("*") && line.endsWith("*")) {
             return (
-              <p key={index} className="mb-5 text-center text-xs italic leading-5 text-slate-500">
+              <p key={index} className="mb-5 text-center text-xs italic leading-5 text-muted-foreground">
                 {citationText(line.slice(1, -1))}
               </p>
             )
@@ -342,14 +342,14 @@ function CandidateCard({
   const consultationUrl = candidate.pdf_url || candidate.url
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge
           variant="outline"
           className={
             documentation
               ? "border-violet-200 bg-violet-50 text-violet-700"
-              : "border-blue-200 bg-blue-50 text-blue-700"
+              : "border-brand/25 bg-brand/8 text-brand"
           }
         >
           {documentation ? (
@@ -363,10 +363,10 @@ function CandidateCard({
         {candidate.open_access && <Badge variant="outline">Accès public</Badge>}
       </div>
 
-      <p className="mt-3 text-sm font-semibold leading-5 text-slate-950">
+      <p className="mt-3 text-sm font-semibold leading-5 text-foreground">
         {candidate.title || "Source sans titre"}
       </p>
-      <p className="mt-1 text-xs text-slate-500">
+      <p className="mt-1 text-xs text-muted-foreground">
         {[
           candidate.authors?.slice(0, 2).join(", "),
           candidate.year,
@@ -376,12 +376,12 @@ function CandidateCard({
           .join(" — ")}
       </p>
       {candidate.abstract && (
-        <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-600">
+        <p className="mt-2 line-clamp-3 text-xs leading-5 text-muted-foreground">
           {candidate.abstract}
         </p>
       )}
       {candidate.role_reason && (
-        <p className="mt-2 rounded-xl bg-slate-50 p-2.5 text-xs leading-5 text-slate-600">
+        <p className="mt-2 rounded-lg bg-muted/60 p-2.5 text-xs leading-5 text-muted-foreground">
           {candidate.role_reason}
         </p>
       )}
@@ -392,7 +392,7 @@ function CandidateCard({
             href={consultationUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex h-8 items-center rounded-lg px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+            className="inline-flex h-8 items-center rounded-lg px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <ExternalLink className="mr-1 size-3" />
             {pendingExtraction ? "Télécharger / consulter" : "Consulter"}
@@ -516,8 +516,8 @@ function CorpusDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="border-b bg-slate-50 px-6 py-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="border-b bg-muted/40 px-6 py-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Ajouter une nouvelle source
           </p>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -570,7 +570,7 @@ function CorpusDialog({
               Importer un PDF
             </Button>
           </div>
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-xs text-muted-foreground">
             Les candidats apparaîtront dans le chat. Cliquez ensuite sur
             « Garder et extraire » pour lancer les phases 1 et 2. Seuls les
             articles réellement extraits entrent dans le corpus. Un PDF importé
@@ -581,9 +581,9 @@ function CorpusDialog({
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
           {articles.length === 0 ? (
             <div className="rounded-2xl border border-dashed p-10 text-center">
-              <Library className="mx-auto size-7 text-slate-400" />
+              <Library className="mx-auto size-7 text-muted-foreground" />
               <p className="mt-3 font-medium">Le corpus est vide</p>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Recherchez puis validez une première source scientifique.
               </p>
             </div>
@@ -605,16 +605,16 @@ function CorpusDialog({
                 return (
                 <div
                   key={article.id}
-                  className="flex items-start gap-3 rounded-2xl border border-slate-200 p-3"
+                  className="flex items-start gap-3 rounded-xl border border-border p-3"
                 >
-                  <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-xs font-semibold text-blue-700">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/8 text-xs font-semibold text-brand">
                     {index + 1}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold leading-5 text-slate-950">
+                    <p className="text-sm font-semibold leading-5 text-foreground">
                       {article.title}
                     </p>
-                    <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-slate-500">
+                    <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
                       {article.year && <span>{article.year}</span>}
                       {article.tag_article && (
                         <Badge variant="outline" className="h-5 text-[10px]">
@@ -1214,18 +1214,18 @@ export function EnnoScholarPlanChat({
       <div
         className={
           immersive
-            ? "relative flex h-full min-h-0 overflow-hidden bg-white"
-            : "relative flex h-[calc(100dvh-205px)] min-h-[520px] max-h-[900px] overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm"
+            ? "improvement-workspace relative flex h-full min-h-0 overflow-hidden"
+            : "improvement-workspace relative flex h-[calc(100dvh-205px)] min-h-[520px] max-h-[900px] overflow-hidden rounded-xl border border-border shadow-xs"
         }
       >
         <aside
-          className={`w-[252px] shrink-0 flex-col border-r border-slate-200 bg-[#f7f7f8] ${
+          className={`w-[252px] shrink-0 flex-col border-r border-border bg-card/90 ${
             artifactOpen ? "hidden 2xl:flex" : "hidden lg:flex"
           }`}
         >
-          <div className="border-b border-slate-200 p-3">
+          <div className="border-b border-border p-3">
             <Button
-              className="w-full justify-start rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+              className="w-full justify-start"
               onClick={() => void createConversation()}
               disabled={initializing}
             >
@@ -1238,8 +1238,8 @@ export function EnnoScholarPlanChat({
               onClick={() => hasDraft && setArtifactOpen((current) => !current)}
               className={`mt-2 flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition ${
                 hasDraft
-                  ? "border-blue-200 bg-blue-50 text-blue-950 hover:bg-blue-100"
-                  : "cursor-default border-slate-200 bg-white text-slate-400"
+                  ? "border-brand/25 bg-brand/8 text-brand hover:bg-brand/10"
+                  : "cursor-default border-border bg-card text-muted-foreground"
               }`}
             >
               <span className="flex items-center gap-2 text-sm font-medium">
@@ -1261,10 +1261,10 @@ export function EnnoScholarPlanChat({
             <button
               type="button"
               onClick={() => setCorpusOpen(true)}
-              className="mt-2 flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left hover:bg-slate-50"
+              className="mt-2 flex w-full items-center justify-between rounded-xl border border-border bg-card px-3 py-2.5 text-left hover:bg-muted/50"
             >
-              <span className="flex items-center gap-2 text-sm font-medium text-slate-800">
-                <Library className="size-4 text-blue-600" />
+              <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Library className="size-4 text-brand" />
                 Corpus
               </span>
               <Badge variant="outline">{conversationArticles.length}</Badge>
@@ -1272,7 +1272,7 @@ export function EnnoScholarPlanChat({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
-            <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+            <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               Conversations
             </p>
             <div className="space-y-1">
@@ -1283,8 +1283,8 @@ export function EnnoScholarPlanChat({
                     key={session.session_id}
                     className={`group flex items-start rounded-xl transition ${
                       active
-                        ? "bg-white shadow-sm ring-1 ring-slate-200"
-                        : "hover:bg-white/80"
+                        ? "bg-brand/8 ring-1 ring-brand/15"
+                        : "hover:bg-muted/60"
                     }`}
                   >
                     <button
@@ -1292,10 +1292,10 @@ export function EnnoScholarPlanChat({
                       onClick={() => void openSession(session.session_id)}
                       className="min-w-0 flex-1 px-3 py-2.5 text-left"
                     >
-                      <p className="line-clamp-2 text-sm font-medium leading-5 text-slate-800">
+                      <p className="line-clamp-2 text-sm font-medium leading-5 text-foreground">
                         {sessionLabel(session)}
                       </p>
-                      <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                      <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                         <span>{formatSessionDate(session.updated_at)}</span>
                         <span>{session.message_count || 0} msg.</span>
                       </div>
@@ -1319,18 +1319,18 @@ export function EnnoScholarPlanChat({
             </div>
           </div>
 
-          <div className="border-t border-slate-200 p-3">
-            <p className="truncate text-xs font-medium text-slate-700">
+          <div className="border-t border-border p-3">
+            <p className="truncate text-xs font-medium text-foreground">
               {projectLabel}
             </p>
-            <p className="mt-0.5 text-[11px] text-slate-400">
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
               Les conversations restent attachées à ce projet.
             </p>
           </div>
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col bg-white">
-          <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 px-4 sm:px-6">
+        <main className="flex min-w-0 flex-1 flex-col bg-card/75">
+          <header className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-card/90 px-4 backdrop-blur-sm sm:px-6">
             <div className="flex min-w-0 items-center gap-3">
               <Button
                 variant="ghost"
@@ -1342,7 +1342,7 @@ export function EnnoScholarPlanChat({
                 <Menu className="size-4" />
               </Button>
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-950">
+                <p className="truncate text-sm font-semibold text-foreground">
                   {sessionLabel(
                     sessions.find((session) => session.session_id === sessionId) ||
                       ({
@@ -1354,7 +1354,7 @@ export function EnnoScholarPlanChat({
                       } as GuidedResearchSession),
                   )}
                 </p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">
                   Conversation scientifique · mémoire du projet active
                 </p>
               </div>
@@ -1365,7 +1365,7 @@ export function EnnoScholarPlanChat({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="hidden rounded-xl text-slate-600 sm:inline-flex"
+                  className="hidden rounded-xl text-muted-foreground sm:inline-flex"
                   onClick={onBackToArticles}
                 >
                   <ChevronLeft className="mr-1 size-4" />
@@ -1378,7 +1378,7 @@ export function EnnoScholarPlanChat({
                   onChange={(event) =>
                     void onProjectChange(Number(event.target.value))
                   }
-                  className="hidden h-9 max-w-56 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-700 xl:block"
+                  className="hidden h-9 max-w-56 rounded-lg border border-border bg-card px-3 text-xs text-foreground xl:block"
                   aria-label="Changer de projet"
                 >
                   {projectOptions.map((option) => (
@@ -1391,9 +1391,9 @@ export function EnnoScholarPlanChat({
               <button
                 type="button"
                 onClick={() => setCorpusOpen(true)}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground shadow-xs hover:border-brand/25 hover:bg-brand/5"
               >
-                <Library className="size-4 text-blue-600" />
+                <Library className="size-4 text-brand" />
                 <span className="hidden sm:inline">Corpus de rédaction</span>
                 <Badge variant="outline">{conversationArticles.length}</Badge>
                 {preparingCorpus && <Loader2 className="size-3.5 animate-spin" />}
@@ -1421,16 +1421,16 @@ export function EnnoScholarPlanChat({
             <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6">
               {messages.length === 0 && !initializing ? (
                 <div className="flex min-h-[360px] flex-col items-center justify-center text-center">
-                  <div className="rounded-2xl bg-slate-900 p-3 text-white">
+                  <div className="rounded-xl border border-brand/15 bg-brand/8 p-3 text-brand">
                     <MessageSquareText className="size-6" />
                   </div>
-                  <h2 className="mt-4 text-xl font-semibold tracking-tight text-slate-950">
+                  <h2 className="mt-4 text-xl font-semibold tracking-tight text-foreground">
                     Comment voulez-vous construire l’état de l’art ?
                   </h2>
-                  <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
                     Parlez naturellement du plan, des articles à rechercher, des
                     verrous ou du niveau d’argumentation. La rédaction reste
-                    disponible comme artefact latéral.
+                    reste disponible comme livrable dans le panneau latéral.
                   </p>
                   <div className="mt-5 flex flex-wrap justify-center gap-2">
                     {[
@@ -1442,7 +1442,7 @@ export function EnnoScholarPlanChat({
                         key={suggestion}
                         type="button"
                         onClick={() => setInput(suggestion)}
-                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50"
+                        className="rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground hover:border-brand/25 hover:bg-brand/5 hover:text-foreground"
                       >
                         {suggestion}
                       </button>
@@ -1460,15 +1460,15 @@ export function EnnoScholarPlanChat({
                       }`}
                     >
                       {!consultant && (
-                        <div className="mt-0.5 h-fit rounded-full bg-slate-900 p-2 text-white">
+                        <div className="mt-0.5 h-fit rounded-full bg-brand/10 p-2 text-brand">
                           <Bot className="size-3.5" />
                         </div>
                       )}
                       <div
                         className={`max-w-[88%] whitespace-pre-wrap text-sm leading-7 ${
                           consultant
-                            ? "rounded-3xl rounded-br-md bg-[#f4f4f4] px-4 py-2.5 text-slate-900"
-                            : "py-1 text-slate-800"
+                            ? "rounded-2xl rounded-br-md border border-brand/10 bg-brand/8 px-4 py-2.5 text-foreground"
+                            : "py-1 text-foreground"
                         }`}
                       >
                         {citationText(message.content)}
@@ -1479,8 +1479,8 @@ export function EnnoScholarPlanChat({
               )}
 
               {candidates.length > 0 && (
-                <div className="space-y-3 border-t border-slate-200 pt-5">
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                <div className="space-y-3 border-t border-border pt-5">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                     <Search className="size-3.5" />
                     Sources proposées · {candidates.length}
                   </div>
@@ -1499,7 +1499,7 @@ export function EnnoScholarPlanChat({
               )}
 
               {(initializing || loading || generating) && (
-                <div className="flex items-center gap-2 py-2 text-sm text-slate-500">
+                <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
                   {generating
                     ? "Rédaction argumentée en cours…"
@@ -1508,26 +1508,26 @@ export function EnnoScholarPlanChat({
               )}
 
               {notice && (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <div className="rounded-xl border border-success/25 bg-success/8 px-4 py-3 text-sm text-success">
                   {notice}
                 </div>
               )}
               {error && (
-                <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                <div className="rounded-xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive">
                   {error}
                 </div>
               )}
               {generationError && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <div className="rounded-xl border border-warning/25 bg-warning/8 px-4 py-3 text-sm text-warning-foreground">
                   {generationError}
                 </div>
               )}
             </div>
           </div>
 
-          <div className="shrink-0 border-t border-slate-100 bg-white px-4 pb-4 pt-3 sm:px-6">
+          <div className="shrink-0 border-t border-border bg-card/95 px-4 pb-4 pt-3 backdrop-blur-sm sm:px-6">
             <div className="mx-auto max-w-3xl">
-              <div className="rounded-[24px] border border-slate-300 bg-white p-2 shadow-[0_8px_28px_rgba(15,23,42,0.08)] focus-within:border-slate-400">
+              <div className="rounded-xl border border-input bg-card p-2 shadow-sm focus-within:border-brand focus-within:ring-3 focus-within:ring-brand/10">
                 <Textarea
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
@@ -1546,7 +1546,7 @@ export function EnnoScholarPlanChat({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="rounded-xl text-xs text-slate-500"
+                    className="rounded-xl text-xs text-muted-foreground"
                     onClick={() => setCorpusOpen(true)}
                   >
                     <FilePlus2 className="mr-1.5 size-4" />
@@ -1555,7 +1555,7 @@ export function EnnoScholarPlanChat({
                   <Button
                     type="button"
                     size="icon"
-                    className="rounded-full bg-slate-900 hover:bg-slate-800"
+                    className="rounded-full"
                     disabled={!canSend}
                     onClick={() => void submitMessage()}
                     aria-label="Envoyer le message"
@@ -1568,7 +1568,7 @@ export function EnnoScholarPlanChat({
                   </Button>
                 </div>
               </div>
-              <p className="mt-2 text-center text-[11px] text-slate-400">
+              <p className="mt-2 text-center text-[11px] text-muted-foreground">
                 Entrée pour envoyer · Maj + Entrée pour une nouvelle ligne
               </p>
             </div>
@@ -1576,15 +1576,15 @@ export function EnnoScholarPlanChat({
         </main>
 
         {artifactOpen && (
-          <aside className="absolute inset-y-0 right-0 z-30 flex w-[min(94vw,620px)] shrink-0 flex-col border-l border-slate-200 bg-[#fafafa] shadow-2xl lg:w-[min(70%,620px)] 2xl:static 2xl:z-auto 2xl:w-[min(40vw,620px)] 2xl:shadow-none">
-            <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
+          <aside className="absolute inset-y-0 right-0 z-30 flex w-[min(94vw,620px)] shrink-0 flex-col border-l border-border bg-muted/30 shadow-2xl lg:w-[min(70%,620px)] 2xl:static 2xl:z-auto 2xl:w-[min(40vw,620px)] 2xl:shadow-none">
+            <header className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-card px-4">
               <div>
-                <p className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-                  <FileText className="size-4 text-blue-600" />
+                <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <FileText className="size-4 text-brand" />
                   État de l’art
                 </p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Artefact rédigé · {wordCount.toLocaleString("fr-FR")} mots
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Livrable rédigé · {wordCount.toLocaleString("fr-FR")} mots
                 </p>
               </div>
               <div className="flex items-center gap-1">
@@ -1613,7 +1613,7 @@ export function EnnoScholarPlanChat({
                   variant="ghost"
                   size="icon"
                   onClick={() => setArtifactOpen(false)}
-                  title="Fermer l’artefact"
+                  title="Fermer le livrable"
                 >
                   <PanelRightClose className="size-4" />
                 </Button>
@@ -1633,10 +1633,10 @@ export function EnnoScholarPlanChat({
             type="button"
             onClick={() => hasDraft && setArtifactOpen(true)}
             disabled={!hasDraft}
-            className={`hidden w-14 shrink-0 flex-col items-center justify-center gap-3 border-l border-slate-200 2xl:flex ${
+            className={`hidden w-14 shrink-0 flex-col items-center justify-center gap-3 border-l border-border 2xl:flex ${
               hasDraft
-                ? "bg-slate-50 text-slate-600 hover:bg-blue-50 hover:text-blue-700"
-                : "cursor-not-allowed bg-slate-50 text-slate-300"
+                ? "bg-muted/40 text-muted-foreground hover:bg-brand/8 hover:text-brand"
+                : "cursor-not-allowed bg-muted/30 text-muted-foreground/40"
             }`}
             title={hasDraft ? "Ouvrir l’état de l’art" : "Aucun état de l’art rédigé"}
           >
@@ -1673,7 +1673,7 @@ export function EnnoScholarPlanChat({
           </SheetHeader>
           <div className="border-b p-3">
             <Button
-              className="w-full justify-start rounded-xl bg-slate-900 text-white"
+              className="w-full justify-start"
               onClick={() => {
                 setMobileSidebarOpen(false)
                 void createConversation()
@@ -1692,7 +1692,7 @@ export function EnnoScholarPlanChat({
               }}
             >
               <span className="flex items-center gap-2">
-                <Library className="size-4 text-blue-600" />
+                <Library className="size-4 text-brand" />
                 Corpus de rédaction
               </span>
               <Badge variant="outline">{conversationArticles.length}</Badge>

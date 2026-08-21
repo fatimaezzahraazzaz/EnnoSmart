@@ -10,7 +10,6 @@ import {
   Loader2,
   LockKeyhole,
   ShieldCheck,
-  Sparkles,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -178,28 +177,25 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const copy = modeCopy[mode]
 
   return (
-    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[minmax(420px,0.92fr)_1.08fr]">
-      <aside className="relative hidden min-h-screen overflow-hidden bg-[#2a0b63] p-12 text-white lg:flex lg:flex-col lg:justify-between">
-        <div className="absolute -right-36 -top-32 size-[430px] rounded-full bg-fuchsia-400/20 blur-3xl" />
-        <div className="absolute -bottom-48 -left-20 size-[520px] rounded-full bg-violet-400/20 blur-3xl" />
-
-        <div className="relative flex items-center gap-3">
+    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[minmax(420px,0.9fr)_1.1fr]">
+      <aside className="hidden min-h-screen border-r border-border bg-muted/35 p-12 text-foreground lg:flex lg:flex-col lg:justify-between">
+        <div className="flex items-center gap-3">
           <img src="/ennoma-logo.png" alt="Logo Ennoma" className="size-12 rounded-[14px] shadow-xl shadow-black/20" />
           <div>
             <p className="text-xl font-bold tracking-tight">Ennoma</p>
-            <p className="text-xs text-violet-200">Intelligence CIR multi-agents</p>
+            <p className="text-xs text-muted-foreground">Intelligence CIR multi-agents</p>
           </div>
         </div>
 
-        <div className="relative max-w-xl space-y-8">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-violet-100 backdrop-blur">
-            <Sparkles className="size-3.5" /> Une expertise augmentée, jamais remplacée
+        <div className="max-w-xl space-y-8">
+          <div className="inline-flex items-center gap-2 rounded-full border border-brand/20 bg-brand/8 px-3 py-1.5 text-xs font-medium text-brand">
+            <ShieldCheck className="size-3.5" /> Espace de travail contrôlé
           </div>
           <div className="space-y-4">
-            <h1 className="max-w-lg text-5xl font-semibold leading-[1.08] tracking-[-0.04em]">
+            <h1 className="max-w-lg text-4xl font-semibold leading-[1.1] tracking-[-0.04em]">
               Pilotez chaque dossier CIR avec précision.
             </h1>
-            <p className="max-w-lg text-base leading-7 text-violet-100/75">
+            <p className="max-w-lg text-base leading-7 text-muted-foreground">
               Diagnostic, recherche scientifique, amélioration rédactionnelle et mémoire d’entreprise réunis dans un espace clair, traçable et sécurisé.
             </p>
           </div>
@@ -210,15 +206,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               ["100%", "traçable"],
               ["CIR", "de bout en bout"],
             ].map(([value, label]) => (
-              <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.07] p-4 backdrop-blur-sm">
+              <div key={label} className="rounded-xl border border-border bg-card p-4 shadow-xs">
                 <p className="text-xl font-semibold">{value}</p>
-                <p className="mt-1 text-xs text-violet-200/75">{label}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{label}</p>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="relative flex items-center gap-2 text-xs text-violet-200/70">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <ShieldCheck className="size-4" /> Accès chiffré et contrôlé par rôle
         </div>
       </aside>

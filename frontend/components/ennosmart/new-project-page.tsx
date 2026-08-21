@@ -617,7 +617,7 @@ export default function NewProjectPage({
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-5 sm:p-7 lg:p-9">
+    <div className="workspace-page space-y-6">
       <div className="ennoma-page-header">
         <Button
           variant="ghost"

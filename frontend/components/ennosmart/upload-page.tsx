@@ -118,7 +118,6 @@ function buildPdfDownloadName(originalName: string) {
 }
 
 export default function UploadPage({ navigateTo }: UploadPageProps) {
-  const [projects, setProjects] = useState<ProjectRead[]>([])
   const [project, setProject] = useState<ProjectRead | null>(null)
   const [documents, setDocuments] = useState<DocumentRead[]>([])
   const [localFiles, setLocalFiles] = useState<LocalFileItem[]>([])
@@ -147,8 +146,6 @@ export default function UploadPage({ navigateTo }: UploadPageProps) {
 
     try {
       const projectList = await getProjects()
-      setProjects(projectList)
-
       if (projectList.length === 0) {
         setProject(null)
         setDocuments([])
@@ -465,7 +462,7 @@ export default function UploadPage({ navigateTo }: UploadPageProps) {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-5 sm:p-7 lg:p-9">
+    <div className="workspace-page space-y-6">
       <div className="ennoma-page-header flex flex-wrap items-start justify-between gap-4">
         <div>
           <Button

@@ -19,6 +19,7 @@ import {
   Cloud,
 } from "lucide-react"
 import PowerAutomateImportPanel from "@/components/ennosmart/sharepoint-audit-panel"
+import { PageHeader, StatusNotice } from "@/components/ennosmart/workspace-ui"
 
 type MemorySource = {
   file_name: string
@@ -159,17 +160,17 @@ function labelForRole(role: string): string {
 
 function Pill({ children, tone = "slate" }: { children: React.ReactNode; tone?: "slate" | "green" | "amber" | "violet" }) {
   const tones = {
-    slate: "border-slate-200 bg-slate-50 text-slate-600",
-    green: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    amber: "border-amber-200 bg-amber-50 text-amber-700",
-    violet: "border-violet-200 bg-violet-50 text-violet-700",
+    slate: "border-border bg-muted/50 text-muted-foreground",
+    green: "border-success/25 bg-success/8 text-success",
+    amber: "border-warning/25 bg-warning/8 text-warning-foreground",
+    violet: "border-brand/25 bg-brand/8 text-brand",
   }
   return <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${tones[tone]}`}>{children}</span>
 }
 
 function PrimaryButton({ children, onClick, disabled, type = "button" }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean; type?: "button" | "submit" }) {
   return (
-    <button type={type} onClick={onClick} disabled={disabled} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50">
+    <button type={type} onClick={onClick} disabled={disabled} className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 focus-visible:ring-3 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50">
       {children}
     </button>
   )
@@ -177,7 +178,7 @@ function PrimaryButton({ children, onClick, disabled, type = "button" }: { child
 
 function SecondaryButton({ children, onClick, disabled }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean }) {
   return (
-    <button type="button" onClick={onClick} disabled={disabled} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-800 disabled:cursor-not-allowed disabled:opacity-50">
+    <button type="button" onClick={onClick} disabled={disabled} className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-xs transition-colors hover:border-brand/25 hover:bg-brand/5 focus-visible:ring-3 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50">
       {children}
     </button>
   )
@@ -185,12 +186,12 @@ function SecondaryButton({ children, onClick, disabled }: { children: React.Reac
 
 function StatCard({ icon, label, value, hint }: { icon: React.ReactNode; label: string; value: string; hint: string }) {
   return (
-    <div className="rounded-2xl border border-violet-100 bg-white p-4 shadow-[0_12px_32px_rgba(50,20,90,.05)]">
+    <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
       <div className="flex items-start justify-between gap-3">
-        <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-slate-400">{label}</p><p className="mt-2 text-2xl font-bold tracking-tight text-slate-900">{value}</p></div>
-        <div className="rounded-xl bg-violet-50 p-2.5 text-violet-700">{icon}</div>
+        <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-bold tracking-tight text-foreground">{value}</p></div>
+        <div className="rounded-lg bg-brand/8 p-2.5 text-brand">{icon}</div>
       </div>
-      <p className="mt-2 text-xs text-slate-500">{hint}</p>
+      <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
     </div>
   )
 }
@@ -351,24 +352,14 @@ export default function CirMemoryPage() {
   const agentsConnected = catalog ? Object.values(catalog.ai_connections).filter((value) => value === true).length : 0
 
   return (
-    <div className="min-h-full bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,.08),transparent_28%)] p-4 sm:p-7 lg:p-9">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <header className="overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_80%_5%,rgba(216,180,254,.28),transparent_25%),linear-gradient(125deg,#240747,#51209a_56%,#7c3aed)] px-6 py-7 text-white shadow-xl shadow-violet-950/15 sm:px-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <div className="mb-4 flex items-center gap-3">
-                <img src="/ennoma-logo.png" alt="Ennoma" className="size-11 rounded-[13px] shadow-lg" />
-                <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-violet-100">Memory V2 · CIR validés</span>
-              </div>
-              <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Mémoire CIR</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-violet-100 sm:text-base">La base d’expérience commune du cabinet : style de rédaction, comparaison historique et projets similaires pour les agents Ennoma.</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-2"><ShieldCheck className="size-4" /> CIR finaux validés uniquement</span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-emerald-100"><span className="size-2 rounded-full bg-emerald-300" /> {catalog?.vector_db.exists ? "Chroma connecté" : "Chroma absent"}</span>
-            </div>
-          </div>
-        </header>
+    <div className="workspace-page-wide min-h-full space-y-6">
+        <PageHeader
+          eyebrow="Memory V2 · CIR validés"
+          title="Mémoire CIR"
+          description="La base d'expérience commune du cabinet : style de rédaction, comparaison historique et projets similaires pour les agents Ennoma."
+          icon={Database}
+          context={<><span className="inline-flex items-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="size-4 text-brand" />CIR finaux validés uniquement</span><span className={`inline-flex items-center gap-2 text-xs font-medium ${catalog?.vector_db.exists ? "text-success" : "text-warning-foreground"}`}><span className="size-2 rounded-full bg-current" />{catalog?.vector_db.exists ? "Chroma connecté" : "Chroma absent"}</span></>}
+        />
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard icon={<Building2 className="size-5" />} label="Entreprises" value={formatNumber(stats?.organisms_count)} hint="Bases d’expérience partagées" />
@@ -377,17 +368,17 @@ export default function CirMemoryPage() {
           <StatCard icon={<BrainCircuit className="size-5" />} label="Agents reliés" value={`${agentsConnected}/3`} hint="Diagnostic, comparaison, style" />
         </div>
 
-        {notice && <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"><CheckCircle2 className="mt-0.5 size-4 shrink-0" /><span>{notice}</span></div>}
-        {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</div>}
+        {notice && <StatusNotice state="validated" title={notice} />}
+        {error && <StatusNotice state="failed" title="Opération impossible" description={error} />}
 
-        <nav className="flex w-full gap-1 rounded-2xl border border-violet-100 bg-white p-1.5 shadow-sm sm:w-fit">
+        <nav className="flex w-full gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1.5 shadow-xs sm:w-fit">
           {([
             ["library", "Bibliothèque", Database],
             ["add", "Ajouter un CIR", UploadCloud],
             ["power-automate", "Collecte automatique", Cloud],
             ["search", "Recherche", Search],
           ] as const).map(([value, label, Icon]) => (
-            <button key={value} onClick={() => setTab(value)} className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition sm:flex-none ${tab === value ? "bg-violet-700 text-white shadow-sm" : "text-slate-600 hover:bg-violet-50 hover:text-violet-800"}`}>
+            <button key={value} onClick={() => setTab(value)} className={`flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors sm:flex-none ${tab === value ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-brand/5 hover:text-foreground"}`}>
               <Icon className="size-4" />{label}
             </button>
           ))}
@@ -476,7 +467,6 @@ export default function CirMemoryPage() {
           <summary className="cursor-pointer font-semibold text-slate-700">État technique de Memory V2</summary>
           <div className="mt-4 grid gap-4 lg:grid-cols-2"><div className="rounded-xl bg-slate-50 p-4"><p className="font-semibold text-slate-800">Connexions IA</p><div className="mt-3 space-y-2 text-xs"><p>EnnoDiagnostic : {catalog?.ai_connections.ennodiagnostic ? "connecté" : "absent"}</p><p>Comparaison CIR : {catalog?.ai_connections.cir_comparison ? "connectée" : "absente"}</p><p>Style rédactionnel : {catalog?.ai_connections.writing_style ? "connecté" : "absent"}</p></div></div><div className="rounded-xl bg-slate-50 p-4"><p className="font-semibold text-slate-800">Source unique</p><p className="mt-2 break-all text-xs text-slate-500">{catalog?.paths.v2_root}</p><p className="mt-1 break-all text-xs text-slate-500">Collection : {catalog?.vector_db.collection}</p><div className="mt-3"><SecondaryButton onClick={rebuild} disabled={loading}><RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />Reconstruire l’index</SecondaryButton></div></div></div>
         </details>
-      </div>
     </div>
   )
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Building2, CheckCircle2, Loader2, Mail, Phone, Save, ShieldCheck, UserRound } from "lucide-react"
+import { Building2, Loader2, Mail, Phone, Save, ShieldCheck, UserRound } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { getAccount, getProjects, updateProfile, type AccountRead, type UserRead } from "@/lib/api"
+import { LoadingState, PageHeader, StatusNotice } from "@/components/ennosmart/workspace-ui"
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "EN"
@@ -80,15 +81,16 @@ export default function ProfilePage({
   }
 
   if (loading) {
-    return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="size-6 animate-spin text-brand" /></div>
+    return <LoadingState label="Chargement du profil…" />
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-5 sm:p-7 lg:p-9">
-      <section className="overflow-hidden rounded-3xl border bg-card shadow-sm">
-        <div className="h-28 bg-[linear-gradient(120deg,#2a0b63,#6d28d9_55%,#a855f7)]" />
+    <div className="workspace-page space-y-6">
+      <PageHeader eyebrow="Compte" title="Mon profil" description="Gérez les informations utilisées dans votre espace et vos affectations." />
+      <section className="overflow-hidden rounded-xl border bg-card shadow-xs">
+        <div className="h-10 border-b bg-[linear-gradient(120deg,rgba(107,72,135,.10),rgba(107,72,135,.025)_55%,transparent)]" />
         <div className="flex flex-col gap-5 px-6 pb-6 sm:flex-row sm:items-end">
-          <Avatar className="-mt-12 size-24 border-4 border-card shadow-lg">
+          <Avatar className="-mt-7 size-20 border-4 border-card shadow-md">
             <AvatarFallback className="bg-brand text-2xl font-semibold text-white">{initials(account?.user.full_name || user.full_name)}</AvatarFallback>
           </Avatar>
           <div className="flex-1 sm:pb-1">
@@ -112,8 +114,8 @@ export default function ProfilePage({
             <CardDescription>Ces informations personnalisent votre espace et les affectations de projet.</CardDescription>
           </CardHeader>
           <CardContent>
-            {message && <div className="mb-5 flex items-center gap-2 rounded-xl border border-success/25 bg-success/10 p-3 text-sm text-success"><CheckCircle2 className="size-4" />{message}</div>}
-            {error && <div className="mb-5 rounded-xl border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+            {message && <StatusNotice className="mb-5" state="validated" title={message} />}
+            {error && <StatusNotice className="mb-5" state="failed" title="Enregistrement impossible" description={error} />}
             <form onSubmit={save} className="space-y-5">
               <div className="grid gap-5 sm:grid-cols-2">
                 <div className="space-y-2"><Label htmlFor="profile-name">Nom complet</Label><div className="relative"><UserRound className="absolute left-3 top-3 size-4 text-muted-foreground" /><Input id="profile-name" className="h-10 pl-9" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required /></div></div>

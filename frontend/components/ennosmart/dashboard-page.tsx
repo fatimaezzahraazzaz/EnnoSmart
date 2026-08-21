@@ -2,17 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
-  AlertCircle,
   ArrowRight,
   BarChart3,
   BookOpen,
   BrainCircuit,
   Building2,
-  CheckCircle2,
   FileText,
   FilePenLine,
   FolderKanban,
-  Loader2,
   RefreshCw,
   Sparkles,
   Upload,
@@ -21,7 +18,16 @@ import {
 import { AppPage } from "@/components/ennosmart/app-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
+import {
+  EmptyState,
+  LoadingState,
+  MetricCard,
+  PageHeader,
+  SectionHeader,
+  StatusNotice,
+  WorkflowSteps,
+} from "@/components/ennosmart/workspace-ui"
 
 import {
   getProjectOverviews,
@@ -230,6 +236,33 @@ export default function DashboardPage({ navigateTo, user }: DashboardPageProps) 
 
   const recentProjects = useMemo(() => getRecentProjects(items), [items])
   const activities = useMemo(() => getActivity(items), [items])
+  const isAdmin = user.role === "admin" || user.role === "superadmin"
+  const isSuperadmin = user.role === "superadmin"
+  const dashboardDescription = isSuperadmin
+    ? "Supervisez le portefeuille, l'équipe et les services d'intelligence qui soutiennent la production CIR."
+    : isAdmin
+      ? "Pilotez le portefeuille, répartissez les dossiers et repérez les validations qui nécessitent une intervention."
+      : "Retrouvez vos dossiers assignés, les validations en attente et la prochaine étape de chaque workflow CIR."
+  const quickSteps = isSuperadmin
+    ? [
+        { label: "Superviser", description: "Équipe & projets", icon: BarChart3, onClick: () => navigateTo("admin") },
+        { label: "Mémoire CIR", description: "Corpus validé", icon: BookOpen, onClick: () => navigateTo("cir-memory") },
+        { label: "Configurer", description: "Modèles IA", icon: BrainCircuit, onClick: () => navigateTo("system-settings") },
+        { label: "Contrôler", description: "Portefeuille", icon: FolderKanban, onClick: () => navigateTo("projects") },
+      ]
+    : isAdmin
+      ? [
+          { label: "Affecter", description: "Équipe & rôles", icon: Building2, onClick: () => navigateTo("admin") },
+          { label: "Contrôler", description: "Portefeuille", icon: FolderKanban, onClick: () => navigateTo("projects") },
+          { label: "Diagnostiquer", description: "Dossier actif", icon: BrainCircuit, onClick: () => navigateTo("diagnosis") },
+          { label: "Valider", description: "Preuves", icon: BookOpen, onClick: () => navigateTo("scholar") },
+        ]
+      : [
+          { label: "Déposer", description: "Documents", icon: Upload, onClick: () => navigateTo("upload") },
+          { label: "Diagnostiquer", description: "Verrous CIR", icon: BrainCircuit, onClick: () => navigateTo("diagnosis") },
+          { label: "Rechercher", description: "Preuves", icon: BookOpen, onClick: () => navigateTo("scholar") },
+          { label: "Améliorer", description: "Livrables", icon: FilePenLine, onClick: () => navigateTo("improvement") },
+        ]
 
   const openProject = (projectId: number, target: AppPage = "project-detail") => {
     setCurrentProjectId(projectId)
@@ -238,164 +271,76 @@ export default function DashboardPage({ navigateTo, user }: DashboardPageProps) 
 
   if (loading) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
-        <Card>
-          <CardContent className="p-8 flex items-center justify-center gap-3 text-muted-foreground">
-            <Loader2 className="size-5 animate-spin" />
-            Chargement du tableau de bord depuis PostgreSQL...
-          </CardContent>
-        </Card>
+      <div className="workspace-page">
+        <LoadingState label="Chargement de l'espace de pilotage…" />
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
-        <Card className="border-destructive/30 bg-destructive/10">
-          <CardContent className="p-5 flex items-start gap-3 text-destructive">
-            <AlertCircle className="size-5 mt-0.5" />
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm font-semibold">Erreur tableau de bord</p>
-                <p className="text-xs mt-1">{error}</p>
-              </div>
-              <Button size="sm" variant="outline" onClick={loadDashboard}>
-                Réessayer
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="workspace-page">
+        <StatusNotice
+          state="failed"
+          title="Le tableau de bord n'a pas pu être chargé"
+          description={error}
+          action={<Button size="sm" variant="outline" onClick={loadDashboard}>Réessayer</Button>}
+        />
       </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-5 sm:p-7 lg:p-9">
-      <section className="relative overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_10%_10%,rgba(216,180,254,.32),transparent_30%),linear-gradient(125deg,#260953,#5115a6_52%,#7e22ce)] px-6 py-9 text-center text-white shadow-xl shadow-violet-950/15 sm:px-10 sm:py-12">
-        <div className="absolute -right-20 -top-24 size-72 rounded-full border border-white/10" />
-        <div className="absolute -bottom-32 -left-20 size-80 rounded-full border border-white/10" />
-        <button type="button" onClick={loadDashboard} className="absolute right-4 top-4 flex size-9 items-center justify-center rounded-full border border-white/15 bg-white/10 text-violet-100 transition hover:bg-white/20" aria-label="Actualiser le tableau de bord"><RefreshCw className="size-4" /></button>
-        <div className="relative mx-auto max-w-3xl">
-          <div className="mx-auto mb-4 flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-violet-100 backdrop-blur"><Sparkles className="size-3.5" />Espace de pilotage multi-agents</div>
-          <h1 className="text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-5xl">Bonjour {firstName(user?.full_name)},<br/><span className="text-violet-200">quel dossier allons-nous faire avancer ?</span></h1>
-          <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-violet-100/75 sm:text-base">Créez un dossier, centralisez les preuves puis laissez chaque agent spécialisé intervenir au bon moment.</p>
-          <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Button size="lg" className="h-12 min-w-52 bg-white text-violet-950 shadow-lg hover:bg-violet-50" onClick={() => navigateTo("new-project")}><Sparkles className="size-4" />Créer un nouveau dossier</Button>
-            <Button size="lg" variant="outline" className="h-12 border-white/25 bg-white/5 text-white hover:bg-white/15 hover:text-white" onClick={() => navigateTo("projects")}><FolderKanban className="size-4" />Ouvrir mes projets</Button>
-          </div>
-        </div>
-        <div className="relative mx-auto mt-9 grid max-w-4xl grid-cols-2 gap-2 sm:grid-cols-4">
-          {[
-            { page: "upload" as AppPage, label: "Déposer", detail: "Documents", icon: Upload },
-            { page: "diagnosis" as AppPage, label: "Diagnostiquer", detail: "Verrous CIR", icon: BrainCircuit },
-            { page: "scholar" as AppPage, label: "Rechercher", detail: "État de l’art", icon: BookOpen },
-            { page: "improvement" as AppPage, label: "Améliorer", detail: "Rédaction", icon: FilePenLine },
-          ].map((action) => <button key={action.page} onClick={() => navigateTo(action.page)} className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.07] p-3 text-left backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white/15"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/10"><action.icon className="size-4" /></span><span><span className="block text-sm font-semibold">{action.label}</span><span className="block text-[11px] text-violet-200/75">{action.detail}</span></span></button>)}
-        </div>
-      </section>
+    <div className="workspace-page-wide space-y-7">
+      <PageHeader
+        eyebrow={`${user.role === "superadmin" ? "Super administration" : user.role === "admin" ? "Administration" : "Production CIR"} · Bonjour ${firstName(user?.full_name)}`}
+        title={isAdmin ? "Centre de pilotage CIR" : "Mon espace de production CIR"}
+        description={dashboardDescription}
+        actions={
+          <>
+            <Button variant="outline" onClick={loadDashboard}><RefreshCw data-icon="inline-start" />Actualiser</Button>
+            {isAdmin ? <Button onClick={() => navigateTo("admin")}><BarChart3 data-icon="inline-start" />Ouvrir le pilotage</Button> : <Button onClick={() => navigateTo("new-project")}><Sparkles data-icon="inline-start" />Nouveau dossier</Button>}
+          </>
+        }
+      />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card className="hover-lift">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase">
-                Organismes suivis
-              </p>
-              <p className="text-3xl font-bold text-foreground mt-2">
-                {stats.organismes}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                depuis PostgreSQL
-              </p>
-            </div>
-
-            <div className="size-11 rounded-lg bg-brand/10 flex items-center justify-center">
-              <Building2 className="size-5 text-brand" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="hover-lift">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase">
-                Dossiers CIR actifs
-              </p>
-              <p className="text-3xl font-bold text-foreground mt-2">
-                {stats.activeProjects}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {stats.documents} document(s)
-              </p>
-            </div>
-
-            <div className="size-11 rounded-lg bg-blue-500/10 flex items-center justify-center">
-              <FolderKanban className="size-5 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="hover-lift">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase">
-                EnnoDiagnostics terminés
-              </p>
-              <p className="text-3xl font-bold text-foreground mt-2">
-                {stats.completedDiagnostics}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {stats.completedScholars} EnnoScholar
-              </p>
-            </div>
-
-            <div className="size-11 rounded-lg bg-success/10 flex items-center justify-center">
-              <CheckCircle2 className="size-5 text-success" />
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label={isAdmin ? "Portefeuille visible" : "Mes dossiers actifs"} value={stats.activeProjects} detail={`${stats.organismes} organisme(s)`} icon={FolderKanban} />
+        <MetricCard label="Validations en attente" value={stats.pendingAnalyses} detail="verrous et articles" icon={BrainCircuit} tone={stats.pendingAnalyses > 0 ? "warning" : "neutral"} />
+        <MetricCard label="Diagnostics disponibles" value={stats.completedDiagnostics} detail={`${stats.documents} document(s) indexé(s)`} icon={Building2} tone="info" />
+        <MetricCard label="Articles utiles" value={stats.usefulArticles} detail={`${stats.articles} article(s) analysé(s)`} icon={BookOpen} tone="success" />
       </div>
 
+      <section className="space-y-3" aria-labelledby="workflow-title">
+        <SectionHeader id="workflow-title" title="Continuer le flux de travail" description="Chaque module reprend automatiquement le dossier actif." />
+        <WorkflowSteps
+          steps={quickSteps}
+        />
+      </section>
+
       {items.length === 0 && (
-        <Card>
-          <CardContent className="p-10 text-center">
-            <div className="size-12 rounded-full bg-brand/10 flex items-center justify-center mx-auto mb-4">
-              <FolderKanban className="size-6 text-brand" />
-            </div>
-            <p className="text-sm font-semibold text-foreground">
-              Aucun dossier CIR pour ce consultant.
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Crée un projet pour commencer l’analyse.
-            </p>
-            <Button
-              className="mt-4 bg-brand hover:bg-brand/90"
-              onClick={() => navigateTo("projects")}
-            >
-              Aller aux projets
-            </Button>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={FolderKanban}
+          title="Aucun dossier CIR"
+          description="Créez un premier dossier pour déposer les sources et lancer l'analyse."
+          action={<Button onClick={() => navigateTo("new-project")}>Créer le premier dossier</Button>}
+        />
       )}
 
       {items.length > 0 && (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           <div className="xl:col-span-2 space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-bold text-foreground">
-                Derniers dossiers analysés
-              </h2>
-
-              <Button
+            <SectionHeader
+              title="Dossiers récents"
+              description="Les derniers contextes consultés ou analysés."
+              action={<Button
                 variant="ghost"
                 size="sm"
                 onClick={() => navigateTo("projects")}
               >
-                Voir tous
-                <ArrowRight className="size-4 ml-2" />
-              </Button>
-            </div>
+                Voir tous <ArrowRight data-icon="inline-end" />
+              </Button>}
+            />
 
             <div className="space-y-3">
               {recentProjects.map((item) => {
@@ -406,7 +351,7 @@ export default function DashboardPage({ navigateTo, user }: DashboardPageProps) 
                 return (
                   <Card
                     key={item.project.id}
-                    className="hover-lift cursor-pointer"
+                    className="cursor-pointer hover:border-brand/25"
                     onClick={() => openProject(item.project.id, "project-detail")}
                   >
                     <CardContent className="p-5">
@@ -478,9 +423,7 @@ export default function DashboardPage({ navigateTo, user }: DashboardPageProps) 
           </div>
 
           <div className="space-y-4">
-            <h2 className="text-lg font-bold text-foreground">
-              Activité récente
-            </h2>
+            <SectionHeader title="Activité récente" description="Éléments produits par les modules." />
 
             <Card>
               <CardContent className="p-0">

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Activity, Bot, CheckCircle2, Cpu, Gauge, Loader2, Save, ShieldCheck } from "lucide-react"
+import { Activity, Bot, Cpu, Gauge, Loader2, Save, ShieldCheck } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { getAdminAuditLog, getAISettings, updateAISettings, type AIModelSettings } from "@/lib/api"
+import { LoadingState, PageHeader, StatusNotice } from "@/components/ennosmart/workspace-ui"
 
 const defaults: AIModelSettings = {
   provider: "ollama",
@@ -59,13 +60,13 @@ export default function SystemSettingsPage() {
     } catch (err) { setError(err instanceof Error ? err.message : "Enregistrement impossible.") } finally { setSaving(false) }
   }
 
-  if (loading) return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="size-6 animate-spin text-brand" /></div>
+  if (loading) return <LoadingState label="Chargement de la configuration système…" />
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-5 sm:p-7 lg:p-9">
-      <div><div className="mb-2 flex items-center gap-2 text-sm font-medium text-brand"><ShieldCheck className="size-4" />Super administration</div><h1 className="text-3xl font-semibold tracking-tight">Modèles & plateforme</h1><p className="mt-2 text-sm text-muted-foreground">Configurez le routage IA global sans exposer les clés API.</p></div>
-      {message && <div className="flex items-center gap-2 rounded-xl border border-success/25 bg-success/10 p-3 text-sm text-success"><CheckCircle2 className="size-4" />{message}</div>}
-      {error && <div className="rounded-xl border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+    <div className="workspace-page space-y-6">
+      <PageHeader eyebrow="Super administration" title="Modèles & plateforme" description="Configurez le routage IA global sans exposer les clés API." icon={ShieldCheck} />
+      {message && <StatusNotice state="validated" title={message} />}
+      {error && <StatusNotice state="failed" title="Configuration indisponible" description={error} />}
 
       <form onSubmit={save} className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <div className="space-y-6">

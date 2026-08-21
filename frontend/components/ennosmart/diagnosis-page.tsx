@@ -3,7 +3,6 @@
 import {
   useEffect,
   useMemo,
-  useRef,
   useState } from "react"
 import {
   AlertCircle,
@@ -34,7 +33,6 @@ import { Card,
   CardDescription,
   CardHeader,
   CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
 import { Tabs,
   TabsContent,
   TabsList,
@@ -58,6 +56,12 @@ import { getCurrentProjectId, setCurrentProjectId } from "@/lib/project-session"
 import { CirFinalConsultantPanel } from "@/components/ennosmart/cir-final-consultant-panel"
 import CirPreviousContinuityTab from "@/components/ennosmart/cir-previous-continuity-tab"
 import { DiagnosticRagChat } from "@/components/ennosmart/diagnostic-rag-chat"
+import {
+  ContextBadge,
+  PageHeader,
+  StatusNotice,
+  WorkflowSteps,
+} from "@/components/ennosmart/workspace-ui"
 
 import {
   SourceTextWithDocuments,
@@ -3841,10 +3845,6 @@ export function DiagnosisPage() {
   const [scholarLoading, setScholarLoading] = useState(false)
 
   const [runningMode, setRunningMode] = useState<RunMode>(null)
-  const [progress, setProgress] = useState(0)
-  const [currentStepIndex, setCurrentStepIndex] = useState(0)
-
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const running = runningMode !== null
 
@@ -4425,10 +4425,6 @@ export function DiagnosisPage() {
 
   useEffect(() => {
     loadData()
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
   }, [])
 
   const currentSteps =
@@ -4440,36 +4436,9 @@ export function DiagnosisPage() {
 
   const startProgress = (mode: RunMode) => {
     setRunningMode(mode)
-    setProgress(4)
-    setCurrentStepIndex(0)
-
-    if (intervalRef.current) clearInterval(intervalRef.current)
-
-    intervalRef.current = setInterval(() => {
-      setProgress((prev) => {
-        const next = Math.min(prev + 4, 92)
-        const stepIndex = Math.min(
-          Math.floor((next / 100) * currentSteps.length),
-          currentSteps.length - 1
-        )
-
-        setCurrentStepIndex(stepIndex)
-        return next
-      })
-    }, 900)
   }
 
-  const stopProgress = (success = true) => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
-    }
-
-    if (success) {
-      setProgress(100)
-      setCurrentStepIndex(currentSteps.length - 1)
-    }
-  }
+  const stopProgress = (_success = true) => undefined
 
   const prepareSources = async () => {
     if (!project) return
@@ -5029,26 +4998,15 @@ export function DiagnosisPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-5 sm:p-7 lg:p-9">
-      <div className="ennoma-page-header flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="size-7 rounded-md bg-brand flex items-center justify-center">
-              <BrainCircuit className="size-4 text-brand-foreground" />
-            </div>
-            <h1 className="text-2xl font-bold text-foreground">
-              EnnoDiagnostic
-            </h1>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {project.organisme} — {project.project_name} — {project.year}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Domaine : {project.domain_label || "Non renseigné"} · Dossier ID #{project.id} · Documents uploadés : {documents.length}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
+    <div className="workspace-page-wide space-y-6">
+      <PageHeader
+        className="module-header module-diagnostic"
+        eyebrow="Agent de qualification"
+        title="EnnoDiagnostic"
+        description="Qualifiez les verrous scientifiques et techniques, contrôlez les preuves, puis validez le diagnostic avec une décision humaine."
+        icon={BrainCircuit}
+        context={<><ContextBadge>{project.organisme} · {project.project_name} · {project.year}</ContextBadge><ContextBadge>{project.domain_label || "Domaine non renseigné"}</ContextBadge><ContextBadge>{documents.length} document(s)</ContextBadge></>}
+        actions={<>
           {projects.length > 1 && (
             <select
               value={project.id}
@@ -5066,80 +5024,57 @@ export function DiagnosisPage() {
 
           <Button
             variant="outline"
-            size="sm"
             onClick={prepareSources}
             disabled={running}
           >
             {runningMode === "prepare" ? (
-              <Loader2 className="size-4 mr-2 animate-spin" />
+              <Loader2 className="animate-spin" data-icon="inline-start" />
             ) : (
-              <Search className="size-4 mr-2" />
+              <Search data-icon="inline-start" />
             )}
             Préparer les sources
           </Button>
 
           <Button
-            className="bg-brand hover:bg-brand/90"
-            size="sm"
             onClick={runAgentOnly}
             disabled={running}
           >
             {runningMode === "agent" ? (
-              <Loader2 className="size-4 mr-2 animate-spin" />
+              <Loader2 className="animate-spin" data-icon="inline-start" />
             ) : (
-              <Play className="size-4 mr-2" />
+              <Play data-icon="inline-start" />
             )}
             Lancer EnnoDiagnostic
           </Button>
 
-          <Button variant="outline" size="sm" onClick={loadData} disabled={running}>
-            <RefreshCw className="size-4 mr-2" />
+          <Button variant="ghost" onClick={loadData} disabled={running}>
+            <RefreshCw data-icon="inline-start" />
             Actualiser
           </Button>
-        </div>
-      </div>
+        </>}
+      />
+
+      <WorkflowSteps steps={[
+        { label: "Sources", detail: "Préparation", status: hasDiagnostic ? "complete" : runningMode === "prepare" ? "current" : "upcoming" },
+        { label: "Diagnostic", detail: "Analyse IA", status: hasDiagnostic ? "complete" : running && runningMode !== "prepare" ? "current" : "upcoming" },
+        { label: "Contrôle", detail: "Preuves", status: hasDiagnostic ? "current" : "upcoming" },
+        { label: "Validation", detail: "Consultant", status: "upcoming" },
+      ]} />
 
       {running && (
-        <Card className="border-brand/30 bg-brand/5">
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Loader2 className="size-4 animate-spin text-brand" />
-              {runningMode === "prepare"
+        <StatusNotice
+          state="processing"
+          live
+          title={runningMode === "prepare"
                 ? "Préparation des sources en cours"
                 : runningMode === "agent"
                   ? "Agent EnnoDiagnostic en cours"
                   : "EnnoDiagnostic complet en cours"}
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Le backend exécute la chaîne demandée. Cette étape peut prendre du temps selon le nombre de fichiers.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Progress value={progress} className="h-2" />
-            <div className="flex items-center justify-between gap-3 text-xs">
-              <p className="font-medium text-foreground">
-                {currentSteps[currentStepIndex]}
-              </p>
-              <p className="text-muted-foreground">{Math.round(progress)}%</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-2">
-              {currentSteps.map((step, index) => (
-                <div
-                  key={step}
-                  className={`p-2 rounded-md border text-xs ${
-                    index <= currentStepIndex
-                      ? "bg-success/10 border-success/30 text-success"
-                      : "bg-background border-border text-muted-foreground"
-                  }`}
-                >
-                  {index <= currentStepIndex ? "✓ " : "• "}
-                  {step}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+          description="Le traitement est exécuté par le backend. Aucune estimation fiable n'est exposée ; vous pouvez laisser cette page ouverte."
+        >
+          <p className="mb-2 font-medium text-foreground">Séquence prévue</p>
+          <p>{currentSteps.join(" · ")}</p>
+        </StatusNotice>
       )}
 
       {error && (
@@ -5260,7 +5195,7 @@ export function DiagnosisPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid grid-cols-2 lg:grid-cols-9 h-auto">
+        <TabsList className="flex h-auto w-full justify-start overflow-x-auto rounded-xl border border-border bg-card p-1.5 shadow-xs">
           <TabsTrigger value="overview">Vue d’ensemble</TabsTrigger>
           <TabsTrigger value="diagnostic">Diagnostic CIR</TabsTrigger>
           <TabsTrigger value="controle-ia">Contrôle IA</TabsTrigger>

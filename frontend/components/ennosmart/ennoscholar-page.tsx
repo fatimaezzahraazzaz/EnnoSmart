@@ -45,6 +45,13 @@ import {
 import { getCurrentProjectId, setCurrentProjectId } from "@/lib/project-session"
 import { EnnoScholarStructuredStateArtPanel } from "./ennoscholar-structured-state-of-art-panel"
 import { EnnoScholarPlanChat } from "./ennoscholar-plan-chat"
+import {
+  ContextBadge,
+  MetricCard,
+  PageHeader,
+  StatusNotice,
+  WorkflowSteps,
+} from "@/components/ennosmart/workspace-ui"
 
 type ArticleDecision = "garde" | "rejete" | "en_attente"
 type SourceFilter = "all" | "semantic_scholar" | "openalex" | "arxiv" | "memory_v2" | "technical"
@@ -688,7 +695,7 @@ function ArticleCard({
   const evidencePresentation = getEvidencePresentation(article)
 
   return (
-    <Card className="border border-border hover-lift">
+    <Card className="border border-border hover:border-brand/25">
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1 flex-1 min-w-0">
@@ -704,18 +711,6 @@ function ArticleCard({
               <Badge variant="outline" className="text-xs">
                 Score {formatScore(article.score)}
               </Badge>
-
-              {article.year && (
-                <Badge variant="outline" className="text-xs">
-                  {article.year}
-                </Badge>
-              )}
-
-              {article.source && (
-                <Badge variant="outline" className="text-xs">
-                  {article.source}
-                </Badge>
-              )}
 
               <Badge
                 variant="outline"
@@ -739,56 +734,24 @@ function ArticleCard({
                 {evidenceLabel(article)}
               </Badge>
 
-              {(() => {
-                const evidence = getEvidencePreflight(article)
-                return evidence ? (
-                  <Badge
-                    variant="outline"
-                    className={`text-xs ${evidenceBadgeClass(evidence?.evidence_status)}`}
-                    title={evidence?.evidence_label || "Statut de disponibilité"}
-                  >
-                    {evidenceShortLabel(evidence?.evidence_status)}
-                  </Badge>
-                ) : null
-              })()}
-
-              {manualUploadVerified && (
-                <Badge
-                  variant="outline"
-                  className="text-xs bg-success/10 text-success border-success/30"
-                  title={(article as any).manual_upload_filename || "PDF importé et identité vérifiée"}
-                >
-                  PDF manuel validé
-                </Badge>
-              )}
-
-              {reportOnly && (
-                <Badge variant="outline" className="text-xs bg-warning/10 text-warning border-warning/30">
-                  Rapport seul
-                </Badge>
-              )}
-
-              {hasTranslation && (
-                <Badge
-                  variant="outline"
-                  className="text-xs bg-success/10 text-success border-success/30"
-                >
-                  FR disponible
-                </Badge>
-              )}
-
-              {coveredVerrous.length > 1 && (
-                <Badge
-                  variant="outline"
-                  className="text-xs bg-brand/10 text-brand border-brand/30"
-                  title="Article identifié par EnnoScholar comme utile pour plusieurs verrous"
-                >
-                  Multi-verrou {coveredVerrous.length}
-                </Badge>
-              )}
             </div>
 
-            {coveredVerrous.length > 0 && (
+            <p className="text-xs leading-5 text-muted-foreground">
+              {[article.year, article.source, authors].filter(Boolean).join(" · ")}
+              {article.doi ? ` · DOI ${article.doi}` : ""}
+            </p>
+            {(manualUploadVerified || reportOnly || hasTranslation || coveredVerrous.length > 1) && (
+              <p className="text-[11px] leading-5 text-muted-foreground">
+                {[
+                  manualUploadVerified ? "PDF vérifié" : "",
+                  reportOnly ? "Rapport non synchronisé" : "",
+                  hasTranslation ? "Résumé FR disponible" : "",
+                  coveredVerrous.length > 1 ? `${coveredVerrous.length} verrous couverts` : "",
+                ].filter(Boolean).join(" · ")}
+              </p>
+            )}
+
+            {expanded && coveredVerrous.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pt-1">
                 <span className="text-[11px] text-muted-foreground mr-1">Couvre :</span>
                 {coveredVerrous.map((verrou) => (
@@ -883,18 +846,6 @@ function ArticleCard({
               />
             </label>
           </div>
-        )}
-
-        {authors && (
-          <p className="text-xs text-muted-foreground">
-            Auteurs : {authors}
-          </p>
-        )}
-
-        {article.doi && (
-          <p className="text-xs text-muted-foreground break-all">
-            DOI : {article.doi}
-          </p>
         )}
 
         <div className="p-3 rounded-md bg-muted/40 border border-border">
@@ -4524,28 +4475,15 @@ export function EnnoScholarPage({
   }
 
   return (
-    <div className="mx-auto max-w-[1800px] space-y-5 p-5 sm:p-7 lg:p-8">
-      {/* Header */}
-      <div className="ennoma-page-header flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="size-7 rounded-md bg-brand flex items-center justify-center">
-              <BookOpen className="size-4 text-brand-foreground" />
-            </div>
-            <h1 className="text-2xl font-bold text-foreground">
-              EnnoScholar
-            </h1>
-          </div>
-
-          <p className="text-sm text-muted-foreground">
-            {project.organisme} — {project.project_name} — {project.year}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Recherche scientifique et validation de l’état de l’art · Dossier ID #{project.id} · Documents uploadés : {documents.length}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
+    <div className="workspace-page-wide space-y-5">
+      <PageHeader
+        className="module-header module-scholar"
+        eyebrow="Agent de preuve scientifique"
+        title="EnnoScholar"
+        description="Recherchez, qualifiez et sélectionnez les preuves scientifiques avant de construire un état de l'art traçable."
+        icon={BookOpen}
+        context={<><ContextBadge>{project.organisme} · {project.project_name} · {project.year}</ContextBadge><ContextBadge>{documents.length} document(s)</ContextBadge></>}
+        actions={<>
           {projects.length > 1 && (
             <select
               value={project.id}
@@ -4560,25 +4498,23 @@ export function EnnoScholarPage({
             </select>
           )}
 
-          <Button variant="outline" size="sm" onClick={loadData}>
-            <RefreshCw className="size-4 mr-2" />
+          <Button variant="outline" onClick={loadData}>
+            <RefreshCw data-icon="inline-start" />
             Actualiser
           </Button>
-        </div>
-      </div>
+        </>}
+      />
+
+      <WorkflowSteps steps={[
+        { label: "Rechercher", detail: "Corpus", status: usefulArticlesCount > 0 ? "complete" : "current" },
+        { label: "Vérifier", detail: "Accès & preuves", status: preflightPendingCount > 0 ? "current" : usefulArticlesCount > 0 ? "complete" : "upcoming" },
+        { label: "Sélectionner", detail: "Consultant", status: consultantSelectedArticles.length > 0 ? "complete" : usefulArticlesCount > 0 ? "current" : "upcoming" },
+        { label: "Rédiger", detail: "État de l'art", status: currentDraftMarkdown ? "complete" : consultantSelectedArticles.length > 0 ? "current" : "upcoming" },
+      ]} />
 
       {preflightPendingCount > 0 && (
-        <Card className="border-brand/30 bg-brand/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Loader2 className="size-5 animate-spin text-brand" />
-              Articles classés — vérification rapide des accès
-            </CardTitle>
-            <CardDescription>
-              Le catalogue classé est déjà consultable. Les liens directs sont vérifiés d'abord, puis le MCP recherche une copie légale pour chaque échec avant d'afficher la conclusion. Aucune extraction lourde n'est lancée automatiquement.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <StatusNotice state="processing" live title="Vérification des accès aux articles" description="Le catalogue reste consultable. Les liens directs sont vérifiés, puis une copie légale est recherchée pour chaque échec.">
+          <div className="mt-3 space-y-3">
             <div className="h-2 overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full bg-brand transition-all duration-500"
@@ -4598,74 +4534,26 @@ export function EnnoScholarPage({
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              EnnoScholar classe les articles, vérifie les accès directs, puis appelle le MCP seulement pour les textes encore introuvables. L'extraction lourde ne démarre qu'au clic ; l'import PDF n'est proposé qu'après l'échec final du MCP.
+              L'extraction lourde ne démarre qu'à votre demande ; l'import PDF est proposé uniquement après l'échec final de la recherche légale.
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </StatusNotice>
       )}
       {activeTab !== "etat-art-rediges" && (
         <>
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Articles candidats</p>
-            <p className="text-2xl font-bold text-foreground mt-1">
-              {usefulArticlesCount}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Articles utiles</p>
-            <p className="text-2xl font-bold text-success mt-1">
-              {usefulCandidateCount}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Directs utiles</p>
-            <p className="text-2xl font-bold text-success mt-1">
-              {directArticlesFoundCount}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Connexes utiles</p>
-            <p className="text-2xl font-bold text-brand mt-1">
-              {connexeArticlesFoundCount}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Fondamentaux utiles</p>
-            <p className="text-2xl font-bold text-blue-700 mt-1">
-              {fondamentalArticlesFoundCount}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Sources techniques</p>
-            <p className="text-2xl font-bold text-purple-700 mt-1">
-              {foundArticleCounts.technique}
-            </p>
-          </CardContent>
-        </Card>
-
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <MetricCard label="Candidats" value={usefulArticlesCount} icon={Search} />
+        <MetricCard label="Utiles" value={usefulCandidateCount} icon={CheckCircle2} tone="success" />
+        <MetricCard label="Directs" value={directArticlesFoundCount} detail="utiles" tone="success" />
+        <MetricCard label="Connexes" value={connexeArticlesFoundCount} detail="utiles" tone="brand" />
+        <MetricCard label="Fondamentaux" value={fondamentalArticlesFoundCount} detail="utiles" tone="info" />
+        <MetricCard label="Techniques" value={foundArticleCounts.technique} detail="sources" tone="neutral" />
       </div>
 
       {/* Search and options */}
-      <Card>
-        <CardContent className="p-4 flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
+      <Card className="shadow-none">
+        <CardContent className="flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
@@ -4719,7 +4607,7 @@ export function EnnoScholarPage({
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid h-auto grid-cols-1 gap-1 rounded-2xl bg-muted/60 p-1 sm:grid-cols-3">
+        <TabsList className="grid h-auto w-full grid-cols-1 gap-1 rounded-xl border border-border bg-card p-1 shadow-xs sm:grid-cols-3">
           <TabsTrigger value="par-verrou">Sélection articles</TabsTrigger>
           <TabsTrigger value="selection">Sélection consultant</TabsTrigger>
           <TabsTrigger value="etat-art-rediges">
