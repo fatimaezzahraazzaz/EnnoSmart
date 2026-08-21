@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from db.models import Article, Document, Project
 
 
-VISUAL_SCHEMA_VERSION = "scholar_visual_evidence_v1_2_metric_ranked"
+VISUAL_SCHEMA_VERSION = "scholar_visual_evidence_v1_3_complete_crop"
 MAX_FIGURES_PER_SOURCE = max(
     1,
     int(os.getenv("ENNOSCHOLAR_VISUAL_MAX_FIGURES_PER_SOURCE", "8")),
@@ -204,10 +204,188 @@ def _text_context(page: Any, caption_rect: tuple[float, float, float, float]) ->
     return " ".join(text for _, text in sorted(rows)[:3])[:2400]
 
 
-def _candidate_crop_rect(
+def _interval_overlap(start_a: float, end_a: float, start_b: float, end_b: float) -> float:
+    return max(0.0, min(end_a, end_b) - max(start_a, start_b))
+
+
+def _rect_union(rects: Iterable[Any]) -> Any:
+    import fitz
+
+    rows = [fitz.Rect(rect) for rect in rects]
+    if not rows:
+        return fitz.Rect()
+    output = fitz.Rect(rows[0])
+    for rect in rows[1:]:
+        output.include_rect(rect)
+    return output
+
+
+def _rects_belong_to_same_visual(
+    left: Any,
+    right: Any,
+    *,
+    horizontal_gap: float,
+    vertical_gap: float,
+) -> bool:
+    """Détecte deux fragments adjacents d'une même figure composite."""
+
+    horizontal_overlap = _interval_overlap(left.x0, left.x1, right.x0, right.x1)
+    vertical_overlap = _interval_overlap(left.y0, left.y1, right.y0, right.y1)
+    x_gap = max(left.x0 - right.x1, right.x0 - left.x1, 0.0)
+    y_gap = max(left.y0 - right.y1, right.y0 - left.y1, 0.0)
+    min_width = max(1.0, min(left.width, right.width))
+    min_height = max(1.0, min(left.height, right.height))
+    return bool(
+        (
+            horizontal_overlap >= min_width * 0.45
+            and y_gap <= vertical_gap
+        )
+        or (
+            vertical_overlap >= min_height * 0.45
+            and x_gap <= horizontal_gap
+        )
+        # Les bordures d'un tableau sont des segments sans largeur/hauteur.
+        # Leur intersection géométrique vaut donc 0 même lorsqu'un trait
+        # vertical touche réellement un trait horizontal.
+        or (
+            x_gap <= min(2.0, horizontal_gap)
+            and y_gap <= min(2.0, vertical_gap)
+        )
+    )
+
+
+def _grow_visual_cluster(
+    seed: Any,
+    candidates: Iterable[Any],
+    *,
+    horizontal_gap: float,
+    vertical_gap: float,
+) -> List[Any]:
+    remaining = [rect for rect in candidates if rect != seed]
+    cluster = [seed]
+    changed = True
+    while changed:
+        changed = False
+        cluster_bounds = _rect_union(cluster)
+        for rect in list(remaining):
+            if _rects_belong_to_same_visual(
+                cluster_bounds,
+                rect,
+                horizontal_gap=horizontal_gap,
+                vertical_gap=vertical_gap,
+            ):
+                cluster.append(rect)
+                remaining.remove(rect)
+                changed = True
+    return cluster
+
+
+def _padded_crop(
+    page_rect: Any,
+    rect: Any,
+    padding: float = 8.0,
+    *,
+    bottom_limit: Optional[float] = None,
+) -> Any:
+    import fitz
+
+    bottom = min(page_rect.y1, rect.y1 + padding)
+    if bottom_limit is not None:
+        bottom = min(bottom, float(bottom_limit))
+    return fitz.Rect(
+        max(page_rect.x0, rect.x0 - padding),
+        max(page_rect.y0, rect.y0 - padding),
+        min(page_rect.x1, rect.x1 + padding),
+        bottom,
+    )
+
+
+def _vector_visual_rect(
     page: Any,
     caption_rect: tuple[float, float, float, float],
-) -> Any:
+) -> Optional[Any]:
+    """Isole un tableau ou schéma vectoriel placé juste au-dessus de sa légende."""
+
+    import fitz
+
+    page_rect = page.rect
+    cx0, cy0, cx1, _ = caption_rect
+    caption_width = max(1.0, cx1 - cx0)
+    horizontal_tolerance = max(18.0, caption_width * 0.20)
+    top_limit = max(page_rect.y0, cy0 - page_rect.height * 0.68)
+    drawings: List[Any] = []
+    for drawing in page.get_drawings() or []:
+        raw_rect = drawing.get("rect")
+        if raw_rect is None:
+            continue
+        rect = fitz.Rect(raw_rect)
+        if rect.y0 >= cy0 or rect.y1 < top_limit:
+            continue
+        if rect.width > page_rect.width * 0.96 and rect.height > page_rect.height * 0.80:
+            continue
+        if (
+            rect.x1 < cx0 - horizontal_tolerance
+            or rect.x0 > cx1 + horizontal_tolerance
+        ):
+            continue
+        drawings.append(rect)
+
+    if not drawings:
+        return None
+    seed = min(drawings, key=lambda rect: max(0.0, cy0 - rect.y1))
+    if cy0 - seed.y1 > page_rect.height * 0.10:
+        return None
+    cluster = _grow_visual_cluster(
+        seed,
+        drawings,
+        horizontal_gap=max(8.0, page_rect.width * 0.018),
+        vertical_gap=max(8.0, page_rect.height * 0.014),
+    )
+    bounds = _rect_union(cluster)
+    if bounds.width < page_rect.width * 0.10 or bounds.height < page_rect.height * 0.025:
+        return None
+
+    # Les traits donnent les limites structurelles. Les blocs de texte internes
+    # (noms de colonnes, valeurs, nœuds d'architecture) complètent ces limites,
+    # sans jamais incorporer la légende ni le paragraphe de la colonne voisine.
+    related = [bounds]
+    for raw in page.get_text("blocks") or []:
+        if len(raw) < 5:
+            continue
+        text = _safe_text(raw[4], 2400).replace("\n", " ")
+        if not text or _CAPTION_RE.match(text):
+            continue
+        rect = fitz.Rect(*map(float, raw[:4]))
+        if rect.y1 < bounds.y0 - 14 or rect.y0 > bounds.y1 + 14:
+            continue
+        overlap = _interval_overlap(bounds.x0, bounds.x1, rect.x0, rect.x1)
+        if overlap >= min(max(1.0, bounds.width), max(1.0, rect.width)) * 0.25:
+            related.append(rect)
+    return _rect_union(related)
+
+
+def _column_bounds(
+    page_rect: Any,
+    caption_rect: tuple[float, float, float, float],
+) -> tuple[float, float]:
+    """Déduit la colonne de la légende sans élargir arbitrairement à la page."""
+
+    cx0, _, cx1, _ = caption_rect
+    relative_x0 = (cx0 - page_rect.x0) / max(1.0, page_rect.width)
+    relative_x1 = (cx1 - page_rect.x0) / max(1.0, page_rect.width)
+    margin = max(8.0, page_rect.width * 0.015)
+    if relative_x0 >= 0.44:
+        return max(page_rect.x0 + margin, cx0 - margin), page_rect.x1 - margin
+    if relative_x1 <= 0.56:
+        return page_rect.x0 + margin, min(page_rect.x1 - margin, cx1 + margin)
+    return page_rect.x0 + margin, page_rect.x1 - margin
+
+
+def _candidate_crop(
+    page: Any,
+    caption_rect: tuple[float, float, float, float],
+    figure_label: str = "",
+) -> tuple[Any, str]:
     import fitz
 
     page_rect = page.rect
@@ -228,12 +406,55 @@ def _candidate_crop_rect(
     ]
     if above:
         target = min(above, key=lambda rect: abs(cy0 - rect.y1))
-        return fitz.Rect(
-            max(page_rect.x0, target.x0 - 8),
-            max(page_rect.y0, target.y0 - 8),
-            min(page_rect.x1, target.x1 + 8),
-            min(page_rect.y1, target.y1 + 8),
+        cluster = _grow_visual_cluster(
+            target,
+            above,
+            horizontal_gap=max(8.0, page_rect.width * 0.018),
+            vertical_gap=max(8.0, page_rect.height * 0.014),
         )
+        return _padded_crop(
+            page_rect,
+            _rect_union(cluster),
+            bottom_limit=cy0 - 2.0,
+        ), (
+            "embedded_image_cluster"
+            if len(cluster) > 1
+            else "embedded_image"
+        )
+
+    vector_rect = _vector_visual_rect(page, caption_rect)
+    if vector_rect is not None:
+        return _padded_crop(
+            page_rect,
+            vector_rect,
+            bottom_limit=cy0 - 2.0,
+        ), "vector_graphics_cluster"
+
+    left, right = _column_bounds(page_rect, caption_rect)
+
+    # Certains tableaux ne contiennent aucun tracé PDF mais forment un bloc de
+    # texte unique. La légende « Table » permet de retenir ce bloc sans aspirer
+    # la colonne narrative située à côté.
+    if _safe_text(figure_label, 40).casefold().startswith(("table", "tableau")):
+        table_blocks: List[Any] = []
+        for raw in page.get_text("blocks") or []:
+            if len(raw) < 5:
+                continue
+            text = _safe_text(raw[4], 4000).replace("\n", " ")
+            rect = fitz.Rect(*map(float, raw[:4]))
+            if not text or _CAPTION_RE.match(text) or rect.y1 > cy0 + 2:
+                continue
+            overlap = _interval_overlap(left, right, rect.x0, rect.x1)
+            if overlap >= min(max(1.0, right - left), max(1.0, rect.width)) * 0.45:
+                table_blocks.append(rect)
+        if table_blocks:
+            target = min(table_blocks, key=lambda rect: max(0.0, cy0 - rect.y1))
+            if cy0 - target.y1 <= page_rect.height * 0.10:
+                return _padded_crop(
+                    page_rect,
+                    target,
+                    bottom_limit=cy0 - 2.0,
+                ), "table_text_block"
 
     # Les courbes et schémas sont souvent dessinés en vecteurs. Dans ce cas,
     # on rend la zone au-dessus de la légende, bornée par le dernier paragraphe
@@ -243,12 +464,29 @@ def _candidate_crop_rect(
         if len(raw) < 5:
             continue
         text = _safe_text(raw[4], 2000).replace("\n", " ")
-        by1 = float(raw[3])
-        if len(text) >= 180 and by1 < cy0 - 16 and by1 > top:
+        bx0, _, bx1, by1 = map(float, raw[:4])
+        horizontal_overlap = _interval_overlap(left, right, bx0, bx1)
+        if (
+            len(text) >= 180
+            and horizontal_overlap >= min(max(1.0, right - left), max(1.0, bx1 - bx0)) * 0.35
+            and by1 < cy0 - 16
+            and by1 > top
+        ):
             top = by1 + 5
-    left = max(page_rect.x0 + 8, min(cx0, page_rect.x0 + page_rect.width * 0.08))
-    right = min(page_rect.x1 - 8, max(cx1, page_rect.x1 - page_rect.width * 0.08))
-    return fitz.Rect(left, top, right, max(top + 10, cy0 - 4))
+    return (
+        fitz.Rect(left, top, right, max(top + 10, cy0 - 4)),
+        "column_aware_fallback",
+    )
+
+
+def _candidate_crop_rect(
+    page: Any,
+    caption_rect: tuple[float, float, float, float],
+    figure_label: str = "",
+) -> Any:
+    """Compatibilité interne : retourne uniquement la boîte de recadrage."""
+
+    return _candidate_crop(page, caption_rect, figure_label)[0]
 
 
 def _render_crop(page: Any, rect: Any) -> bytes:
@@ -341,7 +579,11 @@ def _extract_pdf_figures(
             key=lambda item: (-item[0], item[1], item[2]),
         ):
                 page = document.load_page(page_index)
-                rect = _candidate_crop_rect(page, caption_block["rect"])
+                rect, crop_method = _candidate_crop(
+                    page,
+                    caption_block["rect"],
+                    caption_block.get("figure_label") or "",
+                )
                 image_bytes = _render_crop(page, rect)
                 if not image_bytes or not _is_useful_image(image_bytes):
                     continue
@@ -372,6 +614,16 @@ def _extract_pdf_figures(
                         "asset_sha256": hashlib.sha256(image_bytes).hexdigest(),
                         "width": _image_dimensions(image_bytes)[0],
                         "height": _image_dimensions(image_bytes)[1],
+                        "crop_bbox": [
+                            round(float(rect.x0), 3),
+                            round(float(rect.y0), 3),
+                            round(float(rect.x1), 3),
+                            round(float(rect.y1), 3),
+                        ],
+                        "page_width": round(float(page.rect.width), 3),
+                        "page_height": round(float(page.rect.height), 3),
+                        "crop_method": crop_method,
+                        "crop_valid": True,
                         "quality_score": round(min(1.0, rank), 3),
                         "ranking_score": round(rank, 3),
                         "target_verrous": list(target_verrous or []),
@@ -401,7 +653,13 @@ def _extract_pdf_figures(
 
 def _fulltext_payload(fulltext_info: Dict[str, Any]) -> Dict[str, Any]:
     path = _safe_text(fulltext_info.get("path"), 4000)
-    return _read_json(Path(path)) if path and Path(path).is_file() else {}
+    payload = _read_json(Path(path)) if path and Path(path).is_file() else {}
+    embedded = fulltext_info.get("visual_source")
+    if isinstance(embedded, dict):
+        # Le cache PostgreSQL expose uniquement ces métadonnées sûres, sans
+        # recopier le texte intégral dans chaque Article Card.
+        payload.update(embedded)
+    return payload
 
 
 def _existing_article_pdf(
@@ -435,7 +693,30 @@ def _materialize_verified_remote_pdf(
     payload = _fulltext_payload(fulltext_info)
     if payload.get("content_source_kind") != "pdf":
         return None
-    if payload.get("verified_pdf") is not True or payload.get("same_article") is not True:
+    identity = (
+        payload.get("identity_verification")
+        if isinstance(payload.get("identity_verification"), dict)
+        else {}
+    )
+    same_article = bool(
+        payload.get("same_article") is True
+        or (
+            identity.get("verified") is True
+            and identity.get("same_article") is True
+        )
+    )
+    verified_pdf = bool(
+        payload.get("verified_pdf") is True
+        or (
+            payload.get("ok") is True
+            and "pdf" in _safe_text(payload.get("status"), 100).casefold()
+            and re.fullmatch(
+                r"[0-9a-f]{64}",
+                _safe_text(payload.get("remote_sha256"), 128).casefold(),
+            )
+        )
+    )
+    if not verified_pdf or not same_article:
         return None
     url = _safe_text(
         payload.get("fulltext_final_url") or payload.get("fulltext_source_url"),
@@ -480,7 +761,7 @@ def _materialize_verified_remote_pdf(
             }
         )
         fulltext_path = _safe_text(fulltext_info.get("path"), 4000)
-        if fulltext_path:
+        if fulltext_path and "://" not in fulltext_path:
             _write_json(Path(fulltext_path), payload)
         source_json = dict(article.source_json) if isinstance(article.source_json, dict) else {}
         source_json["legal_pdf_path"] = str(target)

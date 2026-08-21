@@ -53,6 +53,8 @@ from .cir_quality_guard_v3 import (
 )
 
 
+from .visual_placement_service import build_visual_placements_shared
+
 PAYLOAD_TYPE = "state_of_art_draft_payload_canonical_global_v1"
 FORBIDDEN_FINAL_MARKERS = {
     "phase 4",
@@ -2716,6 +2718,124 @@ RÈGLES DE VERDICT
         }
 
 
+def _directive_norm(value: Any) -> str:
+    text = unicodedata.normalize("NFKD", clean_text(value, 12000).casefold())
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return re.sub(r"[^a-z0-9]+", " ", text).strip()
+
+
+def _consultant_directive_for_section(
+    blueprint: Mapping[str, Any],
+    section: Mapping[str, Any],
+) -> dict[str, Any]:
+    request = clean_text(blueprint.get("consultant_writing_request"), 12000)
+    target_ids = {
+        clean_text(value, 200)
+        for value in (
+            blueprint.get("consultant_writing_target_section_ids") or []
+        )
+        if clean_text(value, 200)
+    }
+    target_titles = {
+        _directive_norm(value)
+        for value in (
+            blueprint.get("consultant_writing_target_section_titles") or []
+        )
+        if _directive_norm(value)
+    }
+    section_id = clean_text(section.get("section_id"), 200)
+    section_title = _directive_norm(section.get("title"))
+
+    if target_ids or target_titles:
+        applies_here = bool(
+            section_id in target_ids
+            or section_title in target_titles
+        )
+    else:
+        request_key = _directive_norm(request)
+        # Une demande qui cite le titre exact d'une section reste locale même si
+        # une ancienne classification n'avait pas encore enregistré son ID.
+        named_sections = {
+            _directive_norm(row.get("title"))
+            for row in (blueprint.get("sections") or [])
+            if isinstance(row, Mapping)
+            and len(_directive_norm(row.get("title"))) >= 8
+            and _directive_norm(row.get("title")) in request_key
+        }
+        applies_here = not named_sections or section_title in named_sections
+
+    return {
+        "request": request if applies_here else "",
+        "apply_to_this_section": bool(request and applies_here),
+        "target_section_ids": sorted(target_ids),
+        "target_section_titles": sorted(target_titles),
+        "search_queries": list(
+            blueprint.get("consultant_writing_search_queries") or []
+        ) if applies_here else [],
+        "rule": (
+            "Intégrer ici la demande avec les preuves des nouvelles sources pertinentes."
+            if request and applies_here
+            else (
+                "Ne pas déplacer dans cette section l'ajout demandé pour une autre section."
+                if request
+                else ""
+            )
+        ),
+    }
+
+
+def _enrich_targeted_plan_with_consultant_request(
+    plan: Optional[List[Dict[str, Any]]],
+    *,
+    request: str,
+    target_section_ids: Iterable[Any],
+    target_section_titles: Iterable[Any],
+) -> Optional[List[Dict[str, Any]]]:
+    if not plan or not clean_text(request, 12000):
+        return plan
+    target_ids = {
+        clean_text(value, 200)
+        for value in target_section_ids
+        if clean_text(value, 200)
+    }
+    target_titles = {
+        _directive_norm(value)
+        for value in target_section_titles
+        if _directive_norm(value)
+    }
+    request_key = _directive_norm(request)
+    output: List[Dict[str, Any]] = []
+    for raw in plan:
+        section = dict(raw)
+        section_id = clean_text(section.get("section_id"), 200)
+        section_title = _directive_norm(section.get("title"))
+        targeted = bool(
+            section_id in target_ids
+            or section_title in target_titles
+            or (
+                not target_ids
+                and not target_titles
+                and len(section_title) >= 8
+                and section_title in request_key
+            )
+        )
+        if targeted:
+            existing = [
+                clean_text(value, 4000)
+                for value in as_list(section.get("instructions") or [])
+                if clean_text(value, 4000)
+            ]
+            directive = (
+                "Demande ciblée du consultant pour cette section : "
+                + clean_text(request, 12000)
+            )
+            if directive not in existing:
+                existing.append(directive)
+            section["instructions"] = existing
+        output.append(section)
+    return output
+
+
 def _build_llm_prompt(
     blueprint: Dict[str, Any],
     evidence_units: List[Dict[str, Any]],
@@ -2772,6 +2892,14 @@ PROJET
 
 PLAN FINAL
 {json.dumps(plan, ensure_ascii=False, indent=2)}
+
+DEMANDE CIBLÉE DU CONSULTANT POUR CETTE VERSION
+{json.dumps({
+    "request": blueprint.get("consultant_writing_request") or "",
+    "target_section_ids": blueprint.get("consultant_writing_target_section_ids") or [],
+    "target_section_titles": blueprint.get("consultant_writing_target_section_titles") or [],
+    "search_queries": blueprint.get("consultant_writing_search_queries") or [],
+}, ensure_ascii=False, indent=2)}
 
 CITATIONS AUTORISÉES
 {json.dumps(blueprint["allowed_citations"], ensure_ascii=False)}
@@ -2866,6 +2994,10 @@ def _build_section_llm_prompt(
         section,
         len(blueprint.get("sections") or []),
     )
+    consultant_directive = _consultant_directive_for_section(
+        blueprint,
+        section,
+    )
     return f"""
 Tu rédiges UNE section d'un état de l'art scientifique global en français.
 Le document doit former une histoire continue et convaincante, pas un catalogue
@@ -2900,6 +3032,9 @@ SECTION À RÉDIGER
 
 PLAN GLOBAL, POUR ASSURER LA CONTINUITÉ
 {json.dumps(plan_outline, ensure_ascii=False, indent=2)}
+
+DEMANDE CIBLÉE DU CONSULTANT POUR CETTE SECTION
+{json.dumps(consultant_directive, ensure_ascii=False, indent=2)}
 
 FIN DE LA SECTION PRÉCÉDENTE
 {clean_text(previous_tail, 1800) or "Première section du document."}
@@ -2976,6 +3111,10 @@ CONTRAT DE RÉDACTION
   le titre du verrou et ne crée aucune partie absente du plan consultant.
 - Les citations obligatoires doivent apparaître; les autres citations autorisées
   ne sont utilisées que lorsqu'elles soutiennent réellement le raisonnement.
+- Si ``apply_to_this_section`` vaut vrai dans la demande ciblée, traite
+  explicitement le point demandé dans cette section et mobilise les nouvelles
+  sources pertinentes présentes dans les preuves. S'il vaut faux, n'insère pas
+  cet ajout dans cette section.
 - Toute affirmation scientifique, tout résultat et toute limite doivent être cités.
 - Place au moins une citation dans CHAQUE phrase qui contient une affirmation
   scientifique. Une citation située dans une autre phrase ou seulement à la
@@ -5667,312 +5806,32 @@ def build_visual_placements(
     cards_payload: Dict[str, Any],
     cards: Sequence[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """Place les figures au niveau du paragraphe qu'elles documentent.
-
-    Règles article:
-    - la figure vient d'une Article Card sourcée ;
-    - le paragraphe cible doit citer CE MÊME article ;
-    - caption/context et paragraphe doivent dépasser le seuil sémantique ;
-    - au maximum une figure retenue par section ;
-    - aucun appel LLM n'est effectué pour le placement.
-
-    Règles document projet:
-    - aucune nouvelle preuve scientifique ;
-    - proximité sémantique obligatoire.
-    """
-
-    if os.getenv(
+    # Moteur visuel partagé, signature publique Phase 5 conservée.
+    enabled = os.getenv(
         "ENNOSCHOLAR_PHASE5_INCLUDE_ORIGINAL_FIGURES",
         "1",
-    ).strip().lower() not in {
-        "1", "true", "yes", "on",
-    }:
-        return []
+    ).strip().lower() in {"1", "true", "yes", "on"}
 
-    article_min_similarity = float(
-        os.getenv(
-            "ENNOSCHOLAR_PHASE5_ARTICLE_FIGURE_MIN_SIMILARITY",
-            "0.055",
+    try:
+        article_min_similarity = float(
+            os.getenv(
+                "ENNOSCHOLAR_PHASE5_ARTICLE_FIGURE_MIN_SIMILARITY",
+                "0.09",
+            )
         )
-    )
-    project_min_similarity = float(
-        os.getenv(
-            "ENNOSCHOLAR_PHASE5_PROJECT_FIGURE_MIN_SIMILARITY",
-            "0.055",
+    except (TypeError, ValueError):
+        article_min_similarity = 0.09
+
+    try:
+        project_min_similarity = float(
+            os.getenv(
+                "ENNOSCHOLAR_PHASE5_PROJECT_FIGURE_MIN_SIMILARITY",
+                "0.10",
+            )
         )
-    )
+    except (TypeError, ValueError):
+        project_min_similarity = 0.10
 
-    card_by_label = {
-        normalize_citation_label(
-            card.get("citation_label")
-        ): card
-        for card in cards
-        if normalize_citation_label(
-            card.get("citation_label")
-        )
-    }
-
-    candidates: List[Dict[str, Any]] = []
-    seen_visual_ids: Set[str] = set()
-
-    for citation, card in card_by_label.items():
-        for raw in card.get("visual_evidence") or []:
-            if not isinstance(raw, dict):
-                continue
-            visual_id = clean_text(
-                raw.get("visual_id"), 120
-            )
-            if (
-                not visual_id
-                or visual_id in seen_visual_ids
-            ):
-                continue
-            item = dict(raw)
-            item["citation_label"] = citation
-            candidates.append(item)
-            seen_visual_ids.add(visual_id)
-
-    for raw in (
-        cards_payload.get("project_visual_evidence") or []
-    ):
-        if not isinstance(raw, dict):
-            continue
-        visual_id = clean_text(
-            raw.get("visual_id"), 120
-        )
-        if (
-            not visual_id
-            or visual_id in seen_visual_ids
-        ):
-            continue
-        candidates.append(dict(raw))
-        seen_visual_ids.add(visual_id)
-
-    if not candidates:
-        return []
-
-    blueprint_sections = {
-        clean_text(section.get("section_id"), 160):
-            section
-        for section in blueprint.get("sections") or []
-        if isinstance(section, dict)
-    }
-
-    anchors = _paragraph_visual_anchors(draft)
-    if not anchors:
-        return []
-
-    candidate_semantic_texts = {
-        clean_text(candidate.get("visual_id"), 120):
-            " ".join(
-                [
-                    clean_text(
-                        candidate.get("figure_label"),
-                        100,
-                    ),
-                    clean_text(
-                        candidate.get("caption"),
-                        1800,
-                    ),
-                    clean_text(
-                        candidate.get("context"),
-                        2600,
-                    ),
-                    clean_text(
-                        candidate.get("source_title"),
-                        1000,
-                    ),
-                ]
-            )
-        for candidate in candidates
-        if clean_text(candidate.get("visual_id"), 120)
-    }
-
-    paragraph_semantic_texts = {
-        anchor["anchor_key"]:
-            anchor["paragraph_text"]
-        for anchor in anchors
-    }
-
-    multilingual_similarities = (
-        _multilingual_visual_similarities(
-            paragraph_semantic_texts,
-            candidate_semantic_texts,
-        )
-    )
-
-    scored: List[
-        tuple[float, int, Dict[str, Any]]
-    ] = []
-
-    for anchor in anchors:
-        section_id = anchor["section_id"]
-        contract_section = (
-            blueprint_sections.get(section_id) or {}
-        )
-
-        section_verrous = {
-            clean_text(value, 160)
-            for value in (
-                contract_section.get("verrou_ids")
-                or [
-                    verrou.get("verrou_id")
-                    for verrou in (
-                        contract_section.get("verrous")
-                        or []
-                    )
-                    if isinstance(verrou, dict)
-                ]
-            )
-            if clean_text(value, 160)
-        }
-
-        paragraph_text = anchor["paragraph_text"]
-
-        for candidate in candidates:
-            visual_id = clean_text(
-                candidate.get("visual_id"), 120
-            )
-            if not visual_id:
-                continue
-
-            caption_text = " ".join(
-                [
-                    clean_text(
-                        candidate.get("figure_label"),
-                        100,
-                    ),
-                    clean_text(
-                        candidate.get("caption"),
-                        1800,
-                    ),
-                    clean_text(
-                        candidate.get("context"),
-                        2600,
-                    ),
-                    clean_text(
-                        candidate.get("source_title"),
-                        1000,
-                    ),
-                ]
-            )
-
-            quality = float(
-                candidate.get("ranking_score")
-                or candidate.get("quality_score")
-                or 0.0
-            )
-
-            token_similarity = _visual_similarity(
-                caption_text,
-                paragraph_text,
-            )
-            similarity = max(
-                token_similarity,
-                multilingual_similarities.get(
-                    (
-                        anchor["anchor_key"],
-                        visual_id,
-                    ),
-                    0.0,
-                ),
-            )
-
-            citation = normalize_citation_label(
-                candidate.get("citation_label")
-            )
-
-            target_verrous = {
-                clean_text(value, 160)
-                for value in (
-                    candidate.get("target_verrous")
-                    or []
-                )
-                if clean_text(value, 160)
-            }
-
-            if citation:
-                # Condition forte demandée:
-                # la source doit être citée DANS LE PARAGRAPHE,
-                # pas seulement quelque part dans la section.
-                if citation not in anchor["citations"]:
-                    continue
-                if similarity < article_min_similarity:
-                    continue
-
-                score = (
-                    2.0
-                    + quality
-                    + similarity * 3.0
-                )
-                if (
-                    section_verrous
-                    and target_verrous & section_verrous
-                ):
-                    score += 0.35
-            else:
-                if similarity < project_min_similarity:
-                    continue
-                score = quality + similarity * 3.0
-                if score < 0.65:
-                    continue
-
-            scored.append(
-                (
-                    score,
-                    int(anchor["section_index"]),
-                    {
-                        "section_id": section_id,
-                        "visual_id": visual_id,
-                        "citation_label": citation,
-                        "source_kind": clean_text(
-                            candidate.get("source_kind"),
-                            80,
-                        ),
-                        "source_title": clean_sentence(
-                            candidate.get("source_title"),
-                            900,
-                        ),
-                        "page": candidate.get("page"),
-                        "figure_label": clean_sentence(
-                            candidate.get("figure_label"),
-                            100,
-                        ),
-                        "caption": clean_sentence(
-                            candidate.get("caption"),
-                            1800,
-                        ),
-                        "quality_score": quality,
-                        "semantic_similarity": round(
-                            similarity, 4
-                        ),
-                        "selection_score": round(
-                            score, 4
-                        ),
-                        "content_scope":
-                            anchor["content_scope"],
-                        "subsection_index":
-                            anchor["subsection_index"],
-                        "paragraph_index":
-                            anchor["paragraph_index"],
-                        "anchor_key":
-                            anchor["anchor_key"],
-                        "anchor_excerpt":
-                            clean_sentence(
-                                paragraph_text,
-                                420,
-                            ),
-                        "same_article_cited_in_paragraph":
-                            bool(citation),
-                        "original_figure_preserved": True,
-                        "placement_policy":
-                            "paragraph_citation_plus_semantic_match",
-                    },
-                )
-            )
-
-    # 0 = aucune limite globale.
-    # Le plan peut avoir 5, 30, 80, 150 sections.
     configured_max_visuals = _env_int(
         "ENNOSCHOLAR_PHASE5_MAX_ORIGINAL_FIGURES",
         0,
@@ -5980,69 +5839,24 @@ def build_visual_placements(
         maximum=1000,
     )
 
-    placements: List[Dict[str, Any]] = []
-    occupied_sections: Set[str] = set()
-    occupied_visuals: Set[str] = set()
-
-    for _, _, placement in sorted(
-        scored,
-        key=lambda item: (-item[0], item[1]),
-    ):
-        if (
-            configured_max_visuals > 0
-            and len(placements)
-            >= configured_max_visuals
-        ):
-            break
-
-        # Évite une rédaction visuellement chargée:
-        # une seule figure réellement utile par section.
-        if placement["section_id"] in occupied_sections:
-            continue
-        if placement["visual_id"] in occupied_visuals:
-            continue
-
-        occupied_sections.add(
-            placement["section_id"]
-        )
-        occupied_visuals.add(
-            placement["visual_id"]
-        )
-        placements.append(placement)
-
-    return sorted(
-        placements,
-        key=lambda placement: (
-            next(
-                (
-                    index
-                    for index, section
-                    in enumerate(
-                        draft.get("sections") or []
-                    )
-                    if isinstance(section, dict)
-                    and clean_text(
-                        section.get("section_id"), 160
-                    )
-                    == placement["section_id"]
-                ),
-                10_000,
-            ),
-            0
-            if placement.get("content_scope")
-            == "section"
-            else 1,
-            int(
-                placement.get("subsection_index")
-                or 0
-            ),
-            int(
-                placement.get("paragraph_index")
-                or 0
-            ),
-        ),
+    placements, report = build_visual_placements_shared(
+        draft=draft,
+        contract=blueprint,
+        cards_payload=cards_payload,
+        cards=cards,
+        citation_field="citation_label",
+        article_min_similarity=article_min_similarity,
+        project_min_similarity=project_min_similarity,
+        max_per_section=1,
+        max_visuals=configured_max_visuals,
+        include_project_visuals=True,
+        enabled=enabled,
     )
+    build_visual_placements.last_report = report
+    return placements
 
+
+build_visual_placements.last_report = {}
 
 def _visual_markdown_lines(
     placement: Mapping[str, Any],
@@ -6488,6 +6302,19 @@ def run_phase_5_state_of_art_writer(
         if plan_path.is_file()
         else {}
     )
+    consultant_writing_request = clean_text(
+        plan_contract.get("consultant_writing_request"),
+        12000,
+    )
+    consultant_target_section_ids = list(
+        plan_contract.get("consultant_writing_target_section_ids") or []
+    )
+    consultant_target_section_titles = list(
+        plan_contract.get("consultant_writing_target_section_titles") or []
+    )
+    consultant_search_queries = list(
+        plan_contract.get("consultant_writing_search_queries") or []
+    )
     cards = extract_article_cards(cards_payload)
     guided_payload = read_json(guided_sources_path, {}) or {}
     supplemental_cards = extract_supplemental_source_cards(
@@ -6569,6 +6396,12 @@ def run_phase_5_state_of_art_writer(
     if plan_path.is_file():
         try:
             approved_plan = resolve_approved_plan(plan_contract)
+            approved_plan = _enrich_targeted_plan_with_consultant_request(
+                approved_plan,
+                request=consultant_writing_request,
+                target_section_ids=consultant_target_section_ids,
+                target_section_titles=consultant_target_section_titles,
+            )
         except ContractError as exc:
             result = {
                 **exc.as_dict(),
@@ -6635,6 +6468,16 @@ def run_phase_5_state_of_art_writer(
         return result
     blueprint["evidence_units"] = evidence_units
     blueprint["guided_conversation"] = guided_conversation
+    blueprint["consultant_writing_request"] = consultant_writing_request
+    blueprint["consultant_writing_target_section_ids"] = (
+        consultant_target_section_ids
+    )
+    blueprint["consultant_writing_target_section_titles"] = (
+        consultant_target_section_titles
+    )
+    blueprint["consultant_writing_search_queries"] = (
+        consultant_search_queries
+    )
     strict_consultant_plan_structure = bool(
         guided_conversation and approved_plan
     )
@@ -6852,12 +6695,29 @@ def run_phase_5_state_of_art_writer(
         cards_payload,
         cards,
     )
+    visual_diagnostics = dict(
+        getattr(build_visual_placements, "last_report", {}) or {}
+    )
     # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
     visual_placements, cir_visual_report = filter_visual_placements(
         raw_visual_placements,
         blueprint,
         cir_evidence_matrix,
     )
+    visual_diagnostics.update(
+        {
+            "pre_cir_filter_placement_count": len(raw_visual_placements),
+            "placed_count": len(visual_placements),
+            "cir_filter_removed_count": max(
+                0,
+                len(raw_visual_placements) - len(visual_placements),
+            ),
+        }
+    )
+    if raw_visual_placements and not visual_placements:
+        visual_diagnostics["no_visual_reason"] = "rejected_by_cir_visual_guard"
+    elif visual_placements:
+        visual_diagnostics["no_visual_reason"] = ""
     # END ENNOSCHOLAR_CIR_QUALITY_V3
 
     markdown = draft_to_markdown(
@@ -7017,7 +6877,15 @@ def run_phase_5_state_of_art_writer(
         },
         "draft_json": draft,
         "references": references,
+        "consultant_writing_directive": {
+            "request": consultant_writing_request,
+            "target_section_ids": consultant_target_section_ids,
+            "target_section_titles": consultant_target_section_titles,
+            "search_queries": consultant_search_queries,
+            "propagated_to_writer": bool(consultant_writing_request),
+        },
         "visual_placements": visual_placements,
+        "visual_diagnostics": visual_diagnostics,
         "stats": {
             "article_cards_count": len(cards),
             "scientific_article_cards_count": scientific_article_cards_count,
@@ -7033,6 +6901,12 @@ def run_phase_5_state_of_art_writer(
             "sections_count": len(blueprint["sections"]),
             "citations_used_count": len(used_citations),
             "original_figures_inserted_count": len(visual_placements),
+            "visual_candidates_count": int(
+                visual_diagnostics.get("candidate_count") or 0
+            ),
+            "visual_candidates_rejected_count": int(
+                visual_diagnostics.get("rejected_candidate_count") or 0
+            ),
             # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
             "original_figures_rejected_by_cir_guard_count": int(
                 cir_visual_report.get("rejected_count") or 0

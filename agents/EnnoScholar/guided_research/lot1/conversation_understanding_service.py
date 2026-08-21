@@ -1793,6 +1793,15 @@ Produis uniquement les arguments nécessaires à cette intention :
   excluded_terms, section_ids,
   section_titles, target_verrous, requested_dimensions,
   target_context_dimensions, require_direct_evidence et source_preferences.
+- La demande du consultant est la cible scientifique primaire. Le verrou, la
+  section ou le paragraphe cité sert uniquement à rattacher et contextualiser
+  cette cible : ne remplace jamais « FEKO pour RCS bistatique » par une recherche
+  générale sur tout le verrou SAR. Copie les noms d'outils, méthodes, phénomènes
+  et conditions explicitement demandés dans entity_name/required_terms.
+- Si un outil, logiciel, protocole ou standard nommé est demandé, émets au moins
+  une requête scientific_evidence exigeant ce nom et une requête distincte
+  official_documentation. La documentation établit les capacités et réglages ;
+  seuls les articles peuvent constituer une preuve scientifique de résultats.
 - Pour une méthode recherchée dans un domaine ou une application précise,
   target_context_dimensions contient obligatoirement ce contexte cible et
   required_terms sépare les ancrages indispensables (méthode, domaine, tâche).

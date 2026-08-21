@@ -55,6 +55,58 @@ def _as_str_set(values: Iterable[Any] | None) -> set[str]:
     return {_clean(value, 160) for value in (values or []) if _clean(value, 160)}
 
 
+_PROJECT_CARD_CITATION_KEYS = {
+    "citation_id",
+    "citation_label",
+    "citation_token",
+    "selection_citation_id",
+}
+
+
+def _relabel_project_corpus_card(
+    raw_card: Mapping[str, Any],
+    citation_label: str,
+) -> dict[str, Any]:
+    """Attribue une citation unique à une carte issue d'un corpus multi-runs.
+
+    Chaque ScholarRun construit historiquement ses cartes à partir de ``A1``.
+    Lorsqu'un corpus projet agrège plusieurs runs, conserver ces labels locaux
+    fait disparaître les cartes homonymes dans la Phase 5. La réécriture couvre
+    également les preuves visuelles imbriquées afin que leur citation continue
+    de pointer vers la bonne publication.
+    """
+
+    original_label = _clean(
+        raw_card.get("citation_label")
+        or raw_card.get("citation_id")
+        or raw_card.get("citation_token"),
+        80,
+    )
+
+    def rewrite(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            rewritten: dict[str, Any] = {}
+            for key, child in value.items():
+                if key in _PROJECT_CARD_CITATION_KEYS:
+                    rewritten[key] = citation_label
+                else:
+                    rewritten[key] = rewrite(child)
+            return rewritten
+        if isinstance(value, list):
+            return [rewrite(child) for child in value]
+        if isinstance(value, tuple):
+            return [rewrite(child) for child in value]
+        return value
+
+    card = rewrite(dict(raw_card))
+    card["citation_id"] = citation_label
+    card["citation_label"] = citation_label
+    if original_label:
+        card["project_corpus_original_citation_label"] = original_label
+    card["project_corpus_citation_relabelled"] = True
+    return card
+
+
 def article_scope_ids(article: Article) -> set[str]:
     """Retourne tous les verrous connus pour un article, quelle que soit sa provenance."""
     ids: set[str] = set()
@@ -84,6 +136,29 @@ def article_scope_ids(article: Article) -> set[str]:
             if isinstance(value, (list, tuple, set)):
                 ids.update(_as_str_set(value))
     return ids
+
+
+def article_is_project_global(article: Article) -> bool:
+    """Indique qu'un article guidé s'applique au projet, sans verrou imposé.
+
+    Les premières versions du chat ne stockaient pas le marqueur explicite.  On
+    reconnaît donc aussi leurs articles guidés sans aucun identifiant de verrou,
+    afin que les sources déjà acceptées restent visibles après la correction.
+    """
+
+    src = article.source_json if isinstance(article.source_json, Mapping) else {}
+    explicit_scope = _clean(src.get("project_corpus_scope"), 40).casefold()
+    if explicit_scope in {"project", "global", "project_global"}:
+        return True
+    if bool(src.get("project_corpus_global")):
+        return True
+    if article_scope_ids(article):
+        return False
+    return bool(
+        src.get("guided_research_source")
+        or _clean(src.get("origin"), 80).casefold()
+        in {"guided_research_conversation", "manual_project_upload"}
+    )
 
 
 def article_identity(article: Article) -> str:
@@ -298,10 +373,12 @@ def get_project_kept_articles(
             )
         rows.extend(guided_query.all())
     else:
-        # Projet autonome n'ayant jamais lancé le workflow canonique : on prend
-        # seulement le dernier corpus guidé, pas toute l'histoire du projet.
-        latest_guided = (
-            db.query(ScholarRun)
+        # En mode autonome, le projet n'a pas de ScholarRun canonique servant de
+        # frontière de génération. Son corpus est donc la mémoire dédupliquée de
+        # toutes les conversations EnnoScholar, pas seulement de la plus récente.
+        rows.extend(
+            db.query(Article)
+            .join(ScholarRun, Article.scholar_run_id == ScholarRun.id)
             .filter(ScholarRun.project_id == int(project.id))
             .filter(
                 ScholarRun.status.in_([
@@ -309,21 +386,23 @@ def get_project_kept_articles(
                     "guided_research_standalone",
                 ])
             )
-            .order_by(ScholarRun.created_at.desc(), ScholarRun.id.desc())
-            .first()
+            .filter(Article.consultant_status == "garde")
+            .all()
         )
-        if latest_guided is not None:
-            rows.extend(
-                db.query(Article)
-                .filter(Article.scholar_run_id == int(latest_guided.id))
-                .filter(Article.consultant_status == "garde")
-                .all()
-            )
+
+    # « Gardé » mémorise la décision du consultant, mais ne suffit pas pour
+    # entrer dans le corpus de rédaction. Un article sans texte intégral reste
+    # dans les sources acceptées de la conversation, où le PDF peut être importé,
+    # et n'est ajouté ici qu'après extraction vérifiée.
+    rows = [row for row in rows if _article_is_writing_usable(row)]
 
     if effective_verrous:
         rows = [
             row for row in rows
-            if article_scope_ids(row) & effective_verrous
+            if (
+                article_scope_ids(row) & effective_verrous
+                or article_is_project_global(row)
+            )
         ]
 
     chosen: dict[str, Article] = {}
@@ -362,6 +441,9 @@ def serialize_project_corpus_source(article: Article) -> dict[str, Any]:
     candidate_id = _clean(src.get("guided_candidate_id"), 300) or f"PROJECT-A{int(article.id)}"
     scope_ids = sorted(article_scope_ids(article))
     usable = _article_is_writing_usable(article)
+    corpus_status = _clean(src.get("project_corpus_status"), 80) or (
+        "fulltext_ready" if usable else "needs_manual_upload"
+    )
     return {
         "candidate_id": candidate_id,
         "candidate_kind": "scientific_article",
@@ -378,6 +460,8 @@ def serialize_project_corpus_source(article: Article) -> dict[str, Any]:
         "consultant_reason": "Article gardé dans le corpus persistant du projet.",
         "target_verrous": scope_ids,
         "project_corpus": True,
+        "project_corpus_global": article_is_project_global(article),
+        "project_corpus_status": corpus_status,
         "project_id": int(article.scholar_run.project_id) if getattr(article, "scholar_run", None) else None,
         "origin_scholar_run_id": int(article.scholar_run_id),
         "fulltext_preparation": {
@@ -541,7 +625,13 @@ def get_project_corpus_cards_payload(
                 if candidate_size > previous_size:
                     cards_by_article[article_id] = candidate
 
-    cards = [cards_by_article[key] for key in sorted(cards_by_article)]
+    # Les labels A1..An sont locaux à chaque ScholarRun. L'agrégat projet doit
+    # posséder son propre espace de citations, sinon Phase 5 élimine silencieusement
+    # les cartes A1/A2/... provenant des recherches supplémentaires.
+    cards = [
+        _relabel_project_corpus_card(cards_by_article[key], f"A{index}")
+        for index, key in enumerate(sorted(cards_by_article), start=1)
+    ]
     return {
         "ok": True,
         "project_id": int(project.id),

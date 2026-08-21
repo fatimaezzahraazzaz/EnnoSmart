@@ -855,6 +855,154 @@ def _unique(values: Iterable[Any], limit: int = 100) -> list[str]:
     return output
 
 
+def _search_writing_directive(
+    message: str,
+    classification: IntentClassification,
+    search_requests: Iterable[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Mémorise la finalité rédactionnelle d'une recherche explicite.
+
+    Les requêtes servent à trouver les articles, mais la demande initiale du
+    consultant (notamment la section à enrichir) doit survivre aux tours
+    « garde ces articles » puis « tu peux rédiger ».
+    """
+
+    rows = [dict(row) for row in search_requests if isinstance(row, Mapping)]
+    request = _clean(classification.corrected_message or message, 6000)
+    queries = _unique(
+        _clean(row.get("query"), 1200) for row in rows
+    )
+    section_ids = _unique([
+        *(classification.target_section_ids or []),
+        *(
+            value
+            for row in rows
+            for value in (row.get("section_ids") or [])
+        ),
+    ])
+    section_titles = _unique(
+        value
+        for row in rows
+        for value in (row.get("section_titles") or [])
+    )
+    if not request and not queries:
+        return {}
+    return {
+        "request": request,
+        "search_queries": queries,
+        "target_section_ids": section_ids,
+        "target_section_titles": section_titles,
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _merge_pending_writing_directives(
+    existing: Iterable[Any],
+    current: Mapping[str, Any],
+    *,
+    limit: int = 8,
+) -> list[dict[str, Any]]:
+    rows = [
+        dict(row)
+        for row in existing
+        if isinstance(row, Mapping)
+        and (
+            _clean(row.get("request"), 6000)
+            or list(row.get("search_queries") or [])
+        )
+    ]
+    if current:
+        current_key = (
+            _norm(current.get("request")),
+            tuple(_norm(value) for value in current.get("search_queries") or []),
+        )
+        rows = [
+            row
+            for row in rows
+            if (
+                _norm(row.get("request")),
+                tuple(_norm(value) for value in row.get("search_queries") or []),
+            )
+            != current_key
+        ]
+        rows.append(dict(current))
+    return rows[-max(1, limit):]
+
+
+def _historical_search_writing_directives(
+    session: GuidedResearchSessionData,
+    contract: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Récupère les recherches d'une session créée avant la mémoire ciblée."""
+
+    plan = _contract_sections(contract)
+    section_title_by_id = {
+        _clean(row.get("section_id"), 200): _clean(row.get("title"), 700)
+        for row in plan
+        if _clean(row.get("section_id"), 200)
+        and _clean(row.get("title"), 700)
+    }
+    output: list[dict[str, Any]] = []
+    for turn in session.messages or []:
+        raw_role = (
+            turn.role.value
+            if isinstance(turn.role, ConversationRole)
+            else _clean(turn.role, 40)
+        )
+        if raw_role != ConversationRole.CONSULTANT.value:
+            continue
+        raw_intent = (
+            turn.intent.value
+            if isinstance(turn.intent, ConsultantIntent)
+            else _clean(turn.intent, 80)
+        )
+        try:
+            turn_intent = ConsultantIntent(raw_intent)
+        except (TypeError, ValueError):
+            continue
+        if turn_intent not in _SEARCH_ACTION_INTENTS:
+            continue
+        request = _clean(turn.content, 6000)
+        metadata = turn.metadata if isinstance(turn.metadata, Mapping) else {}
+        raw_classification = metadata.get("classification")
+        classification = (
+            dict(raw_classification)
+            if isinstance(raw_classification, Mapping)
+            else {}
+        )
+        if not classification.get("explicit_research_command"):
+            continue
+        target_ids = _unique(
+            classification.get("target_section_ids") or []
+        )
+        request_key = _norm(request)
+        target_titles = _unique([
+            *(
+                section_title_by_id.get(section_id, "")
+                for section_id in target_ids
+            ),
+            *(
+                title
+                for title in section_title_by_id.values()
+                if len(_norm(title)) >= 8 and _norm(title) in request_key
+            ),
+        ])
+        if request:
+            output.append({
+                "request": request,
+                "search_queries": [],
+                "target_section_ids": target_ids,
+                "target_section_titles": target_titles,
+                "recorded_at": (
+                    turn.created_at.isoformat()
+                    if getattr(turn, "created_at", None)
+                    else ""
+                ),
+                "recovered_from_conversation_history": True,
+            })
+    return output[-8:]
+
+
 def _extract_json(value: Any) -> dict[str, Any]:
     raw = str(value or "").strip()
     raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.I)
@@ -1681,6 +1829,23 @@ class EnnoScholarGuidedResearchAgent:
                 else None
             ),
         }
+        if (
+            intent in _SEARCH_ACTION_INTENTS
+            and classification.explicit_research_command
+            and interpretation.get("search_requests")
+        ):
+            writing_directive = _search_writing_directive(
+                message,
+                classification,
+                interpretation.get("search_requests") or [],
+            )
+            if writing_directive:
+                context_updates["pending_writing_directives"] = (
+                    _merge_pending_writing_directives(
+                        session.context.get("pending_writing_directives") or [],
+                        writing_directive,
+                    )
+                )
         if resolved_verrou_scope:
             context_updates.update({
                 "review_scope": resolved_verrou_scope["review_scope"],
@@ -1837,6 +2002,7 @@ class EnnoScholarGuidedResearchAgent:
                     classification.writing_source_identifiers
                 ),
                 requested_source_count=classification.requested_source_count,
+                target_section_ids=classification.target_section_ids,
                 action_intent=intent,
                 conversation_reply=_clean(
                     interpretation.get("assistant_message"), 6000
@@ -1904,6 +2070,7 @@ class EnnoScholarGuidedResearchAgent:
                     writing_source_scope=classification.writing_source_scope,
                     writing_source_identifiers=classification.writing_source_identifiers,
                     requested_source_count=classification.requested_source_count,
+                    target_section_ids=classification.target_section_ids,
                     action_intent=ConsultantIntent.START_WRITING,
                 )
                 write_response.metadata["compound_actions_executed"] = [
@@ -3361,6 +3528,7 @@ class EnnoScholarGuidedResearchAgent:
         writing_source_scope: str = "unspecified",
         writing_source_identifiers: Iterable[str] | None = None,
         requested_source_count: int | None = None,
+        target_section_ids: Iterable[str] | None = None,
         action_intent: ConsultantIntent = ConsultantIntent.START_WRITING,
         conversation_reply: str = "",
     ) -> ConversationResponse:
@@ -3374,7 +3542,63 @@ class EnnoScholarGuidedResearchAgent:
         # seulement servir au routage. On conserve le texte exact comme contrainte
         # de cette version (ex. « bien défendre les verrous à partir des articles
         # existants »), sans en déduire de faits supplémentaires.
-        writing_request = _clean(message, 6000)
+        pending_directives = [
+            dict(row)
+            for row in (
+                session.context.get("pending_writing_directives") or []
+            )
+            if isinstance(row, Mapping)
+        ]
+        for historical_directive in _historical_search_writing_directives(
+            session,
+            contract,
+        ):
+            pending_directives = _merge_pending_writing_directives(
+                pending_directives,
+                historical_directive,
+            )
+        current_writing_request = _clean(message, 6000)
+        writing_request = _clean(
+            "\n\n".join(
+                _unique([
+                    *(
+                        _clean(row.get("request"), 6000)
+                        for row in pending_directives
+                    ),
+                    current_writing_request,
+                ], limit=12)
+            ),
+            12000,
+        )
+        writing_target_section_ids = _unique([
+            *(target_section_ids or []),
+            *(
+                value
+                for row in pending_directives
+                for value in (row.get("target_section_ids") or [])
+            ),
+        ])
+        writing_target_section_titles = _unique(
+            value
+            for row in pending_directives
+            for value in (row.get("target_section_titles") or [])
+        )
+        writing_search_queries = _unique(
+            value
+            for row in pending_directives
+            for value in (row.get("search_queries") or [])
+        )
+        writing_contract_fields = {
+            "consultant_writing_request": writing_request,
+            "consultant_writing_target_section_ids": (
+                writing_target_section_ids
+            ),
+            "consultant_writing_target_section_titles": (
+                writing_target_section_titles
+            ),
+            "consultant_writing_search_queries": writing_search_queries,
+            "consultant_writing_directives": pending_directives,
+        }
         if writing_request:
             if session.brief is not None:
                 previous_raw = _clean(session.brief.raw_request, 10000)
@@ -3398,7 +3622,16 @@ class EnnoScholarGuidedResearchAgent:
             self.repository.update(
                 db,
                 session.session_id,
-                context_updates={"last_writing_request": writing_request},
+                context_updates={
+                    "last_writing_request": writing_request,
+                    "last_writing_target_section_ids": (
+                        writing_target_section_ids
+                    ),
+                    "last_writing_target_section_titles": (
+                        writing_target_section_titles
+                    ),
+                    "last_writing_search_queries": writing_search_queries,
+                },
             )
         # END ENNOSCHOLAR_WRITING_REQUEST_MEMORY_V2
         if _clean(session.context.get("operating_mode"), 80) == "standalone_chat":
@@ -3481,6 +3714,7 @@ class EnnoScholarGuidedResearchAgent:
                             "trigger_state_of_art_generation": False,
                         },
                     )
+                contract.update(writing_contract_fields)
                 approved_plan = [
                     dict(row)
                     for row in (contract.get("approved_plan") or [])
@@ -3496,6 +3730,7 @@ class EnnoScholarGuidedResearchAgent:
                     context_updates={
                         "plan_approved": True,
                         "writing_authorized": True,
+                        "pending_writing_directives": [],
                     },
                 )
 
@@ -3666,6 +3901,13 @@ class EnnoScholarGuidedResearchAgent:
                         / session.session_id
                     ),
                     revision_request=revision_request,
+                    consultant_request=writing_request,
+                    consultant_target_section_ids=(
+                        writing_target_section_ids
+                    ),
+                    consultant_target_section_titles=(
+                        writing_target_section_titles
+                    ),
                     current_markdown=_clean(
                         (snapshot.get("draft") or {}).get("markdown"),
                         100000,
@@ -3849,6 +4091,7 @@ class EnnoScholarGuidedResearchAgent:
                 False,
                 {"trigger_state_of_art_generation": False},
             )
+        contract.update(writing_contract_fields)
         contract["writing_source_policy"] = source_policy
         brief = session.brief or _brief_from_contract(contract, raw_request=message)
         # V170.3 — START_WRITING écrit immédiatement avec le corpus validé.
@@ -3885,6 +4128,15 @@ class EnnoScholarGuidedResearchAgent:
                 "generation_mode": generation_mode,
                 "revision_request": _clean(revision_request, 6000),
                 "writing_source_policy": source_policy,
+                "pending_writing_directives": [],
+                "last_writing_request": writing_request,
+                "last_writing_target_section_ids": (
+                    writing_target_section_ids
+                ),
+                "last_writing_target_section_titles": (
+                    writing_target_section_titles
+                ),
+                "last_writing_search_queries": writing_search_queries,
             },
         )
         return self._response(
@@ -4454,10 +4706,10 @@ CONSIGNES IMPÉRATIVES
         result = self.research.search(
             requests_payload,
             excluded_ids=excluded,
-            # Le workflow chat EnnoScholar réutilise le moteur scientifique
-            # complet du workflow Agent 1 -> verrou -> Agent 2. La limite de
-            # présentation du moteur léger ne doit pas masquer des résultats.
-            max_candidates=60,
+            # Le moteur scientifique complet reste partagé avec le workflow
+            # Agent 1 -> verrou -> Agent 2. Le chat expose seulement sa shortlist
+            # la mieux alignée avec la demande explicite du consultant.
+            max_candidates=WebResearchService.CHAT_REVIEW_MAX_CANDIDATES,
             project_context={
                 **research_project_context,
                 "guided_session_id": session.session_id,

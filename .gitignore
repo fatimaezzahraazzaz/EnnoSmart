@@ -176,3 +176,7 @@ modules/llm_gateway/
 /backup_*/
 /_patch_backups/
 /.ennoscholar_*_backup.txt
+
+# Local image/visual patch folders
+/_image_writer_patch/
+/_visual_filter_hotfix/

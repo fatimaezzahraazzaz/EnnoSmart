@@ -149,11 +149,21 @@ def _known_source_urls(source: dict[str, Any]) -> dict[str, Any]:
         payload["url"] = url
     payload["guided_candidate_id"] = _clean(source.get("candidate_id"), 200)
     payload["guided_research_source"] = True
-    payload["covered_verrou_ids"] = [
+    covered_verrou_ids = [
         _clean(value, 100)
         for value in (source.get("target_verrous") or [])
         if _clean(value)
     ]
+    payload["covered_verrou_ids"] = covered_verrou_ids
+    # Une recherche guidée peut viser un verrou précis ou compléter le projet
+    # entier (demande libre du chat, nom d'outil, paragraphe, etc.).  Une source
+    # sans verrou explicite ne doit pas être perdue par le filtre de la génération
+    # diagnostique : elle devient une source globale du corpus projet.
+    payload["project_corpus_eligible"] = True
+    payload["project_corpus_scope"] = (
+        "verrou" if covered_verrou_ids else "project"
+    )
+    payload["project_corpus_global"] = not bool(covered_verrou_ids)
     return payload
 
 
@@ -695,6 +705,12 @@ def _sync_guided_article_terminal_preflight(
         "mcp_called": bool(report.get("mcp_called")),
         "synced_at": _utc_now(),
     }
+    fulltext_ready = bool(report.get("fulltext_ready"))
+    source_json["project_corpus_eligible"] = True
+    source_json["project_corpus_status"] = (
+        "fulltext_ready" if fulltext_ready else "needs_manual_upload"
+    )
+    source_json["project_corpus_updated_at"] = _utc_now()
     article.source_json = source_json
     db.add(article)
 

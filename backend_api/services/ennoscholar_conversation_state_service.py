@@ -277,16 +277,50 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
     sources_path = inputs / "guided_research_sources.json"
     scope_path = inputs / "session_scope.json"
 
+    # La consigne ciblée (et sa section) fait partie du contrat de cette
+    # génération. Le fallback contexte permet aussi de reprendre proprement une
+    # conversation créée avant l'ajout de ces champs au writing_contract.
+    materialized_contract = dict(contract)
+    writing_request = str(
+        materialized_contract.get("consultant_writing_request")
+        or snapshot_context.get("last_writing_request")
+        or ""
+    ).strip()
+    writing_target_section_ids = list(
+        materialized_contract.get("consultant_writing_target_section_ids")
+        or snapshot_context.get("last_writing_target_section_ids")
+        or []
+    )
+    writing_target_section_titles = list(
+        materialized_contract.get("consultant_writing_target_section_titles")
+        or snapshot_context.get("last_writing_target_section_titles")
+        or []
+    )
+    writing_search_queries = list(
+        materialized_contract.get("consultant_writing_search_queries")
+        or snapshot_context.get("last_writing_search_queries")
+        or []
+    )
+    if writing_request:
+        materialized_contract["consultant_writing_request"] = writing_request
+    materialized_contract["consultant_writing_target_section_ids"] = (
+        writing_target_section_ids
+    )
+    materialized_contract["consultant_writing_target_section_titles"] = (
+        writing_target_section_titles
+    )
+    materialized_contract["consultant_writing_search_queries"] = (
+        writing_search_queries
+    )
+    materialized_contract["_conversation"] = {
+        "session_id": session_id,
+        "project_id": int(project.id),
+        "materialized_at": _now(),
+    }
+
     _write_json(
         contract_path,
-        {
-            **contract,
-            "_conversation": {
-                "session_id": session_id,
-                "project_id": int(project.id),
-                "materialized_at": _now(),
-            },
-        },
+        materialized_contract,
     )
     _write_json(
         sources_path,
@@ -354,7 +388,7 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
         ),
         "snapshot": snapshot,
         "scope": scope,
-        "contract": contract,
+        "contract": materialized_contract,
         "sources": sources,
         "path_overrides": path_overrides,
     }

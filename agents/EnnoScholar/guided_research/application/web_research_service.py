@@ -246,6 +246,13 @@ class WebResearchService:
         "scientific_publication",
         "scientific_publications",
     })
+    # Le workflow historique par verrou conserve son portefeuille large. Le chat
+    # supplémentaire présente au contraire une shortlist sans remplissage : la
+    # demande explicite du consultant est la cible primaire, le verrou n'est qu'un
+    # contexte de rattachement.
+    CHAT_REVIEW_MAX_CANDIDATES = 12
+    CHAT_REVIEW_MAX_DIRECT = 8
+    CHAT_REVIEW_MAX_CONNECTED = 4
 
     def __init__(
         self,
@@ -354,37 +361,29 @@ class WebResearchService:
         requests_list: list[dict[str, Any]],
         project_context: Mapping[str, Any],
     ) -> list[dict[str, Any]]:
-        """Transforme les verrous figés du chat en cibles scientifiques privées.
+        """Construit des cibles privées centrées sur la demande du consultant.
 
-        Le moteur historique reçoit le même contenu qu'après Agent 1, mais sous
-        le contrat ``research_targets`` : il exécute exactement la même méthode
-        ``search_for_verrou`` sans fabriquer ni rattacher un Verrou en base.
+        ``search_for_verrou`` reste inchangé et fournit le planificateur, la
+        recherche multi-index et le reranking. Ici, le chat adapte seulement son
+        entrée : sujet/outil demandé en premier, paragraphe et verrou en contexte
+        secondaire. Cela évite qu'une recherche FEKO soit diluée dans un verrou
+        général sur les données SAR synthétiques.
         """
         current_verrous = [
             dict(row)
             for row in (project_context.get("current_verrous") or [])
             if isinstance(row, Mapping) and _clean(row.get("title"), 700)
         ]
-        requested_ids = {
-            _clean(value, 120).casefold()
-            for request in requests_list
-            for value in (request.get("target_verrous") or [])
-            if _clean(value, 120)
+        current_by_id = {
+            _clean(row.get("id"), 120).casefold(): row
+            for row in current_verrous
+            if _clean(row.get("id"), 120)
         }
-        active_ids = {
-            _clean(value, 120).casefold()
+        active_ids = [
+            _clean(value, 120)
             for value in (project_context.get("active_verrou_ids") or [])
             if _clean(value, 120)
-        }
-        selected_ids = requested_ids or active_ids
-        if selected_ids:
-            scoped = [
-                row
-                for row in current_verrous
-                if _clean(row.get("id"), 120).casefold() in selected_ids
-            ]
-            if scoped:
-                current_verrous = scoped
+        ]
 
         project = (
             dict(project_context.get("project") or {})
@@ -402,72 +401,188 @@ class WebResearchService:
             or project_brief.get("description"),
             10000,
         )
+
+        # Les 2 à 5 requêtes émises par l'interpréteur décrivent souvent le même
+        # sujet sous plusieurs angles (preuves, protocoles, limites). On les
+        # regroupe par entité et portée afin de ne pas lancer un portefeuille
+        # complet EnnoScholar pour chaque variante.
+        grouped: dict[
+            tuple[tuple[str, ...], str],
+            dict[str, Any],
+        ] = {}
+        for raw_request in requests_list:
+            request = dict(raw_request)
+            explicit_scope = [
+                _clean(value, 120)
+                for value in (request.get("target_verrous") or [])
+                if _clean(value, 120)
+            ]
+            scope_ids = explicit_scope or list(active_ids)
+            if not scope_ids and len(current_verrous) == 1:
+                scope_ids = [_clean(current_verrous[0].get("id"), 120)]
+            scope_ids = list(dict.fromkeys(value for value in scope_ids if value))
+            entity = _clean(request.get("entity_name"), 400)
+            group_entity = _norm(entity) or "__request_portfolio__"
+            key = (tuple(value.casefold() for value in scope_ids), group_entity)
+            group = grouped.setdefault(
+                key,
+                {"scope_ids": scope_ids, "requests": []},
+            )
+            group["requests"].append(request)
+
         targets: list[dict[str, Any]] = []
-        for index, verrou in enumerate(current_verrous, start=1):
-            target_id = _clean(verrou.get("id"), 120) or f"CHAT-V{index}"
-            title = _clean(verrou.get("title"), 700)
-            matched_requests = [
-                request
-                for request in requests_list
-                if not request.get("target_verrous")
-                or target_id.casefold()
-                in {
-                    _clean(value, 120).casefold()
-                    for value in (request.get("target_verrous") or [])
-                }
+        for _, group in grouped.items():
+            scope_ids = list(group.get("scope_ids") or [])
+            grouped_requests = list(group.get("requests") or [])
+            scoped_verrous = [
+                current_by_id[value.casefold()]
+                for value in scope_ids
+                if value.casefold() in current_by_id
             ]
-            suggested_queries = [
+            suggested_queries = list(dict.fromkeys(
                 _clean(request.get("query"), 500)
-                for request in matched_requests
+                for request in grouped_requests
                 if _clean(request.get("query"), 500)
+            ))[:5]
+            entities = list(dict.fromkeys(
+                _clean(request.get("entity_name"), 400)
+                for request in grouped_requests
+                if _clean(request.get("entity_name"), 400)
+            ))
+            focus_title = entities[0] if entities else (
+                suggested_queries[0] if suggested_queries else ""
+            )
+            # Un acronyme isolé reste explicite, mais le titre scientifique doit
+            # aussi porter son application afin que le planificateur dispose de
+            # plusieurs rôles recherchables.
+            if len(focus_title) < 12 and suggested_queries:
+                focus_title = (
+                    suggested_queries[0]
+                    if _norm(suggested_queries[0]).startswith(
+                        _norm(focus_title)
+                    )
+                    else _clean(
+                        f"{focus_title} {suggested_queries[0]}", 700
+                    )
+                )
+            focus_title = focus_title or "Supplementary scientific evidence"
+
+            required_terms = list(dict.fromkeys(
+                _clean(value, 160)
+                for request in grouped_requests
+                for value in (request.get("required_terms") or [])
+                if _clean(value, 160)
+            ))[:16]
+            requested_dimensions = list(dict.fromkeys(
+                _clean(value, 180)
+                for request in grouped_requests
+                for value in (
+                    request.get("target_context_dimensions")
+                    or request.get("requested_dimensions")
+                    or []
+                )
+                if _clean(value, 180)
+            ))[:16]
+            section_titles = list(dict.fromkeys(
+                _clean(value, 300)
+                for request in grouped_requests
+                for value in (request.get("section_titles") or [])
+                if _clean(value, 300)
+            ))[:8]
+            named_external_entities = list(dict.fromkeys(
+                _clean(request.get("entity_name"), 400)
+                for request in grouped_requests
+                if (
+                    _clean(request.get("entity_name"), 400)
+                    and cls._contract_identifier(request.get("entity_type"))
+                    in cls.DOCUMENTATION_ENTITY_TYPES
+                )
+            ))
+            named_entity_context = (
+                "Named externally published scientific tool or protocol "
+                "explicitly requested (not a local project identifier): "
+                + ", ".join(named_external_entities)
+                if named_external_entities else ""
+            )
+            source_passages = [
+                _clean(
+                    ". ".join(value for value in (
+                        named_entity_context,
+                        query,
+                        (
+                            "Required scientific anchors: "
+                            + ", ".join(required_terms)
+                            if required_terms else ""
+                        ),
+                        (
+                            "Target application or conditions: "
+                            + ", ".join(requested_dimensions)
+                            if requested_dimensions else ""
+                        ),
+                        (
+                            "Target document section: "
+                            + ", ".join(section_titles)
+                            if section_titles else ""
+                        ),
+                    ) if value),
+                    2400,
+                )
+                for query in suggested_queries
             ]
-            supporting = _clean(
-                verrou.get("justification")
-                or verrou.get("text")
-                or verrou.get("supporting_context"),
-                5000,
+            related_context = [
+                _clean(
+                    ". ".join(value for value in (
+                        _clean(verrou.get("title"), 700),
+                        _clean(
+                            verrou.get("justification")
+                            or verrou.get("text")
+                            or verrou.get("supporting_context"),
+                            1800,
+                        ),
+                    ) if value),
+                    2400,
+                )
+                for verrou in scoped_verrous
+            ]
+            target_id = _stable_id(
+                "CHAT-R",
+                focus_title,
+                "|".join(scope_ids),
+                "|".join(suggested_queries),
             )
             targets.append({
                 "research_target_id": target_id,
-                "research_target_title": title,
-                "research_target_type": "conversation_scientific_lock",
-                "title": title,
-                "verrou_title": title,
-                "text": "\n".join(
-                    value
-                    for value in (title, supporting, scientific_context)
-                    if value
-                )[:14000],
+                "research_target_title": focus_title,
+                "research_target_type": "conversation_supplementary_request",
+                "title": focus_title,
+                "verrou_title": focus_title,
+                "text": "\n".join([
+                    *source_passages,
+                    *related_context,
+                    *([scientific_context] if scientific_context else []),
+                ])[:14000],
+                "source_passages": source_passages,
                 "suggested_queries": suggested_queries,
-                "raw_item": dict(verrou),
-                "source_json": dict(verrou.get("source_json") or {}),
+                "keywords": list(dict.fromkeys([
+                    *entities,
+                    *required_terms,
+                    *requested_dimensions,
+                ]))[:20],
+                "target_verrous": scope_ids,
+                "related_verrou_ids": scope_ids,
+                "raw_item": {
+                    **dict(grouped_requests[0]),
+                    "search_request_portfolio": grouped_requests,
+                    "related_verrous": scoped_verrous,
+                },
+                "source_json": {
+                    "guided_chat_supplementary_search": True,
+                    "request_portfolio": grouped_requests,
+                    "related_verrou_ids": scope_ids,
+                },
             })
 
-        if targets:
-            return targets
-
-        # Conversation sans diagnostic : chaque demande explicite joue le rôle
-        # du verrou scientifique confirmé par le consultant.
-        for index, request in enumerate(requests_list, start=1):
-            query = _clean(request.get("query"), 700)
-            if not query:
-                continue
-            target_id = _clean(
-                (request.get("target_verrous") or [None])[0], 120
-            ) or f"CHAT-T{index}"
-            targets.append({
-                "research_target_id": target_id,
-                "research_target_title": query,
-                "research_target_type": "conversation_scientific_lock",
-                "title": query,
-                "verrou_title": query,
-                "text": "\n".join(
-                    value for value in (query, scientific_context) if value
-                )[:14000],
-                "suggested_queries": [query],
-                "raw_item": dict(request),
-            })
-        return targets
+        return targets[:4]
 
     @classmethod
     def _map_full_scholar_report(
@@ -475,7 +590,9 @@ class WebResearchService:
         report: Mapping[str, Any],
         requests_list: list[dict[str, Any]],
         excluded: set[str],
+        target_scope_by_id: Mapping[str, Iterable[Any]] | None = None,
     ) -> list[dict[str, Any]]:
+        target_scope_by_id = target_scope_by_id or {}
         candidates: list[dict[str, Any]] = []
         for result in (report.get("results") or []):
             if not isinstance(result, Mapping):
@@ -514,11 +631,20 @@ class WebResearchService:
                 covered_ids = [
                     _clean(row.get("verrou_id"), 120)
                     for row in (article.get("covered_verrous") or [])
-                    if isinstance(row, Mapping) and _clean(row.get("verrou_id"), 120)
+                    if (
+                        isinstance(row, Mapping)
+                        and _clean(row.get("verrou_id"), 120)
+                        and _clean(row.get("verrou_id"), 120) != target_id
+                    )
+                ]
+                scoped_ids = [
+                    _clean(value, 120)
+                    for value in (target_scope_by_id.get(target_id) or [])
+                    if _clean(value, 120)
                 ]
                 target_verrous = list(dict.fromkeys([
                     *covered_ids,
-                    *([target_id] if target_id else []),
+                    *scoped_ids,
                 ]))
                 role = cls._full_scholar_role(tag)
                 score = cls._full_scholar_score(
@@ -564,16 +690,237 @@ class WebResearchService:
                     "consultant_decision": "proposed",
                     "retrieval": dict(article.get("retrieval") or {}),
                     "full_ennoscholar_source": True,
+                    "score_details": dict(article.get("score_details") or {}),
+                    "bge_reranker_score": article.get("bge_reranker_score"),
+                    "chat_research_target_id": target_id,
                 })
-        # Le moteur complet applique déjà son ranking scientifique. On déduplique
-        # sans réintroduire la limite de 30/60 du moteur léger du chat.
         return cls._deduplicate(candidates)
+
+    @classmethod
+    def _chat_request_alignment(
+        cls,
+        candidate: Mapping[str, Any],
+        request: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Mesure l'alignement avec la demande, pas avec le verrou général."""
+        candidate_text = " ".join(
+            _clean(candidate.get(key), 8000)
+            for key in ("title", "abstract", "venue")
+        )
+        found = _tokens(candidate_text)
+        entity = _clean(request.get("entity_name"), 400)
+        entity_tokens = _tokens(entity)
+        query_tokens = _tokens(request.get("query"))
+        required_groups = [
+            tokens
+            for tokens in (
+                _tokens(value)
+                for value in (request.get("required_terms") or [])
+            )
+            if tokens
+        ]
+        context_groups = [
+            tokens
+            for tokens in (
+                _tokens(value)
+                for value in cls._target_context_dimensions(request)
+            )
+            if tokens
+        ]
+
+        def group_matches(tokens: set[str]) -> bool:
+            return bool(
+                tokens
+                and len(tokens & found) >= max(1, (len(tokens) + 1) // 2)
+            )
+
+        entity_coverage = (
+            len(entity_tokens & found) / max(1, len(entity_tokens))
+            if entity_tokens else 0.0
+        )
+        query_coverage = (
+            len(query_tokens & found) / max(1, len(query_tokens))
+            if query_tokens else 0.0
+        )
+        required_matches = sum(group_matches(group) for group in required_groups)
+        context_matches = sum(group_matches(group) for group in context_groups)
+        entity_type = cls._contract_identifier(request.get("entity_type"))
+        named_entity = bool(
+            entity_tokens
+            and (
+                entity_type in cls.DOCUMENTATION_ENTITY_TYPES
+                or bool(re.search(r"\b[A-Z][A-Z0-9+#.-]{2,}\b", entity))
+            )
+        )
+        direct_required = bool(
+            request.get("require_direct_evidence")
+            or cls._contract_identifier(request.get("query_kind"))
+            == "direct_scientific_evidence"
+        )
+        minimum_required_matches = (
+            max(1, (len(required_groups) + 1) // 2)
+            if direct_required and required_groups else 0
+        )
+        eligible = True
+        rejection_reason = ""
+        if named_entity and entity_coverage < 0.5:
+            eligible = False
+            rejection_reason = "named_entity_absent"
+        elif required_matches < minimum_required_matches:
+            eligible = False
+            rejection_reason = "required_scientific_anchors_missing"
+        elif (
+            query_tokens
+            and query_coverage < 0.16
+            and required_matches == 0
+            and entity_coverage == 0.0
+        ):
+            eligible = False
+            rejection_reason = "consultant_request_alignment_too_low"
+
+        alignment_score = round(
+            min(
+                1.0,
+                0.40 * entity_coverage
+                + 0.30 * query_coverage
+                + 0.20 * (
+                    required_matches / max(1, len(required_groups))
+                )
+                + 0.10 * (
+                    context_matches / max(1, len(context_groups))
+                ),
+            ),
+            4,
+        )
+        return {
+            "eligible": eligible,
+            "rejection_reason": rejection_reason,
+            "alignment_score": alignment_score,
+            "entity_coverage": round(entity_coverage, 4),
+            "query_coverage": round(query_coverage, 4),
+            "required_matches": required_matches,
+            "required_groups_count": len(required_groups),
+            "context_matches": context_matches,
+            "context_groups_count": len(context_groups),
+            "named_entity_required": named_entity,
+            "direct_evidence_required": direct_required,
+            "query": _clean(request.get("query"), 500),
+            "entity_name": entity,
+        }
+
+    @classmethod
+    def _select_full_chat_candidates(
+        cls,
+        candidates: list[dict[str, Any]],
+        requests_list: list[dict[str, Any]],
+        *,
+        max_candidates: int,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Shortlist chat stricte, distincte de la présentation par verrou."""
+        scientific_requests = [
+            dict(request)
+            for request in requests_list
+            if cls._wants_scientific(request)
+        ]
+        accepted: list[dict[str, Any]] = []
+        rejected: list[dict[str, Any]] = []
+        for raw_candidate in candidates:
+            candidate = dict(raw_candidate)
+            role = str(candidate.get("relevance_role") or "")
+            relevance = max(
+                0.0,
+                min(1.0, float(candidate.get("relevance_score") or 0.0)),
+            )
+            alignments = [
+                cls._chat_request_alignment(candidate, request)
+                for request in scientific_requests
+            ]
+            eligible_alignments = [
+                row for row in alignments if row.get("eligible")
+            ]
+            best = max(
+                eligible_alignments or alignments or [{}],
+                key=lambda row: float(row.get("alignment_score") or 0.0),
+            )
+            minimum_relevance = 0.50 if role == "direct_evidence" else 0.42
+            eligible = bool(
+                role in {"direct_evidence", "connected_evidence"}
+                and eligible_alignments
+                and relevance >= minimum_relevance
+            )
+            if not eligible:
+                if len(rejected) < 30:
+                    rejected.append({
+                        "title": _clean(candidate.get("title"), 300),
+                        "role": role,
+                        "relevance_score": relevance,
+                        "reason": (
+                            best.get("rejection_reason")
+                            or (
+                                "relevance_below_chat_threshold"
+                                if relevance < minimum_relevance
+                                else "unsupported_relevance_role"
+                            )
+                        ),
+                    })
+                continue
+            candidate["chat_request_alignment"] = best
+            candidate["selection_priority_score"] = round(
+                min(
+                    0.99,
+                    0.58 * relevance
+                    + 0.32 * float(best.get("alignment_score") or 0.0)
+                    + (0.10 if role == "direct_evidence" else 0.04),
+                ),
+                4,
+            )
+            accepted.append(candidate)
+
+        accepted.sort(
+            key=lambda row: (
+                str(row.get("relevance_role")) == "direct_evidence",
+                float(row.get("selection_priority_score") or 0.0),
+                float(row.get("relevance_score") or 0.0),
+                float(row.get("source_authority") or 0.0),
+                bool(row.get("open_access")),
+            ),
+            reverse=True,
+        )
+        limit = max(
+            1,
+            min(int(max_candidates or cls.CHAT_REVIEW_MAX_CANDIDATES),
+                cls.CHAT_REVIEW_MAX_CANDIDATES),
+        )
+        direct = [
+            row for row in accepted
+            if row.get("relevance_role") == "direct_evidence"
+        ][: min(cls.CHAT_REVIEW_MAX_DIRECT, limit)]
+        remaining = max(0, limit - len(direct))
+        connected = [
+            row for row in accepted
+            if row.get("relevance_role") == "connected_evidence"
+        ][: min(cls.CHAT_REVIEW_MAX_CONNECTED, remaining)]
+        selected = [*direct, *connected]
+        return selected, {
+            "policy": "chat_request_primary_strict_shortlist_no_padding_v2",
+            "input_count": len(candidates),
+            "aligned_count": len(accepted),
+            "output_count": len(selected),
+            "max_candidates": limit,
+            "max_direct": cls.CHAT_REVIEW_MAX_DIRECT,
+            "max_connected": cls.CHAT_REVIEW_MAX_CONNECTED,
+            "no_padding": True,
+            "verrou_context_is_secondary": True,
+            "rejected_examples": rejected,
+        }
 
     def _search_with_full_ennoscholar(
         self,
         requests_list: list[dict[str, Any]],
         project_context: Mapping[str, Any],
         excluded: set[str],
+        *,
+        max_candidates: int = CHAT_REVIEW_MAX_CANDIDATES,
     ) -> dict[str, Any]:
         from agents.EnnoScholar.scholar_agent import EnnoScholarAgent
 
@@ -592,7 +939,13 @@ class WebResearchService:
                 project_context.get("validated_article_cards") or []
             )[:30],
         }
-        agent = EnnoScholarAgent(limit_per_query=50)
+        # Le moteur et ses seuils restent ceux du workflow par verrou. Seule la
+        # largeur de son résultat intermédiaire est bornée pour le chat ; la
+        # shortlist finale est encore plus stricte et ne remplit jamais le quota.
+        agent = EnnoScholarAgent(
+            limit_per_query=50,
+            max_articles_per_verrou=40,
+        )
         report = agent.run_search({
             "organisme": project.get("organisme") or "",
             "project": project.get("name") or project.get("project_name") or "",
@@ -605,12 +958,27 @@ class WebResearchService:
             "research_targets": targets,
             "source": "guided_conversation_full_ennoscholar",
         })
-        candidates = self._map_full_scholar_report(
-            report, requests_list, excluded
+        target_scope_by_id = {
+            _clean(target.get("research_target_id"), 120): list(
+                target.get("related_verrou_ids") or []
+            )
+            for target in targets
+            if _clean(target.get("research_target_id"), 120)
+        }
+        mapped_candidates = self._map_full_scholar_report(
+            report,
+            requests_list,
+            excluded,
+            target_scope_by_id,
+        )
+        candidates, selection_report = self._select_full_chat_candidates(
+            mapped_candidates,
+            requests_list,
+            max_candidates=max_candidates,
         )
         return {
             "ok": True,
-            "payload_type": "guided_full_ennoscholar_research_v1",
+            "payload_type": "guided_full_ennoscholar_research_v2",
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "seed_queries": requests_list,
             "queries": requests_list,
@@ -627,10 +995,13 @@ class WebResearchService:
                 requests_list, candidates
             ),
             "refinement_rounds": [],
+            "chat_selection": selection_report,
             "policy": {
                 "engine": "same_full_ennoscholar_agent_as_workflow_1",
+                "conversation_target_is_consultant_request": True,
+                "verrou_and_section_are_secondary_context": True,
                 "conversation_targets_are_not_database_verrous": True,
-                "all_ranked_candidates_returned": True,
+                "strict_shortlist_without_padding": True,
                 "consultant_validation_required": True,
                 "no_paywall_bypass": True,
             },
@@ -653,16 +1024,33 @@ class WebResearchService:
         seed_requests = self._expand_documentation_entities(seed_requests)[:8]
         requests_list = self._plan_provider_requests(seed_requests)[:8]
         excluded = {str(value) for value in (excluded_ids or [])}
-        if full_ennoscholar and any(
-            self._wants_scientific(request) for request in requests_list
-        ):
+        candidate_limit = max(1, min(int(max_candidates), 60))
+        scientific_requests = [
+            request for request in requests_list
+            if self._wants_scientific(request)
+        ]
+        documentation_requests = [
+            request for request in requests_list
+            if self._wants_documentation(request)
+        ]
+        full_candidates: list[dict[str, Any]] = []
+        if full_ennoscholar and scientific_requests:
             try:
                 full_result = self._search_with_full_ennoscholar(
-                    requests_list,
+                    scientific_requests,
                     project_context or {},
                     excluded,
+                    max_candidates=candidate_limit,
                 )
-                if full_result.get("candidates"):
+                full_candidates = [
+                    dict(row)
+                    for row in (full_result.get("candidates") or [])
+                    if isinstance(row, Mapping)
+                ]
+                # Un portefeuille mixte doit aussi exécuter la recherche de
+                # documentation officielle. L'ancien retour anticipé expliquait
+                # « aucune documentation » dès qu'un seul article était trouvé.
+                if full_candidates and not documentation_requests:
                     return full_result
             except Exception as exc:
                 # Continuité de service : si une dépendance du moteur complet
@@ -674,8 +1062,11 @@ class WebResearchService:
                 }
         else:
             full_result = None
+        provider_requests = (
+            documentation_requests if full_candidates else requests_list
+        )
         jobs: list[tuple[str, dict[str, Any]]] = []
-        for request in requests_list:
+        for request in provider_requests:
             wants_documentation = self._wants_documentation(request)
             wants_scientific = self._wants_scientific(request)
             if wants_scientific:
@@ -691,7 +1082,11 @@ class WebResearchService:
             getattr(self.llm, "web_search", None)
         ):
             seen_web_entities: set[str] = set()
-            for request in seed_requests:
+            web_seed_requests = [
+                request for request in seed_requests
+                if not full_candidates or self._wants_documentation(request)
+            ]
+            for request in web_seed_requests:
                 entity_tokens = _tokens(
                     request.get("entity_name") or request.get("query")
                 )
@@ -723,7 +1118,9 @@ class WebResearchService:
                 jobs.append(("openai_web", request))
 
         raw: list[dict[str, Any]] = []
-        executions: list[dict[str, Any]] = []
+        executions: list[dict[str, Any]] = list(
+            full_result.get("executions") or []
+        ) if full_candidates and isinstance(full_result, Mapping) else []
         with ThreadPoolExecutor(max_workers=min(8, max(1, len(jobs)))) as pool:
             futures = {
                 pool.submit(self._run_job, provider, request): (provider, request)
@@ -759,6 +1156,11 @@ class WebResearchService:
             merged,
             seed_requests,
         )
+        if full_candidates:
+            # Les articles du moteur complet ont déjà passé le ranker verrou,
+            # le BGE et le filtre d'alignement chat. On ne les requalifie pas
+            # avec l'heuristique plus légère destinée aux résultats Web.
+            merged = self._deduplicate([*full_candidates, *merged])
         year_ceilings = [
             _year(request.get("publication_year_max"))
             for request in seed_requests
@@ -792,7 +1194,6 @@ class WebResearchService:
             ),
             reverse=True,
         )
-        candidate_limit = max(1, min(int(max_candidates), 60))
         ranked = ranked_all[:candidate_limit]
         documentation_requested = any(
             self._wants_documentation(request)
@@ -898,7 +1299,11 @@ class WebResearchService:
                 )
         response = {
             "ok": True,
-            "payload_type": "guided_multisource_web_research_v1",
+            "payload_type": (
+                "guided_hybrid_full_scholar_research_v2"
+                if full_candidates
+                else "guided_multisource_web_research_v1"
+            ),
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "seed_queries": seed_requests,
             "queries": requests_list,
@@ -916,6 +1321,10 @@ class WebResearchService:
                     "openai_web_search",
                 ],
                 "query_decomposition_enabled": True,
+                "full_scholar_scientific_shortlist_used": bool(
+                    full_candidates
+                ),
+                "mixed_scientific_and_official_documentation_supported": True,
                 "semantic_web_discovery_enabled": bool(self.enable_openai_web),
                 "llm_relevance_reranking_enabled": bool(
                     self.enable_llm_rerank
@@ -938,6 +1347,10 @@ class WebResearchService:
                 "status": full_result.get("status"),
                 "error": full_result.get("error"),
             }
+            if isinstance(full_result.get("chat_selection"), Mapping):
+                response["chat_selection"] = dict(
+                    full_result.get("chat_selection") or {}
+                )
         return response
 
     @staticmethod

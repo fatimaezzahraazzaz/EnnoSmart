@@ -1213,6 +1213,32 @@ def _load_fulltext(project: Project, article: Article) -> Dict[str, Any]:
         if _is_successful_fulltext_json(cached, cleaned_text):
             retrieval_stage = _safe_text(cached.get("retrieval_stage"), 80).lower()
             source_kind = "legal" if "legal" in retrieval_stage or cached.get("retrieved_via_mcp") else "direct"
+            identity_verification = (
+                dict(cached.get("identity_verification") or {})
+                if isinstance(cached.get("identity_verification"), dict)
+                else {}
+            )
+            content_source_kind = _safe_text(
+                cached.get("content_source_kind"), 40
+            ).casefold()
+            cached_status = _safe_text(cached.get("status"), 100).casefold()
+            remote_sha256 = _safe_text(cached.get("remote_sha256"), 128).casefold()
+            same_article = bool(
+                cached.get("same_article") is True
+                or (
+                    identity_verification.get("verified") is True
+                    and identity_verification.get("same_article") is True
+                )
+            )
+            verified_pdf = bool(
+                cached.get("verified_pdf") is True
+                or (
+                    content_source_kind == "pdf"
+                    and cached.get("ok") is True
+                    and "pdf" in cached_status
+                    and bool(re.fullmatch(r"[0-9a-f]{64}", remote_sha256))
+                )
+            )
             return {
                 "found": True,
                 "source_kind": source_kind,
@@ -1234,6 +1260,28 @@ def _load_fulltext(project: Project, article: Article) -> Dict[str, Any]:
                     "cache_key": cached.get("fulltext_cache_key"),
                 },
                 "fulltext_diagnostics": {"status": "global_database_cache_hit"},
+                # Métadonnées minimales nécessaires à l'extraction des figures.
+                # Le texte intégral n'est volontairement pas dupliqué ici.
+                "visual_source": {
+                    "ok": bool(cached.get("ok")),
+                    "status": cached.get("status"),
+                    "full_text_status": cached.get("full_text_status"),
+                    "content_source_kind": content_source_kind,
+                    "verified_pdf": verified_pdf,
+                    "same_article": same_article,
+                    "identity_verification": identity_verification,
+                    "fulltext_source_url": cached.get("fulltext_source_url")
+                    or cached.get("pdf_source_url")
+                    or cached.get("remote_source_url"),
+                    "fulltext_final_url": cached.get("fulltext_final_url")
+                    or cached.get("pdf_final_url")
+                    or cached.get("remote_final_url"),
+                    "remote_sha256": remote_sha256,
+                    "retrieval_stage": cached.get("retrieval_stage"),
+                    "legal_provider": cached.get("legal_provider"),
+                    "license": cached.get("license") or cached.get("legal_license"),
+                    "storage_mode": "global_database_cache",
+                },
                 "candidates_info": [{
                     "source_kind": "global_database_cache",
                     "path": f"db://scholar_fulltext_cache/{cached.get('fulltext_cache_id')}",
@@ -1314,6 +1362,30 @@ def _load_fulltext(project: Project, article: Article) -> Dict[str, Any]:
                 "pdf_saved": bool(data.get("pdf_saved")),
             },
             "fulltext_diagnostics": diagnostic,
+            "visual_source": {
+                key: data.get(key)
+                for key in (
+                    "ok",
+                    "status",
+                    "full_text_status",
+                    "content_source_kind",
+                    "verified_pdf",
+                    "same_article",
+                    "identity_verification",
+                    "fulltext_source_url",
+                    "fulltext_final_url",
+                    "pdf_source_url",
+                    "pdf_final_url",
+                    "remote_source_url",
+                    "remote_final_url",
+                    "remote_sha256",
+                    "retrieval_stage",
+                    "legal_provider",
+                    "license",
+                    "legal_license",
+                )
+                if data.get(key) is not None
+            },
             "candidates_info": candidates_info,
         }
 
@@ -5540,14 +5612,26 @@ def sync_article_cards_after_consultant_decision(
     if selected:
         evidence = _as_dict(source_json.get("evidence_preflight"))
         if evidence.get("evidence_status") == "FULLTEXT_READY":
-            reusable, _ = _load_reusable_card(project, article, f"A{int(article.id)}")
+            citation_id = f"A{int(article.id)}"
+            fulltext_info = _load_fulltext(project, article)
+            reusable, _ = _load_reusable_card(project, article, citation_id)
             card = reusable or build_article_card(
-                f"A{int(article.id)}",
+                citation_id,
                 article,
                 project,
                 mode="instant",
             )
             card = _sync_card_source_context(card, article)
+            # Le clic « Garder » est aussi le chemin de préparation des cartes.
+            # Il doit donc attacher les mêmes figures originales que le build
+            # Article Cards complet, y compris lorsqu'une carte est réutilisée.
+            card = _sync_card_visual_evidence(
+                card,
+                project=project,
+                article=article,
+                citation_id=citation_id,
+                fulltext_info=fulltext_info,
+            )
             source_json["article_card"] = card
             source_json["article_card_storage"] = "database_article_source_json"
             source_json.pop("article_card_sync_error", None)

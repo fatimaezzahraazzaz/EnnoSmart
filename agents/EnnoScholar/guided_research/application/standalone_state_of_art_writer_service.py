@@ -18,6 +18,11 @@ from modules.LLM.llm_client import LLMClient
 
 from ...consultant_plan_service import write_json
 
+from ...state_of_art.visual_placement_service import (
+    build_visual_placements_shared,
+    visual_markdown_lines,
+)
+
 
 def _clean(value: Any, limit: int = 20000) -> str:
     return re.sub(
@@ -243,6 +248,7 @@ def _card_rows(
                 2500,
             ),
             "evidence": _evidence_texts(card),
+            "visual_evidence": list(card.get("visual_evidence") or []),
         }
         if row["title"]:
             rows.append(row)
@@ -363,17 +369,28 @@ def _markdown(
     draft: Mapping[str, Any],
     *,
     sources: list[dict[str, Any]],
+    visual_placements: list[dict[str, Any]] | None = None,
 ) -> str:
     lines = [f"# {_clean(draft.get('title'), 700) or 'État de l’art scientifique'}"]
-    for section in draft.get("sections") or []:
+
+    placements_by_anchor: dict[str, list[dict[str, Any]]] = {}
+    for placement in visual_placements or []:
+        if not isinstance(placement, Mapping):
+            continue
+        anchor_key = _clean(placement.get("anchor_key"), 260)
+        if anchor_key:
+            placements_by_anchor.setdefault(anchor_key, []).append(dict(placement))
+
+    for section_index, section in enumerate(draft.get("sections") or []):
         if not isinstance(section, Mapping):
             continue
         try:
             level = max(1, min(5, int(section.get("level") or 1)))
         except (TypeError, ValueError):
             level = 1
+        section_id = _clean(section.get("section_id"), 160) or f"section_{section_index + 1}"
         lines.extend(["", f"{'#' * (level + 1)} {_clean(section.get('title'), 700)}"])
-        for paragraph in section.get("paragraphs") or []:
+        for paragraph_index, paragraph in enumerate(section.get("paragraphs") or []):
             if not isinstance(paragraph, Mapping):
                 continue
             text = _clean(paragraph.get("text"), 20000)
@@ -384,6 +401,10 @@ def _markdown(
             ]
             if text:
                 lines.extend(["", text + (f" [{', '.join(citations)}]" if citations else "")])
+                anchor_key = f"{section_id}|section|0|{paragraph_index}"
+                for placement in placements_by_anchor.get(anchor_key, []):
+                    lines.extend(["", *visual_markdown_lines(placement)])
+
     lines.extend(["", "## Références"])
     for source in sources:
         authors = ", ".join(_clean(value, 150) for value in source.get("authors") or [])
@@ -402,7 +423,6 @@ def _markdown(
             + (f". {locator}" if locator else "")
         )
     return "\n".join(lines).strip() + "\n"
-
 
 def _deterministic_evidence_draft(
     *,
@@ -518,6 +538,9 @@ def run_standalone_state_of_art_writer(
     cards_payload: Mapping[str, Any],
     output_dir: str | Path,
     revision_request: str = "",
+    consultant_request: str = "",
+    consultant_target_section_ids: Iterable[str] | None = None,
+    consultant_target_section_titles: Iterable[str] | None = None,
     current_markdown: str = "",
     approved_plan: Iterable[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
@@ -616,8 +639,17 @@ VERROUS À COUVRIR
 PLAN VALIDÉ PAR LE CONSULTANT
 {json.dumps(plan, ensure_ascii=False)}
 
-SOURCES AUTORISÉES ET PREUVES
-{json.dumps(sources, ensure_ascii=False)}
+    SOURCES AUTORISÉES ET PREUVES
+{json.dumps([{key: value for key, value in source.items() if key != 'visual_evidence'} for source in sources], ensure_ascii=False)}
+
+DEMANDE CIBLÉE DU CONSULTANT POUR CETTE VERSION
+{_clean(consultant_request or revision_request, 12000)}
+
+SECTIONS CIBLES DE CETTE DEMANDE
+{json.dumps({
+    "section_ids": list(consultant_target_section_ids or []),
+    "section_titles": list(consultant_target_section_titles or []),
+}, ensure_ascii=False)}
 
 DEMANDE DE RÉVISION
 {_clean(revision_request, 5000)}
@@ -634,6 +666,9 @@ global, articule les convergences, différences et dépendances entre tous les v
 Compare les familles de méthodes, leurs protocoles, résultats, limites et conditions
 de transférabilité. Défends le caractère non résolu du verrou uniquement lorsque les
 preuves le permettent et signale explicitement l'absence de preuve directe.
+- Applique la demande ciblée dans la section désignée par son identifiant ou son
+  titre. Ne déplace pas cet ajout dans une autre section et utilise les nouvelles
+  sources pertinentes lorsqu'elles contiennent effectivement la preuve demandée.
 
 Retourne uniquement le JSON du schéma. Chaque section doit indiquer les verrou_ids
 exacts qu'elle couvre. Chaque paragraphe contient des citations choisies uniquement
@@ -715,7 +750,41 @@ CONTRAT ORIGINAL
             "guard": guard,
         })
 
-    markdown = _markdown(draft, sources=sources) if draft else ""
+    visual_placements: list[dict[str, Any]] = []
+    visual_diagnostics: dict[str, Any] = {
+        "enabled": True,
+        "candidate_count": 0,
+        "screened_candidate_count": 0,
+        "rejected_candidate_count": 0,
+        "placed_count": 0,
+        "no_visual_reason": "no_draft",
+        "rejection_reasons": {},
+        "rejected": [],
+        "unmatched": [],
+    }
+    if draft:
+        visual_placements, visual_diagnostics = build_visual_placements_shared(
+            draft=draft,
+            contract={"sections": plan},
+            cards_payload=cards_payload,
+            cards=sources,
+            citation_field="source_id",
+            article_min_similarity=0.09,
+            project_min_similarity=0.10,
+            max_per_section=1,
+            max_visuals=0,
+            include_project_visuals=True,
+            enabled=True,
+        )
+    markdown = (
+        _markdown(
+            draft,
+            sources=sources,
+            visual_placements=visual_placements,
+        )
+        if draft
+        else ""
+    )
     word_count = len(re.findall(r"\b[\wÀ-ÿ'’-]+\b", markdown))
     minimum_consultant_words = 900 if len(active_verrous) == 1 else 1400
     consultant_quality_ready = bool(
@@ -731,6 +800,18 @@ CONTRAT ORIGINAL
         "verrous": active_verrous,
         "approved_plan": plan,
         "sources": sources,
+        "consultant_writing_directive": {
+            "request": _clean(consultant_request or revision_request, 12000),
+            "target_section_ids": list(consultant_target_section_ids or []),
+            "target_section_titles": list(
+                consultant_target_section_titles or []
+            ),
+            "propagated_to_writer": bool(
+                _clean(consultant_request or revision_request, 12000)
+            ),
+        },
+        "visual_placements": visual_placements,
+        "visual_diagnostics": visual_diagnostics,
         "draft_json": draft,
         "guard": guard,
         "attempts": attempts,

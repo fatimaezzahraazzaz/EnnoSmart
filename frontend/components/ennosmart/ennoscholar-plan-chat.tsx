@@ -68,6 +68,7 @@ type ResearchCandidate = {
   authors?: string[]
   year?: number | null
   url?: string | null
+  pdf_url?: string | null
   doi?: string | null
   abstract?: string | null
   source_providers?: string[]
@@ -76,6 +77,15 @@ type ResearchCandidate = {
   selection_priority_score?: number
   open_access?: boolean
   consultant_decision?: string
+  fulltext_verified?: boolean
+  scientific_evidence_eligible?: boolean
+  fulltext_preparation?: {
+    article_id?: number | null
+    status?: string | null
+    usable_as_scientific_evidence?: boolean
+    fulltext_ready?: boolean
+    ready_for_writing?: boolean
+  }
   relevance_role?:
     | "direct_evidence"
     | "connected_evidence"
@@ -295,6 +305,7 @@ function CandidateCard({
   candidate,
   busy,
   onDecision,
+  onUploadPdf,
 }: {
   candidate: ResearchCandidate
   busy: boolean
@@ -302,6 +313,7 @@ function CandidateCard({
     candidate: ResearchCandidate,
     decision: "accepted" | "rejected",
   ) => void
+  onUploadPdf: (candidate: ResearchCandidate, file: File) => void
 }) {
   const decided = String(candidate.consultant_decision || "")
   const documentation = [
@@ -317,6 +329,17 @@ function CandidateCard({
       official_documentation: "Documentation officielle",
       implementation: "Implémentation",
     }[String(candidate.relevance_role)] || ""
+  const preparation = candidate.fulltext_preparation || {}
+  const fulltextReady = Boolean(
+    candidate.fulltext_verified ||
+      candidate.scientific_evidence_eligible ||
+      preparation.usable_as_scientific_evidence ||
+      preparation.fulltext_ready,
+  )
+  const pendingExtraction =
+    decided === "accepted" && !documentation && !fulltextReady
+  const articleId = Number(preparation.article_id || 0)
+  const consultationUrl = candidate.pdf_url || candidate.url
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -364,15 +387,15 @@ function CandidateCard({
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {candidate.url && (
+        {consultationUrl && (
           <a
-            href={candidate.url}
+            href={consultationUrl}
             target="_blank"
             rel="noreferrer"
             className="inline-flex h-8 items-center rounded-lg px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900"
           >
             <ExternalLink className="mr-1 size-3" />
-            Consulter
+            {pendingExtraction ? "Télécharger / consulter" : "Consulter"}
           </a>
         )}
         {!["accepted", "rejected"].includes(decided) ? (
@@ -388,7 +411,7 @@ function CandidateCard({
               ) : (
                 <Check className="mr-1 size-3" />
               )}
-              Ajouter au corpus
+              Garder et extraire
             </Button>
             <Button
               size="sm"
@@ -402,9 +425,49 @@ function CandidateCard({
             </Button>
           </>
         ) : (
-          <Badge className={decided === "accepted" ? "bg-emerald-600" : "bg-slate-500"}>
-            {decided === "accepted" ? "Ajouté au corpus" : "Écarté"}
-          </Badge>
+          <>
+            <Badge
+              className={
+                decided === "rejected"
+                  ? "bg-slate-500"
+                  : pendingExtraction
+                    ? "border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-50"
+                    : "bg-emerald-600"
+              }
+            >
+              {decided === "rejected"
+                ? "Écarté"
+                : pendingExtraction
+                  ? "Non extrait — hors corpus"
+                  : documentation
+                    ? "Source validée"
+                    : "Ajouté au corpus"}
+            </Badge>
+            {pendingExtraction && articleId > 0 && (
+              <label
+                className={`inline-flex h-8 cursor-pointer items-center rounded-lg border border-amber-200 bg-white px-2.5 text-xs font-medium text-amber-800 hover:bg-amber-50 ${
+                  busy ? "pointer-events-none opacity-50" : ""
+                }`}
+              >
+                {busy ? (
+                  <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                ) : (
+                  <UploadCloud className="mr-1.5 size-3.5" />
+                )}
+                Importer le PDF
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    event.target.value = ""
+                    if (file) onUploadPdf(candidate, file)
+                  }}
+                />
+              </label>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -509,7 +572,8 @@ function CorpusDialog({
           </div>
           <p className="mt-2 text-xs text-slate-500">
             Les candidats apparaîtront dans le chat. Cliquez ensuite sur
-            « Ajouter au corpus » pour lancer les phases 1 et 2. Un PDF importé
+            « Garder et extraire » pour lancer les phases 1 et 2. Seuls les
+            articles réellement extraits entrent dans le corpus. Un PDF importé
             depuis votre PC est directement extrait et transformé en Article Card.
           </p>
         </div>
@@ -979,8 +1043,13 @@ export function EnnoScholarPlanChat({
         ])
       }
       if (decision === "accepted") {
+        const refreshedSession = await getGuidedResearchSession(
+          projectId,
+          sessionId,
+        )
+        setCandidates(candidatesFromSession(refreshedSession))
         setNotice(
-          "Source ajoutée : extraction et Article Card terminées ou signalées dans le message.",
+          "Source acceptée : elle est ajoutée au corpus uniquement si son texte a été extrait.",
         )
         await onCorpusChanged?.()
         await refreshConversationCorpus()
@@ -1045,6 +1114,42 @@ export function EnnoScholarPlanChat({
     } catch (err: any) {
       setError(err?.message || "Impossible d’importer et préparer ce PDF.")
     } finally {
+      setPreparingCorpus(false)
+    }
+  }
+
+
+  async function uploadCandidatePdf(candidate: ResearchCandidate, file: File) {
+    const articleId = Number(candidate.fulltext_preparation?.article_id || 0)
+    if (!articleId) {
+      setError("Cette source n'a pas encore d'article associé pour recevoir le PDF.")
+      return
+    }
+    setDecidingId(candidate.candidate_id)
+    setPreparingCorpus(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const result = await uploadAndExtractArticlePdf(
+        projectId,
+        articleId,
+        file,
+        candidate.url || null,
+        sessionId,
+      )
+      const refreshedSession = await getGuidedResearchSession(projectId, sessionId)
+      setCandidates(candidatesFromSession(refreshedSession))
+      await refreshConversationCorpus()
+      await onCorpusChanged?.()
+      const cardsCount = Number(result?.phase_2?.cards_count || 0)
+      setNotice(
+        `Le PDF de « ${candidate.title || file.name} » a été extrait et l'article est maintenant dans le corpus. ` +
+          `${cardsCount} Article Card(s) sont prêtes.`,
+      )
+    } catch (err: any) {
+      setError(err?.message || "Impossible d'importer et d'extraire ce PDF.")
+    } finally {
+      setDecidingId("")
       setPreparingCorpus(false)
     }
   }
@@ -1386,6 +1491,7 @@ export function EnnoScholarPlanChat({
                         candidate={candidate}
                         busy={decidingId === candidate.candidate_id}
                         onDecision={(row, value) => void decide(row, value)}
+                        onUploadPdf={(row, file) => void uploadCandidatePdf(row, file)}
                       />
                     ))}
                   </div>

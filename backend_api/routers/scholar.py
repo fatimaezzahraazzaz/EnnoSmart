@@ -1794,6 +1794,9 @@ async def upload_new_scholar_source(
         "corpus_scope_id": conversation_scope_id,
         "conversation_owned": bool(guided_session_id),
         "project_corpus_eligible": True,
+        "project_corpus_scope": "project",
+        "project_corpus_global": True,
+        "project_corpus_status": "fulltext_ready",
         "origin": (
             "guided_research_conversation"
             if guided_session_id

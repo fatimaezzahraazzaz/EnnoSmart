@@ -61,35 +61,67 @@ def attach_uploaded_article_to_session(
         session_id=session_id,
         create=True,
     )
-    if corpus_run is None or int(article.scholar_run_id) != int(corpus_run.id):
-        raise PermissionError(
-            "Cet article n'appartient pas au corpus de cette conversation."
+    from db.models import ScholarRun
+
+    article_run = (
+        db.query(ScholarRun)
+        .filter(
+            ScholarRun.id == int(article.scholar_run_id),
+            ScholarRun.project_id == int(project.id),
         )
-    all_verrous = [
-        dict(row)
-        for row in (context.get("consultant_verrous") or [])
-        if isinstance(row, dict)
-    ]
+        .first()
+    )
+    if corpus_run is None or article_run is None:
+        raise PermissionError(
+            "Cet article n'appartient pas au corpus persistant de ce projet."
+        )
     active_ids = [
         str(value).strip()
         for value in (context.get("active_verrou_ids") or [])
         if str(value).strip()
     ]
-    target_verrous = active_ids or [
-        str(row.get("id") or "").strip()
-        for row in all_verrous
-        if str(row.get("id") or "").strip()
-    ]
+    target_verrous = (
+        active_ids
+        if str(context.get("review_scope") or "") == "per_verrou"
+        else []
+    )
     source_json = dict(article.source_json) if isinstance(article.source_json, dict) else {}
     corpus_scope_id = str(
         context.get("corpus_scope_id") or session_id
     ).strip()
+    guided_session_ids = [
+        str(value).strip()
+        for value in (source_json.get("guided_session_ids") or [])
+        if str(value).strip()
+    ]
+    if session_id not in guided_session_ids:
+        guided_session_ids.append(session_id)
+    known_verrou_ids = [
+        str(value).strip()
+        for key in ("covered_verrou_ids", "target_verrous", "verrou_ids")
+        for value in (
+            source_json.get(key)
+            if isinstance(source_json.get(key), (list, tuple, set))
+            else []
+        )
+        if str(value).strip()
+    ]
+    if not known_verrou_ids and target_verrous:
+        known_verrou_ids = target_verrous
+        source_json["covered_verrou_ids"] = target_verrous
+    project_global = not bool(known_verrou_ids)
     source_json.update({
         "guided_session_id": session_id,
+        "guided_session_ids": guided_session_ids,
         "corpus_scope_id": corpus_scope_id,
         "conversation_owned": True,
         "origin": "guided_research_conversation",
         "guided_research_source": True,
+        "project_corpus_eligible": True,
+        "project_corpus_scope": "project" if project_global else "verrou",
+        "project_corpus_global": project_global,
+        "project_corpus_status": "fulltext_ready",
+        "project_corpus_updated_at": datetime.now(timezone.utc).isoformat(),
     })
     article.source_json = source_json
     article.verrou_id = None
@@ -116,7 +148,7 @@ def attach_uploaded_article_to_session(
         "scientific_evidence_eligible": True,
         "consultant_decision": "accepted",
         "consultant_reason": "Publication PDF ajoutÃ©e explicitement par le consultant.",
-        "target_verrous": target_verrous,
+        "target_verrous": known_verrou_ids,
         "section_ids": list(source_json.get("section_ids") or []),
         "guided_session_id": session_id,
         "corpus_scope_id": corpus_scope_id,
@@ -340,21 +372,43 @@ def rebuild_guided_research_corpus_cards(
         db, project, session_id=session_id, create=False
     )
     context = dict(snapshot.get("context") or {})
-    if run is not None:
-        legacy_scope = str(context.get("corpus_scope_id") or session_id).strip()
-        build_article_cards_for_selected_articles(
-            db,
-            project,
-            mode="auto",
-            force=force,
-            scholar_run_id=int(run.id),
-            scope_id=legacy_scope,
-        )
     active_ids = (
         list(context.get("active_verrou_ids") or [])
         if str(context.get("review_scope") or "") == "per_verrou"
         else []
     )
+    from services.ennoscholar_project_corpus_service import get_project_kept_articles
+
+    articles = get_project_kept_articles(
+        db, project, active_verrou_ids=active_ids
+    )
+    build_scopes: dict[tuple[int, str | None], set[int]] = {}
+    for article in articles:
+        source_json = (
+            dict(article.source_json)
+            if isinstance(article.source_json, dict)
+            else {}
+        )
+        scope_id = str(source_json.get("corpus_scope_id") or "").strip() or None
+        build_scopes.setdefault(
+            (int(article.scholar_run_id), scope_id), set()
+        ).add(int(article.id))
+
+    # Compatibilité avec une conversation qui vient d'être créée et dont le
+    # corpus est encore vide.
+    if run is not None and not build_scopes:
+        legacy_scope = str(context.get("corpus_scope_id") or session_id).strip()
+        build_scopes[(int(run.id), legacy_scope)] = set()
+
+    for (scholar_run_id, scope_id) in build_scopes:
+        build_article_cards_for_selected_articles(
+            db,
+            project,
+            mode="auto",
+            force=force,
+            scholar_run_id=scholar_run_id,
+            scope_id=scope_id,
+        )
     return get_project_corpus_cards_payload(
         db, project, active_verrou_ids=active_ids
     )
@@ -716,6 +770,34 @@ def decide_guided_research_sources(
             else dict(source)
             for source in updated_sources
         ]
+    project_corpus = read_guided_research_corpus(
+        db,
+        project,
+        session_id=session_id,
+    )
+    project_articles = list(project_corpus.get("articles") or [])
+    project_ready_count = sum(
+        1 for article in project_articles if bool(article.get("fulltext_ready"))
+    )
+    accepted_pending_count = sum(
+        1
+        for source in updated_sources
+        if source.get("consultant_decision") == "accepted"
+        and isinstance(source.get("fulltext_preparation"), dict)
+        and bool((source.get("fulltext_preparation") or {}).get("article_id"))
+        and not bool(
+            (source.get("fulltext_preparation") or {}).get(
+                "usable_as_scientific_evidence"
+            )
+        )
+    )
+    preparation["project_corpus_summary"] = {
+        "articles_count": len(project_articles),
+        "fulltext_ready_count": project_ready_count,
+        "non_extracted_articles_counted_in_corpus": 0,
+        "accepted_sources_waiting_upload_count": accepted_pending_count,
+        "persistent_across_conversations": True,
+    }
     refreshed_coverage = (
         agent._coverage(project, result.brief)
         if result.brief is not None
@@ -758,6 +840,9 @@ def decide_guided_research_sources(
         },
     )
     response.setdefault("metadata", {})["source_preparation"] = preparation
+    response.setdefault("metadata", {})["project_corpus"] = preparation[
+        "project_corpus_summary"
+    ]
     response.setdefault("metadata", {})["selection_actor"] = normalized_actor
     response.setdefault("metadata", {})["coverage"] = refreshed_coverage
     reports = list(preparation.get("reports") or [])
@@ -786,9 +871,12 @@ def decide_guided_research_sources(
     ]
     response["assistant_message"] = (
         f"{response.get('assistant_message', '').strip()} "
-        f"Le corpus total contient {accepted_count} source(s) validée(s), dont "
+        f"Cette conversation contient {accepted_count} source(s) validée(s), dont "
         f"{fulltext_count} texte(s) intégral(aux) vérifié(s) et {ready_count} "
-        f"Article Card(s) prête(s) pour la rédaction. "
+        f"Article Card(s) prête(s). Le corpus persistant du projet contient "
+        f"{len(project_articles)} article(s) extrait(s). "
+        f"{accepted_pending_count} source(s) acceptée(s) non extraite(s) restent "
+        f"hors corpus jusqu'à l'import de leur PDF. "
         f"Cette mise à jour a traité {targeted_count} source(s) ; le MCP a été "
         f"lancé {mcp_count} fois après échec direct et a permis de préparer "
         f"{mcp_success_count} source(s)."

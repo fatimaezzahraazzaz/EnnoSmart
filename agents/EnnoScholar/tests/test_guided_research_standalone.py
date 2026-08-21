@@ -368,6 +368,23 @@ def test_standalone_writer_publishes_only_guarded_markdown(tmp_path: Path) -> No
                     "methode": "Experimental protocol",
                     "resultats": "Observed result",
                     "limites": "Limited transferability",
+                    "visual_evidence": [
+                        {
+                            "visual_id": "Vstandalone-method",
+                            "source_kind": "scientific_article",
+                            "figure_label": "Figure 2",
+                            "caption": (
+                                "Méthode expérimentale et conditions de validité"
+                            ),
+                            "context": (
+                                "La méthode expérimentale délimite ses conditions "
+                                "de validité."
+                            ),
+                            "width": 900,
+                            "height": 540,
+                            "quality_score": 0.9,
+                        }
+                    ],
                 }
             ]
         },
@@ -377,6 +394,9 @@ def test_standalone_writer_publishes_only_guarded_markdown(tmp_path: Path) -> No
     assert result["ok"] is True
     assert result["guard"]["missing_verrous"] == []
     assert "[S1]" in result["markdown"]
+    assert result["visual_placements"][0]["visual_id"] == "Vstandalone-method"
+    assert "ennoscholar-visual://Vstandalone-method" in result["markdown"]
+    assert result["visual_diagnostics"]["placed_count"] == 1
     assert Path(result["markdown_output_path"]).exists()
     assert not (tmp_path / "state_of_art_rejected.md").exists()
 
@@ -503,6 +523,18 @@ def test_standalone_combined_approval_uses_plan_and_mapping_evidence(
             "ok": True,
             "scholar_run_id": 902,
             "scope_id": session.session_id,
+            "selected_articles_count": 2,
+            "cards_count": 1,
+            "writing_ready_cards_count": 1,
+            "excluded_from_writing_count": 1,
+            "cards": [{"article_id": 41}],
+        },
+    )
+    monkeypatch.setattr(
+        "services.ennoscholar_project_corpus_service.get_project_corpus_cards_payload",
+        lambda *args, **kwargs: {
+            "ok": True,
+            "scholar_run_ids": [902],
             "selected_articles_count": 2,
             "cards_count": 1,
             "writing_ready_cards_count": 1,

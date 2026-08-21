@@ -772,6 +772,17 @@ def filter_visual_placements(
         ]
         citation = _citation(placement.get("citation_label"))
         reason = ""
+        raw_section_instructions = section.get("instructions") or []
+        if not isinstance(raw_section_instructions, (list, tuple, set)):
+            raw_section_instructions = [raw_section_instructions]
+        section_instructions = " ".join(
+            _clean(value, 5000)
+            for value in raw_section_instructions
+        ).casefold()
+        targeted_method_context = (
+            "demande ciblée du consultant pour cette section"
+            in section_instructions
+        )
 
         if role == "PROJECT_RESULT" and not allow_project:
             reason = (
@@ -783,11 +794,19 @@ def filter_visual_placements(
         elif role == "METHOD" and not (
             allow_unrequested_method
             or bool(section.get("visual_requirements"))
+            # Une consigne ciblée sur une méthode (par exemple une configuration
+            # bistatique FEKO) constitue un besoin éditorial suffisant. Le moteur
+            # amont impose déjà citation du même article + similarité du paragraphe.
+            or targeted_method_context
         ):
             reason = (
                 "Figure de méthode sans besoin visuel explicitement demandé: exclue."
             )
-        elif verrous and role in {"EVIDENCE", "COMPARISON"}:
+        elif (
+            verrous
+            and role in {"EVIDENCE", "COMPARISON"}
+            and not targeted_method_context
+        ):
             direct_allowed: Set[str] = set()
             for verrou in verrous:
                 vid = _clean(verrou.get("verrou_id"), 120)
