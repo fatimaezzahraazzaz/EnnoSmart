@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+# ENNOSCHOLAR_V170_2_PLAN_EDITING_READBACK_FIX
+
+# ENNOSCHOLAR_V170_1_CONVERSATION_ROUTING_FIX
+
 """Réparation déterministe et grounded des demandes EnnoScholar.
 
 V2 ajoute à la V1 :
@@ -124,6 +128,88 @@ def _asks_existing_validated_sources(normalized: str) -> bool:
         "articles actuels", "sources actuelles", "corpus actuel", "corpus valide",
     )
     return any(marker in normalized for marker in markers)
+
+
+def _asks_plan_readback(normalized: str) -> bool:
+    """Lecture seule du plan courant demandée explicitement par le consultant."""
+    if not normalized:
+        return False
+    # Une approbation du consultant n'est jamais une simple lecture.
+    if _asks_to_keep_or_approve_plan(normalized):
+        return False
+    patterns = (
+        r"\b(?:affich\w*|montr\w*|donne\w*|rappel\w*)\s+(?:moi\s+)?(?:maintenant\s+)?(?:le\s+)?plan\b",
+        r"\bplan\s+courant\s+(?:complet|actuel)\b",
+        r"\b(?:affich\w*|montr\w*|donne\w*|rappel\w*)\s+(?:moi\s+)?(?:les\s+)?(?:titres|sections|parties)\b",
+        r"\bconfirme\s+moi\s+(?:simplement\s+)?(?:les\s+)?(?:titres|sections|parties)\b",
+        r"\btitres\s+que\s+tu\s+vas\s+utilis\w*\b",
+        r"\bquels?\s+(?:sont\s+)?(?:les\s+)?titres\b",
+        r"\bliste\s+(?:moi\s+)?(?:les\s+)?(?:titres|sections|parties)\b",
+    )
+    return any(re.search(pattern, normalized) for pattern in patterns)
+
+
+def _plan_insert_after_target_id(
+    normalized: str,
+    current_plan: Iterable[Mapping[str, Any]],
+) -> str:
+    """Résout une insertion de section à partir d'une position explicite.
+
+    Exemples : « ajoute après la partie 3 ... » ou, avec trois sections
+    existantes, « ajoute la partie 4 ... ». Le contenu de la nouvelle section
+    reste produit par le payload structuré ; cette fonction ne fabrique aucun
+    titre scientifique.
+    """
+    plan = [dict(row) for row in current_plan or [] if isinstance(row, Mapping)]
+    if not normalized or not plan:
+        return ""
+    if not re.search(r"\b(?:ajout\w*|inser\w*)\b", normalized):
+        return ""
+
+    ordinal = None
+    match = re.search(
+        r"\bapres\s+(?:la\s+|le\s+)?(?:partie|section|chapitre)\s+(\d{1,2})\b",
+        normalized,
+    )
+    if match:
+        ordinal = int(match.group(1))
+    else:
+        # « ajoute la partie 4 ... » avec un plan courant de 3 sections = append.
+        match = re.search(
+            r"\b(?:ajout\w*|inser\w*)\s+(?:la\s+|le\s+)?(?:partie|section|chapitre)\s+(\d{1,2})\b",
+            normalized,
+        )
+        if match and int(match.group(1)) == len(plan) + 1:
+            ordinal = len(plan)
+
+    if ordinal is None or not (1 <= ordinal <= len(plan)):
+        return ""
+    target = plan[ordinal - 1]
+    return _clean(target.get("section_id"), 200)
+
+
+def _asks_full_plan_replacement(normalized: str) -> bool:
+    """Détecte une substitution explicite du plan courant, sans inférer le domaine.
+
+    Ce garde-fou ne construit jamais le plan : il empêche seulement qu'une
+    instruction de structure explicite soit routée vers la recherche. Le vrai
+    contenu du plan reste extrait ensuite du message consultant par le payload
+    structuré.
+    """
+    if not normalized or "plan" not in normalized:
+        return False
+    patterns = (
+        r"\butilis\w*\s+(?:exactement\s+)?(?:ce|le)\s+plan\b",
+        r"\bprend\w*\s+(?:exactement\s+)?(?:ce|le)\s+plan\b",
+        r"\bgard\w*\s+(?:exactement\s+)?(?:ce|le)\s+plan\s+(?:a\s+la\s+place|plutot)\b",
+        r"\bremplac\w*\s+(?:(?:ce|le|l\s+ancien)\s+)?plan\b",
+        r"\b(?:ce|le)\s+plan\s+(?:a\s+la\s+place|plutot)\b",
+        r"\bexactement\s+(?:ce|le)\s+plan\b",
+        r"\bplan\s+(?:suivant|ci\s+dessous)\b",
+        r"\buse\s+exactly\s+this\s+plan\b",
+        r"\breplace\s+(?:the|this|current)\s+plan\b",
+    )
+    return any(re.search(pattern, normalized) for pattern in patterns)
 
 
 def _asks_for_research(normalized: str) -> bool:
@@ -269,6 +355,9 @@ def repair_contextual_classification(
     asks_all = _asks_for_all_verrous(normalized, len(rows)) if rows else False
     asks_approval = _asks_to_keep_or_approve_plan(normalized)
     asks_existing_sources = _asks_existing_validated_sources(normalized)
+    asks_full_plan_replacement = _asks_full_plan_replacement(normalized)
+    asks_plan_readback = _asks_plan_readback(normalized)
+    plan_insert_after_target_id = _plan_insert_after_target_id(normalized, plan)
     active_scope = _clean(context.get("review_scope"), 40).casefold()
     actions = set(classification.requested_actions or [])
     compound_from_schema = (
@@ -276,6 +365,102 @@ def repair_contextual_classification(
         and ConsultantIntent.START_WRITING in actions
     )
     repaired = False
+
+    # V170.2 — lecture du plan = opération strictement READ-ONLY. Même si le
+    # message contient « avant de rédiger », il ne doit ni autoriser l'écriture,
+    # ni calculer une politique de recherche, ni modifier l'approbation.
+    if asks_plan_readback:
+        classification.intent = ConsultantIntent.CONVERSE
+        classification.requested_actions = []
+        classification.explicit_research_command = False
+        classification.explicit_write_command = False
+        classification.explicit_plan_approval = False
+        classification.replace_current_plan = False
+        classification.plan_edit_scope = "none"
+        classification.plan_edit_operation = "none"
+        classification.target_section_ids = []
+        classification.needs_clarification = False
+        classification.forbidden_actions = list(dict.fromkeys([
+            *(classification.forbidden_actions or []),
+            ConsultantIntent.START_WRITING,
+            ConsultantIntent.REVISE_DRAFT,
+            ConsultantIntent.ACCEPT_PLAN,
+            ConsultantIntent.PROPOSE_PLAN,
+            ConsultantIntent.ADD_TOPIC,
+            ConsultantIntent.REMOVE_TOPIC,
+            ConsultantIntent.CHANGE_PLAN,
+            ConsultantIntent.SEARCH_MORE,
+            ConsultantIntent.SEARCH_ALTERNATIVE,
+            ConsultantIntent.REPLACE_SOURCE,
+            ConsultantIntent.ADD_VERROU_AND_SEARCH,
+        ]))
+        _append_classifier_marker(classification, "v170_2_plan_readback")
+        repaired = True
+
+    # V170.2 — insertion positionnelle d'une nouvelle section. La cible est
+    # résolue contre le plan COURANT de cette conversation, jamais l'historique.
+    elif plan_insert_after_target_id:
+        classification.intent = ConsultantIntent.ADD_TOPIC
+        classification.requested_actions = [ConsultantIntent.ADD_TOPIC]
+        classification.explicit_research_command = False
+        classification.explicit_write_command = False
+        classification.explicit_plan_approval = False
+        classification.replace_current_plan = False
+        classification.plan_edit_scope = "local_section"
+        classification.plan_edit_operation = "add"
+        classification.target_section_ids = [plan_insert_after_target_id]
+        classification.content_target = "existing_plan"
+        classification.needs_clarification = False
+        classification.forbidden_actions = list(dict.fromkeys([
+            *(classification.forbidden_actions or []),
+            ConsultantIntent.SEARCH_MORE,
+            ConsultantIntent.SEARCH_ALTERNATIVE,
+            ConsultantIntent.REPLACE_SOURCE,
+            ConsultantIntent.ADD_VERROU_AND_SEARCH,
+            ConsultantIntent.START_WRITING,
+            ConsultantIntent.REVISE_DRAFT,
+        ]))
+        _append_classifier_marker(classification, "v170_2_insert_after_section")
+        repaired = True
+
+    # V170.1 — priorité absolue à une instruction explicite de remplacement
+    # du plan. Le classifieur LLM peut parfois confondre les mots du contenu
+    # scientifique du plan avec une demande de recherche. Ici la décision est
+    # grounded uniquement dans le message courant : aucune recherche n'est
+    # autorisée tant que le consultant demande de remplacer la structure.
+    if asks_full_plan_replacement:
+        classification.intent = ConsultantIntent.CHANGE_PLAN
+        classification.requested_actions = [ConsultantIntent.CHANGE_PLAN]
+        classification.explicit_research_command = False
+        classification.explicit_write_command = False
+        classification.explicit_plan_approval = False
+        classification.replace_current_plan = True
+        classification.plan_edit_scope = "full_plan"
+        classification.plan_edit_operation = "modify"
+        classification.target_section_ids = []
+        classification.content_target = "existing_plan"
+        classification.needs_clarification = False
+        classification.writing_source_scope = "unspecified"
+        classification.writing_source_identifiers = []
+        classification.requested_source_count = None
+        # Une action de recherche éventuellement halluciné par le premier LLM
+        # est explicitement neutralisée pour ce tour.
+        classification.forbidden_actions = list(dict.fromkeys([
+            *(classification.forbidden_actions or []),
+            ConsultantIntent.SEARCH_MORE,
+            ConsultantIntent.SEARCH_ALTERNATIVE,
+            ConsultantIntent.REPLACE_SOURCE,
+            ConsultantIntent.ADD_VERROU_AND_SEARCH,
+        ]))
+        _append_classifier_marker(
+            classification,
+            "grounded_project_context_repair_v1",
+        )
+        _append_classifier_marker(
+            classification,
+            "v170_1_explicit_full_plan_replacement",
+        )
+        repaired = True
 
     # V3 — recherche destinée à enrichir une section, un paragraphe ou
     # l'argumentation du verrou actif. « Nouveau paragraphe » ne signifie
@@ -293,7 +478,11 @@ def repair_contextual_classification(
         }
     )
     semantic_research = bool(
-        classification.explicit_research_command
+        not asks_full_plan_replacement
+        and not asks_plan_readback
+        and not plan_insert_after_target_id
+        and (
+            classification.explicit_research_command
         or classification.intent
         in {
             ConsultantIntent.SEARCH_MORE,
@@ -311,9 +500,13 @@ def repair_contextual_classification(
             }
             for action in (classification.requested_actions or [])
         )
+        )
     )
     textual_safety_net = bool(
-        _asks_for_research(normalized)
+        not asks_full_plan_replacement
+        and not asks_plan_readback
+        and not plan_insert_after_target_id
+        and _asks_for_research(normalized)
         and _supplements_existing_scientific_scope(normalized)
     )
     semantic_supplement = bool(

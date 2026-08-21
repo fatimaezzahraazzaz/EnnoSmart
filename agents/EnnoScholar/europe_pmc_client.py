@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
-from .external_source_base import cache_path, encode_params, get_json, normalized_error, read_cache, safe, write_cache
+from .external_source_base import cache_path, encode_params, get_json, normalized_error, read_cache, safe, write_cache, merge_fresh_with_cache, fallback_from_cache
 
 EUROPE_PMC_SEARCH = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 
@@ -17,18 +17,19 @@ class EuropePmcClient:
         limit = max(1, min(int(limit or 20), 100))
         path = cache_path("europe_pmc", query, limit)
         cached = read_cache(path, self.cache_ttl_days)
-        if cached is not None: return cached
         url = encode_params(EUROPE_PMC_SEARCH, {"query": query, "format": "json", "pageSize": limit, "resultType": "core"})
         try:
             data = get_json(url, headers={"Accept": "application/json", "User-Agent": "EnnoSmart-EnnoScholar/3.2"}, timeout=self.timeout, retries=self.max_retries)
             rows = ((data.get("resultList") or {}).get("result") or []) if isinstance(data, dict) else []
             out = [self.normalize(x, query) for x in rows if isinstance(x, dict)]
             out = [x for x in out if x.get("title")]
-            write_cache(path, out)
-            return out
+            combined = merge_fresh_with_cache(out, cached, limit, "europe_pmc")
+            write_cache(path, combined)
+            return combined
         except Exception as exc:
             stale = read_cache(path, 3650)
-            return stale if stale is not None else [normalized_error("europe_pmc", query, exc)]
+            fallback = fallback_from_cache(cached or stale, "europe_pmc", exc)
+            return fallback if fallback else [normalized_error("europe_pmc", query, exc)]
 
     @staticmethod
     def normalize(item: Dict[str, Any], query: str) -> Dict[str, Any]:

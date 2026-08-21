@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 from typing import Any, Dict, List
-from .external_source_base import cache_path, encode_params, get_json, normalized_error, read_cache, safe, write_cache
+from .external_source_base import cache_path, encode_params, get_json, normalized_error, read_cache, safe, write_cache, merge_fresh_with_cache, fallback_from_cache
 
 HF_MODELS = "https://huggingface.co/api/models"
 HF_DATASETS = "https://huggingface.co/api/datasets"
@@ -20,7 +20,6 @@ class HuggingFaceClient:
         limit=max(1,min(int(limit or 10),30))
         path=cache_path("huggingface",query,limit)
         cached=read_cache(path,self.cache_ttl_days)
-        if cached is not None:return cached
         headers={"Accept":"application/json","User-Agent":"EnnoSmart-EnnoScholar/3.2"}
         if self.token: headers["Authorization"]=f"Bearer {self.token}"
         out=[]
@@ -29,10 +28,13 @@ class HuggingFaceClient:
                 data=get_json(encode_params(endpoint,{"search":query,"limit":max(1,limit//2)}),headers=headers,timeout=self.timeout,retries=self.max_retries)
                 if isinstance(data,list):
                     out.extend(self.normalize(x,query,kind) for x in data if isinstance(x,dict))
-            write_cache(path,out[:limit]);return out[:limit]
+            combined = merge_fresh_with_cache(out[:limit], cached, limit, "huggingface")
+            write_cache(path, combined)
+            return combined
         except Exception as exc:
             stale=read_cache(path,3650)
-            return stale if stale is not None else [normalized_error("huggingface",query,exc)]
+            fallback = fallback_from_cache(cached or stale, "huggingface", exc)
+            return fallback if fallback else [normalized_error("huggingface", query, exc)]
 
     @staticmethod
     def normalize(item:Dict[str,Any],query:str,kind:str)->Dict[str,Any]:

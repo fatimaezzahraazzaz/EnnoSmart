@@ -125,6 +125,50 @@ function getEvidencePresentation(article: ArticleRead) {
     preflight.recommended_action ||
     ""
   const cause = [reasonDetail, recommendedAction].filter(Boolean).join(" ")
+  // ENNOSCHOLAR_ACCESS_UX_V165
+  const accessStatus = String((article as any).access_status || "").trim().toUpperCase()
+  const reasonCode = String(
+    (article as any).evidence_reason_code ||
+    preflight.reason_code ||
+    ""
+  ).trim().toUpperCase()
+  const manualVerified = Boolean(
+    (article as any).manual_upload_verified ||
+    sj.manual_upload_verified
+  )
+
+  if (status === "FULLTEXT_READY" && manualVerified) {
+    return {
+      status,
+      title: "PDF manuel validé · texte intégral prêt",
+      detail: "Le PDF importé a été vérifié comme correspondant à cet article puis extrait. La cause d'accès initiale reste conservée dans la traçabilité.",
+      className: "border-success/30 bg-success/5 text-success",
+    }
+  }
+  if (accessStatus === "PAYWALLED" || reasonCode === "PAYWALL_BLOCKED") {
+    return {
+      status,
+      title: "Payant · aucune version légale trouvée",
+      detail: cause || "Open Access et MCP légal n'ont trouvé aucune copie exploitable. Vous pouvez importer un PDF uniquement si vous êtes autorisé à l'utiliser.",
+      className: "border-destructive/30 bg-destructive/5 text-destructive",
+    }
+  }
+  if (accessStatus === "AUTOMATION_BLOCKED" || ["PUBLIC_PDF_BROWSER_ONLY", "ANTIBOT_BLOCKED", "AUTOMATED_ACCESS_BLOCKED"].includes(reasonCode)) {
+    return {
+      status,
+      title: "Téléchargement automatique bloqué",
+      detail: cause || "L'article est accessible, mais le site bloque le client automatique. Ouvrez-le dans votre navigateur puis importez le PDF autorisé.",
+      className: "border-warning/30 bg-warning/5 text-warning",
+    }
+  }
+  if (accessStatus === "LEGAL_ALTERNATIVE" || reasonCode === "MCP_VERIFIED_FULLTEXT_ACCESSIBLE") {
+    return {
+      status,
+      title: "Version légale alternative trouvée",
+      detail: cause || "Le MCP a vérifié une copie légale correspondant au même article. Elle peut être extraite automatiquement.",
+      className: "border-success/30 bg-success/5 text-success",
+    }
+  }
 
   if (status === "FULLTEXT_READY") {
     return {
@@ -404,6 +448,61 @@ function getArticleEvidenceStatus(article: ArticleRead | any): string {
   return String(a.evidence_status || evidence.evidence_status || sj.evidence_status || "NOT_CHECKED").trim().toUpperCase()
 }
 
+// ENNOSCHOLAR_ACCESS_UX_V165
+function getArticleAccessStatus(article: ArticleRead | any): string {
+  const explicit = String((article as any)?.access_status || "").trim().toUpperCase()
+  if (explicit) return explicit
+
+  const sj: any = article?.source_json || {}
+  const evidence: any = sj.evidence_preflight || {}
+  const reasonCode = String(
+    (article as any)?.evidence_reason_code ||
+    evidence.reason_code ||
+    ""
+  ).trim().toUpperCase()
+  const accessKind = String(
+    (article as any)?.evidence_access_kind ||
+    evidence.access_kind ||
+    ""
+  ).trim().toLowerCase()
+  const status = getArticleEvidenceStatus(article)
+
+  if (status === "FULLTEXT_READY") {
+    return Boolean((article as any)?.manual_upload_verified || sj.manual_upload_verified)
+      ? "READY_MANUAL"
+      : "READY_AUTO"
+  }
+  if (reasonCode === "PAYWALL_BLOCKED" || accessKind === "paid") return "PAYWALLED"
+  if (
+    status === "BROWSER_DOWNLOAD_REQUIRED" ||
+    ["PUBLIC_PDF_BROWSER_ONLY", "ANTIBOT_BLOCKED", "AUTOMATED_ACCESS_BLOCKED"].includes(reasonCode) ||
+    ["blocked", "public_browser_only"].includes(accessKind)
+  ) return "AUTOMATION_BLOCKED"
+  if (status === "ACCESS_AVAILABLE") {
+    return reasonCode === "MCP_VERIFIED_FULLTEXT_ACCESSIBLE" || accessKind === "legal_mcp_fulltext_url"
+      ? "LEGAL_ALTERNATIVE"
+      : "EXTRACTIBLE"
+  }
+  if (status === "ACCESS_UNCONFIRMED") return "UNCONFIRMED"
+  if (["NOT_CHECKED", "ACCESS_CHECKING", "MCP_SEARCHING", "EXTRACTION_QUEUED", "EXTRACTION_RUNNING"].includes(status)) {
+    return "CHECKING"
+  }
+  return "UNAVAILABLE"
+}
+
+function isArticlePaywalled(article: ArticleRead | any): boolean {
+  return getArticleAccessStatus(article) === "PAYWALLED"
+}
+
+function isArticleAutomationBlocked(article: ArticleRead | any): boolean {
+  return getArticleAccessStatus(article) === "AUTOMATION_BLOCKED"
+}
+
+function isArticleManualUploadVerified(article: ArticleRead | any): boolean {
+  const sj: any = article?.source_json || {}
+  return Boolean((article as any)?.manual_upload_verified || sj.manual_upload_verified)
+}
+
 function isArticleFulltextReady(article: ArticleRead | any): boolean {
   return getArticleEvidenceStatus(article) === "FULLTEXT_READY"
 }
@@ -448,20 +547,21 @@ function isArticleAccessUnconfirmed(article: ArticleRead | any): boolean {
 }
 
 function evidenceLabel(article: ArticleRead | any): string {
+  const accessStatus = getArticleAccessStatus(article)
+  if (accessStatus === "READY_MANUAL") return "PDF manuel validé"
+  if (accessStatus === "READY_AUTO") return "Texte intégral vérifié"
+  if (accessStatus === "LEGAL_ALTERNATIVE") return "Version légale trouvée"
+  if (accessStatus === "EXTRACTIBLE") return "Accès vérifié · extraction au clic"
+  if (accessStatus === "PAYWALLED") return "Payant · PDF autorisé requis"
+  if (accessStatus === "AUTOMATION_BLOCKED") return "Téléchargement automatique bloqué"
+  if (accessStatus === "UNCONFIRMED") return "Accès à confirmer"
+  if (accessStatus === "CHECKING") return "Accès en vérification"
+
   switch (getArticleEvidenceStatus(article)) {
-    case "FULLTEXT_READY": return "Texte intégral vérifié"
-    case "ACCESS_AVAILABLE": return "Accessible · extraction au clic"
-    case "ACCESS_UNAVAILABLE": return "PDF à importer"
-    case "BROWSER_DOWNLOAD_REQUIRED": return "PDF public · navigateur requis"
-    case "ACCESS_UNCONFIRMED": return "Accès non confirmé"
     case "ABSTRACT_READY": return "Résumé disponible"
     case "METADATA_ONLY": return "Référence disponible"
     case "EXTRACTION_FAILED": return "Texte non récupéré"
-    case "ACCESS_CHECKING": return "Accès en vérification"
-    case "MCP_SEARCHING": return "Recherche MCP"
-    case "EXTRACTION_QUEUED":
-    case "EXTRACTION_RUNNING": return "Texte en vérification"
-    default: return "Vérification à venir"
+    default: return "PDF autorisé requis"
   }
 }
 
@@ -515,10 +615,14 @@ function ArticleCard({
   const browserDownloadRequired = isArticleBrowserDownloadRequired(article)
   const browserDownloadUrl = getArticleBrowserDownloadUrl(article)
   const accessUnconfirmed = isArticleAccessUnconfirmed(article)
+  const paywalled = isArticlePaywalled(article)
+  const automationBlocked = isArticleAutomationBlocked(article)
+  const manualUploadVerified = isArticleManualUploadVerified(article)
   const evidencePending = ["NOT_CHECKED", "ACCESS_CHECKING", "MCP_SEARCHING", "EXTRACTION_QUEUED", "EXTRACTION_RUNNING"].includes(
     getArticleEvidenceStatus(article)
   )
-  const decisionBlocked = accessUnavailable || accessUnconfirmed || evidencePending
+  const backendSelectionBlocked = (article as any).selection_allowed === false
+  const decisionBlocked = backendSelectionBlocked || accessUnavailable || accessUnconfirmed || evidencePending
 
   const uploadMissingPdf = async (file: File) => {
     if (!file || uploading || reportOnly) return
@@ -648,6 +752,16 @@ function ArticleCard({
                 ) : null
               })()}
 
+              {manualUploadVerified && (
+                <Badge
+                  variant="outline"
+                  className="text-xs bg-success/10 text-success border-success/30"
+                  title={(article as any).manual_upload_filename || "PDF importé et identité vérifiée"}
+                >
+                  PDF manuel validé
+                </Badge>
+              )}
+
               {reportOnly && (
                 <Badge variant="outline" className="text-xs bg-warning/10 text-warning border-warning/30">
                   Rapport seul
@@ -722,11 +836,26 @@ function ArticleCard({
 
         {accessUnavailable && (
           <div className="rounded-md border border-warning/30 bg-warning/5 p-3 space-y-2">
-            <p className="text-xs text-warning">
-              {browserDownloadRequired
-                ? "Le PDF public existe, mais sa protection anti-robot impose le téléchargement dans votre navigateur. Importez ensuite le fichier pour activer Garder et Rejeter."
-                : "Garder et Rejeter sont désactivés jusqu'à l'import d'une copie PDF autorisée."}
+            <p className={`text-xs ${paywalled ? "text-destructive" : "text-warning"}`}>
+              {paywalled
+                ? "Article payant : aucune version légale exploitable n'a été trouvée après la vérification MCP. Importez uniquement un PDF que vous êtes autorisé à utiliser ; après vérification d'identité, Garder et Rejeter seront activés."
+                : automationBlocked
+                  ? "L'article est accessible, mais le téléchargement automatique est bloqué. Ouvrez la source dans votre navigateur puis importez le PDF autorisé ; son identité sera vérifiée avant de débloquer la sélection."
+                  : browserDownloadRequired
+                    ? "Le PDF public existe, mais sa protection anti-robot impose le téléchargement dans votre navigateur. Importez ensuite le fichier pour activer Garder et Rejeter."
+                    : "Garder et Rejeter sont désactivés jusqu'à l'import d'une copie PDF autorisée et validée."}
             </p>
+            {(paywalled || automationBlocked) && article.url && (
+              <a
+                href={article.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-8 items-center justify-center rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-muted"
+              >
+                <ExternalLink className="size-3 mr-2" />
+                Ouvrir l'article
+              </a>
+            )}
             {browserDownloadRequired && browserDownloadUrl && (
               <a
                 href={browserDownloadUrl}

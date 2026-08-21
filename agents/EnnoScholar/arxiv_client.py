@@ -21,6 +21,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .external_source_base import merge_fresh_with_cache, fallback_from_cache
+
 ARXIV_API_URL = "https://export.arxiv.org/api/query"
 
 
@@ -88,7 +90,7 @@ class ArxivClient:
     def __init__(self, timeout: int = 8, sleep_seconds: float | None = None, max_retries: int | None = None, cache_ttl_days: int | None = None):
         self.timeout = timeout
         self.sleep_seconds = float(sleep_seconds if sleep_seconds is not None else os.getenv("ENNOSCHOLAR_ARXIV_SLEEP", "0.05"))
-        self.max_retries = int(max_retries if max_retries is not None else os.getenv("ENNOSCHOLAR_MAX_RETRIES", "1"))
+        self.max_retries = int(max_retries if max_retries is not None else os.getenv("ENNOSCHOLAR_ARXIV_MAX_RETRIES", os.getenv("ENNOSCHOLAR_MAX_RETRIES", "1")))
         self.cache_ttl_days = int(cache_ttl_days if cache_ttl_days is not None else os.getenv("ENNOSCHOLAR_CACHE_TTL_DAYS", "30"))
 
     def search_papers(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
@@ -99,8 +101,7 @@ class ArxivClient:
         limit = max(1, min(int(limit or 20), 100))
         cache_path = _cache_key("arxiv", query, limit)
         cached = _read_cache(cache_path, self.cache_ttl_days)
-        if cached is not None:
-            return cached
+        # Fresh-first: cache is kept only as a supplement/fallback.
 
         params = {
             "search_query": "all:" + query,
@@ -127,14 +128,11 @@ class ArxivClient:
                 last_code = code
                 if not retryable or attempt >= self.max_retries:
                     stale = _read_cache(cache_path, max_age_days=3650)
-                    if stale is not None:
-                        for it in stale:
-                            if isinstance(it, dict):
-                                it["cache_stale_used_after_error"] = True
-                                it["api_error"] = last_error
-                        return stale
-                    return [{"source": "arxiv", "query": query, "error": last_error, "http_status": last_code, "normalized_error": True, "api_limited": last_code == 429 or "429" in last_error, "attempts": self.max_retries + 1}]
-                time.sleep(min((2.0 if code == 429 else 1.0) * (attempt + 1) + self.sleep_seconds, float(os.getenv("ENNOSCHOLAR_BACKOFF_MAX_SECONDS", "2.0"))))
+                    fallback = fallback_from_cache(cached or stale, "arxiv", last_error)
+                    if fallback:
+                        return fallback
+                    return [{"source": "arxiv", "query": query, "error": last_error, "http_status": last_code, "normalized_error": True, "api_limited": last_code == 429 or "429" in last_error, "attempts": self.max_retries + 1, "retrieval_origin": "fresh_api_error"}]
+                time.sleep(min((2.0 if code == 429 else 1.0) * (attempt + 1) + self.sleep_seconds, float(os.getenv("ENNOSCHOLAR_ARXIV_RETRY_MAX_DELAY", os.getenv("ENNOSCHOLAR_BACKOFF_MAX_SECONDS", "8.0")))))
 
         try:
             root = ET.fromstring(raw)
@@ -194,5 +192,6 @@ class ArxivClient:
                 "free_fulltext_available": bool(pdf_url),
                 "fulltext_access_status": "open_access_pdf",
             })
-        _write_cache(cache_path, out)
-        return out
+        combined = merge_fresh_with_cache(out, cached, limit, "arxiv")
+        _write_cache(cache_path, combined)
+        return combined

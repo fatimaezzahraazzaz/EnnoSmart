@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
-from .external_source_base import cache_path, encode_params, get_json, normalized_error, read_cache, safe, strip_html, write_cache
+from .external_source_base import cache_path, encode_params, get_json, normalized_error, read_cache, safe, strip_html, write_cache, merge_fresh_with_cache, fallback_from_cache
 
 ZENODO_RECORDS = "https://zenodo.org/api/records"
 
@@ -16,21 +16,22 @@ class ZenodoClient:
     def search_records(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
         query = safe(query, 300)
         if not query: return []
-        limit = max(1, min(int(limit or 20), 100))
+        limit = max(1, min(int(limit or 20), 25))
         path = cache_path("zenodo", query, limit)
         cached = read_cache(path, self.cache_ttl_days)
-        if cached is not None: return cached
         url = encode_params(ZENODO_RECORDS, {"q": query, "size": limit, "sort": "bestmatch"})
         try:
             data = get_json(url, headers={"Accept": "application/json", "User-Agent": "EnnoSmart-EnnoScholar/3.2"}, timeout=self.timeout, retries=self.max_retries)
             hits = ((data.get("hits") or {}).get("hits") or []) if isinstance(data, dict) else []
             out = [self.normalize(x, query) for x in hits if isinstance(x, dict)]
             out = [x for x in out if x.get("title")]
-            write_cache(path, out)
-            return out
+            combined = merge_fresh_with_cache(out, cached, limit, "zenodo")
+            write_cache(path, combined)
+            return combined
         except Exception as exc:
             stale = read_cache(path, 3650)
-            return stale if stale is not None else [normalized_error("zenodo", query, exc)]
+            fallback = fallback_from_cache(cached or stale, "zenodo", exc)
+            return fallback if fallback else [normalized_error("zenodo", query, exc)]
 
     @staticmethod
     def normalize(item: Dict[str, Any], query: str) -> Dict[str, Any]:

@@ -36,6 +36,7 @@ def _doi_from_pid(value: Any) -> str:
 
 class OpenCitationsClient:
     def __init__(self, timeout: float | None = None, max_retries: int | None = None):
+        # Réglages V5 d'origine conservés : pas de nouvelle politique quota.
         self.timeout = float(timeout or os.getenv("OPENCITATIONS_TIMEOUT", "6"))
         self.max_retries = max(
             0,
@@ -113,12 +114,13 @@ class OpenCitationsClient:
             pass
 
     def _get(self, endpoint: str) -> List[Dict[str, Any]]:
+        # Fresh-first sans modifier les quotas/retries V5.
+        cached = self._cache_get(endpoint) or []
         if httpx is None:
-            return []
-        cached = self._cache_get(endpoint)
-        if cached is not None:
-            return cached
+            return [dict(row, retrieval_origin="cache_fallback") for row in cached if isinstance(row, dict)]
+
         url = f"{API_BASE}/{endpoint.lstrip('/')}"
+        last_error: Exception | None = None
         for attempt in range(self.max_retries + 1):
             try:
                 with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
@@ -128,13 +130,37 @@ class OpenCitationsClient:
                     continue
                 response.raise_for_status()
                 payload = response.json()
-                rows = payload if isinstance(payload, list) else []
-                self._cache_set(endpoint, rows)
-                return rows
-            except Exception:
+                fresh = payload if isinstance(payload, list) else []
+
+                merged: List[Dict[str, Any]] = []
+                seen: set[str] = set()
+                for origin, rows in (("fresh_api", fresh), ("cache_supplement", cached)):
+                    for row in rows:
+                        if not isinstance(row, dict):
+                            continue
+                        key = json.dumps(row, sort_keys=True, ensure_ascii=False)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        item = dict(row)
+                        item["retrieval_origin"] = origin
+                        merged.append(item)
+                self._cache_set(endpoint, merged)
+                return merged
+            except Exception as exc:
+                last_error = exc
                 if attempt < self.max_retries:
                     time.sleep(0.25 * (attempt + 1))
-        return []
+
+        out: List[Dict[str, Any]] = []
+        for row in cached:
+            if isinstance(row, dict):
+                item = dict(row)
+                item["retrieval_origin"] = "cache_fallback"
+                if last_error is not None:
+                    item["fresh_error"] = f"{type(last_error).__name__}: {last_error}"
+                out.append(item)
+        return out
 
     def references(self, doi: str, limit: int = 10) -> List[Dict[str, Any]]:
         doi = _clean_doi(doi)

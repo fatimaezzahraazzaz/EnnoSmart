@@ -47,6 +47,32 @@ def validate_verrou_scientifically(
     errors = errors or []
     search_status = search_status or {}
 
+    # V167: a planning failure is not a literature result.
+    if bool(search_status.get("query_planning_failed")):
+        workflow = search_status.get("query_workflow") if isinstance(search_status.get("query_workflow"), dict) else {}
+        return {
+            "scientific_support_score": 0.0,
+            "technical_reference_support_score": 0.0,
+            "rnd_uncertainty_score": 0.0,
+            "engineering_only_risk": 0.0,
+            "decision": "recherche_non_lancee_planification_requetes",
+            "search_incomplete": True,
+            "search_executed": False,
+            "query_planning_failed": True,
+            "api_limited": False,
+            "gap_analysis": (
+                "La recherche scientifique n’a pas été lancée : EnnoScholar n’a pas pu construire "
+                "des requêtes suffisamment fiables après validation et réparation automatiques. "
+                "Ce statut ne signifie pas qu’aucun article scientifique n’existe."
+            ),
+            "consultant_action": (
+                "Aucune conclusion scientifique n’est proposée. Vérifier les preuves du verrou ou relancer "
+                "la planification des requêtes ; les bases scientifiques n’ont pas été interrogées."
+            ),
+            "query_workflow": workflow,
+            "consultant_status_label": "Recherche non lancée — requêtes non validées",
+        }
+
     academic = [a for a in (articles or []) if isinstance(a, dict) and not _is_technical_source(a)]
     technical_count = len(technical_sources) + len([a for a in (articles or []) if isinstance(a, dict) and _is_technical_source(a)])
     api_limited = bool(search_status.get("api_limited") or _api_limited(errors))
@@ -147,3 +173,5 @@ def validate_verrou_scientifically(
         "gap_analysis": gap,
         "consultant_action": action,
     }
+
+# ENNOSCHOLAR_V167_LANGGRAPH_QUERY_WORKFLOW

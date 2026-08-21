@@ -2,3 +2,7 @@
 python-dotenv>=1.0,<2
 torch>=2.2
 transformers>=4.40,<6
+# V167 query workflow orchestration
+langgraph>=1.0,<2.0
+# Optional LLM observability; disabled unless ENNOSCHOLAR_LANGFUSE_ENABLED=1
+langfuse>=4.0,<5.0

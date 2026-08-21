@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+# ENNOSCHOLAR_V169_1_PROJECT_PERSISTENT_CORPUS
+
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -91,6 +93,7 @@ def attach_uploaded_article_to_session(
     })
     article.source_json = source_json
     article.verrou_id = None
+    article.consultant_status = "garde"
     db.add(article)
     db.commit()
     db.refresh(article)
@@ -290,32 +293,32 @@ def read_guided_research_corpus(
     *,
     session_id: str,
 ) -> dict[str, Any]:
-    from db.models import Article
+    """Expose le corpus durable du projet, filtré par le verrou actif du chat."""
+    from services.ennoscholar_project_corpus_service import get_project_kept_articles
 
-    _, run, snapshot = _guided_corpus_run(
-        db, project, session_id=session_id, create=False
-    )
+    agent = get_guided_research_agent()
+    session = agent.state_manager.get_session(db, session_id, include_messages=False)
+    if int(session.project_id) != int(project.id):
+        raise PermissionError("Cette conversation appartient à un autre projet.")
+    snapshot = agent.repository.snapshot(db, session_id)
     context = dict(snapshot.get("context") or {})
-    if run is None:
-        return {
-            "ok": True,
-            "session_id": session_id,
-            "corpus_scope_id": context.get("corpus_scope_id") or session_id,
-            "scholar_run_id": None,
-            "articles": [],
-        }
-    articles = (
-        db.query(Article)
-        .filter(Article.scholar_run_id == run.id)
-        .filter(Article.consultant_status == "garde")
-        .order_by(Article.score.desc().nullslast(), Article.id.asc())
-        .all()
+    active_ids = (
+        list(context.get("active_verrou_ids") or [])
+        if str(context.get("review_scope") or "") == "per_verrou"
+        else []
     )
+    articles = get_project_kept_articles(
+        db, project, active_verrou_ids=active_ids
+    )
+    run_ids = sorted({int(article.scholar_run_id) for article in articles})
     return {
         "ok": True,
         "session_id": session_id,
-        "corpus_scope_id": context.get("corpus_scope_id") or session_id,
-        "scholar_run_id": int(run.id),
+        "corpus_scope_id": f"project:{project.id}",
+        "effective_corpus_scope_id": f"project:{project.id}",
+        "project_corpus": True,
+        "scholar_run_id": run_ids[0] if len(run_ids) == 1 else None,
+        "scholar_run_ids": run_ids,
         "articles": [
             _serialize_guided_corpus_article(article) for article in articles
         ],
@@ -329,24 +332,31 @@ def rebuild_guided_research_corpus_cards(
     session_id: str,
     force: bool = True,
 ) -> dict[str, Any]:
-    from services.article_card_builder import (
-        build_article_cards_for_selected_articles,
-    )
+    """Rafraîchit les nouvelles sources du chat puis retourne les cards projet."""
+    from services.article_card_builder import build_article_cards_for_selected_articles
+    from services.ennoscholar_project_corpus_service import get_project_corpus_cards_payload
 
     _, run, snapshot = _guided_corpus_run(
-        db, project, session_id=session_id, create=True
+        db, project, session_id=session_id, create=False
     )
-    if run is None:
-        raise LookupError("Corpus de conversation introuvable.")
     context = dict(snapshot.get("context") or {})
-    scope_id = str(context.get("corpus_scope_id") or session_id).strip()
-    return build_article_cards_for_selected_articles(
-        db,
-        project,
-        mode="auto",
-        force=force,
-        scholar_run_id=int(run.id),
-        scope_id=scope_id,
+    if run is not None:
+        legacy_scope = str(context.get("corpus_scope_id") or session_id).strip()
+        build_article_cards_for_selected_articles(
+            db,
+            project,
+            mode="auto",
+            force=force,
+            scholar_run_id=int(run.id),
+            scope_id=legacy_scope,
+        )
+    active_ids = (
+        list(context.get("active_verrou_ids") or [])
+        if str(context.get("review_scope") or "") == "per_verrou"
+        else []
+    )
+    return get_project_corpus_cards_payload(
+        db, project, active_verrou_ids=active_ids
     )
 
 
@@ -357,56 +367,43 @@ def remove_guided_research_corpus_article(
     session_id: str,
     article_id: int,
 ) -> dict[str, Any]:
-    from db.models import Article
+    """Retrait explicite : la décision s'applique au corpus projet dédupliqué."""
+    from services.ennoscholar_project_corpus_service import reject_project_corpus_article
 
     agent = get_guided_research_agent()
-    _, run, snapshot = _guided_corpus_run(
-        db, project, session_id=session_id, create=False
+    session = agent.state_manager.get_session(db, session_id, include_messages=False)
+    if int(session.project_id) != int(project.id):
+        raise PermissionError("Cette conversation appartient à un autre projet.")
+    snapshot = agent.repository.snapshot(db, session_id)
+    removed_ids = reject_project_corpus_article(
+        db, project, article_id=int(article_id)
     )
-    if run is None:
-        raise LookupError("Corpus de conversation introuvable.")
-    article = (
-        db.query(Article)
-        .filter(Article.id == article_id)
-        .filter(Article.scholar_run_id == run.id)
-        .first()
-    )
-    if article is None:
-        raise LookupError("Article absent de cette conversation.")
-    article.consultant_status = "rejete"
-    db.add(article)
-    db.commit()
 
-    source_json = dict(article.source_json or {})
-    candidate_id = str(source_json.get("guided_candidate_id") or "").strip()
     selected_sources = []
+    removed_set = {int(value) for value in removed_ids}
     for raw in (snapshot.get("selected_sources") or []):
         if not isinstance(raw, dict):
             continue
         source = dict(raw)
-        source_article_id = int(
-            (source.get("fulltext_preparation") or {}).get("article_id") or 0
-        )
-        if (
-            source_article_id == int(article_id)
-            or (
-                candidate_id
-                and str(source.get("candidate_id") or "") == candidate_id
+        try:
+            source_article_id = int(
+                (source.get("fulltext_preparation") or {}).get("article_id") or 0
             )
-        ):
+        except (TypeError, ValueError):
+            source_article_id = 0
+        if source_article_id in removed_set:
             source["consultant_decision"] = "rejected"
-            source["consultant_reason"] = "Retiré du corpus de cette conversation."
+            source["consultant_reason"] = "Retiré explicitement du corpus persistant du projet."
+            source["project_corpus_removal"] = True
         selected_sources.append(source)
-    agent.repository.update(
-        db, session_id, selected_sources=selected_sources
-    )
-    cards = rebuild_guided_research_corpus_cards(
-        db, project, session_id=session_id, force=True
-    )
+    agent.repository.update(db, session_id, selected_sources=selected_sources)
     return {
         "ok": True,
         "article_id": int(article_id),
-        "phase_2": cards,
+        "removed_article_ids": sorted(removed_set),
+        "phase_2": rebuild_guided_research_corpus_cards(
+            db, project, session_id=session_id, force=False
+        ),
         "corpus": read_guided_research_corpus(
             db, project, session_id=session_id
         ),

@@ -170,3 +170,9 @@ modules/llm_gateway/
 
 # Pytest temporary folders
 /.pytest_tmp*/
+
+# Local EnnoScholar patches / installers / backups
+/EnnoScholar_V*/
+/backup_*/
+/_patch_backups/
+/.ennoscholar_*_backup.txt

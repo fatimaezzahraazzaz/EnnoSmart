@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import os
+import urllib.error
 from typing import Any, Dict, List
-from .external_source_base import cache_path, encode_params, get_json, normalized_error, read_cache, safe, write_cache
+from .external_source_base import cache_path, encode_params, get_json, normalized_error, read_cache, safe, write_cache, merge_fresh_with_cache, fallback_from_cache
 
 GITHUB_SEARCH = "https://api.github.com/search/repositories"
 
@@ -19,16 +20,19 @@ class GitHubClient:
         limit = max(1, min(int(limit or 10), 30))
         path = cache_path("github", query, limit)
         cached = read_cache(path, self.cache_ttl_days)
-        if cached is not None: return cached
         url = encode_params(GITHUB_SEARCH, {"q": query, "per_page": limit, "sort": "stars", "order": "desc"})
         headers = {"Accept":"application/vnd.github+json", "X-GitHub-Api-Version":"2022-11-28", "User-Agent":"EnnoSmart-EnnoScholar/3.2"}
         if self.token: headers["Authorization"] = f"Bearer {self.token}"
         try:
             try:
                 data = get_json(url, headers=headers, timeout=self.timeout, retries=self.max_retries)
-            except Exception:
-                # Un jeton local expiré ne doit pas désactiver la recherche publique.
-                if not self.token:
+            except Exception as first_exc:
+                # Ne retirer le token que si GitHub refuse réellement l'authentification.
+                # Pour 502/503/504, get_json a déjà effectué les retries/backoff :
+                # on conserve donc l'authentification et on laisse le cache prendre le relais.
+                status = int(getattr(first_exc, "code", 0) or 0)
+                auth_error = isinstance(first_exc, urllib.error.HTTPError) and status in {401, 403}
+                if not self.token or not auth_error:
                     raise
                 anonymous_headers = {
                     key: value for key, value in headers.items()
@@ -42,10 +46,13 @@ class GitHubClient:
                 )
             rows = data.get("items") or []
             out = [self.normalize(x, query) for x in rows if isinstance(x,dict)]
-            write_cache(path,out); return out
+            combined = merge_fresh_with_cache(out, cached, limit, "github")
+            write_cache(path, combined)
+            return combined
         except Exception as exc:
             stale = read_cache(path,3650)
-            return stale if stale is not None else [normalized_error("github",query,exc)]
+            fallback = fallback_from_cache(cached or stale, "github", exc)
+            return fallback if fallback else [normalized_error("github", query, exc)]
 
     @staticmethod
     def normalize(item: Dict[str, Any], query: str) -> Dict[str, Any]:

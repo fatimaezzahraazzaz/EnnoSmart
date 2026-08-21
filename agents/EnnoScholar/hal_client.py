@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
-from .external_source_base import cache_path, encode_params, get_json, normalized_error, read_cache, safe, write_cache
+from .external_source_base import cache_path, encode_params, get_json, normalized_error, read_cache, safe, write_cache, merge_fresh_with_cache, fallback_from_cache
 
 HAL_SEARCH = "https://api.archives-ouvertes.fr/search/"
 
@@ -20,8 +20,6 @@ class HalClient:
         limit = max(1, min(int(limit or 20), 100))
         path = cache_path("hal", query, limit)
         cached = read_cache(path, self.cache_ttl_days)
-        if cached is not None:
-            return cached
         params = {
             "q": query,
             "wt": "json",
@@ -33,11 +31,13 @@ class HalClient:
             docs = ((data.get("response") or {}).get("docs") or []) if isinstance(data, dict) else []
             out = [self.normalize(x, query) for x in docs if isinstance(x, dict)]
             out = [x for x in out if x.get("title")]
-            write_cache(path, out)
-            return out
+            combined = merge_fresh_with_cache(out, cached, limit, "hal")
+            write_cache(path, combined)
+            return combined
         except Exception as exc:
             stale = read_cache(path, 3650)
-            return stale if stale is not None else [normalized_error("hal", query, exc)]
+            fallback = fallback_from_cache(cached or stale, "hal", exc)
+            return fallback if fallback else [normalized_error("hal", query, exc)]
 
     @staticmethod
     def normalize(item: Dict[str, Any], query: str) -> Dict[str, Any]:

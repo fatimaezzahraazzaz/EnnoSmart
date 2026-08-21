@@ -316,6 +316,52 @@ async def upload_and_extract_pdf_for_article(
         }
 
     extracted = _extract_text_from_pdf_bytes(pdf_bytes)
+
+    # ENNOSCHOLAR_ACCESS_UX_V165
+    # Pour un article déjà présent dans le catalogue, le PDF manuel doit
+    # correspondre à l'article attendu AVANT toute mutation de son identité.
+    original_source_json = (
+        dict(article.source_json)
+        if isinstance(article.source_json, dict)
+        else {}
+    )
+    previous_evidence_snapshot = (
+        dict(original_source_json.get("evidence_preflight") or {})
+        if isinstance(original_source_json.get("evidence_preflight"), dict)
+        else {}
+    )
+    existing_catalog_article = not bool(
+        original_source_json.get("manual_upload_source")
+    )
+
+    if existing_catalog_article:
+        from services.scholar_fulltext_identity import verify_article_extraction
+
+        identity_verification = verify_article_extraction(
+            article,
+            extracted,
+            resolver_candidate=None,
+        )
+        if not bool(identity_verification.get("verified")):
+            return {
+                "ok": False,
+                "article_id": article.id,
+                "status": "uploaded_pdf_identity_mismatch",
+                "message": (
+                    "Le PDF importé ne correspond pas suffisamment à l'article sélectionné "
+                    "(titre/DOI/auteurs/contenu). Aucun statut n'a été modifié."
+                ),
+                "identity_verification": identity_verification,
+            }
+    else:
+        identity_verification = {
+            "verified": True,
+            "same_article": True,
+            "method": "new_manual_source",
+            "score": 1.0,
+            "reasons": [],
+        }
+
     extracted_identity = _normalize_uploaded_article_identity(
         article,
         extracted,
@@ -347,6 +393,9 @@ async def upload_and_extract_pdf_for_article(
         "uploaded_pdf_path": str(pdf_file),
         "pdf_source_url": source_url,
         "extracted_identity": extracted_identity,
+        "identity_verification": identity_verification,
+        "manual_upload_verified": True,
+        "fulltext_resolution_source": "MANUAL_UPLOAD",
         "output_path": str(out_file),
         **extracted,
         "generated_at": datetime.utcnow().isoformat(),
@@ -358,9 +407,29 @@ async def upload_and_extract_pdf_for_article(
         if isinstance(article.source_json, dict)
         else {}
     )
+    history = source_json.get("access_resolution_history")
+    history = list(history) if isinstance(history, list) else []
+    if previous_evidence_snapshot:
+        history.append(
+            {
+                "captured_at": datetime.utcnow().isoformat(),
+                "event": "before_manual_upload",
+                "evidence_status": previous_evidence_snapshot.get("evidence_status"),
+                "reason_code": previous_evidence_snapshot.get("reason_code"),
+                "reason_detail": previous_evidence_snapshot.get("reason_detail"),
+                "access_kind": previous_evidence_snapshot.get("access_kind"),
+                "mcp_checked": isinstance(original_source_json.get("mcp_access_diagnostic"), dict),
+            }
+        )
+
     source_json.update(
         {
             "manual_upload_source": True,
+            "manual_upload_verified": True,
+            "manual_upload_identity_verification": identity_verification,
+            "manual_upload_original_evidence": previous_evidence_snapshot or None,
+            "fulltext_resolution_source": "MANUAL_UPLOAD",
+            "access_resolution_history": history[-20:],
             "uploaded_pdf_available": True,
             "uploaded_filename": filename,
             "uploaded_pdf_sha256": pdf_sha256,
@@ -378,6 +447,16 @@ async def upload_and_extract_pdf_for_article(
         from services.scholar_fulltext_cache_service import store_cached_fulltext
 
         evidence = _classify(article, result)
+        evidence.update(
+            {
+                "access_resolution_source": "MANUAL_UPLOAD",
+                "manual_upload_verified": True,
+                "manual_upload_identity_score": identity_verification.get("score"),
+                "original_evidence_status": previous_evidence_snapshot.get("evidence_status"),
+                "original_reason_code": previous_evidence_snapshot.get("reason_code"),
+                "original_access_kind": previous_evidence_snapshot.get("access_kind"),
+            }
+        )
         _set_article_evidence(db, article, evidence, result)
         cache_row = store_cached_fulltext(db, article, result)
         if cache_row is not None:

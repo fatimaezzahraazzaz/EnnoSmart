@@ -1,182 +1,100 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-"""Generic scientific-query normalization for EnnoScholar.
+"""Generic compatibility normalizer for EnnoScholar.
 
-The module is deliberately project-agnostic. It separates local product/tool names
-from transferable scientific concepts and builds an English research vocabulary
-from evidence text. No customer, project, software or domain is hard-coded.
+V159 rule: no domain, client, project, product, acronym or technology catalog is
+allowed in the scientific-search path.  Concepts are derived only from the
+current lock/evidence and from fields already present in the intent.
 """
 
-import re
-import unicodedata
 from collections import Counter
+import re
 from typing import Any, Dict, Iterable, List
 
 _GENERIC = {
-    "incertitude", "uncertainty", "verrou", "technical", "scientific", "technique",
-    "validation", "validate", "validity", "performance", "performances", "result", "results", "prennent", "prendre", "compte", "exactes", "exacte",
-    "validite", "validity", "methodes", "methode", "logiciel", "study", "project", "software", "tool", "system", "method", "methods",
-    "model", "models", "approach", "analysis", "comparison", "using", "based",
-    "cpu", "gpu", "cuda", "implementation", "implementations", "document", "source",
-    "evidence", "consultant", "research", "development", "problem", "issue",
-}
-
-_STOP = _GENERIC | {
-    "avec", "sans", "dans", "pour", "par", "sur", "sous", "entre", "vers", "afin",
-    "les", "des", "une", "un", "du", "de", "la", "le", "et", "ou", "est", "sont",
-    "qui", "que", "dont", "ce", "cette", "ces", "au", "aux", "en", "plus", "moins",
-    "the", "and", "or", "of", "to", "in", "on", "for", "with", "without", "from",
-    "this", "that", "these", "those", "is", "are", "be", "been", "as", "at", "by",
-}
-
-# Generic scientific translations. These are field concepts, not project profiles.
-_TRANSLATE = {
-    "électromagnétique": "electromagnetic", "electromagnetique": "electromagnetic",
-    "électromagnétisme": "electromagnetics", "electromagnetisme": "electromagnetics",
-    "diffusion": "scattering", "diffraction": "diffraction", "arête": "edge", "arete": "edge",
-    "rayon": "ray", "rayons": "rays", "lancer": "tracing", "optique": "optics",
-    "géométrique": "geometrical", "geometrique": "geometrical", "physique": "physical",
-    "asymptotique": "asymptotic", "haute fréquence": "high frequency", "haute frequence": "high frequency",
-    "surface équivalente radar": "radar cross section", "surface equivalente radar": "radar cross section",
-    "ser": "radar cross section", "maillage": "mesh", "convergence": "convergence",
-    "précision": "accuracy", "precision": "accuracy", "robustesse": "robustness",
-    "représentativité": "representativeness", "representativite": "representativeness",
-    "données synthétiques": "synthetic data", "donnees synthetiques": "synthetic data",
-    "données réelles": "real data", "donnees reelles": "real data",
-    "généralisation": "generalization", "generalisation": "generalization",
-    "classification": "classification", "reconnaissance": "recognition",
-    "apprentissage": "learning", "entraînement": "training", "entrainement": "training",
-    "décalage de domaine": "domain shift", "decalage de domaine": "domain shift",
-    "méthodes": "methods", "methodes": "methods", "méthode": "method", "methode": "method",
-    "validité": "validity", "validite": "validity", "logiciel": "software",
-    "prise en compte": "modeling", "prennent en compte": "model",
-    "simulation": "simulation", "mesure": "measurement", "mesures": "measurements",
-    "capteur": "sensor", "signal": "signal", "image": "image", "radar": "radar",
-    "matériau": "material", "materiau": "material", "matériaux": "materials", "materiaux": "materials",
-    "température": "temperature", "temperature": "temperature", "pression": "pressure",
-    "écoulement": "flow", "ecoulement": "flow", "thermique": "thermal",
-    "corrosion": "corrosion", "fatigue": "fatigue", "usure": "wear",
-    "détection": "detection", "detection": "detection", "segmentation": "segmentation",
-    "optimisation": "optimization", "modélisation": "modeling", "modelisation": "modeling",
-}
-
-_METHOD_WORDS = {
-    "simulation", "solver", "solvers", "modeling", "modelling", "optimization", "learning",
-    "training", "classification", "detection", "segmentation", "measurement", "experiment",
-    "ray", "tracing", "optics", "asymptotic", "finite", "element", "mesh", "benchmark",
-}
-_PHENOMENON_WORDS = {
-    "scattering", "diffraction", "convergence", "generalization", "shift", "robustness",
-    "accuracy", "representativeness", "uncertainty", "noise", "fatigue", "corrosion", "wear",
-    "thermal", "flow", "pressure", "temperature", "deformation", "failure", "stability",
+    "the", "and", "with", "from", "into", "for", "that", "this", "these", "those",
+    "dans", "avec", "pour", "sans", "des", "les", "une", "sur", "par", "aux", "est",
+    "verrou", "project", "projet", "scientific", "scientifique", "technical", "technique",
+    "study", "etude", "étude", "result", "results", "résultat", "résultats",
 }
 
 
 def _norm(text: Any) -> str:
-    s = unicodedata.normalize("NFKD", str(text or ""))
-    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
-    s = re.sub(r"[^a-z0-9%/\-\s]+", " ", s)
-    return re.sub(r"\s+", " ", s).strip()
+    value = str(text or "").casefold().replace("œ", "oe")
+    value = re.sub(r"[^a-z0-9à-ÿ%°µ/._+\- ]+", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
 
 
 def _unique(values: Iterable[str], limit: int) -> List[str]:
     out: List[str] = []
     seen = set()
     for value in values:
-        value = re.sub(r"\s+", " ", str(value or "")).strip()
-        key = _norm(value)
-        if not key or key in seen:
+        cleaned = _norm(value)
+        if not cleaned or cleaned in seen:
             continue
-        seen.add(key)
-        out.append(value)
-        if len(out) >= limit:
+        seen.add(cleaned)
+        out.append(cleaned)
+        if len(out) >= max(1, int(limit)):
             break
     return out
 
 
-def _translate_phrases(text: str) -> str:
-    out = " " + _norm(text) + " "
-    for fr, en in sorted(_TRANSLATE.items(), key=lambda kv: len(kv[0]), reverse=True):
-        pattern = r"(?<![a-z0-9])" + re.escape(_norm(fr)).replace(r"\ ", r"\s+") + r"(?![a-z0-9])"
-        out = re.sub(pattern, en, out)
-    return re.sub(r"\s+", " ", out).strip()
-
-
 def _tokens(text: str) -> List[str]:
-    return [t for t in re.findall(r"[a-z0-9][a-z0-9\-/]{2,}", _norm(text)) if t not in _STOP]
+    return [
+        token for token in re.findall(r"[a-zA-ZÀ-ÿ0-9][a-zA-ZÀ-ÿ0-9%°µ/._+\-]{2,}", str(text or ""))
+        if _norm(token) not in _GENERIC
+    ]
 
 
-def _local_names(original_text: str) -> List[str]:
-    names: List[str] = []
-    for token in re.findall(r"\b[A-Z][A-Z0-9_-]{1,}\b|\b[A-Z][a-zA-Z0-9_-]{3,}\b", original_text or ""):
-        nt = _norm(token)
-        # Acronyms that have a generic scientific expansion are concepts, not local names.
-        if nt in {_norm(k) for k in _TRANSLATE}:
-            continue
-        if nt not in _STOP:
-            names.append(token)
-    return _unique(names, 12)
+def _local_names(text: str) -> List[str]:
+    # Literal names/acronyms are detected from the evidence itself.  No known-name list.
+    values = re.findall(r"\b[A-Z][A-Z0-9_-]{1,}\b|\b[A-Z][a-zA-Z0-9_-]{3,}\b", str(text or ""))
+    return _unique(values, 16)
 
 
 def normalize_scientific_intent(intent: Dict[str, Any], evidence_text: str = "") -> Dict[str, Any]:
-    """Return an enriched, generic intent suitable for scholarly retrieval."""
     out = dict(intent or {})
-    title = str(out.get("verrou_title") or "")
-    source = str(evidence_text or (out.get("source_basis") or {}).get("source_text_excerpt") or "")
-    original = " ".join([title, source, str(out.get("scientific_problem") or "")])
-    translated = _translate_phrases(original)
+    source_basis = out.get("source_basis") if isinstance(out.get("source_basis"), dict) else {}
+    evidence = " ".join([
+        str(out.get("verrou_title") or out.get("title") or ""),
+        str(out.get("scientific_problem") or ""),
+        str(evidence_text or source_basis.get("source_text_excerpt") or ""),
+        " ".join(map(str, out.get("key_terms_en") or [])),
+        " ".join(map(str, out.get("key_terms_fr") or [])),
+    ]).strip()
 
-    local_names = _local_names(original)
-    local_name_norms = {_norm(x) for x in local_names}
-    toks = [t for t in _tokens(translated) if t not in local_name_norms]
-    counts = Counter(toks)
+    local_names = _local_names(evidence)
+    local_norms = {_norm(name) for name in local_names}
+    tokens = [token for token in _tokens(evidence) if _norm(token) not in local_norms]
+    counts = Counter(_norm(token) for token in tokens if _norm(token))
 
-    # Prefer multiword scientific expressions found in translated evidence.
     phrases: List[str] = []
-    for n in (3, 2):
-        for i in range(max(0, len(toks) - n + 1)):
-            gram = toks[i:i+n]
-            if any(x in _GENERIC for x in gram):
-                continue
-            if len(set(gram)) < n:
+    normalized_tokens = [_norm(token) for token in tokens if _norm(token)]
+    for width in (3, 2):
+        for index in range(max(0, len(normalized_tokens) - width + 1)):
+            gram = normalized_tokens[index:index + width]
+            if any(token in _GENERIC for token in gram) or len(set(gram)) != width:
                 continue
             phrases.append(" ".join(gram))
     phrase_counts = Counter(phrases)
 
-    concepts = [p for p, _ in phrase_counts.most_common(10)]
-    if len(concepts) < 4:
-        concepts.extend([t for t, _ in counts.most_common(12)])
-    concepts = _unique(concepts, 10)
+    existing_core = [str(x) for x in out.get("core_concepts") or []]
+    inferred = [p for p, _ in phrase_counts.most_common(10)]
+    if len(inferred) < 6:
+        inferred.extend([token for token, _ in counts.most_common(12)])
 
-    method_anchors = _unique(
-        [p for p in concepts if any(w in _METHOD_WORDS for w in p.split())]
-        + [t for t in toks if t in _METHOD_WORDS], 8
-    )
-    phenomenon_anchors = _unique(
-        [p for p in concepts if any(w in _PHENOMENON_WORDS for w in p.split())]
-        + [t for t in toks if t in _PHENOMENON_WORDS], 8
-    )
-
-    # Core concepts must be transferable and never depend on a local product name.
-    core = _unique(
-        [p for p in concepts if not any(_norm(name) in _norm(p) for name in local_names)]
-        + method_anchors + phenomenon_anchors,
-        8,
-    )
-
+    core = _unique(existing_core + inferred, 12)
     out["core_concepts"] = core
-    out["method_anchors"] = method_anchors
-    out["phenomenon_anchors"] = phenomenon_anchors
+    out["primary_core_concepts"] = _unique(out.get("primary_core_concepts") or core[:3], 5)
     out["project_tool_terms"] = local_names
     out["local_names"] = local_names
-    out["normalized_research_text_en"] = translated[:1800]
+    out["normalized_research_text_en"] = evidence[:2400]
     out["normalization_report"] = {
-        "version": "generic_scientific_normalizer_v1",
+        "version": "v159_generic_evidence_only",
         "project_specific_rules": False,
-        "local_names_excluded_from_core": local_names,
+        "domain_dictionary_used": False,
+        "local_names_detected_from_evidence": local_names,
         "core_concepts": core,
-        "method_anchors": method_anchors,
-        "phenomenon_anchors": phenomenon_anchors,
     }
     return out

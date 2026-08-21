@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 from typing import Any, Dict, List
-from .external_source_base import cache_path, encode_params, get_json, normalized_error, read_cache, safe, write_cache
+from .external_source_base import cache_path, encode_params, get_json, normalized_error, read_cache, safe, write_cache, merge_fresh_with_cache, fallback_from_cache
 
 IEEE_SEARCH = "https://ieeexploreapi.ieee.org/api/v1/search/articles"
 
@@ -23,18 +23,19 @@ class IeeeClient:
         limit = max(1, min(int(limit or 20), 200))
         path = cache_path("ieee", query, limit)
         cached = read_cache(path, self.cache_ttl_days)
-        if cached is not None: return cached
         url = encode_params(IEEE_SEARCH, {"querytext": query, "max_records": limit, "start_record": 1, "sort_field": "article_title", "sort_order": "asc", "apikey": self.api_key, "format": "json"})
         try:
             data = get_json(url, headers={"Accept": "application/json", "User-Agent": "EnnoSmart-EnnoScholar/3.2"}, timeout=self.timeout, retries=self.max_retries)
             rows = data.get("articles") or []
             out = [self.normalize(x, query) for x in rows if isinstance(x, dict)]
             out = [x for x in out if x.get("title")]
-            write_cache(path, out)
-            return out
+            combined = merge_fresh_with_cache(out, cached, limit, "ieee")
+            write_cache(path, combined)
+            return combined
         except Exception as exc:
             stale = read_cache(path, 3650)
-            return stale if stale is not None else [normalized_error("ieee", query, exc)]
+            fallback = fallback_from_cache(cached or stale, "ieee", exc)
+            return fallback if fallback else [normalized_error("ieee", query, exc)]
 
     @staticmethod
     def normalize(item: Dict[str, Any], query: str) -> Dict[str, Any]:

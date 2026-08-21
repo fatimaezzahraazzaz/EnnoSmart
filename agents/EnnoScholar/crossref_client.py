@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, List
 
-from .external_source_base import cache_path, encode_params, get_json, normalized_error, read_cache, safe, strip_html, write_cache
+from .external_source_base import cache_path, encode_params, get_json, normalized_error, read_cache, safe, strip_html, write_cache, merge_fresh_with_cache, fallback_from_cache
 
 CROSSREF_WORKS = "https://api.crossref.org/works"
 
@@ -23,8 +23,6 @@ class CrossrefClient:
         limit = max(1, min(int(limit or 20), 100))
         path = cache_path("crossref", query, limit)
         cached = read_cache(path, self.cache_ttl_days)
-        if cached is not None:
-            return cached
         params = {
             "query.bibliographic": query,
             "rows": limit,
@@ -39,12 +37,14 @@ class CrossrefClient:
             items = ((data.get("message") or {}).get("items") or []) if isinstance(data, dict) else []
             out = [self.normalize(item, query) for item in items if isinstance(item, dict)]
             out = [x for x in out if x.get("title")]
-            write_cache(path, out)
-            return out
+            combined = merge_fresh_with_cache(out, cached, limit, "crossref")
+            write_cache(path, combined)
+            return combined
         except Exception as exc:
             stale = read_cache(path, 3650)
-            if stale is not None:
-                return stale
+            fallback = fallback_from_cache(cached or stale, "crossref", exc)
+            if fallback:
+                return fallback
             return [normalized_error("crossref", query, exc)]
 
     @staticmethod

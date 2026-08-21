@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+# ENNOSCHOLAR_V169_1_PROJECT_PERSISTENT_CORPUS
+
 import importlib.util
 import os
 import re
@@ -837,6 +839,175 @@ def sync_articles(
     return sync_articles_from_scholar(db, run)
 
 
+
+# ============================================================
+# ENNOSCHOLAR_ACCESS_UX_V165
+# Etat d'accès/extraction stable pour le frontend.
+# Aucun champ DB supplémentaire : tout est dérivé de source_json.
+# ============================================================
+def _compact_article_access_state(
+    article: Article,
+    source_json: dict[str, Any],
+    evidence: dict[str, Any],
+) -> dict[str, Any]:
+    evidence_status = str(
+        evidence.get("evidence_status") or "NOT_CHECKED"
+    ).strip().upper()
+    reason_code = str(
+        evidence.get("reason_code") or ""
+    ).strip().upper()
+    access_kind = str(
+        evidence.get("access_kind") or ""
+    ).strip().lower()
+
+    manual_verified = bool(source_json.get("manual_upload_verified"))
+    manual_filename = (
+        str(source_json.get("uploaded_filename") or "").strip() or None
+    )
+    identity = (
+        source_json.get("manual_upload_identity_verification")
+        if isinstance(source_json.get("manual_upload_identity_verification"), dict)
+        else {}
+    )
+    try:
+        identity_score = (
+            float(identity.get("score"))
+            if identity.get("score") is not None
+            else None
+        )
+    except Exception:
+        identity_score = None
+
+    access_probe = (
+        source_json.get("access_probe_result")
+        if isinstance(source_json.get("access_probe_result"), dict)
+        else {}
+    )
+    browser_download_url = (
+        str(
+            evidence.get("browser_download_url")
+            or access_probe.get("browser_download_url")
+            or ""
+        ).strip()
+        or None
+    )
+
+    mcp_checked = isinstance(source_json.get("mcp_access_diagnostic"), dict)
+    is_paywalled = bool(
+        evidence_status != "FULLTEXT_READY"
+        and (
+            reason_code == "PAYWALL_BLOCKED"
+            or access_kind == "paid"
+        )
+    )
+    is_automation_blocked = bool(
+        evidence_status != "FULLTEXT_READY"
+        and (
+            evidence_status == "BROWSER_DOWNLOAD_REQUIRED"
+            or reason_code in {
+                "PUBLIC_PDF_BROWSER_ONLY",
+                "ANTIBOT_BLOCKED",
+                "AUTOMATED_ACCESS_BLOCKED",
+            }
+            or access_kind in {"blocked", "public_browser_only"}
+        )
+    )
+
+    access_status = "UNAVAILABLE"
+    badge = "Accès indisponible"
+    extraction_status = "MANUAL_UPLOAD_REQUIRED"
+    resolution_source = str(
+        evidence.get("access_resolution_source")
+        or source_json.get("fulltext_resolution_source")
+        or ""
+    ).strip().upper() or None
+
+    if evidence_status == "FULLTEXT_READY":
+        if manual_verified:
+            access_status = "READY_MANUAL"
+            badge = "PDF manuel validé"
+            resolution_source = "MANUAL_UPLOAD"
+        else:
+            access_status = "READY_AUTO"
+            badge = "Texte intégral prêt"
+            resolution_source = resolution_source or "AUTOMATIC"
+        extraction_status = "VERIFIED_READY"
+
+    elif is_paywalled:
+        access_status = "PAYWALLED"
+        badge = "Payant · aucune version légale trouvée"
+        extraction_status = "MANUAL_UPLOAD_REQUIRED"
+
+    elif is_automation_blocked:
+        access_status = "AUTOMATION_BLOCKED"
+        badge = "Téléchargement automatique bloqué"
+        extraction_status = "MANUAL_UPLOAD_REQUIRED"
+
+    elif evidence_status == "ACCESS_AVAILABLE":
+        if reason_code == "MCP_VERIFIED_FULLTEXT_ACCESSIBLE" or access_kind == "legal_mcp_fulltext_url":
+            access_status = "LEGAL_ALTERNATIVE"
+            badge = "Version légale trouvée"
+            resolution_source = "MCP"
+        else:
+            access_status = "EXTRACTIBLE"
+            badge = "Accès vérifié"
+            resolution_source = resolution_source or "DIRECT"
+        extraction_status = "READY_TO_EXTRACT"
+
+    elif evidence_status == "ACCESS_UNCONFIRMED":
+        access_status = "UNCONFIRMED"
+        badge = "Accès à confirmer"
+        extraction_status = "NOT_READY"
+
+    elif evidence_status in {
+        "NOT_CHECKED",
+        "ACCESS_CHECKING",
+        "MCP_SEARCHING",
+        "EXTRACTION_QUEUED",
+        "EXTRACTION_RUNNING",
+    }:
+        access_status = "CHECKING"
+        badge = "Vérification en cours"
+        extraction_status = (
+            "RUNNING"
+            if evidence_status in {"EXTRACTION_QUEUED", "EXTRACTION_RUNNING"}
+            else "NOT_STARTED"
+        )
+
+    elif evidence_status in {"ABSTRACT_READY", "METADATA_ONLY", "EXTRACTION_FAILED", "ACCESS_UNAVAILABLE"}:
+        access_status = "UNAVAILABLE"
+        badge = "PDF autorisé requis"
+        extraction_status = "MANUAL_UPLOAD_REQUIRED"
+
+    manual_upload_required = bool(
+        evidence.get("needs_consultant_upload")
+        or access_status in {"PAYWALLED", "AUTOMATION_BLOCKED", "UNAVAILABLE"}
+    ) and evidence_status != "FULLTEXT_READY"
+
+    selection_allowed = bool(
+        evidence_status in {"ACCESS_AVAILABLE", "FULLTEXT_READY"}
+    )
+    access_final = bool(
+        evidence_status in {"ACCESS_UNAVAILABLE", "BROWSER_DOWNLOAD_REQUIRED"}
+        and mcp_checked
+    )
+
+    return {
+        "access_status": access_status,
+        "access_badge_label": badge,
+        "extraction_status": extraction_status,
+        "manual_upload_required": manual_upload_required,
+        "browser_download_url": browser_download_url,
+        "manual_upload_verified": manual_verified,
+        "manual_upload_filename": manual_filename,
+        "manual_upload_identity_score": identity_score,
+        "selection_allowed": selection_allowed,
+        "access_resolution_source": resolution_source,
+        "mcp_checked": mcp_checked,
+        "access_final": access_final,
+    }
+
+
 @router.get("/projects/{project_id}/articles", response_model=list[ArticleRead])
 def list_articles(
     project_id: int,
@@ -881,6 +1052,11 @@ def list_articles(
                 if isinstance(source_json.get("evidence_preflight"), dict)
                 else {}
             )
+            access_state = _compact_article_access_state(
+                article,
+                source_json,
+                evidence,
+            )
             output.append(
                 {
                     "id": article.id,
@@ -905,6 +1081,7 @@ def list_articles(
                     "evidence_reason_detail": evidence.get("reason_detail"),
                     "evidence_recommended_action": evidence.get("recommended_action"),
                     "evidence_access_kind": evidence.get("access_kind"),
+                    **access_state,
                     "created_at": article.created_at,
                 }
             )
@@ -1616,6 +1793,7 @@ async def upload_new_scholar_source(
         "guided_session_id": str(guided_session_id or "").strip() or None,
         "corpus_scope_id": conversation_scope_id,
         "conversation_owned": bool(guided_session_id),
+        "project_corpus_eligible": True,
         "origin": (
             "guided_research_conversation"
             if guided_session_id
@@ -1701,7 +1879,7 @@ async def upload_new_scholar_source(
         selection_payload = {
             "ok": True,
             "scope_id": conversation_scope_id,
-            "policy": "conversation_scoped_no_global_selection_mutation",
+            "policy": "project_persistent_corpus_conversation_provenance",
         }
         article_cards = rebuild_guided_research_corpus_cards(
             db,
@@ -1762,6 +1940,16 @@ async def upload_and_extract_scholar_article_pdf(
         file=file,
         source_url=source_url,
     )
+    # ENNOSCHOLAR_ACCESS_UX_V165
+    # Un mauvais PDF ne doit jamais être traité comme un upload réussi.
+    if result.get("ok") is not True:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(
+                result.get("message")
+                or "Le PDF importé n'a pas pu être validé pour cet article."
+            ),
+        )
     if guided_session_id and result.get("ok") is True:
         from db.models import Article
         from services.guided_research_service import (
@@ -1788,7 +1976,7 @@ async def upload_and_extract_scholar_article_pdf(
         )
         result["phase_1"] = {
             "ok": True,
-            "policy": "conversation_scoped_no_global_selection_mutation",
+            "policy": "project_persistent_corpus_conversation_provenance",
         }
         result["phase_2"] = rebuild_guided_research_corpus_cards(
             db,
@@ -1923,23 +2111,33 @@ def _run_state_of_art_full_pipeline(
         guided_session_id,
     )
     if latest_run is not None:
-        run_articles = (
-            db.query(Article)
-            .filter(Article.scholar_run_id == latest_run.id)
-            .all()
-        )
-        # BEGIN ENNOSCHOLAR_SCOPE_AWARE_PREFLIGHT_V4
         if guided_session_id:
-            from services.ennoscholar_conversation_state_service import (
-                filter_article_orm_rows_for_session,
+            # V169.1 : le preflight contrôle le même corpus projet que celui que
+            # le writer va réellement lire, pas le ScholarRun privé du chat.
+            from services.guided_research_service import get_guided_research_agent
+            from services.ennoscholar_project_corpus_service import (
+                get_project_kept_articles,
             )
-            run_articles = filter_article_orm_rows_for_session(
+
+            agent = get_guided_research_agent()
+            guided_snapshot = agent.repository.snapshot(db, str(guided_session_id))
+            guided_context = dict(guided_snapshot.get("context") or {})
+            active_verrou_ids = (
+                list(guided_context.get("active_verrou_ids") or [])
+                if str(guided_context.get("review_scope") or "") == "per_verrou"
+                else []
+            )
+            run_articles = get_project_kept_articles(
                 db,
                 project,
-                guided_session_id,
-                run_articles,
+                active_verrou_ids=active_verrou_ids,
             )
-        # END ENNOSCHOLAR_SCOPE_AWARE_PREFLIGHT_V4
+        else:
+            run_articles = (
+                db.query(Article)
+                .filter(Article.scholar_run_id == latest_run.id)
+                .all()
+            )
 
 
         # V3 UX : la rédaction dépend uniquement du corpus explicitement

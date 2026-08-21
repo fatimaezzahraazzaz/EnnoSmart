@@ -108,7 +108,7 @@ MAX_SELECTED_ARTICLES_PER_VERROU = 8
 MAX_ARTICLES_PER_VERROU = int(os.getenv("ENNOSCHOLAR_MAX_ARTICLES_PER_VERROU", "120"))
 MIN_LIMIT_PER_QUERY = int(os.getenv("ENNOSCHOLAR_MIN_LIMIT_PER_QUERY", "35"))
 MAX_LIMIT_PER_QUERY = int(os.getenv("ENNOSCHOLAR_MAX_LIMIT_PER_QUERY", "100"))
-MAX_QUERIES_PER_VERROU = int(os.getenv("ENNOSCHOLAR_MAX_QUERIES_PER_VERROU", "3"))
+MAX_QUERIES_PER_VERROU = int(os.getenv("ENNOSCHOLAR_MAX_QUERIES_PER_VERROU", "5"))
 SOURCE_WORKERS = int(os.getenv("ENNOSCHOLAR_SOURCE_WORKERS", "6"))
 # La mémoire de dossiers antérieurs est désactivée par défaut. Elle ne peut être
 # activée que volontairement et ses résultats restent de simples candidats à
@@ -121,7 +121,7 @@ SUMMARY_TOP_N = int(os.getenv("ENNOSCHOLAR_SUMMARY_MAX_ARTICLES_PER_VERROU", "0"
 # Ce cache-ci est plus haut niveau : si le payload + la configuration n'ont pas changé,
 # on réutilise directement le rapport complet, sans refaire les appels API, le ranking,
 # le reranking BGE ni les résumés/abstracts.
-RUN_CACHE_VERSION = "v156_all_locks_section_aware_manual_validation"
+RUN_CACHE_VERSION = "v168_role_coverage_ranker"
 
 
 def _env_bool_value(name: str, default: bool = False) -> bool:
@@ -416,7 +416,7 @@ def _run_cache_config_fingerprint(agent: Any) -> Dict[str, Any]:
         "cir_require_known_year": os.getenv("ENNOSCHOLAR_CIR_REQUIRE_KNOWN_YEAR", "true"),
         "presentation_top_k": os.getenv("ENNOSCHOLAR_PRESENTATION_TOP_K", "15"),
         "keep_memory_v2_without_pdf": os.getenv("ENNOSCHOLAR_KEEP_MEMORY_V2_WITHOUT_PDF", "false"),
-        "source_router_version": "v149_relevance_routed_technical_artifacts",
+        "source_router_version": "v159_generic_capability_router",
         "use_doaj": os.getenv("ENNOSCHOLAR_USE_DOAJ", "true"),
         "use_crossref": os.getenv("ENNOSCHOLAR_USE_CROSSREF", "true"),
         "use_hal": os.getenv("ENNOSCHOLAR_USE_HAL", "true"),
@@ -1897,14 +1897,16 @@ def _select_relevant_articles_for_output(
     limit = min(requested, presentation_cap)
 
     thresholds = {
-        "Direct": float(os.getenv("ENNOSCHOLAR_MIN_SCORE_DIRECT", "0.55") or 0.55),
-        "Connexe": float(os.getenv("ENNOSCHOLAR_MIN_SCORE_CONNEXE", "0.45") or 0.45),
-        "Fondamental": float(os.getenv("ENNOSCHOLAR_MIN_SCORE_FONDAMENTAL", "0.28") or 0.28),
+        "Direct": float(os.getenv("ENNOSCHOLAR_MIN_SCORE_DIRECT", "0.50") or 0.50),
+        "Connexe": float(os.getenv("ENNOSCHOLAR_MIN_SCORE_CONNEXE", "0.34") or 0.34),
+        "Fondamental": float(os.getenv("ENNOSCHOLAR_MIN_SCORE_FONDAMENTAL", "0.22") or 0.22),
+        "Technique": float(os.getenv("ENNOSCHOLAR_MIN_SCORE_TECHNIQUE", "0.24") or 0.24),
     }
     limits = {
         "Direct": max(0, int(os.getenv("ENNOSCHOLAR_MAX_DIRECT", str(limit)) or limit)),
         "Connexe": max(0, int(os.getenv("ENNOSCHOLAR_MAX_CONNEXE", str(limit)) or limit)),
         "Fondamental": max(0, int(os.getenv("ENNOSCHOLAR_MAX_FONDAMENTAL", "20") or 20)),
+        "Technique": max(0, int(os.getenv("ENNOSCHOLAR_MAX_TECHNIQUE", "20") or 20)),
         "Hors sujet": 0,
     }
 
@@ -1936,11 +1938,15 @@ def _select_relevant_articles_for_output(
         )
 
         if tag == "Direct":
-            precise = (primary_n >= 1 and (problem_evidence or support_n >= 1)) if has_role_fields else specific_n >= 2
+            precise = bool(details.get("direct_eligible")) if has_role_fields else specific_n >= 3
         elif tag == "Connexe":
-            precise = (primary_n >= 1 and support_n >= 1) if has_role_fields else specific_n >= 2
+            precise = bool(details.get("connexe_eligible")) if has_role_fields else specific_n >= 2
+        elif tag == "Fondamental":
+            precise = bool(details.get("fundamental_eligible")) if has_role_fields else specific_n >= 1
+        elif tag == "Technique":
+            precise = bool(details.get("technical_eligible")) if has_role_fields else specific_n >= 1
         else:
-            precise = (primary_n >= 1 or support_n >= 1) if has_role_fields else specific_n >= 1
+            precise = False
 
         if score < thresholds[tag] or not precise:
             if len(rejected_low_precision) < 30:
@@ -1959,7 +1965,7 @@ def _select_relevant_articles_for_output(
         accepted.append(item)
 
     selected: List[Dict[str, Any]] = []
-    tag_counts = {"Direct": 0, "Connexe": 0, "Fondamental": 0}
+    tag_counts = {"Direct": 0, "Connexe": 0, "Fondamental": 0, "Technique": 0}
     for item in accepted:
         tag = str(item.get("tag") or "")
         if tag not in tag_counts:
@@ -2062,6 +2068,16 @@ def _adaptive_rescue_queries(
     if methods and phenomena: add([methods[:1], phenomena[:1]])
     return candidates[:max(1, int(max_queries or 6))]
 
+# ENNOSCHOLAR_V166_2_RESCUE_OVERRIDE_BEGIN
+def _adaptive_rescue_queries(
+    intent: Dict[str, Any],
+    existing_queries: List[Any],
+    max_queries: int = 6,
+) -> List[str]:
+    from .scientific_query_workflow import build_rescue_queries
+    return build_rescue_queries(intent, existing_queries, max_queries=max_queries)
+# ENNOSCHOLAR_V166_2_RESCUE_OVERRIDE_END
+
 class EnnoScholarAgent:
     def __init__(
         self,
@@ -2099,7 +2115,15 @@ class EnnoScholarAgent:
             min(int(max_articles_per_verrou or MAX_ARTICLES_PER_VERROU), 200),
         )
 
-        self.max_queries_per_verrou = max(1, min(MAX_QUERIES_PER_VERROU, 6))
+        configured_max_queries = max(1, min(MAX_QUERIES_PER_VERROU, 6))
+        if self.fast_mode:
+            try:
+                portfolio_target = max(4, min(int(os.getenv("ENNOSCHOLAR_QUERY_PORTFOLIO_SIZE", "6") or 6), 6))
+            except Exception:
+                portfolio_target = 5
+            self.max_queries_per_verrou = max(configured_max_queries, portfolio_target)
+        else:
+            self.max_queries_per_verrou = configured_max_queries
         configured_source_workers = int(
             os.getenv("ENNOSCHOLAR_SOURCE_WORKERS", "12" if self.fast_mode else str(SOURCE_WORKERS))
             or ("12" if self.fast_mode else SOURCE_WORKERS)
@@ -2113,15 +2137,20 @@ class EnnoScholarAgent:
         api_sleep = float(os.getenv("ENNOSCHOLAR_API_SLEEP", "0.05"))
         api_retries = int(os.getenv("ENNOSCHOLAR_MAX_RETRIES", "1" if self.fast_mode else "3"))
 
+        # Semantic Scholar is re-enabled with its own prudent cadence.
+        # Do not inherit the aggressive generic fast-mode values.
         self.semantic_client = SemanticScholarClient(
-            timeout=api_timeout,
-            sleep_seconds=api_sleep,
-            max_retries=api_retries,
+            timeout=min(int(os.getenv("ENNOSCHOLAR_SEMANTIC_TIMEOUT", "10") or 10), 10) if self.fast_mode else int(os.getenv("ENNOSCHOLAR_SEMANTIC_TIMEOUT", "20") or 20),
+            sleep_seconds=min(float(os.getenv("ENNOSCHOLAR_SEMANTIC_SLEEP", "0.40") or 0.40), 0.50) if self.fast_mode else float(os.getenv("ENNOSCHOLAR_SEMANTIC_SLEEP", "1.10") or 1.10),
+            max_retries=min(int(os.getenv("ENNOSCHOLAR_SEMANTIC_MAX_RETRIES", "1") or 1), 1) if self.fast_mode else int(os.getenv("ENNOSCHOLAR_SEMANTIC_MAX_RETRIES", "3") or 3),
         )
+        # OpenAlex is the preferred bibliographic engine.  Unlike the other
+        # clients it uses its source-specific timeout/retry cadence so the
+        # generic fast-mode values cannot accidentally make it hammer the API.
         self.openalex_client = OpenAlexClient(
-            timeout=api_timeout,
-            sleep_seconds=api_sleep,
-            max_retries=api_retries,
+            timeout=min(int(os.getenv("ENNOSCHOLAR_OPENALEX_TIMEOUT", "12") or 12), 12) if self.fast_mode else int(os.getenv("ENNOSCHOLAR_OPENALEX_TIMEOUT", "30") or 30),
+            sleep_seconds=float(os.getenv("ENNOSCHOLAR_OPENALEX_SLEEP", "0.35") or 0.35),
+            max_retries=min(int(os.getenv("ENNOSCHOLAR_OPENALEX_MAX_RETRIES", "1") or 1), 1) if self.fast_mode else int(os.getenv("ENNOSCHOLAR_OPENALEX_MAX_RETRIES", "3") or 3),
         )
         self.arxiv_client = ArxivClient(
             timeout=api_timeout,
@@ -2132,10 +2161,16 @@ class EnnoScholarAgent:
         self.doaj_client = DoajClient(timeout=api_timeout, max_retries=api_retries)
         self.hal_client = HalClient(timeout=api_timeout, max_retries=api_retries)
         self.core_client = CoreClient(timeout=max(api_timeout, 10), max_retries=api_retries)
-        self.zenodo_client = ZenodoClient(timeout=max(api_timeout, 10), max_retries=api_retries)
+        self.zenodo_client = ZenodoClient(
+            timeout=min(int(os.getenv("ENNOSCHOLAR_ZENODO_TIMEOUT", "12") or 12), 12) if self.fast_mode else int(os.getenv("ENNOSCHOLAR_ZENODO_TIMEOUT", "30") or 30),
+            max_retries=min(int(os.getenv("ENNOSCHOLAR_ZENODO_MAX_RETRIES", "1") or 1), 1) if self.fast_mode else int(os.getenv("ENNOSCHOLAR_ZENODO_MAX_RETRIES", "2") or 2),
+        )
         self.europe_pmc_client = EuropePmcClient(timeout=api_timeout, max_retries=api_retries)
         self.ieee_client = IeeeClient(timeout=max(api_timeout, 10), max_retries=api_retries)
-        self.github_client = GitHubClient(timeout=api_timeout, max_retries=api_retries)
+        self.github_client = GitHubClient(
+            timeout=min(int(os.getenv("ENNOSCHOLAR_GITHUB_TIMEOUT", "12") or 12), 12) if self.fast_mode else int(os.getenv("ENNOSCHOLAR_GITHUB_TIMEOUT", "20") or 20),
+            max_retries=min(int(os.getenv("ENNOSCHOLAR_GITHUB_MAX_RETRIES", "1") or 1), 1) if self.fast_mode else int(os.getenv("ENNOSCHOLAR_GITHUB_MAX_RETRIES", "3") or 3),
+        )
         self.huggingface_client = HuggingFaceClient(timeout=api_timeout, max_retries=api_retries)
 
         # >>> ENNOSMART_RESEARCH_UPGRADE_V1_BEGIN
@@ -2159,7 +2194,7 @@ class EnnoScholarAgent:
         self._source_locks_guard = threading.Lock()
 
     def _source_lock(self, source_name: str) -> threading.BoundedSemaphore:
-        """Autorise un petit parallélisme contrôlé par API scientifique."""
+        """Conserve la régulation V5 existante, sans politique quota ajoutée."""
         with self._source_locks_guard:
             lock = self._source_locks.get(source_name)
             if lock is None:
@@ -2177,6 +2212,7 @@ class EnnoScholarAgent:
         domain_detection: Dict[str, Any],
         diagnostic_context: Dict[str, Any],
     ) -> Dict[str, Any]:
+        search_started_v1672 = time.perf_counter()
         intent = build_scientific_intent(
             verrou,
             domain_detection=domain_detection,
@@ -2283,6 +2319,7 @@ class EnnoScholarAgent:
             intent,
             max_queries=self.max_queries_per_verrou,
         )
+        query_planning_elapsed_v1672 = round(time.perf_counter() - search_started_v1672, 3)
 
         all_papers: List[Dict[str, Any]] = []
         errors: List[Dict[str, Any]] = []
@@ -2337,13 +2374,13 @@ class EnnoScholarAgent:
             fallback_scientific_sources = [x for x in fallback_scientific_sources if x != "arxiv"]
 
         source_status = {
-            name: {"enabled": True, "success": 0, "errors": 0, "api_limited": 0, "skipped": 0}
+            name: {"enabled": True, "success": 0, "errors": 0, "api_limited": 0, "skipped": 0, "fresh": 0, "cache_supplement": 0, "cache_fallback": 0}
             for name in scientific_sources + fallback_scientific_sources + artifact_sources
         }
         technical_artifacts: List[Dict[str, Any]] = []
 
         def _record_results(source_name: str, res: List[Dict[str, Any]], *, artifacts: bool = False) -> None:
-            source_status.setdefault(source_name, {"enabled": True, "success": 0, "errors": 0, "api_limited": 0, "skipped": 0})
+            source_status.setdefault(source_name, {"enabled": True, "success": 0, "errors": 0, "api_limited": 0, "skipped": 0, "fresh": 0, "cache_supplement": 0, "cache_fallback": 0})
             for p in res:
                 if not isinstance(p, dict):
                     continue
@@ -2355,11 +2392,18 @@ class EnnoScholarAgent:
                         source_status[source_name]["errors"] += 1
                     if p.get("api_limited") or p.get("http_status") == 429 or "429" in str(p.get("error") or ""):
                         source_status[source_name]["api_limited"] += 1
-                elif artifacts:
-                    technical_artifacts.append(p)
-                    source_status[source_name]["success"] += 1
                 else:
-                    all_papers.append(p)
+                    origin = str(p.get("retrieval_origin") or "fresh_api")
+                    if origin == "cache_supplement":
+                        source_status[source_name]["cache_supplement"] += 1
+                    elif origin == "cache_fallback":
+                        source_status[source_name]["cache_fallback"] += 1
+                    else:
+                        source_status[source_name]["fresh"] += 1
+                    if artifacts:
+                        technical_artifacts.append(p)
+                    else:
+                        all_papers.append(p)
                     source_status[source_name]["success"] += 1
 
         source_functions = {
@@ -2385,29 +2429,48 @@ class EnnoScholarAgent:
         unique_candidates_before_fallback = 0
         artifact_calls_planned = 0
         external_elapsed_seconds = 0.0
+        query_feedback_report: Dict[str, Any] = {
+            "enabled": True,
+            "triggered": False,
+            "planner_version": "v166_3_role_contract_query_planner",
+        }
+        adaptive_refinement_report: Dict[str, Any] = {
+            "enabled": True,
+            "triggered": False,
+            "llm_calls": 0,
+            "queries_count": 0,
+            "reason": "not_evaluated",
+        }
+
+        # ENNOSCHOLAR_V167_2_FAST_RETRIEVAL_BEGIN
+        retrieval_plan_v1672: Dict[str, Any] = {
+            "version": "v167_6_adaptive_recall_50_corpus",
+            "enabled": not self.offline_dry_run,
+            "wave1_executed": False,
+            "wave2_executed": False,
+            "wave2_reason": "offline_dry_run" if self.offline_dry_run else "not_started",
+            "wave1_elapsed_seconds": 0.0,
+            "wave2_elapsed_seconds": 0.0,
+        }
 
         if not self.offline_dry_run:
-            jobs: List[Tuple[str, str, Any, bool, int]] = []
-            for q in queries:
-                query = q.get("query") if isinstance(q, dict) else str(q)
-                query = clean_text(query, 220)
-                if not query:
-                    continue
-                for source_name in scientific_sources:
-                    func = source_functions.get(source_name)
-                    if func is not None:
-                        jobs.append((source_name, query, func, False, self.limit_per_query))
+            from .fast_retrieval import (
+                article_has_core_alignment,
+                build_fast_retrieval_plan,
+                build_job_tuples,
+                build_refinement_jobs,
+                should_expand_wave2,
+                should_run_adaptive_refinement,
+            )
 
-            # Les artefacts sont recherchés avec une seule requête, pour ne pas surcharger les APIs.
-            artifact_query = clean_text((queries[0].get("query") if queries and isinstance(queries[0], dict) else (queries[0] if queries else "")), 220)
-            if artifact_query:
-                for source_name in artifact_sources:
-                    func = artifact_functions.get(source_name)
-                    if func is not None:
-                        jobs.append((source_name, artifact_query, func, True, int(os.getenv("ENNOSCHOLAR_ARTIFACT_LIMIT", "10") or 10)))
-
-            external_calls_planned = sum(1 for x in jobs if not x[3])
-            artifact_calls_planned = sum(1 for x in jobs if x[3])
+            retrieval_plan_v1672.update(
+                build_fast_retrieval_plan(
+                    queries,
+                    scientific_sources,
+                    artifact_sources,
+                    self.limit_per_query,
+                )
+            )
             started = time.perf_counter()
 
             def _execute_jobs(batch: List[Tuple[str, str, Any, bool, int]]) -> None:
@@ -2415,8 +2478,18 @@ class EnnoScholarAgent:
                     return
                 with ThreadPoolExecutor(max_workers=min(self.source_workers, len(batch))) as executor:
                     def _run_source_job(source_name: str, query: str, func: Any, limit: int) -> Any:
+                        from .scientific_query_workflow import adapt_query_for_provider
+                        provider_query = adapt_query_for_provider(query, source_name, intent=intent)
+                        if not provider_query:
+                            return {"results": [], "elapsed": 0.0, "provider_query": ""}
+                        started_job = time.perf_counter()
                         with self._source_lock(source_name):
-                            return func(query, limit)
+                            results = func(provider_query, limit)
+                        return {
+                            "results": results,
+                            "elapsed": round(time.perf_counter() - started_job, 3),
+                            "provider_query": provider_query,
+                        }
 
                     future_map = {
                         executor.submit(_run_source_job, source_name, query, func, limit): (source_name, query, is_artifact)
@@ -2424,93 +2497,158 @@ class EnnoScholarAgent:
                     }
                     for future in as_completed(future_map):
                         source_name, query, is_artifact = future_map[future]
+                        elapsed_job = 0.0
+                        provider_query = ""
                         try:
-                            res = future.result()
+                            payload = future.result()
+                            if isinstance(payload, dict) and "results" in payload:
+                                res = payload.get("results")
+                                elapsed_job = float(payload.get("elapsed") or 0.0)
+                                provider_query = str(payload.get("provider_query") or "")
+                            else:
+                                res = payload
                             if not isinstance(res, list):
                                 res = [{"source": source_name, "query": query, "error": "Client returned non-list result", "normalized_error": True}]
                         except Exception as exc:
                             res = [{"source": source_name, "query": query, "error": str(exc), "normalized_error": True}]
+                        status = source_status.setdefault(source_name, {"enabled": True, "success": 0, "errors": 0, "api_limited": 0, "skipped": 0, "fresh": 0, "cache_supplement": 0, "cache_fallback": 0})
+                        status["calls"] = int(status.get("calls") or 0) + 1
+                        status["elapsed_seconds"] = round(float(status.get("elapsed_seconds") or 0.0) + elapsed_job, 3)
+                        if provider_query:
+                            status["last_provider_query"] = provider_query
                         _record_results(source_name, res, artifacts=is_artifact)
 
-            _execute_jobs(jobs)
-
-            # V153 — rescue adaptatif universel pour verrou pauvre/difficile.
-            rescue_enabled = _env_bool_value("ENNOSCHOLAR_ADAPTIVE_RESCUE_ENABLED", True)
-            if rescue_enabled and queries:
-                rescue_min_relevant = max(1, int(os.getenv("ENNOSCHOLAR_RESCUE_MIN_RELEVANT", "30") or 30))
-                rescue_target_raw = max(rescue_min_relevant, int(os.getenv("ENNOSCHOLAR_RESCUE_TARGET_RAW", "100") or 100))
-
-                preliminary_ranked = rank_papers_for_intent(
-                    all_papers, intent, top_n=self.max_articles_per_verrou
-                )
-                preliminary_visible, _ = _select_relevant_articles_for_output(
-                    preliminary_ranked, self.max_articles_per_verrou
-                )
-                unique_before_rescue = len(dedupe_papers(all_papers))
-
-                if len(preliminary_visible) < rescue_min_relevant or unique_before_rescue < rescue_target_raw:
-                    rescue_queries = _adaptive_rescue_queries(
-                        intent,
-                        queries,
-                        max_queries=int(os.getenv("ENNOSCHOLAR_RESCUE_MAX_QUERIES", "6") or 6),
-                    )
-                    rescue_sources = list(dict.fromkeys(scientific_sources + fallback_scientific_sources))
-                    rescue_jobs: List[Tuple[str, str, Any, bool, int]] = []
-                    for rescue_query in rescue_queries:
-                        for source_name in rescue_sources:
-                            func = source_functions.get(source_name)
-                            if func is not None:
-                                rescue_jobs.append((source_name, rescue_query, func, False, self.limit_per_query))
-                    if rescue_jobs:
-                        _execute_jobs(rescue_jobs)
-                        external_calls_planned += len(rescue_jobs)
-                        fallback_calls_planned += len(rescue_jobs)
-                        fallback_triggered = True
-
-            # Deuxième niveau à la demande : HAL, Zenodo et CORE ne sont appelés
-            # que si les sources rapides n'ont pas fourni assez de candidats
-            # uniques pour remplir le Top N demandé.
-            unique_candidates_before_fallback = len(dedupe_papers(all_papers))
-            fallback_target = max(
-                1,
-                min(
-                    self.max_articles_per_verrou,
-                    int(os.getenv("ENNOSCHOLAR_FAST_FALLBACK_MIN_CANDIDATES", str(self.max_articles_per_verrou))
-                        or self.max_articles_per_verrou),
-                ),
+            # Wave 1: broad providers start together. OpenAlex keeps its own
+            # internal serialization but no longer blocks the other engines.
+            wave1_jobs = build_job_tuples(
+                retrieval_plan_v1672.get("wave1_jobs") or [],
+                source_functions,
+                artifact_functions,
             )
-            if (
-                fallback_scientific_sources
-                and unique_candidates_before_fallback < fallback_target
-                and queries
-            ):
-                fallback_triggered = True
+            wave1_started = time.perf_counter()
+            _execute_jobs(wave1_jobs)
+            retrieval_plan_v1672["wave1_executed"] = bool(wave1_jobs)
+            retrieval_plan_v1672["wave1_elapsed_seconds"] = round(time.perf_counter() - wave1_started, 3)
+            external_calls_planned += sum(1 for row in wave1_jobs if not row[3])
+            artifact_calls_planned += sum(1 for row in wave1_jobs if row[3])
 
-                # 50+ generic coverage:
-                # for sparse/difficult locks, secondary sources must not receive
-                # only the first query. Reuse up to the best 3 selected queries.
-                fallback_queries: List[str] = []
-                for fallback_q in queries[:3]:
-                    q_text = clean_text(
-                        fallback_q.get("query") if isinstance(fallback_q, dict) else fallback_q,
-                        220,
-                    )
-                    if q_text and q_text not in fallback_queries:
-                        fallback_queries.append(q_text)
+            unique_candidates_before_fallback = len(dedupe_papers(all_papers))
+            wave1_source_names = list(retrieval_plan_v1672.get("wave1_sources") or [])
+            successful_wave1_sources = sum(
+                1 for source_name in wave1_source_names
+                if source_status.get(source_name, {}).get("success", 0) > 0
+            )
+            expand_wave2, wave2_reason, wave1_target = should_expand_wave2(
+                unique_candidates=unique_candidates_before_fallback,
+                successful_wave1_sources=successful_wave1_sources,
+                wave1_plan=retrieval_plan_v1672,
+            )
+            retrieval_plan_v1672["wave1_unique_candidates"] = unique_candidates_before_fallback
+            retrieval_plan_v1672["wave1_successful_sources"] = successful_wave1_sources
+            retrieval_plan_v1672["wave1_target_unique"] = wave1_target
+            retrieval_plan_v1672["wave2_reason"] = wave2_reason
 
-                fallback_jobs: List[Tuple[str, str, Any, bool, int]] = []
-                for fallback_query in fallback_queries:
-                    for source_name in fallback_scientific_sources:
-                        func = source_functions.get(source_name)
-                        if func is not None:
-                            fallback_jobs.append(
-                                (source_name, fallback_query, func, False, self.limit_per_query)
-                            )
-                fallback_calls_planned = len(fallback_jobs)
+            # Wave 2: only when first-pass coverage is insufficient. Providers
+            # that already exposed a rate limit are not retried in the same run.
+            if expand_wave2:
+                planned_wave2 = [
+                    row for row in (retrieval_plan_v1672.get("wave2_jobs") or [])
+                    if source_status.get(str(row.get("source") or ""), {}).get("api_limited", 0) <= 0
+                ]
+                wave2_jobs = build_job_tuples(planned_wave2, source_functions, artifact_functions)
+                wave2_started = time.perf_counter()
+                _execute_jobs(wave2_jobs)
+                retrieval_plan_v1672["wave2_elapsed_seconds"] = round(time.perf_counter() - wave2_started, 3)
+                retrieval_plan_v1672["wave2_executed"] = bool(wave2_jobs)
+                fallback_triggered = bool(wave2_jobs)
+                fallback_calls_planned = sum(1 for row in wave2_jobs if not row[3])
                 external_calls_planned += fallback_calls_planned
-                _execute_jobs(fallback_jobs)
+                artifact_calls_planned += sum(1 for row in wave2_jobs if row[3])
+
+            # V167.6 — one bounded vocabulary-refinement LLM call only when
+            # the normal 6-query portfolio + Wave 2 still leaves a weak corpus.
+            current_unique_after_wave2 = len(dedupe_papers(all_papers))
+            run_refinement_v1676, refinement_reason_v1676, refinement_trigger_v1676 = should_run_adaptive_refinement(
+                unique_candidates=current_unique_after_wave2,
+                retrieval_plan=retrieval_plan_v1672,
+            )
+            retrieval_plan_v1672["pre_refinement_unique_candidates"] = current_unique_after_wave2
+            retrieval_plan_v1672["refinement_trigger_unique"] = refinement_trigger_v1676
+            retrieval_plan_v1672["refinement_reason"] = refinement_reason_v1676
+            retrieval_plan_v1672["refinement_executed"] = False
+            retrieval_plan_v1672["refinement_elapsed_seconds"] = 0.0
+            retrieval_plan_v1672["refinement_calls"] = 0
+
+            if run_refinement_v1676:
+                try:
+                    from .adaptive_query_refinement import build_adaptive_refinement_queries
+                    refinement_queries_v1676, adaptive_refinement_report = build_adaptive_refinement_queries(
+                        intent,
+                        dedupe_papers(all_papers),
+                        queries,
+                        call_openrouter_chat,
+                        max_queries=2,
+                    )
+                    adaptive_refinement_report["triggered"] = bool(refinement_queries_v1676)
+                    if refinement_queries_v1676:
+                        planned_refinement_v1676 = build_refinement_jobs(
+                            refinement_queries_v1676,
+                            scientific_sources,
+                            limit=min(max(self.limit_per_query, 20), 30),
+                        )
+                        planned_refinement_v1676 = [
+                            row for row in planned_refinement_v1676
+                            if source_status.get(str(row.get("source") or ""), {}).get("api_limited", 0) <= 0
+                        ]
+                        refinement_jobs_v1676 = build_job_tuples(
+                            planned_refinement_v1676, source_functions, artifact_functions
+                        )
+                        refinement_started_v1676 = time.perf_counter()
+                        _execute_jobs(refinement_jobs_v1676)
+                        refinement_elapsed_v1676 = round(time.perf_counter() - refinement_started_v1676, 3)
+                        external_calls_planned += len(refinement_jobs_v1676)
+                        queries.extend(refinement_queries_v1676)
+                        retrieval_plan_v1672["refinement_executed"] = bool(refinement_jobs_v1676)
+                        retrieval_plan_v1672["refinement_elapsed_seconds"] = refinement_elapsed_v1676
+                        retrieval_plan_v1672["refinement_calls"] = len(refinement_jobs_v1676)
+                        retrieval_plan_v1672["refinement_queries"] = [
+                            row.get("query") for row in refinement_queries_v1676
+                        ]
+                except Exception as exc:
+                    adaptive_refinement_report = {
+                        "enabled": True,
+                        "triggered": False,
+                        "llm_calls": 0,
+                        "queries_count": 0,
+                        "reason": f"refinement_exception:{type(exc).__name__}",
+                        "error": str(exc),
+                    }
+
+            retrieval_plan_v1672["post_refinement_unique_candidates"] = len(dedupe_papers(all_papers))
+
+            # Technical artifacts are opt-in in the interactive fast path.
+            artifact_jobs = build_job_tuples(
+                retrieval_plan_v1672.get("artifact_jobs") or [],
+                source_functions,
+                artifact_functions,
+            )
+            if artifact_jobs:
+                _execute_jobs(artifact_jobs)
+                artifact_calls_planned += len(artifact_jobs)
 
             external_elapsed_seconds = round(time.perf_counter() - started, 3)
+            retrieval_plan_v1672["final_unique_candidates"] = len(dedupe_papers(all_papers))
+
+            # The old feedback/rescue cartesian expansion is replaced by the
+            # bounded second wave; it no longer multiplies API calls.
+            query_feedback_report = {
+                "enabled": True,
+                "triggered": bool(adaptive_refinement_report.get("triggered")),
+                "reason": adaptive_refinement_report.get("reason") or "adaptive_recall_complete",
+                "planner_version": "v167_6_adaptive_recall_50_corpus",
+                "adaptive_refinement": adaptive_refinement_report,
+            }
+        # ENNOSCHOLAR_V167_2_FAST_RETRIEVAL_END
 
         # Filtre OA optionnel avant ranking. Il reste désactivé dans le flux
         # canonique : un article payant Direct doit rester sélectionnable afin
@@ -2528,7 +2666,15 @@ class EnnoScholarAgent:
         limited_sources = [k for k in enabled_sources if source_status.get(k, {}).get("api_limited", 0) > 0]
         enabled_artifact_sources = [k for k in artifact_sources if source_status.get(k, {}).get("enabled")]
         successful_artifact_sources = [k for k in enabled_artifact_sources if source_status.get(k, {}).get("success", 0) > 0]
+        query_workflow = intent.get("query_workflow") if isinstance(intent.get("query_workflow"), dict) else {}
+        query_planning_failed = bool(
+            query_workflow.get("status") == "QUERY_PLANNING_FAILED"
+            or (not queries and query_workflow and not query_workflow.get("search_allowed", False))
+        )
         search_status = {
+            "query_workflow": query_workflow,
+            "query_planning_failed": query_planning_failed,
+            "search_executed": bool(external_calls_planned > 0),
             "queries_count": len(queries),
             "queries_generated_count": len(all_queries),
             "query_selection_version": intent.get("query_builder_version") or "unknown",
@@ -2547,7 +2693,10 @@ class EnnoScholarAgent:
             "unique_candidates_before_fallback": unique_candidates_before_fallback,
             "artifact_calls_planned": artifact_calls_planned,
             "source_plan": source_plan,
+            "query_feedback": query_feedback_report,
+            "retrieval_plan_v1672": retrieval_plan_v1672,
             "technical_artifacts_count": len(technical_artifacts),
+            "query_planning_elapsed_seconds": query_planning_elapsed_v1672,
             "external_elapsed_seconds": external_elapsed_seconds,
             "enabled_sources": enabled_sources,
             "successful_sources": successful_sources,
@@ -2559,6 +2708,7 @@ class EnnoScholarAgent:
             "source_status": source_status,
         }
 
+        ranking_started_v1672 = time.perf_counter()
         # 1) Ranker déterministe : tags Direct / Connexe / Fondamental + score explicable.
         deterministic_ranked = rank_papers_for_intent(
             all_papers,
@@ -2596,15 +2746,35 @@ class EnnoScholarAgent:
             "Direct": sum(1 for a in ranked if a.get("tag") == "Direct"),
             "Connexe": sum(1 for a in ranked if a.get("tag") == "Connexe"),
             "Fondamental": sum(1 for a in ranked if a.get("tag") == "Fondamental"),
+            "Technique": sum(1 for a in ranked if a.get("tag") == "Technique"),
             "Hors sujet": sum(1 for a in ranked if a.get("tag") == "Hors sujet"),
         }
 
         # >>> ENNOSMART_RESEARCH_UPGRADE_V1_DEEP_DISCOVERY
         deep_discovery_report = {"enabled": False, "reason": "service_unavailable"}
-        if self.deep_discovery is not None and self.deep_discovery.enabled:
+        raw_target_v1676 = int(retrieval_plan_v1672.get("raw_candidate_target") or 150)
+        citation_trigger_v1676 = max(40, int(round(raw_target_v1676 * 0.80)))
+        adaptive_citation_needed_v1676 = bool(
+            not self.offline_dry_run
+            and _env_bool_value("ENNOSCHOLAR_CITATION_EXPANSION_WHEN_LOW", True)
+            and int(retrieval_plan_v1672.get("final_unique_candidates") or 0) < citation_trigger_v1676
+        )
+        deep_discovery_during_search_v1672 = bool(
+            _env_bool_value("ENNOSCHOLAR_DEEP_DISCOVERY_DURING_SEARCH", False)
+            or adaptive_citation_needed_v1676
+        )
+        plan_for_citation_v1676 = intent.get("scientific_query_plan") if isinstance(intent.get("scientific_query_plan"), dict) else {}
+        deep_discovery_seeds_v1676 = list(ranked)
+        if adaptive_citation_needed_v1676 and plan_for_citation_v1676:
+            from .fast_retrieval import article_has_core_alignment as _article_has_core_alignment_v1676
+            deep_discovery_seeds_v1676 = [
+                article for article in ranked
+                if isinstance(article, dict) and _article_has_core_alignment_v1676(article, plan_for_citation_v1676)
+            ]
+        if self.deep_discovery is not None and self.deep_discovery.enabled and deep_discovery_during_search_v1672:
             try:
                 deep_candidates, deep_discovery_report = self.deep_discovery.discover(
-                    ranked,
+                    deep_discovery_seeds_v1676,
                     core_search=(
                         self.core_client.search_works
                         if getattr(self, "core_client", None) is not None
@@ -2635,6 +2805,7 @@ class EnnoScholarAgent:
                         "Direct": sum(1 for a in ranked if a.get("tag") == "Direct"),
                         "Connexe": sum(1 for a in ranked if a.get("tag") == "Connexe"),
                         "Fondamental": sum(1 for a in ranked if a.get("tag") == "Fondamental"),
+                        "Technique": sum(1 for a in ranked if a.get("tag") == "Technique"),
                         "Hors sujet": sum(1 for a in ranked if a.get("tag") == "Hors sujet"),
                     }
             except Exception as exc:
@@ -2644,6 +2815,17 @@ class EnnoScholarAgent:
                     "new_candidates_resolved": 0,
                 }
         # <<< ENNOSMART_RESEARCH_UPGRADE_V1_DEEP_DISCOVERY
+        if self.deep_discovery is not None and self.deep_discovery.enabled and not deep_discovery_during_search_v1672:
+            deep_discovery_report = {
+                "enabled": False,
+                "available": True,
+                "mode": "on_demand_after_initial_search",
+                "reason": "disabled_during_interactive_search_v167_2",
+            }
+
+        search_status["raw_papers_after_deep_discovery"] = len(all_papers)
+        search_status["adaptive_citation_needed"] = adaptive_citation_needed_v1676
+        search_status["citation_seed_count"] = len(deep_discovery_seeds_v1676)
 
         # 3) Résumé court des Top N articles pour aider le consultant à sélectionner.
         #    Le module utilise un cache et fallback sans LLM si Gemini/OpenRouter est indisponible.
@@ -2672,11 +2854,20 @@ class EnnoScholarAgent:
         search_status["precision_tag_counts"] = precision_counts
         search_status["article_summaries"] = summary_report
         search_status["deep_discovery"] = deep_discovery_report
+        search_status["timing_v1672"] = {
+            "query_planning_seconds": query_planning_elapsed_v1672,
+            "wave1_seconds": float(retrieval_plan_v1672.get("wave1_elapsed_seconds") or 0.0),
+            "wave2_seconds": float(retrieval_plan_v1672.get("wave2_elapsed_seconds") or 0.0),
+            "external_retrieval_seconds": external_elapsed_seconds,
+            "ranking_reranking_seconds": round(time.perf_counter() - ranking_started_v1672, 3),
+            "total_before_validation_seconds": round(time.perf_counter() - search_started_v1672, 3),
+        }
 
+        technical_validation_sources = list(technical_sources or []) + list(technical_artifacts or [])
         validation = validate_verrou_scientifically(
             intent,
             ranked,
-            technical_sources=technical_sources,
+            technical_sources=technical_validation_sources,
             errors=errors,
             search_status=search_status,
         )
@@ -2693,7 +2884,7 @@ class EnnoScholarAgent:
             "raw_articles_retrieved": len(all_papers),
             "memory_v2": {k: v for k, v in memory_v2_report.items() if k != "articles"},
             "memory_v2_articles_retrieved": int(memory_v2_report.get("accepted_count") or 0),
-            "technical_sources_added": len(technical_sources),
+            "technical_sources_added": len(technical_validation_sources),
             "articles_limit": self.max_articles_per_verrou,
             "reranking": reranker_report,
             "article_summary_report": summary_report,
@@ -2764,9 +2955,9 @@ class EnnoScholarAgent:
             "publication_year_max": payload.get("publication_year_max"),
         }
 
-        # V141 — cache global de run complet.
-        # À la différence du cache par requête des clients, ce cache évite tout recalcul
-        # si le même projet/verrous/contexte/configuration est relancé.
+        # V159 — cache global conservé uniquement pour traçabilité.
+        # Il n'est plus relu pour court-circuiter la recherche : chaque run tente
+        # d'abord les fournisseurs externes, puis les caches complètent/replient.
         run_cache_enabled = _env_bool_value("ENNOSCHOLAR_RUN_CACHE_ENABLED", True)
         force_refresh = bool(
             _env_bool_value("ENNOSCHOLAR_FORCE_REFRESH", False)
@@ -2778,22 +2969,10 @@ class EnnoScholarAgent:
         run_cache_key = _run_cache_key(payload, self)
         run_cache_path = _run_cache_path(run_cache_key)
 
-        if run_cache_enabled and not force_refresh:
-            cached_report = _read_run_cache(run_cache_path, ttl_days=run_cache_ttl_days)
-            if cached_report is not None:
-                cached_report = dict(cached_report)
-                cached_report["cache"] = {
-                    "enabled": True,
-                    "used": True,
-                    "level": "run",
-                    "key": run_cache_key,
-                    "path": str(run_cache_path),
-                    "ttl_days": run_cache_ttl_days,
-                    "message": "Rapport EnnoScholar repris depuis le cache global : aucune nouvelle recherche API ni reranking BGE.",
-                }
-                cached_report["generated_at_from_cache"] = cached_report.get("generated_at")
-                cached_report["served_at"] = _now_iso()
-                return cached_report
+        # V159 fresh-first: a previous run can be written for traceability, but
+        # it must never short-circuit a new external search. Per-query caches are
+        # used only inside providers to supplement/fallback after the fresh call.
+        cached_report = None
 
         research_target_items = [
             target for target in (payload.get("research_targets") or [])
@@ -2932,11 +3111,12 @@ class EnnoScholarAgent:
                 "path": str(run_cache_path),
                 "ttl_days": run_cache_ttl_days,
                 "force_refresh": bool(force_refresh),
+                "read_policy": "disabled_fresh_first",
             },
             "results": results,
         }
 
-        if run_cache_enabled and not force_refresh:
+        if run_cache_enabled:
             _write_run_cache(run_cache_path, run_cache_key, report)
             report["cache"]["written"] = True
 
@@ -3279,3 +3459,19 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# ENNOSCHOLAR_V167_LANGGRAPH_QUERY_WORKFLOW
+
+# ENNOSCHOLAR_V167_1_EVIDENCE_REF_PARTIAL_REPAIR
+
+# ENNOSCHOLAR_V167_2_MULTIQUERY_FAST_RETRIEVAL
+
+# ENNOSCHOLAR_V167_3_USEFUL_TERMS_NO_WASTE_LLM
+
+# ENNOSCHOLAR_V167_4_FIVE_QUERIES_50_CORPUS
+
+# ENNOSCHOLAR_V167_5_LEVELLED_QUERIES_50_CORPUS
+
+# ENNOSCHOLAR_V167_6_ADAPTIVE_RECALL_50_CORPUS
+
+# ENNOSCHOLAR_V168_ROLE_COVERAGE_RANKER

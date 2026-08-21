@@ -496,8 +496,7 @@ def _v146_memory_role_score(intent: Dict[str, Any], article: Dict[str, Any]) -> 
         candidates = aliases.get(concept) or [concept]
         hit = False
         for alias in candidates:
-            if str(alias).upper() in {"SER", "SAR", "ATR"}:
-                continue
+            # Generic exact matching: no acronym/domain deny-list.
             if _v146_exact(text, str(alias)):
                 hit = True
                 break

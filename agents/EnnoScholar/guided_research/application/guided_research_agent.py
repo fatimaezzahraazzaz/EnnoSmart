@@ -1,6 +1,17 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+# ENNOSCHOLAR_V170_3_EVIDENCE_FIRST_WRITING
+# ENNOSCHOLAR_V170_3_1_INSTALLER_FIX
+
+# ENNOSCHOLAR_V170_2_PLAN_EDITING_READBACK_FIX
+
+# ENNOSCHOLAR_V170_1_CONVERSATION_ROUTING_FIX
+
+# ENNOSCHOLAR_V170_CONVERSATION_PLAN_AUTHORITY
+
+# ENNOSCHOLAR_V169_1_PROJECT_PERSISTENT_CORPUS
+
 import hashlib
 import inspect
 import json
@@ -473,6 +484,85 @@ def _merge_additive_plan_update(
     return normalize_plan_sections(merged)
 
 
+def _insert_plan_sections_after(
+    current: Iterable[Mapping[str, Any]],
+    candidate: Iterable[Mapping[str, Any]],
+    *,
+    target_section_ids: Iterable[Any],
+) -> list[dict[str, Any]]:
+    """Insère uniquement les nouvelles sections après une section courante.
+
+    Le titre et le contenu viennent toujours du payload structuré. Cette
+    fonction ne fait que garantir la position demandée et préserver toutes
+    les autres sections de la conversation.
+    """
+    current_plan = normalize_plan_sections(list(current))
+    candidate_plan = normalize_plan_sections(list(candidate))
+    target_ids = {
+        _clean(value, 200)
+        for value in target_section_ids or []
+        if _clean(value, 200)
+    }
+    if len(target_ids) != 1 or not current_plan or not candidate_plan:
+        return current_plan
+    target_id = next(iter(target_ids))
+    target_index = next(
+        (
+            index
+            for index, row in enumerate(current_plan)
+            if _clean(row.get("section_id"), 200) == target_id
+        ),
+        None,
+    )
+    if target_index is None:
+        return current_plan
+
+    existing_titles = {_norm(row.get("title")) for row in current_plan}
+    existing_ids = {
+        _clean(row.get("section_id"), 200)
+        for row in current_plan
+        if _clean(row.get("section_id"), 200)
+    }
+    additions: list[dict[str, Any]] = []
+    used_ids = set(existing_ids)
+    target = current_plan[target_index]
+    target_level = max(1, int(target.get("level") or 1))
+    target_parent = target.get("parent_id")
+    for raw in candidate_plan:
+        title_key = _norm(raw.get("title"))
+        if not title_key or title_key in existing_titles:
+            continue
+        addition = dict(raw)
+        section_id = _clean(addition.get("section_id"), 200)
+        if not section_id or section_id in used_ids:
+            base_id = storage_slug(addition.get("title")) or "section"
+            section_id = base_id
+            suffix = 2
+            while section_id in used_ids:
+                section_id = f"{base_id}_{suffix}"
+                suffix += 1
+            addition["section_id"] = section_id
+        addition["level"] = target_level
+        addition["parent_id"] = target_parent
+        used_ids.add(section_id)
+        existing_titles.add(title_key)
+        additions.append(addition)
+
+    if not additions:
+        return current_plan
+
+    # Insérer après les éventuels descendants de la section cible.
+    insert_at = target_index + 1
+    while insert_at < len(current_plan):
+        row_level = max(1, int(current_plan[insert_at].get("level") or 1))
+        if row_level <= target_level:
+            break
+        insert_at += 1
+    return normalize_plan_sections(
+        [*current_plan[:insert_at], *additions, *current_plan[insert_at:]]
+    )
+
+
 def _apply_local_plan_edit_scope(
     current: Iterable[Mapping[str, Any]],
     candidate: Iterable[Mapping[str, Any]],
@@ -942,9 +1032,45 @@ class EnnoScholarGuidedResearchAgent:
 
     @staticmethod
     def _cards_payload(project: Any, db: Session | None = None) -> dict[str, Any]:
-        from services.article_card_builder import get_article_cards_payload
+        # V169.1 : le writer ne lit plus uniquement le dernier ScholarRun / le
+        # ScholarRun privé de la conversation. Il agrège les Article Cards des
+        # publications gardées dans tout le projet.
+        if db is None:
+            from services.article_card_builder import get_article_cards_payload
+            return get_article_cards_payload(project, db=db)
+        from services.ennoscholar_project_corpus_service import (
+            get_project_corpus_cards_payload,
+        )
+        return get_project_corpus_cards_payload(db, project)
 
-        return get_article_cards_payload(project, db=db)
+    def _effective_selected_sources(
+        self,
+        db: Session,
+        project: Any,
+        session: GuidedResearchSessionData,
+        snapshot: Mapping[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        # Le JSON de session conserve les candidats/rejets du chat courant.
+        # Les sources acceptées utilisées pour couverture/rédaction sont la vue
+        # cumulative du projet, filtrée par le verrou actif.
+        from services.ennoscholar_project_corpus_service import (
+            get_effective_guided_sources,
+        )
+
+        current = dict(snapshot or self.repository.snapshot(db, session.session_id))
+        context = dict(current.get("context") or session.context or {})
+        review_scope = _clean(context.get("review_scope"), 40)
+        active_ids = (
+            list(context.get("active_verrou_ids") or [])
+            if review_scope == "per_verrou"
+            else []
+        )
+        return get_effective_guided_sources(
+            db,
+            project,
+            session_sources=list(current.get("selected_sources") or []),
+            active_verrou_ids=active_ids,
+        )
 
     @staticmethod
     def _sources_path(project: Any) -> Path:
@@ -1299,10 +1425,13 @@ class EnnoScholarGuidedResearchAgent:
                 "contract_path": str(isolated_contract_path),
                 "guided_sources_path": str(isolated_sources_path),
                 "conversation_storage_isolated": True,
+                "conversation_plan_storage_isolated": True,
+                # Identifiant legacy gardé uniquement pour tracer le ScholarRun
+                # ayant produit de nouveaux candidats dans cette conversation.
                 "corpus_scope_id": session.session_id,
-                "corpus_isolation_policy": (
-                    "one_guided_conversation_one_corpus"
-                ),
+                "effective_corpus_scope_id": f"project:{project.id}",
+                "corpus_storage_isolated": False,
+                "corpus_isolation_policy": "project_persistent_consultant_corpus",
             },
         )
         session = self.state_manager.get_session(db, session.session_id)
@@ -1608,6 +1737,21 @@ class EnnoScholarGuidedResearchAgent:
                 ),
             },
         )
+
+        # V170.2 — toute demande de lecture du plan est servie depuis le
+        # contrat réellement persisté de CETTE session. Le LLM n'a pas le droit
+        # de reconstruire le plan depuis l'historique conversationnel.
+        if "v170_2_plan_readback" in str(classification.classifier or ""):
+            current_plan_view = _format_plan_outline_for_chat(
+                _contract_sections(contract)
+            )
+            interpretation["assistant_message"] = (
+                "Voici le plan courant de cette conversation, sans modification."
+                + ("\n\n" + current_plan_view if current_plan_view.strip() else "")
+            )
+            interpretation["plan"] = []
+            interpretation["search_requests"] = []
+            interpretation["trigger_state_of_art_generation"] = False
 
         if intent in _RESPONSE_ONLY_INTENTS:
             response = self._respond_only(
@@ -2685,11 +2829,70 @@ class EnnoScholarGuidedResearchAgent:
             explicit_scope_ids or stored_scope_ids,
         )
         normalized_proposed_plan = normalize_plan_sections(proposed_plan)
+        # V170 — le plan est une mémoire STRICTEMENT conversationnelle.
+        # La dernière instruction explicite du consultant est l'autorité.
+        # Un plan complet remplace le plan courant ; une édition ciblée ne
+        # touche que la section visée. Le corpus projet reste partagé mais le
+        # plan, son approbation et le draft restent propres à la session.
+        normalized_plan_message = _norm(message)
+        explicit_replacement_markers = (
+            "exactement ce plan",
+            "utilise exactement",
+            "utiliser exactement",
+            "je veux ce plan",
+            "garde ce plan",
+            "reprends ce plan",
+            "remplace le plan",
+            "remplacer le plan",
+            "sans ajouter",
+            "sans supprimer",
+            "sans renommer",
+            "use exactly this plan",
+            "replace the plan",
+            "keep this plan exactly",
+        )
+        full_replacement_requested = bool(
+            allow_plan_change
+            and normalized_proposed_plan
+            and (
+                classification.replace_current_plan
+                or classification.plan_edit_scope == "full_plan"
+                or action_intent == ConsultantIntent.PROPOSE_PLAN
+                or (
+                    action_intent == ConsultantIntent.CHANGE_PLAN
+                    and not classification.target_section_ids
+                    and classification.plan_edit_scope != "local_section"
+                    and len(normalized_proposed_plan) >= 2
+                )
+                or any(
+                    marker in normalized_plan_message
+                    for marker in explicit_replacement_markers
+                )
+            )
+        )
+        if full_replacement_requested:
+            classification.replace_current_plan = True
+            classification.plan_edit_scope = "full_plan"
+
+        # Un identifiant de section explicite + modify/remove est une édition
+        # locale même si le classifieur a oublié de positionner plan_edit_scope.
         local_edit_requested = bool(
             allow_plan_change
-            and classification.plan_edit_scope == "local_section"
+            and not full_replacement_requested
             and not classification.replace_current_plan
+            and (
+                classification.plan_edit_scope == "local_section"
+                or (
+                    bool(classification.target_section_ids)
+                    and classification.plan_edit_operation in {
+                        "modify",
+                        "remove",
+                    }
+                )
+            )
         )
+        if local_edit_requested:
+            classification.plan_edit_scope = "local_section"
         if (
             allow_plan_change
             and not normalized_proposed_plan
@@ -2735,12 +2938,23 @@ class EnnoScholarGuidedResearchAgent:
                         )
                     },
                 )
-            normalized_proposed_plan = _apply_local_plan_edit_scope(
-                current_plan,
-                normalized_proposed_plan,
-                target_section_ids=requested_target_ids,
-                operation=classification.plan_edit_operation,
-            )
+            if (
+                classification.plan_edit_operation == "add"
+                and "v170_2_insert_after_section"
+                in str(classification.classifier or "")
+            ):
+                normalized_proposed_plan = _insert_plan_sections_after(
+                    current_plan,
+                    normalized_proposed_plan,
+                    target_section_ids=requested_target_ids,
+                )
+            else:
+                normalized_proposed_plan = _apply_local_plan_edit_scope(
+                    current_plan,
+                    normalized_proposed_plan,
+                    target_section_ids=requested_target_ids,
+                    operation=classification.plan_edit_operation,
+                )
             local_edit_scope_applied = True
         if (
             action_intent in {
@@ -2748,6 +2962,7 @@ class EnnoScholarGuidedResearchAgent:
                 ConsultantIntent.CHANGE_PLAN,
             }
             and not classification.replace_current_plan
+            and not full_replacement_requested
             and not local_edit_scope_applied
             and not _plan_candidate_covers_current(
                 normalized_proposed_plan,
@@ -2937,10 +3152,8 @@ class EnnoScholarGuidedResearchAgent:
         coverage = self._coverage(
             project,
             brief,
-            supplemental_sources=(
-                self.repository.snapshot(db, session.session_id).get(
-                    "selected_sources"
-                ) or []
+            supplemental_sources=self._effective_selected_sources(
+                db, project, session
             ),
         )
         target_state = (
@@ -2976,6 +3189,12 @@ class EnnoScholarGuidedResearchAgent:
                         else bool(session.context.get("writing_authorized"))
                     ),
                     "last_interpreter": interpretation.get("interpreter"),
+                    "plan_authority_policy": (
+                        "conversation_local_last_explicit_consultant_instruction_v170"
+                    ),
+                    "full_plan_replacement_applied": bool(
+                        plan_changed and full_replacement_requested
+                    ),
                     **(
                         {"plan_history": plan_history}
                         if plan_changed
@@ -2984,22 +3203,33 @@ class EnnoScholarGuidedResearchAgent:
                 },
             )
 
-        # V3 UX : conserver la réponse naturelle produite par le contrôleur.
-        # Avant, toute action de plan était écrasée par le même texte fixe.
+        # V170.1 — pour toute action de plan, le texte affiché est dérivé du
+        # plan réellement persisté, jamais d'un résumé libre produit avant le
+        # payload structuré. Cela évite d'annoncer « 3 parties » puis d'en
+        # afficher 6, ou de décrire un plan différent de celui enregistré.
         assistant = _clean(interpretation.get("assistant_message"), 6000)
 
         if action_intent in _PLAN_ACTION_INTENTS:
-            if not assistant:
+            if not plan_changed:
+                assistant = (
+                    "Je n'ai appliqué aucune modification au plan : la structure "
+                    "enregistrée reste inchangée."
+                )
+            else:
                 assistant = {
                     ConsultantIntent.PROPOSE_PLAN:
-                        "Voici la structure que je vous propose.",
+                        "Voici la structure que je vous propose pour cette conversation.",
                     ConsultantIntent.ADD_TOPIC:
-                        "Oui, j'ai intégré cet ajout au plan.",
+                        "C'est fait, j'ai ajouté la partie demandée au plan de cette conversation.",
                     ConsultantIntent.REMOVE_TOPIC:
-                        "C'est fait, j'ai retiré la partie demandée.",
+                        "C'est fait, j'ai supprimé la partie demandée du plan de cette conversation.",
                     ConsultantIntent.CHANGE_PLAN:
-                        "Oui, j'ai repris le plan dans ce sens.",
-                }.get(action_intent, "J'ai mis le plan à jour.")
+                        (
+                            "C'est fait, j'ai remplacé le plan de cette conversation par celui que vous venez de fournir."
+                            if classification.replace_current_plan
+                            else "C'est fait, j'ai appliqué la modification demandée au plan de cette conversation."
+                        ),
+                }.get(action_intent, "J'ai mis le plan de cette conversation à jour.")
 
             plan_view = (
                 _format_plan_for_review(_contract_sections(contract))
@@ -3073,28 +3303,30 @@ class EnnoScholarGuidedResearchAgent:
             constraints=session.brief.general_constraints if session.brief else [],
         )
         self.state_manager.update_brief(db, session.session_id, brief)
-        coverage = self._coverage(
-            project,
-            brief,
-            supplemental_sources=(
-                self.repository.snapshot(db, session.session_id).get(
-                    "selected_sources"
-                ) or []
-            ),
-        )
-        weak = coverage.get("weak_sections") or []
+        # V170.3 — Evidence-first : le score lexical de couverture reste un
+        # diagnostic historique, mais il ne pilote plus la conversation.
+        # Une recherche supplémentaire exige une demande explicite du consultant.
+        coverage = {
+            "ok": True,
+            "payload_type": "guided_prewrite_evidence_first_v170_3",
+            "section_coverage": [],
+            "weak_sections": [],
+            "sufficient": True,
+            "policy": {
+                "prewriting_coverage_gate_enabled": False,
+                "automatic_research_from_coverage": False,
+                "research_requires_explicit_consultant_command": True,
+                "writer_uses_approved_plan": True,
+                "writer_uses_current_article_cards": True,
+            },
+        }
         assistant = conversation_reply or (
-            "Le plan est validé et devient la structure obligatoire du document. "
-            "La préparation scientifique pourra seulement alimenter ce plan, jamais le remplacer."
+            "Le plan est validé et devient la structure obligatoire du document."
         )
-        if weak:
-            assistant += (
-                "\n\nAvant d'écrire, je vois encore "
-                f"{len(weak)} partie(s) faiblement couverte(s). "
-                "Je lancerai une recherche ciblée si vous me demandez de rédiger, sauf si vous précisez de travailler uniquement avec les sources actuelles."
-            )
-        else:
-            assistant += "\n\nLa couverture est suffisante. Vous pouvez me dire naturellement de commencer la rédaction."
+        assistant += (
+            "\n\nLa rédaction utilisera les Article Cards actuellement validées. "
+            "Une recherche supplémentaire ne sera lancée que si vous la demandez explicitement."
+        )
         self.repository.update(
             db,
             session.session_id,
@@ -3299,26 +3531,15 @@ class EnnoScholarGuidedResearchAgent:
                     context.get("corpus_scope_id") or session.session_id,
                     160,
                 )
-                cards_payload = get_article_cards_payload(
-                    project,
-                    scope_id=corpus_scope_id,
-                    db=db,
+                cards_payload = self._cards_payload(project, db=db)
+                corpus_run_ids = list(cards_payload.get("scholar_run_ids") or [])
+                corpus_run_id = (
+                    int(corpus_run_ids[0]) if len(corpus_run_ids) == 1 else None
                 )
-                corpus_run_id = cards_payload.get("scholar_run_id")
                 if not list(cards_payload.get("cards") or []):
-                    if corpus_run_id is None:
-                        raise RuntimeError(
-                            "Le corpus privé de cette conversation est introuvable."
-                        )
-                    cards_payload = build_article_cards_for_selected_articles(
-                        db=db,
-                        project=project,
-                        mode="auto",
-                        force=False,
-                        scholar_run_id=int(corpus_run_id),
-                        scope_id=corpus_scope_id,
+                    raise RuntimeError(
+                        "Aucune Article Card exploitable dans le corpus persistant du projet."
                     )
-                    corpus_run_id = cards_payload.get("scholar_run_id") or corpus_run_id
 
                 ready_cards_count = int(
                     cards_payload.get("writing_ready_cards_count")
@@ -3345,7 +3566,7 @@ class EnnoScholarGuidedResearchAgent:
                     "scholar_run_id": (
                         int(corpus_run_id) if corpus_run_id is not None else None
                     ),
-                    "policy": "conversation_ready_article_cards_only",
+                    "policy": "project_persistent_ready_article_cards_only",
                 }
             except Exception as exc:
                 print(
@@ -3431,8 +3652,8 @@ class EnnoScholarGuidedResearchAgent:
                     ),
                     verrous=active_verrous,
                     review_scope=review_scope,
-                    selected_sources=list(
-                        snapshot.get("selected_sources") or []
+                    selected_sources=self._effective_selected_sources(
+                        db, project, session, snapshot
                     ),
                     cards_payload=self._cards_payload(project, db=db),
                     output_dir=(
@@ -3601,9 +3822,8 @@ class EnnoScholarGuidedResearchAgent:
             "require_all_selected_sources": (
                 effective_source_count is not None
             ),
-            "exclude_external_research": (
-                effective_source_scope == "baseline_verrou_corpus"
-            ),
+            "exclude_external_research": True,
+            "research_requires_explicit_consultant_command": True,
             "grounded_in_current_message": bool(
                 _clean(writing_source_scope, 80) != "unspecified"
                 or stored_source_policy.get("grounded_in_current_message")
@@ -3631,55 +3851,24 @@ class EnnoScholarGuidedResearchAgent:
             )
         contract["writing_source_policy"] = source_policy
         brief = session.brief or _brief_from_contract(contract, raw_request=message)
-        coverage = self._coverage(
-            project,
-            brief,
-            supplemental_sources=(
-                self.repository.snapshot(db, session.session_id).get(
-                    "selected_sources"
-                ) or []
-            ),
-        )
-        weak = coverage.get("weak_sections") or []
-        bypass_search = bool(
-            use_current_sources_only
-            or effective_source_scope != "all_validated"
-        )
-        snapshot = self.repository.snapshot(db, session.session_id)
-        already_searched = bool((snapshot.get("context") or {}).get("external_research_started"))
-        if weak and not bypass_search and not already_searched:
-            write_json(contract_path, approved_contract)
-            self.repository.update(
-                db,
-                session.session_id,
-                writing_contract=approved_contract,
-                coverage=coverage,
-                state=GuidedResearchState.READY_TO_WRITE,
-                ready_to_write=True,
-                context_updates={
-                    "plan_approved": True,
-                    "writing_authorized": False,
-                    "pipeline_execution_requested": False,
-                },
-            )
-            return self._response(
-                session.session_id,
-                action_intent,
-                GuidedResearchState.READY_TO_WRITE,
-                (
-                    "Le plan est prêt, mais certaines sections manquent encore "
-                    "de preuves. Souhaitez-vous lancer une recherche ciblée, ou "
-                    "rédiger avec les sources actuellement validées ?"
-                ),
-                NextAction.RUN_RESEARCH,
-                brief,
-                True,
-                {
-                    "coverage": coverage,
-                    "trigger_state_of_art_generation": False,
-                    "awaiting_source_policy": True,
-                },
-            )
+        # V170.3 — START_WRITING écrit immédiatement avec le corpus validé.
+        # Le score lexical covered/partial/absent ne bloque pas et ne déclenche
+        # aucune recherche implicite. Les guards scientifiques Phase 5 restent actifs.
+        coverage = {
+            "ok": True,
+            "payload_type": "guided_prewrite_evidence_first_v170_3",
+            "section_coverage": [],
+            "weak_sections": [],
+            "sufficient": True,
+            "policy": {
+                "prewriting_coverage_gate_enabled": False,
+                "automatic_research_from_coverage": False,
+                "research_requires_explicit_consultant_command": True,
+                "writer_uses_approved_plan": True,
+                "writer_uses_current_article_cards": True,
+            },
+        }
+        bypass_search = True
         write_json(contract_path, contract)
         self.repository.update(
             db,

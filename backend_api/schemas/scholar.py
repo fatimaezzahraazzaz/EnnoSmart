@@ -44,6 +44,23 @@ class ArticleRead(BaseModel):
     evidence_reason_detail: str | None = None
     evidence_recommended_action: str | None = None
     evidence_access_kind: str | None = None
+
+    # ENNOSCHOLAR_ACCESS_UX_V165
+    # Etat d'accès normalisé destiné au frontend. Aucune migration DB :
+    # ces champs sont dérivés de source_json.evidence_preflight.
+    access_status: str | None = None
+    access_badge_label: str | None = None
+    extraction_status: str | None = None
+    manual_upload_required: bool | None = None
+    browser_download_url: str | None = None
+    manual_upload_verified: bool | None = None
+    manual_upload_filename: str | None = None
+    manual_upload_identity_score: float | None = None
+    selection_allowed: bool | None = None
+    access_resolution_source: str | None = None
+    mcp_checked: bool | None = None
+    access_final: bool | None = None
+
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

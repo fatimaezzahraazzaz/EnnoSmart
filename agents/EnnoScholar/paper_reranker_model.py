@@ -331,15 +331,40 @@ def rerank_papers_with_bge(
 # =============================================================================
 def _intent_query_text(intent: Dict[str, Any]) -> str:
     parts: List[str] = []
+    plan = intent.get("scientific_query_plan") if isinstance(intent.get("scientific_query_plan"), dict) else {}
+    if plan:
+        for key in [
+            "scientific_object", "independent_variables", "response_variables",
+            "operating_conditions", "phenomena", "methods", "validation_concepts",
+        ]:
+            rows = plan.get(key) or []
+            if not isinstance(rows, list):
+                rows = [rows]
+            for row in rows[:8]:
+                if isinstance(row, dict):
+                    value = row.get("term_en") or row.get("term") or row.get("value")
+                else:
+                    value = row
+                if value:
+                    parts.append(str(value))
     for key in ["core_concepts", "method_anchors", "phenomenon_anchors"]:
         value = intent.get(key) or []
         if isinstance(value, list):
-            parts.extend(map(str, value[:10]))
+            parts.extend(map(str, value[:8]))
     if not parts:
-        for key in ["technical_object", "phenomenon", "scientific_problem"]:
+        for key in ["technical_object", "phenomenon", "scientific_problem", "verrou_title"]:
             if intent.get(key):
                 parts.append(str(intent.get(key)))
-    return _clean(" | ".join(parts), 2400)
+    # Preserve order while removing duplicate concepts.
+    seen = set()
+    unique = []
+    for item in parts:
+        key = item.strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
+    return _clean(" | ".join(unique), 3000)
 
 
 def rerank_papers_with_bge(
@@ -347,6 +372,12 @@ def rerank_papers_with_bge(
     intent: Dict[str, Any],
     top_n: int | None = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """V168: BGE orders relevance inside deterministic categories only.
+
+    The scientific category is decided by paper_ranker V168. Semantic similarity
+    cannot promote an article from Fundamental/Hors sujet to Direct/Connexe and
+    cannot turn a technical implementation into scientific evidence.
+    """
     started = time.perf_counter()
     articles = [a for a in (articles or []) if isinstance(a, dict)]
     top_n = int(top_n or len(articles) or 0)
@@ -355,7 +386,7 @@ def rerank_papers_with_bge(
         "model": os.getenv("ENNOSCHOLAR_RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"),
         "input_count": len(articles), "reranked_count": 0, "requalified_count": 0,
         "top_k_input": 0, "elapsed_seconds": 0.0, "error": "",
-        "policy": "v146_downgrade_first_core_gate_memory_postcheck",
+        "policy": "v168_bge_order_only_category_locked",
     }
     if not articles or not report["enabled"]:
         report["elapsed_seconds"] = round(time.perf_counter() - started, 3)
@@ -367,56 +398,26 @@ def rerank_papers_with_bge(
     try:
         raw_scores = _CrossEncoderReranker.predict(_intent_query_text(intent), [_paper_text(a) for a in head])
         scores = _normalize_scores(raw_scores)
-        weight = max(0.0, min(_env_float("ENNOSCHOLAR_RERANKER_WEIGHT", 0.42), 1.0))
-        requalified = 0
+        weight = max(0.0, min(_env_float("ENNOSCHOLAR_RERANKER_WEIGHT", 0.30), 0.45))
         memory_threshold = _env_float("ENNOSCHOLAR_MEMORY_V2_BGE_MIN_SCORE", 0.30)
 
         for article, raw, bge in zip(head, raw_scores, scores):
             old_tag = str(article.get("tag") or "Hors sujet")
             details = dict(article.get("score_details") or {})
-            core_n = int(details.get("core_concept_hit_count") or 0)
-            primary_n = int(details.get("primary_core_hit_count") or 0)
-            support_n = int(details.get("support_role_count") or 0)
-            contradiction = bool(details.get("domain_contradiction"))
             previous = float(article.get("relevance_score") or 0.0)
-            new_tag = old_tag
 
-            if contradiction:
-                new_tag = "Hors sujet"
-            elif old_tag == "Direct":
-                if primary_n < 1 or support_n < 1:
-                    new_tag = "Connexe" if primary_n else "Fondamental"
-                elif bge < 0.008 and primary_n < 2:
-                    new_tag = "Connexe"
-            elif old_tag == "Connexe":
-                if primary_n == 0 and support_n < 2:
-                    new_tag = "Fondamental" if (core_n or support_n) else "Hors sujet"
-                elif bge < 0.006 and primary_n == 0:
-                    new_tag = "Hors sujet"
-            elif old_tag in {"Fondamental", "Hors sujet"}:
-                # Promotion exceptionnellement autorisée vers Connexe seulement si le garde
-                # déterministe a déjà trouvé un concept coeur ET un rôle de support.
-                if primary_n >= 1 and support_n >= 1 and bge >= 0.55 and not contradiction:
-                    new_tag = "Connexe"
-
+            # Memory V2 remains conservative, but BGE does not modify the tag.
             if article.get("memory_v2_prior"):
+                object_hit = bool(details.get("object_role_hit") or int(details.get("primary_core_hit_count") or 0) >= 1)
+                relation = bool(details.get("relation_evidence") or details.get("problem_evidence"))
                 accepted = bool(
-                    new_tag in {"Direct", "Connexe"}
-                    and primary_n >= 1 and support_n >= 1
-                    and bge >= memory_threshold
-                    and not contradiction
+                    old_tag in {"Direct", "Connexe"}
+                    and object_hit
+                    and (relation or int(details.get("support_role_count") or 0) >= 1)
+                    and float(bge) >= memory_threshold
                 )
                 article["memory_v2_accepted_after_bge"] = accepted
-                article["memory_v2_rejection_reason"] = "" if accepted else "memory_requires_core_support_and_bge_threshold"
-
-            if new_tag != old_tag:
-                requalified += 1
-                article["tag_before_bge"] = old_tag
-                article["tag"] = new_tag
-                article["reason"] = (
-                    f"Tag réévalué par le garde V146 : {old_tag} → {new_tag}. "
-                    "Le BGE ne peut pas compenser l'absence de concept scientifique coeur."
-                )
+                article["memory_v2_rejection_reason"] = "" if accepted else "memory_requires_role_support_and_bge_threshold"
 
             combined = weight * float(bge) + (1.0 - weight) * previous
             article["relevance_score_before_rerank"] = round(previous, 4)
@@ -425,10 +426,11 @@ def rerank_papers_with_bge(
             article["relevance_score"] = round(max(0.0, min(combined, 1.0)), 4)
             details.update({
                 "bge_reranker_used": True,
+                "bge_reranker_policy": "order_only_category_locked",
                 "bge_reranker_score_absolute": article["bge_reranker_score"],
                 "bge_reranker_raw_score": article["bge_reranker_raw_score"],
                 "tag_before_bge": old_tag,
-                "tag_after_bge": article.get("tag"),
+                "tag_after_bge": old_tag,
                 "memory_v2_accepted_after_bge": article.get("memory_v2_accepted_after_bge"),
             })
             article["score_details"] = details
@@ -440,8 +442,12 @@ def rerank_papers_with_bge(
             float(x.get("bge_reranker_score") or 0.0),
             int(x.get("citation_count") or 0),
         ), reverse=True)
-        report.update({"used": True, "reranked_count": len(head), "requalified_count": requalified,
-                       "elapsed_seconds": round(time.perf_counter() - started, 3)})
+        report.update({
+            "used": True,
+            "reranked_count": len(head),
+            "requalified_count": 0,
+            "elapsed_seconds": round(time.perf_counter() - started, 3),
+        })
         return (head + tail)[:top_n], report
     except Exception as exc:
         report.update({"used": False, "error": repr(exc), "elapsed_seconds": round(time.perf_counter() - started, 3)})

@@ -22,6 +22,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .external_source_base import merge_fresh_with_cache, fallback_from_cache
+
 SEMANTIC_SCHOLAR_SEARCH_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 
 FIELDS = ",".join([
@@ -117,7 +119,7 @@ class SemanticScholarClient:
         self.max_retries = int(
             max_retries
             if max_retries is not None
-            else os.getenv("ENNOSCHOLAR_MAX_RETRIES", "1")
+            else os.getenv("ENNOSCHOLAR_SEMANTIC_MAX_RETRIES", os.getenv("ENNOSCHOLAR_MAX_RETRIES", "1"))
         )
         self.cache_ttl_days = int(
             cache_ttl_days
@@ -143,8 +145,7 @@ class SemanticScholarClient:
         cache_path = _cache_key("semantic_scholar", query, limit)
 
         cached = _read_cache(cache_path, self.cache_ttl_days)
-        if cached is not None:
-            return cached
+        # Fresh-first: cache is kept only as a supplement/fallback.
 
         params = {"query": query, "limit": limit, "fields": FIELDS}
         url = SEMANTIC_SCHOLAR_SEARCH_URL + "?" + urllib.parse.urlencode(params)
@@ -158,9 +159,10 @@ class SemanticScholarClient:
                 for p in data.get("data") or []:
                     if isinstance(p, dict):
                         out.append(self.normalize(p, query))
-                _write_cache(cache_path, out)
+                combined = merge_fresh_with_cache(out, cached, limit, "semantic_scholar")
+                _write_cache(cache_path, combined)
                 time.sleep(self.sleep_seconds)
-                return out
+                return combined
             except Exception as exc:
                 retryable, message, code = _is_retryable_error(exc)
                 last_error = message
@@ -169,16 +171,13 @@ class SemanticScholarClient:
                     break
                 # Backoff prudent. 429 demande souvent quelques secondes.
                 base = 2.0 if code == 429 else 1.0
-                time.sleep(min(base * (attempt + 1) + self.sleep_seconds, float(os.getenv("ENNOSCHOLAR_BACKOFF_MAX_SECONDS", "2.0"))))
+                time.sleep(min(base * (attempt + 1) + self.sleep_seconds, float(os.getenv("ENNOSCHOLAR_SEMANTIC_RETRY_MAX_DELAY", os.getenv("ENNOSCHOLAR_BACKOFF_MAX_SECONDS", "6.0")))))
 
         # Fallback cache expiré si l'API est limitée mais qu'on a une ancienne réponse.
         stale = _read_cache(cache_path, max_age_days=3650)
-        if stale is not None:
-            for it in stale:
-                if isinstance(it, dict):
-                    it["cache_stale_used_after_error"] = True
-                    it["api_error"] = last_error
-            return stale
+        fallback = fallback_from_cache(cached or stale, "semantic_scholar", last_error)
+        if fallback:
+            return fallback
 
         return [{
             "source": "semantic_scholar",

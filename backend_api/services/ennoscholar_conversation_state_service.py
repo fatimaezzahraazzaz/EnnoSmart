@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+# ENNOSCHOLAR_V169_1_PROJECT_PERSISTENT_CORPUS
+
 import hashlib
 import json
 import re
@@ -234,7 +236,30 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
 
     scope = _collect_session_scope(snapshot)
     contract = _contract_from_snapshot(snapshot)
-    sources = _sources_from_snapshot(snapshot)
+    # V169.1 : la conversation garde ses candidats locaux mais son corpus accepte
+    # est reconstruit depuis toutes les publications gardees du projet.
+    from services.ennoscholar_project_corpus_service import get_effective_guided_sources
+
+    snapshot_context = dict(snapshot.get("context") or {})
+    active_verrou_ids = (
+        list(snapshot_context.get("active_verrou_ids") or [])
+        if str(snapshot_context.get("review_scope") or "") == "per_verrou"
+        else []
+    )
+    effective_sources = get_effective_guided_sources(
+        db,
+        project,
+        session_sources=list(snapshot.get("selected_sources") or []),
+        active_verrou_ids=active_verrou_ids,
+    )
+    accepted_decisions = {"accepted", "accept", "garde", "gardé", "garder"}
+    sources = [
+        dict(row)
+        for row in effective_sources
+        if isinstance(row, Mapping)
+        and str(row.get("consultant_decision") or "").casefold()
+        in accepted_decisions
+    ]
     from services.guided_research_service import _guided_corpus_run
 
     _, corpus_run, _ = _guided_corpus_run(
@@ -267,7 +292,7 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
         sources_path,
         {
             "ok": True,
-            "payload_type": "guided_accepted_sources_session_scoped_v1",
+            "payload_type": "guided_accepted_sources_project_persistent_v169_1",
             "session_id": session_id,
             "updated_at": _now(),
             "sources": sources,
@@ -319,7 +344,11 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
 
     return {
         "session_id": session_id,
+        # Le scope de stockage reste conversationnel pour la tracabilite ; le
+        # corpus scientifique effectif est commun au projet.
         "corpus_scope_id": corpus_scope_id,
+        "effective_corpus_scope_id": f"project:{project.id}",
+        "project_persistent_corpus": True,
         "scholar_run_id": (
             int(corpus_run.id) if corpus_run is not None else None
         ),

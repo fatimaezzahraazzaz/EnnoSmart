@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+# ENNOSCHOLAR_V170_CONVERSATION_PLAN_AUTHORITY
+
 """Phase 5 canonique — rédaction globale evidence-first.
 
 Principes :
@@ -2372,7 +2374,11 @@ def _semantic_claim_audit(
             continue
         verrou_id = clean_text(verrou.get("verrou_id"), 120)
         subsection = generated_subsections.get(verrou_id) or {}
-        content = clean_text(subsection.get("content"), 200000)
+        content = (
+            clean_text(generated.get("content"), 200000)
+            if section.get("_strict_consultant_plan_structure")
+            else clean_text(subsection.get("content"), 200000)
+        )
         if not disclosure_pattern.search(content):
             missing_disclosures.append(
                 {
@@ -2854,6 +2860,8 @@ def _build_section_llm_prompt(
         }
         for verrou in section.get("verrous") or []
     ]
+    if section.get("_strict_consultant_plan_structure"):
+        expected_subsections = []
     target_words = _section_target_words(
         section,
         len(blueprint.get("sections") or []),
@@ -2963,6 +2971,9 @@ STATUT DES PREUVES PAR VERROU
 
 CONTRAT DE RÉDACTION
 - Utilise uniquement les preuves ci-dessus et uniquement leurs citations.
+- Si le tableau "subsections" de SECTION À RÉDIGER est vide, retourne
+  impérativement "subsections": [] : n'ajoute aucun sous-titre, ne répète pas
+  le titre du verrou et ne crée aucune partie absente du plan consultant.
 - Les citations obligatoires doivent apparaître; les autres citations autorisées
   ne sont utilisées que lorsqu'elles soutiennent réellement le raisonnement.
 - Toute affirmation scientifique, tout résultat et toute limite doivent être cités.
@@ -3348,6 +3359,8 @@ def _validate_generated_section(
         )
         for row in section.get("verrous") or []
     ]
+    if section.get("_strict_consultant_plan_structure"):
+        expected = []
     observed = [
         (
             clean_text(row.get("verrou_id"), 120),
@@ -3392,10 +3405,13 @@ def _validate_generated_section(
             citation_sort(expected_verrou.get("required_citations") or [])
         )
         generated_verrou = generated_subsections.get(verrou_id) or {}
+        verrou_evidence_text = (
+            clean_text(generated.get("content"), 200000)
+            if section.get("_strict_consultant_plan_structure")
+            else clean_text(generated_verrou.get("content"), 200000)
+        )
         detected_for_verrou = set(
-            citations_from_text(
-                clean_text(generated_verrou.get("content"), 200000)
-            )
+            citations_from_text(verrou_evidence_text)
         )
         missing_for_verrou = citation_sort(
             required_for_verrou - detected_for_verrou
@@ -4059,6 +4075,29 @@ def call_sectional_writer_llm(
                     request_name=f"ennoscholar:phase5:section:{index}",
                 )
                 parsed = _extract_json_response(raw)
+                if (
+                    parsed
+                    and section.get("_strict_consultant_plan_structure")
+                ):
+                    overflow_content = [
+                        clean_text(row.get("content"), 100000)
+                        for row in parsed.get("subsections") or []
+                        if isinstance(row, Mapping)
+                        and clean_text(row.get("content"), 100000)
+                    ]
+                    parsed["section_id"] = clean_text(
+                        section.get("section_id"), 120
+                    )
+                    parsed["title"] = clean_sentence(
+                        section.get("title"), 700
+                    )
+                    if overflow_content:
+                        parsed["content"] = (
+                            clean_text(parsed.get("content"), 200000)
+                            + "\n\n"
+                            + "\n\n".join(overflow_content)
+                        ).strip()
+                    parsed["subsections"] = []
                 if guided_iterative_publication:
                     disclosure_repairs = []
                 else:
@@ -5006,7 +5045,13 @@ def validate_draft(
         for subsection in section.get("subsections") or []
         if isinstance(subsection, dict)
     ]
-    if actual_verrous != expected_verrous:
+    strict_plan_structure = bool(
+        blueprint.get("strict_consultant_plan_structure")
+    )
+    if strict_plan_structure:
+        if actual_verrous:
+            errors.append("unexpected_subsections_outside_approved_plan")
+    elif actual_verrous != expected_verrous:
         errors.append("verrou_coverage_or_titles_mismatch")
 
     body = " ".join(
@@ -5110,11 +5155,30 @@ def validate_draft(
             set(required_by_verrou.get(verrou_id) or []) & allowed
         )
         verrou_subsection = actual_subsections_by_id.get(verrou_id) or {}
-        all_detected_in_verrou = citation_sort(
-            citations_from_text(
-                clean_text(verrou_subsection.get("content"), 200000)
+        if strict_plan_structure:
+            scoped_section_text = " ".join(
+                clean_text(actual_section.get("content"), 200000)
+                for expected_section, actual_section in zip(
+                    expected_sections,
+                    actual_sections,
+                )
+                if isinstance(expected_section, Mapping)
+                and isinstance(actual_section, Mapping)
+                and any(
+                    clean_text(row.get("verrou_id"), 120) == verrou_id
+                    for row in expected_section.get("verrous") or []
+                    if isinstance(row, Mapping)
+                )
             )
-        )
+            all_detected_in_verrou = citation_sort(
+                citations_from_text(scoped_section_text)
+            )
+        else:
+            all_detected_in_verrou = citation_sort(
+                citations_from_text(
+                    clean_text(verrou_subsection.get("content"), 200000)
+                )
+            )
         detected_for_verrou = citation_sort(
             set(required_for_verrou) & set(all_detected_in_verrou)
         )
@@ -5131,8 +5195,14 @@ def validate_draft(
                 "all_citations_in_verrou_section": all_detected_in_verrou,
                 "missing_citations": missing_for_verrou,
                 "coverage_ok": (
-                    (verrou_id, verrou_title) in actual_verrou_pairs
-                    and not missing_for_verrou
+                    (
+                        not missing_for_verrou
+                        if strict_plan_structure
+                        else (
+                            (verrou_id, verrou_title) in actual_verrou_pairs
+                            and not missing_for_verrou
+                        )
+                    )
                 ),
             }
         )
@@ -5216,8 +5286,22 @@ def _publication_guard_for_new_llm(
     """
     strict_errors = list(strict_guard.get("errors") or [])
     if guided_conversation:
-        advisory_errors = strict_errors
-        blocking_errors: List[str] = []
+        structural_errors = {
+            "section_order_or_ids_mismatch",
+            "section_titles_mismatch",
+            "unexpected_subsections_outside_approved_plan",
+            "verrou_coverage_or_titles_mismatch",
+        }
+        blocking_errors = [
+            error
+            for error in strict_errors
+            if error in structural_errors
+        ]
+        advisory_errors = [
+            error
+            for error in strict_errors
+            if error not in structural_errors
+        ]
     else:
         advisory_errors = [
             error
@@ -6551,11 +6635,31 @@ def run_phase_5_state_of_art_writer(
         return result
     blueprint["evidence_units"] = evidence_units
     blueprint["guided_conversation"] = guided_conversation
+    strict_consultant_plan_structure = bool(
+        guided_conversation and approved_plan
+    )
+    blueprint["strict_consultant_plan_structure"] = (
+        strict_consultant_plan_structure
+    )
+    blueprint.setdefault("rules", {}).update(
+        {
+            "conversation_plan_is_session_local": bool(guided_conversation),
+            "approved_plan_structure_is_immutable": (
+                strict_consultant_plan_structure
+            ),
+            "render_verrou_subsections": (
+                not strict_consultant_plan_structure
+            ),
+        }
+    )
     if guided_conversation:
         for section in blueprint.get("sections") or []:
             if not isinstance(section, dict):
                 continue
             section["_guided_conversation"] = True
+            section["_strict_consultant_plan_structure"] = (
+                strict_consultant_plan_structure
+            )
             # Un plan approuvé sans consigne chiffrée reste volontairement
             # concis dans le chat. Une cible explicite du consultant est
             # toujours conservée.

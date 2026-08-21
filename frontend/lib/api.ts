@@ -239,7 +239,21 @@ export type ArticleRead = {
   evidence_reason_detail?: string | null
   evidence_recommended_action?: string | null
   evidence_access_kind?: string | null
-  manual_upload_required?: boolean
+
+  // ENNOSCHOLAR_ACCESS_UX_V165
+  access_status?: string | null
+  access_badge_label?: string | null
+  extraction_status?: string | null
+  manual_upload_required?: boolean | null
+  browser_download_url?: string | null
+  manual_upload_verified?: boolean | null
+  manual_upload_filename?: string | null
+  manual_upload_identity_score?: number | null
+  selection_allowed?: boolean | null
+  access_resolution_source?: string | null
+  mcp_checked?: boolean | null
+  access_final?: boolean | null
+
   created_at: string
 }
 

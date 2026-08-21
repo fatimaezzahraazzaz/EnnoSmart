@@ -14,7 +14,9 @@ from typing import Any, Dict, List
 
 from .external_source_base import (
     cache_path,
+    fallback_from_cache,
     get_json,
+    merge_fresh_with_cache,
     normalized_error,
     read_cache,
     safe,
@@ -44,8 +46,6 @@ class DoajClient:
         limit = max(1, min(int(limit or 20), 100))
         path = cache_path("doaj", query, limit)
         cached = read_cache(path, self.cache_ttl_days)
-        if cached is not None:
-            return cached
 
         encoded_query = urllib.parse.quote(query, safe="")
         url = f"{DOAJ_ARTICLE_SEARCH}/{encoded_query}?pageSize={limit}"
@@ -63,11 +63,13 @@ class DoajClient:
             results = data.get("results") or [] if isinstance(data, dict) else []
             out = [self.normalize(item, query) for item in results if isinstance(item, dict)]
             out = [item for item in out if item.get("title")]
-            write_cache(path, out)
-            return out
+            combined = merge_fresh_with_cache(out, cached, limit, "doaj")
+            write_cache(path, combined)
+            return combined
         except Exception as exc:
             stale = read_cache(path, 3650)
-            return stale if stale is not None else [normalized_error("doaj", query, exc)]
+            fallback = fallback_from_cache(cached or stale, "doaj", exc)
+            return fallback if fallback else [normalized_error("doaj", query, exc)]
 
     @staticmethod
     def normalize(item: Dict[str, Any], query: str) -> Dict[str, Any]:

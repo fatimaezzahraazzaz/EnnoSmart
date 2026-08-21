@@ -1,26 +1,29 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-"""
-openalex_client.py — EnnoScholar V136 production
+"""OpenAlex client - V161 priority/fresh-first.
 
-Client OpenAlex Works API robuste :
-- retry avec backoff sur 429 / erreurs temporaires ;
-- cache JSON local par requête ;
-- fallback sur cache si l'API limite les requêtes ;
-- limite configurable jusqu'à 100 résultats par requête.
+Key properties:
+- always attempts a fresh OpenAlex request before using query cache;
+- sends OPENALEX_API_KEY when configured;
+- serializes OpenAlex calls across concurrent lock searches;
+- applies a conservative minimum interval plus exponential backoff on 429;
+- cache is supplement/fallback only.
 """
 
 import hashlib
 import json
 import os
 import socket
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+from .external_source_base import merge_fresh_with_cache, fallback_from_cache
 
 OPENALEX_WORKS_URL = "https://api.openalex.org/works"
 
@@ -44,6 +47,8 @@ def _cache_root() -> Path:
 
 
 def _cache_key(source: str, query: str, limit: int) -> Path:
+    # Preserve V5 cache key version so old query results remain usable only as
+    # supplement/fallback after the new fresh request.
     raw = f"{source}|{query}|{limit}|v132".encode("utf-8", errors="replace")
     h = hashlib.sha256(raw).hexdigest()[:32]
     return _cache_root() / source / f"{h}.json"
@@ -58,12 +63,14 @@ def _read_cache(path: Path, max_age_days: int) -> Optional[List[Dict[str, Any]]]
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict) and isinstance(data.get("items"), list):
-            items = data["items"]
-            for it in items:
-                if isinstance(it, dict):
-                    it.setdefault("cache_hit", True)
-                    it.setdefault("cache_source", str(path))
-            return items
+            out: List[Dict[str, Any]] = []
+            for raw in data["items"]:
+                if isinstance(raw, dict):
+                    item = dict(raw)
+                    item.setdefault("cache_hit", True)
+                    item.setdefault("cache_source", str(path))
+                    out.append(item)
+            return out
     except Exception:
         return None
     return None
@@ -81,22 +88,37 @@ def _write_cache(path: Path, items: List[Dict[str, Any]]) -> None:
         pass
 
 
-def _open_json(url: str, headers: Dict[str, str], timeout: int = 12) -> Dict[str, Any]:
+def _open_json(url: str, headers: Dict[str, str], timeout: int = 12) -> Tuple[Dict[str, Any], Dict[str, str]]:
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         raw = resp.read().decode("utf-8", errors="replace")
-    return json.loads(raw)
+        response_headers = {str(k): str(v) for k, v in resp.headers.items()}
+    return json.loads(raw), response_headers
 
 
 def _is_retryable_error(exc: Exception) -> Tuple[bool, str, int]:
     if isinstance(exc, urllib.error.HTTPError):
         code = int(getattr(exc, "code", 0) or 0)
-        if code in {408, 409, 425, 429, 500, 502, 503, 504}:
-            return True, f"HTTP Error {code}: {getattr(exc, 'reason', '')}", code
-        return False, f"HTTP Error {code}: {getattr(exc, 'reason', '')}", code
+        message = f"HTTP Error {code}: {getattr(exc, 'reason', '')}"
+        return code in {408, 409, 425, 429, 500, 502, 503, 504}, message, code
     if isinstance(exc, (TimeoutError, socket.timeout, urllib.error.URLError)):
         return True, str(exc), 0
     return False, str(exc), 0
+
+
+def _retry_after_seconds(exc: Exception) -> float | None:
+    try:
+        headers = getattr(exc, "headers", None)
+        if headers is None:
+            return None
+        raw = headers.get("Retry-After")
+        if raw is None:
+            return None
+        value = float(raw)
+        # Never freeze an interactive run for a daily reset window.
+        return value if 0 <= value <= 30 else None
+    except Exception:
+        return None
 
 
 def _abstract_from_inverted_index(inv: Any) -> str:
@@ -119,31 +141,56 @@ class OpenAlexClient:
     def __init__(
         self,
         mailto: str | None = None,
-        timeout: int = 8,
+        timeout: int = 30,
         sleep_seconds: float | None = None,
         max_retries: int | None = None,
         cache_ttl_days: int | None = None,
     ):
         self.mailto = mailto or os.getenv("OPENALEX_MAILTO", "")
-        self.timeout = timeout
+        self.api_key = str(os.getenv("OPENALEX_API_KEY", "") or "").strip()
+        self.timeout = int(timeout)
         self.sleep_seconds = float(
             sleep_seconds
             if sleep_seconds is not None
-            else os.getenv("ENNOSCHOLAR_OPENALEX_SLEEP", "0.05")
+            else os.getenv("ENNOSCHOLAR_OPENALEX_SLEEP", "0.35")
         )
-        self.max_retries = int(
-            max_retries
-            if max_retries is not None
-            else os.getenv("ENNOSCHOLAR_MAX_RETRIES", "1")
+        self.min_interval_seconds = max(
+            0.0,
+            float(os.getenv("ENNOSCHOLAR_OPENALEX_MIN_INTERVAL_SECONDS", str(max(self.sleep_seconds, 0.35)))),
+        )
+        self.max_retries = max(
+            0,
+            int(
+                max_retries
+                if max_retries is not None
+                else os.getenv("ENNOSCHOLAR_OPENALEX_MAX_RETRIES", "3")
+            ),
+        )
+        self.retry_max_delay = max(
+            2.0,
+            float(os.getenv("ENNOSCHOLAR_OPENALEX_RETRY_MAX_DELAY", "12")),
         )
         self.cache_ttl_days = int(
             cache_ttl_days
             if cache_ttl_days is not None
             else os.getenv("ENNOSCHOLAR_CACHE_TTL_DAYS", "30")
         )
+        # One shared client instance is used by all lock workers. This lock makes
+        # OpenAlex priority predictable and avoids concurrent bursts from the same run.
+        self._request_lock = threading.Lock()
+        self._last_request_at = 0.0
 
     def headers(self) -> Dict[str, str]:
-        return {"User-Agent": "EnnoSmart-EnnoScholar/3.2", "Accept": "application/json"}
+        return {
+            "User-Agent": "EnnoSmart-EnnoScholar/5.0",
+            "Accept": "application/json",
+        }
+
+    def _wait_for_slot(self) -> None:
+        elapsed = time.monotonic() - self._last_request_at
+        remaining = self.min_interval_seconds - elapsed
+        if remaining > 0:
+            time.sleep(remaining)
 
     def search_works(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
         query = _safe(query)
@@ -151,67 +198,94 @@ class OpenAlexClient:
             return []
 
         limit = max(1, min(int(limit or 20), 100))
-        require_oa = _env_bool("ENNOSCHOLAR_REQUIRE_FREE_FULLTEXT", True)
+        require_oa = _env_bool("ENNOSCHOLAR_REQUIRE_FREE_FULLTEXT", False)
         cache_query = query + ("|openalex_oa_only" if require_oa else "")
         cache_path = _cache_key("openalex", cache_query, limit)
-
         cached = _read_cache(cache_path, self.cache_ttl_days)
-        if cached is not None:
-            return cached
 
-        params = {
+        params: Dict[str, Any] = {
             "search": query,
             "per-page": limit,
             "sort": "relevance_score:desc",
         }
         if require_oa:
-            # V142 — recherche OpenAlex limitée aux travaux Open Access.
-            # Cela évite de proposer au consultant des articles payants ensuite bloquants.
             params["filter"] = "open_access.is_oa:true"
-        if self.mailto:
-            params["mailto"] = self.mailto
+        # OpenAlex API authentication is key-based. The key is read from the
+        # existing project environment and never logged or persisted in cache.
+        if self.api_key:
+            params["api_key"] = self.api_key
 
         url = OPENALEX_WORKS_URL + "?" + urllib.parse.urlencode(params)
-
         last_error = ""
         last_code = 0
-        for attempt in range(self.max_retries + 1):
-            try:
-                data = _open_json(url, headers=self.headers(), timeout=self.timeout)
-                out = []
-                for w in data.get("results") or []:
-                    if isinstance(w, dict):
-                        out.append(self.normalize(w, query))
-                _write_cache(cache_path, out)
-                time.sleep(self.sleep_seconds)
-                return out
-            except Exception as exc:
-                retryable, message, code = _is_retryable_error(exc)
-                last_error = message
-                last_code = code
-                if not retryable or attempt >= self.max_retries:
-                    break
-                base = 2.0 if code == 429 else 1.0
-                time.sleep(min(base * (attempt + 1) + self.sleep_seconds, float(os.getenv("ENNOSCHOLAR_BACKOFF_MAX_SECONDS", "2.0"))))
+        attempts = 0
+        last_rate_headers: Dict[str, str] = {}
+
+        # Serialize *only* OpenAlex calls. Other engines remain parallel.
+        with self._request_lock:
+            for attempt in range(self.max_retries + 1):
+                attempts = attempt + 1
+                self._wait_for_slot()
+                try:
+                    data, response_headers = _open_json(
+                        url,
+                        headers=self.headers(),
+                        timeout=self.timeout,
+                    )
+                    self._last_request_at = time.monotonic()
+                    last_rate_headers = {
+                        key: value
+                        for key, value in response_headers.items()
+                        if key.lower().startswith("x-ratelimit-")
+                    }
+                    fresh: List[Dict[str, Any]] = []
+                    for work in data.get("results") or []:
+                        if isinstance(work, dict):
+                            item = self.normalize(work, query)
+                            item["openalex_authenticated"] = bool(self.api_key)
+                            if last_rate_headers:
+                                item["openalex_rate_limit"] = dict(last_rate_headers)
+                            fresh.append(item)
+
+                    combined = merge_fresh_with_cache(fresh, cached, limit, "openalex")
+                    _write_cache(cache_path, combined)
+                    return combined
+                except Exception as exc:
+                    self._last_request_at = time.monotonic()
+                    retryable, message, code = _is_retryable_error(exc)
+                    last_error = message
+                    last_code = code
+                    if not retryable or attempt >= self.max_retries:
+                        break
+
+                    retry_after = _retry_after_seconds(exc)
+                    if retry_after is not None:
+                        delay = retry_after
+                    else:
+                        # OpenAlex guidance recommends exponential backoff for 429.
+                        delay = min((2.0 ** attempt) + self.min_interval_seconds, self.retry_max_delay)
+                    time.sleep(max(self.min_interval_seconds, delay))
 
         stale = _read_cache(cache_path, max_age_days=3650)
-        if stale is not None:
-            for it in stale:
-                if isinstance(it, dict):
-                    it["cache_stale_used_after_error"] = True
-                    it["api_error"] = last_error
-            return stale
+        fallback = fallback_from_cache(cached or stale, "openalex", last_error)
+        if fallback:
+            for item in fallback:
+                item["openalex_authenticated"] = bool(self.api_key)
+                item["openalex_attempts"] = attempts
+            return fallback
 
         return [{
             "source": "openalex",
             "query": query,
-            "error": last_error,
+            "error": last_error or "OpenAlex request failed",
             "http_status": last_code,
             "normalized_error": True,
             "retryable": True,
-            "attempts": self.max_retries + 1,
+            "attempts": attempts,
             "api_limited": last_code == 429 or "429" in last_error,
             "cache_path": str(cache_path),
+            "openalex_authenticated": bool(self.api_key),
+            "retrieval_origin": "fresh_api_error",
         }]
 
     def normalize(self, w: Dict[str, Any], query: str) -> Dict[str, Any]:

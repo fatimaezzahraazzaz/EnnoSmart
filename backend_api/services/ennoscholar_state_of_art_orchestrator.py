@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+# ENNOSCHOLAR_V169_1_PROJECT_PERSISTENT_CORPUS
 from modules.LLM.usage_budget import budgeted_pipeline
 
 """
@@ -836,29 +837,39 @@ def generate_state_of_art_after_consultant_selection(
         )
 
     # Le workflow 1 exige toujours son artefact Phase 1 canonique. Une
-    # conversation guidée autonome possède en revanche un verrou et un corpus
-    # privés : son handoff Phase 1 est matérialisé plus bas dans son runtime.
+    # conversation guidée autonome possède en revanche un verrou et une vue de corpus
+    # projet persistante : son handoff Phase 1 est matérialisé plus bas dans son runtime.
     if not guided_session_id and not paths["selection_payload"].exists():
         raise RuntimeError(
             "Phase 1 existante introuvable. Retourne dans Préparation état de l'art : "
             f"{paths['selection_payload']}"
         )
-    from services.article_card_builder import get_article_cards_payload
+    if guided_session_id and conversation_context:
+        from services.ennoscholar_project_corpus_service import (
+            get_project_corpus_cards_payload,
+        )
 
-    article_cards_payload = get_article_cards_payload(
-        project,
-        db=db,
-        scope_id=(
-            conversation_context.get("corpus_scope_id")
-            if conversation_context
-            else None
-        ),
-        scholar_run_id=(
-            conversation_context.get("scholar_run_id")
-            if conversation_context
-            else None
-        ),
-    )
+        guided_snapshot = dict(conversation_context.get("snapshot") or {})
+        guided_context = dict(guided_snapshot.get("context") or {})
+        active_verrou_ids = (
+            list(guided_context.get("active_verrou_ids") or [])
+            if str(guided_context.get("review_scope") or "") == "per_verrou"
+            else []
+        )
+        article_cards_payload = get_project_corpus_cards_payload(
+            db,
+            project,
+            active_verrou_ids=active_verrou_ids,
+        )
+    else:
+        from services.article_card_builder import get_article_cards_payload
+
+        article_cards_payload = get_article_cards_payload(
+            project,
+            db=db,
+            scope_id=None,
+            scholar_run_id=None,
+        )
 
     # BEGIN ENNOSCHOLAR_VERROU_SCOPE_LOCK_V4
     if guided_session_id and conversation_context:

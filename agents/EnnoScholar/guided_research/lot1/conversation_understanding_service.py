@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+# ENNOSCHOLAR_V170_2_PLAN_EDITING_READBACK_FIX
+
+# ENNOSCHOLAR_V170_1_CONVERSATION_ROUTING_FIX
+
 import json
 import logging
 import re
@@ -1877,6 +1881,45 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
                 "grounded_project_context_repair_v1"
                 in str(decision.classification.classifier or "")
             )
+            v170_1_plan_replacement = (
+                "v170_1_explicit_full_plan_replacement"
+                in str(decision.classification.classifier or "")
+            )
+            v170_2_plan_readback = (
+                "v170_2_plan_readback"
+                in str(decision.classification.classifier or "")
+            )
+            v170_2_plan_insertion = (
+                "v170_2_insert_after_section"
+                in str(decision.classification.classifier or "")
+            )
+            if v170_2_plan_readback:
+                decision.plan_reference = "current"
+                decision.plan_generation_mode = "none"
+                decision.plan_document_scope = "state_of_art"
+                decision.assistant_message = (
+                    "Je vous affiche le plan courant réellement enregistré dans cette conversation."
+                )
+            elif v170_2_plan_insertion:
+                decision.plan_reference = "current"
+                decision.plan_generation_mode = "none"
+                decision.plan_document_scope = "state_of_art"
+                decision.assistant_message = (
+                    "J'ai compris : vous ajoutez une nouvelle partie à une position précise du plan courant."
+                )
+            if (
+                v170_1_plan_replacement
+                and decision.classification.intent == ConsultantIntent.CHANGE_PLAN
+            ):
+                # Le premier LLM s'est trompé de capacité ; on recale aussi
+                # les métadonnées qui pilotent le second payload structuré.
+                decision.plan_reference = "current"
+                decision.plan_generation_mode = "none"
+                decision.plan_document_scope = "state_of_art"
+                decision.assistant_message = (
+                    "J'ai compris : le plan que vous venez de fournir remplace "
+                    "entièrement le plan courant de cette conversation."
+                )
             if grounded_repair and decision.classification.intent == ConsultantIntent.PROPOSE_PLAN:
                 decision.plan_reference = "none"
                 decision.plan_generation_mode = "initial" if not compact_plan else "alternative"
