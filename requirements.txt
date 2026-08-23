@@ -1,0 +1,70 @@
+# EnnoSmart - dépendances de production par défaut
+# Cible : CPython 3.12 (Linux x86_64)
+
+# API, configuration et sécurité
+fastapi>=0.115.6,<1
+uvicorn[standard]>=0.34,<1
+anyio>=4.8,<5
+pydantic>=2.10,<3
+pydantic-settings>=2.7,<3
+python-dotenv>=1.0,<2
+python-multipart>=0.0.20,<1
+email-validator>=2.2,<3
+python-jose[cryptography]>=3.3,<4
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+
+# Base de données, checkpoints et workers
+SQLAlchemy>=2.0.36,<2.1
+psycopg2-binary>=2.9.10,<3
+psycopg[binary,pool]>=3.2,<4
+celery[redis]>=5.6,<5.7
+redis>=5,<7
+langgraph>=1.2,<2
+langgraph-checkpoint-postgres>=3.1,<4
+langgraph-checkpoint-redis>=0.5,<0.6
+
+# HTTP, recherche scientifique et serveur MCP
+requests>=2.32,<3
+httpx>=0.28,<1
+beautifulsoup4>=4.12,<5
+lxml>=5,<7
+mcp[cli]>=1.27,<2
+rapidfuzz>=3.9,<4
+langfuse>=4,<5
+
+# Documents, images et OCR CPU
+fpdf2>=2.8,<3
+PyMuPDF>=1.24,<2
+pypdf>=5,<7
+PyPDF2>=3,<4
+pdfplumber>=0.11,<1
+Pillow>=10.4,<12
+CairoSVG>=2.7,<3
+pytesseract>=0.3.13,<1
+python-docx>=1.1,<2
+python-pptx>=1,<2
+openpyxl>=3.1,<4
+xlrd>=2,<3
+extract-msg>=0.55,<1
+pandas>=2.2,<3
+
+# NLP, embeddings, Chroma et modèles
+numpy>=2,<3
+joblib>=1.4,<2
+scikit-learn==1.8.0
+chromadb>=1.5.9,<2
+sentence-transformers>=5.4.1,<6
+huggingface-hub>=0.36,<1
+torch>=2.2,<3
+transformers>=4.48,<5
+accelerate>=1,<2
+sentencepiece>=0.2,<1
+sacremoses>=0.1,<1
+lingua-language-detector>=2,<3
+language-tool-python>=2.9,<3
+
+# Audio et intégration Ollama (fallback CPU opérationnel)
+ctranslate2>=4.5,<5
+faster-whisper>=1.2,<2
+ollama>=0.5,<1

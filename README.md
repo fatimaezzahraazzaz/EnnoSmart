@@ -1,146 +1,219 @@
-# EnnoScholar Legal Fulltext MCP — v1.1
+# EnnoSmart — branche de déploiement
 
-Serveur MCP autonome chargé de retrouver une copie publiquement accessible du même article scientifique après la sélection du consultant.
+Cette branche contient l’application de production : API FastAPI, interface
+Next.js, agents EnnoDiagnostic/EnnoScholar/EnnoAmelioration, workers Celery,
+RAG/Chroma et serveur MCP légal de récupération d’articles.
 
-## Périmètre exact
+Elle ne contient pas les bases PostgreSQL, les index Chroma, les documents
+clients, les sorties IA, les secrets, les caches de modèles, les tests, les
+intégrations temporaires ni les sauvegardes. Ces données doivent être créées ou
+restaurées directement sur le serveur.
 
-Ce composant intervient uniquement après la sélection des articles. Il ne remplace pas :
+## Versions recommandées
 
-- la recherche scientifique initiale ;
-- le ranking BGE ;
-- les tags Direct / Connexe / Fondamental ;
-- l'extraction PyMuPDF ;
-- la construction des Article Cards ;
-- la rédaction de l'état de l'art.
+- Ubuntu 24.04 LTS x86_64 ;
+- Python 3.12 ;
+- Node.js 20.9 ou supérieur et npm 10+ ;
+- Docker Engine avec le plugin Compose ;
+- au moins 16 Go de RAM pour le profil CPU de base (davantage si les modèles
+  lourds sont activés).
 
-Le MCP reçoit DOI, titre, auteurs, année et URL connues, puis interroge :
+Python 3.14 n’est pas la cible de déploiement : plusieurs bibliothèques ML/OCR
+n’y publient pas encore toutes leurs roues binaires.
 
-1. URL PDF directe déjà connue ;
-2. Unpaywall ;
-3. CORE ;
-4. OpenAlex ;
-5. Semantic Scholar ;
-6. HAL ;
-7. arXiv ;
-8. Europe PMC ;
-9. Zenodo ;
-10. recherche Web publique optionnelle via Brave Search.
+## Installation système (Ubuntu)
 
-La recherche Web publique sert à découvrir les PDF accessibles sur des pages auteurs, laboratoires et dépôts universitaires. Elle n'est activée que si `BRAVE_SEARCH_API_KEY` est renseignée.
+```bash
+sudo apt update
+sudo apt install -y \
+  python3.12 python3.12-venv python3.12-dev build-essential libpq-dev \
+  tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng \
+  ffmpeg libreoffice poppler-utils default-jre \
+  libcairo2 libpango-1.0-0 libgdk-pixbuf-2.0-0
+```
 
-Le MCP valide l'identité de l'article, vérifie que l'URL renvoie réellement un PDF et retourne une réponse traçable. Aucun PDF n'est stocké par le MCP.
+Docker fournit PostgreSQL, Redis et GROBID avec
+`docker-compose.research.yml`. Node.js doit être installé depuis une source qui
+fournit une version compatible avec `frontend/package-lock.json`.
 
-## Provenance v1.1
+## Installation Python complète
 
-Chaque candidat possède maintenant :
+Depuis la racine clonée :
+
+```bash
+python3.12 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip setuptools wheel
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip check
+```
+
+`requirements.txt` est la source canonique utilisée aussi par les fichiers
+`backend_api/requirements.txt` et
+`mcp_servers/legal_fulltext_mcp/requirements.txt`.
+
+Le profil par défaut inclut l’API, PostgreSQL, Redis/Celery, Chroma, les
+embeddings, les formats bureautiques, Tesseract, faster-whisper, Ollama et le
+MCP. Les capacités lourdes ou hors service web principal (Surya,
+WhisperX/diarisation, Pix2Tex, Pydantic AI, vision Qwen locale, anciennes pages
+Streamlit et outils d’entraînement) sont isolées :
+
+```bash
+.venv/bin/python -m pip install -r requirements-optional.txt
+```
+
+Pour une machine NVIDIA, installer d’abord la version de PyTorch correspondant
+exactement au pilote/CUDA du serveur, puis relancer les requirements.
+
+## Configuration
+
+```bash
+cp .env.example .env
+chmod 600 .env
+mkdir -p storage/uploads outputs/safe_rag_upload logs
+```
+
+Pour un lancement manuel dans un shell, charger les variables avant les
+commandes ci-dessous :
+
+```bash
+set -a
+. ./.env
+set +a
+```
+
+Avec systemd, utiliser plutôt `EnvironmentFile=/opt/ennosmart/.env` dans chaque
+unité de service.
+
+Modifier au minimum dans `.env` :
+
+- `SECRET_KEY` ;
+- `POSTGRES_PASSWORD` et le même mot de passe dans `DATABASE_URL` ;
+- `FRONTEND_URL` et `CORS_ORIGINS` ;
+- le fournisseur LLM choisi et sa clé ;
+- `UNPAYWALL_EMAIL`/`CROSSREF_MAILTO` pour la recherche scientifique ;
+- les chemins `/opt/ennosmart` si le clone est installé ailleurs.
+
+Le frontend reçoit son URL d’API au moment du build :
+
+```bash
+cp frontend/.env.production.example frontend/.env.production
+```
+
+Remplacer ensuite `NEXT_PUBLIC_API_URL` par l’URL HTTPS publique de l’API.
+
+## PostgreSQL, Redis et GROBID
+
+```bash
+docker compose -f docker-compose.research.yml up -d
+docker compose -f docker-compose.research.yml ps
+```
+
+Les volumes Docker `ennosmart_postgres_data` et `ennosmart_redis_data` restent
+sur le serveur et ne sont jamais envoyés dans Git. Au premier démarrage, l’API
+crée les tables absentes. Pour une restauration, importer le dump PostgreSQL
+avant de lancer l’API.
+
+## Modèles et Chroma
+
+Le modèle applicatif FastJudge requis est versionné sous :
 
 ```text
-access_type
-rights_status
-source_domain
-discovered_via
+models/fastjudge/fastjudge_linearsvc_C025.joblib
 ```
 
-Exemples :
+Les modèles publics volumineux ne sont pas versionnés. Avec
+`ENNOSMART_EMBEDDING_OFFLINE=0`, ils sont téléchargés dans `HF_HOME` au premier
+usage. Il est préférable de les précharger pendant le déploiement, puis de
+passer `ENNOSMART_EMBEDDING_OFFLINE=1` si le serveur doit fonctionner sans
+accès réseau.
 
-```text
-repository_copy + repository_terms
-public_author_copy + publicly_accessible_license_unknown
-publisher_open_access + license_explicit
-preprint + repository_terms
+Les index Chroma sont recréés sous `storage/**/chroma/`. Pour migrer un serveur
+existant, copier les documents et sorties utiles puis reconstruire les index ;
+ne pas committer `chroma.sqlite3`.
+
+## Build du frontend
+
+```bash
+cd frontend
+npm ci
+npm run build
+cd ..
 ```
 
-Une copie publique dont la licence n'est pas explicitement déclarée reste distinguée d'un article Open Access sous licence claire.
+Le dépôt utilise `package-lock.json` comme lockfile de production.
 
-## Installation
+## Commandes de lancement
 
-Depuis `C:\EnnoSmart` :
+Les processus Python ont besoin de la racine et de `backend_api` dans le
+`PYTHONPATH`. Ces commandes sont prévues pour être reprises dans systemd,
+Supervisor ou un autre gestionnaire de processus.
 
-```powershell
-py -3.12 -m venv .venv-mcp
-.\.venv-mcp\Scripts\Activate.ps1
-pip install -r .\mcp_servers\legal_fulltext_mcp\requirements.txt
+API :
+
+```bash
+cd /opt/ennosmart
+PYTHONPATH=/opt/ennosmart:/opt/ennosmart/backend_api \
+  .venv/bin/uvicorn backend_api.main:app \
+  --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-Copier les variables de `.env.example` dans `C:\EnnoSmart\.env`, puis renseigner au minimum :
+Worker EnnoScholar :
 
-```env
-UNPAYWALL_EMAIL=votre-adresse@example.com
+```bash
+cd /opt/ennosmart
+PYTHONPATH=/opt/ennosmart:/opt/ennosmart/backend_api \
+  .venv/bin/celery -A backend_api.worker.celery_app:celery_app worker \
+  --loglevel=INFO --pool=threads --concurrency=4
 ```
 
-Pour activer la découverte automatique sur le Web public :
+Worker CIR :
 
-```env
-BRAVE_SEARCH_API_KEY=VOTRE_CLE
+```bash
+cd /opt/ennosmart
+PYTHONPATH=/opt/ennosmart:/opt/ennosmart/backend_api \
+  .venv/bin/celery -A backend_api.workers.celery_app:celery_app worker \
+  --loglevel=INFO --pool=threads --concurrency=4 -Q ennosmart.cir
 ```
 
-Les providers nécessitant une clé restent désactivés tant que leur clé est absente.
+MCP légal :
 
-## Lancement
-
-```powershell
-cd C:\EnnoSmart
-.\.venv-mcp\Scripts\python.exe -m mcp_servers.legal_fulltext_mcp.server
+```bash
+cd /opt/ennosmart
+PYTHONPATH=/opt/ennosmart:/opt/ennosmart/backend_api \
+  .venv/bin/python -m mcp_servers.legal_fulltext_mcp.server
 ```
 
-Endpoints par défaut :
+Frontend :
 
-```text
-MCP officiel : http://127.0.0.1:8010/mcp
-Passerelle backend : http://127.0.0.1:8010/api/resolve
-Santé : http://127.0.0.1:8010/health
+```bash
+cd /opt/ennosmart/frontend
+npm start -- --hostname 127.0.0.1 --port 3000
 ```
 
-## Test santé
+Nginx (ou le proxy OVH) doit terminer TLS et router le domaine applicatif vers
+le port 3000 et le domaine API vers le port 8000. Les ports PostgreSQL, Redis,
+GROBID et MCP sont liés à `127.0.0.1` et ne doivent pas être exposés au public.
 
-```powershell
-Invoke-RestMethod http://127.0.0.1:8010/health
+## Contrôles après démarrage
+
+```bash
+curl --fail http://127.0.0.1:8000/health
+curl --fail http://127.0.0.1:8010/health
+curl --fail http://127.0.0.1:3000/
+docker compose -f docker-compose.research.yml ps
 ```
 
-## Test d'un article
+La documentation OpenAPI est disponible sur `http://127.0.0.1:8000/docs` si
+elle n’est pas filtrée par le proxy.
 
-```powershell
-$body = @{
-    title = "Radar Cross Section of General Three-Dimensional Scatterers"
-    doi = "10.1109/temc.1983.304133"
-    authors = @("Allen Taflove", "Korada R. Umashankar")
-    year = 1983
-    known_urls = @()
-    search_all = $true
-    force_refresh = $true
-} | ConvertTo-Json -Depth 10
+## Données à sauvegarder hors Git
 
-$params = @{
-    Uri = "http://127.0.0.1:8010/api/resolve"
-    Method = "Post"
-    ContentType = "application/json"
-    Body = $body
-}
+- dump PostgreSQL ;
+- `storage/` (documents, Chroma, mémoire, caches et modèles téléchargés) ;
+- `outputs/` si les artefacts générés doivent être conservés ;
+- le vrai `.env`, dans un coffre de secrets ;
+- les éventuels modèles privés supplémentaires.
 
-$result = Invoke-RestMethod @params
-$result | ConvertTo-Json -Depth 12
-```
-
-## Tests unitaires
-
-```powershell
-pytest .\mcp_servers\legal_fulltext_mcp\tests -q
-```
-
-## Intégration EnnoScholar
-
-Copier les fichiers contenus dans :
-
-```text
-backend_api/services/
-```
-
-puis appliquer :
-
-```text
-integration/PATCH_INTEGRATION.md
-```
-
-## Conformité
-
-Le serveur utilise uniquement des URLs publiquement accessibles et ne contourne aucun paywall, authentification ou restriction technique. Les domaines connus de redistribution non autorisée sont rejetés par le provider de recherche Web publique.
+Ne jamais sauvegarder une base active en copiant seulement son répertoire :
+utiliser `pg_dump` pour PostgreSQL et arrêter les processus avant toute copie
+brute d’un index Chroma.

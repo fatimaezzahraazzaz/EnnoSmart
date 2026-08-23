@@ -8,7 +8,7 @@ Tous les agents utilisent la même API :
     client = LLMClient()
     text = client.generate(...)
 
-Le fournisseur et les modèles sont lus dans ``C:/EnnoSmart/.env``.
+Le fournisseur et les modèles sont lus dans le fichier ``.env`` du projet.
 Les agents ne contiennent ni clé API, ni URL fournisseur, ni logique de
 basculement. Le routage du modèle de rédaction est centralisé ici à partir du
 ``request_name`` : les appels ``ennoscholar:phase5:*`` utilisent le modèle
@@ -38,14 +38,10 @@ _CONFIG: Optional[Dict[str, str]] = None
 
 
 def _project_root() -> Path:
-    try:
-        # C:/EnnoSmart/backend_api/modules/LLM/llm_client.py -> C:/EnnoSmart
-        candidate = Path(__file__).resolve().parents[3]
-        if (candidate / "backend_api").exists() or (candidate / ".env").exists():
-            return candidate
-    except Exception:
-        pass
-    return Path(os.getenv("ENNOSMART_ROOT") or r"C:\EnnoSmart")
+    configured = os.getenv("ENNOSMART_ROOT") or os.getenv("ENNOSMART_BASE_DIR")
+    if configured:
+        return Path(configured)
+    return Path(__file__).resolve().parents[2]
 
 
 def reload_config() -> Dict[str, str]:

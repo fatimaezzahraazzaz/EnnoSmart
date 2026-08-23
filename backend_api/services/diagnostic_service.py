@@ -65,7 +65,11 @@ def save_json(path: Path, data: Any) -> None:
 # ============================================================
 
 def ennosmart_base_dir() -> Path:
-    return Path(os.getenv("ENNOSMART_BASE_DIR", r"C:\EnnoSmart"))
+    return Path(
+        os.getenv("ENNOSMART_BASE_DIR")
+        or os.getenv("ENNOSMART_ROOT")
+        or Path(__file__).resolve().parents[2]
+    )
 
 
 def ensure_ennosmart_imports() -> Path:
@@ -622,10 +626,10 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
 def _legacy_agent_project_root(project: Project) -> Path:
     r"""
     Racine attendue par l'ancien ai_content_detector.py de l'agent :
-    C:\EnnoSmart\storage\organismes\{org}\projects\{project}
+    <racine-projet>/storage/organismes/{org}/projects/{project}
 
     Le backend récent travaille avec :
-    C:\EnnoSmart\storage\organismes\{org}\projects\{project}\years\{year}
+    <racine-projet>/storage/organismes/{org}/projects/{project}/years/{year}
 
     On adapte le backend pour fournir au détecteur IA de l'agent ses fichiers
     au format qu'il attend, sans modifier l'agent.

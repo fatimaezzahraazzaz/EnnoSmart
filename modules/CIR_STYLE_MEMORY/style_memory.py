@@ -6,7 +6,7 @@ Compatibility adapter:
 CIR_STYLE_MEMORY lit maintenant les exemples de style depuis Memory V2.
 
 Source unique :
-C:\EnnoSmart\storage\experience_memory_v2
+<racine-projet>/storage/experience_memory_v2
 
 Important :
 - pas de base style séparée ;
@@ -24,7 +24,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
-ROOT_DIR = Path(os.getenv("ENNOSMART_BASE_DIR", r"C:\EnnoSmart"))
+ROOT_DIR = Path(
+    os.getenv("ENNOSMART_BASE_DIR")
+    or os.getenv("ENNOSMART_ROOT")
+    or Path(__file__).resolve().parents[2]
+)
 
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))

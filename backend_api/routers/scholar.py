@@ -78,8 +78,6 @@ def _ensure_ennosmart_root_on_path() -> Path:
     for parent in cwd.parents:
         candidates.append(parent)
 
-    candidates.append(Path("C:/EnnoSmart"))
-
     seen: set[str] = set()
 
     for candidate in candidates:

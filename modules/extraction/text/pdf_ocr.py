@@ -253,7 +253,7 @@ OCR_TESSERACT_PSMS = tuple(
     if psm in {1, 3, 4, 6, 11, 12}
 ) or (3, 4)
 
-# Tesseract peut être configuré dans C:\EnnoSmart\.env :
+# Tesseract peut être configuré dans le fichier .env du projet :
 # TESSERACT_CMD=C:/Users/dell/AppData/Local/Programs/Tesseract-OCR/tesseract.exe
 TESSERACT_CMD = os.getenv(
     "TESSERACT_CMD",

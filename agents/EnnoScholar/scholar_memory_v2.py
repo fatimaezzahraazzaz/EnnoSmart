@@ -97,10 +97,10 @@ def _root_candidates() -> List[Path]:
         if value:
             raw_roots.extend([x.strip() for x in value.split(";") if x.strip()])
 
-    raw_roots.extend([
-        r"C:\EnnoSmart\storage\organismes",
-        r"C:\EnnoSmart\outputs",
-    ])
+    repo_root = Path(__file__).resolve().parents[2]
+    storage_root = Path(os.getenv("ENNOSMART_STORAGE_ROOT") or repo_root / "storage")
+    outputs_root = Path(os.getenv("ENNOSMART_OUTPUT_ROOT") or repo_root / "outputs")
+    raw_roots.extend([str(storage_root / "organismes"), str(outputs_root)])
 
     roots: List[Path] = []
     seen = set()

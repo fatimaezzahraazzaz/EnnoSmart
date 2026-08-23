@@ -32,7 +32,7 @@ from typing import Any, Dict, List, Optional
 
 from ..contracts import ContractError, assert_same_verrous, build_confirmed_contract
 
-ROOT_DIR = Path(os.getenv("ENNOSMART_ROOT_DIR") or os.getenv("ENNOSMART_ROOT") or r"C:\EnnoSmart")
+ROOT_DIR = Path(os.getenv("ENNOSMART_ROOT_DIR") or os.getenv("ENNOSMART_ROOT") or Path(__file__).resolve().parents[3])
 OUTPUT_PAYLOAD_TYPE = "project_rd_argumentation_payload_v1_5_project_first_phase45_v23_no_repetition"
 
 PROJECT_SECTION_KEYS = [

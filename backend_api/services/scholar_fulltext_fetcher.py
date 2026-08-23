@@ -111,7 +111,8 @@ def _json_read(path: Path) -> Optional[Dict[str, Any]]:
 
 
 def _project_ennoscholar_dir(project: Project) -> Path:
-    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT", "C:/EnnoSmart/storage"))
+    default_storage = Path(__file__).resolve().parents[2] / "storage"
+    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT") or default_storage)
 
     organisme = _slugify(getattr(project, "organisme", "") or "organisme")
     project_name = _slugify(getattr(project, "project_name", "") or "project")

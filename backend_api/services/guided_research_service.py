@@ -3,6 +3,7 @@ from __future__ import annotations
 
 # ENNOSCHOLAR_V169_1_PROJECT_PERSISTENT_CORPUS
 
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,7 +13,11 @@ from sqlalchemy.orm import Session
 
 
 def _ensure_root() -> None:
-    root = Path("C:/EnnoSmart")
+    root = Path(
+        os.getenv("ENNOSMART_ROOT")
+        or os.getenv("ENNOSMART_PROJECT_ROOT")
+        or Path(__file__).resolve().parents[2]
+    )
     if root.exists() and str(root) not in sys.path:
         sys.path.insert(0, str(root))
 

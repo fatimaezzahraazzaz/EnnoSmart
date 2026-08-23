@@ -378,7 +378,7 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
           <div className="rounded-2xl border border-emerald-200 bg-white p-4 text-xs leading-5 text-emerald-900"><strong>SharePoint autorisé :</strong><br />Get files, Get properties, Get metadata, Get file content.</div>
           <div className="rounded-2xl border border-rose-200 bg-white p-4 text-xs leading-5 text-rose-900"><strong>SharePoint interdit :</strong><br />Create, Update, Rename, Move, Delete, Grant access, Stop sharing.</div>
         </div>
-        <p className="mt-3 text-[11px] leading-5 text-blue-700">EnnoSmart ne travaille que sur une copie locale de traitement sous C:\EnnoSmart. Il n’écrit jamais dans la bibliothèque synchronisée.</p>
+        <p className="mt-3 text-[11px] leading-5 text-blue-700">EnnoSmart ne travaille que sur une copie locale de traitement configurée sur le serveur. Il n’écrit jamais dans la bibliothèque synchronisée.</p>
       </section>
 
       <section className="rounded-3xl border border-violet-100 bg-white p-5 shadow-sm sm:p-6">

@@ -56,8 +56,8 @@ except Exception:  # pragma: no cover
 
 router = APIRouter(tags=["source-preview"])
 
-PROJECT_ROOT = Path(os.getenv("ENNOSMART_ROOT", r"C:\EnnoSmart")).resolve()
-STORAGE_ROOT = PROJECT_ROOT / "storage"
+PROJECT_ROOT = Path(os.getenv("ENNOSMART_ROOT") or Path(__file__).resolve().parents[2]).resolve()
+STORAGE_ROOT = Path(os.getenv("ENNOSMART_STORAGE_ROOT") or PROJECT_ROOT / "storage").resolve()
 PREVIEW_ROOT = STORAGE_ROOT / "previews" / "source_highlight"
 
 PDF_EXTENSIONS = {".pdf"}

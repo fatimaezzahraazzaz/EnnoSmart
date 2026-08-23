@@ -16,6 +16,7 @@ Corrections par rapport V2 :
 """
 
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -24,7 +25,11 @@ from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Tuple
 
 
-BASE_DIR = Path(r"C:\EnnoSmart")
+BASE_DIR = Path(
+    os.getenv("ENNOSMART_BASE_DIR")
+    or os.getenv("ENNOSMART_ROOT")
+    or Path(__file__).resolve().parents[2]
+)
 STORAGE_DIR = BASE_DIR / "storage" / "organismes"
 OUTPUTS_DIR = BASE_DIR / "outputs" / "safe_rag_upload"
 EXPERIENCE_MEMORY_V2_DIR = BASE_DIR / "storage" / "experience_memory_v2"

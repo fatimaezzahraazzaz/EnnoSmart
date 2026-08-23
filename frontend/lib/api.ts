@@ -909,7 +909,7 @@ export type StateOfArtLatestResponse = {
 /**
  * Le frontend ne choisit jamais le fournisseur ni le modèle LLM.
  * Le routage est centralisé côté backend dans modules/LLM/llm_client.py
- * à partir de C:/EnnoSmart/.env et du request_name.
+ * à partir du fichier .env du serveur et du request_name.
  */
 export type StateOfArtGenerationOptions = {
   forcePhase3?: boolean

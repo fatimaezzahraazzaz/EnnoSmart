@@ -1,8 +1,0 @@
-Client : Exemple Industrie
-Projet : Réunion plateforme
-Année : 2025
-
-Compte rendu de réunion client.
-La prochaine réunion abordera le planning, les livrables contractuels et les responsabilités de chaque équipe.
-Les points ouverts concernent uniquement le calendrier contractuel et les responsables opérationnels.
-

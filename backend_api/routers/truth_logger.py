@@ -5,7 +5,7 @@ from __future__ import annotations
 EnnoSmart V76 — Truth Logger backend
 
 But : écrire un log simple et honnête de ce qui est réellement appelé par chaque bouton.
-Fichier de log : C:\EnnoSmart\logs\truth_actions.log
+Fichier de log : <racine-projet>/logs/truth_actions.log
 Endpoint : GET /debug/truth-log/latest
 """
 
@@ -20,7 +20,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-ROOT = Path(os.environ.get("ENNOSMART_ROOT", r"C:\EnnoSmart"))
+ROOT = Path(os.environ.get("ENNOSMART_ROOT") or Path(__file__).resolve().parents[2])
 LOG_DIR = ROOT / "logs"
 LOG_FILE = LOG_DIR / "truth_actions.log"
 

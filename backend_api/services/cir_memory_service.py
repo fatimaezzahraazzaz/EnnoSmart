@@ -112,7 +112,12 @@ def slugify(value: Any, default: str = "unknown") -> str:
 # ---------------------------------------------------------------------------
 
 def _fallback_organism_dir(project: Project) -> Path:
-    return Path(r"C:\EnnoSmart") / "storage" / "organismes" / slugify(project.organisme)
+    root = Path(
+        os.getenv("ENNOSMART_BASE_DIR")
+        or os.getenv("ENNOSMART_ROOT")
+        or Path(__file__).resolve().parents[2]
+    )
+    return root / "storage" / "organismes" / slugify(project.organisme)
 
 
 def find_organism_dir(project_dir: Path, project: Project) -> Path:

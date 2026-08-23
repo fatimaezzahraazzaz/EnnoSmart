@@ -1535,11 +1535,11 @@ def _load_document_compare_module():
     Charge DOCUMENT_COMPARE de manière robuste.
 
     Pourquoi :
-    quand le backend est lancé depuis C:\EnnoSmart\backend_api, Python peut voir
+    quand le backend est lancé depuis le dossier backend_api, Python peut voir
     le package modules mais pas le sous-package DOCUMENT_COMPARE si le dossier
     n'est pas bien déclaré/copié. Cette fonction tente :
     1) import normal modules.DOCUMENT_COMPARE.document_compare
-    2) import direct depuis C:\EnnoSmart\modules\DOCUMENT_COMPARE\document_compare.py
+    2) import direct depuis modules/DOCUMENT_COMPARE/document_compare.py
     """
     try:
         ensure_ennosmart_imports()
@@ -1554,13 +1554,10 @@ def _load_document_compare_module():
         candidates = []
 
         try:
-            # C:\EnnoSmart\backend_api\routers\diagnostic.py -> C:\EnnoSmart
+            # backend_api/routers/diagnostic.py -> racine du dépôt
             candidates.append(Path(__file__).resolve().parents[2] / "modules" / "DOCUMENT_COMPARE" / "document_compare.py")
         except Exception:
             pass
-
-        candidates.append(Path(r"C:\EnnoSmart\modules\DOCUMENT_COMPARE\document_compare.py"))
-
         for path in candidates:
             if path.exists():
                 spec = importlib.util.spec_from_file_location("ennosmart_document_compare_direct", str(path))

@@ -67,7 +67,10 @@ def _resolve_ennosmart_year_root(organisme: str, project: str, year: str) -> Pat
     n'existe encore, elle construit un chemin canonique à partir des valeurs
     reçues, sans règle propre à un organisme ou à un projet.
     """
-    root = Path(os.getenv("ENNOSMART_ROOT", r"C:\EnnoSmart"))
+    root = Path(
+        os.getenv("ENNOSMART_ROOT")
+        or Path(__file__).resolve().parents[2]
+    )
     storage = root / "storage" / "organismes"
     year_value = str(year)
 
@@ -4296,7 +4299,10 @@ class EnnoDiagnosticAgent:
                 current_year=self.year,
             )
 
-            root = Path(os.getenv("ENNOSMART_ROOT", r"C:\EnnoSmart"))
+            root = Path(
+                os.getenv("ENNOSMART_ROOT")
+                or Path(__file__).resolve().parents[2]
+            )
             org_slug = str(self.organisme).strip().lower()
             project_slug = str(self.project).strip().lower()
             possible_local_memory_paths = [

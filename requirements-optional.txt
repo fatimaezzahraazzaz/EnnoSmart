@@ -1,0 +1,27 @@
+# Capacités lourdes/optionnelles. Le serveur fonctionne sans ce fichier grâce
+# aux fallbacks Tesseract, faster-whisper et heuristiques intégrés.
+# Installer seulement si le serveur possède les ressources CPU/GPU adaptées :
+#   pip install -r requirements-optional.txt
+
+# OCR neuronal Surya (Tesseract reste le fallback de production)
+surya-ocr==0.17.1
+
+# OCR de formules lorsque ENNOSMART_EXTRACTION_FORMULA_MODE n'est pas "off"
+pix2tex==0.1.4
+
+# Diarisation avancée ; nécessite HF_TOKEN et l'accès aux modèles pyannote
+whisperx>=3.3,<4
+
+# Sorties structurées Pydantic AI (un fallback JSON existe sans ce paquet)
+pydantic-ai>=0.0.24,<2
+
+# Backend vision Qwen local
+torchvision>=0.17,<1
+qwen-vl-utils>=0.0.14,<1
+
+# Interfaces historiques et outils d'entraînement conservés dans le dépôt
+streamlit>=1.40,<2
+openai>=1.60,<3
+gliner>=0.2.26,<1
+matplotlib>=3.9,<4
+tqdm>=4.66,<5

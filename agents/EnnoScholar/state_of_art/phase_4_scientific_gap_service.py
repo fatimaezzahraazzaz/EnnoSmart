@@ -35,7 +35,7 @@ from typing import Any, Dict, List, Optional
 
 from ..contracts import ContractError, build_confirmed_contract
 
-ROOT_DIR = Path(os.getenv("ENNOSMART_ROOT_DIR") or os.getenv("ENNOSMART_ROOT") or r"C:\EnnoSmart")
+ROOT_DIR = Path(os.getenv("ENNOSMART_ROOT_DIR") or os.getenv("ENNOSMART_ROOT") or Path(__file__).resolve().parents[3])
 
 
 # ============================================================

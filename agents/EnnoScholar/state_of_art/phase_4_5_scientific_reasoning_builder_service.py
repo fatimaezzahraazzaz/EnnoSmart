@@ -49,7 +49,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
-ROOT_DIR = Path(os.getenv("ENNOSMART_ROOT_DIR", r"C:\EnnoSmart"))
+ROOT_DIR = Path(os.getenv("ENNOSMART_ROOT_DIR") or os.getenv("ENNOSMART_ROOT") or Path(__file__).resolve().parents[3])
 
 
 # ============================================================

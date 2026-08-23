@@ -30,6 +30,7 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from difflib import SequenceMatcher
+import os
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import quote
@@ -54,7 +55,7 @@ except Exception:
 
 router = APIRouter(prefix="/projects/{project_id}/cir-source-view", tags=["CIR source view"])
 
-ROOT = Path(__file__).resolve().parents[2] if len(Path(__file__).resolve().parents) >= 3 else Path(r"C:\EnnoSmart")
+ROOT = Path(os.getenv("ENNOSMART_ROOT") or Path(__file__).resolve().parents[2]).resolve()
 STORAGE = ROOT / "storage"
 OUTPUTS = ROOT / "outputs"
 PREVIEW_DIR = ROOT / "storage" / "source_previews"

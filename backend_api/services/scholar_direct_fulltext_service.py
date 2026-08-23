@@ -1044,7 +1044,8 @@ def resolve_and_extract_fulltext_for_selected_articles(
     if articles:
         report_path = _direct_extracted_path(project, articles[0]).parent.parent / "unified_direct_fulltext_report.json"
     else:
-        root = Path(os.getenv("ENNOSMART_STORAGE_ROOT", "C:/EnnoSmart/storage"))
+        default_storage = Path(__file__).resolve().parents[2] / "storage"
+        root = Path(os.getenv("ENNOSMART_STORAGE_ROOT") or default_storage)
         report_path = root / "unified_direct_fulltext_report.json"
     _json_dump(report_path, summary)
     summary["report_path"] = str(report_path)

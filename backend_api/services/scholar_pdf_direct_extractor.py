@@ -127,7 +127,8 @@ def _json_read(path: Path) -> Optional[Dict[str, Any]]:
 
 
 def _project_ennoscholar_dir(project: Project) -> Path:
-    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT", "C:/EnnoSmart/storage"))
+    default_storage = Path(__file__).resolve().parents[2] / "storage"
+    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT") or default_storage)
 
     organisme = _slugify(getattr(project, "organisme", "") or "organisme")
     project_name = _slugify(getattr(project, "project_name", "") or "project")
@@ -458,8 +459,8 @@ def _import_ocr_extractor():
     """
     Importe le moteur OCR seulement lorsqu'il est nécessaire.
 
-    Le backend peut être lancé depuis C:/EnnoSmart/backend_api ; dans ce cas,
-    la racine C:/EnnoSmart n'est pas toujours présente dans sys.path.
+    Le backend peut être lancé depuis le dossier backend_api ; dans ce cas,
+    la racine du dépôt n'est pas toujours présente dans sys.path.
     """
     project_root = Path(__file__).resolve().parents[2]
     project_root_str = str(project_root)

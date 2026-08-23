@@ -1,1 +1,2 @@
-# Le cœur EnnoScholar utilise uniquement la bibliothèque standard de Python 3.10+.
+# Source canonique unique pour le clone de production.
+-r ../../requirements.txt

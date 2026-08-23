@@ -339,7 +339,7 @@ def _existing_file_paths_for_project(project) -> list[Path]:
     Récupère les documents déjà présents dans les dossiers IA du projet.
 
     Cas historique EnnoSmart :
-    C:/EnnoSmart/outputs/safe_rag_upload/{organisme}/{projet}/{annee}/uploaded
+    <racine-projet>/outputs/safe_rag_upload/{organisme}/{projet}/{annee}/uploaded
 
     Cette fonction sert seulement à importer d'anciens fichiers disque
     vers PostgreSQL. Les nouveaux uploads ne passent plus par le disque.

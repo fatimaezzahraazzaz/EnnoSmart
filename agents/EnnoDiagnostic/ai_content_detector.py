@@ -21,7 +21,7 @@ def _load_project_env() -> None:
     candidates = [
         Path.cwd() / ".env",
         Path.cwd().parent / ".env",
-        Path(r"C:\EnnoSmart\.env"),
+        Path(__file__).resolve().parents[2] / ".env",
     ]
     for env_path in candidates:
         if env_path.exists():
@@ -242,7 +242,9 @@ class EnnoExtractedContentLoader:
         self.organisme = safe_name(organisme)
         self.project = safe_name(project)
 
-        self.base_dir = base_dir or Path(_str_env("ENNOSMART_BASE_DIR", r"C:\EnnoSmart"))
+        self.base_dir = base_dir or Path(
+            _str_env("ENNOSMART_BASE_DIR", str(Path(__file__).resolve().parents[2]))
+        )
         self.storage_root = self.base_dir / "storage" / "organismes"
 
         if allow_rag_fallback is None:
@@ -1092,7 +1094,9 @@ class EnnoAIDetectionService:
         self.organisme = safe_name(organisme)
         self.project = safe_name(project)
 
-        self.base_dir = Path(_str_env("ENNOSMART_BASE_DIR", r"C:\EnnoSmart"))
+        self.base_dir = Path(
+            _str_env("ENNOSMART_BASE_DIR", str(Path(__file__).resolve().parents[2]))
+        )
 
         self.loader = EnnoExtractedContentLoader(
             organisme=organisme,

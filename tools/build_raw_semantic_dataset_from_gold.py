@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""
+r"""
 build_raw_semantic_dataset_from_gold.py
 
 Transforme ton ancien CSV annoté FastJudge en raw_semantic_dataset.csv
 pour EnnoSmart NLP V13.3+.
 
 Usage PowerShell :
-    cd C:\EnnoSmart
+    cd /opt/ennosmart
     python tools\build_raw_semantic_dataset_from_gold.py ^
-      --input "C:\chemin\vers\ton_ancien_dataset.csv" ^
+      --input "/chemin/vers/ton_ancien_dataset.csv" ^
       --output "modules\NLP\data\raw_semantic_dataset.csv"
 
 Ensuite :

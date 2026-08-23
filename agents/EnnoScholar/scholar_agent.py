@@ -1212,12 +1212,11 @@ def _load_env_for_scholar_writer() -> None:
     except Exception:
         return
 
+    repo_root = Path(__file__).resolve().parents[2]
     candidates = [
         Path.cwd() / ".env",
-        Path(r"C:\EnnoSmart\backend_api\.env"),
-        Path(r"C:\EnnoSmart\.env"),
-        Path(__file__).resolve().parents[2] / ".env",
-        Path(__file__).resolve().parents[3] / ".env" if len(Path(__file__).resolve().parents) > 3 else None,
+        repo_root / "backend_api" / ".env",
+        repo_root / ".env",
     ]
 
     seen = set()
@@ -1245,12 +1244,11 @@ def _ensure_llm_import_paths() -> None:
     Rend le module LLM central importable, quelle que soit la manière dont
     EnnoScholar est lancé : FastAPI, CLI, script direct ou test.
     """
+    repo_root = Path(__file__).resolve().parents[2]
     candidates = [
         Path.cwd(),
-        Path(r"C:\EnnoSmart\backend_api"),
-        Path(r"C:\EnnoSmart"),
-        Path(__file__).resolve().parents[2],  # backend_api si fichier dans agents/EnnoScholar
-        Path(__file__).resolve().parents[3] if len(Path(__file__).resolve().parents) > 3 else None,
+        repo_root / "backend_api",
+        repo_root,
     ]
 
     for p in candidates:

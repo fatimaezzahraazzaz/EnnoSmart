@@ -18,7 +18,7 @@ except Exception:
 def load_env() -> None:
     if load_dotenv is None:
         return
-    for p in [Path.cwd() / ".env", Path(r"C:\EnnoSmart\.env"), Path(__file__).resolve().parents[2] / ".env"]:
+    for p in [Path.cwd() / ".env", Path(__file__).resolve().parents[2] / ".env"]:
         if p.exists():
             load_dotenv(p, override=True)
 

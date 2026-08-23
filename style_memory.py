@@ -7,7 +7,7 @@ import json, os, re, sys
 from pathlib import Path
 from typing import Any, Dict, List
 
-ROOT_DIR = Path(os.getenv("ENNOSMART_BASE_DIR", r"C:\EnnoSmart"))
+ROOT_DIR = Path(os.getenv("ENNOSMART_BASE_DIR") or os.getenv("ENNOSMART_ROOT") or Path(__file__).resolve().parent)
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 V2_ROOT = Path(os.getenv("ENNOSMART_EXPERIENCE_MEMORY_V2_DIR", str(ROOT_DIR / "storage" / "experience_memory_v2")))

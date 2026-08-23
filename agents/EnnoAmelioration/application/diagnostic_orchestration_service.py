@@ -199,7 +199,8 @@ def _virtual_documents(request: ImprovementRequest, scope_key: str) -> tuple[lis
 
 
 def _ensure_imports() -> None:
-    root = Path(os.getenv("ENNOSMART_BASE_DIR", os.getenv("ENNOSMART_ROOT", r"C:\EnnoSmart")))
+    default_root = Path(__file__).resolve().parents[3]
+    root = Path(os.getenv("ENNOSMART_BASE_DIR") or os.getenv("ENNOSMART_ROOT") or default_root)
     import sys
 
     for path in (root, root / "backend_api"):

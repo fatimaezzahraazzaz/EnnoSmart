@@ -14,13 +14,18 @@ Rôle :
 """
 
 import json
+import os
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
-ROOT_DIR = Path(r"C:\EnnoSmart")
+ROOT_DIR = Path(
+    os.getenv("ENNOSMART_BASE_DIR")
+    or os.getenv("ENNOSMART_ROOT")
+    or Path(__file__).resolve().parents[3]
+)
 
 
 # ============================================================

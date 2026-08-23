@@ -9,8 +9,16 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
 def _env_files() -> tuple[str, ...]:
-    root = Path(os.getenv("ENNOSMART_ROOT") or os.getenv("ENNOSMART_PROJECT_ROOT") or "C:/EnnoSmart")
+    default_root = DEFAULT_PROJECT_ROOT
+    root = Path(
+        os.getenv("ENNOSMART_ROOT")
+        or os.getenv("ENNOSMART_PROJECT_ROOT")
+        or default_root
+    )
     return (str(root / ".env"), ".env")
 
 
@@ -78,11 +86,11 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = Field(86400, alias="ENNOSCHOLAR_LEGAL_MCP_CACHE_TTL_SECONDS")
     cache_negative_results: bool = Field(False, alias="ENNOSCHOLAR_LEGAL_MCP_CACHE_NEGATIVE_RESULTS")
     cache_db: str = Field(
-        "C:/EnnoSmart/storage/mcp/legal_fulltext_cache.sqlite3",
+        str(DEFAULT_PROJECT_ROOT / "storage" / "mcp" / "legal_fulltext_cache.sqlite3"),
         alias="ENNOSCHOLAR_LEGAL_MCP_CACHE_DB",
     )
     audit_log: str = Field(
-        "C:/EnnoSmart/logs/legal_fulltext_mcp_audit.jsonl",
+        str(DEFAULT_PROJECT_ROOT / "logs" / "legal_fulltext_mcp_audit.jsonl"),
         alias="ENNOSCHOLAR_LEGAL_MCP_AUDIT_LOG",
     )
 

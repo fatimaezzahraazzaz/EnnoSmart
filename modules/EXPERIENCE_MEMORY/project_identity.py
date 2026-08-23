@@ -15,13 +15,18 @@ le resolver retourne "AI_Radar" pour chercher dans la mémoire.
 """
 
 import json
+import os
 import re
 import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
-ROOT_DIR = Path(r"C:\EnnoSmart")
+ROOT_DIR = Path(
+    os.getenv("ENNOSMART_BASE_DIR")
+    or os.getenv("ENNOSMART_ROOT")
+    or Path(__file__).resolve().parents[2]
+)
 V2_ROOT = ROOT_DIR / "storage" / "experience_memory_v2"
 CATALOG_V2 = V2_ROOT / "catalog_v2.json"
 

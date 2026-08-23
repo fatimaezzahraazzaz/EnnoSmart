@@ -56,7 +56,11 @@ def _enabled() -> bool:
 
 
 def _root() -> Path:
-    return Path(os.getenv("ENNOSMART_ROOT") or "C:/EnnoSmart")
+    return Path(
+        os.getenv("ENNOSMART_ROOT")
+        or os.getenv("ENNOSMART_BASE_DIR")
+        or Path(__file__).resolve().parents[2]
+    )
 
 
 def _safe_int(value: Any) -> int:

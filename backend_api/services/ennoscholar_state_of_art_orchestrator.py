@@ -30,7 +30,11 @@ from sqlalchemy.orm import Session
 
 from services.article_card_builder import is_article_card_ready_for_writing
 
-ROOT = Path(os.getenv("ENNOSMART_ROOT") or os.getenv("ENNOSMART_PROJECT_ROOT") or "C:/EnnoSmart")
+ROOT = Path(
+    os.getenv("ENNOSMART_ROOT")
+    or os.getenv("ENNOSMART_PROJECT_ROOT")
+    or Path(__file__).resolve().parents[2]
+)
 
 
 # ============================================================

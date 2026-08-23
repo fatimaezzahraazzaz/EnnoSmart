@@ -8,9 +8,9 @@ V6.1:
 - MAIS les clés ENNOSCHOLAR_* du backend deviennent explicitement
   autoritaires pour le worker EnnoScholar.
 
-Cela évite qu'une ancienne valeur présente dans C:\EnnoSmart\.env conserve
+Cela évite qu'une ancienne valeur présente dans le fichier .env conserve
 par exemple 10 workers MCP ou un ancien timeout alors que la V6 a été
-configurée dans backend_api\.env.
+configurée dans backend_api/.env.
 """
 
 import os

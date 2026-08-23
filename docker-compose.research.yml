@@ -1,20 +1,44 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ennosmart-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ennosmart}
+      POSTGRES_USER: ${POSTGRES_USER:-ennosmart}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ennosmart_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ennosmart} -d ${POSTGRES_DB:-ennosmart}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7-alpine
     container_name: ennosmart-redis
     restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     ports:
-      - "6379:6379"
-    command: ["redis-server", "--appendonly", "yes"]
+      - "127.0.0.1:6379:6379"
     volumes:
       - ennosmart_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   grobid:
     image: ${GROBID_IMAGE:-grobid/grobid:0.9.0-crf}
     container_name: ennosmart-grobid
     restart: unless-stopped
     ports:
-      - "8070:8070"
+      - "127.0.0.1:8070:8070"
 
 volumes:
+  ennosmart_postgres_data:
   ennosmart_redis_data:

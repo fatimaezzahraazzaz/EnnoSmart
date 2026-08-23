@@ -4,7 +4,12 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-BASE_DIR = Path(os.getenv("ENNOSMART_BASE_DIR", r"C:\EnnoSmart"))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+BASE_DIR = Path(
+    os.getenv("ENNOSMART_BASE_DIR")
+    or os.getenv("ENNOSMART_ROOT")
+    or PROJECT_ROOT
+)
 ORGANISMES_DIR = BASE_DIR / "storage" / "organismes"
 
 # Modèle sémantique déjà utilisé par le RAG. Il reste configurable sans changer
@@ -15,7 +20,9 @@ EMBEDDING_MODEL_NAME = os.getenv(
 )
 
 DEFAULT_TOP_K = int(os.getenv("ENNOSMART_RAG_TOP_K", "8"))
-EMBEDDING_OFFLINE = os.getenv("ENNOSMART_EMBEDDING_OFFLINE", "1").strip() == "1"
+# Un clone neuf télécharge le modèle au premier démarrage. Une fois le cache
+# Hugging Face préchargé, la production peut imposer le mode hors ligne.
+EMBEDDING_OFFLINE = os.getenv("ENNOSMART_EMBEDDING_OFFLINE", "0").strip() == "1"
 
 # Consolidation sémantique des groupes de verrous.
 # Les seuils sont volontairement prudents : un groupe non fusionné est conservé

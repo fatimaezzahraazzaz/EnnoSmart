@@ -18,7 +18,7 @@ def slug(value: object) -> str:
 
 def root_dir() -> Path:
     configured = os.getenv("ENNOSMART_ROOT_DIR") or os.getenv("ENNOSMART_ROOT")
-    return Path(configured or r"C:\EnnoSmart")
+    return Path(configured or Path(__file__).resolve().parents[2])
 
 
 def storage_root() -> Path:

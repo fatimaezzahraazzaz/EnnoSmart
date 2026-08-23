@@ -205,10 +205,10 @@ def _project_ennoscholar_dir(project: Project) -> Path:
     """
     Dossier racine EnnoScholar du projet.
 
-    Par défaut :
-    C:/EnnoSmart/storage/organismes/<organisme>/projects/<project>/years/<year>/ennoscholar
+    Par défaut, le stockage est résolu depuis la racine du dépôt.
     """
-    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT", "C:/EnnoSmart/storage"))
+    default_storage = Path(__file__).resolve().parents[2] / "storage"
+    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT") or default_storage)
 
     organisme = _slugify_path_segment(getattr(project, "organisme", None), "organisme")
     project_name = _slugify_path_segment(getattr(project, "project_name", None), "project")
@@ -596,7 +596,8 @@ def _candidate_ennodiagnostic_report_paths(project: Project) -> List[Path]:
     if explicit:
         paths.append(Path(explicit))
 
-    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT", "C:/EnnoSmart/storage"))
+    default_storage = Path(__file__).resolve().parents[2] / "storage"
+    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT") or default_storage)
 
     organismes = _path_variants(getattr(project, "organisme", None))
     projects = _path_variants(getattr(project, "project_name", None))
@@ -2391,7 +2392,7 @@ def build_state_of_art_selection_payload(
 
         # Sauvegarde Phase 1
     output_dir = (
-        Path(os.getenv("ENNOSMART_STORAGE_ROOT", "C:/EnnoSmart/storage"))
+        Path(os.getenv("ENNOSMART_STORAGE_ROOT") or Path(__file__).resolve().parents[2] / "storage")
         / "organismes"
         / _slugify_path(project.organisme)
         / "projects"

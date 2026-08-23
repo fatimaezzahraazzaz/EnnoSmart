@@ -94,7 +94,8 @@ def _write_json(path: Path, payload: Dict[str, Any]) -> None:
 
 
 def _project_ennoscholar_dir(project: Project) -> Path:
-    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT", "C:/EnnoSmart/storage"))
+    default_storage = Path(__file__).resolve().parents[2] / "storage"
+    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT") or default_storage)
     return (
         root
         / "organismes"

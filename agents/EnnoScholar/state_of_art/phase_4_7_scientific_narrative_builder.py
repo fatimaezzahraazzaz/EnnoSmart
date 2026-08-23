@@ -63,7 +63,7 @@ from ..storage_paths import (
     consultant_plan_path as default_consultant_plan_contract_path,
 )
 
-ROOT_DIR = Path(os.getenv("ENNOSMART_ROOT_DIR") or os.getenv("ENNOSMART_ROOT") or r"C:\EnnoSmart")
+ROOT_DIR = Path(os.getenv("ENNOSMART_ROOT_DIR") or os.getenv("ENNOSMART_ROOT") or Path(__file__).resolve().parents[3])
 OUTPUT_PAYLOAD_TYPE = "scientific_narrative_payload_v3_4_verrou_sections_fixed"
 
 

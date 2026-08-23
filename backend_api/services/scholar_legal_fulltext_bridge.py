@@ -12,7 +12,7 @@ Objectifs :
 - ne réinjecter dans le pipeline qu'un PDF légal, vérifié et correspondant au même article.
 
 Le fichier d'overrides est, par défaut :
-    C:/EnnoSmart/config/ennoscholar_article_identity_overrides.json
+    <racine-projet>/config/ennoscholar_article_identity_overrides.json
 
 Il peut être remplacé avec :
     ENNOSCHOLAR_ARTICLE_IDENTITY_OVERRIDES_FILE
@@ -320,10 +320,8 @@ def collect_first_phase_urls(
 # ---------------------------------------------------------------------------
 
 def _override_file_path() -> Path:
-    configured = os.getenv(
-        "ENNOSCHOLAR_ARTICLE_IDENTITY_OVERRIDES_FILE",
-        "C:/EnnoSmart/config/ennoscholar_article_identity_overrides.json",
-    )
+    default_path = Path(__file__).resolve().parents[2] / "config" / "ennoscholar_article_identity_overrides.json"
+    configured = os.getenv("ENNOSCHOLAR_ARTICLE_IDENTITY_OVERRIDES_FILE") or default_path
     return Path(configured)
 
 

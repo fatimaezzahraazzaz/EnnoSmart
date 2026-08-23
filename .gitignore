@@ -49,7 +49,21 @@ yarn-error.log*
 /data/
 /projects/
 /dataset_final/
-/models/
+/modules/NLP/data/raw_semantic_dataset.csv
+/modules/NLP/data/raw_verrou_prototypes.json
+/outputs/
+/chroma/
+**/chroma/
+**/chroma.sqlite3
+/.huggingface/
+/.cache/
+
+# Les modèles volumineux restent hors Git. Le seul artefact applicatif maison
+# indispensable au pipeline NLP est explicitement versionné ci-dessous.
+/models/*
+!/models/fastjudge/
+/models/fastjudge/*
+!/models/fastjudge/fastjudge_linearsvc_C025.joblib
 *.db
 *.db-*
 *.sqlite
@@ -64,8 +78,12 @@ yarn-error.log*
 *.pptx
 *.msg
 
-# Local model checkpoints and training corpora. Training source code remains
-# versioned from train/*.py and train/notebooks/.
+# Volumes locaux des services de production (jamais versionnés).
+/.postgres-data/
+/.redis-data/
+/.grobid-data/
+
+# Local model checkpoints and training corpora.
 train/data/
 train/models/
 train/final_gliner_cir_dataset*/
@@ -79,7 +97,7 @@ train/**/*.jpg
 train/**/*.jpeg
 train/**/*.png
 
-# Annotation batches may contain client text. Keep only the reusable tooling.
+# Annotation batches may contain client text.
 llm_annotation/prompts/
 llm_annotation/responses/
 llm_annotation/stats/
@@ -96,6 +114,14 @@ logs/
 _ocr_debug/
 _test_outputs/
 _tests/
+tests/
+**/tests/
+test_*.py
+**/test_*.py
+verify_*.py
+**/verify_*.py
+integration/
+_upgrade_backups/
 .guided_research_*
 backend_api/backend_*.json
 backend_api/backend_*.txt
@@ -110,6 +136,13 @@ scholar_test_result*.json
 test_*_api.json
 test_modeles_*.json
 /test_*.json
+
+# Frontend-only debug helpers and unused starter placeholders.
+/frontend/app/debug-diagnostic/
+/frontend/scripts/debug_token_browser_console.js
+/frontend/components/ennosmart/scholar.py
+/frontend/public/placeholder*
+/frontend/pnpm-lock.yaml
 
 # ---------------------------------------------------------------------------
 # Local backups, archives and one-off repair copies
@@ -127,6 +160,7 @@ agents/EnnoScholar_backup*/
 *.bak_*
 *.backup
 *.backup_*
+*.before*
 *.broken_*
 *.corrected.py
 * - Copie.py
@@ -136,6 +170,11 @@ patch_*.py
 rollback_*.ps1
 requirements_*backup*.txt
 requirements_before_*.txt
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
 
 # Bundled third-party binaries are installed locally, not committed.
 poppler-*/

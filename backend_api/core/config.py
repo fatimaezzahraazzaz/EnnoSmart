@@ -5,10 +5,9 @@ from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-# Chemin robuste vers le .env du backend :
-# C:\EnnoSmart\backend_api\.env
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-ENV_FILE = BACKEND_DIR / ".env"
+PROJECT_ROOT = BACKEND_DIR.parent
+ENV_FILES = (PROJECT_ROOT / ".env", BACKEND_DIR / ".env")
 
 
 class Settings(BaseSettings):
@@ -40,8 +39,8 @@ class Settings(BaseSettings):
     SESSION_LOCK_TTL_SECONDS: int = 3900
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
-    UPLOAD_ROOT: str = "C:/EnnoSmart/storage/uploads"
-    AI_OUTPUT_ROOT: str = "C:/EnnoSmart/outputs/safe_rag_upload"
+    UPLOAD_ROOT: str = str(PROJECT_ROOT / "storage" / "uploads")
+    AI_OUTPUT_ROOT: str = str(PROJECT_ROOT / "outputs" / "safe_rag_upload")
 
     MAX_UPLOAD_SIZE_MB: int = 50
     ALLOWED_EXTENSIONS: str = ".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.txt,.png,.jpg,.jpeg,.msg"
@@ -51,16 +50,20 @@ class Settings(BaseSettings):
     AI_RUN_TIMEOUT_SECONDS: int = 3600
 
     # Bibliothèque professionnelle synchronisée, parcourue strictement en lecture seule.
-    POWER_AUTOMATE_IMPORT_ROOT: str = "C:/Users/dell/OneDrive - Ennodev/ENNODEV - Clients"
-    POWER_AUTOMATE_FAKE_ROOT: str = "C:/EnnoSmart/tests/fixtures/fake_power_automate_inbox"
-    POWER_AUTOMATE_AUDIT_ROOT: str = "C:/EnnoSmart/storage/power_automate_import"
+    POWER_AUTOMATE_IMPORT_ROOT: str = ""
+    POWER_AUTOMATE_FAKE_ROOT: str = ""
+    POWER_AUTOMATE_AUDIT_ROOT: str = str(
+        PROJECT_ROOT / "storage" / "power_automate_import"
+    )
     POWER_AUTOMATE_MAX_FILE_MB: int = 100
 
     # IMPORTANT :
     # extra="ignore" évite que Pydantic bloque les variables IA/LLM/EnnoScholar
     # comme GEMINI_API_KEY, ENNOSCHOLAR_ENABLE_BGE_RERANKER, OLLAMA_MODEL, etc.
     model_config = SettingsConfigDict(
-        env_file=str(ENV_FILE),
+        # Un seul .env racine suffit en production. Un éventuel
+        # backend_api/.env reste accepté pour la compatibilité locale.
+        env_file=tuple(str(path) for path in ENV_FILES),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
