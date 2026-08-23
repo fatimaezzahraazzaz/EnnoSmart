@@ -56,6 +56,9 @@ class Settings(BaseSettings):
         PROJECT_ROOT / "storage" / "power_automate_import"
     )
     POWER_AUTOMATE_MAX_FILE_MB: int = 100
+    # Optionnel : requis uniquement pour convertir les anciens Word .doc.
+    # La conversion est exécutée sur une copie locale placée dans l'audit root.
+    LIBREOFFICE_BIN: str = ""
 
     # IMPORTANT :
     # extra="ignore" évite que Pydantic bloque les variables IA/LLM/EnnoScholar

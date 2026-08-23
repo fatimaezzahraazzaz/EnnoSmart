@@ -19,8 +19,11 @@ from datetime import datetime, timezone
 import hashlib
 import html
 import json
+import os
 from pathlib import Path
 import re
+import shutil
+import subprocess
 import sys
 import threading
 import unicodedata
@@ -34,8 +37,24 @@ from core.config import settings
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_AUDIT_ROOT = ROOT_DIR / "storage" / "power_automate_import"
 DEFAULT_FAKE_ROOT = ROOT_DIR / "tests" / "fixtures" / "fake_power_automate_inbox"
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
+DIRECT_EXTRACT_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
+SUPPORTED_EXTENSIONS = DIRECT_EXTRACT_EXTENSIONS | {".doc"}
 SCAN_LOCK = threading.Lock()
+YEAR_RE = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)")
+
+FINAL_MARKERS = (
+    "version finale", "versions finales", "dossier technique final",
+    "rapport final", "cir final", "final consultant", "valide client",
+)
+DRAFT_MARKERS = (
+    "brouillon", "draft", "version de travail", "a relire", "relecture",
+    "commentaires", "ancienne version", "old", "archive",
+)
+GENERIC_PROJECT_DIRS = {
+    "cir", "cii", "dossier technique", "dossier justificatif", "redaction technique",
+    "version finale", "versions finales", "final", "livrable", "livrables",
+    "documents", "document", "annee", "archive", "archives",
+}
 
 
 def _utc_now() -> str:
@@ -54,6 +73,26 @@ def _json_write(path: Path, payload: Any) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     temporary.replace(path)
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _assert_safe_local_storage(storage_root: Path, source_root: Path | None) -> None:
+    """Garantit qu'aucun artefact local ne peut être écrit dans OneDrive."""
+    storage = storage_root.resolve()
+    if source_root is None:
+        return
+    source = source_root.resolve()
+    if _is_within(storage, source) or _is_within(source, storage):
+        raise PermissionError(
+            "Configuration dangereuse : la zone d'audit et la source OneDrive doivent être deux arborescences séparées."
+        )
 
 
 def _safe_name(value: str, fallback: str = "document") -> str:
@@ -79,21 +118,6 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _snapshot_tree(root: Path) -> dict[str, dict[str, Any]]:
-    if not root.is_dir():
-        return {}
-    snapshot: dict[str, dict[str, Any]] = {}
-    for path in sorted(item for item in root.rglob("*") if item.is_file()):
-        relative = path.relative_to(root).as_posix()
-        stat = path.stat()
-        snapshot[relative] = {
-            "sha256": _sha256_file(path),
-            "size": stat.st_size,
-            "mtime_ns": stat.st_mtime_ns,
-        }
-    return snapshot
-
-
 @dataclass(frozen=True)
 class ImportFolderItem:
     external_id: str
@@ -103,6 +127,7 @@ class ImportFolderItem:
     mime_type: str = "application/octet-stream"
     etag: str = ""
     last_modified: str = ""
+    mtime_ns: int = 0
 
 
 class ReadOnlyImportProvider(Protocol):
@@ -122,10 +147,12 @@ class LocalReadOnlyImportProvider:
         *,
         provider_name: str = "power_automate_inbox",
         source_scope: str = "",
+        source_library_root: Path | None = None,
     ):
         self.provider_name = provider_name
         self.source_scope = str(source_scope or "").strip("/\\")
         self.source_root = source_root.resolve()
+        self.source_library_root = (source_library_root or source_root).resolve()
         if not self.source_root.is_dir():
             raise FileNotFoundError(f"Dossier de copies Power Automate introuvable : {self.source_root}")
 
@@ -135,7 +162,6 @@ class LocalReadOnlyImportProvider:
             if path.suffix.lower() not in SUPPORTED_EXTENSIONS or path.name.startswith("~$"):
                 continue
             relative = path.relative_to(self.source_root).as_posix()
-            digest = _sha256_file(path)
             stat = path.stat()
             items.append(
                 ImportFolderItem(
@@ -144,11 +170,23 @@ class LocalReadOnlyImportProvider:
                     source_path=relative,
                     size=stat.st_size,
                     mime_type=_mime_for(path),
-                    etag=digest,
+                    # Ne pas hasher ici : le hash hydraterait tous les placeholders
+                    # OneDrive avant même que l'utilisateur ait besoin du contenu.
+                    etag="",
                     last_modified=datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(timespec="seconds"),
+                    mtime_ns=int(stat.st_mtime_ns),
                 )
             )
         return items
+
+    def source_signature(self, item: ImportFolderItem) -> dict[str, int]:
+        target = (self.source_root / Path(item.source_path)).resolve()
+        try:
+            target.relative_to(self.source_root)
+        except ValueError as exc:
+            raise ValueError("Chemin hors du dossier d'import autorisé.") from exc
+        stat = target.stat()
+        return {"size": int(stat.st_size), "mtime_ns": int(stat.st_mtime_ns)}
 
     def read_content(self, item: ImportFolderItem) -> bytes:
         target = (self.source_root / Path(item.source_path)).resolve()
@@ -173,14 +211,69 @@ def _mime_for(path: Path) -> str:
     return {
         ".pdf": "application/pdf",
         ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".doc": "application/msword",
         ".txt": "text/plain",
         ".md": "text/markdown",
     }.get(path.suffix.lower(), "application/octet-stream")
 
 
-def _tree_digest(root: Path) -> str:
-    payload = json.dumps(_snapshot_tree(root), sort_keys=True).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+def _libreoffice_binary() -> Path | None:
+    configured = str(getattr(settings, "LIBREOFFICE_BIN", "") or os.getenv("LIBREOFFICE_BIN") or "").strip()
+    candidates = [
+        configured,
+        shutil.which("soffice") or "",
+        shutil.which("libreoffice") or "",
+        r"C:\Program Files\LibreOffice\program\soffice.exe",
+        r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+    ]
+    for raw in candidates:
+        if raw and Path(raw).is_file():
+            return Path(raw).resolve()
+    return None
+
+
+def legacy_doc_converter_status() -> dict[str, Any]:
+    binary = _libreoffice_binary()
+    return {
+        "available": binary is not None,
+        "name": "LibreOffice headless",
+        "path": str(binary) if binary else "",
+        "source_policy": "conversion_on_local_copy_only",
+    }
+
+
+def _convert_legacy_doc_copy(staged_doc: Path) -> Path:
+    """Convertit uniquement la copie locale .doc ; ne reçoit jamais un chemin source."""
+    binary = _libreoffice_binary()
+    if binary is None:
+        raise RuntimeError(
+            "Ancien Word .doc détecté : LibreOffice headless doit être installé sur le serveur pour convertir la copie locale."
+        )
+    output_dir = (staged_doc.parent / "converted").resolve()
+    profile_dir = (staged_doc.parent / "libreoffice_profile").resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    command = [
+        str(binary),
+        f"-env:UserInstallation={profile_dir.as_uri()}",
+        "--headless",
+        "--convert-to", "docx",
+        "--outdir", str(output_dir),
+        str(staged_doc.resolve()),
+    ]
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+        shell=False,
+    )
+    converted = output_dir / f"{staged_doc.stem}.docx"
+    if completed.returncode != 0 or not converted.is_file():
+        detail = (completed.stderr or completed.stdout or "conversion sans résultat").strip()[-600:]
+        raise RuntimeError(f"Conversion locale .doc impossible : {detail}")
+    return converted
 
 
 def _extract_docx_preview(path: Path, max_chars: int) -> str:
@@ -332,6 +425,293 @@ def detect_document_identity(text: str, *, file_name: str = "", source_path: str
     return {"organisme": organisme, "project": project, "year": year}
 
 
+def _without_full_dates(value: Any) -> str:
+    return re.sub(
+        r"(?<!\d)(?:19|20)\d{2}[-_. ](?:0?[1-9]|1[0-2])[-_. ](?:0?[1-9]|[12]\d|3[01])(?!\d)",
+        " ",
+        str(value or ""),
+    )
+
+
+def _safe_identity_label(value: Any, fallback: str = "") -> str:
+    cleaned = re.sub(r"\s+", " ", str(value or "")).strip(" .-_/\\")
+    cleaned = re.sub(r"[<>:\"|?*]+", " ", cleaned)
+    return (cleaned or fallback)[:120]
+
+
+def _identity_key(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", "", _normalise(value)) or "unknown"
+
+
+def _identity_group_key(identity: dict[str, Any]) -> str:
+    return "::".join((
+        _identity_key(identity.get("organisme")),
+        _identity_key(identity.get("project")),
+        str(identity.get("year") or "").strip(),
+    ))
+
+
+def _all_relative_parts(source_scope: str, source_path: str) -> list[str]:
+    combined = "/".join(
+        part.strip("/\\")
+        for part in (str(source_scope or ""), str(source_path or ""))
+        if part.strip("/\\")
+    )
+    return [part for part in re.split(r"[/\\]+", combined) if part]
+
+
+def _detect_path_year(parts: list[str], file_name: str, detected_year: Any) -> str:
+    for part in reversed(parts[:-1]):
+        raw = part.strip()
+        if YEAR_RE.fullmatch(raw):
+            return raw
+    file_years = YEAR_RE.findall(_without_full_dates(Path(file_name).stem))
+    if file_years:
+        return file_years[-1]
+    for part in reversed(parts[:-1]):
+        years = YEAR_RE.findall(_without_full_dates(part))
+        if years:
+            return years[-1]
+    value = str(detected_year or "").strip()
+    return value if YEAR_RE.fullmatch(value) else ""
+
+
+def _meaningful_project_folder(parts: list[str], organisme: str, year: str) -> str:
+    parents = parts[:-1]
+    year_index = next((index for index in range(len(parents) - 1, -1, -1) if parents[index].strip() == year), -1)
+    search = parents[:year_index] if year_index > 0 else parents
+    for part in reversed(search):
+        cleaned = re.sub(r"^\d+[. _-]*", "", part).strip()
+        normalized = _normalise(cleaned)
+        if not normalized or normalized == _normalise(organisme) or YEAR_RE.fullmatch(cleaned):
+            continue
+        if re.fullmatch(r"(?:cir|cii|cf)?\s*(?:19|20)\d{2}(?:\s+.*)?", normalized):
+            continue
+        if normalized in GENERIC_PROJECT_DIRS or any(marker in normalized for marker in FINAL_MARKERS):
+            continue
+        if any(marker in normalized for marker in DRAFT_MARKERS):
+            continue
+        return _safe_identity_label(cleaned)
+    return ""
+
+
+def _project_from_filename(file_name: str, organisme: str) -> str:
+    value = unicodedata.normalize("NFKC", _without_full_dates(Path(file_name).stem)).replace("_", " ")
+    value = re.sub(re.escape(organisme), " ", value, flags=re.IGNORECASE)
+    for token in re.findall(r"[A-Za-zÀ-ÿ0-9]+", organisme):
+        if len(token) >= 3:
+            value = re.sub(rf"\b{re.escape(token)}\b", " ", value, flags=re.IGNORECASE)
+    value = YEAR_RE.sub(" ", value)
+    value = re.sub(
+        r"\b(?:CIR|CII|DT|VF\s*\d*|V\s*\d+(?:[.,]\d+)*|ED(?:ITION)?\s*\d+(?:[.,]\d+)*|FINAL(?:E)?|DEFINITIF|VALIDE)\b",
+        " ", value, flags=re.IGNORECASE,
+    )
+    value = re.sub(r"\b(?:dossier|technique|justificatif|version|document|rapport|complet)\b", " ", value, flags=re.IGNORECASE)
+    value = re.sub(r"[-–—]+", " ", value)
+    value = re.sub(r"\s+", " ", value).strip(" .-_")
+    return _safe_identity_label(value.title()) if len(_normalise(value)) >= 3 else ""
+
+
+def infer_audit_identity(
+    *,
+    source_scope: str,
+    source_path: str,
+    file_name: str,
+    detected: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    """Le classement client/projet/année prime sur les mentions trouvées dans le texte."""
+    detected = detected or {}
+    parts = _all_relative_parts(source_scope, source_path)
+    identity_prefix_count = 1
+    organisme_source = parts[0] if parts else detected.get("organisme")
+    # Certains groupes classent leurs sociétés au deuxième niveau sous la
+    # forme « 1. CEVAA ». Dans ce cas la filiale, pas le groupe, est l'identité.
+    if len(parts) > 1 and re.match(r"^\d+[. _-]+", parts[1]):
+        subsidiary = re.sub(r"^\d+[. _-]*", "", parts[1]).strip()
+        if subsidiary:
+            organisme_source = subsidiary
+            identity_prefix_count = 2
+    organisme = _safe_identity_label(organisme_source, "Entreprise à confirmer")
+    identity_parts = parts[identity_prefix_count:]
+    year = _detect_path_year(identity_parts, file_name, detected.get("year"))
+    project = _meaningful_project_folder(identity_parts, organisme, year)
+    if not project:
+        project = _project_from_filename(file_name, organisme)
+    if not project:
+        candidate = _safe_identity_label(detected.get("project"))
+        if candidate and len(candidate) <= 90:
+            project = candidate
+    if not project:
+        project = f"Dossier CIR {year}" if year else "Projet à confirmer"
+    return {"organisme": organisme, "project": project, "year": year}
+
+
+def _version_numbers(file_name: str) -> list[int]:
+    raw = _normalise(Path(file_name).stem)
+    matches = re.findall(r"(?<![a-z0-9])(?:vf|version|edition|ed|v)\s*[-_. ]?\s*(\d+(?:[._-]\d+)*)", raw)
+    values: list[int] = []
+    for match in matches:
+        values.extend(int(value) for value in re.findall(r"\d+", match))
+    if not values and re.search(r"(?<![a-z0-9])(?:vf|finale?|definitif|valide)(?![a-z0-9])", raw):
+        values.append(1)
+    return values[:6]
+
+
+def _embedded_date_rank(file_name: str) -> int:
+    dates = re.findall(
+        r"(?<!\d)((?:19|20)\d{2})[-_. ](0?[1-9]|1[0-2])[-_. ](0?[1-9]|[12]\d|3[01])(?!\d)",
+        Path(file_name).stem,
+    )
+    if not dates:
+        return 0
+    year, month, day = dates[-1]
+    return int(year) * 10_000 + int(month) * 100 + int(day)
+
+
+def _selection_rank(item: dict[str, Any]) -> tuple[Any, ...]:
+    context = _normalise(f"{item.get('name')} {item.get('source_path')}")
+    suffix = Path(str(item.get("name") or "")).suffix.lower()
+    return (
+        1 if item.get("classification") == "cir_final_confirmed" else 0,
+        1 if any(marker in context for marker in FINAL_MARKERS) else 0,
+        tuple(int(value) for value in (item.get("version_numbers") or [])),
+        int(item.get("embedded_date_rank") or 0),
+        2 if suffix == ".pdf" else 1 if suffix == ".docx" else 0,
+        int(item.get("mtime_ns") or 0),
+        float(item.get("confidence") or 0),
+        int(item.get("size") or 0),
+    )
+
+
+def _memory_records() -> tuple[set[str], set[str]]:
+    memory_root = Path(
+        os.getenv("ENNOSMART_EXPERIENCE_MEMORY_V2_DIR")
+        or ROOT_DIR / "storage" / "experience_memory_v2"
+    )
+    hashes: set[str] = set()
+    groups: set[str] = set()
+    runs_dir = memory_root / "runs"
+    for path in runs_dir.glob("*.run_v2.json") if runs_dir.is_dir() else []:
+        payload = _json_read(path, {})
+        if not isinstance(payload, dict) or not payload.get("ok"):
+            continue
+        digest = str(payload.get("source_hash") or "").strip().lower()
+        if digest:
+            hashes.add(digest)
+        groups.add(_identity_group_key({
+            "organisme": payload.get("organisme"),
+            "project": payload.get("project"),
+            "year": payload.get("year"),
+        }))
+    return hashes, groups
+
+
+def apply_final_version_policy(items: list[dict[str, Any]]) -> dict[str, int]:
+    """Choisit une seule version recommandée par organisme/projet/année."""
+    memory_hashes, memory_groups = _memory_records()
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        item.setdefault("recommended_version", False)
+        item.setdefault("index_eligible", False)
+        item["version_numbers"] = _version_numbers(str(item.get("name") or ""))
+        item["embedded_date_rank"] = _embedded_date_rank(str(item.get("name") or ""))
+        identity = item.get("detected_identity") or {}
+        group = _identity_group_key(identity)
+        item["selection_group"] = group
+        digest = str(item.get("sha256") or "").lower()
+        item["already_in_memory_by_hash"] = bool(digest and digest in memory_hashes)
+        item["already_in_memory_by_identity"] = bool(group in memory_groups)
+        if (
+            item.get("classification") in {"cir_final_confirmed", "cir_probable"}
+            and item.get("indexable") is True
+            and identity.get("organisme")
+            and identity.get("project")
+            and YEAR_RE.fullmatch(str(identity.get("year") or ""))
+        ):
+            groups.setdefault(group, []).append(item)
+        else:
+            item["selection_status"] = "review_required" if "cir" in str(item.get("classification")) else "not_a_final_cir"
+
+    recommended = alternatives = exact_duplicates = memory_conflicts = 0
+    for group_items in groups.values():
+        unique_by_hash: dict[str, dict[str, Any]] = {}
+        duplicates: list[dict[str, Any]] = []
+        for item in sorted(group_items, key=_selection_rank, reverse=True):
+            digest = str(item.get("sha256") or "")
+            if digest in unique_by_hash:
+                item["duplicate_of_external_id"] = unique_by_hash[digest].get("external_id")
+                item["selection_status"] = "exact_duplicate"
+                duplicates.append(item)
+                exact_duplicates += 1
+            else:
+                unique_by_hash[digest] = item
+        ranked = sorted(unique_by_hash.values(), key=_selection_rank, reverse=True)
+        if not ranked:
+            continue
+        chosen = ranked[0]
+        chosen["recommended_version"] = True
+        chosen["alternative_external_ids"] = [str(item.get("external_id") or "") for item in ranked[1:] + duplicates]
+        chosen["alternative_versions_count"] = len(chosen["alternative_external_ids"])
+        if chosen.get("already_in_memory_by_hash"):
+            chosen["selection_status"] = "already_in_memory"
+        elif chosen.get("already_in_memory_by_identity"):
+            chosen["selection_status"] = "memory_version_conflict"
+            memory_conflicts += 1
+        else:
+            chosen["selection_status"] = "recommended"
+            chosen["index_eligible"] = True
+            recommended += 1
+        for item in ranked[1:]:
+            item["selection_status"] = "older_alternative"
+            item["recommended_version"] = False
+            item["index_eligible"] = False
+            alternatives += 1
+
+    return {
+        "recommended_for_index": recommended,
+        "older_alternatives": alternatives,
+        "exact_duplicates": exact_duplicates,
+        "memory_version_conflicts": memory_conflicts,
+    }
+
+
+def audit_manifest_fingerprint(run: dict[str, Any]) -> str:
+    payload = [
+        {
+            "external_id": str(item.get("external_id") or ""),
+            "sha256": str(item.get("sha256") or ""),
+            "identity": item.get("detected_identity") or {},
+            "classification": str(item.get("classification") or ""),
+            "recommended_version": bool(item.get("recommended_version")),
+            "index_eligible": bool(item.get("index_eligible")),
+        }
+        for item in run.get("items") or []
+    ]
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def require_manifest_confirmation(run: dict[str, Any], value: Any) -> None:
+    expected = str(run.get("manifest_sha256") or "")
+    actual = audit_manifest_fingerprint(run)
+    if not expected or expected != actual:
+        raise PermissionError("Le manifeste du scan a changé ; relancez le scan avant toute indexation.")
+    if str(value or "").strip().lower() != expected.lower():
+        raise PermissionError("Confirmez explicitement la signature du manifeste affiché.")
+
+
+def memory_identity_conflict(
+    *, digest: str, organisme: Any, project: Any, year: Any,
+) -> str:
+    hashes, groups = _memory_records()
+    if str(digest or "").lower() in hashes:
+        return "same_hash"
+    group = _identity_group_key({"organisme": organisme, "project": project, "year": year})
+    if group in groups:
+        return "same_identity_other_version"
+    return ""
+
+
 def _resolve_scope(root: Path, relative_folder: Any = "") -> tuple[Path, str]:
     root = root.resolve()
     relative = str(relative_folder or "").strip().replace("\\", "/").strip("/")
@@ -348,6 +728,16 @@ def _resolve_scope(root: Path, relative_folder: Any = "") -> tuple[Path, str]:
     return target, relative_path.as_posix() if relative else ""
 
 
+def _professional_import_root() -> Path:
+    raw = str(settings.POWER_AUTOMATE_IMPORT_ROOT or "").strip()
+    if not raw:
+        raise FileNotFoundError("Le dossier professionnel POWER_AUTOMATE_IMPORT_ROOT n'est pas configuré.")
+    root = Path(raw)
+    if not root.is_dir():
+        raise FileNotFoundError(f"Dossier professionnel introuvable : {root}")
+    return root
+
+
 def list_import_folders(
     *,
     parent: Any = "",
@@ -358,7 +748,7 @@ def list_import_folders(
     if name in {"fake", "factice", "local"}:
         root = Path(settings.POWER_AUTOMATE_FAKE_ROOT or str(DEFAULT_FAKE_ROOT))
     elif name in {"inbox", "power_automate", "onedrive", "real"}:
-        root = Path(settings.POWER_AUTOMATE_IMPORT_ROOT)
+        root = _professional_import_root()
     else:
         raise ValueError("Source d'import inconnue.")
 
@@ -408,28 +798,51 @@ def _provider_from_environment(provider_name: str, relative_folder: Any = "") ->
     if name in {"fake", "factice", "local"}:
         root = Path(settings.POWER_AUTOMATE_FAKE_ROOT or str(DEFAULT_FAKE_ROOT))
         scope_root, scope = _resolve_scope(root, relative_folder)
-        return LocalReadOnlyImportProvider(scope_root, provider_name="fake", source_scope=scope)
+        return LocalReadOnlyImportProvider(
+            scope_root,
+            provider_name="fake",
+            source_scope=scope,
+            source_library_root=root,
+        )
     if name in {"inbox", "power_automate", "onedrive", "real"}:
-        root = Path(settings.POWER_AUTOMATE_IMPORT_ROOT)
+        root = _professional_import_root()
         scope_root, scope = _resolve_scope(root, relative_folder)
-        return LocalReadOnlyImportProvider(scope_root, provider_name="power_automate_inbox", source_scope=scope)
+        return LocalReadOnlyImportProvider(
+            scope_root,
+            provider_name="power_automate_inbox",
+            source_scope=scope,
+            source_library_root=root,
+        )
     raise ValueError("Source d'import Power Automate inconnue.")
 
 
 def import_configuration_status() -> dict[str, Any]:
     fake_root = Path(settings.POWER_AUTOMATE_FAKE_ROOT or str(DEFAULT_FAKE_ROOT))
-    import_root = Path(settings.POWER_AUTOMATE_IMPORT_ROOT)
+    import_root_raw = str(settings.POWER_AUTOMATE_IMPORT_ROOT or "").strip()
+    import_root = Path(import_root_raw) if import_root_raw else None
+    audit_root = Path(settings.POWER_AUTOMATE_AUDIT_ROOT or str(DEFAULT_AUDIT_ROOT))
+    storage_separated = True
+    storage_error = ""
+    if import_root is not None and import_root.is_dir():
+        try:
+            _assert_safe_local_storage(audit_root, import_root)
+        except PermissionError as exc:
+            storage_separated = False
+            storage_error = str(exc)
     return {
         "ok": True,
         "mode": "power_automate_local_inbox",
         "credentials_required": False,
         "client_id_required": False,
         "client_secret_required": False,
-        "import_folder_configured": import_root.is_dir(),
-        "import_root": str(import_root),
+        "import_folder_configured": bool(import_root is not None and import_root.is_dir()),
+        "import_root": str(import_root) if import_root is not None else "",
         "fake_available": fake_root.is_dir(),
         "fake_root": str(fake_root),
-        "audit_root": str(Path(settings.POWER_AUTOMATE_AUDIT_ROOT or str(DEFAULT_AUDIT_ROOT))),
+        "audit_root": str(audit_root),
+        "storage_separated_from_source": storage_separated,
+        "storage_configuration_error": storage_error,
+        "legacy_doc_converter": legacy_doc_converter_status(),
         "safety": {
             "source_operations": ["list", "read", "hash"],
             "sharepoint_write_enabled": False,
@@ -464,7 +877,8 @@ def run_sharepoint_audit(
     cache_dir = root / "documents"
 
     source_root = getattr(provider, "source_root", None)
-    before = _snapshot_tree(source_root) if isinstance(source_root, Path) else None
+    source_library_root = getattr(provider, "source_library_root", source_root)
+    _assert_safe_local_storage(root, source_library_root if isinstance(source_library_root, Path) else None)
     run: dict[str, Any] = {
         "ok": False,
         "scan_id": scan_id,
@@ -518,15 +932,57 @@ def run_sharepoint_audit(
                         content = provider.read_content(source_item)
                         digest = _sha256_bytes(content)
                         assert_source_operation_allowed("hash")
+                        signature_reader = getattr(provider, "source_signature", None)
+                        post_read_signature = signature_reader(source_item) if callable(signature_reader) else None
+                        listed_signature = {
+                            "size": int(source_item.size),
+                            "mtime_ns": int(source_item.mtime_ns or 0),
+                        }
+                        item_payload.update({
+                            "sha256": digest,
+                            "source_signature_listed": listed_signature,
+                            "source_signature_after_read": post_read_signature,
+                            "source_hydrated_during_read": bool(
+                                post_read_signature
+                                and (
+                                    int(post_read_signature.get("size") or 0) != listed_signature["size"]
+                                    or (
+                                        listed_signature["mtime_ns"] > 0
+                                        and int(post_read_signature.get("mtime_ns") or 0) != listed_signature["mtime_ns"]
+                                    )
+                                )
+                            ),
+                        })
                         cache_record_path = cache_dir / f"{digest}.json"
                         cached = _json_read(cache_record_path, None)
-                        if isinstance(cached, dict) and Path(str(cached.get("staged_path") or "")).is_file():
+                        cached_path = Path(str((cached or {}).get("staged_path") or "")) if isinstance(cached, dict) else Path()
+                        cached_index_path = Path(str((cached or {}).get("index_staged_path") or "")) if isinstance(cached, dict) else Path()
+                        cache_reusable = bool(
+                            isinstance(cached, dict)
+                            and cached.get("cache_schema_version") == 2
+                            and cached_path.is_file()
+                            and _sha256_file(cached_path) == digest
+                            and cached_path.name == _safe_name(source_item.name, "document")
+                            and (
+                                source_item.name.lower().endswith(".doc") is False
+                                or (cached.get("indexable") is True and cached_index_path.is_file())
+                            )
+                        )
+                        if cache_reusable:
                             for key in (
                                 "classification", "confidence", "signals", "detected_identity",
                                 "preview_excerpt", "preview_chars", "needs_ocr", "extraction_mode",
-                                "staged_path", "sha256",
+                                "staged_path", "index_staged_path", "index_sha256", "sha256",
+                                "indexable", "legacy_doc", "legacy_doc_conversion",
+                                "errors",
                             ):
                                 item_payload[key] = cached.get(key)
+                            item_payload["detected_identity"] = infer_audit_identity(
+                                source_scope=str(getattr(provider, "source_scope", "") or ""),
+                                source_path=source_item.source_path,
+                                file_name=source_item.name,
+                                detected=item_payload.get("detected_identity") or {},
+                            )
                             item_payload.update({
                                 "deduplicated": True,
                                 "is_new_content": False,
@@ -537,33 +993,95 @@ def run_sharepoint_audit(
                             target_dir.mkdir(parents=True, exist_ok=True)
                             staged_path = target_dir / _safe_name(source_item.name, "document")
                             staged_path.write_bytes(content)
-                            preview = extract_preview(staged_path, deep_scan=deep_scan)
-                            classification = classify_cir_document(
-                                preview["text"],
-                                file_name=source_item.name,
-                                source_path=source_item.source_path,
-                            )
-                            item_payload.update(classification)
+                            if _sha256_file(staged_path) != digest:
+                                raise RuntimeError("La copie locale ne correspond pas au fichier lu ; audit refusé.")
+                            preview_path = staged_path
+                            index_path = staged_path
+                            legacy_doc = staged_path.suffix.lower() == ".doc"
+                            conversion: dict[str, Any] = {"required": legacy_doc, "ok": not legacy_doc}
+                            conversion_error = ""
+                            if legacy_doc:
+                                try:
+                                    index_path = _convert_legacy_doc_copy(staged_path)
+                                    preview_path = index_path
+                                    conversion.update({"ok": True, "output": str(index_path), "converter": "LibreOffice headless"})
+                                except Exception as exc:
+                                    conversion_error = str(exc)
+                                    conversion.update({"ok": False, "error": conversion_error})
+
+                            if legacy_doc and not conversion.get("ok"):
+                                item_payload.update({
+                                    "classification": "legacy_doc_requires_converter",
+                                    "confidence": 0.0,
+                                    "signals": [],
+                                    "detected_identity": infer_audit_identity(
+                                        source_scope=str(getattr(provider, "source_scope", "") or ""),
+                                        source_path=source_item.source_path,
+                                        file_name=source_item.name,
+                                    ),
+                                    "preview_excerpt": "",
+                                    "preview_chars": 0,
+                                    "needs_ocr": False,
+                                    "extraction_mode": "legacy_doc_pending_conversion",
+                                    "errors": [conversion_error],
+                                    "indexable": False,
+                                })
+                            else:
+                                preview = extract_preview(preview_path, deep_scan=deep_scan)
+                                classification = classify_cir_document(
+                                    preview["text"],
+                                    file_name=source_item.name,
+                                    source_path=source_item.source_path,
+                                )
+                                classification["detected_identity"] = infer_audit_identity(
+                                    source_scope=str(getattr(provider, "source_scope", "") or ""),
+                                    source_path=source_item.source_path,
+                                    file_name=source_item.name,
+                                    detected=classification.get("detected_identity") or {},
+                                )
+                                item_payload.update(classification)
+                                item_payload.update({
+                                    "preview_excerpt": preview["preview_excerpt"],
+                                    "preview_chars": preview["chars"],
+                                    "needs_ocr": preview["needs_ocr"],
+                                    "extraction_mode": preview["extraction_mode"],
+                                    "errors": preview["errors"],
+                                    "indexable": not bool(preview["needs_ocr"]),
+                                })
+                            index_digest = _sha256_file(index_path) if index_path.is_file() else ""
                             item_payload.update({
                                 "sha256": digest,
                                 "staged_path": str(staged_path),
-                                "preview_excerpt": preview["preview_excerpt"],
-                                "preview_chars": preview["chars"],
-                                "needs_ocr": preview["needs_ocr"],
-                                "extraction_mode": preview["extraction_mode"],
-                                "errors": preview["errors"],
+                                "index_staged_path": str(index_path) if index_path.is_file() else "",
+                                "index_sha256": index_digest,
+                                "legacy_doc": legacy_doc,
+                                "legacy_doc_conversion": conversion,
                                 "deduplicated": False,
                                 "is_new_content": True,
                                 "source_policy": "power_automate_copy_read_only",
                             })
                             _json_write(cache_record_path, {
-                                key: item_payload.get(key)
-                                for key in (
+                                **{
+                                    key: item_payload.get(key)
+                                    for key in (
                                     "classification", "confidence", "signals", "detected_identity",
                                     "preview_excerpt", "preview_chars", "needs_ocr", "extraction_mode",
-                                    "staged_path", "sha256",
-                                )
+                                    "staged_path", "index_staged_path", "index_sha256", "sha256",
+                                    "indexable", "legacy_doc", "legacy_doc_conversion",
+                                    "errors",
+                                    )
+                                },
+                                "cache_schema_version": 2,
                             })
+                        staged = Path(str(item_payload.get("staged_path") or ""))
+                        final_signature = signature_reader(source_item) if callable(signature_reader) else post_read_signature
+                        item_payload["source_signature_final"] = final_signature
+                        item_payload["source_copy_verified"] = bool(
+                            staged.is_file() and _sha256_file(staged) == digest
+                        )
+                        item_payload["source_metadata_stable_after_read"] = bool(
+                            post_read_signature is None or final_signature == post_read_signature
+                        )
                 except Exception as exc:
                     item_payload.update({
                         "classification": "scan_error",
@@ -577,8 +1095,19 @@ def run_sharepoint_audit(
                 _json_write(item_path, item_payload)
                 run["items"].append(item_payload)
 
-            after = _snapshot_tree(source_root) if isinstance(source_root, Path) else None
-            source_integrity_verified = before == after if before is not None else None
+            selection_counts = apply_final_version_policy(run["items"])
+            # La politique de sélection ajoute des champs au manifeste : réécrire
+            # les fiches locales une fois la comparaison inter-versions terminée.
+            for item in run["items"]:
+                item_id = _safe_name(str(item.get("external_id") or ""), "item")
+                _json_write(items_dir / f"{item_id}.json", item)
+
+            source_integrity_verified = all(
+                bool(item.get("source_copy_verified"))
+                and bool(item.get("source_metadata_stable_after_read"))
+                for item in run["items"]
+                if item.get("classification") != "scan_error"
+            )
             counts: dict[str, int] = {}
             for item in run["items"]:
                 key = str(item.get("classification") or "unknown")
@@ -588,16 +1117,22 @@ def run_sharepoint_audit(
                 "status": "completed",
                 "completed_at": _utc_now(),
                 "source_integrity_verified": source_integrity_verified,
-                "source_snapshot_before": before if before is not None else None,
-                "source_snapshot_after": after if after is not None else None,
                 "counts": {
                     "discovered": len(source_items),
                     "audited": len(run["items"]),
                     "new_content": sum(1 for item in run["items"] if item.get("is_new_content")),
                     "deduplicated": sum(1 for item in run["items"] if item.get("deduplicated")),
+                    "legacy_doc": sum(1 for item in run["items"] if item.get("legacy_doc")),
+                    "legacy_doc_conversion_required": sum(
+                        1 for item in run["items"]
+                        if item.get("legacy_doc") and not (item.get("legacy_doc_conversion") or {}).get("ok")
+                    ),
+                    **selection_counts,
                     **counts,
                 },
             })
+            run["manifest_sha256"] = audit_manifest_fingerprint(run)
+            run["approval_required_before_index"] = True
         except Exception as exc:
             run.update({"ok": False, "status": "failed", "completed_at": _utc_now()})
             run["errors"].append(str(exc))
@@ -737,13 +1272,14 @@ def mark_matching_items_memory_removed(
 def validate_staged_path(item: dict[str, Any], *, audit_root: Path | None = None) -> Path:
     root = (audit_root or Path(settings.POWER_AUTOMATE_AUDIT_ROOT or str(DEFAULT_AUDIT_ROOT))).resolve()
     staged_root = (root / "staging").resolve()
-    path = Path(str(item.get("staged_path") or "")).resolve()
+    path = Path(str(item.get("index_staged_path") or item.get("staged_path") or "")).resolve()
     try:
         path.relative_to(staged_root)
     except ValueError as exc:
         raise ValueError("Copie locale hors de la zone d'audit autorisée.") from exc
     if not path.is_file():
         raise FileNotFoundError("Copie locale d'audit introuvable.")
-    if item.get("sha256") and _sha256_file(path) != item["sha256"]:
+    expected_hash = str(item.get("index_sha256") or item.get("sha256") or "")
+    if expected_hash and _sha256_file(path) != expected_hash:
         raise ValueError("La copie locale a changé depuis le scan ; indexation refusée.")
     return path

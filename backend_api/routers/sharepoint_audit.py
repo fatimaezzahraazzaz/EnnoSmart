@@ -15,7 +15,9 @@ from services.sharepoint_audit_service import (
     list_import_folders,
     list_sharepoint_audits,
     mark_audit_item_indexed,
+    memory_identity_conflict,
     require_index_confirmation,
+    require_manifest_confirmation,
     run_sharepoint_audit,
     validate_staged_path,
 )
@@ -110,11 +112,16 @@ def index_import_inbox_item(
     try:
         require_index_confirmation(payload.get("confirm_local_memory_changes"))
         run = get_sharepoint_audit(scan_id)
+        require_manifest_confirmation(run, payload.get("confirm_manifest_sha256"))
         if run.get("provider") == "fake":
             raise ValueError("Les documents du faux dossier Power Automate ne peuvent pas être indexés dans la mémoire de production.")
         item = get_sharepoint_audit_item(scan_id, item_id)
         if item.get("classification") not in {"cir_final_confirmed", "cir_probable"}:
             raise ValueError("Seuls les CIR confirmés ou probables peuvent être indexés.")
+        if item.get("recommended_version") is not True or item.get("index_eligible") is not True:
+            raise ValueError(
+                "Ce document n'est pas la version finale recommandée ou nécessite une revue avant indexation."
+            )
         if item.get("indexed"):
             raise ValueError("Ce document est déjà indexé.")
         staged_path = validate_staged_path(item)
@@ -124,6 +131,19 @@ def index_import_inbox_item(
         year = str(payload.get("year") or identity.get("year") or "").strip()
         if not organisme or not project or not year:
             raise ValueError("Entreprise, projet et année doivent être confirmés avant l'indexation.")
+        conflict = memory_identity_conflict(
+            digest=str(item.get("sha256") or ""),
+            organisme=organisme,
+            project=project,
+            year=year,
+        )
+        if conflict == "same_hash":
+            raise ValueError("Ce fichier exact existe déjà dans Memory V2.")
+        if conflict == "same_identity_other_version":
+            raise ValueError(
+                "Une autre version existe déjà pour cet organisme, ce projet et cette année. "
+                "Archivez d'abord cette ancienne version depuis l'onglet Bibliothèque."
+            )
         result = build_uploaded_cir(
             staged_path,
             organisme=organisme,

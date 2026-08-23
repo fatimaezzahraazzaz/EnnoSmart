@@ -53,7 +53,7 @@ if str(ROOT_DIR) not in sys.path:
 # Chemins
 # ---------------------------------------------------------------------------
 
-BASE_DIR = Path(os.getenv("ENNOSMART_BASE_DIR", r"C:\EnnoSmart"))
+BASE_DIR = Path(os.getenv("ENNOSMART_BASE_DIR") or os.getenv("ENNOSMART_ROOT") or ROOT_DIR).resolve()
 STORAGE_DIR = BASE_DIR / "storage"
 
 ORGANISMES_DIR = STORAGE_DIR / "organismes"

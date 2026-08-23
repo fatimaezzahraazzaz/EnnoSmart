@@ -48,6 +48,15 @@ type AuditItem = {
   review_status?: string
   indexed?: boolean
   errors?: string[]
+  recommended_version?: boolean
+  index_eligible?: boolean
+  selection_status?: string
+  alternative_versions_count?: number
+  already_in_memory_by_hash?: boolean
+  already_in_memory_by_identity?: boolean
+  legacy_doc?: boolean
+  legacy_doc_conversion?: { required?: boolean; ok?: boolean; error?: string; converter?: string }
+  indexable?: boolean
 }
 
 type AuditRun = {
@@ -66,6 +75,8 @@ type AuditRun = {
   source_delete_operations: number
   memory_index_operations: number
   source_integrity_verified?: boolean | null
+  manifest_sha256?: string
+  approval_required_before_index?: boolean
   counts: Record<string, number>
   items: AuditItem[]
   errors?: string[]
@@ -100,6 +111,9 @@ type AuditConfiguration = {
   fake_available: boolean
   fake_root: string
   audit_root: string
+  storage_separated_from_source?: boolean
+  storage_configuration_error?: string
+  legacy_doc_converter?: { available: boolean; name: string; path?: string; source_policy?: string }
   safety: {
     source_operations: string[]
     sharepoint_write_enabled: boolean
@@ -153,6 +167,7 @@ function classificationLabel(value: string): string {
     scan_error: "Erreur d’analyse",
     too_large: "Fichier trop volumineux",
     unsupported: "Format non pris en charge",
+    legacy_doc_requires_converter: "Ancien Word · conversion requise",
   } as Record<string, string>)[value] || value.replaceAll("_", " ")
 }
 
@@ -160,6 +175,7 @@ function classificationStyle(value: string): string {
   if (value === "cir_final_confirmed") return "border-emerald-200 bg-emerald-50 text-emerald-800"
   if (value === "cir_probable") return "border-amber-200 bg-amber-50 text-amber-800"
   if (value === "cir_draft") return "border-orange-200 bg-orange-50 text-orange-800"
+  if (value === "legacy_doc_requires_converter") return "border-blue-200 bg-blue-50 text-blue-800"
   if (value === "scan_error" || value === "source_missing") return "border-rose-200 bg-rose-50 text-rose-800"
   return "border-slate-200 bg-slate-50 text-slate-700"
 }
@@ -207,7 +223,9 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
   const visibleItems = useMemo(() => {
     const needle = filter.trim().toLocaleLowerCase("fr")
     return (run?.items || []).filter((item) => {
-      if (classFilter !== "all" && item.classification !== classFilter) return false
+      if (classFilter === "recommended" && !item.recommended_version) return false
+      if (classFilter === "legacy_doc" && !item.legacy_doc) return false
+      if (!['all', 'recommended', 'legacy_doc'].includes(classFilter) && item.classification !== classFilter) return false
       if (!needle) return true
       return `${item.name} ${item.source_path} ${item.detected_identity?.organisme || ""} ${item.detected_identity?.project || ""}`
         .toLocaleLowerCase("fr")
@@ -314,6 +332,14 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
       setError("Confirmez l’entreprise, le projet et l’année.")
       return
     }
+    if (!selected.recommended_version || !selected.index_eligible) {
+      setError("Seule la version finale recommandée et sans conflit Memory V2 peut être indexée.")
+      return
+    }
+    if (!run?.manifest_sha256) {
+      setError("Le manifeste signé du scan est absent. Relancez le scan.")
+      return
+    }
     if (!window.confirm("Cette action copiera le CIR dans la bibliothèque locale et reconstruira Memory V2. Continuer ?")) return
     setLoading(true)
     setError("")
@@ -324,6 +350,7 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
         body: JSON.stringify({
           ...identity,
           confirm_local_memory_changes: "INDEXER_DANS_MEMORY_V2",
+          confirm_manifest_sha256: run?.manifest_sha256 || "",
         }),
       })
       const refreshed = await request<AuditRun>(`/cir-memory/import-inbox/scans/${encodeURIComponent(run!.scan_id)}`)
@@ -371,6 +398,7 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
 
       {notice && <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"><CheckCircle2 className="mt-0.5 size-4 shrink-0" />{notice}</div>}
       {error && <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"><AlertTriangle className="mt-0.5 size-4 shrink-0" />{error}</div>}
+      {configuration?.storage_separated_from_source === false && <div className="flex items-start gap-3 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900"><AlertTriangle className="mt-0.5 size-4 shrink-0" />{configuration.storage_configuration_error || "La zone d’audit locale chevauche le dossier OneDrive : scan bloqué."}</div>}
 
       <section className="rounded-3xl border border-blue-100 bg-blue-50/70 p-5 sm:p-6">
         <div className="flex items-start gap-3"><div className="rounded-xl bg-blue-700 p-2 text-white"><Cloud className="size-5" /></div><div><h3 className="font-semibold text-blue-950">Source locale configurée</h3><p className="mt-1 break-all text-xs leading-5 text-blue-800"><code>{configuration?.import_root || "Chargement…"}</code></p></div></div>
@@ -379,6 +407,9 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
           <div className="rounded-2xl border border-rose-200 bg-white p-4 text-xs leading-5 text-rose-900"><strong>SharePoint interdit :</strong><br />Create, Update, Rename, Move, Delete, Grant access, Stop sharing.</div>
         </div>
         <p className="mt-3 text-[11px] leading-5 text-blue-700">EnnoSmart ne travaille que sur une copie locale de traitement configurée sur le serveur. Il n’écrit jamais dans la bibliothèque synchronisée.</p>
+        <div className={`mt-3 rounded-xl border px-3.5 py-3 text-xs leading-5 ${configuration?.legacy_doc_converter?.available ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+          <strong>Anciens fichiers Word `.doc` :</strong> {configuration?.legacy_doc_converter?.available ? "convertisseur local disponible ; seules les copies de travail seront converties." : "LibreOffice headless absent ; ces fichiers seront signalés et resteront non indexables jusqu’à son installation."}
+        </div>
       </section>
 
       <section className="rounded-3xl border border-violet-100 bg-white p-5 shadow-sm sm:p-6">
@@ -397,7 +428,7 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <label className="flex items-center gap-2 text-xs font-medium text-slate-600"><input type="checkbox" checked={deepScan} onChange={(event) => setDeepScan(event.target.checked)} className="size-4 rounded border-slate-300 accent-violet-700" />OCR approfondi si nécessaire</label>
-            <button type="button" onClick={startAudit} disabled={loading || folderLoading || (provider === "fake" && !configuration?.fake_available) || (provider === "inbox" && !folderListing?.current)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50">
+            <button type="button" onClick={startAudit} disabled={loading || folderLoading || configuration?.storage_separated_from_source === false || (provider === "fake" && !configuration?.fake_available) || (provider === "inbox" && !folderListing?.current)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50">
               {loading ? <LoaderCircle className="size-4 animate-spin" /> : <Search className="size-4" />}{provider === "fake" ? "Lancer le test factice" : "Scanner ce dossier"}
             </button>
           </div>
@@ -427,16 +458,19 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
       {run && (
         <>
           {run.source_scope && <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900"><strong>Périmètre analysé :</strong> {run.source_scope}</div>}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
             <Stat label="Analysés" value={counts.audited || 0} />
             <Stat label="CIR confirmés" value={counts.cir_final_confirmed || 0} tone="green" />
+            <Stat label="Versions retenues" value={counts.recommended_for_index || 0} tone="green" />
             <Stat label="À vérifier" value={counts.cir_probable || 0} tone="amber" />
             <Stat label="Brouillons" value={counts.cir_draft || 0} tone="slate" />
-            <Stat label="Documents client" value={counts.client_document || 0} tone="slate" />
+            <Stat label="Anciennes versions" value={(counts.older_alternatives || 0) + (counts.exact_duplicates || 0)} tone="slate" />
           </div>
 
+          {run.manifest_sha256 && <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-xs leading-5 text-violet-900"><strong>Manifeste de sélection :</strong> <code className="break-all">{run.manifest_sha256}</code><br />L’API vérifiera cette signature avant chaque indexation.</div>}
+
           <div className={`flex flex-col gap-3 rounded-2xl border p-4 text-sm sm:flex-row sm:items-center sm:justify-between ${run.source_integrity_verified === true ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-slate-50 text-slate-700"}`}>
-            <span className="flex items-center gap-2 font-semibold">{run.source_integrity_verified === true ? <CheckCircle2 className="size-5" /> : <History className="size-5" />}{run.source_integrity_verified === true ? "Fichiers sources vérifiés : aucun octet, nom ou date de modification n’a changé." : "Audit terminé sans opération d’écriture déclarée."}</span>
+            <span className="flex items-center gap-2 font-semibold">{run.source_integrity_verified === true ? <CheckCircle2 className="size-5" /> : <History className="size-5" />}{run.source_integrity_verified === true ? "Copies locales vérifiées par hash ; aucune opération d’écriture source exécutée." : "Audit terminé sans opération d’écriture déclarée."}</span>
             <span className="text-xs">Créations : {run.source_create_operations} · Modifications : {run.source_update_operations} · Déplacements : {run.source_move_operations} · Suppressions : {run.source_delete_operations} · Indexations : {run.memory_index_operations}</span>
           </div>
 
@@ -446,10 +480,12 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
                 <label className="relative flex-1"><Search className="absolute left-3 top-3 size-4 text-slate-400" /><input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Nom, chemin, entreprise ou projet…" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-100" /></label>
                 <select value={classFilter} onChange={(event) => setClassFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-violet-400">
                   <option value="all">Toutes les catégories</option>
+                  <option value="recommended">Versions finales recommandées</option>
                   <option value="cir_final_confirmed">CIR confirmés</option>
                   <option value="cir_probable">CIR probables</option>
                   <option value="cir_draft">Brouillons</option>
                   <option value="client_document">Documents client</option>
+                  <option value="legacy_doc">Anciens Word .doc</option>
                 </select>
                 <button type="button" onClick={loadState} disabled={loading} className="grid size-10 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"><RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} /></button>
               </div>
@@ -457,7 +493,7 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
                 {visibleItems.map((item) => (
                   <button key={item.external_id} type="button" onClick={() => selectItem(item)} className={`flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition ${selectedId === item.external_id ? "border-violet-300 bg-violet-50" : "border-slate-100 hover:border-violet-200 hover:bg-slate-50"}`}>
                     <div className="mt-0.5 rounded-xl bg-white p-2 text-violet-700 shadow-sm">{item.classification === "cir_final_confirmed" ? <FileCheck2 className="size-5" /> : item.classification.includes("cir") ? <FileQuestion className="size-5" /> : <FileText className="size-5" />}</div>
-                    <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-semibold text-slate-900">{item.name}</p><span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${classificationStyle(item.classification)}`}>{classificationLabel(item.classification)}</span></div><p className="mt-1 truncate text-xs text-slate-500">{item.source_path}</p><p className="mt-2 text-xs text-slate-400">Confiance {Math.round((item.confidence || 0) * 100)} % · {formatSize(item.size)}</p></div>
+                    <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-semibold text-slate-900">{item.name}</p><span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${classificationStyle(item.classification)}`}>{classificationLabel(item.classification)}</span>{item.recommended_version && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">Version recommandée</span>}{item.selection_status === "older_alternative" && <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Ancienne version écartée</span>}{item.selection_status === "already_in_memory" && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-800">Déjà en mémoire</span>}{item.selection_status === "memory_version_conflict" && <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Version existante à archiver</span>}</div><p className="mt-1 truncate text-xs text-slate-500">{item.source_path}</p><p className="mt-2 text-xs text-slate-400">Confiance {Math.round((item.confidence || 0) * 100)} % · {formatSize(item.size)}{item.alternative_versions_count ? ` · ${item.alternative_versions_count} alternative(s)` : ""}</p></div>
                   </button>
                 ))}
               </div>
@@ -470,6 +506,11 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
                 {selected.preview_excerpt && <div className="mt-4 rounded-2xl bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Aperçu extrait</p><p className="mt-2 line-clamp-8 text-xs leading-5 text-slate-600">{selected.preview_excerpt}</p></div>}
                 <div className="mt-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Pourquoi cette catégorie ?</p><div className="mt-2 flex flex-wrap gap-2">{(selected.signals || []).map((signal, index) => <span key={`${signal.label}-${index}`} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600">{signal.label}</span>)}</div></div>
                 {selected.needs_ocr && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">Le document semble scanné. Relancez avec « OCR approfondi » avant toute validation.</div>}
+                {selected.selection_status === "older_alternative" && <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-700">Cette version a été écartée au profit d’une version finale mieux classée. Elle ne peut pas être indexée.</div>}
+                {selected.selection_status === "already_in_memory" && <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-800">Ce fichier exact est déjà présent dans Memory V2 : aucune nouvelle indexation n’est nécessaire.</div>}
+                {selected.selection_status === "memory_version_conflict" && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">Une version existe déjà pour ce projet et cette année. Vérifiez-la dans « Bibliothèque » et archivez-la seulement si la version recommandée doit réellement la remplacer.</div>}
+                {selected.legacy_doc && selected.legacy_doc_conversion?.ok && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs leading-5 text-emerald-800">Ancien Word converti avec succès sur une copie locale. Le `.doc` OneDrive original reste inchangé.</div>}
+                {selected.classification === "legacy_doc_requires_converter" && <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-800">Installez LibreOffice headless sur le serveur, puis relancez ce scan. Aucun traitement n’est effectué sur l’original.</div>}
                 {(selected.classification === "cir_final_confirmed" || selected.classification === "cir_probable") && <div className="mt-5 border-t border-slate-100 pt-5">
                   <p className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Database className="size-4 text-violet-700" />Validation avant Memory V2</p>
                   <div className="mt-3 space-y-3">
@@ -478,8 +519,8 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
                     <input value={identity.year} onChange={(event) => setIdentity({ ...identity, year: event.target.value })} placeholder="Année" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-violet-400" />
                   </div>
                   {fakeIsolation ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-800"><strong>Test isolé :</strong> les documents factices ne peuvent pas être envoyés dans la mémoire de production.</div> : <>
-                    <label className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-600"><input type="checkbox" checked={confirmIndex} onChange={(event) => setConfirmIndex(event.target.checked)} className="mt-0.5 size-4 accent-violet-700" /><span>Je confirme l’ajout à la bibliothèque Memory V2. Le fichier de la boîte Power Automate restera inchangé.</span></label>
-                    <button type="button" onClick={indexSelected} disabled={loading || !confirmIndex || selected.indexed} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"><Database className="size-4" />{selected.indexed ? "Déjà indexé" : "Valider, extraire et indexer"}</button>
+                    <label className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-600"><input type="checkbox" checked={confirmIndex} disabled={!selected.recommended_version || !selected.index_eligible} onChange={(event) => setConfirmIndex(event.target.checked)} className="mt-0.5 size-4 accent-violet-700 disabled:opacity-40" /><span>Je confirme l’identité, la version finale recommandée et le manifeste signé. Le fichier OneDrive restera inchangé.</span></label>
+                    <button type="button" onClick={indexSelected} disabled={loading || !confirmIndex || selected.indexed || !selected.recommended_version || !selected.index_eligible} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"><Database className="size-4" />{selected.indexed ? "Déjà indexé" : selected.recommended_version && selected.index_eligible ? "Valider, extraire et indexer" : "Version non indexable"}</button>
                   </>}
                 </div>}
                 {(selected.errors || []).length > 0 && <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">{selected.errors?.join(" · ")}</div>}

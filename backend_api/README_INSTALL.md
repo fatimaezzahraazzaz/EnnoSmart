@@ -14,6 +14,21 @@ Backend FastAPI avec :
 
 ## 1. Installation
 
+Sur un serveur Ubuntu/OVH, installe aussi LibreOffice headless si les archives
+contiennent d'anciens fichiers Word `.doc`. EnnoSmart convertit uniquement ses
+copies locales de travail ; les originaux SharePoint/OneDrive restent intacts :
+
+```bash
+sudo apt-get update
+sudo apt-get install -y libreoffice-headless
+```
+
+Puis configure, si nécessaire :
+
+```text
+LIBREOFFICE_BIN=/usr/bin/libreoffice
+```
+
 Dans PowerShell :
 
 ```powershell
