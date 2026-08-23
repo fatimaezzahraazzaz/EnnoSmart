@@ -25,7 +25,9 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
+import time
 import unicodedata
 from typing import Any, Iterable, Protocol
 from uuid import uuid4
@@ -128,6 +130,7 @@ class ImportFolderItem:
     etag: str = ""
     last_modified: str = ""
     mtime_ns: int = 0
+    file_attributes: int = 0
 
 
 class ReadOnlyImportProvider(Protocol):
@@ -153,6 +156,7 @@ class LocalReadOnlyImportProvider:
         self.source_scope = str(source_scope or "").strip("/\\")
         self.source_root = source_root.resolve()
         self.source_library_root = (source_library_root or source_root).resolve()
+        self.last_read_modes: dict[str, str] = {}
         if not self.source_root.is_dir():
             raise FileNotFoundError(f"Dossier de copies Power Automate introuvable : {self.source_root}")
 
@@ -175,6 +179,7 @@ class LocalReadOnlyImportProvider:
                     etag="",
                     last_modified=datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(timespec="seconds"),
                     mtime_ns=int(stat.st_mtime_ns),
+                    file_attributes=int(getattr(stat, "st_file_attributes", 0) or 0),
                 )
             )
         return items
@@ -186,7 +191,11 @@ class LocalReadOnlyImportProvider:
         except ValueError as exc:
             raise ValueError("Chemin hors du dossier d'import autorisé.") from exc
         stat = target.stat()
-        return {"size": int(stat.st_size), "mtime_ns": int(stat.st_mtime_ns)}
+        return {
+            "size": int(stat.st_size),
+            "mtime_ns": int(stat.st_mtime_ns),
+            "file_attributes": int(getattr(stat, "st_file_attributes", 0) or 0),
+        }
 
     def read_content(self, item: ImportFolderItem) -> bytes:
         target = (self.source_root / Path(item.source_path)).resolve()
@@ -196,7 +205,40 @@ class LocalReadOnlyImportProvider:
             raise ValueError("Chemin hors du dossier d'import autorisé.") from exc
         if not target.is_file():
             raise FileNotFoundError(item.source_path)
-        return target.read_bytes()
+        content, mode = _read_source_bytes_with_retry(target)
+        self.last_read_modes[item.external_id] = mode
+        return content
+
+
+def _read_bytes_direct(path: Path) -> bytes:
+    return path.read_bytes()
+
+
+def _read_bytes_via_local_copy(path: Path) -> bytes:
+    """Force l'hydratation Windows via une copie temporaire hors OneDrive."""
+    with tempfile.TemporaryDirectory(prefix="ennosmart_onedrive_read_") as directory:
+        local_copy = Path(directory) / _safe_name(path.name, "document")
+        shutil.copyfile(path, local_copy)
+        return local_copy.read_bytes()
+
+
+def _read_source_bytes_with_retry(path: Path) -> tuple[bytes, str]:
+    """Tolère les retours transitoires EINVAL des placeholders OneDrive."""
+    errors: list[OSError] = []
+    for attempt in range(3):
+        try:
+            return _read_bytes_direct(path), "direct"
+        except OSError as exc:
+            errors.append(exc)
+            if os.name == "nt":
+                try:
+                    return _read_bytes_via_local_copy(path), "windows_local_copy_fallback"
+                except OSError as fallback_exc:
+                    errors.append(fallback_exc)
+            if attempt < 2:
+                time.sleep(0.4 * (attempt + 1))
+    detail = " | ".join(str(error) for error in errors[-3:])
+    raise OSError(f"Lecture OneDrive impossible après 3 tentatives : {detail}")
 
 
 def assert_source_operation_allowed(operation: str) -> None:
@@ -937,6 +979,7 @@ def run_sharepoint_audit(
                         listed_signature = {
                             "size": int(source_item.size),
                             "mtime_ns": int(source_item.mtime_ns or 0),
+                            "file_attributes": int(source_item.file_attributes or 0),
                         }
                         item_payload.update({
                             "sha256": digest,
@@ -947,10 +990,14 @@ def run_sharepoint_audit(
                                 and (
                                     int(post_read_signature.get("size") or 0) != listed_signature["size"]
                                     or (
-                                        listed_signature["mtime_ns"] > 0
-                                        and int(post_read_signature.get("mtime_ns") or 0) != listed_signature["mtime_ns"]
+                                    listed_signature["mtime_ns"] > 0
+                                    and int(post_read_signature.get("mtime_ns") or 0) != listed_signature["mtime_ns"]
                                     )
+                                    or int(post_read_signature.get("file_attributes") or 0) != listed_signature["file_attributes"]
                                 )
+                            ),
+                            "source_read_mode": (getattr(provider, "last_read_modes", {}) or {}).get(
+                                source_item.external_id, "provider"
                             ),
                         })
                         cache_record_path = cache_dir / f"{digest}.json"
