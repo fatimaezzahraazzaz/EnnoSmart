@@ -1,22 +1,26 @@
 "use client"
 
 import {
+  type FormEvent,
   useEffect,
   useMemo,
   useState } from "react"
 import {
   AlertCircle,
   AlertTriangle,
+  ArrowRight,
   BrainCircuit,
   CheckCircle2,
   FileText,
   Loader2,
   Lock,
+  Plus,
   Play,
   RefreshCw,
   Search,
   Sparkles,
   Target,
+  Tags,
   TrendingUp,
   Upload,
   XCircle,
@@ -37,17 +41,32 @@ import { Tabs,
   TabsContent,
   TabsList,
   TabsTrigger } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 import {
+  createManualVerrou,
   getAccessToken,
   getDiagnosticLatest,
+  getDiagnosticCorpusReview,
   getDocuments,
   getProjects,
   getVerrous,
   importExistingDiagnostic,
   runDiagnostic,
   syncVerrous,
+  updateDiagnosticCorpusReview,
   updateVerrouDecision,
+  type DiagnosticCorpusReview,
   type DocumentRead,
   type ProjectRead,
   type VerrouRead,
@@ -100,6 +119,27 @@ const fullSteps = [
   "Agent EnnoDiagnostic",
   "Synchronisation",
 ]
+
+const diagnosticTabs = [
+  { value: "overview", label: "Vue d’ensemble" },
+  { value: "diagnostic", label: "Diagnostic CIR" },
+  { value: "controle-ia", label: "Contrôle IA" },
+  { value: "cir-precedent", label: "CIR précédent" },
+  { value: "comparaison-docs", label: "Comparaison docs" },
+  { value: "validation", label: "Validation" },
+  { value: "cir-final-consultant", label: "Déposer le CIR final" },
+] as const
+
+const diagnosticSubsections = [
+  { value: "objectif", label: "Objectif global", shortLabel: "Objectif" },
+  { value: "eligibilite", label: "Étude d’éligibilité", shortLabel: "Éligibilité" },
+  { value: "verrous", label: "Verrous & preuves", shortLabel: "Verrous" },
+  { value: "demarche", label: "Pertinence des démarches", shortLabel: "Démarche" },
+  { value: "resultats", label: "Résultats & métriques", shortLabel: "Résultats" },
+  { value: "parametres", label: "Paramètres & contraintes", shortLabel: "Paramètres" },
+] as const
+
+type DiagnosticSubsection = (typeof diagnosticSubsections)[number]["value"]
 
 
 function firstNonEmptyArray(...values: any[]) {
@@ -181,6 +221,12 @@ function formatScore(score: number | string | null | undefined) {
   return `${Math.round(normalized)}%`
 }
 
+function scorePercent(score: number | string | null | undefined) {
+  const value = Number(score)
+  if (!Number.isFinite(value)) return null
+  return Math.max(0, Math.min(100, value <= 1 ? value * 100 : value))
+}
+
 function formatVerrouScoreV124(score: number | string | null | undefined) {
   const normalized = normalizeVerrouScoreV124(score)
   if (normalized === null) return "—"
@@ -247,6 +293,16 @@ function decisionLabel(status: string) {
     default:
       return "À examiner"
   }
+}
+
+function isManualConsultantVerrou(verrou: VerrouRead) {
+  const sourceJson = verrou.source_json || {}
+  return Boolean(
+    sourceJson.manual_verrou ||
+      sourceJson.supplementary_verrou ||
+      (sourceJson.human_validated === true &&
+        sourceJson.automatic_verrou_creation === false)
+  )
 }
 
 function getSourceText(verrou: VerrouRead) {
@@ -528,6 +584,22 @@ function getVerrouExplanationSections(verrou: VerrouRead): VerrouExplanationSect
   const sourceJson = verrou.source_json || {}
   const sources = getSources(verrou)
 
+  if (isManualConsultantVerrou(verrou)) {
+    return {
+      detection:
+        cleanDisplayText(
+          sourceJson.manual_description ||
+            verrou.justification ||
+            sourceJson.manual_scholar_text ||
+            ""
+        ) ||
+        "Ce verrou a été ajouté explicitement par le consultant et sera traité comme un verrou retenu.",
+      uncertainty: "",
+      notSimpleEngineering: "",
+      evidence: "",
+    }
+  }
+
   const direct = sanitizeVerrouExplanation(
     sourceJson.consultant_explanation ||
       sourceJson.agent_reasoning ||
@@ -638,6 +710,17 @@ function consultantInterpretation(verrou: VerrouRead) {
 
 function getConsultantCheckText(verrou: VerrouRead) {
   const sourceJson = verrou.source_json || {}
+  if (isManualConsultantVerrou(verrou)) {
+    const keywords = Array.isArray(sourceJson.keywords)
+      ? sourceJson.keywords.filter(Boolean).join(", ")
+      : ""
+    return (
+      "Vérifier que la formulation décrit bien l’incertitude scientifique ou technique à documenter. " +
+      (keywords
+        ? `Les mots-clés transmis à EnnoScholar sont : ${keywords}.`
+        : "Ajoutez des mots-clés précis pour guider la recherche scientifique.")
+    )
+  }
   const scientificLock = cleanDisplayText(sourceJson.scientific_lock || "")
   const evidenceSummary = cleanDisplayText(sourceJson.evidence_summary || "")
 
@@ -1791,8 +1874,8 @@ function MarkdownTableV93({
     .filter((row) => row.some((cell) => cell.trim()))
 
   return (
-    <div className="overflow-x-auto rounded-xl border bg-white">
-      <table className="min-w-full divide-y divide-border text-sm">
+    <div className="max-w-full overflow-x-auto rounded-xl border bg-white">
+      <table className="w-full min-w-[720px] divide-y divide-border text-sm">
         <thead className="bg-muted/60">
           <tr>
             {header.map((cell, index) => (
@@ -1902,7 +1985,7 @@ function BackendSectionRendererV93({
     flushText()
 
     return (
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         {blocks.map((block, index) =>
           block.type === "table" ? (
             <MarkdownTableV93 key={index} lines={block.lines} projectId={projectId} sourceDocuments={sourceDocuments} enableSourceDocs={enableSourceDocs} />
@@ -1920,7 +2003,7 @@ function BackendSectionRendererV93({
     .filter(Boolean)
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
       {paragraphs.map((paragraph, index) => {
         const pLines = paragraph
           .split("\n")
@@ -1938,7 +2021,7 @@ function BackendSectionRendererV93({
         const bulletLines = pLines.filter((line) => /^[-*•]\s+/.test(line))
         if (bulletLines.length === pLines.length && bulletLines.length > 0) {
           return (
-            <ul key={index} className="list-disc space-y-2 pl-5 text-sm leading-7 text-muted-foreground">
+            <ul key={index} className="list-disc space-y-2 pl-5 text-sm leading-7 text-muted-foreground [overflow-wrap:anywhere]">
               {bulletLines.map((line, lineIndex) => (
                 <li key={lineIndex}>
                   <InlineMarkdownV93 text={line.replace(/^[-*•]\s+/, "")} />
@@ -1951,7 +2034,7 @@ function BackendSectionRendererV93({
         const numberedLines = pLines.filter((line) => /^\d+[.)]\s+/.test(line))
         if (numberedLines.length === pLines.length && numberedLines.length > 0) {
           return (
-            <ol key={index} className="list-decimal space-y-2 pl-5 text-sm leading-7 text-muted-foreground">
+            <ol key={index} className="list-decimal space-y-2 pl-5 text-sm leading-7 text-muted-foreground [overflow-wrap:anywhere]">
               {numberedLines.map((line, lineIndex) => (
                 <li key={lineIndex}>
                   <InlineMarkdownV93 text={line.replace(/^\d+[.)]\s+/, "")} />
@@ -1962,7 +2045,7 @@ function BackendSectionRendererV93({
         }
 
         return (
-          <p key={index} className="text-sm leading-7 text-muted-foreground whitespace-pre-wrap">
+          <p key={index} className="whitespace-pre-wrap text-sm leading-7 text-muted-foreground [overflow-wrap:anywhere]">
             <InlineMarkdownV93 text={paragraph} />
           </p>
         )
@@ -2198,11 +2281,11 @@ function BackendSectionCardV93({
           : ""
 
   return (
-    <Card className={toneClass}>
+    <Card className={`min-w-0 ${toneClass}`}>
       <CardHeader>
-        <CardTitle className="text-sm flex items-center gap-2">
-          {Icon ? <Icon className="size-4 text-brand" /> : null}
-          {title}
+        <CardTitle className="flex min-w-0 items-start gap-2 text-sm">
+          {Icon ? <Icon className="mt-0.5 size-4 shrink-0 text-brand" /> : null}
+          <span className="min-w-0 [overflow-wrap:anywhere]">{title}</span>
         </CardTitle>
         {description ? (
           <CardDescription className="text-xs">
@@ -2210,8 +2293,8 @@ function BackendSectionCardV93({
           </CardDescription>
         ) : null}
       </CardHeader>
-      <CardContent>
-        <div className="rounded-xl border bg-white/80 p-4">
+      <CardContent className="min-w-0">
+        <div className="min-w-0 rounded-xl border bg-white/80 p-3 sm:p-4">
           {text?.trim() ? (
             structuredSection && projectId ? (
               <InlineSourcedSectionV194
@@ -2404,7 +2487,7 @@ function FrascatiAnalysisCard({
   }
 
   return (
-    <Card className="overflow-hidden border-brand/20 bg-gradient-to-br from-brand/5 via-white to-white">
+    <Card className="min-w-0 overflow-hidden border-brand/20 bg-gradient-to-br from-brand/5 via-white to-white">
       <CardHeader className="border-b bg-white/70">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="space-y-1">
@@ -2941,8 +3024,8 @@ function UnifiedEligibilityStudyCardV191({
   return (
     <Card className="overflow-hidden border-brand/20 bg-gradient-to-br from-brand/5 via-white to-white">
       <CardHeader className="border-b bg-white/70">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
             <CardTitle className="flex items-center gap-2 text-base">
               <BrainCircuit className="size-5 text-brand" />
               Étude d’éligibilité
@@ -2957,8 +3040,8 @@ function UnifiedEligibilityStudyCardV191({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-5 pt-5">
-        <div className="rounded-xl border border-brand/20 bg-white p-5">
+      <CardContent className="min-w-0 space-y-5 pt-5">
+        <div className="min-w-0 rounded-xl border border-brand/20 bg-white p-4 sm:p-5">
           <p className="text-sm font-semibold text-foreground">Conclusion globale d’éligibilité</p>
           <p className="mt-3 text-sm leading-7 text-foreground">
             {sourcedNarrativeParts.length > 0 ? sourcedNarrativeParts.map((claim: any, index: number) => (
@@ -3402,6 +3485,30 @@ async function getPreviousCirFinals(projectId: number) {
   return Array.isArray(data?.items) ? data.items : []
 }
 
+async function getCirFinalConsultantStatus(projectId: number) {
+  const token = getAccessToken()
+
+  if (!token) return false
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/projects/${projectId}/cir-final-consultant/latest`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    )
+
+    if (!response.ok) return false
+
+    const data = await response.json().catch(() => null)
+    return Boolean(data && data?.status !== "empty")
+  } catch {
+    return false
+  }
+}
+
 async function getDocumentComparePairs(projectId: number, force = false) {
   const token = getAccessToken()
 
@@ -3759,6 +3866,13 @@ async function postDiagnosticAction(projectId: number, action: "prepare-sources"
   return data
 }
 
+function formatDocumentSize(value: number) {
+  const bytes = Math.max(0, Number(value || 0))
+  if (bytes < 1024) return `${bytes} o`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} Ko`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`
+}
+
 async function compareCurrentWithPreviousCir(projectId: number) {
   const token = getAccessToken()
 
@@ -3814,14 +3928,21 @@ async function getPreviousCirComparisonLatest(projectId: number) {
   return data
 }
 
-export function DiagnosisPage() {
+export function DiagnosisPage(
+  { onOpenScholar }: { onOpenScholar?: () => void } = {}
+) {
   const [activeTab, setActiveTab] = useState("overview")
+  const [diagnosticSection, setDiagnosticSection] = useState<DiagnosticSubsection>("objectif")
   const [loading, setLoading] = useState(true)
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null)
   const [error, setError] = useState("")
   const [project, setProject] = useState<ProjectRead | null>(null)
   const [projects, setProjects] = useState<ProjectRead[]>([])
   const [documents, setDocuments] = useState<DocumentRead[]>([])
+  const [diagnosticCorpusReview, setDiagnosticCorpusReview] = useState<DiagnosticCorpusReview | null>(null)
+  const [corpusReviewOpen, setCorpusReviewOpen] = useState(false)
+  const [corpusReviewSaving, setCorpusReviewSaving] = useState(false)
+  const [corpusKeepIds, setCorpusKeepIds] = useState<Set<number>>(new Set())
   const [verrous, setVerrous] = useState<VerrouRead[]>([])
   const [diagnosticBundle, setDiagnosticBundle] = useState<any>(null)
   const [prepareReport, setPrepareReport] = useState<any>(null)
@@ -3843,6 +3964,14 @@ export function DiagnosisPage() {
   const [scholarBundle, setScholarBundle] = useState<any>(null)
   const [articles, setArticles] = useState<any[]>([])
   const [scholarLoading, setScholarLoading] = useState(false)
+  const [cirFinalRegistered, setCirFinalRegistered] = useState(false)
+  const [manualFormOpen, setManualFormOpen] = useState(false)
+  const [manualTitle, setManualTitle] = useState("")
+  const [manualDescription, setManualDescription] = useState("")
+  const [manualKeywords, setManualKeywords] = useState("")
+  const [manualSubmitting, setManualSubmitting] = useState(false)
+  const [manualFeedback, setManualFeedback] = useState("")
+  const [manualFormError, setManualFormError] = useState("")
 
   const [runningMode, setRunningMode] = useState<RunMode>(null)
 
@@ -4214,6 +4343,37 @@ export function DiagnosisPage() {
 
 
   const decisions = useMemo(() => countByDecision(verrous), [verrous])
+  const decisionSegments = useMemo(() => [
+    {
+      key: "garde",
+      label: "Retenus",
+      count: decisions.garde,
+      color: "bg-success",
+      dot: "bg-success",
+    },
+    {
+      key: "reformuler",
+      label: "À consolider",
+      count: decisions.reformuler,
+      color: "bg-brand",
+      dot: "bg-brand",
+    },
+    {
+      key: "rejete",
+      label: "Non retenus",
+      count: decisions.rejete,
+      color: "bg-destructive/75",
+      dot: "bg-destructive/75",
+    },
+    {
+      key: "en_attente",
+      label: "En attente",
+      count: decisions.en_attente,
+      color: "bg-warning",
+      dot: "bg-warning",
+    },
+  ], [decisions])
+  const frascatiPercent = scorePercent(frascatiScore)
   const sourceDocuments = useProjectSourceDocuments(project?.id)
 
   const backendMarkdownV93 = useMemo(() => {
@@ -4334,6 +4494,34 @@ export function DiagnosisPage() {
 
   const hasDiagnostic = Boolean(backendMarkdownV93 || latestRun || verrousForDisplay.length > 0 || reportMarkdown)
 
+  const pendingImprovementDocuments =
+    diagnosticCorpusReview?.pending_improvement_documents || []
+  const diagnosticDocumentsCount =
+    diagnosticCorpusReview?.diagnostic_documents.length ?? documents.length
+
+  const applyDiagnosticCorpusReview = (review: DiagnosticCorpusReview | null) => {
+    setDiagnosticCorpusReview(review)
+    const pending = review?.pending_improvement_documents || []
+    setCorpusKeepIds(new Set())
+    setCorpusReviewOpen(pending.length > 0)
+  }
+
+  const reviewedVerrousCount =
+    decisions.garde + decisions.reformuler + decisions.rejete
+  const pendingReviewCount = decisions.en_attente
+  const reviewProgress =
+    verrousForDisplay.length > 0
+      ? Math.round((reviewedVerrousCount / verrousForDisplay.length) * 100)
+      : 0
+
+  const nextDiagnosticAction = !hasDiagnostic
+    ? "Préparer les sources puis lancer EnnoDiagnostic"
+    : pendingReviewCount > 0
+      ? `Examiner ${pendingReviewCount} verrou(s) encore en attente`
+      : selectedVerrousForScholar.length > 0
+        ? `Passer ${selectedVerrousForScholar.length} verrou(s) retenu(s) à EnnoScholar`
+        : "Relire la synthèse et finaliser les décisions"
+
   const loadData = async () => {
     // V12 : ouverture rapide SANS vider les anciens résultats.
     // Le correctif V11 libérait l’interface trop tôt et faisait un reset des states,
@@ -4359,6 +4547,7 @@ export function DiagnosisPage() {
         setDiagnosticBundle(null)
         setScholarBundle(null)
         setArticles([])
+        setCirFinalRegistered(false)
         setPreviousCirList([])
         setDocumentCompareIndex(null)
         setPreviousCirComparisonReport(null)
@@ -4382,9 +4571,10 @@ export function DiagnosisPage() {
       // Le diagnostic officiel contient déjà les verrous décisionnels. L'ancien
       // chargement appelait /verrous en parallèle et relisait deux fois le même
       // gros rapport PostgreSQL/fichier.
-      const [documentsData, diagnosticData] = await Promise.all([
+      const [documentsData, diagnosticData, corpusReviewData] = await Promise.all([
         getDocuments(selectedProject.id).catch(() => []),
         getDiagnosticLatest(selectedProject.id).catch(() => null),
+        getDiagnosticCorpusReview(selectedProject.id).catch(() => null),
       ])
 
       const diagnosticVerrous =
@@ -4394,7 +4584,12 @@ export function DiagnosisPage() {
       setVerrous(Array.isArray(diagnosticVerrous) ? diagnosticVerrous : [])
       setDocuments(Array.isArray(documentsData) ? documentsData : [])
       setDiagnosticBundle(diagnosticData)
+      applyDiagnosticCorpusReview(corpusReviewData)
       setLoading(false)
+
+      void getCirFinalConsultantStatus(selectedProject.id)
+        .then(setCirFinalRegistered)
+        .catch(() => setCirFinalRegistered(false))
 
       // Données secondaires : elles ne bloquent pas l’affichage du diagnostic.
       Promise.all([
@@ -4426,6 +4621,57 @@ export function DiagnosisPage() {
   useEffect(() => {
     loadData()
   }, [])
+
+  const submitManualVerrou = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!project || manualSubmitting) return
+
+    const title = manualTitle.trim()
+    const description = manualDescription.trim()
+    const keywords = Array.from(
+      new Set(
+        manualKeywords
+          .split(/[,;\n]+/)
+          .map((keyword) => keyword.trim())
+          .filter(Boolean)
+      )
+    ).slice(0, 20)
+
+    if (title.length < 5) {
+      setManualFormError("Le titre doit contenir au moins 5 caractères.")
+      return
+    }
+
+    setManualSubmitting(true)
+    setManualFormError("")
+    setManualFeedback("")
+    try {
+      const created = await createManualVerrou(project.id, {
+        title,
+        description,
+        keywords,
+      })
+      setVerrous((current) => {
+        const withoutDuplicate = current.filter((item) => item.id !== created.id)
+        return [created, ...withoutDuplicate]
+      })
+      setManualTitle("")
+      setManualDescription("")
+      setManualKeywords("")
+      setManualFormOpen(false)
+      setManualFeedback(
+        `« ${created.title} » est retenu et prêt pour EnnoScholar.`
+      )
+    } catch (err) {
+      setManualFormError(
+        err instanceof Error
+          ? err.message
+          : "Impossible d’ajouter le verrou manuel."
+      )
+    } finally {
+      setManualSubmitting(false)
+    }
+  }
 
   const currentSteps =
     runningMode === "prepare"
@@ -4522,6 +4768,64 @@ export function DiagnosisPage() {
     }
   }
 
+  const prepareSourcesAndRunDiagnostic = async () => {
+    if (!project) return
+
+    setError("")
+    setActiveTab("overview")
+    startProgress("full")
+
+    try {
+      const prepared = await postDiagnosticAction(project.id, "prepare-sources")
+      setPrepareReport(prepared)
+      const runResult = await postDiagnosticAction(project.id, "run-agent")
+      const runId = extractRunId(runResult)
+      if (runId) {
+        await syncVerrous(project.id, runId).catch(() => null)
+      }
+      await loadData()
+      stopProgress(true)
+    } catch (err) {
+      stopProgress(false)
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Impossible de préparer puis relancer EnnoDiagnostic."
+      )
+    } finally {
+      setTimeout(() => setRunningMode(null), 700)
+    }
+  }
+
+  const saveCorpusReview = async (runAfterSave: boolean) => {
+    if (!project || corpusReviewSaving) return
+    setCorpusReviewSaving(true)
+    setError("")
+    try {
+      const updated = await updateDiagnosticCorpusReview(
+        project.id,
+        pendingImprovementDocuments.map((document) => ({
+          document_id: document.id,
+          keep: corpusKeepIds.has(document.id),
+        })),
+      )
+      setDiagnosticCorpusReview(updated)
+      setCorpusReviewOpen(false)
+      setCorpusKeepIds(new Set())
+      if (runAfterSave) {
+        await prepareSourcesAndRunDiagnostic()
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Impossible d’enregistrer la sélection du corpus Diagnostic."
+      )
+    } finally {
+      setCorpusReviewSaving(false)
+    }
+  }
+
   const importExisting = async () => {
     if (!project) return
 
@@ -4555,6 +4859,8 @@ export function DiagnosisPage() {
     setLoading(true)
     setError("")
     setPrepareReport(null)
+    setCorpusReviewOpen(false)
+    setDiagnosticCorpusReview(null)
 
     try {
       const selectedProject = projects.find((item) => item.id === projectId) || null
@@ -4568,6 +4874,7 @@ export function DiagnosisPage() {
       setSelectedPairIndex(null)
       setScholarBundle(null)
       setArticles([])
+      setCirFinalRegistered(false)
       setPreviousCirList([])
       setPreviousCirComparisonReport(null)
       setCirPreviousComparisonReport(null)
@@ -4575,9 +4882,10 @@ export function DiagnosisPage() {
       const previousYear = Number(selectedProject?.year)
       setPreviousCirYear(Number.isFinite(previousYear) ? String(previousYear - 1) : "")
 
-      const [documentsData, diagnosticData] = await Promise.all([
+      const [documentsData, diagnosticData, corpusReviewData] = await Promise.all([
         getDocuments(projectId).catch(() => []),
         getDiagnosticLatest(projectId).catch(() => null),
+        getDiagnosticCorpusReview(projectId).catch(() => null),
       ])
 
       const diagnosticVerrous =
@@ -4587,7 +4895,12 @@ export function DiagnosisPage() {
       setVerrous(Array.isArray(diagnosticVerrous) ? diagnosticVerrous : [])
       setDocuments(documentsData)
       setDiagnosticBundle(diagnosticData)
+      applyDiagnosticCorpusReview(corpusReviewData)
       setLoading(false)
+
+      void getCirFinalConsultantStatus(projectId)
+        .then(setCirFinalRegistered)
+        .catch(() => setCirFinalRegistered(false))
 
       Promise.all([
         getScholarLatest(projectId).catch(() => null),
@@ -4969,11 +5282,34 @@ export function DiagnosisPage() {
 
   if (loading) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
-        <Card>
-          <CardContent className="p-8 flex items-center justify-center gap-3 text-muted-foreground">
-            <Loader2 className="size-5 animate-spin" />
-            Chargement du diagnostic depuis FastAPI...
+      <div
+        className="workspace-page-wide min-w-0 space-y-5 pb-8"
+        aria-busy="true"
+        aria-label="Chargement d’EnnoDiagnostic"
+      >
+        <Card className="overflow-hidden">
+          <CardContent className="space-y-5 p-5 sm:p-6">
+            <div className="flex items-center gap-3">
+              <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand">
+                <BrainCircuit className="size-5" aria-hidden="true" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-foreground">Ouverture d’EnnoDiagnostic</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Le projet s’affiche dès que la synthèse principale est prête.
+                </p>
+              </div>
+              <Loader2 className="size-4 animate-spin text-brand" aria-hidden="true" />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {[0, 1, 2].map((item) => (
+                <div key={item} className="space-y-2 rounded-xl border p-4">
+                  <div className="h-3 w-24 rounded bg-muted motion-safe:animate-pulse" />
+                  <div className="h-7 w-16 rounded bg-muted motion-safe:animate-pulse" />
+                  <div className="h-3 w-full rounded bg-muted/70 motion-safe:animate-pulse" />
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -4998,68 +5334,237 @@ export function DiagnosisPage() {
   }
 
   return (
-    <div className="workspace-page-wide space-y-6">
+    <div className="workspace-page-wide min-w-0 space-y-4 pb-24 sm:space-y-5 sm:pb-7 lg:space-y-6 lg:pb-8">
+      <Dialog
+        open={corpusReviewOpen}
+        onOpenChange={(open) => {
+          // Cette vérification protège le corpus. La fermeture passe par une
+          // des deux actions explicites du pied de dialogue.
+          if (open) setCorpusReviewOpen(true)
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl" showCloseButton={false}>
+          <DialogHeader>
+            <div className="flex items-start gap-3 pr-2">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-warning/12 text-warning">
+                <AlertTriangle className="size-5" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <DialogTitle>Vérifier les documents avant le diagnostic</DialogTitle>
+                <DialogDescription className="mt-2 leading-6">
+                  Vous avez ajouté {pendingImprovementDocuments.length} document(s) depuis
+                  EnnoAmélioration. Ils sont exclus du Diagnostic par défaut afin d’éviter
+                  d’analyser un CIR ou un texte non souhaité.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="max-h-[45dvh] space-y-2 overflow-y-auto pr-1" role="list">
+            {pendingImprovementDocuments.map((document) => {
+              const kept = corpusKeepIds.has(document.id)
+              return (
+                <div
+                  key={document.id}
+                  className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center"
+                  role="listitem"
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                    <FileText className="size-4" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground" title={document.filename}>
+                      {document.filename}
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span>{formatDocumentSize(document.file_size)}</span>
+                      <Badge variant={kept ? "default" : "outline"} className="h-5 px-2 text-[10px]">
+                        {kept ? "Gardé pour Diagnostic" : "En attente"}
+                      </Badge>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant={kept ? "default" : "outline"}
+                    className="min-h-11 shrink-0 sm:min-h-9"
+                    aria-pressed={kept}
+                    disabled={corpusReviewSaving}
+                    onClick={() => {
+                      setCorpusKeepIds((current) => {
+                        const next = new Set(current)
+                        if (next.has(document.id)) next.delete(document.id)
+                        else next.add(document.id)
+                        return next
+                      })
+                    }}
+                  >
+                    {kept ? <CheckCircle2 className="size-4" /> : <Plus className="size-4" />}
+                    {kept ? "Gardé" : "Garder"}
+                  </Button>
+                </div>
+              )
+            })}
+          </div>
+
+          <p className="text-xs leading-5 text-muted-foreground" role="status" aria-live="polite">
+            {diagnosticDocumentsCount + corpusKeepIds.size === 0
+              ? "Aucune source Diagnostic ne resterait disponible. Gardez au moins un document avant de relancer."
+              : corpusKeepIds.size > 0
+                ? `${corpusKeepIds.size} document(s) seront ajoutés au corpus Diagnostic.`
+                : "Aucun de ces documents ne sera utilisé par le Diagnostic."}
+          </p>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              disabled={corpusReviewSaving}
+              onClick={() => void saveCorpusReview(false)}
+            >
+              Continuer sans relancer
+            </Button>
+            <Button
+              type="button"
+              className="min-h-11 bg-brand hover:bg-brand/90"
+              disabled={corpusReviewSaving || diagnosticDocumentsCount + corpusKeepIds.size === 0}
+              onClick={() => void saveCorpusReview(true)}
+            >
+              {corpusReviewSaving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Play className="size-4" />
+              )}
+              Préparer les sources puis relancer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <PageHeader
         className="module-header module-diagnostic"
         eyebrow="Agent de qualification"
         title="EnnoDiagnostic"
         description="Qualifiez les verrous scientifiques et techniques, contrôlez les preuves, puis validez le diagnostic avec une décision humaine."
         icon={BrainCircuit}
-        context={<><ContextBadge>{project.organisme} · {project.project_name} · {project.year}</ContextBadge><ContextBadge>{project.domain_label || "Domaine non renseigné"}</ContextBadge><ContextBadge>{documents.length} document(s)</ContextBadge></>}
-        actions={<>
-          {projects.length > 1 && (
-            <select
-              value={project.id}
-              onChange={(event) => changeProject(Number(event.target.value))}
-              className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+        context={
+          <>
+            <ContextBadge
+              className="max-w-full"
+              label="Projet"
+              value={`${project.organisme} · ${project.project_name} · ${project.year}`}
+            />
+            <ContextBadge
+              className="max-w-full"
+              label="Domaine"
+              value={project.domain_label || "Non renseigné"}
+            />
+            <ContextBadge>{diagnosticDocumentsCount} source(s) Diagnostic</ContextBadge>
+          </>
+        }
+        actions={
+          <div className="grid w-full min-w-0 gap-2 sm:w-[32rem] sm:grid-cols-2 xl:w-[34rem] 2xl:flex 2xl:w-auto">
+            {projects.length > 1 && (
+              <select
+                aria-label="Changer de projet"
+                value={project.id}
+                onChange={(event) => changeProject(Number(event.target.value))}
+                className="min-h-11 min-w-0 rounded-md border border-border bg-background px-3 text-sm sm:col-span-2 sm:min-h-9 2xl:col-span-1 2xl:w-72"
+                disabled={running}
+              >
+                {projects.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.organisme} — {item.project_name} — {item.year}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <Button
+              variant="outline"
+              className="min-h-11 w-full sm:min-h-9 2xl:w-auto"
+              onClick={prepareSources}
               disabled={running}
             >
-              {projects.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.organisme} — {item.project_name} — {item.year}
-                </option>
-              ))}
-            </select>
-          )}
+              {runningMode === "prepare" ? (
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <Search data-icon="inline-start" />
+              )}
+              Préparer les sources
+            </Button>
 
-          <Button
-            variant="outline"
-            onClick={prepareSources}
-            disabled={running}
-          >
-            {runningMode === "prepare" ? (
-              <Loader2 className="animate-spin" data-icon="inline-start" />
-            ) : (
-              <Search data-icon="inline-start" />
-            )}
-            Préparer les sources
-          </Button>
+            <Button
+              className="min-h-11 w-full sm:min-h-9 2xl:w-auto"
+              onClick={runAgentOnly}
+              disabled={running}
+            >
+              {runningMode === "agent" ? (
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <Play data-icon="inline-start" />
+              )}
+              Lancer EnnoDiagnostic
+            </Button>
 
-          <Button
-            onClick={runAgentOnly}
-            disabled={running}
-          >
-            {runningMode === "agent" ? (
-              <Loader2 className="animate-spin" data-icon="inline-start" />
-            ) : (
-              <Play data-icon="inline-start" />
-            )}
-            Lancer EnnoDiagnostic
-          </Button>
-
-          <Button variant="ghost" onClick={loadData} disabled={running}>
-            <RefreshCw data-icon="inline-start" />
-            Actualiser
-          </Button>
-        </>}
+            <Button
+              variant="ghost"
+              className="min-h-11 w-full sm:col-span-2 sm:min-h-9 2xl:col-span-1 2xl:w-auto"
+              onClick={loadData}
+              disabled={running}
+            >
+              <RefreshCw data-icon="inline-start" />
+              Actualiser
+            </Button>
+          </div>
+        }
       />
 
-      <WorkflowSteps steps={[
-        { label: "Sources", detail: "Préparation", status: hasDiagnostic ? "complete" : runningMode === "prepare" ? "current" : "upcoming" },
-        { label: "Diagnostic", detail: "Analyse IA", status: hasDiagnostic ? "complete" : running && runningMode !== "prepare" ? "current" : "upcoming" },
-        { label: "Contrôle", detail: "Preuves", status: hasDiagnostic ? "current" : "upcoming" },
-        { label: "Validation", detail: "Consultant", status: "upcoming" },
-      ]} />
+      <WorkflowSteps
+        className="snap-x snap-mandatory"
+        steps={[
+          {
+            label: "Sources",
+            detail: "Préparation",
+            status: hasDiagnostic
+              ? "complete"
+              : runningMode === "prepare"
+                ? "current"
+                : "upcoming",
+          },
+          {
+            label: "Diagnostic",
+            detail: "Analyse IA",
+            status: hasDiagnostic
+              ? "complete"
+              : running && runningMode !== "prepare"
+                ? "current"
+                : "upcoming",
+          },
+          {
+            label: "Contrôle",
+            detail:
+              hasDiagnostic && pendingReviewCount === 0
+                ? "Revue terminée"
+                : "Preuves & décisions",
+            status:
+              hasDiagnostic && pendingReviewCount === 0
+                ? "complete"
+                : hasDiagnostic
+                  ? "current"
+                  : "upcoming",
+          },
+          {
+            label: "Validation",
+            detail: cirFinalRegistered ? "CIR final archivé" : "CIR final à déposer",
+            status: cirFinalRegistered
+              ? "complete"
+              : hasDiagnostic && pendingReviewCount === 0
+                ? "current"
+                : "upcoming",
+          },
+        ]}
+      />
 
       {running && (
         <StatusNotice
@@ -5079,9 +5584,9 @@ export function DiagnosisPage() {
 
       {error && (
         <Card className="border-destructive/30 bg-destructive/10">
-          <CardContent className="p-4 flex items-start gap-3 text-destructive">
-            <AlertCircle className="size-5 mt-0.5" />
-            <div>
+          <CardContent className="flex items-start gap-3 p-4 text-destructive">
+            <AlertCircle className="mt-0.5 size-5 shrink-0" />
+            <div className="min-w-0 [overflow-wrap:anywhere]">
               <p className="text-sm font-semibold">Erreur EnnoDiagnostic</p>
               <p className="text-xs mt-1">{error}</p>
             </div>
@@ -5100,12 +5605,12 @@ export function DiagnosisPage() {
               Prépare d’abord les sources, puis lance EnnoDiagnostic.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={prepareSources}>
+          <CardContent className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
+            <Button className="min-h-11 w-full sm:min-h-9 sm:w-auto" variant="outline" onClick={prepareSources}>
               <Search className="size-4 mr-2" />
               Préparer les sources
             </Button>
-            <Button className="bg-brand hover:bg-brand/90" onClick={runAgentOnly}>
+            <Button className="min-h-11 w-full bg-brand hover:bg-brand/90 sm:min-h-9 sm:w-auto" onClick={runAgentOnly}>
               <Play className="size-4 mr-2" />
               Lancer EnnoDiagnostic
             </Button>
@@ -5113,492 +5618,1179 @@ export function DiagnosisPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Documents extraits</p>
-            <p className="text-2xl font-bold text-foreground mt-1">
-              {pipelineStats?.documents_loaded_count ?? "—"}
+      <section className="grid min-w-0 gap-4 xl:grid-cols-[0.92fr_1.08fr_1.35fr]">
+        <Card className="overflow-hidden rounded-2xl border-brand/15 bg-gradient-to-br from-white via-white to-brand/[0.035] shadow-sm">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Défendabilité R&D
+                </p>
+                <div className="mt-3 flex flex-wrap items-end gap-3">
+                  <span className="text-4xl font-semibold tracking-[-0.05em] text-foreground">
+                    {formatScore(frascatiScore)}
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={`mb-1 ${riskClass(frascatiRisk)}`}
+                  >
+                    Risque {frascatiRisk || "—"}
+                  </Badge>
+                </div>
+              </div>
+
+              <span className="grid size-11 shrink-0 place-items-center rounded-2xl border border-brand/15 bg-brand/[0.06] text-brand">
+                <TrendingUp className="size-5" aria-hidden="true" />
+              </span>
+            </div>
+
+            <p className="mt-4 max-w-sm text-xs leading-5 text-muted-foreground">
+              Indice interne de défendabilité documentaire. La décision finale reste celle du consultant CIR.
             </p>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Raw : {prepareReport?.documents_used_count ?? "—"}
-            </p>
+
+            <div className="mt-5" role="img" aria-label={`Défendabilité documentaire : ${formatScore(frascatiScore)}`}>
+              <div className="relative h-2.5 overflow-hidden rounded-full bg-muted">
+                <div className="absolute inset-y-0 left-1/2 w-px bg-foreground/25" aria-hidden="true" />
+                <div className="absolute inset-y-0 left-3/4 w-px bg-foreground/35" aria-hidden="true" />
+                {frascatiPercent !== null && (
+                  <div
+                    className="h-full rounded-full bg-brand motion-safe:transition-[width] motion-safe:duration-500"
+                    style={{ width: `${frascatiPercent}%` }}
+                  />
+                )}
+              </div>
+              <div className="mt-1.5 flex justify-between text-[9px] text-muted-foreground" aria-hidden="true">
+                <span>À documenter</span>
+                <span>50</span>
+                <span>75</span>
+                <span>Solide</span>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Indice de défendabilité R&D</p>
-            <p className="text-2xl font-bold text-warning mt-1">
-              {formatScore(frascatiScore)}
-            </p>
-            <Badge variant="outline" className={`text-xs mt-1 ${riskClass(frascatiRisk)}`}>
-              Risque {frascatiRisk || "—"}
-            </Badge>
-          </CardContent>
-        </Card>
+        <Card className="overflow-hidden rounded-2xl border-border bg-card shadow-sm">
+          <CardContent className="p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Revue consultant
+                </p>
+                <div className="mt-3 flex items-baseline gap-2">
+                  <span className="text-3xl font-semibold tracking-[-0.04em] text-foreground">
+                    {reviewedVerrousCount}/{verrousForDisplay.length || 0}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    verrou(s) examiné(s)
+                  </span>
+                </div>
+              </div>
 
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Score IA</p>
-            <p className="text-2xl font-bold text-success mt-1">
-              {formatScore(aiScore)}
-            </p>
-            <Badge variant="outline" className={`text-xs mt-1 ${riskClass(aiRisk)}`}>
-              {aiRisk || "—"}
-            </Badge>
-          </CardContent>
-        </Card>
+              <Badge
+                variant="outline"
+                className={
+                  pendingReviewCount === 0
+                    ? "border-success/30 bg-success/10 text-success"
+                    : "border-warning/30 bg-warning/10 text-warning"
+                }
+              >
+                {reviewProgress}%
+              </Badge>
+            </div>
 
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">CIR précédent</p>
-            <p className="text-2xl font-bold text-brand mt-1">
-              {noveltyPercent(cirMemoryNoveltyScore)}
-            </p>
-            <Badge
-              variant="outline"
-              className={`text-xs mt-1 ${comparisonBadgeClass(cirMemorySignal)}`}
+            <div
+              className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-muted"
+              role="img"
+              aria-label={decisionSegments.map((segment) => `${segment.label} : ${segment.count}`).join(" ; ")}
             >
-              {cirMemoryComparisons.length > 0
-                ? "Comparé"
-                : previousCirAvailable
-                  ? "Disponible"
-                  : "Absent"}
-            </Badge>
+              {decisionSegments.map((segment) =>
+                segment.count > 0 ? (
+                  <span
+                    key={segment.key}
+                    className={`${segment.color} h-full motion-safe:transition-[width] motion-safe:duration-500`}
+                    style={{ width: `${(segment.count / Math.max(verrousForDisplay.length, 1)) * 100}%` }}
+                  />
+                ) : null
+              )}
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              {decisionSegments.map((segment) => (
+                <button
+                  key={segment.key}
+                  type="button"
+                  className="flex min-h-10 items-center justify-between gap-2 rounded-lg border bg-background px-3 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => {
+                    setActiveTab("diagnostic")
+                    setDiagnosticSection("verrous")
+                  }}
+                  aria-label={`${segment.label} : ${segment.count}. Ouvrir les verrous.`}
+                >
+                  <span className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
+                    <span className={`size-2 shrink-0 rounded-full ${segment.dot}`} aria-hidden="true" />
+                    <span className="truncate">{segment.label}</span>
+                  </span>
+                  <span className="text-sm font-semibold tabular-nums text-foreground">{segment.count}</span>
+                </button>
+              ))}
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Paires docs</p>
-            <p className="text-2xl font-bold text-brand mt-1">
-              {docComparePairsCount || "—"}
+        <Card className="overflow-hidden rounded-2xl border-border bg-card shadow-sm">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Dossier & contrôles
+                </p>
+                <div className="mt-3 flex items-baseline gap-2">
+                  <span className="text-3xl font-semibold tracking-[-0.04em] text-foreground">
+                    {pipelineStats?.documents_loaded_count ?? documents.length ?? 0}
+                  </span>
+                  <span className="text-xs text-muted-foreground">document(s) extrait(s)</span>
+                </div>
+              </div>
+
+              <span className="grid size-11 shrink-0 place-items-center rounded-2xl border bg-muted/35 text-muted-foreground">
+                <FileText className="size-5" aria-hidden="true" />
+              </span>
+            </div>
+
+            <div className="mt-5 grid grid-cols-3 divide-x divide-border">
+              <div className="pr-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  Contrôle IA
+                </p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{formatScore(aiScore)}</p>
+                <p className="text-[10px] text-muted-foreground">{aiRisk || "—"}</p>
+              </div>
+
+              <div className="px-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  CIR précédent
+                </p>
+                <p className="mt-1 text-sm font-semibold text-foreground">
+                  {noveltyPercent(cirMemoryNoveltyScore)}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {cirMemoryComparisons.length > 0
+                    ? "Comparé"
+                    : previousCirAvailable
+                      ? "Disponible"
+                      : "Absent"}
+                </p>
+              </div>
+
+              <div className="pl-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  Comparaison docs
+                </p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{docComparePairsCount || 0}</p>
+                <p className="text-[10px] text-muted-foreground">paire(s)</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {hasDiagnostic && selectedVerrousForScholar.length > 0 ? (
+        <Card className="overflow-hidden rounded-2xl border-brand/20 bg-gradient-to-r from-brand/[0.055] via-white to-white shadow-sm">
+          <CardContent className="p-0">
+            <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_240px]">
+              <div className="min-w-0 p-5">
+                <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
+                  <div className="flex items-start gap-3">
+                    <span className="grid size-11 shrink-0 place-items-center rounded-2xl border border-brand/20 bg-white text-brand shadow-sm">
+                      <Search className="size-5" aria-hidden="true" />
+                    </span>
+
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand">
+                        Relais Agent 1 → Agent 2
+                      </p>
+                      <h2 className="mt-1 text-base font-semibold text-foreground">
+                        Passage vers EnnoScholar
+                      </h2>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Seuls les verrous retenus par le consultant sont transmis à l’agent scientifique.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid min-w-0 gap-2 md:grid-cols-3">
+                    {selectedVerrousForScholar.slice(0, 3).map((verrou, index) => (
+                      <div
+                        key={verrou.id}
+                        className="flex min-w-0 items-start gap-2 rounded-xl border border-brand/10 bg-white/90 p-3"
+                      >
+                        <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-success/10 text-[10px] font-semibold text-success">
+                          ✓
+                        </span>
+                        <div className="min-w-0">
+                          <p className="line-clamp-2 text-xs font-medium leading-5 text-foreground">
+                            {verrou.title}
+                          </p>
+                          <p className="mt-1 text-[10px] text-muted-foreground">
+                            V{index + 1} · Score {formatVerrouScoreV124(verrou.score)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-center gap-2 border-t border-brand/15 bg-white/65 p-5 lg:border-l lg:border-t-0">
+                <Button
+                  className="w-full bg-brand hover:bg-brand/90"
+                  disabled={scholarLoading || pendingReviewCount > 0}
+                  onClick={async () => {
+                    if (!scholarRunId) {
+                      await launchEnnoScholar()
+                    }
+                    onOpenScholar?.()
+                  }}
+                >
+                  {scholarLoading ? (
+                    <Loader2 className="size-4 animate-spin" data-icon="inline-start" />
+                  ) : (
+                    <Search className="size-4" data-icon="inline-start" />
+                  )}
+                  {scholarRunId ? "Ouvrir EnnoScholar" : "Passer à EnnoScholar"}
+                  {!scholarLoading ? (
+                    <ArrowRight className="size-4" data-icon="inline-end" />
+                  ) : null}
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => {
+                    setActiveTab("diagnostic")
+                    setDiagnosticSection("verrous")
+                  }}
+                >
+                  Revoir les verrous
+                </Button>
+
+                {!onOpenScholar && scholarRunId ? (
+                  <p className="text-center text-[10px] leading-4 text-muted-foreground">
+                    Le passage est prêt. Ouvrez EnnoScholar depuis le menu latéral.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0 space-y-4">
+        <div className="sticky top-2 z-20 rounded-xl border border-border bg-card/95 p-3 shadow-sm backdrop-blur md:hidden">
+          <label htmlFor="diagnostic-section" className="mb-2 block text-xs font-semibold text-foreground">
+            Section EnnoDiagnostic
+          </label>
+          <select
+            id="diagnostic-section"
+            value={activeTab}
+            onChange={(event) => setActiveTab(event.target.value)}
+            className="min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+          >
+            {diagnosticTabs.map((tab) => (
+              <option key={tab.value} value={tab.value}>
+                {tab.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="sticky top-2 z-20 hidden min-w-0 overflow-hidden rounded-2xl border border-border bg-card/95 shadow-sm backdrop-blur md:grid xl:grid-cols-[1.2fr_0.9fr_0.8fr]">
+          <div className="min-w-0 border-b border-border p-2 xl:border-b-0 xl:border-r">
+            <p className="px-2 pb-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-brand">
+              Analyse
             </p>
-            <Badge variant="outline" className="text-xs mt-1">
-              Comparaison A/B
-            </Badge>
-          </CardContent>
-        </Card>
+            <TabsList className="grid h-auto w-full grid-cols-3 gap-1 bg-muted/35 p-1">
+              <TabsTrigger value="overview" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4">
+                Vue d’ensemble
+              </TabsTrigger>
+              <TabsTrigger value="diagnostic" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4">
+                Diagnostic CIR
+              </TabsTrigger>
+              <TabsTrigger value="controle-ia" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4">
+                Contrôle IA
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">EnnoScholar</p>
-            <p className="text-2xl font-bold text-brand mt-1">
-              {scholarSummary?.verrous_analyzed ?? scholarResults.length ?? "—"}
+          <div className="min-w-0 border-b border-border p-2 xl:border-b-0 xl:border-r">
+            <p className="px-2 pb-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-brand">
+              Consolidation
             </p>
-            <Badge variant="outline" className="text-xs mt-1">
-              {selectedVerrousForScholar.length} verrou(s) sélectionné(s)
-            </Badge>
-          </CardContent>
-        </Card>
-      </div>
+            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 bg-muted/35 p-1">
+              <TabsTrigger value="cir-precedent" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4">
+                CIR précédent
+              </TabsTrigger>
+              <TabsTrigger value="comparaison-docs" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4">
+                Comparaison docs
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="flex h-auto w-full justify-start overflow-x-auto rounded-xl border border-border bg-card p-1.5 shadow-xs">
-          <TabsTrigger value="overview">Vue d’ensemble</TabsTrigger>
-          <TabsTrigger value="diagnostic">Diagnostic CIR</TabsTrigger>
-          <TabsTrigger value="controle-ia">Contrôle IA</TabsTrigger>
-          <TabsTrigger value="cir-precedent">CIR précédent</TabsTrigger>
-          <TabsTrigger value="cir-final-consultant">CIR final consultant</TabsTrigger>
-          <TabsTrigger value="comparaison-docs">Comparaison docs</TabsTrigger>
-          <TabsTrigger value="ennoscholar">EnnoScholar</TabsTrigger>
-          <TabsTrigger value="rapport">Rapport complet</TabsTrigger>
-          <TabsTrigger value="validation">Validation</TabsTrigger>
-        </TabsList>
+          <div className="min-w-0 p-2">
+            <p className="px-2 pb-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-success">
+              Finalisation
+            </p>
+            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 bg-muted/35 p-1">
+              <TabsTrigger value="validation" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4">
+                Validation
+              </TabsTrigger>
+              <TabsTrigger value="cir-final-consultant" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4">
+                Déposer le CIR final
+              </TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
 
-        <TabsContent value="overview" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Sparkles className="size-4 text-brand" />
-                Synthèse stratégique
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Synthèse issue du rapport EnnoDiagnostic généré par l’agent.
-              </CardDescription>
+        <TabsContent value="overview" className="space-y-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
+          <Card className="overflow-hidden rounded-2xl border-border bg-card shadow-sm">
+            <CardHeader className="border-b bg-gradient-to-r from-brand/[0.04] via-white to-white">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Sparkles className="size-4 text-brand" />
+                    Synthèse stratégique
+                  </CardTitle>
+                  <CardDescription className="mt-1 text-xs">
+                    Une lecture rapide du dossier avant d’ouvrir les détails techniques.
+                  </CardDescription>
+                </div>
+
+                <Badge variant="outline" className={riskClass(frascatiRisk)}>
+                  Défendabilité {formatScore(frascatiScore)}
+                </Badge>
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="rounded-xl border bg-muted/20 p-4">
+
+            <CardContent className="p-0">
+              <div className="border-b border-border px-5 py-5">
                 <BackendSectionRendererV93 text={summary} />
+              </div>
+
+              <div className="grid min-w-0 md:grid-cols-3">
+                <div className="min-w-0 p-5 md:border-r md:border-border">
+                  <div className="flex items-center gap-2 text-brand">
+                    <Target className="size-4" aria-hidden="true" />
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em]">
+                      Objectif global
+                    </p>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-foreground">
+                    {cleanDisplayText(objective).slice(0, 420)}
+                    {cleanDisplayText(objective).length > 420 ? "…" : ""}
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-3 px-0 text-brand"
+                    onClick={() => {
+                      setActiveTab("diagnostic")
+                      setDiagnosticSection("objectif")
+                    }}
+                  >
+                    Voir le détail
+                    <ArrowRight className="size-4" data-icon="inline-end" />
+                  </Button>
+                </div>
+
+                <div className="min-w-0 border-t border-border p-5 md:border-r md:border-t-0">
+                  <div className="flex items-center gap-2 text-brand">
+                    <CheckCircle2 className="size-4" aria-hidden="true" />
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em]">
+                      Conclusion d’éligibilité
+                    </p>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="text-2xl font-semibold text-foreground">
+                      {formatScore(frascatiScore)}
+                    </span>
+                    <Badge variant="outline" className={riskClass(frascatiRisk)}>
+                      Risque {frascatiRisk || "—"}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    {cleanDisplayText(lectureFrascatiText || frascatiJustificationText).slice(0, 320) ||
+                      "L’étude détaillée relie les critères Frascati aux preuves du dossier."}
+                    {cleanDisplayText(lectureFrascatiText || frascatiJustificationText).length > 320 ? "…" : ""}
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-3 px-0 text-brand"
+                    onClick={() => {
+                      setActiveTab("diagnostic")
+                      setDiagnosticSection("eligibilite")
+                    }}
+                  >
+                    Voir l’étude
+                    <ArrowRight className="size-4" data-icon="inline-end" />
+                  </Button>
+                </div>
+
+                <div className="min-w-0 border-t border-border p-5 md:border-t-0">
+                  <div className="flex items-center gap-2 text-brand">
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em]">
+                      Prochaine étape
+                    </p>
+                  </div>
+                  <p className="mt-3 text-sm font-semibold leading-6 text-foreground">
+                    {nextDiagnosticAction}
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    {pendingReviewCount > 0
+                      ? "Terminez les décisions consultant avant le passage vers l’agent scientifique."
+                      : selectedVerrousForScholar.length > 0
+                        ? `${selectedVerrousForScholar.length} verrou(s) retenu(s) sont prêts à être transmis à EnnoScholar.`
+                        : "Aucun verrou retenu n’est encore prêt pour EnnoScholar."}
+                  </p>
+                  <Button
+                    size="sm"
+                    className="mt-4"
+                    onClick={() => {
+                      setActiveTab("diagnostic")
+                      setDiagnosticSection(pendingReviewCount > 0 ? "verrous" : "eligibilite")
+                    }}
+                  >
+                    Continuer
+                    <ArrowRight className="size-4" data-icon="inline-end" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="diagnostic" className="space-y-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
+          <Card className="sticky top-2 z-20 min-w-0 border-brand/15 bg-card/95 shadow-sm backdrop-blur">
+            <CardContent className="p-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="hidden shrink-0 px-2 lg:block">
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    Diagnostic CIR
+                  </p>
+                  <p className="mt-0.5 text-xs font-medium text-foreground">
+                    6 sections métier
+                  </p>
+                </div>
+
+                <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto pb-0.5">
+                  {diagnosticSubsections.map((section, index) => (
+                    <button
+                      key={section.value}
+                      type="button"
+                      onClick={() => setDiagnosticSection(section.value)}
+                      aria-current={diagnosticSection === section.value ? "step" : undefined}
+                      className={`group flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition ${
+                        diagnosticSection === section.value
+                          ? "bg-brand text-brand-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                    >
+                      <span
+                        className={`flex size-5 items-center justify-center rounded-full text-[10px] font-semibold ${
+                          diagnosticSection === section.value
+                            ? "bg-white/20 text-white"
+                            : "bg-muted text-muted-foreground group-hover:bg-background"
+                        }`}
+                      >
+                        {index + 1}
+                      </span>
+                      <span>{section.shortLabel}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>
 
-        </TabsContent>
+          <div className="flex min-w-0 items-center justify-between gap-3 px-1">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-brand">
+                Vous êtes ici
+              </p>
+              <p className="truncate text-sm font-semibold text-foreground">
+                {diagnosticSubsections.find((section) => section.value === diagnosticSection)?.label}
+              </p>
+            </div>
+            <p className="shrink-0 text-xs text-muted-foreground">
+              {diagnosticSubsections.findIndex((section) => section.value === diagnosticSection) + 1}/6
+            </p>
+          </div>
 
-        <TabsContent value="diagnostic" className="space-y-4">
-          <BackendSectionCardV93
-            title="Objectif global"
-            icon={Target}
-            text={objective}
-            emptyText="L’objectif global apparaîtra après l’exécution d’EnnoDiagnostic."
-          />
+          {diagnosticSection === "objectif" && (
+            <BackendSectionCardV93
+                        title="Objectif global"
+                        icon={Target}
+                        text={objective}
+                        emptyText="L’objectif global apparaîtra après l’exécution d’EnnoDiagnostic."
+                      />
+          )}
 
-          <UnifiedEligibilityStudyCardV191
-            score={frascatiScore}
-            signalsCount={Number(
-              display?.frascati_summary?.scores_count ??
-                diagnosticBundle?.frascati_summary?.scores_count ??
-                0
-            )}
-            candidateCount={verrousForDisplay.length}
-            reading={lectureFrascatiText}
-            justification={frascatiJustificationText}
-            demarche={demarcheAudit}
-            evidenceReport={eligibilityEvidenceReport}
-            proofClaims={eligibilityProofClaims}
-            projectId={project?.id}
-            sourceDocuments={sourceDocuments}
-          />
+          {diagnosticSection === "eligibilite" && (
+            <UnifiedEligibilityStudyCardV191
+                        score={frascatiScore}
+                        signalsCount={Number(
+                          display?.frascati_summary?.scores_count ??
+                            diagnosticBundle?.frascati_summary?.scores_count ??
+                            0
+                        )}
+                        candidateCount={verrousForDisplay.length}
+                        reading={lectureFrascatiText}
+                        justification={frascatiJustificationText}
+                        demarche={demarcheAudit}
+                        evidenceReport={eligibilityEvidenceReport}
+                        proofClaims={eligibilityProofClaims}
+                        projectId={project?.id}
+                        sourceDocuments={sourceDocuments}
+                      />
+          )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Lock className="size-4 text-brand" />
-                Verrous synchronisés pour validation
-              </CardTitle>
-              <CardDescription className="text-xs">
-Chaque verrou candidat est relié à ses documents sources. Le consultant peut retenir, consolider ou écarter le verrou après lecture des preuves.
-              </CardDescription>
-            </CardHeader>
+          {diagnosticSection === "verrous" && (
+            <Card className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
+              <CardHeader className="border-b bg-white px-5 py-4 sm:px-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <Lock className="size-4 text-brand" />
+                      Verrous synchronisés pour validation
+                    </CardTitle>
+                    <CardDescription className="mt-1 max-w-3xl text-xs leading-5">
+                      Chaque verrou conserve l’ensemble des éléments du diagnostic : raisonnement,
+                      incertitude, preuves, contrôle consultant, documents sources et décision humaine.
+                    </CardDescription>
+                  </div>
 
-            <CardContent>
-              {verrousForDisplay.length === 0 ? (
-                <div className="p-6 text-center border border-dashed rounded-lg">
-                  <p className="text-sm font-medium text-foreground">
-                    Aucun verrou candidat synchronisé pour ce projet.
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Lance EnnoDiagnostic puis synchronise les verrous.
-                  </p>
+                  <Button
+                    type="button"
+                    variant={manualFormOpen ? "secondary" : "outline"}
+                    className="min-h-10 w-full shrink-0 rounded-xl sm:w-auto"
+                    aria-expanded={manualFormOpen}
+                    aria-controls="manual-verrou-form"
+                    onClick={() => {
+                      setManualFormOpen((current) => !current)
+                      setManualFormError("")
+                    }}
+                  >
+                    <Plus className="size-4" data-icon="inline-start" />
+                    Ajouter un verrou
+                  </Button>
                 </div>
-              ) : (
-                <Accordion className="w-full space-y-3">
-                  {verrousForDisplay.map((verrou) => {
-                    const sourceDocumentsForVerrou = getVerrouSourceDocuments(verrou)
-                    const isLoading = actionLoadingId === verrou.id
-                    const isJsonOnly = isJsonOnlyVerrouV107(verrou)
-                    const explanationSections = getVerrouExplanationSections(verrou)
-                    const whyVerrou = getShortVerrouRationale(verrou)
-                    const action = consultantAction(verrou)
+              </CardHeader>
 
-                    return (
-                      <AccordionItem
-                        key={verrou.id}
-                        value={String(verrou.id)}
-                        className="rounded-xl border bg-white shadow-sm overflow-hidden"
+              <CardContent className="space-y-4 p-4 sm:p-5">
+                {manualFormOpen && (
+                  <form
+                    id="manual-verrou-form"
+                    onSubmit={submitManualVerrou}
+                    className="space-y-4 rounded-xl border border-brand/20 bg-brand/[0.035] p-4 sm:p-5"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        Nouveau verrou consultant
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Il sera marqué « Retenu » dès sa création. La description et les mots-clés guideront la recherche et la rédaction.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <div className="space-y-2 lg:col-span-2">
+                        <Label htmlFor="manual-verrou-title">Titre du verrou</Label>
+                        <Input
+                          id="manual-verrou-title"
+                          value={manualTitle}
+                          onChange={(event) => setManualTitle(event.target.value)}
+                          placeholder="Ex. Incertitude sur la stabilité du procédé en conditions variables"
+                          minLength={5}
+                          maxLength={500}
+                          required
+                          disabled={manualSubmitting}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="manual-verrou-description">Description</Label>
+                        <Textarea
+                          id="manual-verrou-description"
+                          value={manualDescription}
+                          onChange={(event) => setManualDescription(event.target.value)}
+                          placeholder="Décrivez l’incertitude, les limites connues et ce qui reste à démontrer."
+                          className="min-h-28 resize-y"
+                          maxLength={4000}
+                          disabled={manualSubmitting}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="manual-verrou-keywords">Mots-clés</Label>
+                        <Input
+                          id="manual-verrou-keywords"
+                          value={manualKeywords}
+                          onChange={(event) => setManualKeywords(event.target.value)}
+                          placeholder="stabilité, robustesse, variabilité, validation"
+                          disabled={manualSubmitting}
+                        />
+                        <p className="flex items-start gap-1.5 text-xs leading-5 text-muted-foreground">
+                          <Tags className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                          Séparez les mots-clés par une virgule. Ils sont transmis au moteur de recherche scientifique.
+                        </p>
+                      </div>
+                    </div>
+
+                    {manualFormError && (
+                      <div
+                        role="alert"
+                        className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive"
                       >
-                        <AccordionTrigger className="hover:bg-muted/30 px-4 py-4">
-                          <div className="flex items-start gap-3 text-left flex-1">
-                            <div className="flex-1 space-y-2">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <Badge variant="outline" className="text-xs bg-brand/10 text-brand border-brand/30">
-                                  Signal R&D détecté
+                        {manualFormError}
+                      </div>
+                    )}
+
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="min-h-10"
+                        disabled={manualSubmitting}
+                        onClick={() => setManualFormOpen(false)}
+                      >
+                        Annuler
+                      </Button>
+                      <Button type="submit" className="min-h-10" disabled={manualSubmitting}>
+                        {manualSubmitting ? (
+                          <Loader2 className="size-4 animate-spin" data-icon="inline-start" />
+                        ) : (
+                          <CheckCircle2 className="size-4" data-icon="inline-start" />
+                        )}
+                        Ajouter et retenir
+                      </Button>
+                    </div>
+                  </form>
+                )}
+
+                {manualFeedback && (
+                  <div
+                    role="status"
+                    className="rounded-lg border border-success/20 bg-success/5 px-3 py-2 text-xs text-success"
+                  >
+                    {manualFeedback}
+                  </div>
+                )}
+
+                {verrousForDisplay.length === 0 ? (
+                  <div className="rounded-xl border border-dashed p-8 text-center">
+                    <p className="text-sm font-medium text-foreground">
+                      Aucun verrou à qualifier pour ce projet.
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Lance EnnoDiagnostic ou ajoute directement un verrou consultant.
+                    </p>
+                  </div>
+                ) : (
+                  <Accordion className="w-full space-y-3">
+                    {verrousForDisplay.map((verrou) => {
+                      const sourceDocumentsForVerrou = getVerrouSourceDocuments(verrou)
+                      const isLoading = actionLoadingId === verrou.id
+                      const isJsonOnly = isJsonOnlyVerrouV107(verrou)
+                      const canDecide = Boolean(
+                        (verrou as any)?.id ||
+                          (verrou as any)?.verrou_id ||
+                          (verrou as any)?.db_id ||
+                          (verrou as any)?.can_decide === true ||
+                          (verrou as any)?.is_db_synced === true
+                      )
+                      const isManual = isManualConsultantVerrou(verrou)
+                      const verrouKeywords = Array.isArray(verrou.source_json?.keywords)
+                        ? verrou.source_json.keywords.filter(Boolean).slice(0, 6)
+                        : []
+                      const explanationSections = getVerrouExplanationSections(verrou)
+                      const whyVerrou = getShortVerrouRationale(verrou)
+                      const action = consultantAction(verrou)
+                      const consultantCheck = getConsultantCheckText(verrou)
+                      const sourcePassagesCount = sourceDocumentsForVerrou.reduce(
+                        (total, item) => total + item.passagesCount,
+                        0
+                      )
+
+                      return (
+                        <AccordionItem
+                          key={verrou.id}
+                          value={String(verrou.id)}
+                          className="overflow-hidden rounded-xl border border-brand/15 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                        >
+                          <AccordionTrigger className="px-4 py-4 hover:bg-brand/[0.025] sm:px-5">
+                            <div className="min-w-0 flex-1 text-left">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge
+                                  variant="outline"
+                                  className="border-brand/25 bg-brand/[0.06] text-[10px] font-medium text-brand"
+                                >
+                                  {isManual ? "Ajout consultant" : "Signal R&D détecté"}
                                 </Badge>
                                 <Badge
                                   variant="outline"
-                                  className={`text-xs ${decisionClass(verrou.consultant_status)}`}
+                                  className={`text-[10px] ${decisionClass(verrou.consultant_status)}`}
                                 >
                                   {decisionLabel(verrou.consultant_status)}
                                 </Badge>
-                                <Badge variant="outline" className="text-xs">
-                                  Score {formatVerrouScoreV124(verrou.score)}
-                                </Badge>
+                                {!isManual && (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    Score {formatVerrouScoreV124(verrou.score)}
+                                  </Badge>
+                                )}
                               </div>
 
-                              <p className="text-sm font-semibold text-foreground">
+                              <p className="mt-2 text-sm font-semibold leading-6 text-foreground">
                                 {verrou.title}
                               </p>
 
-                              <p className="text-xs text-muted-foreground leading-relaxed">
-                                {cleanDisplayText(whyVerrou).slice(0, 220) || "Verrou à confirmer à partir des preuves sources."}
+                              <p className="mt-1 max-w-5xl text-xs leading-5 text-muted-foreground">
+                                {cleanDisplayText(whyVerrou).slice(0, 260) ||
+                                  "Verrou à confirmer à partir des preuves sources."}
                               </p>
-                            </div>
-                          </div>
-                        </AccordionTrigger>
 
-                        <AccordionContent className="px-4 pb-4 bg-muted/20">
-                          <div className="space-y-4">
-                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                              <div className="rounded-lg border bg-white p-4 space-y-3">
-                                <p className="text-xs font-semibold text-brand uppercase tracking-wide">
-                                  Pourquoi EnnoDiagnostic le détecte comme verrou
-                                </p>
-                                <p className="text-sm leading-7 text-foreground">
-                                  {explanationSections.detection}
-                                </p>
-
-                                {explanationSections.uncertainty && (
-                                  <div className="rounded-md bg-muted/40 p-3 space-y-1">
-                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                      Incertitude technique formulée
-                                    </p>
-                                    <p className="text-sm leading-7 text-foreground">
-                                      {explanationSections.uncertainty}
-                                    </p>
-                                  </div>
-                                )}
-
-                                {explanationSections.notSimpleEngineering && (
-                                  <div className="rounded-md bg-muted/40 p-3 space-y-1">
-                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                      Pourquoi ce n’est pas une simple ingénierie
-                                    </p>
-                                    <p className="text-sm leading-7 text-foreground">
-                                      {explanationSections.notSimpleEngineering}
-                                    </p>
-                                  </div>
-                                )}
-
-                                {explanationSections.evidence && (
-                                  <div className="rounded-md bg-muted/40 p-3 space-y-1">
-                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                      Preuves sources utilisées
-                                    </p>
-                                    <p className="text-sm leading-7 text-foreground">
-                                      {explanationSections.evidence}
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="rounded-lg border bg-white p-4 space-y-2">
-                                <p className="text-xs font-semibold text-brand uppercase tracking-wide">
-                                  Ce que le consultant doit vérifier
-                                </p>
-                                <p className="text-sm leading-7 text-foreground">
-                                  {getConsultantCheckText(verrou)}
-                                </p>
-                              </div>
-                            </div>
-
-                            {sourceDocumentsForVerrou.length > 0 && (
-                              <div className="rounded-xl border bg-white p-4 space-y-4">
-                                <div className="flex items-center justify-between gap-3 flex-wrap">
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                      Documents concernés
-                                    </p>
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                      {sourceDocumentsForVerrou.length} document(s) unique(s) relié(s) à ce verrou
-                                    </p>
-                                  </div>
-                                  <Badge variant="outline" className="text-xs">
-                                    {sourceDocumentsForVerrou.reduce(
-                                      (total, item) => total + item.passagesCount,
-                                      0
-                                    )} passage(s)
-                                  </Badge>
-                                </div>
-
-                                <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                                  {sourceDocumentsForVerrou.map((source) => (
-                                    <div
-                                      key={source.key}
-                                      className="rounded-lg border bg-muted/20 p-4 transition-colors hover:bg-muted/40"
-                                    >
-                                      <div className="flex items-start gap-3">
-                                        <div className="rounded-lg border bg-white p-2">
-                                          <FileText className="size-4 text-brand" />
-                                        </div>
-                                        <div className="min-w-0 flex-1 space-y-2">
-                                          <p className="truncate text-sm font-semibold text-foreground">
-                                            {source.displayName || source.document}
-                                          </p>
-                                          <SourceTextWithDocuments
-                                            projectId={project?.id || 0}
-                                            text={source.document}
-                                            documents={sourceDocuments}
-                                            evidence={source.evidence}
-                                            compact
-                                            hideTextWhenMatched
-                                          />
-                                          <Badge variant="secondary" className="text-xs">
-                                            {source.passagesCount} passage(s) associé(s)
-                                          </Badge>
-                                        </div>
-                                      </div>
-                                    </div>
+                              {verrouKeywords.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Mots-clés du verrou">
+                                  {verrouKeywords.map((keyword: string) => (
+                                    <Badge key={keyword} variant="secondary" className="text-[10px] font-normal">
+                                      {keyword}
+                                    </Badge>
                                   ))}
                                 </div>
-
-                                <p className="text-xs leading-6 text-muted-foreground">
-                                  Ouvrez un document pour parcourir les preuves associées. Les fichiers PDF sont positionnés sur la page connue et les fichiers texte affichent le passage sélectionné en surbrillance.
-                                </p>
-                              </div>
-                            )}
-
-                            <div className="rounded-lg border bg-brand/5 border-brand/20 p-4 space-y-2">
-                              <p className="text-xs font-semibold text-brand uppercase tracking-wide">
-                                Action consultant
-                              </p>
-                              <p className="text-sm leading-7 text-foreground">
-                                {action}
-                              </p>
+                              )}
                             </div>
+                          </AccordionTrigger>
 
-                            <details className="rounded-lg border bg-white p-4">
-                              <summary className="cursor-pointer text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                Traçabilité technique
-                              </summary>
+                          <AccordionContent className="border-t border-brand/10 bg-[#fcfcff] px-3 pb-3 sm:px-4 sm:pb-4">
+                            <div className="space-y-3 pt-4">
+                              {/* Zone principale : exactement la hiérarchie de la maquette */}
+                              <div className="grid gap-3 xl:grid-cols-[1.02fr_0.98fr]">
+                                <section
+                                  className="rounded-xl border border-brand/15 bg-white p-4 sm:p-5"
+                                  aria-labelledby={`verrou-why-${verrou.id}`}
+                                >
+                                  <div className="mb-4 flex items-center gap-3">
+                                    <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand/[0.07] text-brand">
+                                      <BrainCircuit className="size-4" aria-hidden="true" />
+                                    </span>
+                                    <div>
+                                      <h4
+                                        id={`verrou-why-${verrou.id}`}
+                                        className="text-sm font-semibold text-foreground"
+                                      >
+                                        {isManual
+                                          ? "Pourquoi ce verrou est retenu"
+                                          : "Pourquoi EnnoDiagnostic le détecte comme verrou"}
+                                      </h4>
+                                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                        Raisonnement technique relié aux preuves du dossier.
+                                      </p>
+                                    </div>
+                                  </div>
 
-                              <div className="mt-3 space-y-3">
-                                <div>
-                                  <p className="text-xs font-medium text-muted-foreground mb-1">
-                                    Titre initial détecté
-                                  </p>
-                                  <p className="text-sm text-foreground">
-                                    {verrou.title}
-                                  </p>
-                                </div>
+                                  <div className="space-y-2.5">
+                                    <div className="rounded-lg border bg-muted/[0.18] p-3.5">
+                                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                                        {isManual
+                                          ? "Formulation du consultant"
+                                          : "Incertitude technique formulée"}
+                                      </p>
+                                      <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-foreground sm:text-sm">
+                                        {explanationSections.uncertainty ||
+                                          explanationSections.detection}
+                                      </p>
+                                    </div>
 
-                                <div>
-                                  <p className="text-xs font-medium text-muted-foreground mb-1">
-                                    Justification EnnoDiagnostic
-                                  </p>
-                                  <p className="text-sm text-foreground whitespace-pre-wrap">
-                                    {cleanDisplayText(verrou.justification || "Aucune justification disponible.")}
-                                  </p>
-                                </div>
+                                    {explanationSections.notSimpleEngineering && (
+                                      <div className="rounded-lg border bg-muted/[0.18] p-3.5">
+                                        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                                          Pourquoi ce n’est pas une simple ingénierie
+                                        </p>
+                                        <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-foreground sm:text-sm">
+                                          {explanationSections.notSimpleEngineering}
+                                        </p>
+                                      </div>
+                                    )}
 
-                                <div className="flex gap-2 flex-wrap">
-                                  <Badge variant="outline" className={`text-xs ${tagClass(verrou.tag_cir)}`}>
-                                    {verrou.tag_cir || "Verrou à vérifier"}
-                                  </Badge>
-                                  <Badge variant="outline" className="text-xs">
-                                    Couverture Frascati {formatVerrouScoreV124(verrou.score)}
-                                  </Badge>
-                                </div>
+                                    {explanationSections.evidence && (
+                                      <div className="rounded-lg border border-success/20 bg-success/[0.035] p-3.5">
+                                        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-success">
+                                          Preuves sources utilisées
+                                        </p>
+                                        <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-foreground sm:text-sm">
+                                          {explanationSections.evidence}
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {!explanationSections.uncertainty &&
+                                      !explanationSections.notSimpleEngineering &&
+                                      !explanationSections.evidence && (
+                                        <div className="rounded-lg border bg-muted/[0.18] p-3.5">
+                                          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                                            Signal et raisonnement de détection
+                                          </p>
+                                          <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-foreground sm:text-sm">
+                                            {explanationSections.detection}
+                                          </p>
+                                        </div>
+                                      )}
+                                  </div>
+                                </section>
+
+                                <section
+                                  className="rounded-xl border border-brand/15 bg-white p-4 sm:p-5"
+                                  aria-labelledby={`verrou-check-${verrou.id}`}
+                                >
+                                  <div className="mb-4 flex items-center gap-3">
+                                    <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand/[0.07] text-brand">
+                                      <Search className="size-4" aria-hidden="true" />
+                                    </span>
+                                    <div>
+                                      <h4
+                                        id={`verrou-check-${verrou.id}`}
+                                        className="text-sm font-semibold text-foreground"
+                                      >
+                                        Ce que le consultant doit vérifier
+                                      </h4>
+                                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                        Points de contrôle avant validation du verrou.
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <p className="whitespace-pre-wrap text-xs leading-6 text-foreground sm:text-sm sm:leading-7">
+                                    {consultantCheck}
+                                  </p>
+                                </section>
                               </div>
-                            </details>
 
-                            {(() => {
-                              const verrouId =
-                                (verrou as any)?.id ??
-                                (verrou as any)?.verrou_id ??
-                                (verrou as any)?.db_id ??
-                                null
+                              {/* Action consultant : bandeau léger et non une grosse carte */}
+                              <section
+                                className="flex flex-col gap-3 rounded-xl border border-success/20 bg-success/[0.035] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                                aria-labelledby={`verrou-action-${verrou.id}`}
+                              >
+                                <div className="flex min-w-0 items-start gap-3">
+                                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white text-success ring-1 ring-success/15">
+                                    <CheckCircle2 className="size-4" aria-hidden="true" />
+                                  </span>
+                                  <div className="min-w-0">
+                                    <h4
+                                      id={`verrou-action-${verrou.id}`}
+                                      className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground"
+                                    >
+                                      Action consultant
+                                    </h4>
+                                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                      {action}
+                                    </p>
+                                  </div>
+                                </div>
+                                <Badge
+                                  variant="outline"
+                                  className={`w-fit shrink-0 bg-white text-[10px] ${decisionClass(verrou.consultant_status)}`}
+                                >
+                                  Statut : {decisionLabel(verrou.consultant_status)}
+                                </Badge>
+                              </section>
 
-                              const canDecide =
-                                Boolean(verrouId) ||
-                                (verrou as any)?.can_decide === true ||
-                                (verrou as any)?.is_db_synced === true
-
-                              return !canDecide ? (
+                              {!canDecide && (
                                 <div className="rounded-lg border border-warning/20 bg-warning/5 p-3">
-                                  <p className="text-xs text-warning font-medium">
+                                  <p className="text-xs font-medium text-warning">
                                     Ce verrou vient directement du JSON diagnostic. Pour activer les décisions consultant, lance ou vérifie la synchronisation backend des verrous reformulés.
                                   </p>
                                 </div>
-                              ) : null
-                            })()}
+                              )}
 
-                            <div className="flex flex-wrap gap-2 pt-1">
-                              <Button
-                                size="sm"
-                                className="text-xs h-8 bg-brand hover:bg-brand/90"
-                                disabled={
-                                  isLoading ||
-                                  !(
-                                    (verrou as any)?.id ||
-                                    (verrou as any)?.verrou_id ||
-                                    (verrou as any)?.db_id ||
-                                    (verrou as any)?.can_decide === true ||
-                                    (verrou as any)?.is_db_synced === true
-                                  )
-                                }
-                                onClick={() => {
-                                  const verrouId =
-                                    (verrou as any)?.id ??
-                                    (verrou as any)?.verrou_id ??
-                                    (verrou as any)?.db_id
+                              {/* Sources : visibles comme dans la version originale, mais plus respirantes */}
+                              {sourceDocumentsForVerrou.length > 0 && (
+                                <section
+                                  className="overflow-hidden rounded-xl border border-border bg-white"
+                                  aria-labelledby={`verrou-sources-${verrou.id}`}
+                                >
+                                  <div className="flex flex-col gap-3 border-b bg-muted/[0.12] px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="flex items-start gap-3">
+                                      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand/[0.06] text-brand">
+                                        <FileText className="size-4" aria-hidden="true" />
+                                      </span>
+                                      <div>
+                                        <h4
+                                          id={`verrou-sources-${verrou.id}`}
+                                          className="text-sm font-semibold text-foreground"
+                                        >
+                                          Documents et preuves associés au verrou
+                                        </h4>
+                                        <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">
+                                          Cliquez sur une source pour contrôler les passages utilisés.
+                                        </p>
+                                      </div>
+                                    </div>
 
-                                  if (verrouId) updateDecision(verrouId, "garde")
-                                }}
-                              >
-                                <CheckCircle2 className="size-3 mr-1" />
-                                Retenir
-                              </Button>
+                                    <div className="flex flex-wrap gap-2">
+                                      <Badge variant="outline" className="bg-white text-[10px]">
+                                        {sourceDocumentsForVerrou.length} document(s)
+                                      </Badge>
+                                      <Badge variant="secondary" className="text-[10px]">
+                                        {sourcePassagesCount} passage(s)
+                                      </Badge>
+                                    </div>
+                                  </div>
 
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-xs h-8"
-                                disabled={isLoading || isJsonOnly}
-                                onClick={() => {
-                                  if (!isJsonOnly) updateDecision(verrou.id, "reformuler")
-                                }}
-                              >
-                                <RefreshCw className="size-3 mr-1" />
-                                À consolider
-                              </Button>
+                                  <div className="grid grid-cols-1 gap-2.5 p-3.5 xl:grid-cols-2">
+                                    {sourceDocumentsForVerrou.map((source) => (
+                                      <article
+                                        key={source.key}
+                                        className="rounded-lg border bg-white p-3 transition-colors hover:border-brand/25 hover:bg-brand/[0.02]"
+                                      >
+                                        <div className="flex items-start gap-3">
+                                          <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-muted/[0.16] text-brand">
+                                            <FileText className="size-3.5" aria-hidden="true" />
+                                          </span>
+                                          <div className="min-w-0 flex-1">
+                                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                              <p className="[overflow-wrap:anywhere] text-xs font-semibold leading-5 text-foreground sm:text-sm">
+                                                {source.displayName || source.document}
+                                              </p>
+                                              <Badge variant="secondary" className="w-fit shrink-0 text-[9px]">
+                                                {source.passagesCount} passage(s)
+                                              </Badge>
+                                            </div>
 
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-xs h-8 text-muted-foreground border-border hover:bg-muted"
-                                disabled={isLoading || isJsonOnly}
-                                onClick={() => {
-                                  if (!isJsonOnly) updateDecision(verrou.id, "rejete")
-                                }}
-                              >
-                                <XCircle className="size-3 mr-1" />
-                                Non retenir
-                              </Button>
+                                            <div className="mt-2">
+                                              <SourceTextWithDocuments
+                                                projectId={project?.id || 0}
+                                                text={source.document}
+                                                documents={sourceDocuments}
+                                                evidence={source.evidence}
+                                                compact
+                                                hideTextWhenMatched
+                                              />
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </article>
+                                    ))}
+                                  </div>
+                                </section>
+                              )}
+
+                              {/* Traçabilité secondaire : gardée mais repliée */}
+                              <details className="group overflow-hidden rounded-xl border bg-white">
+                                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-muted/20 [&::-webkit-details-marker]:hidden">
+                                  <span>Traçabilité technique</span>
+                                  <ArrowRight
+                                    className="size-4 transition-transform group-open:rotate-90"
+                                    aria-hidden="true"
+                                  />
+                                </summary>
+
+                                <div className="grid gap-4 border-t p-4 lg:grid-cols-2">
+                                  <div>
+                                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                                      {isManual ? "Titre saisi" : "Titre initial détecté"}
+                                    </p>
+                                    <p className="text-sm leading-6 text-foreground">
+                                      {verrou.title}
+                                    </p>
+                                  </div>
+
+                                  <div>
+                                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                                      {isManual
+                                        ? "Description du consultant"
+                                        : "Justification EnnoDiagnostic"}
+                                    </p>
+                                    <p className="whitespace-pre-wrap text-sm leading-6 text-foreground">
+                                      {cleanDisplayText(
+                                        verrou.justification ||
+                                          "Aucune justification disponible."
+                                      )}
+                                    </p>
+                                  </div>
+                                </div>
+                              </details>
+
+                              {/* Décision : barre finale, comme sur la maquette */}
+                              <section className="rounded-xl border border-brand/15 bg-white p-3">
+                                <div className="mb-2 flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
+                                  <div>
+                                    <p className="text-xs font-semibold text-foreground">
+                                      Décision du consultant
+                                    </p>
+                                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                                      Le choix est enregistré immédiatement.
+                                    </p>
+                                  </div>
+                                  <Badge
+                                    variant="outline"
+                                    className={`w-fit text-[10px] ${decisionClass(verrou.consultant_status)}`}
+                                  >
+                                    {decisionLabel(verrou.consultant_status)}
+                                  </Badge>
+                                </div>
+
+                                <div
+                                  className="grid gap-1 rounded-lg bg-muted/[0.42] p-1 sm:grid-cols-3"
+                                  role="group"
+                                  aria-label={`Décision pour ${verrou.title}`}
+                                >
+                                  <Button
+                                    size="sm"
+                                    variant={
+                                      verrou.consultant_status === "rejete"
+                                        ? "destructive"
+                                        : "ghost"
+                                    }
+                                    className="min-h-10 justify-center rounded-md text-xs"
+                                    aria-pressed={verrou.consultant_status === "rejete"}
+                                    disabled={isLoading || isJsonOnly}
+                                    onClick={() => {
+                                      if (!isJsonOnly) updateDecision(verrou.id, "rejete")
+                                    }}
+                                  >
+                                    {isLoading &&
+                                    verrou.consultant_status === "rejete" ? (
+                                      <Loader2
+                                        className="size-3.5 animate-spin"
+                                        data-icon="inline-start"
+                                      />
+                                    ) : (
+                                      <XCircle
+                                        className="size-3.5"
+                                        data-icon="inline-start"
+                                      />
+                                    )}
+                                    Non retenir
+                                  </Button>
+
+                                  <Button
+                                    size="sm"
+                                    variant={
+                                      verrou.consultant_status === "reformuler"
+                                        ? "secondary"
+                                        : "ghost"
+                                    }
+                                    className="min-h-10 justify-center rounded-md text-xs"
+                                    aria-pressed={verrou.consultant_status === "reformuler"}
+                                    disabled={isLoading || isJsonOnly}
+                                    onClick={() => {
+                                      if (!isJsonOnly) updateDecision(verrou.id, "reformuler")
+                                    }}
+                                  >
+                                    {isLoading &&
+                                    verrou.consultant_status === "reformuler" ? (
+                                      <Loader2
+                                        className="size-3.5 animate-spin"
+                                        data-icon="inline-start"
+                                      />
+                                    ) : (
+                                      <RefreshCw
+                                        className="size-3.5"
+                                        data-icon="inline-start"
+                                      />
+                                    )}
+                                    Consolider
+                                  </Button>
+
+                                  <Button
+                                    size="sm"
+                                    variant={
+                                      verrou.consultant_status === "garde"
+                                        ? "default"
+                                        : "ghost"
+                                    }
+                                    className="min-h-10 justify-center rounded-md text-xs"
+                                    aria-pressed={verrou.consultant_status === "garde"}
+                                    disabled={isLoading || !canDecide}
+                                    onClick={() => {
+                                      const verrouId =
+                                        (verrou as any)?.id ??
+                                        (verrou as any)?.verrou_id ??
+                                        (verrou as any)?.db_id
+
+                                      if (verrouId) updateDecision(verrouId, "garde")
+                                    }}
+                                  >
+                                    {isLoading &&
+                                    verrou.consultant_status === "garde" ? (
+                                      <Loader2
+                                        className="size-3.5 animate-spin"
+                                        data-icon="inline-start"
+                                      />
+                                    ) : (
+                                      <CheckCircle2
+                                        className="size-3.5"
+                                        data-icon="inline-start"
+                                      />
+                                    )}
+                                    Retenir
+                                  </Button>
+                                </div>
+                              </section>
                             </div>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    )
-                  })}
-                </Accordion>
-              )}
-            </CardContent>
-          </Card>
+                          </AccordionContent>
+                        </AccordionItem>
+                      )
+                    })}
+                  </Accordion>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {diagnosticSection === "demarche" && (
             <BackendSectionCardV93
-              title="Pertinence des démarches"
-              description="Nécessité des étapes, distinction R&D / ingénierie classique et possibilité d’aller directement à la solution finale."
-              icon={Search}
-              text={demarcheText}
-              emptyText="Aucune démarche détectée."
-              projectId={project.id}
-              sourceDocuments={sourceDocuments}
-              structuredSection={demarcheStructuredSectionV194}
-              preserveDemarcheAudit
-            />
+                          title="Pertinence des démarches"
+                          description="Nécessité des étapes, distinction R&D / ingénierie classique et possibilité d’aller directement à la solution finale."
+                          icon={Search}
+                          text={demarcheText}
+                          emptyText="Aucune démarche détectée."
+                          projectId={project.id}
+                          sourceDocuments={sourceDocuments}
+                          structuredSection={demarcheStructuredSectionV194}
+                          preserveDemarcheAudit
+                        />
+          )}
 
+          {diagnosticSection === "resultats" && (
             <BackendSectionCardV93
-              title="Résultats / métriques"
-              description="Résultats chiffrés, observations qualitatives et éléments insuffisants à confirmer."
-              icon={TrendingUp}
-              text={resultatsText}
-              emptyText="Aucun résultat ou métrique disponible."
-              tone="success"
-              projectId={project.id}
-              sourceDocuments={sourceDocuments}
-              structuredSection={resultatsStructuredSectionV194}
-            />
+                          title="Résultats / métriques"
+                          description="Résultats chiffrés, observations qualitatives et éléments insuffisants à confirmer."
+                          icon={TrendingUp}
+                          text={resultatsText}
+                          emptyText="Aucun résultat ou métrique disponible."
+                          tone="success"
+                          projectId={project.id}
+                          sourceDocuments={sourceDocuments}
+                          structuredSection={resultatsStructuredSectionV194}
+                        />
+          )}
 
+          {diagnosticSection === "parametres" && (
             <BackendSectionCardV93
-              title="Paramètres et contraintes techniques"
-              description="Paramètres, jeux de données, conditions expérimentales et contraintes techniques."
-              icon={FileText}
-              text={parametresText}
-              emptyText="Aucun paramètre technique disponible."
-              projectId={project.id}
-              sourceDocuments={sourceDocuments}
-              structuredSection={parametresStructuredSectionV194}
-            />
-          </div>
-
-
+                          title="Paramètres et contraintes techniques"
+                          description="Paramètres, jeux de données, conditions expérimentales et contraintes techniques."
+                          icon={FileText}
+                          text={parametresText}
+                          emptyText="Aucun paramètre technique disponible."
+                          projectId={project.id}
+                          sourceDocuments={sourceDocuments}
+                          structuredSection={parametresStructuredSectionV194}
+                        />
+          )}
         </TabsContent>
 
-
-        <TabsContent value="controle-ia" className="space-y-4">
+        <TabsContent value="controle-ia" className="space-y-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">Contrôle IA documentaire</CardTitle>
@@ -5654,7 +6846,7 @@ Chaque verrou candidat est relié à ses documents sources. Le consultant peut r
           </Card>
         </TabsContent>
 
-        <TabsContent value="cir-precedent" className="space-y-4">
+        <TabsContent value="cir-precedent" className="space-y-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
           <Card className="border-brand/20 bg-brand/5">
             <CardHeader>
               <CardTitle className="text-sm flex items-center gap-2">
@@ -5848,7 +7040,61 @@ Chaque verrou candidat est relié à ses documents sources. Le consultant peut r
           )}
         </TabsContent>
 
-        <TabsContent value="cir-final-consultant" className="space-y-4">
+        <TabsContent value="cir-final-consultant" className="space-y-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
+          <Card className="overflow-hidden border-success/25 bg-gradient-to-br from-success/5 via-white to-white">
+            <CardHeader className="border-b bg-white/75">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-success/20 bg-success/10 text-success">
+                    <Upload className="size-5" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-success">
+                      Clôture du dossier
+                    </p>
+                    <CardTitle className="mt-1 text-base">
+                      Déposer le CIR final réellement livré
+                    </CardTitle>
+                    <CardDescription className="mt-1 max-w-3xl text-xs leading-5">
+                      EnnoSmart ne génère pas ici l’intégralité du CIR. Lorsque le consultant a terminé et validé la version définitive sur son poste, cette version doit être déposée pour conserver la référence réellement livrée et maintenir la mémoire CIR du projet à jour.
+                    </CardDescription>
+                  </div>
+                </div>
+
+                <Badge variant="outline" className="shrink-0 border-warning/30 bg-warning/10 text-warning">
+                  À faire à la clôture
+                </Badge>
+              </div>
+            </CardHeader>
+
+            <CardContent className="grid gap-3 pt-5 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl border bg-white p-3">
+                <p className="text-xs font-semibold text-foreground">Version officielle</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Conserver le document réellement remis au client ou utilisé pour la déclaration.
+                </p>
+              </div>
+              <div className="rounded-xl border bg-white p-3">
+                <p className="text-xs font-semibold text-foreground">Mémoire CIR à jour</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  La version finale devient une référence fiable pour les futurs travaux.
+                </p>
+              </div>
+              <div className="rounded-xl border bg-white p-3">
+                <p className="text-xs font-semibold text-foreground">Comparaison N / N-1</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Le CIR de cette année pourra servir de repère historique lors du prochain exercice.
+                </p>
+              </div>
+              <div className="rounded-xl border bg-white p-3">
+                <p className="text-xs font-semibold text-foreground">Traçabilité</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  La plateforme conserve le lien entre analyse, décisions et livrable final.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
           <CirFinalConsultantPanel
             projectId={project.id}
             apiBaseUrl={API_BASE_URL}
@@ -5856,10 +7102,11 @@ Chaque verrou candidat est relié à ses documents sources. Le consultant peut r
             defaultOrganisme={project.organisme || ""}
             defaultProject={project.project_name || ""}
             defaultYear={project.year || ""}
+            onStatusChange={setCirFinalRegistered}
           />
         </TabsContent>
 
-        <TabsContent value="comparaison-docs" className="space-y-4">
+        <TabsContent value="comparaison-docs" className="space-y-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
           <Card>
             <CardHeader>
               <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -6167,361 +7414,77 @@ Chaque verrou candidat est relié à ses documents sources. Le consultant peut r
           </Card>
         </TabsContent>
 
-        <TabsContent value="ennoscholar" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div>
-                  <CardTitle className="text-sm">EnnoScholar — validation scientifique des verrous</CardTitle>
-                  <CardDescription className="text-xs">
-                    Seuls les verrous gardés par le consultant sont envoyés vers les bases scientifiques.
-                  </CardDescription>
-                </div>
-
-                <Button
-                  className="bg-brand hover:bg-brand/90"
-                  onClick={launchEnnoScholar}
-                  disabled={scholarLoading || selectedVerrousForScholar.length === 0}
+        <TabsContent value="validation" className="space-y-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
+          <Card
+            className={
+              cirFinalRegistered
+                ? "overflow-hidden rounded-2xl border-success/30 bg-success/[0.045] shadow-sm"
+                : "overflow-hidden rounded-2xl border-warning/30 bg-warning/[0.045] shadow-sm"
+            }
+          >
+            <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <span
+                  className={`grid size-10 shrink-0 place-items-center rounded-xl border ${
+                    cirFinalRegistered
+                      ? "border-success/30 bg-white text-success"
+                      : "border-warning/30 bg-white text-warning"
+                  }`}
                 >
-                  {scholarLoading ? (
-                    <Loader2 className="size-4 mr-2 animate-spin" />
+                  {cirFinalRegistered ? (
+                    <CheckCircle2 className="size-5" aria-hidden="true" />
                   ) : (
-                    <Search className="size-4 mr-2" />
+                    <Upload className="size-5" aria-hidden="true" />
                   )}
-                  Lancer EnnoScholar
-                </Button>
-              </div>
-            </CardHeader>
+                </span>
 
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div className="p-3 rounded-md border">
-                  <p className="text-xs text-muted-foreground">Verrous sélectionnés</p>
-                  <p className="text-2xl font-bold mt-1">{selectedVerrousForScholar.length}</p>
-                </div>
-
-                <div className="p-3 rounded-md border">
-                  <p className="text-xs text-muted-foreground">Verrous analysés</p>
-                  <p className="text-2xl font-bold mt-1">{scholarSummary?.verrous_analyzed ?? scholarResults.length ?? 0}</p>
-                </div>
-
-                <div className="p-3 rounded-md border">
-                  <p className="text-xs text-muted-foreground">Défendables</p>
-                  <p className="text-2xl font-bold mt-1">
-                    {scholarDecisionCounts?.verrou_scientifiquement_defendable ?? 0}
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                    Clôture du dossier
                   </p>
-                </div>
-
-                <div className="p-3 rounded-md border">
-                  <p className="text-xs text-muted-foreground">Articles</p>
-                  <p className="text-2xl font-bold mt-1">{scholarArticlesCount}</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">
+                    {cirFinalRegistered
+                      ? "Validation finale complétée"
+                      : "La revue est terminée, le CIR final reste à déposer"}
+                  </p>
+                  <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
+                    {cirFinalRegistered
+                      ? "La version réellement livrée est archivée dans EnnoSmart et pourra servir de référence historique pour les exercices suivants."
+                      : "La validation ne passe au vert qu’après dépôt de la version CIR finale réellement livrée par le consultant."}
+                  </p>
                 </div>
               </div>
 
-              {selectedVerrousForScholar.length === 0 && (
-                <div className="p-4 rounded-md border border-warning/30 bg-warning/5">
-                  <p className="text-sm font-medium text-warning">
-                    Aucun verrou sélectionné pour EnnoScholar.
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Va dans l’onglet Validation, choisis les verrous réellement utiles, puis mets leur statut sur “Gardé”.
-                  </p>
-                </div>
-              )}
-
-              {scholarGroupingActive && (
-                <Card className="border-brand/30 bg-brand/5">
-                  <CardHeader>
-                    <CardTitle className="text-sm">Regroupement automatique avant EnnoScholar</CardTitle>
-                    <CardDescription className="text-xs">
-                      Les signaux gardés par le consultant ont été regroupés en verrous scientifiques uniques avant la recherche, pour éviter les doublons.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div className="p-3 rounded-md border bg-background/70">
-                        <p className="text-xs text-muted-foreground">Signaux retenus</p>
-                        <p className="text-xl font-bold mt-1">{scholarGroupingSummary?.input_signals_count ?? selectedVerrousForScholar.length}</p>
-                      </div>
-                      <div className="p-3 rounded-md border bg-background/70">
-                        <p className="text-xs text-muted-foreground">Verrous scientifiques envoyés</p>
-                        <p className="text-xl font-bold mt-1">{scholarGroupingSummary?.grouped_verrous_count ?? scholarResults.length}</p>
-                      </div>
-                      <div className="p-3 rounded-md border bg-background/70">
-                        <p className="text-xs text-muted-foreground">Doublons regroupés</p>
-                        <p className="text-xl font-bold mt-1">{scholarGroupingSummary?.duplicates_removed ?? 0}</p>
-                      </div>
-                    </div>
-
-                    {scholarGroupingGroups.length > 0 && (
-                      <div className="space-y-2">
-                        {scholarGroupingGroups.map((group: any, index: number) => (
-                          <div key={`${group.group_key || group.consolidated_title || index}`} className="p-3 rounded-md border bg-background/80">
-                            <div className="flex items-center gap-2 flex-wrap mb-2">
-                              <Badge variant="outline" className="text-xs">
-                                {group.grouped_count || 1} signal{Number(group.grouped_count || 1) > 1 ? "s" : ""} regroupé{Number(group.grouped_count || 1) > 1 ? "s" : ""}
-                              </Badge>
-                              <Badge variant="outline" className="text-xs">
-                                {group.profile || "profil scientifique"}
-                              </Badge>
-                            </div>
-                            <p className="text-sm font-medium text-foreground">
-                              {group.consolidated_title || "Verrou scientifique consolidé"}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Regroupe : {(group.grouped_original_titles || []).join(" ; ") || "signal unique"}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Pourquoi : {group.reason || "même objet technique ou même phénomène scientifique détecté dans les sources"}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">Signaux retenus par le consultant</CardTitle>
-                  <CardDescription className="text-xs">
-                    Cette liste montre la décision du consultant. La recherche EnnoScholar utilise ensuite les verrous scientifiques regroupés ci-dessus.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {selectedVerrousForScholar.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Aucun verrou gardé.</p>
-                  ) : (
-                    selectedVerrousForScholar.map((verrou) => (
-                      <div key={verrou.id} className="p-3 rounded-md border bg-success/5">
-                        <div className="flex items-center gap-2 flex-wrap mb-2">
-                          <Badge variant="outline" className={decisionClass(verrou.consultant_status)}>
-                            {decisionLabel(verrou.consultant_status)}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            Score {formatVerrouScoreV124(verrou.score)}
-                          </Badge>
-                        </div>
-                        <p className="text-sm font-medium text-foreground">
-                          {verrou.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">
-                          {getSourceText(verrou).slice(0, 600)}
-                        </p>
-                      </div>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
-
-              {scholarResults.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Résultats de validation scientifique</CardTitle>
-                    <CardDescription className="text-xs">
-                      Décision automatique à valider par le consultant : défendable, à confirmer, support faible ou aucun article.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {scholarResults.map((result: any, index: number) => (
-                      <div key={`${result.verrou_id}-${index}`} className="p-3 rounded-md border">
-                        <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                          <Badge variant="outline" className={scholarDecisionClass(result.decision)}>
-                            {scholarDecisionLabel(result.decision)}
-                          </Badge>
-
-                          <div className="flex gap-2 flex-wrap">
-                            <Badge variant="outline" className="text-xs">
-                              Support {formatScore(result.scientific_support_score)}
-                            </Badge>
-                            <Badge variant="outline" className="text-xs">
-                              Articles {result.articles_found ?? result.articles?.length ?? 0}
-                            </Badge>
-                          </div>
-                        </div>
-
-                        <p className="text-sm font-semibold text-foreground">
-                          {result.verrou_title || result.title || `Verrou ${index + 1}`}
-                        </p>
-
-                        {result.scientific_intent?.scientific_problem && (
-                          <p className="text-xs text-muted-foreground mt-2 whitespace-pre-wrap">
-                            Problème scientifique : {result.scientific_intent.scientific_problem}
-                          </p>
-                        )}
-
-                        {result.gap_analysis && (
-                          <p className="text-sm text-foreground mt-2 whitespace-pre-wrap">
-                            {result.gap_analysis}
-                          </p>
-                        )}
-
-                        {result.consultant_action && (
-                          <p className="text-xs text-muted-foreground mt-2">
-                            Action consultant : {result.consultant_action}
-                          </p>
-                        )}
-
-                        {Array.isArray(result.queries) && result.queries.length > 0 && (
-                          <Accordion className="mt-3">
-                            <AccordionItem value="queries">
-                              <AccordionTrigger>Requêtes scientifiques</AccordionTrigger>
-                              <AccordionContent className="space-y-2">
-                                {result.queries.slice(0, 6).map((query: any, qIndex: number) => (
-                                  <div key={qIndex} className="p-2 rounded-md bg-muted/30 border">
-                                    <p className="text-xs font-medium">{query.kind || "query"}</p>
-                                    <p className="text-sm">{query.query || String(query)}</p>
-                                  </div>
-                                ))}
-                              </AccordionContent>
-                            </AccordionItem>
-                          </Accordion>
-                        )}
-
-                        {Array.isArray(result.articles) && result.articles.length > 0 && (
-                          <Accordion className="mt-3">
-                            <AccordionItem value="articles">
-                              <AccordionTrigger>Articles trouvés</AccordionTrigger>
-                              <AccordionContent className="space-y-2">
-                                {result.articles.slice(0, 5).map((article: any, aIndex: number) => (
-                                  <div key={aIndex} className="p-3 rounded-md border bg-background">
-                                    <div className="flex gap-2 flex-wrap mb-2">
-                                      <Badge variant="outline" className={tagClass(article.tag || article.tag_article)}>
-                                        {article.tag || article.tag_article || "Article"}
-                                      </Badge>
-                                      <Badge variant="outline" className="text-xs">
-                                        Score {formatScore(article.relevance_score || article.score)}
-                                      </Badge>
-                                      {article.year && (
-                                        <Badge variant="outline" className="text-xs">
-                                          {article.year}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <p className="text-sm font-medium">{article.title}</p>
-                                    {article.abstract && (
-                                      <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">
-                                        {article.abstract.slice(0, 500)}
-                                      </p>
-                                    )}
-                                  </div>
-                                ))}
-                              </AccordionContent>
-                            </AccordionItem>
-                          </Accordion>
-                        )}
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card>
-                <CardHeader>
-
-          <div className="mt-6">
-          </div>
-
-
-                  <CardTitle className="text-sm">Articles synchronisés</CardTitle>
-                  <CardDescription className="text-xs">
-                    Articles sauvegardés côté backend et reliés aux verrous quand l’information est disponible.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {articles.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Aucun article synchronisé pour le moment.
-                    </p>
-                  ) : (
-                    articles.slice(0, 20).map((article) => {
-                      const validation = articleValidationFromSource(article)
-                      return (
-                        <div key={article.id} className="p-3 rounded-md border">
-                          <div className="flex gap-2 flex-wrap mb-2">
-                            <Badge variant="outline" className={tagClass(article.tag_article)}>
-                              {article.tag_article || "Article"}
-                            </Badge>
-                            <Badge variant="outline" className="text-xs">
-                              Score {formatScore(article.score)}
-                            </Badge>
-                            {article.year && (
-                              <Badge variant="outline" className="text-xs">
-                                {article.year}
-                              </Badge>
-                            )}
-                            {validation?.scientific_decision && (
-                              <Badge variant="outline" className={scholarDecisionClass(validation.scientific_decision)}>
-                                {scholarDecisionLabel(validation.scientific_decision)}
-                              </Badge>
-                            )}
-                          </div>
-
-                          <p className="text-sm font-medium text-foreground">
-                            {article.title}
-                          </p>
-
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Source : {article.source || "—"} | Verrou lié : {article.verrou_id || "—"}
-                          </p>
-
-                          {article.url && (
-                            <a
-                              href={article.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-xs text-brand underline mt-2 inline-block"
-                            >
-                              Ouvrir l’article
-                            </a>
-                          )}
-                        </div>
-                      )
-                    })
-                  )}
-                </CardContent>
-              </Card>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="rapport" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Rapport EnnoDiagnostic complet</CardTitle>
-              <CardDescription className="text-xs">
-                Contenu brut retourné par display.report_markdown.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {(backendMarkdownV93 || reportMarkdown) ? (
-                <div className="rounded-xl border bg-muted/20 p-4">
-                  <BackendSectionRendererV93 text={backendMarkdownV93 || reportMarkdown} />
-                </div>
+              {cirFinalRegistered ? (
+                <Badge
+                  variant="outline"
+                  className="shrink-0 border-success/30 bg-white text-success"
+                >
+                  CIR final archivé
+                </Badge>
               ) : (
-                <p className="text-sm text-muted-foreground">
-                  Aucun rapport disponible. Lance EnnoDiagnostic.
-                </p>
+                <Button
+                  className="shrink-0"
+                  onClick={() => setActiveTab("cir-final-consultant")}
+                >
+                  Déposer le CIR final
+                  <ArrowRight className="size-4" data-icon="inline-end" />
+                </Button>
               )}
             </CardContent>
           </Card>
-        </TabsContent>
 
-        <TabsContent value="validation" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid gap-3 sm:grid-cols-4">
             {["garde", "reformuler", "rejete", "en_attente"].map((status) => {
               const count = decisions[status as keyof typeof decisions]
 
               return (
-                <Card key={status}>
-                  <CardContent className="p-4">
-                    <p className="text-xs text-muted-foreground">
-                      {decisionLabel(status)}
-                    </p>
-                    <p className="text-2xl font-bold text-foreground mt-1">{count}</p>
-                  </CardContent>
-                </Card>
+                <div key={status} className="rounded-xl border bg-card px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    {decisionLabel(status)}
+                  </p>
+                  <p className="mt-1 text-xl font-semibold text-foreground">{count}</p>
+                </div>
               )
             })}
           </div>
@@ -6566,6 +7529,8 @@ Chaque verrou candidat est relié à ses documents sources. Le consultant peut r
               })}
             </CardContent>
           </Card>
+
+
         </TabsContent>
       </Tabs>
 

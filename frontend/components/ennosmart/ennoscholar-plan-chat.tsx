@@ -5,7 +5,9 @@ import {
   BookOpenText,
   Bot,
   Check,
+  ChevronDown,
   ChevronLeft,
+  ChevronUp,
   Copy,
   ExternalLink,
   FilePlus2,
@@ -13,7 +15,6 @@ import {
   Globe2,
   Library,
   Loader2,
-  Menu,
   MessageSquarePlus,
   MessageSquareText,
   PanelRightClose,
@@ -28,13 +29,6 @@ import {
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import {
   Sheet,
@@ -392,7 +386,7 @@ function CandidateCard({
             href={consultationUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex h-8 items-center rounded-lg px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="inline-flex min-h-10 items-center rounded-lg px-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25"
           >
             <ExternalLink className="mr-1 size-3" />
             {pendingExtraction ? "Télécharger / consulter" : "Consulter"}
@@ -402,7 +396,7 @@ function CandidateCard({
           <>
             <Button
               size="sm"
-              className="h-8 rounded-lg"
+              className="min-h-10 rounded-lg"
               disabled={busy}
               onClick={() => onDecision(candidate, "accepted")}
             >
@@ -416,7 +410,7 @@ function CandidateCard({
             <Button
               size="sm"
               variant="outline"
-              className="h-8 rounded-lg"
+              className="min-h-10 rounded-lg"
               disabled={busy}
               onClick={() => onDecision(candidate, "rejected")}
             >
@@ -474,7 +468,305 @@ function CandidateCard({
   )
 }
 
-function CorpusDialog({
+function getMessageCandidates(
+  message: GuidedResearchConversationTurn | any,
+): ResearchCandidate[] {
+  const metadata: any = message?.metadata || {}
+  const direct = metadata?.candidates
+  const nested = metadata?.research?.candidates
+  const rows = Array.isArray(direct)
+    ? direct
+    : Array.isArray(nested)
+      ? nested
+      : []
+
+  return rows.filter(
+    (candidate: ResearchCandidate) =>
+      candidate && String(candidate.candidate_id || "").trim(),
+  )
+}
+
+function withMessageCandidates(
+  message: GuidedResearchConversationTurn | any,
+  candidates: ResearchCandidate[],
+) {
+  const metadata: any = { ...(message?.metadata || {}) }
+
+  if (metadata?.research && Array.isArray(metadata.research?.candidates)) {
+    metadata.research = {
+      ...metadata.research,
+      candidates,
+    }
+  } else {
+    metadata.candidates = candidates
+  }
+
+  return {
+    ...message,
+    metadata,
+  }
+}
+
+function updateCandidateInMessages(
+  messages: GuidedResearchConversationTurn[],
+  candidateId: string,
+  updater: (candidate: ResearchCandidate) => ResearchCandidate,
+) {
+  return messages.map((message) => {
+    const candidates = getMessageCandidates(message)
+    if (!candidates.some((candidate) => candidate.candidate_id === candidateId)) {
+      return message
+    }
+
+    return withMessageCandidates(
+      message,
+      candidates.map((candidate) =>
+        candidate.candidate_id === candidateId
+          ? updater(candidate)
+          : candidate,
+      ),
+    )
+  })
+}
+
+function hydrateResearchAttachments(
+  messages: GuidedResearchConversationTurn[],
+  current: any,
+  legacyCandidates: ResearchCandidate[],
+) {
+  const selected = Array.isArray(current?.artifacts?.selected_sources)
+    ? current.artifacts.selected_sources
+    : []
+
+  const selectedById = new Map(
+    selected
+      .filter((candidate: ResearchCandidate) => candidate?.candidate_id)
+      .map((candidate: ResearchCandidate) => [
+        candidate.candidate_id,
+        candidate,
+      ]),
+  )
+
+  let hydrated = messages.map((message) => {
+    const candidates = getMessageCandidates(message)
+    if (!candidates.length) return message
+
+    return withMessageCandidates(
+      message,
+      candidates.map((candidate) => ({
+        ...candidate,
+        ...(selectedById.get(candidate.candidate_id) || {}),
+      })),
+    )
+  })
+
+  // Compatibilité avec les anciennes conversations :
+  // si le backend ne stockait pas encore les candidats dans metadata,
+  // le dernier batch de recherche est rattaché au dernier message assistant.
+  if (
+    legacyCandidates.length > 0 &&
+    !hydrated.some((message) => getMessageCandidates(message).length > 0)
+  ) {
+    let targetIndex = -1
+    for (let index = hydrated.length - 1; index >= 0; index -= 1) {
+      if (hydrated[index]?.role === "assistant") {
+        targetIndex = index
+        break
+      }
+    }
+
+    if (targetIndex >= 0) {
+      hydrated = hydrated.map((message, index) =>
+        index === targetIndex
+          ? withMessageCandidates(message, legacyCandidates)
+          : message,
+      )
+    }
+  }
+
+  return hydrated
+}
+
+function ResearchAttachment({
+  candidates,
+  busyCandidateId,
+  onDecision,
+  onUploadPdf,
+}: {
+  candidates: ResearchCandidate[]
+  busyCandidateId: string
+  onDecision: (
+    candidate: ResearchCandidate,
+    decision: "accepted" | "rejected",
+  ) => void
+  onUploadPdf: (candidate: ResearchCandidate, file: File) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  const directCount = candidates.filter(
+    (candidate) => candidate.relevance_role === "direct_evidence",
+  ).length
+  const connectedCount = candidates.filter(
+    (candidate) => candidate.relevance_role === "connected_evidence",
+  ).length
+  const documentationCount = candidates.filter((candidate) =>
+    ["official_documentation", "documentation"].includes(
+      String(candidate.relevance_role || candidate.candidate_kind || ""),
+    ),
+  ).length
+  const keptCount = candidates.filter(
+    (candidate) => candidate.consultant_decision === "accepted",
+  ).length
+
+  const preview = candidates.slice(0, 3)
+
+  return (
+    <section className="mt-3 overflow-hidden rounded-2xl border border-brand/15 bg-card shadow-[0_4px_18px_rgba(59,34,109,0.055)]">
+      <div className="flex flex-col gap-3 border-b border-border/70 bg-brand/[0.025] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-brand/[0.08] text-brand">
+              <Search className="size-3.5" aria-hidden="true" />
+            </span>
+            <p className="text-xs font-semibold text-foreground">
+              Recherche scientifique
+            </p>
+            <Badge
+              variant="outline"
+              className="rounded-full border-brand/15 bg-background text-[10px]"
+            >
+              {candidates.length} source{candidates.length > 1 ? "s" : ""}
+            </Badge>
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            {directCount > 0 && <span>{directCount} directe(s)</span>}
+            {connectedCount > 0 && <span>{connectedCount} connexe(s)</span>}
+            {documentationCount > 0 && (
+              <span>{documentationCount} documentation(s)</span>
+            )}
+            {keptCount > 0 && (
+              <span className="font-medium text-success">
+                {keptCount} gardée(s)
+              </span>
+            )}
+          </div>
+        </div>
+
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="min-h-9 shrink-0 rounded-xl px-3 text-xs"
+          onClick={() => setExpanded((current) => !current)}
+          aria-expanded={expanded}
+        >
+          {expanded ? (
+            <>
+              Réduire
+              <ChevronUp className="size-3.5" data-icon="inline-end" />
+            </>
+          ) : (
+            <>
+              Examiner les sources
+              <ChevronDown className="size-3.5" data-icon="inline-end" />
+            </>
+          )}
+        </Button>
+      </div>
+
+      {!expanded ? (
+        <div className="divide-y divide-border/60">
+          {preview.map((candidate) => {
+            const decision = String(candidate.consultant_decision || "")
+            return (
+              <button
+                key={candidate.candidate_id}
+                type="button"
+                className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/25"
+                onClick={() => setExpanded(true)}
+              >
+                <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg border border-border bg-background text-brand">
+                  <BookOpenText className="size-3.5" aria-hidden="true" />
+                </span>
+
+                <span className="min-w-0 flex-1">
+                  <span className="line-clamp-1 block text-xs font-semibold text-foreground">
+                    {candidate.title || "Source scientifique"}
+                  </span>
+                  <span className="mt-0.5 line-clamp-1 block text-[11px] text-muted-foreground">
+                    {[
+                      candidate.year,
+                      candidate.source_providers?.join(" · "),
+                      candidate.relevance_role === "direct_evidence"
+                        ? "Preuve directe"
+                        : candidate.relevance_role === "connected_evidence"
+                          ? "Source connexe"
+                          : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </span>
+
+                {decision === "accepted" ? (
+                  <Badge className="shrink-0 bg-success text-[9px]">
+                    Gardée
+                  </Badge>
+                ) : decision === "rejected" ? (
+                  <Badge
+                    variant="secondary"
+                    className="shrink-0 text-[9px]"
+                  >
+                    Écartée
+                  </Badge>
+                ) : null}
+              </button>
+            )
+          })}
+
+          {candidates.length > preview.length && (
+            <button
+              type="button"
+              className="flex w-full items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-medium text-brand transition-colors hover:bg-brand/[0.035]"
+              onClick={() => setExpanded(true)}
+            >
+              Voir les {candidates.length} sources
+              <ChevronDown className="size-3.5" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3 bg-muted/[0.08] p-3 sm:p-4">
+          {candidates.map((candidate) => (
+            <CandidateCard
+              key={candidate.candidate_id}
+              candidate={candidate}
+              busy={busyCandidateId === candidate.candidate_id}
+              onDecision={onDecision}
+              onUploadPdf={onUploadPdf}
+            />
+          ))}
+
+          <div className="flex justify-center pt-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="rounded-xl text-xs text-muted-foreground"
+              onClick={() => setExpanded(false)}
+            >
+              Réduire la recherche
+              <ChevronUp className="size-3.5" data-icon="inline-end" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function CorpusPanel({
   open,
   onOpenChange,
   articles,
@@ -501,20 +793,20 @@ function CorpusDialog({
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[88vh] flex-col overflow-hidden p-0 sm:max-w-4xl">
-        <DialogHeader className="border-b px-6 py-5">
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="flex w-[96vw] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
+        <SheetHeader className="border-b px-5 py-4 pr-14 text-left sm:px-6">
+          <SheetTitle className="flex items-center gap-2">
             <Library className="size-5 text-brand" />
             Corpus de rédaction
             <Badge variant="outline">{articles.length} article(s)</Badge>
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription>
             Chaque article présent ici est sélectionné pour la rédaction.
             L’ajout prépare le texte intégral puis construit automatiquement son
             Article Card.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         <div className="border-b bg-muted/40 px-6 py-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -687,8 +979,8 @@ function CorpusDialog({
             </div>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -708,7 +1000,6 @@ export function EnnoScholarPlanChat({
   const [sessions, setSessions] = useState<GuidedResearchSession[]>([])
   const [sessionId, setSessionId] = useState("")
   const [messages, setMessages] = useState<GuidedResearchConversationTurn[]>([])
-  const [candidates, setCandidates] = useState<ResearchCandidate[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [initializing, setInitializing] = useState(true)
@@ -717,7 +1008,7 @@ export function EnnoScholarPlanChat({
   const [notice, setNotice] = useState<string | null>(null)
   const [artifactOpen, setArtifactOpen] = useState(false)
   const [corpusOpen, setCorpusOpen] = useState(false)
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [conversationsOpen, setConversationsOpen] = useState(false)
   const [preparingCorpus, setPreparingCorpus] = useState(false)
   const [busyArticleId, setBusyArticleId] = useState<number | null>(null)
   const [conversationArticles, setConversationArticles] = useState<ArticleRead[]>([])
@@ -740,7 +1031,13 @@ export function EnnoScholarPlanChat({
   )
 
   useEffect(() => {
-    if (hasDraft && !previousHasDraft.current) setArtifactOpen(true)
+    if (
+      hasDraft &&
+      !previousHasDraft.current &&
+      window.matchMedia("(min-width: 1536px)").matches
+    ) {
+      setArtifactOpen(true)
+    }
     if (!hasDraft) setArtifactOpen(false)
     previousHasDraft.current = hasDraft
   }, [hasDraft])
@@ -748,7 +1045,7 @@ export function EnnoScholarPlanChat({
   useEffect(() => {
     const viewport = messagesViewportRef.current
     if (viewport) viewport.scrollTop = viewport.scrollHeight
-  }, [messages, candidates, loading, generating])
+  }, [messages, loading, generating])
 
   async function refreshSessions() {
     const result = await listGuidedResearchSessions(projectId)
@@ -798,8 +1095,14 @@ export function EnnoScholarPlanChat({
     try {
       const current = await getGuidedResearchSession(projectId, id)
       setSessionId(id)
-      setMessages(current?.session?.messages || [])
-      setCandidates(candidatesFromSession(current))
+      const legacyCandidates = candidatesFromSession(current)
+      setMessages(
+        hydrateResearchAttachments(
+          current?.session?.messages || [],
+          current,
+          legacyCandidates,
+        ),
+      )
       setOperatingMode(String(current?.session?.context?.operating_mode || ""))
       setSessionDraftMarkdown(String(current?.artifacts?.draft?.markdown || ""))
       await refreshConversationCorpus(id)
@@ -822,7 +1125,6 @@ export function EnnoScholarPlanChat({
       if (!id) throw new Error("La conversation n’a pas été créée.")
       setSessionId(id)
       setMessages(created?.session?.messages || [])
-      setCandidates([])
       setOperatingMode(String(created?.session?.context?.operating_mode || ""))
       setSessionDraftMarkdown("")
       setConversationArticles([])
@@ -890,7 +1192,6 @@ export function EnnoScholarPlanChat({
   useEffect(() => {
     setSessionId("")
     setMessages([])
-    setCandidates([])
     setConversationArticles([])
     void initialize()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -926,10 +1227,6 @@ export function EnnoScholarPlanChat({
           metadata: response?.metadata || {},
         },
       ])
-      const found =
-        response?.metadata?.candidates ||
-        response?.metadata?.research?.candidates
-      if (Array.isArray(found)) setCandidates(found)
       if (response?.metadata?.operating_mode) {
         setOperatingMode(String(response.metadata.operating_mode))
       }
@@ -1022,11 +1319,11 @@ export function EnnoScholarPlanChat({
         [candidate.candidate_id],
         decision,
       )
-      setCandidates((current) =>
-        current.map((row) =>
-          row.candidate_id === candidate.candidate_id
-            ? { ...row, consultant_decision: decision }
-            : row,
+      setMessages((current) =>
+        updateCandidateInMessages(
+          current,
+          candidate.candidate_id,
+          (row) => ({ ...row, consultant_decision: decision }),
         ),
       )
       const response = result?.response
@@ -1047,7 +1344,18 @@ export function EnnoScholarPlanChat({
           projectId,
           sessionId,
         )
-        setCandidates(candidatesFromSession(refreshedSession))
+        const refreshedCandidate = candidatesFromSession(refreshedSession).find(
+          (row) => row.candidate_id === candidate.candidate_id,
+        )
+        if (refreshedCandidate) {
+          setMessages((current) =>
+            updateCandidateInMessages(
+              current,
+              candidate.candidate_id,
+              () => refreshedCandidate,
+            ),
+          )
+        }
         setNotice(
           "Source acceptée : elle est ajoutée au corpus uniquement si son texte a été extrait.",
         )
@@ -1138,7 +1446,18 @@ export function EnnoScholarPlanChat({
         sessionId,
       )
       const refreshedSession = await getGuidedResearchSession(projectId, sessionId)
-      setCandidates(candidatesFromSession(refreshedSession))
+      const refreshedCandidate = candidatesFromSession(refreshedSession).find(
+        (row) => row.candidate_id === candidate.candidate_id,
+      )
+      if (refreshedCandidate) {
+        setMessages((current) =>
+          updateCandidateInMessages(
+            current,
+            candidate.candidate_id,
+            () => refreshedCandidate,
+          ),
+        )
+      }
       await refreshConversationCorpus()
       await onCorpusChanged?.()
       const cardsCount = Number(result?.phase_2?.cards_count || 0)
@@ -1214,132 +1533,23 @@ export function EnnoScholarPlanChat({
       <div
         className={
           immersive
-            ? "improvement-workspace relative flex h-full min-h-0 overflow-hidden"
-            : "improvement-workspace relative flex h-[calc(100dvh-205px)] min-h-[520px] max-h-[900px] overflow-hidden rounded-xl border border-border shadow-xs"
+            ? "relative flex h-full min-h-0 overflow-hidden bg-background"
+            : "relative flex h-[calc(100dvh-205px)] min-h-[520px] max-h-[900px] overflow-hidden rounded-xl border border-border bg-background shadow-xs"
         }
       >
-        <aside
-          className={`w-[252px] shrink-0 flex-col border-r border-border bg-card/90 ${
-            artifactOpen ? "hidden 2xl:flex" : "hidden lg:flex"
-          }`}
-        >
-          <div className="border-b border-border p-3">
-            <Button
-              className="w-full justify-start"
-              onClick={() => void createConversation()}
-              disabled={initializing}
-            >
-              <MessageSquarePlus className="mr-2 size-4" />
-              Nouvelle conversation
-            </Button>
-
-            <button
-              type="button"
-              onClick={() => hasDraft && setArtifactOpen((current) => !current)}
-              className={`mt-2 flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition ${
-                hasDraft
-                  ? "border-brand/25 bg-brand/8 text-brand hover:bg-brand/10"
-                  : "cursor-default border-border bg-card text-muted-foreground"
-              }`}
-            >
-              <span className="flex items-center gap-2 text-sm font-medium">
-                <FileText className="size-4" />
-                État de l’art
-              </span>
-              <Badge
-                variant="outline"
-                className={
-                  hasDraft
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : ""
-                }
-              >
-                {hasDraft ? "Rédigé" : "Fermé"}
-              </Badge>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setCorpusOpen(true)}
-              className="mt-2 flex w-full items-center justify-between rounded-xl border border-border bg-card px-3 py-2.5 text-left hover:bg-muted/50"
-            >
-              <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <Library className="size-4 text-brand" />
-                Corpus
-              </span>
-              <Badge variant="outline">{conversationArticles.length}</Badge>
-            </button>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
-            <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Conversations
-            </p>
-            <div className="space-y-1">
-              {sessions.map((session) => {
-                const active = session.session_id === sessionId
-                return (
-                  <div
-                    key={session.session_id}
-                    className={`group flex items-start rounded-xl transition ${
-                      active
-                        ? "bg-brand/8 ring-1 ring-brand/15"
-                        : "hover:bg-muted/60"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => void openSession(session.session_id)}
-                      className="min-w-0 flex-1 px-3 py-2.5 text-left"
-                    >
-                      <p className="line-clamp-2 text-sm font-medium leading-5 text-foreground">
-                        {sessionLabel(session)}
-                      </p>
-                      <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                        <span>{formatSessionDate(session.updated_at)}</span>
-                        <span>{session.message_count || 0} msg.</span>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      disabled={deletingSessionId === session.session_id}
-                      onClick={() => void removeConversation(session)}
-                      className="mr-1 mt-1.5 inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-slate-400 opacity-50 transition hover:bg-rose-50 hover:text-rose-600 focus:opacity-100 group-hover:opacity-100"
-                      aria-label={`Supprimer la conversation ${sessionLabel(session)}`}
-                    >
-                      {deletingSessionId === session.session_id ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <Trash2 className="size-3.5" />
-                      )}
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="border-t border-border p-3">
-            <p className="truncate text-xs font-medium text-foreground">
-              {projectLabel}
-            </p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Les conversations restent attachées à ce projet.
-            </p>
-          </div>
-        </aside>
-
         <main className="flex min-w-0 flex-1 flex-col bg-card/75">
-          <header className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-card/90 px-4 backdrop-blur-sm sm:px-6">
+          <header className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-card/95 px-3 py-2 backdrop-blur-sm sm:px-5">
             <div className="flex min-w-0 items-center gap-3">
               <Button
-                variant="ghost"
-                size="icon"
-                className="lg:hidden"
-                title="Conversations"
-                onClick={() => setMobileSidebarOpen(true)}
+                variant="outline"
+                size="sm"
+                className="min-h-10 shrink-0"
+                onClick={() => setConversationsOpen(true)}
+                aria-label={`Ouvrir les conversations, ${sessions.length} au total`}
               >
-                <Menu className="size-4" />
+                <MessageSquareText className="size-4" aria-hidden="true" />
+                <span className="hidden sm:inline">Conversations</span>
+                <Badge variant="outline" className="ml-1">{sessions.length}</Badge>
               </Button>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-foreground">
@@ -1354,7 +1564,7 @@ export function EnnoScholarPlanChat({
                       } as GuidedResearchSession),
                   )}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="hidden text-xs text-muted-foreground sm:block">
                   Conversation scientifique · mémoire du projet active
                 </p>
               </div>
@@ -1391,16 +1601,17 @@ export function EnnoScholarPlanChat({
               <button
                 type="button"
                 onClick={() => setCorpusOpen(true)}
-                className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground shadow-xs hover:border-brand/25 hover:bg-brand/5"
+                className="flex min-h-10 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground shadow-xs transition-colors hover:border-brand/25 hover:bg-brand/5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25"
               >
-                <Library className="size-4 text-brand" />
-                <span className="hidden sm:inline">Corpus de rédaction</span>
+                <Library className="size-4 text-brand" aria-hidden="true" />
+                <span className="hidden md:inline">Corpus</span>
                 <Badge variant="outline">{conversationArticles.length}</Badge>
                 {preparingCorpus && <Loader2 className="size-3.5 animate-spin" />}
               </button>
               <Button
                 variant="outline"
-                size="icon"
+                size="sm"
+                className="min-h-10"
                 onClick={() => hasDraft && setArtifactOpen((current) => !current)}
                 disabled={!hasDraft}
                 title={hasDraft ? "Afficher l’état de l’art" : "Aucun état de l’art rédigé"}
@@ -1410,6 +1621,7 @@ export function EnnoScholarPlanChat({
                 ) : (
                   <PanelRightOpen className="size-4" />
                 )}
+                <span className="hidden lg:inline">Aperçu</span>
               </Button>
             </div>
           </header>
@@ -1418,7 +1630,7 @@ export function EnnoScholarPlanChat({
             ref={messagesViewportRef}
             className="min-h-0 flex-1 overflow-y-auto"
           >
-            <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6">
+            <div className="mx-auto w-full max-w-5xl space-y-7 px-4 py-7 sm:px-6 lg:px-8">
               {messages.length === 0 && !initializing ? (
                 <div className="flex min-h-[360px] flex-col items-center justify-center text-center">
                   <div className="rounded-xl border border-brand/15 bg-brand/8 p-3 text-brand">
@@ -1452,6 +1664,10 @@ export function EnnoScholarPlanChat({
               ) : (
                 messages.map((message, index) => {
                   const consultant = message.role === "consultant"
+                  const messageCandidates = consultant
+                    ? []
+                    : getMessageCandidates(message)
+
                   return (
                     <div
                       key={message.message_id || `${message.role}-${index}`}
@@ -1460,42 +1676,42 @@ export function EnnoScholarPlanChat({
                       }`}
                     >
                       {!consultant && (
-                        <div className="mt-0.5 h-fit rounded-full bg-brand/10 p-2 text-brand">
+                        <div className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full border border-brand/10 bg-brand/[0.055] text-brand">
                           <Bot className="size-3.5" />
                         </div>
                       )}
+
                       <div
-                        className={`max-w-[88%] whitespace-pre-wrap text-sm leading-7 ${
+                        className={
                           consultant
-                            ? "rounded-2xl rounded-br-md border border-brand/10 bg-brand/8 px-4 py-2.5 text-foreground"
-                            : "py-1 text-foreground"
-                        }`}
+                            ? "max-w-[82%]"
+                            : "min-w-0 w-full max-w-[900px]"
+                        }
                       >
-                        {citationText(message.content)}
+                        <div
+                          className={`whitespace-pre-wrap text-sm leading-7 ${
+                            consultant
+                              ? "rounded-2xl rounded-br-md border border-brand/10 bg-brand/8 px-4 py-2.5 text-foreground"
+                              : "py-1 text-foreground"
+                          }`}
+                        >
+                          {citationText(message.content)}
+                        </div>
+
+                        {!consultant && messageCandidates.length > 0 && (
+                          <ResearchAttachment
+                            candidates={messageCandidates}
+                            busyCandidateId={decidingId}
+                            onDecision={(row, value) => void decide(row, value)}
+                            onUploadPdf={(row, file) =>
+                              void uploadCandidatePdf(row, file)
+                            }
+                          />
+                        )}
                       </div>
                     </div>
                   )
                 })
-              )}
-
-              {candidates.length > 0 && (
-                <div className="space-y-3 border-t border-border pt-5">
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    <Search className="size-3.5" />
-                    Sources proposées · {candidates.length}
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {candidates.map((candidate) => (
-                      <CandidateCard
-                        key={candidate.candidate_id}
-                        candidate={candidate}
-                        busy={decidingId === candidate.candidate_id}
-                        onDecision={(row, value) => void decide(row, value)}
-                        onUploadPdf={(row, file) => void uploadCandidatePdf(row, file)}
-                      />
-                    ))}
-                  </div>
-                </div>
               )}
 
               {(initializing || loading || generating) && (
@@ -1628,27 +1844,9 @@ export function EnnoScholarPlanChat({
           </aside>
         )}
 
-        {!artifactOpen && (
-          <button
-            type="button"
-            onClick={() => hasDraft && setArtifactOpen(true)}
-            disabled={!hasDraft}
-            className={`hidden w-14 shrink-0 flex-col items-center justify-center gap-3 border-l border-border 2xl:flex ${
-              hasDraft
-                ? "bg-muted/40 text-muted-foreground hover:bg-brand/8 hover:text-brand"
-                : "cursor-not-allowed bg-muted/30 text-muted-foreground/40"
-            }`}
-            title={hasDraft ? "Ouvrir l’état de l’art" : "Aucun état de l’art rédigé"}
-          >
-            <FileText className="size-5" />
-            <span className="[writing-mode:vertical-rl] text-xs font-semibold uppercase tracking-[0.16em]">
-              État de l’art
-            </span>
-          </button>
-        )}
       </div>
 
-      <CorpusDialog
+      <CorpusPanel
         open={corpusOpen}
         onOpenChange={setCorpusOpen}
         articles={conversationArticles}
@@ -1663,9 +1861,9 @@ export function EnnoScholarPlanChat({
         onConsult={(article) => void consultArticle(article)}
       />
 
-      <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
-        <SheetContent side="left" className="w-[88vw] max-w-sm gap-0 p-0">
-          <SheetHeader className="border-b pr-14">
+      <Sheet open={conversationsOpen} onOpenChange={setConversationsOpen}>
+        <SheetContent side="left" className="flex w-[92vw] max-w-sm flex-col gap-0 p-0">
+          <SheetHeader className="border-b px-4 py-4 pr-14 text-left">
             <SheetTitle>Conversations du projet</SheetTitle>
             <SheetDescription>
               Chaque conversation conserve son propre historique scientifique.
@@ -1675,7 +1873,7 @@ export function EnnoScholarPlanChat({
             <Button
               className="w-full justify-start"
               onClick={() => {
-                setMobileSidebarOpen(false)
+                setConversationsOpen(false)
                 void createConversation()
               }}
               disabled={initializing}
@@ -1687,7 +1885,7 @@ export function EnnoScholarPlanChat({
               variant="outline"
               className="mt-2 w-full justify-between rounded-xl"
               onClick={() => {
-                setMobileSidebarOpen(false)
+                setConversationsOpen(false)
                 setCorpusOpen(true)
               }}
             >
@@ -1702,7 +1900,7 @@ export function EnnoScholarPlanChat({
                 variant="ghost"
                 className="mt-2 w-full justify-start rounded-xl"
                 onClick={() => {
-                  setMobileSidebarOpen(false)
+                  setConversationsOpen(false)
                   onBackToArticles()
                 }}
               >
@@ -1712,27 +1910,34 @@ export function EnnoScholarPlanChat({
             )}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            {sessions.length === 0 && !initializing && (
+              <div className="m-2 rounded-xl border border-dashed border-border p-5 text-center">
+                <MessageSquareText className="mx-auto size-5 text-muted-foreground" aria-hidden="true" />
+                <p className="mt-2 text-sm font-medium text-foreground">Aucune conversation</p>
+                <p className="mt-1 text-xs text-muted-foreground">Créez une conversation pour commencer la rédaction guidée.</p>
+              </div>
+            )}
             {sessions.map((session) => (
               <div
                 key={session.session_id}
                 className={`mb-1 flex items-start rounded-xl ${
                   session.session_id === sessionId
-                    ? "bg-slate-100 ring-1 ring-slate-200"
-                    : "hover:bg-slate-50"
+                    ? "bg-brand/8 ring-1 ring-brand/15"
+                    : "hover:bg-muted/60"
                 }`}
               >
                 <button
                   type="button"
                   onClick={() => {
-                    setMobileSidebarOpen(false)
+                    setConversationsOpen(false)
                     void openSession(session.session_id)
                   }}
-                  className="min-w-0 flex-1 px-3 py-2.5 text-left"
+                  className="min-w-0 flex-1 rounded-xl px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25"
                 >
-                  <p className="line-clamp-2 text-sm font-medium text-slate-800">
+                  <p className="line-clamp-2 text-sm font-medium text-foreground">
                     {sessionLabel(session)}
                   </p>
-                  <p className="mt-1 text-[11px] text-slate-400">
+                  <p className="mt-1 text-[11px] text-muted-foreground">
                     {formatSessionDate(session.updated_at)} ·{" "}
                     {session.message_count || 0} message(s)
                   </p>
@@ -1741,7 +1946,7 @@ export function EnnoScholarPlanChat({
                   type="button"
                   disabled={deletingSessionId === session.session_id}
                   onClick={() => void removeConversation(session)}
-                  className="mr-1 mt-1.5 inline-flex size-9 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                  className="mr-1 mt-1.5 inline-flex size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25"
                   aria-label={`Supprimer la conversation ${sessionLabel(session)}`}
                 >
                   {deletingSessionId === session.session_id ? (
@@ -1752,6 +1957,10 @@ export function EnnoScholarPlanChat({
                 </button>
               </div>
             ))}
+          </div>
+          <div className="border-t border-border bg-muted/30 px-4 py-3">
+            <p className="truncate text-xs font-medium text-foreground">{projectLabel}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">Historique et corpus attachés à ce projet.</p>
           </div>
         </SheetContent>
       </Sheet>

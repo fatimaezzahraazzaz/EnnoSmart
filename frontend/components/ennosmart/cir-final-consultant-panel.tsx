@@ -9,6 +9,7 @@ type Props = {
   defaultOrganisme?: string | null
   defaultProject?: string | null
   defaultYear?: string | number | null
+  onStatusChange?: (registered: boolean) => void
 }
 
 type SectionCard = {
@@ -76,11 +77,16 @@ export function CirFinalConsultantPanel({
   defaultOrganisme = "",
   defaultProject = "",
   defaultYear = "",
+  onStatusChange,
 }: Props) {
   const fileRef = useRef<HTMLInputElement | null>(null)
 
-  const [organisme, setOrganisme] = useState<string>(() => toSafeString(defaultOrganisme))
-  const [project, setProject] = useState<string>(() => toSafeString(defaultProject))
+  const [organisme, setOrganisme] = useState<string>(() =>
+    toSafeString(defaultOrganisme)
+  )
+  const [project, setProject] = useState<string>(() =>
+    toSafeString(defaultProject)
+  )
   const [year, setYear] = useState<string>(() => toSafeString(defaultYear))
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [fileInputKey, setFileInputKey] = useState<number>(0)
@@ -101,22 +107,31 @@ export function CirFinalConsultantPanel({
       )
 
       const data = await res.json()
+
       if (res.ok && data?.status !== "empty") {
         setReport(data)
+        onStatusChange?.(true)
 
-        // Remplissage doux des champs seulement s'ils sont vides.
-        // Toujours avec des chaînes pour éviter controlled/uncontrolled.
-        if (!organisme && data?.organisme) setOrganisme(toSafeString(data.organisme))
-        if (!project && data?.project) setProject(toSafeString(data.project))
-        if (!year && data?.year) setYear(toSafeString(data.year))
+        if (!organisme && data?.organisme) {
+          setOrganisme(toSafeString(data.organisme))
+        }
+        if (!project && data?.project) {
+          setProject(toSafeString(data.project))
+        }
+        if (!year && data?.year) {
+          setYear(toSafeString(data.year))
+        }
+      } else if (res.ok) {
+        setReport(null)
+        onStatusChange?.(false)
       }
     } catch {
-      // Absence de CIR final enregistré : pas d'erreur affichée.
+      onStatusChange?.(false)
     }
   }
 
   useEffect(() => {
-    loadLatest()
+    void loadLatest()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
@@ -150,13 +165,15 @@ export function CirFinalConsultantPanel({
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data?.detail || "Erreur lors de l’enregistrement du CIR final.")
+        throw new Error(
+          data?.detail || "Erreur lors de l’enregistrement du CIR final."
+        )
       }
 
       setReport(data)
       setSelectedFile(null)
+      onStatusChange?.(true)
 
-      // Reset propre du champ fichier sans le rendre contrôlé.
       setFileInputKey((x) => x + 1)
       if (fileRef.current) {
         fileRef.current.value = ""
@@ -172,15 +189,31 @@ export function CirFinalConsultantPanel({
 
   return (
     <div className="space-y-5 rounded-3xl border border-violet-100 bg-white p-5 shadow-sm">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900">
-          CIR précédent / CIR final consultant
-        </h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-violet-600">
+            Référence de clôture
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-900">
+            CIR final consultant
+          </h2>
 
-        <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-          Déposez ici votre version finale du CIR afin de la conserver comme
-          référence pour les futurs dossiers du projet.
-        </p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+            Déposez uniquement la version définitive réellement livrée. Elle
+            devient la référence officielle du dossier dans EnnoSmart et
+            alimentera la mémoire CIR des exercices suivants.
+          </p>
+        </div>
+
+        <span
+          className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
+            report
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-amber-200 bg-amber-50 text-amber-700"
+          }`}
+        >
+          {report ? "CIR final enregistré" : "CIR final à déposer"}
+        </span>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
@@ -212,17 +245,24 @@ export function CirFinalConsultantPanel({
           ref={fileRef}
           type="file"
           accept=".docx,.pdf,.txt,.md"
-          onChange={(e) => setSelectedFile(e.currentTarget.files?.[0] || null)}
+          onChange={(e) =>
+            setSelectedFile(e.currentTarget.files?.[0] || null)
+          }
           className="block w-full text-sm text-slate-700"
         />
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button
+            type="button"
             onClick={uploadFinalCir}
             disabled={loading || !selectedFile}
             className="rounded-xl bg-violet-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? "Enregistrement..." : "Enregistrer le CIR final"}
+            {loading
+              ? "Enregistrement..."
+              : report
+                ? "Remplacer le CIR final"
+                : "Enregistrer le CIR final"}
           </button>
 
           {selectedFile && (
@@ -247,7 +287,8 @@ export function CirFinalConsultantPanel({
             </h3>
 
             <p className="mt-1 text-sm leading-6 text-emerald-800">
-              Le document est maintenant disponible comme référence pour ce projet.
+              La validation de clôture peut maintenant être considérée comme
+              complète dans EnnoDiagnostic.
             </p>
 
             <div className="mt-3 grid gap-2 text-sm text-emerald-900 md:grid-cols-2">

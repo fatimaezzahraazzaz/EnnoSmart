@@ -2584,23 +2584,26 @@ def _call_ollama_json(prompt: str, task: str = "ollama") -> Optional[Dict[str, A
     )
 
     try:
-        resp = requests.post(
-            f"{OLLAMA_BASE_URL.rstrip('/')}/api/generate",
-            json={
-                "model": OLLAMA_MODEL,
-                "prompt": prompt,
-                "stream": False,
-                "format": "json",
-                "options": {
-                    "temperature": 0.02,
-                    "num_ctx": OLLAMA_NUM_CTX,
-                    "num_predict": OLLAMA_NUM_PREDICT,
+        from modules.LLM.llm_concurrency import llm_capacity_slot
+
+        with llm_capacity_slot(f"ennoscholar:article_card:{task}"):
+            resp = requests.post(
+                f"{OLLAMA_BASE_URL.rstrip('/')}/api/generate",
+                json={
+                    "model": OLLAMA_MODEL,
+                    "prompt": prompt,
+                    "stream": False,
+                    "format": "json",
+                    "options": {
+                        "temperature": 0.02,
+                        "num_ctx": OLLAMA_NUM_CTX,
+                        "num_predict": OLLAMA_NUM_PREDICT,
+                    },
                 },
-            },
-            timeout=LLM_TIMEOUT,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+                timeout=LLM_TIMEOUT,
+            )
+            resp.raise_for_status()
+            data = resp.json()
         parsed = _extract_json_from_llm(data.get("response", ""))
         elapsed = round(time.time() - started, 2)
         print(

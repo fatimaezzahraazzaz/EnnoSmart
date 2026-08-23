@@ -483,7 +483,10 @@ def generate_eligibility_section_with_pydantic_ai(
     )
 
     prompt = _prompt_from_evidence(frascati_summary, evidence)
-    result = eligibility_agent.run_sync(prompt, deps=deps)
+    from modules.LLM.llm_concurrency import llm_capacity_slot
+
+    with llm_capacity_slot("ennodiagnostic:eligibility_structured"):
+        result = eligibility_agent.run_sync(prompt, deps=deps)
     narrative = result.output
     result_facts = [fact.model_dump() for fact in narrative.result_facts]
 

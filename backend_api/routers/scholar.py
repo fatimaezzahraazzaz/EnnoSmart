@@ -19,6 +19,9 @@ from core.deps import get_current_user, get_db, require_agent_enabled
 from db.models import Article, DiagnosticRun, ScholarRun, User, Verrou
 from schemas.scholar import ArticleDecisionRequest, ArticleRead, ScholarRead
 from services.project_service import get_project_for_user
+from services.consultant_verrou_service import (
+    get_latest_diagnostic_verrous as get_current_and_manual_verrous,
+)
 from services import scholar_service as scholar_service_module
 from services.scholar_service import (
     build_scholar_payload_from_selected_verrous,
@@ -453,38 +456,23 @@ def _install_latest_diagnostic_verrou_policy(
         service_db: Session,
         project: Any,
     ) -> list[Verrou]:
-        run = _latest_diagnostic_run_for_project(
+        return get_current_and_manual_verrous(
             service_db,
             int(project.id),
-        )
-        if run is None:
-            return []
-        return (
-            service_db.query(Verrou)
-            .filter(Verrou.diagnostic_run_id == int(run.id))
-            .order_by(Verrou.created_at.asc(), Verrou.id.asc())
-            .all()
         )
 
     def latest_selected_verrous(
         service_db: Session,
         project: Any,
     ) -> list[Verrou]:
-        run = _latest_diagnostic_run_for_project(
-            service_db,
-            int(project.id),
-        )
-        if run is None:
-            return []
-        return (
-            service_db.query(Verrou)
-            .filter(
-                Verrou.diagnostic_run_id == int(run.id),
-                Verrou.consultant_status == "garde",
+        return [
+            verrou
+            for verrou in get_current_and_manual_verrous(
+                service_db,
+                int(project.id),
             )
-            .order_by(Verrou.created_at.asc(), Verrou.id.asc())
-            .all()
-        )
+            if verrou.consultant_status == "garde"
+        ]
 
     scholar_service_module.get_all_current_verrous = latest_all_verrous
     scholar_service_module.get_selected_verrous_for_scholar = latest_selected_verrous
@@ -492,18 +480,10 @@ def _install_latest_diagnostic_verrou_policy(
     current_count = 0
     selected_count = 0
     if latest_run is not None:
-        current_count = (
-            db.query(Verrou)
-            .filter(Verrou.diagnostic_run_id == int(latest_run.id))
-            .count()
-        )
-        selected_count = (
-            db.query(Verrou)
-            .filter(
-                Verrou.diagnostic_run_id == int(latest_run.id),
-                Verrou.consultant_status == "garde",
-            )
-            .count()
+        current_rows = get_current_and_manual_verrous(db, project_id)
+        current_count = len(current_rows)
+        selected_count = sum(
+            1 for verrou in current_rows if verrou.consultant_status == "garde"
         )
 
     report = {
@@ -514,7 +494,7 @@ def _install_latest_diagnostic_verrou_policy(
         "current_verrous": int(current_count),
         "selected_verrous": int(selected_count),
         "history_deleted": False,
-        "policy": "latest_diagnostic_run_only",
+        "policy": "latest_diagnostic_run_plus_manual_history",
     }
     print(
         "[EnnoScholar][V12_LATEST_ONLY_NO_DELETE] "
@@ -534,17 +514,10 @@ def _latest_diagnostic_verrous(
     selected_only: bool = False,
 ) -> list[Verrou]:
     """Lecture non cumulative utilisée par l'aperçu EnnoScholar."""
-    latest_run = _latest_diagnostic_run_for_project(db, project_id)
-    if latest_run is None:
-        return []
-
-    query = db.query(Verrou).filter(
-        Verrou.diagnostic_run_id == int(latest_run.id)
-    )
+    rows = get_current_and_manual_verrous(db, project_id)
     if selected_only:
-        query = query.filter(Verrou.consultant_status == "garde")
-
-    return query.order_by(Verrou.created_at.asc(), Verrou.id.asc()).all()
+        rows = [row for row in rows if row.consultant_status == "garde"]
+    return rows
 
 
 # ============================================================

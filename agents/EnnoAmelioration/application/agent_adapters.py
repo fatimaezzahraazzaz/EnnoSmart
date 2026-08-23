@@ -196,12 +196,17 @@ def diagnostic_context(db: Any, project: Any, target_text: str) -> dict[str, Any
             "evidence_items": [],
         }
 
-    rows = (
-        db.query(Verrou)
-        .filter(Verrou.diagnostic_run_id == run.id)
-        .order_by(Verrou.score.desc(), Verrou.created_at.asc())
-        .all()
-    )
+    try:
+        from services.consultant_verrou_service import get_latest_diagnostic_verrous
+
+        rows = get_latest_diagnostic_verrous(db, int(project.id))
+    except Exception:
+        rows = (
+            db.query(Verrou)
+            .filter(Verrou.diagnostic_run_id == run.id)
+            .order_by(Verrou.score.desc(), Verrou.created_at.asc())
+            .all()
+        )
     kept = [row for row in rows if str(row.consultant_status or "").casefold() == "garde"] or rows
     snapshot = _diagnostic_snapshot(run)
     raw_result = run.raw_result_json if isinstance(run.raw_result_json, dict) else {}

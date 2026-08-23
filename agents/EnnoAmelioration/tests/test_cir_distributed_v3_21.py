@@ -12,7 +12,7 @@ def test_celery_worker_files_exist():
 def test_windows_worker_uses_the_project_virtualenv_explicitly():
     path = ROOT / "start_cir_worker_windows.ps1"
     text = path.read_text(encoding="utf-8")
-    assert 'C:\\EnnoSmart\\.venv\\Scripts\\python.exe' in text
+    assert 'C:\\EnnoSmart\\.venv_py314\\Scripts\\python.exe' in text
     assert "& $pythonExe -m celery" in text
 
 

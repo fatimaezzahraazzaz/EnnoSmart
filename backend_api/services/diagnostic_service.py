@@ -13,10 +13,15 @@ import re
 import shutil
 import sys
 
-from sqlalchemy.orm import Session, undefer
+from sqlalchemy.orm import Session
 
 from core.config import settings
 from db.models import DiagnosticRun, Project, Verrou
+from services.document_corpus_service import (
+    CORPUS_DIAGNOSTIC,
+    diagnostic_corpus_manifest,
+    documents_for_corpus,
+)
 from services.file_service import load_json_file, project_output_dir, run_optional_ai_script
 
 try:
@@ -115,12 +120,7 @@ def get_uploaded_document_paths(db: Session, project: Project) -> List[str]:
     if Document is None:
         return paths
 
-    docs = (
-        db.query(Document)
-        .filter(Document.project_id == project.id)
-        .order_by(Document.created_at.asc())
-        .all()
-    )
+    docs = documents_for_corpus(db, project.id, CORPUS_DIAGNOSTIC)
 
     for doc in docs:
         file_path = getattr(doc, "file_path", None)
@@ -130,7 +130,11 @@ def get_uploaded_document_paths(db: Session, project: Project) -> List[str]:
     return paths
 
 
-def copy_uploaded_docs_to_project_store(db: Session, project: Project) -> List[str]:
+def copy_uploaded_docs_to_project_store(
+    db: Session,
+    project: Project,
+    documents: Optional[List[Any]] = None,
+) -> List[str]:
     """
     Source officielle des documents = table documents.
 
@@ -150,13 +154,35 @@ def copy_uploaded_docs_to_project_store(db: Session, project: Project) -> List[s
     if Document is None:
         return copied
 
-    docs = (
+    docs = list(documents) if documents is not None else documents_for_corpus(
+        db,
+        project.id,
+        CORPUS_DIAGNOSTIC,
+        load_file_data=True,
+    )
+
+    # Le dossier raw est une copie de travail reconstructible. On retire
+    # uniquement les copies DB qui ne font pas partie du corpus Diagnostic ;
+    # les originaux PostgreSQL ne sont jamais supprimés.
+    selected_ids = {int(doc.id) for doc in docs}
+    all_project_docs = (
         db.query(Document)
-        .options(undefer(Document.file_data))
         .filter(Document.project_id == project.id)
-        .order_by(Document.created_at.asc())
         .all()
     )
+    removed_working_copies: List[str] = []
+    for doc in all_project_docs:
+        if int(doc.id) in selected_ids:
+            continue
+        stored_name = getattr(doc, "stored_filename", None) or getattr(doc, "filename", None) or f"document_{doc.id}"
+        safe_name = re.sub(r'[\\/:*?"<>|]+', "_", str(stored_name)).strip() or f"document_{doc.id}"
+        stale_path = ps.documents_raw_dir / safe_name
+        try:
+            if stale_path.exists() and stale_path.is_file():
+                stale_path.unlink()
+                removed_working_copies.append(str(stale_path))
+        except OSError as exc:
+            print(f"[prepare-sources] Copie raw non supprimée {stale_path}: {exc}")
 
     for doc in docs:
         stored_name = getattr(doc, "stored_filename", None) or getattr(doc, "filename", None) or f"document_{doc.id}"
@@ -181,6 +207,11 @@ def copy_uploaded_docs_to_project_store(db: Session, project: Project) -> List[s
     print(f"✅ Documents reconstruits depuis PostgreSQL vers raw : {len(copied)}")
     for path in copied[:20]:
         print(f"   - {path}")
+    if removed_working_copies:
+        print(
+            "[prepare-sources] Copies de travail hors corpus retirées : "
+            f"{len(removed_working_copies)}"
+        )
 
     return copied
 
@@ -378,7 +409,10 @@ def read_diagnostic_bundle(project: Project, *, compact: bool = False) -> Dict[s
         # La vue React est reconstruite depuis le rapport officiel. Charger ici
         # nlp_result/chunks/comparaisons (plusieurs dizaines de Mo) ne change pas
         # l'affichage et bloquait inutilement chaque ouverture de page.
-        return sanitize_json_value({
+        # Le rapport est un JSON déjà désérialisé. Ne pas le parcourir une
+        # première fois ici : la route compacte sélectionne ensuite les seuls
+        # champs publics avant l'unique sanitation finale.
+        return {
             "output_dir": str(paths["output_dir"]),
             "report": load_json_file(paths["report"]),
             "report_path_used": str(paths["report"]) if paths["report"].exists() else None,
@@ -393,7 +427,7 @@ def read_diagnostic_bundle(project: Project, *, compact: bool = False) -> Dict[s
                 "comparison_cir_vs_raw": paths["comparison_cir_vs_raw"].exists(),
                 "rag_report": paths["rag_report"].exists(),
             },
-        })
+        }
 
     return sanitize_json_value({
         "output_dir": str(paths["output_dir"]),
@@ -440,18 +474,29 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
     ps = get_project_store(project)
 
     print("[prepare-sources][1/6] Reconstruction des documents", flush=True)
-    copied_from_db = copy_uploaded_docs_to_project_store(db, project)
+    selected_documents = documents_for_corpus(
+        db,
+        project.id,
+        CORPUS_DIAGNOSTIC,
+        load_file_data=True,
+    )
+    corpus_manifest = diagnostic_corpus_manifest(db, project.id)
+    copied_from_db = copy_uploaded_docs_to_project_store(
+        db,
+        project,
+        selected_documents,
+    )
 
     allowed_ext = _supported_raw_extensions_from_extraction_router()
     raw_paths: List[str] = []
     skipped_paths: List[str] = []
 
-    if ps.documents_raw_dir.exists():
-        for path in ps.documents_raw_dir.rglob("*"):
-            if _is_supported_raw_document(path, allowed_ext):
-                raw_paths.append(str(path))
-            elif path.is_file():
-                skipped_paths.append(str(path))
+    for value in copied_from_db:
+        path = Path(value)
+        if _is_supported_raw_document(path, allowed_ext):
+            raw_paths.append(str(path))
+        elif path.is_file():
+            skipped_paths.append(str(path))
 
     raw_paths = sorted(dict.fromkeys(raw_paths))
 
@@ -566,6 +611,7 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
         "documents_skipped_paths": skipped_paths,
         "documents_skipped_count": len(skipped_paths),
         "allowed_extensions": sorted(allowed_ext),
+        "corpus_manifest": corpus_manifest,
         # Compatibilite avec le reste du backend, sans contenu NLP massif.
         "nlp_result": {"stats": stats},
         "nlp_stats": stats,
@@ -1244,17 +1290,52 @@ def sync_verrous_from_diagnostic(
         else {}
     )
 
-    # On remplace uniquement les lignes du run courant.
+    # On remplace uniquement les lignes agent du run courant. Les ajouts
+    # explicites du consultant sont des données métier et ne doivent jamais
+    # disparaître lors d'une resynchronisation du même run.
     # Les anciens runs restent intacts pour l'audit et leurs articles
     # conservent leurs clés étrangères valides.
-    deleted_current_count = (
+    current_rows = (
         db.query(Verrou)
         .filter(Verrou.diagnostic_run_id == int(run.id))
-        .delete(synchronize_session=False)
+        .all()
     )
+    manual_current = []
+    agent_current_ids = []
+    for current_row in current_rows:
+        current_source = (
+            current_row.source_json
+            if isinstance(current_row.source_json, dict)
+            else {}
+        )
+        is_manual = bool(
+            current_source.get("manual_verrou")
+            or current_source.get("supplementary_verrou")
+            or (
+                current_source.get("human_validated") is True
+                and current_source.get("automatic_verrou_creation") is False
+            )
+        )
+        if is_manual:
+            manual_current.append(current_row)
+        else:
+            agent_current_ids.append(int(current_row.id))
+
+    deleted_current_count = 0
+    if agent_current_ids:
+        deleted_current_count = (
+            db.query(Verrou)
+            .filter(Verrou.id.in_(agent_current_ids))
+            .delete(synchronize_session=False)
+        )
     db.flush()
 
     created: List[Verrou] = []
+    manual_titles = {
+        re.sub(r"\s+", " ", str(row.title or "").lower()).strip()
+        for row in manual_current
+        if str(row.title or "").strip()
+    }
 
     for item in candidates:
         title = _clean_text(
@@ -1264,6 +1345,11 @@ def sync_verrous_from_diagnostic(
             500,
         )
         if not title:
+            continue
+
+        normalized_title = re.sub(r"\s+", " ", title.lower()).strip()
+        if normalized_title in manual_titles:
+            # La formulation humaine est prioritaire et reste déjà auto-gardée.
             continue
 
         source_json = (
@@ -1281,7 +1367,6 @@ def sync_verrous_from_diagnostic(
         })
 
         score = _to_float(item.get("score"))
-        normalized_title = re.sub(r"\s+", " ", title.lower()).strip()
         status_value = (
             previous_statuses.get(normalized_title)
             or item.get("consultant_status")
@@ -1328,7 +1413,8 @@ def sync_verrous_from_diagnostic(
 
     db.flush()
 
-    if not created:
+    synced_rows = [*manual_current, *created]
+    if not synced_rows:
         raise RuntimeError(
             "Le diagnostic contient des candidats, mais aucun verrou "
             "n'a pu être persisté."
@@ -1343,7 +1429,8 @@ def sync_verrous_from_diagnostic(
             "run_id": run.id,
             "deleted_current_count": int(deleted_current_count or 0),
             "history_preserved": True,
-            "count": len(created),
+            "count": len(synced_rows),
+            "manual_preserved_count": len(manual_current),
             "synced_at": datetime.utcnow().isoformat(),
             "items": [
                 {
@@ -1355,7 +1442,7 @@ def sync_verrous_from_diagnostic(
                         "en_attente",
                     ),
                 }
-                for verrou in created
+                for verrou in synced_rows
             ],
         }
         run.raw_result_json = payload
@@ -1366,16 +1453,17 @@ def sync_verrous_from_diagnostic(
         f"run_id={run.id} "
         f"deleted_current={int(deleted_current_count or 0)} "
         f"created_current={len(created)} "
+        f"manual_preserved={len(manual_current)} "
         "history_preserved=true"
     )
 
     if commit:
         db.commit()
         db.refresh(run)
-        for verrou in created:
+        for verrou in synced_rows:
             db.refresh(verrou)
 
-    return created
+    return synced_rows
 
 
 def _persist_complete_run(
@@ -1470,6 +1558,7 @@ def prepare_ennodiagnostic_sources(db: Session, project: Project) -> Dict[str, A
         "nlp_stats": nlp_stats,
         "index_report": index_report,
         "nlp_result_path": nlp_rag.get("nlp_result_path"),
+        "corpus_manifest": nlp_rag.get("corpus_manifest") or {},
     }
 
     result = {
@@ -1486,6 +1575,7 @@ def prepare_ennodiagnostic_sources(db: Session, project: Project) -> Dict[str, A
         "documents_used_count": compact_pipeline["documents_used_count"],
         "documents_loaded_count": compact_pipeline["documents_loaded_count"],
         "documents_used_paths": compact_pipeline["documents_used_paths"],
+        "corpus_manifest": compact_pipeline["corpus_manifest"],
         "nlp_stats": nlp_stats,
         "index_report": index_report,
         "paths": {
@@ -1527,6 +1617,20 @@ def run_ennodiagnostic_agent_only(db: Session, project: Project) -> DiagnosticRu
         )
 
     prepare_report = _load_prepare_report(project)
+    prepared_manifest = (
+        prepare_report.get("corpus_manifest")
+        if isinstance(prepare_report.get("corpus_manifest"), dict)
+        else {}
+    )
+    current_manifest = diagnostic_corpus_manifest(db, project.id)
+    if (
+        not prepared_manifest.get("fingerprint")
+        or prepared_manifest.get("fingerprint") != current_manifest.get("fingerprint")
+    ):
+        raise RuntimeError(
+            "Le corpus Diagnostic a changé depuis la dernière préparation. "
+            "Cliquez sur « Préparer les sources » avant de relancer EnnoDiagnostic."
+        )
     prior_pipeline = (
         prepare_report.get("raw_pipeline_result")
         if isinstance(prepare_report.get("raw_pipeline_result"), dict)

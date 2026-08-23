@@ -162,6 +162,10 @@ export type ProjectOverview = {
   diagnostic: {
     available: boolean
     latest_run: { id: number; status: string; created_at: string; completed_at: string | null } | null
+    eligibility: {
+      score: number | null
+      available: boolean
+    }
     verrous: {
       count: number
       pending: number
@@ -202,6 +206,12 @@ export type DocumentRead = {
   storage_path?: string | null
   mime_type?: string | null
   size_bytes?: number | null
+}
+
+export type DiagnosticCorpusReview = {
+  diagnostic_documents: DocumentRead[]
+  pending_improvement_documents: DocumentRead[]
+  excluded_improvement_documents: DocumentRead[]
 }
 
 export type VerrouRead = {
@@ -372,6 +382,8 @@ async function apiRequest<T>(
         ? data.detail
         : Array.isArray(data?.detail)
           ? data.detail.map((item: any) => item.msg || item.type).join(" | ")
+          : data?.detail && typeof data.detail === "object" && typeof data.detail.message === "string"
+            ? data.detail.message
           : "Erreur API."
 
     throw new Error(detail)
@@ -599,17 +611,40 @@ export async function getDocuments(projectId: number) {
   )
 }
 
+export async function getDiagnosticCorpusReview(projectId: number) {
+  return apiRequest<DiagnosticCorpusReview>(
+    `/projects/${projectId}/documents/diagnostic-review`,
+  )
+}
+
+export async function updateDiagnosticCorpusReview(
+  projectId: number,
+  decisions: Array<{ document_id: number; keep: boolean }>,
+) {
+  const review = await apiRequest<DiagnosticCorpusReview>(
+    `/projects/${projectId}/documents/diagnostic-review`,
+    {
+      method: "POST",
+      body: JSON.stringify({ decisions }),
+    },
+  )
+  clearReadCache(`documents:${projectId}`)
+  return review
+}
+
 export async function uploadDocument(
   projectId: number,
   file: File,
-  documentType?: string
+  documentType?: string,
+  corpusScope: "diagnostic" | "improvement" = "diagnostic",
 ) {
   const formData = new FormData()
   formData.append("file", file)
 
-  const query = documentType
-    ? `?document_type=${encodeURIComponent(documentType)}`
-    : ""
+  const queryParams = new URLSearchParams()
+  if (documentType) queryParams.set("document_type", documentType)
+  queryParams.set("corpus_scope", corpusScope)
+  const query = `?${queryParams.toString()}`
 
   const document = await apiRequest<DocumentRead>(
     `/projects/${projectId}/documents/upload${query}`,
@@ -650,6 +685,26 @@ export async function updateVerrouDecision(
       method: "PATCH",
       body: JSON.stringify({ consultant_status }),
     }
+  )
+  clearReadCache("project-overviews")
+  return verrou
+}
+
+export async function createManualVerrou(
+  projectId: number,
+  payload: {
+    title: string
+    description: string
+    keywords: string[]
+    force_create_distinct?: boolean
+  },
+) {
+  const verrou = await apiRequest<VerrouRead>(
+    `/projects/${projectId}/verrous/manual`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
   )
   clearReadCache("project-overviews")
   return verrou

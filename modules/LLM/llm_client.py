@@ -20,10 +20,13 @@ import math
 import os
 import re
 import time
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import requests
+
+from modules.LLM.llm_concurrency import llm_capacity_slot
 
 try:
     from dotenv import dotenv_values
@@ -338,7 +341,13 @@ class LLMClient:
             180000,
             5000,
         )
-        self._last_generation_meta: Dict[str, Any] = {}
+        # Un même agent peut servir plusieurs requêtes simultanées. ContextVar
+        # empêche les métadonnées d'un utilisateur d'écraser celles d'un autre.
+        self._generation_meta_context: ContextVar[Dict[str, Any]] = ContextVar(
+            f"ennosmart_llm_generation_meta_{id(self)}",
+            default={},
+        )
+        self._last_generation_meta = {}
 
         _log(
             f"provider={self.provider} default_model={self.model_name} "
@@ -373,6 +382,14 @@ class LLMClient:
 
     def get_last_generation_meta(self) -> Dict[str, Any]:
         return dict(self._last_generation_meta)
+
+    @property
+    def _last_generation_meta(self) -> Dict[str, Any]:
+        return dict(self._generation_meta_context.get())
+
+    @_last_generation_meta.setter
+    def _last_generation_meta(self, value: Mapping[str, Any]) -> None:
+        self._generation_meta_context.set(dict(value or {}))
 
     @property
     def last_generation_meta(self) -> Dict[str, Any]:
@@ -466,6 +483,37 @@ class LLMClient:
         }
 
     def generate(
+        self,
+        prompt: str,
+        temperature: float = 0.10,
+        max_output_tokens: int = 1400,
+        retries: int = 1,
+        max_input_tokens: Optional[int] = None,
+        json_mode: bool = False,
+        request_name: Optional[str] = None,
+        response_schema: Optional[Mapping[str, Any]] = None,
+        **kwargs: Any,
+    ) -> str:
+        """Exécute un appel après admission dans la file de capacité globale."""
+        with llm_capacity_slot(request_name or "llm:generate") as queue_meta:
+            try:
+                return self._generate_without_capacity_limit(
+                    prompt=prompt,
+                    temperature=temperature,
+                    max_output_tokens=max_output_tokens,
+                    retries=retries,
+                    max_input_tokens=max_input_tokens,
+                    json_mode=json_mode,
+                    request_name=request_name,
+                    response_schema=response_schema,
+                    **kwargs,
+                )
+            finally:
+                meta = self.get_last_generation_meta()
+                meta.update(queue_meta)
+                self._last_generation_meta = meta
+
+    def _generate_without_capacity_limit(
         self,
         prompt: str,
         temperature: float = 0.10,
@@ -597,6 +645,32 @@ class LLMClient:
         raise RuntimeError("Aucun LLM disponible : " + " | ".join(errors[-10:]))
 
     def web_search(
+        self,
+        query: str,
+        *,
+        allowed_domains: Optional[Sequence[str]] = None,
+        blocked_domains: Optional[Sequence[str]] = None,
+        max_output_tokens: int = 1400,
+        retries: int = 1,
+        request_name: str = "ennoscholar:guided_research:web_search",
+    ) -> Dict[str, Any]:
+        """Exécute la recherche Web dans la même capacité que les autres LLM."""
+        with llm_capacity_slot(request_name) as queue_meta:
+            try:
+                return self._web_search_without_capacity_limit(
+                    query,
+                    allowed_domains=allowed_domains,
+                    blocked_domains=blocked_domains,
+                    max_output_tokens=max_output_tokens,
+                    retries=retries,
+                    request_name=request_name,
+                )
+            finally:
+                meta = self.get_last_generation_meta()
+                meta.update(queue_meta)
+                self._last_generation_meta = meta
+
+    def _web_search_without_capacity_limit(
         self,
         query: str,
         *,

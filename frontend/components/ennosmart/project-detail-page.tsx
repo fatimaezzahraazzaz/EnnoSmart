@@ -4,23 +4,36 @@ import { useEffect, useMemo, useState } from "react"
 import {
   AlertCircle,
   ArrowLeft,
+  ArrowRight,
   BookOpen,
   BrainCircuit,
+  CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Database,
-  FileText,
   FilePenLine,
+  FileText,
   FolderKanban,
   Loader2,
+  MoreHorizontal,
   RefreshCw,
+  Search,
   Upload,
 } from "lucide-react"
 
 import { AppPage } from "@/components/ennosmart/app-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 
 import {
   getDocuments,
@@ -32,14 +45,23 @@ import {
   type ProjectOverview,
   type ProjectRead,
 } from "@/lib/api"
-import { getCurrentProjectId, setCurrentProjectId } from "@/lib/project-session"
-import { WorkflowSteps } from "@/components/ennosmart/workspace-ui"
+
+import {
+  getCurrentProjectId,
+  setCurrentProjectId,
+} from "@/lib/project-session"
 
 interface ProjectDetailPageProps {
   navigateTo: (page: AppPage) => void
 }
 
 type StatusState = "ok" | "warning" | "empty"
+
+const PAGE_SIZE_OPTIONS = [10, 20, 50]
+
+/* -------------------------------------------------------------------------- */
+/* Helpers                                                                    */
+/* -------------------------------------------------------------------------- */
 
 function formatDate(value?: string | null) {
   if (!value) return "—"
@@ -65,33 +87,122 @@ function formatSize(size?: number | null) {
 }
 
 function statusBadge(status: string) {
-  if (status.includes("terminé") || status.includes("completed")) {
-    return "bg-success/10 text-success border-success/30"
+  if (
+    status.includes("terminé") ||
+    status.includes("completed") ||
+    status.includes("Validé")
+  ) {
+    return "border-success/25 bg-success/10 text-success"
   }
 
-  if (status.includes("Créé") || status.includes("created")) {
-    return "bg-muted text-muted-foreground border-border"
+  if (
+    status.includes("Créé") ||
+    status.includes("created")
+  ) {
+    return "border-border bg-muted text-muted-foreground"
   }
 
-  return "bg-brand/10 text-brand border-brand/30"
+  return "border-brand/25 bg-brand/10 text-brand"
 }
 
 function statusCardClass(state: StatusState) {
   switch (state) {
     case "ok":
-      return "border-success/30 bg-success/5"
+      return "border-success/20 bg-[linear-gradient(135deg,rgba(22,163,74,0.035),rgba(255,255,255,0.94))]"
     case "warning":
-      return "border-warning/30 bg-warning/5"
+      return "border-warning/20 bg-[linear-gradient(135deg,rgba(245,158,11,0.035),rgba(255,255,255,0.94))]"
     default:
-      return "border-border"
+      return "border-border/80 bg-card"
   }
 }
 
 function sourceFileName(doc: DocumentRead) {
-  return doc.original_filename || doc.filename || doc.file_path || doc.storage_path || `Document #${doc.id}`
+  return (
+    doc.original_filename ||
+    doc.filename ||
+    doc.file_path ||
+    doc.storage_path ||
+    `Document #${doc.id}`
+  )
 }
 
-export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps) {
+function extensionFromName(name: string) {
+  const clean = name.split("?")[0].split("#")[0]
+  const dot = clean.lastIndexOf(".")
+
+  if (dot === -1) return ""
+  return clean.slice(dot + 1).toLowerCase()
+}
+
+function documentTypeLabel(doc: DocumentRead) {
+  const name = sourceFileName(doc)
+  const extension = extensionFromName(name)
+  const mime = String(doc.mime_type || "").toLowerCase()
+  const declared = String(doc.document_type || "").trim()
+
+  if (extension === "pdf" || mime.includes("pdf")) return "PDF"
+  if (["doc", "docx"].includes(extension) || mime.includes("word")) return "Word"
+  if (["xls", "xlsx"].includes(extension) || mime.includes("excel") || mime.includes("spreadsheet")) {
+    return "Excel"
+  }
+  if (["ppt", "pptx"].includes(extension) || mime.includes("presentation")) {
+    return "PowerPoint"
+  }
+  if (["png", "jpg", "jpeg", "webp", "gif"].includes(extension) || mime.startsWith("image/")) {
+    return "Image"
+  }
+  if (["mp3", "wav", "m4a", "aac", "flac", "ogg"].includes(extension) || mime.startsWith("audio/")) {
+    return "Audio"
+  }
+  if (["mp4", "mov", "avi", "mkv", "webm"].includes(extension) || mime.startsWith("video/")) {
+    return "Vidéo"
+  }
+  if (extension === "msg" || mime.includes("message")) return "Email"
+  if (["txt", "md"].includes(extension) || mime.startsWith("text/")) return "Texte"
+
+  return declared || "Fichier"
+}
+
+function documentTypeClass(type: string) {
+  switch (type) {
+    case "PDF":
+      return "border-red-200 bg-red-50 text-red-700"
+    case "Word":
+      return "border-blue-200 bg-blue-50 text-blue-700"
+    case "Excel":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700"
+    case "PowerPoint":
+      return "border-orange-200 bg-orange-50 text-orange-700"
+    case "Image":
+      return "border-violet-200 bg-violet-50 text-violet-700"
+    case "Audio":
+    case "Vidéo":
+      return "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700"
+    default:
+      return "border-border bg-muted text-muted-foreground"
+  }
+}
+
+function pageNumbers(current: number, total: number) {
+  if (total <= 5) {
+    return Array.from({ length: total }, (_, index) => index + 1)
+  }
+
+  if (current <= 3) return [1, 2, 3, 4, 5]
+  if (current >= total - 2) {
+    return [total - 4, total - 3, total - 2, total - 1, total]
+  }
+
+  return [current - 2, current - 1, current, current + 1, current + 2]
+}
+
+/* -------------------------------------------------------------------------- */
+/* Page                                                                       */
+/* -------------------------------------------------------------------------- */
+
+export default function ProjectDetailPage({
+  navigateTo,
+}: ProjectDetailPageProps) {
   const [project, setProject] = useState<ProjectRead | null>(null)
   const [projects, setProjects] = useState<ProjectRead[]>([])
   const [overviews, setOverviews] = useState<ProjectOverview[]>([])
@@ -99,8 +210,15 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
   const [documents, setDocuments] = useState<DocumentRead[]>([])
 
   const [loading, setLoading] = useState(true)
-  const [actionLoading, setActionLoading] = useState<"diagnostic" | "scholar" | "documents" | null>(null)
+  const [actionLoading, setActionLoading] = useState<
+    "diagnostic" | "scholar" | "documents" | null
+  >(null)
   const [error, setError] = useState("")
+
+  const [documentSearch, setDocumentSearch] = useState("")
+  const [documentTypeFilter, setDocumentTypeFilter] = useState("all")
+  const [documentPage, setDocumentPage] = useState(1)
+  const [documentPageSize, setDocumentPageSize] = useState(10)
 
   const selectedProjectId = project?.id
 
@@ -120,10 +238,82 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
   }, [overview])
 
   const diagnosticState: StatusState =
-    (overview?.diagnostic.verrous.count || 0) > 0 ? "ok" : overview?.diagnostic.available ? "warning" : "empty"
+    (overview?.diagnostic.verrous.count || 0) > 0
+      ? "ok"
+      : overview?.diagnostic.available
+        ? "warning"
+        : "empty"
 
   const scholarState: StatusState =
-    (overview?.scholar.articles.count || 0) > 0 ? "ok" : overview?.scholar.available ? "warning" : "empty"
+    (overview?.scholar.articles.count || 0) > 0
+      ? "ok"
+      : overview?.scholar.available
+        ? "warning"
+        : "empty"
+
+  /* ---------------------------------------------------------------------- */
+  /* Documents : filtres + pagination                                       */
+  /* ---------------------------------------------------------------------- */
+
+  const documentTypes = useMemo(
+    () =>
+      Array.from(
+        new Set(documents.map((doc) => documentTypeLabel(doc))),
+      ).sort((a, b) => a.localeCompare(b, "fr")),
+    [documents],
+  )
+
+  const filteredDocuments = useMemo(() => {
+    const query = documentSearch.trim().toLowerCase()
+
+    return documents.filter((doc) => {
+      const name = sourceFileName(doc)
+      const type = documentTypeLabel(doc)
+
+      const matchesSearch =
+        !query ||
+        name.toLowerCase().includes(query) ||
+        type.toLowerCase().includes(query) ||
+        String(doc.id).includes(query)
+
+      const matchesType =
+        documentTypeFilter === "all" ||
+        type === documentTypeFilter
+
+      return matchesSearch && matchesType
+    })
+  }, [documents, documentSearch, documentTypeFilter])
+
+  const totalDocumentPages = Math.max(
+    1,
+    Math.ceil(filteredDocuments.length / documentPageSize),
+  )
+
+  const currentDocumentPage = Math.min(
+    documentPage,
+    totalDocumentPages,
+  )
+
+  const documentStartIndex =
+    (currentDocumentPage - 1) * documentPageSize
+
+  const paginatedDocuments = filteredDocuments.slice(
+    documentStartIndex,
+    documentStartIndex + documentPageSize,
+  )
+
+  const visibleDocumentPages = pageNumbers(
+    currentDocumentPage,
+    totalDocumentPages,
+  )
+
+  useEffect(() => {
+    setDocumentPage(1)
+  }, [documentSearch, documentTypeFilter, documentPageSize])
+
+  /* ---------------------------------------------------------------------- */
+  /* Chargement                                                             */
+  /* ---------------------------------------------------------------------- */
 
   const loadData = async () => {
     setLoading(true)
@@ -132,28 +322,39 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
     try {
       const overviewList = await getProjectOverviews()
       const projectList = overviewList.map((item) => item.project)
+
       setOverviews(overviewList)
       setProjects(projectList)
 
       if (projectList.length === 0) {
         setProject(null)
+        setOverview(null)
+        setDocuments([])
         return
       }
 
       const storedProjectId = getCurrentProjectId()
+
       const selected =
-        projectList.find((item) => item.id === storedProjectId) || projectList[0]
+        projectList.find((item) => item.id === storedProjectId) ||
+        projectList[0]
 
       setCurrentProjectId(selected.id)
-
       setProject(selected)
-      setOverview(overviewList.find((item) => item.project.id === selected.id) || null)
-      setDocuments(await getDocuments(selected.id).catch(() => []))
+      setOverview(
+        overviewList.find(
+          (item) => item.project.id === selected.id,
+        ) || null,
+      )
+
+      setDocuments(
+        await getDocuments(selected.id).catch(() => []),
+      )
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "Impossible de charger le détail du projet."
+          : "Impossible de charger le détail du projet.",
       )
     } finally {
       setLoading(false)
@@ -161,7 +362,7 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
   }
 
   useEffect(() => {
-    loadData()
+    void loadData()
   }, [])
 
   const changeProject = async (projectId: number) => {
@@ -170,48 +371,63 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
     setError("")
 
     try {
-      const selected = projects.find((item) => item.id === projectId) || null
+      const selected =
+        projects.find((item) => item.id === projectId) || null
+
       setProject(selected)
-      setOverview(overviews.find((item) => item.project.id === projectId) || null)
-      setDocuments(await getDocuments(projectId).catch(() => []))
+      setOverview(
+        overviews.find((item) => item.project.id === projectId) || null,
+      )
+
+      setDocuments(
+        await getDocuments(projectId).catch(() => []),
+      )
+
+      setDocumentSearch("")
+      setDocumentTypeFilter("all")
+      setDocumentPage(1)
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "Impossible de charger le projet sélectionné."
+          : "Impossible de charger le projet sélectionné.",
       )
     } finally {
       setLoading(false)
     }
   }
 
+  /* ---------------------------------------------------------------------- */
+  /* Navigation                                                             */
+  /* ---------------------------------------------------------------------- */
+
   const openDiagnosis = () => {
     if (!selectedProjectId) return
-
     setCurrentProjectId(selectedProjectId)
     navigateTo("diagnosis")
   }
 
   const openScholar = () => {
     if (!selectedProjectId) return
-
     setCurrentProjectId(selectedProjectId)
     navigateTo("scholar")
   }
 
   const openUpload = () => {
     if (!selectedProjectId) return
-
     setCurrentProjectId(selectedProjectId)
     navigateTo("upload")
   }
 
   const openImprovement = () => {
     if (!selectedProjectId) return
-
     setCurrentProjectId(selectedProjectId)
     navigateTo("improvement")
   }
+
+  /* ---------------------------------------------------------------------- */
+  /* Import existant                                                        */
+  /* ---------------------------------------------------------------------- */
 
   const importDiagnostic = async () => {
     if (!selectedProjectId) return
@@ -226,7 +442,7 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
       setError(
         err instanceof Error
           ? err.message
-          : "Impossible d’importer le diagnostic existant."
+          : "Impossible d’importer le diagnostic existant.",
       )
     } finally {
       setActionLoading(null)
@@ -246,7 +462,7 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
       setError(
         err instanceof Error
           ? err.message
-          : "Impossible d’importer EnnoScholar."
+          : "Impossible d’importer EnnoScholar.",
       )
     } finally {
       setActionLoading(null)
@@ -266,20 +482,24 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
       setError(
         err instanceof Error
           ? err.message
-          : "Impossible d’importer les documents existants."
+          : "Impossible d’importer les documents existants.",
       )
     } finally {
       setActionLoading(null)
     }
   }
 
+  /* ---------------------------------------------------------------------- */
+  /* Loading / error / vide                                                 */
+  /* ---------------------------------------------------------------------- */
+
   if (loading) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
-        <Card>
-          <CardContent className="p-8 flex items-center justify-center gap-3 text-muted-foreground">
+      <div className="mx-auto max-w-[1600px] p-6">
+        <Card className="rounded-2xl">
+          <CardContent className="flex items-center justify-center gap-3 p-10 text-sm text-muted-foreground">
             <Loader2 className="size-5 animate-spin" />
-            Chargement du détail projet depuis FastAPI...
+            Chargement du détail projet…
           </CardContent>
         </Card>
       </div>
@@ -288,21 +508,35 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
 
   if (error) {
     return (
-      <div className="p-6 max-w-7xl mx-auto space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => navigateTo("projects")}>
-          <ArrowLeft className="size-4 mr-2" />
+      <div className="mx-auto max-w-[1600px] space-y-4 p-6">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigateTo("projects")}
+          className="rounded-xl"
+        >
+          <ArrowLeft className="size-4" />
           Retour aux projets
         </Button>
 
-        <Card className="border-destructive/30 bg-destructive/10">
-          <CardContent className="p-5 flex items-start gap-3 text-destructive">
-            <AlertCircle className="size-5 mt-0.5" />
+        <Card className="rounded-2xl border-destructive/30 bg-destructive/10">
+          <CardContent className="flex items-start gap-3 p-5 text-destructive">
+            <AlertCircle className="mt-0.5 size-5" />
+
             <div className="space-y-3">
               <div>
-                <p className="text-sm font-semibold">Erreur détail projet</p>
-                <p className="text-xs mt-1">{error}</p>
+                <p className="text-sm font-semibold">
+                  Erreur détail projet
+                </p>
+                <p className="mt-1 text-xs">{error}</p>
               </div>
-              <Button size="sm" variant="outline" onClick={loadData}>
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={loadData}
+                className="rounded-xl"
+              >
                 Réessayer
               </Button>
             </div>
@@ -314,14 +548,15 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
 
   if (!project) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
-        <Card>
-          <CardContent className="p-8 text-center">
+      <div className="mx-auto max-w-[1600px] p-6">
+        <Card className="rounded-2xl">
+          <CardContent className="p-10 text-center">
             <p className="text-sm font-medium text-foreground">
               Aucun projet disponible.
             </p>
+
             <Button
-              className="mt-4"
+              className="mt-4 rounded-xl"
               variant="outline"
               onClick={() => navigateTo("projects")}
             >
@@ -333,364 +568,887 @@ export default function ProjectDetailPage({ navigateTo }: ProjectDetailPageProps
     )
   }
 
+  const workflow = [
+    {
+      number: 1,
+      label: "Sources",
+      detail: `${documents.length} document(s)`,
+      complete: documents.length > 0,
+      current: documents.length === 0,
+      onClick: openUpload,
+    },
+    {
+      number: 2,
+      label: "Diagnostic",
+      detail: "Verrous",
+      complete: diagnosticState === "ok",
+      current:
+        diagnosticState !== "ok" &&
+        documents.length > 0,
+      onClick: openDiagnosis,
+    },
+    {
+      number: 3,
+      label: "Recherche",
+      detail: "Preuves",
+      complete: scholarState === "ok",
+      current:
+        scholarState !== "ok" &&
+        diagnosticState === "ok",
+      onClick: openScholar,
+    },
+    {
+      number: 4,
+      label: "Amélioration",
+      detail: "Livrable",
+      complete: false,
+      current: scholarState === "ok",
+      onClick: openImprovement,
+    },
+  ]
+
   return (
-    <div className="workspace-page-wide space-y-6">
-      {/* Header */}
-      <div className="ennoma-page-header flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-2">
-          <Button variant="ghost" size="sm" onClick={() => navigateTo("projects")}>
-            <ArrowLeft className="size-4 mr-2" />
-            Retour aux projets
-          </Button>
+    <div className="workspace-page-wide pb-10">
+      <div className="mx-auto w-full max-w-[1600px] space-y-4">
 
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="size-8 rounded-lg bg-brand flex items-center justify-center">
-                <FolderKanban className="size-4 text-brand-foreground" />
-              </div>
-              <h1 className="text-2xl font-bold text-foreground">
-                {project.project_name}
-              </h1>
-            </div>
+        {/* ================================================================= */}
+        {/* Breadcrumb                                                       */}
+        {/* ================================================================= */}
 
-            <p className="text-sm text-muted-foreground">
-              {project.organisme} — {project.year}
-            </p>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => navigateTo("projects")}
+            className="transition hover:text-foreground"
+          >
+            Projets
+          </button>
 
-            <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <Badge variant="outline" className={statusBadge(project.status)}>
-                {project.status}
-              </Badge>
-              <Badge variant="outline">
-                Dossier ID #{project.id}
-              </Badge>
-              <Badge variant="outline">
-                {project.domain_label || "Domaine non renseigné"}
-              </Badge>
-            </div>
-          </div>
+          <span>/</span>
+
+          <span className="font-medium text-foreground">
+            Détail du projet
+          </span>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {projects.length > 1 && (
-            <select
-              value={project.id}
-              onChange={(event) => changeProject(Number(event.target.value))}
-              className="h-9 rounded-md border border-border bg-background px-3 text-sm"
-            >
-              {projects.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.organisme} — {item.project_name} — {item.year}
-                </option>
-              ))}
-            </select>
-          )}
+        {/* ================================================================= */}
+        {/* Hero projet                                                      */}
+        {/* ================================================================= */}
 
-          <Button variant="outline" size="sm" onClick={loadData}>
-            <RefreshCw className="size-4 mr-2" />
-            Actualiser
-          </Button>
-        </div>
-      </div>
+        <section className="relative overflow-hidden rounded-[20px] border border-brand/15 bg-card shadow-sm">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_88%_8%,rgba(109,70,178,.075),transparent_30%)]"
+          />
 
-      {/* Main overview cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Documents</p>
-            <p className="text-2xl font-bold text-foreground mt-1">
-              {documents.length}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              fichiers projet
-            </p>
-          </CardContent>
-        </Card>
+          <div className="absolute inset-y-0 left-0 w-1 bg-brand" />
 
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Verrous</p>
-            <p className="text-2xl font-bold text-brand mt-1">
-              {overview?.diagnostic.verrous.count || 0}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {stats.pertinent} pertinents · {stats.moyen} moyens
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Articles utiles</p>
-            <p className="text-2xl font-bold text-success mt-1">
-              {stats.usefulArticles}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {stats.direct} directs
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Créé le</p>
-            <p className="text-lg font-bold text-foreground mt-1">
-              {formatDate(project.created_at)}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              consultant #{project.consultant_id}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <WorkflowSteps
-        ariaLabel="Workflow du dossier"
-        steps={[
-          { label: "Sources", detail: `${documents.length} document(s)`, icon: Upload, status: documents.length > 0 ? "complete" : "current", onClick: openUpload },
-          { label: "Diagnostic", detail: "Verrous", icon: BrainCircuit, status: diagnosticState === "ok" ? "complete" : documents.length > 0 ? "current" : "upcoming", onClick: openDiagnosis },
-          { label: "Recherche", detail: "Preuves", icon: BookOpen, status: scholarState === "ok" ? "complete" : diagnosticState === "ok" ? "current" : "upcoming", onClick: openScholar },
-          { label: "Amélioration", detail: "Livrable", icon: FilePenLine, status: scholarState === "ok" ? "current" : "upcoming", onClick: openImprovement },
-        ]}
-      />
-
-      {/* Action cards */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className={statusCardClass(diagnosticState)}>
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2">
-              <BrainCircuit className="size-4 text-brand" />
-              EnnoDiagnostic
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Diagnostic technique CIR, verrous et validation consultant.
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="p-3 rounded-md bg-card border border-border text-center">
-                <p className="text-xs text-muted-foreground">Verrous</p>
-                <p className="text-xl font-bold text-foreground">{overview?.diagnostic.verrous.count || 0}</p>
-              </div>
-
-              <div className="p-3 rounded-md bg-card border border-border text-center">
-                <p className="text-xs text-muted-foreground">Pertinents</p>
-                <p className="text-xl font-bold text-success">{stats.pertinent}</p>
-              </div>
-
-              <div className="p-3 rounded-md bg-card border border-border text-center">
-                <p className="text-xs text-muted-foreground">Moyens</p>
-                <p className="text-xl font-bold text-warning">{stats.moyen}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              {diagnosticState === "ok" ? (
-                <>
-                  <CheckCircle2 className="size-4 text-success" />
-                  Verrous synchronisés et prêts à valider.
-                </>
-              ) : diagnosticState === "warning" ? (
-                <>
-                  <Clock className="size-4 text-warning" />
-                  Diagnostic trouvé, mais verrous non synchronisés.
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="size-4 text-muted-foreground" />
-                  Aucun diagnostic importé pour ce projet.
-                </>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button className="bg-brand hover:bg-brand/90" onClick={openDiagnosis}>
-                Ouvrir EnnoDiagnostic
-              </Button>
-
+          <div className="relative flex flex-col gap-5 px-5 py-5 sm:px-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
               <Button
-                variant="outline"
-                onClick={importDiagnostic}
-                disabled={actionLoading === "diagnostic"}
-              >
-                {actionLoading === "diagnostic" ? (
-                  <Loader2 className="size-4 mr-2 animate-spin" />
-                ) : (
-                  <Database className="size-4 mr-2" />
-                )}
-                Importer résultat existant
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className={statusCardClass(scholarState)}>
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2">
-              <BookOpen className="size-4 text-brand" />
-              EnnoScholar
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Recherche scientifique, tri des articles et état de l’art.
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="p-3 rounded-md bg-card border border-border text-center">
-                <p className="text-xs text-muted-foreground">Articles</p>
-                <p className="text-xl font-bold text-foreground">{overview?.scholar.articles.count || 0}</p>
-              </div>
-
-              <div className="p-3 rounded-md bg-card border border-border text-center">
-                <p className="text-xs text-muted-foreground">Directs</p>
-                <p className="text-xl font-bold text-success">{stats.direct}</p>
-              </div>
-
-              <div className="p-3 rounded-md bg-card border border-border text-center">
-                <p className="text-xs text-muted-foreground">Hors sujet</p>
-                <p className="text-xl font-bold text-muted-foreground">{stats.horsSujet}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              {scholarState === "ok" ? (
-                <>
-                  <CheckCircle2 className="size-4 text-success" />
-                  Articles synchronisés et prêts à sélectionner.
-                </>
-              ) : scholarState === "warning" ? (
-                <>
-                  <Clock className="size-4 text-warning" />
-                  Rapport EnnoScholar trouvé, mais articles non synchronisés.
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="size-4 text-muted-foreground" />
-                  Aucun rapport EnnoScholar importé pour ce projet.
-                </>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button className="bg-brand hover:bg-brand/90" onClick={openScholar}>
-                Ouvrir EnnoScholar
-              </Button>
-
-              <Button
-                variant="outline"
-                onClick={importScholar}
-                disabled={actionLoading === "scholar"}
-              >
-                {actionLoading === "scholar" ? (
-                  <Loader2 className="size-4 mr-2 animate-spin" />
-                ) : (
-                  <Database className="size-4 mr-2" />
-                )}
-                Importer résultat existant
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <FilePenLine className="size-4 text-brand" />
-              EnnoAmelioration
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Révision contrôlée des sections et du CIR complet à partir des preuves disponibles.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-lg border border-brand/15 bg-brand/[0.045] p-4">
-              <p className="text-sm font-semibold text-foreground">Amélioration guidée</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Conservez l'original, comparez chaque proposition et validez explicitement la version retenue.
-              </p>
-            </div>
-            <Button onClick={openImprovement}>Continuer la rédaction</Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Documents */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <FileText className="size-4 text-brand" />
-                Documents du projet
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Documents enregistrés côté backend pour ce dossier.
-              </CardDescription>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                onClick={importDocuments}
-                disabled={actionLoading === "documents"}
+                onClick={() => navigateTo("projects")}
+                className="-ml-2 mb-2 h-8 rounded-xl px-2 text-muted-foreground"
               >
-                {actionLoading === "documents" ? (
-                  <Loader2 className="size-4 mr-2 animate-spin" />
-                ) : (
-                  <Database className="size-4 mr-2" />
-                )}
-                Importer existants
+                <ArrowLeft className="size-4" />
+                Retour aux projets
               </Button>
 
-              <Button variant="outline" size="sm" onClick={openUpload}>
-                <Upload className="size-4 mr-2" />
-                Déposer
+              <div className="flex items-start gap-3">
+                <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-brand text-brand-foreground shadow-sm">
+                  <FolderKanban className="size-5" />
+                </div>
+
+                <div className="min-w-0">
+                  <h1 className="truncate text-2xl font-semibold tracking-[-0.035em] text-foreground sm:text-[28px]">
+                    {project.project_name}
+                  </h1>
+
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {project.organisme} — {project.year}
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={`rounded-full ${statusBadge(project.status)}`}
+                    >
+                      {project.status}
+                    </Badge>
+
+                    <Badge
+                      variant="outline"
+                      className="rounded-full bg-background"
+                    >
+                      Dossier ID #{project.id}
+                    </Badge>
+
+                    <Badge
+                      variant="outline"
+                      className="rounded-full bg-background"
+                    >
+                      {project.domain_label || "Domaine non renseigné"}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {projects.length > 1 && (
+                <select
+                  value={project.id}
+                  onChange={(event) =>
+                    changeProject(Number(event.target.value))
+                  }
+                  className="h-10 min-w-[260px] rounded-xl border border-border bg-background px-3 text-sm outline-none transition focus:border-brand/35 focus:ring-2 focus:ring-brand/10"
+                >
+                  {projects.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.organisme} — {item.project_name} — {item.year}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              <Button
+                variant="outline"
+                onClick={loadData}
+                className="h-10 rounded-xl"
+              >
+                <RefreshCw className="size-4" />
+                Actualiser
               </Button>
             </div>
           </div>
-        </CardHeader>
+        </section>
 
-        <CardContent>
-          {documents.length === 0 ? (
-            <div className="p-6 text-center border border-dashed rounded-lg">
-              <p className="text-sm font-medium text-foreground">
-                Aucun document enregistré en base.
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Les résultats IA existent déjà dans les outputs, mais les documents
-                n’ont pas encore été uploadés via l’API documents.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {documents.map((doc) => (
-                <div
-                  key={doc.id}
-                  className="flex items-center justify-between gap-3 p-3 border border-border rounded-md bg-muted/30"
+        {/* ================================================================= */}
+        {/* KPI                                                              */}
+        {/* ================================================================= */}
+
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <OverviewCard
+            icon={FileText}
+            label="Documents"
+            value={String(documents.length)}
+            detail="fichiers projet"
+            tone="brand"
+          />
+
+          <OverviewCard
+            icon={BrainCircuit}
+            label="Verrous"
+            value={String(overview?.diagnostic.verrous.count || 0)}
+            detail={`${stats.pertinent} pertinents · ${stats.moyen} moyens`}
+            tone="brand"
+          />
+
+          <OverviewCard
+            icon={BookOpen}
+            label="Articles utiles"
+            value={String(stats.usefulArticles)}
+            detail={`${stats.direct} directs`}
+            tone="success"
+          />
+
+          <OverviewCard
+            icon={CalendarDays}
+            label="Créé le"
+            value={formatDate(project.created_at)}
+            detail={`consultant #${project.consultant_id}`}
+            tone="brand"
+            compactValue
+          />
+        </section>
+
+        {/* ================================================================= */}
+        {/* Workflow                                                         */}
+        {/* ================================================================= */}
+
+        <section className="rounded-2xl border border-border/80 bg-card px-4 py-4 shadow-sm sm:px-6">
+          <div className="grid gap-3 lg:grid-cols-4">
+            {workflow.map((step, index) => (
+              <button
+                key={step.number}
+                type="button"
+                onClick={step.onClick}
+                className="group relative flex min-w-0 items-center gap-3 rounded-xl px-2 py-1.5 text-left transition hover:bg-muted/45"
+              >
+                {index < workflow.length - 1 && (
+                  <span
+                    aria-hidden="true"
+                    className={`absolute left-[calc(50%+42px)] right-[-14px] top-1/2 hidden h-px -translate-y-1/2 lg:block ${
+                      step.complete
+                        ? "bg-success/55"
+                        : "border-t border-dashed border-brand/30"
+                    }`}
+                  />
+                )}
+
+                <span
+                  className={`relative z-10 grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold ${
+                    step.complete
+                      ? "bg-success text-white"
+                      : step.current
+                        ? "bg-brand text-brand-foreground"
+                        : "border border-border bg-background text-muted-foreground"
+                  }`}
                 >
-                  <div className="flex items-start gap-3 min-w-0">
-                    <FileText className="size-4 text-brand mt-0.5 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {sourceFileName(doc)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {doc.document_type || doc.mime_type || "Type non renseigné"} ·{" "}
-                        {formatSize(doc.size_bytes)} · {formatDate(doc.created_at)}
-                      </p>
-                    </div>
+                  {step.complete ? (
+                    <CheckCircle2 className="size-4" />
+                  ) : (
+                    step.number
+                  )}
+                </span>
+
+                <div className="relative z-10 min-w-0 bg-card pr-3 group-hover:bg-transparent">
+                  <p className="truncate text-xs font-semibold text-foreground">
+                    {step.number} &nbsp; {step.label}
+                  </p>
+                  <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                    {step.detail}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* ================================================================= */}
+        {/* Agents                                                           */}
+        {/* ================================================================= */}
+
+        <section className="grid gap-4 lg:grid-cols-3">
+
+          {/* EnnoDiagnostic */}
+
+          <Card className={`overflow-hidden rounded-2xl shadow-sm ${statusCardClass(diagnosticState)}`}>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <span className="grid size-8 place-items-center rounded-xl bg-success/8 text-success">
+                  <BrainCircuit className="size-4" />
+                </span>
+                EnnoDiagnostic
+              </CardTitle>
+
+              <CardDescription className="text-xs leading-5">
+                Diagnostic technique CIR, verrous et validation consultant.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-2">
+                <MiniMetric
+                  label="Verrous"
+                  value={overview?.diagnostic.verrous.count || 0}
+                />
+                <MiniMetric
+                  label="Pertinents"
+                  value={stats.pertinent}
+                  tone="success"
+                />
+                <MiniMetric
+                  label="Moyens"
+                  value={stats.moyen}
+                  tone="warning"
+                />
+              </div>
+
+              <AgentStatus
+                state={diagnosticState}
+                okText="Verrous synchronisés et prêts à valider."
+                warningText="Diagnostic trouvé, mais verrous non synchronisés."
+                emptyText="Aucun diagnostic importé pour ce projet."
+              />
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  className="rounded-xl bg-brand hover:bg-brand/90"
+                  onClick={openDiagnosis}
+                >
+                  Ouvrir EnnoDiagnostic
+                  <ArrowRight className="size-4" />
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={importDiagnostic}
+                  disabled={actionLoading === "diagnostic"}
+                >
+                  {actionLoading === "diagnostic" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Database className="size-4" />
+                  )}
+                  Importer résultat existant
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* EnnoScholar */}
+
+          <Card className={`overflow-hidden rounded-2xl shadow-sm ${statusCardClass(scholarState)}`}>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <span className="grid size-8 place-items-center rounded-xl bg-brand/8 text-brand">
+                  <BookOpen className="size-4" />
+                </span>
+                EnnoScholar
+              </CardTitle>
+
+              <CardDescription className="text-xs leading-5">
+                Recherche scientifique, tri des articles et état de l’art.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-2">
+                <MiniMetric
+                  label="Articles"
+                  value={overview?.scholar.articles.count || 0}
+                />
+                <MiniMetric
+                  label="Directs"
+                  value={stats.direct}
+                  tone="success"
+                />
+                <MiniMetric
+                  label="Hors sujet"
+                  value={stats.horsSujet}
+                />
+              </div>
+
+              <AgentStatus
+                state={scholarState}
+                okText="Articles synchronisés et prêts à sélectionner."
+                warningText="Rapport EnnoScholar trouvé, mais articles non synchronisés."
+                emptyText="Aucun rapport EnnoScholar importé pour ce projet."
+              />
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  className="rounded-xl bg-brand hover:bg-brand/90"
+                  onClick={openScholar}
+                >
+                  Ouvrir EnnoScholar
+                  <ArrowRight className="size-4" />
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={importScholar}
+                  disabled={actionLoading === "scholar"}
+                >
+                  {actionLoading === "scholar" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Database className="size-4" />
+                  )}
+                  Importer résultat existant
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* EnnoAmelioration */}
+
+          <Card className="overflow-hidden rounded-2xl border-brand/15 bg-[linear-gradient(135deg,rgba(109,70,178,0.035),rgba(255,255,255,0.96))] shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <span className="grid size-8 place-items-center rounded-xl bg-brand/8 text-brand">
+                  <FilePenLine className="size-4" />
+                </span>
+                EnnoAmelioration
+              </CardTitle>
+
+              <CardDescription className="text-xs leading-5">
+                Révision contrôlée des sections et du CIR complet à partir des preuves disponibles.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              <div className="rounded-xl border border-brand/15 bg-brand/[0.04] p-4">
+                <p className="text-sm font-semibold text-foreground">
+                  Amélioration guidée
+                </p>
+
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Conservez l’original, comparez chaque proposition et validez explicitement la version retenue.
+                </p>
+              </div>
+
+              <Button
+                onClick={openImprovement}
+                className="w-full justify-between rounded-xl bg-brand hover:bg-brand/90"
+              >
+                Continuer la rédaction
+                <ArrowRight className="size-4" />
+              </Button>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* ================================================================= */}
+        {/* Documents                                                        */}
+        {/* ================================================================= */}
+
+        <Card className="overflow-hidden rounded-2xl border-border/80 shadow-sm">
+          <CardHeader className="border-b border-border/70 px-4 py-4 sm:px-5">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <FileText className="size-4 text-brand" />
+                  Documents du projet
+                </CardTitle>
+
+                <CardDescription className="mt-1 text-xs">
+                  Documents enregistrés côté backend pour ce dossier.
+                </CardDescription>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+
+                {/* Recherche */}
+
+                <div className="relative min-w-[250px] sm:min-w-[290px]">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+
+                  <Input
+                    value={documentSearch}
+                    onChange={(event) =>
+                      setDocumentSearch(event.target.value)
+                    }
+                    placeholder="Rechercher un document…"
+                    className="h-9 rounded-xl pl-9"
+                  />
+                </div>
+
+                {/* Type */}
+
+                <select
+                  value={documentTypeFilter}
+                  onChange={(event) =>
+                    setDocumentTypeFilter(event.target.value)
+                  }
+                  className="h-9 min-w-[150px] rounded-xl border border-border bg-background px-3 text-xs outline-none transition focus:border-brand/35 focus:ring-2 focus:ring-brand/10"
+                >
+                  <option value="all">
+                    Tous les types
+                  </option>
+
+                  {documentTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 rounded-xl"
+                  onClick={importDocuments}
+                  disabled={actionLoading === "documents"}
+                >
+                  {actionLoading === "documents" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Database className="size-4" />
+                  )}
+                  Importer existants
+                </Button>
+
+                <Button
+                  size="sm"
+                  className="h-9 rounded-xl bg-brand hover:bg-brand/90"
+                  onClick={openUpload}
+                >
+                  <Upload className="size-4" />
+                  Déposer
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-0">
+            {documents.length === 0 ? (
+              <div className="m-5 rounded-xl border border-dashed p-8 text-center">
+                <p className="text-sm font-medium text-foreground">
+                  Aucun document enregistré en base.
+                </p>
+
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Importez les documents existants ou ajoutez de nouvelles sources.
+                </p>
+              </div>
+            ) : filteredDocuments.length === 0 ? (
+              <div className="m-5 rounded-xl border border-dashed p-8 text-center">
+                <Search className="mx-auto size-5 text-muted-foreground" />
+
+                <p className="mt-3 text-sm font-medium text-foreground">
+                  Aucun document trouvé
+                </p>
+
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Modifiez la recherche ou le filtre de type.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Table desktop */}
+
+                <div className="hidden lg:block">
+                  <div className="grid grid-cols-[minmax(280px,1.5fr)_150px_150px_140px_90px_60px] gap-4 border-b border-border/70 bg-muted/[0.16] px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    <span>Nom</span>
+                    <span>Type</span>
+                    <span>Date</span>
+                    <span>Statut</span>
+                    <span>ID</span>
+                    <span className="text-center">Actions</span>
                   </div>
 
-                  <Badge variant="outline">#{doc.id}</Badge>
+                  {paginatedDocuments.map((doc) => {
+                    const name = sourceFileName(doc)
+                    const type = documentTypeLabel(doc)
+
+                    return (
+                      <div
+                        key={doc.id}
+                        className="grid min-h-[52px] grid-cols-[minmax(280px,1.5fr)_150px_150px_140px_90px_60px] items-center gap-4 border-b border-border/55 px-5 py-2.5 text-xs transition last:border-b-0 hover:bg-brand/[0.018]"
+                      >
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-brand/[0.065] text-brand">
+                            <FileText className="size-3.5" />
+                          </span>
+
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-foreground">
+                              {name}
+                            </p>
+                            {doc.size_bytes ? (
+                              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                                {formatSize(doc.size_bytes)}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div>
+                          <Badge
+                            variant="outline"
+                            className={`rounded-full px-2 py-0.5 text-[10px] ${documentTypeClass(type)}`}
+                          >
+                            {type}
+                          </Badge>
+                        </div>
+
+                        <span className="text-muted-foreground">
+                          {formatDate(doc.created_at)}
+                        </span>
+
+                        <div>
+                          <Badge
+                            variant="outline"
+                            className="rounded-full border-success/20 bg-success/8 px-2 py-0.5 text-[10px] text-success"
+                          >
+                            Disponible
+                          </Badge>
+                        </div>
+
+                        <span className="font-medium text-foreground">
+                          #{doc.id}
+                        </span>
+
+                        <div className="flex justify-center">
+                          <button
+                            type="button"
+                            className="grid size-8 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                            title={name}
+                            aria-label={`Détails de ${name}`}
+                          >
+                            <MoreHorizontal className="size-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+
+                {/* Cards mobile */}
+
+                <div className="divide-y divide-border/60 lg:hidden">
+                  {paginatedDocuments.map((doc) => {
+                    const name = sourceFileName(doc)
+                    const type = documentTypeLabel(doc)
+
+                    return (
+                      <div
+                        key={doc.id}
+                        className="space-y-3 p-4"
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand/[0.065] text-brand">
+                            <FileText className="size-4" />
+                          </span>
+
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {name}
+                            </p>
+
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {formatDate(doc.created_at)} · #{doc.id}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={`rounded-full text-[10px] ${documentTypeClass(type)}`}
+                          >
+                            {type}
+                          </Badge>
+
+                          <Badge
+                            variant="outline"
+                            className="rounded-full border-success/20 bg-success/8 text-[10px] text-success"
+                          >
+                            Disponible
+                          </Badge>
+
+                          {doc.size_bytes ? (
+                            <span className="text-[10px] text-muted-foreground">
+                              {formatSize(doc.size_bytes)}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Pagination */}
+
+                <div className="flex flex-col gap-3 border-t border-border/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    {filteredDocuments.length === 0
+                      ? "0 document"
+                      : `${documentStartIndex + 1}-${Math.min(
+                          documentStartIndex + documentPageSize,
+                          filteredDocuments.length,
+                        )} sur ${filteredDocuments.length} document${
+                          filteredDocuments.length > 1 ? "s" : ""
+                        }`}
+                  </p>
+
+                  <div className="flex items-center justify-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 rounded-lg px-2.5"
+                      disabled={currentDocumentPage === 1}
+                      onClick={() =>
+                        setDocumentPage((page) =>
+                          Math.max(1, page - 1),
+                        )
+                      }
+                    >
+                      <ChevronLeft className="size-4" />
+                      <span className="hidden sm:inline">
+                        Précédent
+                      </span>
+                    </Button>
+
+                    {visibleDocumentPages.map((page) => (
+                      <Button
+                        key={page}
+                        variant={
+                          page === currentDocumentPage
+                            ? "default"
+                            : "ghost"
+                        }
+                        size="icon"
+                        className="size-8 rounded-lg text-xs"
+                        onClick={() => setDocumentPage(page)}
+                      >
+                        {page}
+                      </Button>
+                    ))}
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 rounded-lg px-2.5"
+                      disabled={
+                        currentDocumentPage === totalDocumentPages
+                      }
+                      onClick={() =>
+                        setDocumentPage((page) =>
+                          Math.min(totalDocumentPages, page + 1),
+                        )
+                      }
+                    >
+                      <span className="hidden sm:inline">
+                        Suivant
+                      </span>
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      Afficher
+                    </span>
+
+                    <select
+                      value={documentPageSize}
+                      onChange={(event) =>
+                        setDocumentPageSize(
+                          Number(event.target.value),
+                        )
+                      }
+                      className="h-8 rounded-lg border border-border bg-background px-2 text-xs outline-none"
+                    >
+                      {PAGE_SIZE_OPTIONS.map((size) => (
+                        <option key={size} value={size}>
+                          {size} / page
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Sous-composants                                                            */
+/* -------------------------------------------------------------------------- */
+
+function OverviewCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone = "brand",
+  compactValue = false,
+}: {
+  icon: typeof FileText
+  label: string
+  value: string
+  detail: string
+  tone?: "brand" | "success"
+  compactValue?: boolean
+}) {
+  return (
+    <Card className="rounded-2xl border-border/80 shadow-sm">
+      <CardContent className="flex items-center gap-4 p-4">
+        <span
+          className={`grid size-10 shrink-0 place-items-center rounded-xl ${
+            tone === "success"
+              ? "bg-success/8 text-success"
+              : "bg-brand/[0.065] text-brand"
+          }`}
+        >
+          <Icon className="size-5" />
+        </span>
+
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">
+            {label}
+          </p>
+
+          <p
+            className={`mt-0.5 truncate font-semibold tracking-[-0.02em] text-foreground ${
+              compactValue ? "text-lg" : "text-2xl"
+            }`}
+          >
+            {value}
+          </p>
+
+          <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+            {detail}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function MiniMetric({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string
+  value: number
+  tone?: "default" | "success" | "warning"
+}) {
+  return (
+    <div className="rounded-xl border border-border/80 bg-card px-3 py-2.5 text-center shadow-sm">
+      <p className="text-[10px] text-muted-foreground">
+        {label}
+      </p>
+
+      <p
+        className={`mt-0.5 text-lg font-semibold ${
+          tone === "success"
+            ? "text-success"
+            : tone === "warning"
+              ? "text-warning"
+              : "text-foreground"
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function AgentStatus({
+  state,
+  okText,
+  warningText,
+  emptyText,
+}: {
+  state: StatusState
+  okText: string
+  warningText: string
+  emptyText: string
+}) {
+  if (state === "ok") {
+    return (
+      <div className="flex items-start gap-2 text-xs text-muted-foreground">
+        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
+        <span>{okText}</span>
+      </div>
+    )
+  }
+
+  if (state === "warning") {
+    return (
+      <div className="flex items-start gap-2 text-xs text-muted-foreground">
+        <Clock className="mt-0.5 size-4 shrink-0 text-warning" />
+        <span>{warningText}</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-start gap-2 text-xs text-muted-foreground">
+      <AlertCircle className="mt-0.5 size-4 shrink-0" />
+      <span>{emptyText}</span>
     </div>
   )
 }

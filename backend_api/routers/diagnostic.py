@@ -13,9 +13,21 @@ import hashlib
 
 from core.deps import get_current_user, get_db, require_agent_enabled
 from db.models import DiagnosticRun, User, Verrou
-from schemas.diagnostic import DiagnosticRead, VerrouDecisionRequest, VerrouRead
-from services.diagnostic_display_service import build_diagnostic_display
+from schemas.diagnostic import (
+    DiagnosticRead,
+    VerrouDecisionRequest,
+    VerrouManualCreate,
+    VerrouRead,
+)
+from services.diagnostic_display_service import (
+    build_compact_diagnostic_display,
+    build_diagnostic_display,
+)
 from services import diagnostic_service as diagnostic_service_module
+from services.consultant_verrou_service import (
+    create_or_reuse_consultant_verrou,
+    get_latest_diagnostic_verrous,
+)
 from services.diagnostic_service import (
     create_diagnostic_run_from_files,
     prepare_ennodiagnostic_sources,
@@ -1327,11 +1339,27 @@ def get_latest_diagnostic(
     latest_run = _latest_run_for_project(db, project.id)
 
     base_bundle = read_diagnostic_bundle(project, compact=compact)
-    bundle = _choose_latest_report_source(
-        base_bundle,
-        latest_run,
-        include_run_raw=not compact,
-    )
+    if compact and _as_dict(base_bundle.get("report")):
+        # La page n'a besoin que du rapport fichier officiel et des verrous DB.
+        # Lire/materialiser le JSONB complet pendant un GET pouvait dépasser
+        # 30 secondes et rendait l'écran inutilisable.
+        bundle = dict(base_bundle)
+        bundle["official_report_source"] = "filesystem_report_compact_read"
+        bundle["official_report_timestamp"] = _report_timestamp(
+            _as_dict(bundle.get("report")),
+            _path_mtime(bundle.get("report_path_used")),
+        )
+        bundle["official_report_debug"] = {
+            "file_report_path": bundle.get("report_path_used"),
+            "db_run_id": latest_run.id if latest_run else None,
+            "used": "filesystem_report_compact_read",
+        }
+    else:
+        bundle = _choose_latest_report_source(
+            base_bundle,
+            latest_run,
+            include_run_raw=not compact,
+        )
     official_source = bundle.get("official_report_source")
 
     display = build_diagnostic_display(project, bundle)
@@ -1339,7 +1367,11 @@ def get_latest_diagnostic(
     latest_verrous: list[Verrou] = []
     auto_materialized = False
 
-    if official_source == "filesystem_report":
+    if compact:
+        # Lecture pure : aucune resynchronisation ni matérialisation coûteuse
+        # ne doit bloquer le premier affichage.
+        latest_verrous = get_latest_diagnostic_verrous(db, project.id)
+    elif official_source == "filesystem_report":
         materialized_run, latest_verrous, auto_materialized = _materialize_filesystem_report_in_db(
             db=db,
             project=project,
@@ -1450,6 +1482,14 @@ def get_latest_diagnostic(
         "all_sections_saved_in_raw_result_json": bool(persisted_snapshot),
     }
 
+    if compact:
+        display = build_compact_diagnostic_display(display)
+    response_verrous = (
+        display.get("validation_verrous", [])
+        if compact
+        else frontend_verrous
+    )
+
     return sanitize_json_value(
         {
             "project": {
@@ -1463,7 +1503,7 @@ def get_latest_diagnostic(
             "latest_run": latest_run_dump,
             "bundle": {} if compact else bundle,
             "display": display,
-            "validation_verrous": frontend_verrous,
+            "validation_verrous": response_verrous,
             "source_policy": {
                 "diagnostic_display_source": "backend_display_service_v143",
                 "official_report_source": official_source,
@@ -2056,34 +2096,8 @@ def list_verrous(
     )
 
     if latest_only:
-        latest_run = _latest_run_for_project(db, project.id)
-
-        # V141 : /verrous doit suivre la même sortie officielle que
-        # /diagnostic/latest. Si un rapport CLI plus récent existe, on le
-        # matérialise ici avant de lire les verrous.
-        base_bundle = read_diagnostic_bundle(project, compact=True)
-        bundle = _choose_latest_report_source(
-            base_bundle,
-            latest_run,
-            include_run_raw=False,
-        )
-        if bundle.get("official_report_source") == "filesystem_report":
-            materialized_run, _synced, _created = _materialize_filesystem_report_in_db(
-                db=db,
-                project=project,
-                bundle=bundle,
-            )
-            if materialized_run is not None:
-                latest_run = materialized_run
-
-        if not latest_run:
-            return []
-
-        current = _read_latest_run_verrous_fast(db, latest_run)
-        if not current:
-            run_report, _content = _extract_latest_run_report(latest_run)
-            if _extract_final_accepted_verrous_from_report(run_report):
-                current = _sync_final_verrous_from_run(db, latest_run)
+        # Un GET reste une lecture pure et inclut les ajouts humains historiques.
+        current = get_latest_diagnostic_verrous(db, project.id)
 
         # Retour direct pour garantir les vrais ids du run officiel.
         seen: set[str] = set()
@@ -2109,6 +2123,53 @@ def list_verrous(
         clean.append(verrou)
 
     return clean
+
+
+@router.post(
+    "/projects/{project_id}/verrous/manual",
+    response_model=VerrouRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_manual_verrou(
+    project_id: int,
+    payload: VerrouManualCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_project_for_user(db, project_id, current_user)
+    result = create_or_reuse_consultant_verrou(
+        db,
+        project,
+        title=payload.title,
+        justification=payload.description,
+        supporting_context=payload.description,
+        created_by_user_id=int(current_user.id),
+        force_create_distinct=payload.force_create_distinct,
+        keywords=payload.keywords,
+        added_via="ennodiagnostic_manual_form",
+    )
+
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=result,
+        )
+
+    verrou = (
+        db.query(Verrou)
+        .join(DiagnosticRun, Verrou.diagnostic_run_id == DiagnosticRun.id)
+        .filter(
+            Verrou.id == int(result["verrou_id"]),
+            DiagnosticRun.project_id == project.id,
+        )
+        .first()
+    )
+    if verrou is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Le verrou manuel a été créé mais ne peut pas être relu.",
+        )
+    return verrou
 
 
 @router.patch("/projects/{project_id}/verrous/{verrou_id}/decision", response_model=VerrouRead)

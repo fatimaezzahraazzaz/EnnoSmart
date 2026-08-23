@@ -10,6 +10,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     JSON,
     LargeBinary,
 )
@@ -202,6 +203,34 @@ class Document(Base):
     storage_mode = Column(String(30), default="database", nullable=False)
 
     project = relationship("Project", back_populates="documents")
+    corpus_assignments = relationship(
+        "DocumentCorpusAssignment",
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
+
+
+class DocumentCorpusAssignment(Base):
+    """Affectation explicite d'un document à un corpus fonctionnel."""
+
+    __tablename__ = "document_corpus_assignments"
+    __table_args__ = (
+        UniqueConstraint("document_id", "corpus", name="uq_document_corpus_assignment"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(
+        Integer,
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    corpus = Column(String(50), nullable=False, index=True)
+    included = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    document = relationship("Document", back_populates="corpus_assignments")
 
 
 class DiagnosticRun(Base):

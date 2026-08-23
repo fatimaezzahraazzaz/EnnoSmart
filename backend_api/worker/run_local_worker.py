@@ -31,7 +31,7 @@ if __name__ == "__main__":
     hostname = sys.argv[1] if len(sys.argv) > 1 else "ennoscholar@%h"
     queue = sys.argv[2] if len(sys.argv) > 2 else "celery"
     pool = os.getenv("ENNOSCHOLAR_CELERY_POOL", "threads")
-    concurrency = os.getenv("ENNOSCHOLAR_CELERY_CONCURRENCY", "2")
+    concurrency = os.getenv("ENNOSCHOLAR_CELERY_CONCURRENCY", "4")
     celery_app.worker_main(
         [
             "worker",

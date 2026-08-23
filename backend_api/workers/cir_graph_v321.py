@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from typing import Any, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -21,6 +20,7 @@ from services.improvement_service import (
 
 
 class FullCIRState(TypedDict, total=False):
+    job_id: str
     project_id: int
     session_id: str
     user_id: int
@@ -127,11 +127,7 @@ def _publish(
         project_id,
         session_id,
         job_id=str(
-            os.getenv(
-                "ENNOSMART_CURRENT_CELERY_TASK_ID",
-                "",
-            )
-            or state.get("job_id")
+            state.get("job_id")
             or ""
         ),
         status=status,

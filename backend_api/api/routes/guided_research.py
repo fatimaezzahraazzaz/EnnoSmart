@@ -6,6 +6,8 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from core.execution_lock import SessionBusyError, session_execution_lock
+from modules.LLM.llm_concurrency import LLMCapacityTimeoutError
 from schemas.guided_research import (
     GuidedResearchMessageCreate,
     GuidedResearchSessionCreate,
@@ -186,13 +188,21 @@ def build_guided_research_router(
     ):
         project = get_project_for_user(db, project_id, current_user)
         try:
-            response = send_guided_research_message(
-                db,
-                project,
-                session_id=session_id,
-                message=payload.message,
-            )
+            with session_execution_lock(
+                "guided-research",
+                f"{project.id}:{session_id}",
+            ):
+                response = send_guided_research_message(
+                    db,
+                    project,
+                    session_id=session_id,
+                    message=payload.message,
+                )
             return {"ok": True, "response": response}
+        except SessionBusyError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except LLMCapacityTimeoutError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except LookupError as exc:
@@ -212,16 +222,24 @@ def build_guided_research_router(
     ):
         project = get_project_for_user(db, project_id, current_user)
         try:
-            response = decide_guided_research_sources(
-                db,
-                project,
-                session_id=session_id,
-                candidate_ids=payload.candidate_ids,
-                decision=payload.decision,
-                reason=payload.reason,
-                prepare_after_acceptance=payload.prepare_after_acceptance,
-            )
+            with session_execution_lock(
+                "guided-research",
+                f"{project.id}:{session_id}",
+            ):
+                response = decide_guided_research_sources(
+                    db,
+                    project,
+                    session_id=session_id,
+                    candidate_ids=payload.candidate_ids,
+                    decision=payload.decision,
+                    reason=payload.reason,
+                    prepare_after_acceptance=payload.prepare_after_acceptance,
+                )
             return {"ok": True, "response": response}
+        except SessionBusyError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except LLMCapacityTimeoutError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except LookupError as exc:

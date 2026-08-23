@@ -77,11 +77,6 @@ def run_full_cir(
         error=None,
     )
 
-    # Utilisé seulement pour rendre le task_id visible dans les heartbeats.
-    os.environ[
-        "ENNOSMART_CURRENT_CELERY_TASK_ID"
-    ] = task_id
-
     # Un thread LangGraph par job Celery. Un retry Celery conserve le même
     # task_id et reprend donc les mêmes checkpoints ; une nouvelle demande CIR
     # dans la même conversation obtient un nouveau thread propre.
@@ -121,6 +116,7 @@ def run_full_cir(
             )
 
             initial_state = {
+                "job_id": task_id,
                 "project_id": project_id,
                 "session_id": session_id,
                 "user_id": int(user_id),

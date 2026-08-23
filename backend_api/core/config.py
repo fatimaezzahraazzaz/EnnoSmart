@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
 
     DATABASE_URL: str = "sqlite:///./ennosmart_dev.db"
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_TIMEOUT_SECONDS: int = 30
+    DB_POOL_RECYCLE_SECONDS: int = 1800
+    WEB_THREAD_LIMIT: int = 80
+    SESSION_LOCK_DISTRIBUTED: bool = True
+    SESSION_LOCK_REDIS_URL: str = "redis://127.0.0.1:6379/0"
+    SESSION_LOCK_TTL_SECONDS: int = 3900
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     UPLOAD_ROOT: str = "C:/EnnoSmart/storage/uploads"

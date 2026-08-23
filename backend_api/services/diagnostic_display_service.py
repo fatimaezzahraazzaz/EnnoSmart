@@ -587,3 +587,306 @@ def build_diagnostic_display(project: Any, bundle: Dict[str, Any]) -> Dict[str, 
             "official_verrous": "display.validation_verrous",
         },
     }
+
+
+# ============================================================
+# Vue HTTP compacte
+# ============================================================
+
+_PUBLIC_EVIDENCE_KEYS = {
+    "evidence_id", "rag_chunk_id", "passage_id", "chunk_id", "document_id",
+    "document", "document_name", "filename", "source_path", "path",
+    "page", "page_number", "paragraph_index", "char_start", "char_end",
+    "sentence_start", "sentence_end", "section_title", "section_path", "role",
+    "operation_number", "operation_group_id", "operation_function", "summary_fr",
+    "proof_kind", "result_scope", "quantitative_values", "reference_like",
+    "primary_result_evidence", "hypothesis_explicit", "hypothesis_anchor",
+    "source_text_original", "source_field", "source_is_original",
+    "highlight_coordinates", "justification_bridge_fr", "excerpt", "text",
+}
+
+
+def _compact_public_evidence(value: Any) -> Dict[str, Any]:
+    source = _as_dict(value)
+    output: Dict[str, Any] = {}
+    for key in _PUBLIC_EVIDENCE_KEYS:
+        item = source.get(key)
+        if item in (None, "", [], {}):
+            continue
+        if isinstance(item, str):
+            output[key] = _clean_text(item, 1600)
+        elif isinstance(item, list):
+            output[key] = item[:20]
+        elif isinstance(item, dict):
+            output[key] = {
+                nested_key: nested_value
+                for nested_key, nested_value in item.items()
+                if nested_key in _PUBLIC_EVIDENCE_KEYS
+                and nested_value not in (None, "", [], {})
+            }
+        else:
+            output[key] = item
+
+    metadata = _as_dict(source.get("metadata"))
+    if metadata:
+        compact_metadata = {
+            key: metadata.get(key)
+            for key in _PUBLIC_EVIDENCE_KEYS
+            if metadata.get(key) not in (None, "", [], {})
+        }
+        if compact_metadata:
+            output["metadata"] = compact_metadata
+    return output
+
+
+def _compact_public_claim(value: Any) -> Dict[str, Any]:
+    source = _as_dict(value)
+    output = {
+        key: source.get(key)
+        for key in ("text", "claim_kind", "label", "status", "reason", "reason_fr")
+        if source.get(key) not in (None, "")
+    }
+    evidence_ids = _as_list(source.get("evidence_ids"))[:20]
+    if evidence_ids:
+        output["evidence_ids"] = evidence_ids
+    proofs = [
+        _compact_public_evidence(item)
+        for item in _as_list(source.get("proofs"))[:12]
+        if isinstance(item, dict)
+    ]
+    if proofs:
+        output["proofs"] = proofs
+    nested_claims = [
+        _compact_public_claim(item)
+        for item in _as_list(source.get("claims"))[:20]
+        if isinstance(item, dict)
+    ]
+    if nested_claims:
+        output["claims"] = nested_claims
+    return output
+
+
+def _compact_public_section(value: Any) -> Dict[str, Any]:
+    source = _as_dict(value)
+    output: Dict[str, Any] = {}
+    for key in ("body", "status", "valid", "proof_policy", "display_mode", "format"):
+        item = source.get(key)
+        if item not in (None, ""):
+            output[key] = _clean_text(item, 30000) if isinstance(item, str) else item
+
+    for key in ("paragraphs", "items"):
+        rows = [
+            _compact_public_claim(item)
+            for item in _as_list(source.get(key))[:40]
+            if isinstance(item, dict)
+        ]
+        if rows:
+            output[key] = rows
+
+    evidence_ids = _as_list(source.get("evidence_ids"))[:40]
+    if evidence_ids:
+        output["evidence_ids"] = evidence_ids
+    evidence = [
+        _compact_public_evidence(item)
+        for item in _as_list(source.get("evidence"))[:20]
+        if isinstance(item, dict)
+    ]
+    if evidence:
+        output["evidence"] = evidence
+    return output
+
+
+def _compact_eligibility_operation(value: Any) -> Dict[str, Any]:
+    source = _as_dict(value)
+    output: Dict[str, Any] = {}
+    for key, item in source.items():
+        if isinstance(item, (str, int, float, bool)) or item is None:
+            output[key] = _clean_text(item, 4000) if isinstance(item, str) else item
+
+    functional = _as_dict(source.get("functional_evidence"))
+    if functional:
+        output["functional_evidence"] = {
+            key: [
+                _compact_public_evidence(item)
+                for item in _as_list(rows)[:2]
+                if isinstance(item, dict)
+            ]
+            for key, rows in functional.items()
+            if isinstance(rows, list)
+        }
+
+    criteria = []
+    for criterion in _as_list(source.get("criteria"))[:12]:
+        if not isinstance(criterion, dict):
+            continue
+        compact = {
+            key: (_clean_text(item, 2500) if isinstance(item, str) else item)
+            for key, item in criterion.items()
+            if key != "evidence" and isinstance(item, (str, int, float, bool))
+        }
+        evidence = [
+            _compact_public_evidence(item)
+            for item in _as_list(criterion.get("evidence"))[:2]
+            if isinstance(item, dict)
+        ]
+        if evidence:
+            compact["evidence"] = evidence
+        criteria.append(compact)
+    if criteria:
+        output["criteria"] = criteria
+    return output
+
+
+def _compact_eligibility_report(value: Any) -> Dict[str, Any]:
+    source = _as_dict(value)
+    output = {
+        key: item
+        for key, item in source.items()
+        if isinstance(item, (str, int, float, bool)) or item is None
+    }
+    for key in ("score_basis_operation", "reference_operation"):
+        if isinstance(source.get(key), dict):
+            output[key] = _compact_eligibility_operation(source[key])
+    operations = [
+        _compact_eligibility_operation(item)
+        for item in _as_list(source.get("operations"))[:20]
+        if isinstance(item, dict)
+    ]
+    if operations:
+        output["operations"] = operations
+    return output
+
+
+def _compact_frascati_summary(value: Any) -> Dict[str, Any]:
+    source = _as_dict(value)
+    output: Dict[str, Any] = {
+        key: item
+        for key, item in source.items()
+        if isinstance(item, (str, int, float, bool)) or item is None
+    }
+    for key in ("demarche_legibility", "decisions_count", "rag_audit"):
+        item = source.get(key)
+        if isinstance(item, dict):
+            output[key] = item
+    questions = _as_list(source.get("questions_to_ask"))[:20]
+    if questions:
+        output["questions_to_ask"] = questions
+    output["eligibility_evidence_report"] = _compact_eligibility_report(
+        source.get("eligibility_evidence_report")
+    )
+    return output
+
+
+def _compact_verrou_source_json(value: Any) -> Dict[str, Any]:
+    source = _as_dict(value)
+    scalar_keys = {
+        "origin", "origin_type", "added_via", "manual_verrou",
+        "supplementary_verrou", "human_validated", "automatic_verrou_creation",
+        "manual_description", "manual_scholar_text", "scientific_support_status",
+        "consultant_explanation", "agent_reasoning", "why_agent_found_verrou",
+        "scientific_lock", "why_not_simple_engineering", "evidence_summary",
+        "text", "source_text", "description", "document", "source_document",
+        "filename", "document_name", "db_verrou_id", "is_db_synced", "can_decide",
+        "sync_source", "frontend_json_only", "frontend_source",
+    }
+    output: Dict[str, Any] = {}
+    for key in scalar_keys:
+        item = source.get(key)
+        if item in (None, ""):
+            continue
+        output[key] = _clean_text(item, 5000) if isinstance(item, str) else item
+
+    keywords = [
+        _clean_text(item, 100)
+        for item in _as_list(source.get("keywords"))[:20]
+        if _clean_text(item, 100)
+    ]
+    if keywords:
+        output["keywords"] = keywords
+
+    for key in ("sources", "evidence_sources", "source_documents", "evidence"):
+        rows = [
+            _compact_public_evidence(item) if isinstance(item, dict) else _clean_text(item, 1000)
+            for item in _as_list(source.get(key))[:16]
+        ]
+        if rows:
+            output[key] = rows
+    return output
+
+
+def _compact_verrou(value: Any) -> Dict[str, Any]:
+    source = _as_dict(value)
+    output = {
+        key: source.get(key)
+        for key in (
+            "id", "verrou_id", "db_id", "diagnostic_run_id", "title", "titre",
+            "verrou", "tag_cir", "score", "consultant_status", "justification",
+            "description", "text", "created_at", "is_db_synced", "can_decide",
+            "source", "sync_source",
+        )
+        if source.get(key) not in (None, "")
+    }
+    output["source_json"] = _compact_verrou_source_json(source.get("source_json"))
+    return output
+
+
+def build_compact_diagnostic_display(display: Dict[str, Any]) -> Dict[str, Any]:
+    """Supprime les payloads d'audit lourds avant sérialisation HTTP."""
+    source = _as_dict(display)
+    passthrough_keys = {
+        "source", "display_version", "domain", "status", "summary", "objective",
+        "frascati_text", "frascati_justification_text", "verrous_text", "methodes",
+        "resultats", "parametres", "limites", "report_markdown", "report_sections",
+        "diagnostic_sections_by_key", "diagnostic_sections", "sections_count",
+        "ai_summary", "ai_detection", "ai_score", "ai_risk_level",
+        "ai_suspected_passages", "inputs_status", "pipeline_stats", "source_policy",
+        "consultant_validation_source", "consultant_validation_enabled", "verrous_sync",
+        "official_report_debug", "official_report_source", "display_source_policy",
+        "database_persistence", "document_compare", "document_compare_pairs",
+        "document_compare_pairs_count", "style_memory", "style_memory_ok",
+        "style_memory_examples_count", "style_memory_roles", "style_memory_stats",
+        "cir_memory_ok", "cir_memory_has_previous", "cir_memory_summary",
+        "cir_memory_previous_years", "cir_memory_project_novelty_score",
+        "cir_memory_signal", "cir_memory_explanation", "cir_memory_new_verrous",
+        "cir_memory_evolutions", "cir_memory_continuities", "cir_memory_verrou_comparisons",
+    }
+    output = {key: source[key] for key in passthrough_keys if key in source}
+    output["frascati_summary"] = _compact_frascati_summary(source.get("frascati_summary"))
+
+    cards = []
+    for card in _as_list(source.get("diagnostic_cards")):
+        if not isinstance(card, dict) or str(card.get("key") or "") != "lecture_frascati":
+            continue
+        compact_card = _compact_public_section(card)
+        compact_card.update({
+            key: card.get(key)
+            for key in ("key", "title", "description", "is_empty", "hidden_in_diagnostic_ui")
+            if key in card
+        })
+        cards.append(compact_card)
+    output["diagnostic_cards"] = cards
+
+    section_payloads = _as_dict(
+        _as_dict(source.get("static_diagnostic")).get("section_payloads_by_key")
+    )
+    compact_sections = {
+        key: _compact_public_section(section_payloads.get(key))
+        for key in ("demarche_detectee", "resultats_metriques", "parametres_contraintes")
+        if isinstance(section_payloads.get(key), dict)
+    }
+    if compact_sections:
+        output["static_diagnostic"] = {"section_payloads_by_key": compact_sections}
+
+    validation = [
+        _compact_verrou(item)
+        for item in _as_list(source.get("validation_verrous"))
+        if isinstance(item, dict)
+    ]
+    output["validation_verrous"] = validation
+    if not validation:
+        output["validation_verrous_preview"] = [
+            _compact_verrou(item)
+            for item in _as_list(source.get("validation_verrous_preview"))[:40]
+            if isinstance(item, dict)
+        ]
+    return output

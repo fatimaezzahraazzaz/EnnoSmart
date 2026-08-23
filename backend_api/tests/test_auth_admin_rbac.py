@@ -1,27 +1,50 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 import sys
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 
 TEST_DB = Path(__file__).resolve().parents[2] / ".tmp" / "ennoma_auth_admin_test.db"
 TEST_DB.parent.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB.as_posix()}"
-os.environ["ENV"] = "test"
-os.environ["SECRET_KEY"] = "test-secret-key-with-enough-random-characters"
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from db.database import Base, SessionLocal, engine
+from core.deps import get_db
+from db.database import Base
 from db.models import User
 from routers import admin, auth, projects
 
 
+# Ce test ne doit jamais dépendre du moteur global de l'application : lorsque
+# pytest a déjà importé ``db.database``, modifier DATABASE_URL ici arrive trop
+# tard et ``drop_all`` pourrait alors viser PostgreSQL.
+test_engine = create_engine(
+    f"sqlite:///{TEST_DB.as_posix()}",
+    connect_args={"check_same_thread": False},
+)
+TestSessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=test_engine,
+)
+
+
+def _get_test_db():
+    db = TestSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 def _app() -> FastAPI:
     app = FastAPI()
+    app.dependency_overrides[get_db] = _get_test_db
     app.include_router(auth.router)
     app.include_router(projects.router)
     app.include_router(admin.router)
@@ -35,8 +58,10 @@ def _headers(client: TestClient, email: str, password: str) -> dict[str, str]:
 
 
 def test_auth_profile_password_reset_and_admin_workflow(monkeypatch):
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    assert test_engine.url.get_backend_name() == "sqlite"
+    assert Path(test_engine.url.database).resolve() == TEST_DB.resolve()
+    Base.metadata.drop_all(bind=test_engine)
+    Base.metadata.create_all(bind=test_engine)
     client = TestClient(_app())
 
     first = client.post(
@@ -50,7 +75,7 @@ def test_auth_profile_password_reset_and_admin_workflow(monkeypatch):
     )
     assert first.status_code == 201, first.text
 
-    with SessionLocal() as db:
+    with TestSessionLocal() as db:
         olivier = db.query(User).filter(User.email == "olivier@example.com").one()
         olivier.role = "admin"
         db.commit()
@@ -116,7 +141,7 @@ def test_auth_profile_password_reset_and_admin_workflow(monkeypatch):
     assert reset.status_code == 200, reset.text
     assert client.post("/auth/login", json={"email": "sofia@example.com", "password": "NewConsultant!456"}).status_code == 200
 
-    with SessionLocal() as db:
+    with TestSessionLocal() as db:
         olivier = db.query(User).filter(User.email == "olivier@example.com").one()
         olivier.role = "superadmin"
         db.commit()

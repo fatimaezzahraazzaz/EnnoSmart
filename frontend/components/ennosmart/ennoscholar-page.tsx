@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useMemo, useState } from "react"
 import {
@@ -20,10 +20,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import {
   getArticles,
   getDocuments,
+  getProjectOverviews,
   getProjects,
   getScholarLatest,
   getStateOfArtHistory,
@@ -40,15 +41,13 @@ import {
   updateArticleDecision,
   type ArticleRead,
   type DocumentRead,
+  type ProjectOverview,
   type ProjectRead,
 } from "@/lib/api"
 import { getCurrentProjectId, setCurrentProjectId } from "@/lib/project-session"
 import { EnnoScholarStructuredStateArtPanel } from "./ennoscholar-structured-state-of-art-panel"
 import { EnnoScholarPlanChat } from "./ennoscholar-plan-chat"
 import {
-  ContextBadge,
-  MetricCard,
-  PageHeader,
   StatusNotice,
   WorkflowSteps,
 } from "@/components/ennosmart/workspace-ui"
@@ -813,7 +812,7 @@ function ArticleCard({
                 href={article.url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex h-8 items-center justify-center rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-muted"
+                className="inline-flex min-h-10 items-center justify-center rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-muted"
               >
                 <ExternalLink className="size-3 mr-2" />
                 Ouvrir l'article
@@ -824,7 +823,7 @@ function ArticleCard({
                 href={browserDownloadUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex h-8 items-center justify-center rounded-md border border-brand/30 px-3 text-xs font-medium text-brand hover:bg-brand/10"
+                className="inline-flex min-h-10 items-center justify-center rounded-md border border-brand/30 px-3 text-xs font-medium text-brand hover:bg-brand/10"
               >
                 <ExternalLink className="size-3 mr-2" />
                 Télécharger le PDF public
@@ -877,7 +876,7 @@ function ArticleCard({
         <div className="flex flex-wrap gap-2 pt-1">
           <Button
             size="sm"
-            className="text-xs h-8 bg-brand hover:bg-brand/90"
+            className="min-h-10 text-xs bg-brand hover:bg-brand/90"
             disabled={loading || reportOnly || decisionBlocked}
             onClick={() => updateDecision("garde")}
           >
@@ -892,7 +891,7 @@ function ArticleCard({
           <Button
             size="sm"
             variant="outline"
-            className="text-xs h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
+            className="min-h-10 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
             disabled={loading || reportOnly || decisionBlocked}
             onClick={() => updateDecision("rejete")}
           >
@@ -903,7 +902,7 @@ function ArticleCard({
           <Button
             size="sm"
             variant="outline"
-            className="text-xs h-8"
+            className="min-h-10 text-xs"
             disabled={loading || reportOnly}
             onClick={() => updateDecision("en_attente")}
           >
@@ -913,7 +912,7 @@ function ArticleCard({
           <Button
             size="sm"
             variant="ghost"
-            className="text-xs h-8"
+            className="min-h-10 text-xs"
             onClick={() => setExpanded((prev) => !prev)}
           >
             {expanded ? (
@@ -933,7 +932,7 @@ function ArticleCard({
             <Button
               size="sm"
               variant="outline"
-              className="text-xs h-8"
+              className="min-h-10 text-xs"
               disabled={translating || loading}
               onClick={() => translateAbstract(false)}
               title="Traduire le résumé en français avec OPUS"
@@ -946,7 +945,7 @@ function ArticleCard({
               <Button
                 size="sm"
                 variant={abstractMode === "fr" ? "default" : "outline"}
-                className="text-xs h-8"
+                className="min-h-10 text-xs"
                 disabled={translating}
                 onClick={() => {
                   setAbstractMode("fr")
@@ -961,7 +960,7 @@ function ArticleCard({
               <Button
                 size="sm"
                 variant={abstractMode === "original" ? "default" : "outline"}
-                className="text-xs h-8"
+                className="min-h-10 text-xs"
                 disabled={translating}
                 onClick={() => {
                   setAbstractMode("original")
@@ -975,7 +974,7 @@ function ArticleCard({
               <Button
                 size="sm"
                 variant="outline"
-                className="text-xs h-8"
+                className="min-h-10 text-xs"
                 disabled={translating || loading}
                 onClick={() => translateAbstract(true)}
                 title="Relancer la traduction et remplacer la traduction en cache"
@@ -1002,18 +1001,20 @@ function ArticleSection({
   articles,
   projectId,
   onUpdated,
+  embedded = false,
 }: {
   title: string
   description: string
   articles: ArticleRead[]
   projectId: number
   onUpdated: (article: ArticleRead) => void
+  embedded?: boolean
 }) {
-  return (
-    <Card>
-      <CardHeader>
+  const content = (
+    <>
+      <div className={embedded ? "border-b border-border/70 pb-3" : undefined}>
         <CardTitle className="text-sm flex items-center gap-2">
-          <FileText className="size-4 text-brand" />
+          <FileText className="size-4 text-brand" aria-hidden="true" />
           {title}
           <Badge variant="outline" className="ml-1">
             {articles.length}
@@ -1022,9 +1023,9 @@ function ArticleSection({
         <CardDescription className="text-xs">
           {description}
         </CardDescription>
-      </CardHeader>
+      </div>
 
-      <CardContent className="space-y-3">
+      <div className="space-y-3">
         {articles.length === 0 ? (
           <div className="p-6 text-center border border-dashed rounded-lg">
             <p className="text-sm font-medium text-foreground">
@@ -1041,7 +1042,17 @@ function ArticleSection({
             />
           ))
         )}
-      </CardContent>
+      </div>
+    </>
+  )
+
+  if (embedded) {
+    return <section className="space-y-3">{content}</section>
+  }
+
+  return (
+    <Card>
+      <CardContent className="space-y-4 p-4 sm:p-5">{content}</CardContent>
     </Card>
   )
 }
@@ -1965,11 +1976,6 @@ function EnnoScholarByVerrouSection({
     ? groups
     : groups.filter((group) => group.key === selectedVerrouKey)
 
-  const selectedVerrouTitle =
-    selectedVerrouKey === "all"
-      ? "Tous les verrous scientifiques"
-      : groups.find((group) => group.key === selectedVerrouKey)?.title || "Verrou sélectionné"
-
   const selectedVerrouGroup =
     selectedVerrouKey === "all"
       ? null
@@ -2001,42 +2007,40 @@ function EnnoScholarByVerrouSection({
 
   return (
     <div className="space-y-4">
-      <Card className="border-brand/20 bg-brand/5">
-        <CardHeader>
-          <CardTitle className="text-sm flex items-center gap-2">
-            <BookOpen className="size-4 text-brand" />
+      <section className="overflow-hidden rounded-xl border border-brand/20 bg-card shadow-xs" aria-labelledby="scholar-verrou-filters-title">
+        <div className="border-b border-brand/15 bg-brand/5 px-4 py-3">
+          <h2 id="scholar-verrou-filters-title" className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <BookOpen className="size-4 text-brand" aria-hidden="true" />
             Filtrer les articles par verrou scientifique
-          </CardTitle>
-          <CardDescription className="text-xs">
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
             Choisis un verrou, puis filtre ses articles par catégorie : Direct, Connexe ou Fondamental.
-          </CardDescription>
-        </CardHeader>
+          </p>
+        </div>
 
-        <CardContent className="space-y-4">
+        <div className="space-y-4 p-4">
           {groupingSummary?.active && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="rounded-md border bg-background p-3">
-                <p className="text-xs text-muted-foreground">Signaux retenus au départ</p>
-                <p className="text-xl font-bold mt-1">{groupingSummary?.input_signals_count ?? "—"}</p>
-              </div>
-              <div className="rounded-md border bg-background p-3">
-                <p className="text-xs text-muted-foreground">Verrous scientifiques après regroupement</p>
-                <p className="text-xl font-bold mt-1">{groupingSummary?.grouped_verrous_count ?? groups.length}</p>
-              </div>
-              <div className="rounded-md border bg-background p-3">
-                <p className="text-xs text-muted-foreground">Doublons évités</p>
-                <p className="text-xl font-bold mt-1">{groupingSummary?.duplicates_removed ?? 0}</p>
-              </div>
-            </div>
+            <dl className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+              {[
+                ["Signaux de départ", groupingSummary?.input_signals_count ?? "—"],
+                ["Verrous consolidés", groupingSummary?.grouped_verrous_count ?? groups.length],
+                ["Doublons évités", groupingSummary?.duplicates_removed ?? 0],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="flex items-baseline gap-2">
+                  <dt className="text-xs text-muted-foreground">{label}</dt>
+                  <dd className="text-sm font-semibold tabular-nums text-foreground">{value}</dd>
+                </div>
+              ))}
+            </dl>
           )}
 
-          <div className="grid gap-3 lg:grid-cols-[1.6fr_1fr]">
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Filtre par verrou</p>
+          <div className="space-y-2">
+              <label htmlFor="scholar-verrou-filter" className="text-xs font-medium text-muted-foreground">Filtre par verrou</label>
               <select
+                id="scholar-verrou-filter"
                 value={selectedVerrouKey}
                 onChange={(event) => setSelectedVerrouKey(event.target.value)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25"
               >
                 <option value="all">Tous les verrous scientifiques consolidés</option>
                 {groups.map((group, index) => (
@@ -2045,14 +2049,6 @@ function EnnoScholarByVerrouSection({
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Nom du verrou affiché</p>
-              <div className="rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground">
-                {selectedVerrouTitle}
-              </div>
-            </div>
           </div>
 
           {selectedVerrouGroup && (
@@ -2090,7 +2086,8 @@ function EnnoScholarByVerrouSection({
                     key={tag}
                     type="button"
                     onClick={() => setSelectedTag(tag)}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                    aria-pressed={active}
+                    className={`min-h-10 rounded-full border px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25 ${
                       active
                         ? "border-brand bg-brand text-white"
                         : "border-border bg-background text-muted-foreground hover:bg-muted"
@@ -2103,8 +2100,8 @@ function EnnoScholarByVerrouSection({
             </div>
           </div>
 
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {filteredGroups.map((group, index) => {
         const direct = group.articles.filter((article) => normalizeTag(article.tag_article) === "Direct")
@@ -2266,6 +2263,7 @@ function EnnoScholarByVerrouSection({
                     articles={section.articles}
                     projectId={projectId}
                     onUpdated={onUpdated}
+                    embedded
                   />
                 ) : null
               )}
@@ -3852,7 +3850,7 @@ type EnnoScholarPageProps = {
 export function EnnoScholarPage({
   onImmersiveModeChange,
 }: EnnoScholarPageProps = {}) {
-  const [activeTab, setActiveTab] = useState("etat-art-rediges")
+  const [activeTab, setActiveTab] = useState("par-verrou")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [query, setQuery] = useState("")
@@ -3860,6 +3858,8 @@ export function EnnoScholarPage({
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all")
   const [project, setProject] = useState<ProjectRead | null>(null)
   const [projects, setProjects] = useState<ProjectRead[]>([])
+  const [projectOverviews, setProjectOverviews] = useState<ProjectOverview[]>([])
+  const [diagnosticAvailable, setDiagnosticAvailable] = useState<boolean | null>(null)
   const [documents, setDocuments] = useState<DocumentRead[]>([])
   const [articles, setArticles] = useState<ArticleRead[]>([])
   const [scholarBundle, setScholarBundle] = useState<any>(null)
@@ -4013,11 +4013,16 @@ export function EnnoScholarPage({
     setError("")
 
     try {
-      const projectList = await getProjects()
+      const [projectList, overviewList] = await Promise.all([
+        getProjects(),
+        getProjectOverviews().catch(() => [] as ProjectOverview[]),
+      ])
       setProjects(projectList)
+      setProjectOverviews(overviewList)
 
       if (projectList.length === 0) {
         setProject(null)
+        setDiagnosticAvailable(null)
         setDocuments([])
         setArticles([])
         setStateOfArtHistory([])
@@ -4032,6 +4037,17 @@ export function EnnoScholarPage({
 
       setCurrentProjectId(selectedProject.id)
       setProject(selectedProject)
+
+      const selectedOverview = overviewList.find(
+        (item) => item.project.id === selectedProject.id,
+      )
+      const selectedProjectHasDiagnostic = selectedOverview
+        ? Boolean(selectedOverview.diagnostic.available)
+        : true
+      setDiagnosticAvailable(selectedProjectHasDiagnostic)
+      if (!selectedProjectHasDiagnostic) {
+        setActiveTab("etat-art-rediges")
+      }
 
       const [documentsData, articlesData] = await Promise.all([
         getDocuments(selectedProject.id).catch(() => []),
@@ -4087,6 +4103,7 @@ export function EnnoScholarPage({
   useEffect(() => {
     if (
       !project?.id ||
+      diagnosticAvailable === false ||
       preflightPendingCount <= 0 ||
       activeTab === "etat-art-rediges"
     ) return
@@ -4105,15 +4122,17 @@ export function EnnoScholarPage({
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [project?.id, preflightPendingCount, activeTab])
+  }, [project?.id, diagnosticAvailable, preflightPendingCount, activeTab])
 
   // IMPORTANT :
   // ne jamais changer automatiquement d'onglet à cause d'un statut
   // d'extraction. Le consultant reste dans sa conversation.
 
   useEffect(() => {
-    onImmersiveModeChange?.(activeTab === "etat-art-rediges")
-  }, [activeTab, onImmersiveModeChange])
+    onImmersiveModeChange?.(
+      diagnosticAvailable === false || activeTab === "etat-art-rediges",
+    )
+  }, [activeTab, diagnosticAvailable, onImmersiveModeChange])
 
   useEffect(
     () => () => onImmersiveModeChange?.(false),
@@ -4128,6 +4147,14 @@ export function EnnoScholarPage({
     try {
       const selectedProject = projects.find((item) => item.id === projectId) || null
       setProject(selectedProject)
+      const selectedOverview = projectOverviews.find(
+        (item) => item.project.id === projectId,
+      )
+      const selectedProjectHasDiagnostic = selectedOverview
+        ? Boolean(selectedOverview.diagnostic.available)
+        : true
+      setDiagnosticAvailable(selectedProjectHasDiagnostic)
+      setActiveTab(selectedProjectHasDiagnostic ? "par-verrou" : "etat-art-rediges")
       setScholarBundle(null)
       setStateOfArtHistory([])
       setSelectedStateOfArtRunId(null)
@@ -4446,49 +4473,48 @@ export function EnnoScholarPage({
     selectedStateOfArtEntry?.report?.markdown ||
     ""
 
-  if (activeTab === "etat-art-rediges") {
-    return (
-      <div className="h-full min-h-0">
-        <EnnoScholarPlanChat
-          projectId={project.id}
-          projectLabel={`${project.organisme} — ${project.project_name} — ${project.year}`}
-          projectOptions={projects.map((item) => ({
-            id: item.id,
-            label: `${item.organisme} — ${item.project_name} — ${item.year}`,
-          }))}
-          onProjectChange={changeProject}
-          onBackToArticles={() => setActiveTab("par-verrou")}
-          immersive
-          selectedArticles={consultantSelectedArticles}
-          onCorpusChanged={refreshCorpusAfterChatAction}
-          onGenerate={launchFinalStateOfArtGeneration}
-          onRefreshDraft={async () => {
-            const refreshed = await getLatestStateOfArt(project.id)
-            setLatestStateArtResult(refreshed)
-          }}
-          draftMarkdown={currentDraftMarkdown}
-          generating={generatingStateArt}
-          generationError={generateStateArtError}
-        />
-      </div>
-    )
-  }
+  const standaloneChatMode = diagnosticAvailable === false
 
-  return (
-    <div className="workspace-page-wide space-y-5">
-      <PageHeader
-        className="module-header module-scholar"
-        eyebrow="Agent de preuve scientifique"
-        title="EnnoScholar"
-        description="Recherchez, qualifiez et sélectionnez les preuves scientifiques avant de construire un état de l'art traçable."
-        icon={BookOpen}
-        context={<><ContextBadge>{project.organisme} · {project.project_name} · {project.year}</ContextBadge><ContextBadge>{documents.length} document(s)</ContextBadge></>}
-        actions={<>
+  const workflowSteps = [
+    { label: "Rechercher", detail: "Corpus", status: usefulArticlesCount > 0 ? "complete" as const : "current" as const },
+    { label: "Vérifier", detail: "Accès & preuves", status: preflightPendingCount > 0 ? "current" as const : usefulArticlesCount > 0 ? "complete" as const : "upcoming" as const },
+    { label: "Sélectionner", detail: "Consultant", status: consultantSelectedArticles.length > 0 ? "complete" as const : usefulArticlesCount > 0 ? "current" as const : "upcoming" as const },
+    { label: "Rédiger", detail: "État de l'art", status: currentDraftMarkdown ? "complete" as const : consultantSelectedArticles.length > 0 ? "current" as const : "upcoming" as const },
+  ]
+
+  const scholarSpaces = [
+    { value: "par-verrou", label: "Sélection articles", hint: `${usefulArticlesCount} candidat(s)` },
+    { value: "selection", label: "Sélection consultant", hint: `${consultantSelectedArticles.length} gardé(s)` },
+    { value: "etat-art-rediges", label: "Rédaction état de l’art", hint: currentDraftMarkdown ? "Brouillon disponible" : "À préparer" },
+  ]
+
+  const scholarWorkspaceHeader = (
+    <header className="shrink-0 border-b border-border bg-card/95 shadow-xs backdrop-blur-sm">
+      <div className="flex min-h-14 flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-brand/20 bg-brand/8 text-brand">
+            <BookOpen className="size-4.5" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-base font-semibold tracking-tight text-foreground">EnnoScholar</h1>
+              <Badge variant="outline" className="border-brand/20 bg-brand/5 text-brand">
+                Agent de preuve scientifique
+              </Badge>
+            </div>
+            <p className="truncate text-xs text-muted-foreground">
+              {project.organisme} · {project.project_name} · {project.year} · {documents.length} document(s)
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
           {projects.length > 1 && (
             <select
               value={project.id}
               onChange={(event) => changeProject(Number(event.target.value))}
-              className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+              className="min-h-10 max-w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25"
+              aria-label="Changer de projet EnnoScholar"
             >
               {projects.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -4497,20 +4523,157 @@ export function EnnoScholarPage({
               ))}
             </select>
           )}
-
-          <Button variant="outline" onClick={loadData}>
-            <RefreshCw data-icon="inline-start" />
+          <Button variant="outline" size="sm" className="min-h-10" onClick={loadData}>
+            <RefreshCw data-icon="inline-start" aria-hidden="true" />
             Actualiser
           </Button>
-        </>}
-      />
+        </div>
+      </div>
 
-      <WorkflowSteps steps={[
-        { label: "Rechercher", detail: "Corpus", status: usefulArticlesCount > 0 ? "complete" : "current" },
-        { label: "Vérifier", detail: "Accès & preuves", status: preflightPendingCount > 0 ? "current" : usefulArticlesCount > 0 ? "complete" : "upcoming" },
-        { label: "Sélectionner", detail: "Consultant", status: consultantSelectedArticles.length > 0 ? "complete" : usefulArticlesCount > 0 ? "current" : "upcoming" },
-        { label: "Rédiger", detail: "État de l'art", status: currentDraftMarkdown ? "complete" : consultantSelectedArticles.length > 0 ? "current" : "upcoming" },
-      ]} />
+      {standaloneChatMode ? (
+        <div className="border-t border-border/60 px-3 py-1.5 sm:px-4 lg:px-6">
+          <div className="flex min-h-9 flex-wrap items-center gap-2">
+            <Badge className="bg-brand text-brand-foreground hover:bg-brand">
+              Mode autonome
+            </Badge>
+            <p className="text-xs text-muted-foreground">
+              Chat scientifique EnnoScholar · aucun parcours EnnoDiagnostic pour ce projet
+            </p>
+          </div>
+        </div>
+      ) : activeTab === "etat-art-rediges" ? (
+        <div className="border-t border-border/60 px-3 py-1.5 sm:px-4 lg:px-6">
+          <div className="flex min-h-9 items-center justify-between gap-3 overflow-x-auto">
+            <nav
+              className="flex shrink-0 items-center gap-1"
+              aria-label="Espaces EnnoScholar"
+            >
+              {scholarSpaces.map((space) => {
+                const active = activeTab === space.value
+                const compactLabel =
+                  space.value === "par-verrou"
+                    ? "Articles"
+                    : space.value === "selection"
+                      ? "Sélection"
+                      : "Rédaction"
+
+                return (
+                  <button
+                    key={space.value}
+                    type="button"
+                    onClick={() => setActiveTab(space.value)}
+                    aria-current={active ? "page" : undefined}
+                    className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/20 ${
+                      active
+                        ? "bg-brand/[0.08] text-brand"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                    }`}
+                  >
+                    {compactLabel}
+                  </button>
+                )
+              })}
+            </nav>
+
+            <div
+              className="hidden shrink-0 items-center gap-2.5 text-[10px] text-muted-foreground md:flex"
+              aria-label="Progression EnnoScholar"
+            >
+              {workflowSteps.map((step, index) => {
+                const complete = step.status === "complete"
+                const current = step.status === "current"
+
+                return (
+                  <div key={step.label} className="flex items-center gap-2">
+                    {index > 0 && (
+                      <span className="h-px w-4 bg-border" aria-hidden="true" />
+                    )}
+                    <span
+                      className={`flex items-center gap-1.5 whitespace-nowrap ${
+                        complete || current ? "text-foreground" : ""
+                      }`}
+                    >
+                      <span
+                        className={`grid size-4 place-items-center rounded-full text-[9px] font-semibold ${
+                          complete
+                            ? "bg-success text-white"
+                            : current
+                              ? "bg-brand text-white"
+                              : "border border-border bg-background"
+                        }`}
+                        aria-hidden="true"
+                      >
+                        {complete ? "✓" : current ? "•" : ""}
+                      </span>
+                      {step.label}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="border-t border-border/70 px-4 py-2 lg:px-6">
+          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(420px,0.9fr)] md:items-center">
+            <nav className="grid grid-cols-1 gap-1 rounded-xl bg-muted/70 p-1 sm:grid-cols-3" aria-label="Espaces EnnoScholar">
+              {scholarSpaces.map((space) => {
+                const active = activeTab === space.value
+                return (
+                  <button
+                    key={space.value}
+                    type="button"
+                    onClick={() => setActiveTab(space.value)}
+                    aria-current={active ? "page" : undefined}
+                    className={`min-h-11 rounded-lg px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25 ${
+                      active
+                        ? "bg-card text-foreground shadow-xs ring-1 ring-border"
+                        : "text-muted-foreground hover:bg-card/70 hover:text-foreground"
+                    }`}
+                  >
+                    <span className="block truncate text-xs font-semibold">{space.label}</span>
+                    <span className="mt-0.5 block truncate text-[10px] opacity-75">{space.hint}</span>
+                  </button>
+                )
+              })}
+            </nav>
+            <WorkflowSteps steps={workflowSteps} className="border-0 bg-transparent shadow-none" />
+          </div>
+        </div>
+      )}
+    </header>
+  )
+
+  if (standaloneChatMode || activeTab === "etat-art-rediges") {
+    return (
+      <div className="flex h-full min-h-0 flex-col bg-background">
+        {scholarWorkspaceHeader}
+        <div className="min-h-0 flex-1">
+          <EnnoScholarPlanChat
+            projectId={project.id}
+            projectLabel={`${project.organisme} — ${project.project_name} — ${project.year}`}
+            immersive
+            selectedArticles={consultantSelectedArticles}
+            onCorpusChanged={refreshCorpusAfterChatAction}
+            onGenerate={launchFinalStateOfArtGeneration}
+            onRefreshDraft={async () => {
+              const refreshed = await getLatestStateOfArt(project.id)
+              setLatestStateArtResult(refreshed)
+            }}
+            draftMarkdown={currentDraftMarkdown}
+            generating={generatingStateArt}
+            generationError={generateStateArtError}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="workspace-page-wide space-y-4">
+      <div className="sticky top-0 z-20 -mx-4 sm:-mx-5 lg:-mx-7">
+        {scholarWorkspaceHeader}
+      </div>
 
       {preflightPendingCount > 0 && (
         <StatusNotice state="processing" live title="Vérification des accès aux articles" description="Le catalogue reste consultable. Les liens directs sont vérifiés, puis une copie légale est recherchée pour chaque échec.">
@@ -4541,53 +4704,58 @@ export function EnnoScholarPage({
       )}
       {activeTab !== "etat-art-rediges" && (
         <>
-      {/* Stats */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <MetricCard label="Candidats" value={usefulArticlesCount} icon={Search} />
-        <MetricCard label="Utiles" value={usefulCandidateCount} icon={CheckCircle2} tone="success" />
-        <MetricCard label="Directs" value={directArticlesFoundCount} detail="utiles" tone="success" />
-        <MetricCard label="Connexes" value={connexeArticlesFoundCount} detail="utiles" tone="brand" />
-        <MetricCard label="Fondamentaux" value={fondamentalArticlesFoundCount} detail="utiles" tone="info" />
-        <MetricCard label="Techniques" value={foundArticleCounts.technique} detail="sources" tone="neutral" />
-      </div>
+      {/* Bandeau de lecture rapide : toutes les métriques, sans empiler six cartes. */}
+      <section className="overflow-x-auto rounded-xl border border-border bg-card shadow-xs" aria-label="Indicateurs du corpus">
+        <dl className="grid min-w-[720px] grid-cols-6 divide-x divide-border">
+          {[
+            { label: "Candidats", value: usefulArticlesCount, tone: "text-foreground" },
+            { label: "Utiles", value: usefulCandidateCount, tone: "text-success" },
+            { label: "Directs", value: directArticlesFoundCount, tone: "text-success" },
+            { label: "Connexes", value: connexeArticlesFoundCount, tone: "text-brand" },
+            { label: "Fondamentaux", value: fondamentalArticlesFoundCount, tone: "text-blue-700" },
+            { label: "Techniques", value: foundArticleCounts.technique, tone: "text-purple-700" },
+          ].map((stat) => (
+            <div key={stat.label} className="px-4 py-3">
+              <dt className="text-[11px] font-medium text-muted-foreground">{stat.label}</dt>
+              <dd className={`mt-0.5 text-lg font-semibold tabular-nums ${stat.tone}`}>{stat.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
 
       {/* Search and options */}
-      <Card className="shadow-none">
-        <CardContent className="flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between">
+      <Card className="shadow-xs">
+        <CardContent className="flex flex-col gap-3 p-3 lg:flex-row lg:items-center">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Rechercher un article, un DOI, une source..."
-              className="pl-10"
+              className="min-h-10 pl-10"
+              aria-label="Rechercher dans les articles EnnoScholar"
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {(["all", "semantic_scholar", "openalex", "arxiv", "memory_v2", "technical"] as SourceFilter[]).map((value) => {
-              const active = sourceFilter === value
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setSourceFilter(value)}
-                  className={`rounded-md border px-3 py-2 text-xs font-medium transition ${
-                    active
-                      ? "border-brand bg-brand text-white"
-                      : "border-border bg-background text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  {sourceFilterLabel(value)}
-                </button>
-              )
-            })}
-          </div>
+          <label className="flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 text-xs font-medium text-muted-foreground">
+            Source
+            <select
+              value={sourceFilter}
+              onChange={(event) => setSourceFilter(event.target.value as SourceFilter)}
+              className="min-w-36 flex-1 bg-transparent text-sm text-foreground focus-visible:outline-none"
+            >
+              {(["all", "semantic_scholar", "openalex", "arxiv", "memory_v2", "technical"] as SourceFilter[]).map((value) => (
+                <option key={value} value={value}>{sourceFilterLabel(value)}</option>
+              ))}
+            </select>
+          </label>
 
           <Button
             variant="outline"
             size="sm"
+            className="min-h-10"
             onClick={() => setShowHorsSujet((prev) => !prev)}
+            aria-pressed={showHorsSujet}
           >
             {showHorsSujet ? (
               <>
@@ -4607,14 +4775,6 @@ export function EnnoScholarPage({
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid h-auto w-full grid-cols-1 gap-1 rounded-xl border border-border bg-card p-1 shadow-xs sm:grid-cols-3">
-          <TabsTrigger value="par-verrou">Sélection articles</TabsTrigger>
-          <TabsTrigger value="selection">Sélection consultant</TabsTrigger>
-          <TabsTrigger value="etat-art-rediges">
-            Rédaction état de l’art
-          </TabsTrigger>
-        </TabsList>
-
         <TabsContent value="par-verrou">
           <EnnoScholarByVerrouSection
             groups={groupedByVerrou}

@@ -12,6 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from core.deps import get_current_user, get_db, require_agent_enabled
+from core.execution_lock import SessionBusyError, session_execution_lock
+from modules.LLM.llm_concurrency import LLMCapacityTimeoutError
 from db.models import User
 from schemas.improvement import (
     ImprovementDecisionCreate,
@@ -43,6 +45,10 @@ router = APIRouter(
 
 
 def _http_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, SessionBusyError):
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    if isinstance(exc, LLMCapacityTimeoutError):
+        return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
     if isinstance(exc, LookupError):
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     if isinstance(exc, ValueError):
@@ -139,56 +145,81 @@ def create_improvement_message(
         current_user,
     )
     try:
-        # V3.21 : le CIR complet quitte la requête FastAPI immédiatement.
-        # Les demandes de SECTION restent totalement synchrones et conservent
-        # la validation humaine des sources.
-        if should_background_message(
-            db,
-            project.id,
-            session_id,
-            payload,
+        with session_execution_lock(
+            "improvement",
+            f"{project.id}:{session_id}",
         ):
-            job = enqueue_full_cir_job(
-                project_id=project.id,
-                session_id=session_id,
-                user_id=current_user.id,
-                payload=payload.model_dump(),
-            )
-            mirror_status_into_session(
+            background_requested = should_background_message(
                 db,
                 project.id,
                 session_id,
-                job,
+                payload,
             )
-            session = get_session(
+            active_job = read_background_status(project.id, session_id) or {}
+            if str(active_job.get("status") or "") in {
+                "queued",
+                "running",
+                "retrying",
+            }:
+                if background_requested:
+                    session = get_session(db, project.id, session_id)
+                    return {
+                        "ok": True,
+                        "background": True,
+                        "background_job": active_job,
+                        "session": serialize_session(session),
+                        "candidate_version_id": None,
+                    }
+                raise SessionBusyError(
+                    "Le traitement complet de ce CIR est déjà en cours. "
+                    "Les autres conversations peuvent continuer normalement."
+                )
+
+            # V3.21 : le CIR complet quitte la requête FastAPI immédiatement.
+            # Les demandes de SECTION restent totalement synchrones et conservent
+            # la validation humaine des sources.
+            if background_requested:
+                job = enqueue_full_cir_job(
+                    project_id=project.id,
+                    session_id=session_id,
+                    user_id=current_user.id,
+                    payload=payload.model_dump(),
+                )
+                mirror_status_into_session(
+                    db,
+                    project.id,
+                    session_id,
+                    job,
+                )
+                session = get_session(
+                    db,
+                    project.id,
+                    session_id,
+                )
+                return {
+                    "ok": True,
+                    "background": True,
+                    "background_job": job,
+                    "session": serialize_session(session),
+                    "candidate_version_id": None,
+                }
+
+            session, candidate = send_message(
                 db,
-                project.id,
+                project,
                 session_id,
+                **payload.model_dump(),
             )
             return {
                 "ok": True,
-                "background": True,
-                "background_job": job,
+                "background": False,
                 "session": serialize_session(session),
-                "candidate_version_id": None,
+                "candidate_version_id": (
+                    candidate.id
+                    if candidate
+                    else None
+                ),
             }
-
-        session, candidate = send_message(
-            db,
-            project,
-            session_id,
-            **payload.model_dump(),
-        )
-        return {
-            "ok": True,
-            "background": False,
-            "session": serialize_session(session),
-            "candidate_version_id": (
-                candidate.id
-                if candidate
-                else None
-            ),
-        }
     except Exception as exc:
         db.rollback()
         raise _http_error(exc) from exc
@@ -206,14 +237,18 @@ def decide_improvement_version(
 ):
     project = get_project_for_user(db, project_id, current_user)
     try:
-        session = decide_version(
-            db,
-            project.id,
-            session_id,
-            version_id,
-            decision=payload.decision,
-            reason=payload.reason,
-        )
+        with session_execution_lock(
+            "improvement",
+            f"{project.id}:{session_id}",
+        ):
+            session = decide_version(
+                db,
+                project.id,
+                session_id,
+                version_id,
+                decision=payload.decision,
+                reason=payload.reason,
+            )
         return {"ok": True, "session": serialize_session(session)}
     except Exception as exc:
         db.rollback()
@@ -231,7 +266,17 @@ def restore_improvement_version(
 ):
     project = get_project_for_user(db, project_id, current_user)
     try:
-        session = restore_version(db, project.id, session_id, version_id, reason=payload.reason)
+        with session_execution_lock(
+            "improvement",
+            f"{project.id}:{session_id}",
+        ):
+            session = restore_version(
+                db,
+                project.id,
+                session_id,
+                version_id,
+                reason=payload.reason,
+            )
         return {"ok": True, "session": serialize_session(session)}
     except Exception as exc:
         db.rollback()
@@ -248,14 +293,18 @@ def decide_improvement_sources(
 ):
     project = get_project_for_user(db, project_id, current_user)
     try:
-        session = decide_research_sources(
-            db,
-            project,
-            session_id,
-            candidate_ids=payload.candidate_ids,
-            decision=payload.decision,
-            reason=payload.reason,
-        )
+        with session_execution_lock(
+            "improvement",
+            f"{project.id}:{session_id}",
+        ):
+            session = decide_research_sources(
+                db,
+                project,
+                session_id,
+                candidate_ids=payload.candidate_ids,
+                decision=payload.decision,
+                reason=payload.reason,
+            )
         return {"ok": True, "session": serialize_session(session)}
     except Exception as exc:
         db.rollback()

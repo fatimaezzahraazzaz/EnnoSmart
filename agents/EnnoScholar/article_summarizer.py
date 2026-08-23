@@ -51,8 +51,11 @@ def _translate_fr_with_ollama(text: str) -> str:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+        from modules.LLM.llm_concurrency import llm_capacity_slot
+
+        with llm_capacity_slot("ennoscholar:abstract_translation"):
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="replace"))
         return _clean(data.get("response"), 20000)
     except Exception:
         return ""

@@ -5,6 +5,7 @@ import logging
 import mimetypes
 import re
 import tempfile
+from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
@@ -16,7 +17,18 @@ from core.config import settings
 from core.deps import get_current_user, get_db
 from db.models import Document, User
 from modules.extraction.router import extract
-from schemas.document import DocumentRead
+from schemas.document import (
+    DiagnosticCorpusDecisionRequest,
+    DiagnosticCorpusReview,
+    DocumentRead,
+)
+from services.document_corpus_service import (
+    CORPUS_DIAGNOSTIC,
+    CORPUS_IMPROVEMENT,
+    diagnostic_document_review,
+    ensure_document_corpus,
+    set_diagnostic_decision,
+)
 from services.file_service import project_output_dir
 from services.project_service import get_project_for_user
 
@@ -386,16 +398,72 @@ def list_documents(
     )
 
 
+@router.get("/diagnostic-review", response_model=DiagnosticCorpusReview)
+def get_diagnostic_document_review(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_project_for_user(db, project_id, current_user)
+    return diagnostic_document_review(db, project.id)
+
+
+@router.post("/diagnostic-review", response_model=DiagnosticCorpusReview)
+def update_diagnostic_document_review(
+    project_id: int,
+    payload: DiagnosticCorpusDecisionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_project_for_user(db, project_id, current_user)
+    document_ids = {int(item.document_id) for item in payload.decisions}
+    documents = (
+        db.query(Document)
+        .filter(
+            Document.project_id == project.id,
+            Document.id.in_(document_ids),
+        )
+        .all()
+        if document_ids
+        else []
+    )
+    by_id = {int(document.id): document for document in documents}
+    missing = sorted(document_ids - set(by_id))
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document(s) introuvable(s) dans ce projet : {missing}",
+        )
+
+    try:
+        for item in payload.decisions:
+            set_diagnostic_decision(
+                db,
+                by_id[int(item.document_id)],
+                keep=bool(item.keep),
+            )
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    return diagnostic_document_review(db, project.id)
+
+
 @router.post("/upload", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     project_id: int,
     file: UploadFile = File(...),
     document_type: str | None = Query(default=None),
+    corpus_scope: Literal["diagnostic", "improvement"] = Query(default="diagnostic"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Upload document brut EnnoDiagnostic.
+    Upload dans un corpus explicite : Diagnostic par défaut, ou Amélioration.
 
     Nouvelle logique :
     - le fichier complet est stocké dans PostgreSQL : documents.file_data
@@ -441,6 +509,12 @@ async def upload_document(
     )
 
     db.add(document)
+    db.flush()
+    ensure_document_corpus(
+        db,
+        document,
+        CORPUS_IMPROVEMENT if corpus_scope == "improvement" else CORPUS_DIAGNOSTIC,
+    )
     db.commit()
     db.refresh(document)
 
@@ -656,6 +730,8 @@ def import_existing_documents(
         )
 
         db.add(document)
+        db.flush()
+        ensure_document_corpus(db, document, CORPUS_DIAGNOSTIC)
         created.append(document)
         existing_sha.add(sha256)
         existing_logical_paths.add(_normalise_path(logical_path))

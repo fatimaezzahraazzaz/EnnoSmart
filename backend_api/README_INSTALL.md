@@ -86,7 +86,7 @@ Body :
 ```json
 {
   "full_name": "Sophie Consultant",
-  "email": "sophie@ennosmart.local",
+  "email": "sophie@ennosmart.fr",
   "password": "password123"
 }
 ```
@@ -101,7 +101,7 @@ Body :
 
 ```json
 {
-  "email": "sophie@ennosmart.local",
+  "email": "sophie@ennosmart.fr",
   "password": "password123"
 }
 ```

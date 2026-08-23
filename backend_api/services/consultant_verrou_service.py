@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-"""Persistance des verrous ajoutés explicitement depuis le chat EnnoScholar.
+"""Persistance des verrous ajoutés explicitement par le consultant.
 
 Règles métier :
 - aucune création automatique silencieuse ;
 - le consultant doit demander explicitement l'ajout ;
-- le verrou est rattaché au dernier DiagnosticRun officiel du projet ;
+- le verrou est rattaché au dernier DiagnosticRun du projet ;
+- un run manuel minimal est créé si EnnoDiagnostic n'a pas encore été lancé ;
 - score CIR et tag CIR restent indéterminés ;
 - la provenance humaine est conservée dans source_json ;
 - les doublons certains sont réutilisés ;
@@ -90,15 +91,59 @@ def get_latest_diagnostic_run(db: Session, project_id: int) -> DiagnosticRun | N
     )
 
 
+def is_manual_consultant_verrou(verrou: Verrou) -> bool:
+    source_json = verrou.source_json if isinstance(verrou.source_json, dict) else {}
+    return bool(
+        source_json.get("manual_verrou")
+        or source_json.get("supplementary_verrou")
+        or (
+            source_json.get("human_validated") is True
+            and source_json.get("automatic_verrou_creation") is False
+        )
+    )
+
+
+def get_project_manual_verrous(db: Session, project_id: int) -> list[Verrou]:
+    """Retourne les ajouts humains de tout l'historique, sans doublon de ligne."""
+    rows = (
+        db.query(Verrou)
+        .join(DiagnosticRun, Verrou.diagnostic_run_id == DiagnosticRun.id)
+        .filter(DiagnosticRun.project_id == int(project_id))
+        .order_by(Verrou.created_at.asc(), Verrou.id.asc())
+        .all()
+    )
+    return [row for row in rows if is_manual_consultant_verrou(row)]
+
+
+def merge_current_and_manual_verrous(
+    current: Iterable[Verrou],
+    manual_history: Iterable[Verrou],
+) -> list[Verrou]:
+    """Ajoute les verrous humains historiques au run courant sans dupliquer les ids."""
+    output: list[Verrou] = []
+    seen_ids: set[int] = set()
+    for verrou in [*(current or []), *(manual_history or [])]:
+        verrou_id = int(getattr(verrou, "id", 0) or 0)
+        if verrou_id <= 0 or verrou_id in seen_ids:
+            continue
+        seen_ids.add(verrou_id)
+        output.append(verrou)
+    return output
+
+
 def get_latest_diagnostic_verrous(db: Session, project_id: int) -> list[Verrou]:
     run = get_latest_diagnostic_run(db, project_id)
-    if run is None:
-        return []
-    return (
+    current = (
         db.query(Verrou)
         .filter(Verrou.diagnostic_run_id == int(run.id))
         .order_by(Verrou.created_at.asc(), Verrou.id.asc())
         .all()
+        if run is not None
+        else []
+    )
+    return merge_current_and_manual_verrous(
+        current,
+        get_project_manual_verrous(db, project_id),
     )
 
 
@@ -181,6 +226,57 @@ def _merge_consultant_event(
     verrou.source_json = source_json
 
 
+def _clean_keywords(values: Iterable[str]) -> list[str]:
+    output: list[str] = []
+    seen: set[str] = set()
+    for value in values or ():
+        keyword = _clean(value, 100)
+        normalized = _norm(keyword)
+        if not keyword or not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        output.append(keyword)
+        if len(output) >= 20:
+            break
+    return output
+
+
+def _apply_manual_metadata(
+    verrou: Verrou,
+    *,
+    description: str,
+    keywords: Iterable[str],
+    added_via: str,
+) -> None:
+    clean_description = _clean(description, 4000)
+    clean_keywords = _clean_keywords(keywords)
+    source_json = dict(verrou.source_json) if isinstance(verrou.source_json, dict) else {}
+    source_json.update({
+        "origin": "consultant_manual",
+        "origin_type": "human_declared_verrou",
+        "added_via": _clean(added_via, 120) or "consultant_manual",
+        "manual_verrou": True,
+        "supplementary_verrou": True,
+        "human_validated": True,
+        "automatic_verrou_creation": False,
+        "manual_description": clean_description,
+        "keywords": clean_keywords,
+        "manual_scholar_text": " ".join(
+            part
+            for part in [
+                _clean(verrou.title, 500),
+                clean_description,
+                f"Mots-clés : {', '.join(clean_keywords)}" if clean_keywords else "",
+            ]
+            if part
+        ),
+        "scientific_support_status": "pending_research",
+    })
+    verrou.source_json = source_json
+    if clean_description and not _clean(verrou.justification, 4000):
+        verrou.justification = clean_description
+
+
 def create_or_reuse_consultant_verrou(
     db: Session,
     project: Any,
@@ -192,6 +288,8 @@ def create_or_reuse_consultant_verrou(
     session_id: str = "",
     created_by_user_id: int | None = None,
     force_create_distinct: bool = False,
+    keywords: Iterable[str] = (),
+    added_via: str = "ennoscholar_guided_research",
 ) -> dict[str, Any]:
     """Crée ou réutilise un verrou explicitement demandé par le consultant."""
     clean_title = _clean(title, 1200)
@@ -200,10 +298,18 @@ def create_or_reuse_consultant_verrou(
 
     latest_run = get_latest_diagnostic_run(db, int(project.id))
     if latest_run is None:
-        raise RuntimeError(
-            "Aucun DiagnosticRun officiel n'existe pour ce projet. "
-            "Lance d'abord EnnoDiagnostic avant d'ajouter un verrou depuis EnnoScholar."
+        latest_run = DiagnosticRun(
+            project_id=int(project.id),
+            status="manual_consultant_only",
+            raw_result_json={
+                "status": "manual_consultant_only",
+                "created_at": _utc_now(),
+                "source": "consultant_manual_verrou",
+            },
+            completed_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
+        db.add(latest_run)
+        db.flush()
 
     existing = get_latest_diagnostic_verrous(db, int(project.id))
     duplicate, similarity = _best_duplicate(clean_title, existing)
@@ -218,6 +324,12 @@ def create_or_reuse_consultant_verrou(
             supporting_context=supporting_context,
             source_document_ids=source_document_ids,
             reused=True,
+        )
+        _apply_manual_metadata(
+            duplicate,
+            description=justification,
+            keywords=keywords,
+            added_via=added_via,
         )
         db.add(duplicate)
         db.commit()
@@ -264,9 +376,10 @@ def create_or_reuse_consultant_verrou(
     )
     now = _utc_now()
     source_json = {
-        "origin": "consultant_chat",
-        "origin_type": "human_declared_missing_verrou",
-        "added_via": "ennoscholar_guided_research",
+        "origin": "consultant_manual",
+        "origin_type": "human_declared_verrou",
+        "added_via": _clean(added_via, 120) or "consultant_manual",
+        "manual_verrou": True,
         "supplementary_verrou": True,
         "human_validated": True,
         "automatic_verrou_creation": False,
@@ -308,6 +421,12 @@ def create_or_reuse_consultant_verrou(
         consultant_status="garde",
         justification=_clean(justification, 4000) or None,
         source_json=source_json,
+    )
+    _apply_manual_metadata(
+        verrou,
+        description=justification,
+        keywords=keywords,
+        added_via=added_via,
     )
     db.add(verrou)
     db.commit()

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from core.deps import get_current_user, get_db
 from db.models import Article, DiagnosticRun, Document, Project, ScholarRun, User, Verrou
 from schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
+from services.diagnostic_eligibility_service import extract_diagnostic_eligibility_score
 from services.file_service import clean_path_segment
 from services.project_service import get_project_for_user
 
@@ -83,6 +84,18 @@ def list_project_overviews(
         latest_diagnostics.setdefault(row.project_id, row)
 
     diagnostic_ids = [row.id for row in latest_diagnostics.values()]
+    eligibility_by_run = {}
+    if diagnostic_ids:
+        eligibility_rows = (
+            db.query(DiagnosticRun.id, DiagnosticRun.raw_result_json)
+            .filter(DiagnosticRun.id.in_(diagnostic_ids))
+            .all()
+        )
+        eligibility_by_run = {
+            row[0]: extract_diagnostic_eligibility_score(row[1])
+            for row in eligibility_rows
+        }
+
     verrou_rows = []
     if diagnostic_ids:
         verrou_rows = (
@@ -178,6 +191,8 @@ def list_project_overviews(
     result = []
     for project in projects:
         diagnostic = latest_diagnostics.get(project.id)
+        diagnostic_id = diagnostic.id if diagnostic is not None else None
+        eligibility_score = eligibility_by_run.get(diagnostic_id)
         scholar = latest_scholars.get(project.id)
         result.append(
             {
@@ -197,8 +212,12 @@ def list_project_overviews(
                         if diagnostic is not None
                         else None
                     ),
+                    "eligibility": {
+                        "score": eligibility_score,
+                        "available": eligibility_score is not None,
+                    },
                     "verrous": verrous_by_run.get(
-                        diagnostic.id if diagnostic is not None else None,
+                        diagnostic_id,
                         {
                             "count": 0,
                             "pending": 0,

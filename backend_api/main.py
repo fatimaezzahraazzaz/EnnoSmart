@@ -15,11 +15,19 @@ if os.name == "nt":
 
         _FFMPEG_DLL_DIR_HANDLE = os.add_dll_directory(_ffmpeg_bin)
 
-from fastapi import FastAPI
+from typing import Any
+
+from anyio.to_thread import current_default_thread_limiter
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from core.config import settings
-from db.database import Base, engine
+from db.database import Base, database_pool_status, engine
+from modules.LLM.llm_concurrency import (
+    LLMCapacityTimeoutError,
+    llm_concurrency_status,
+)
 
 from routers import auth
 from routers import projects
@@ -57,7 +65,28 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.exception_handler(LLMCapacityTimeoutError)
+    async def llm_capacity_timeout_handler(
+        request: Request,
+        exc: LLMCapacityTimeoutError,
+    ) -> JSONResponse:
+        del request
+        return JSONResponse(
+            status_code=503,
+            headers={"Retry-After": "15"},
+            content={"detail": str(exc), "code": "LLM_CAPACITY_TIMEOUT"},
+        )
+
     Base.metadata.create_all(bind=engine)
+
+    @app.on_event("startup")
+    async def configure_request_thread_capacity() -> None:
+        # Les routes ``def`` de FastAPI utilisent ce pool. 80 threads laissent
+        # les lectures/authentifications répondre pendant que les appels LLM
+        # longs attendent leur créneau borné.
+        limiter = current_default_thread_limiter()
+        limiter.total_tokens = max(40, settings.WEB_THREAD_LIMIT)
+        app.state.web_thread_limit = limiter.total_tokens
 
     app.include_router(auth.router)
     app.include_router(projects.router)
@@ -79,11 +108,20 @@ def create_app() -> FastAPI:
     app.include_router(document_db_source_router)
 
     @app.get("/health", tags=["health"])
-    def health_check() -> dict[str, str]:
+    def health_check() -> dict[str, Any]:
         return {
             "status": "ok",
             "app": settings.APP_NAME,
             "env": settings.ENV,
+            "capacity": {
+                "web_thread_limit": getattr(
+                    app.state,
+                    "web_thread_limit",
+                    settings.WEB_THREAD_LIMIT,
+                ),
+                "database": database_pool_status(),
+                "llm": llm_concurrency_status(),
+            },
         }
 
     return app

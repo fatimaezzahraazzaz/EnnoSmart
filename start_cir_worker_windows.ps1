@@ -10,10 +10,16 @@ $env:CELERY_RESULT_BACKEND = "redis://127.0.0.1:6379/2"
 
 # V3.21.4 : transport CIR lu depuis .ennosmart-cir-runtime.env
 
-Write-Host "[EnnoSmart] Celery worker CIR - Windows DEV / pool=solo"
+$workerConcurrency = if ($env:ENNOSMART_CIR_WORKER_CONCURRENCY) {
+    $env:ENNOSMART_CIR_WORKER_CONCURRENCY
+} else {
+    "4"
+}
+
+Write-Host "[EnnoSmart] Celery worker CIR - Windows DEV / pool=threads / concurrency=$workerConcurrency"
 Write-Host "[EnnoSmart] Queue = ennosmart.cir"
 
-$pythonExe = "C:\EnnoSmart\.venv\Scripts\python.exe"
+$pythonExe = "C:\EnnoSmart\.venv_py314\Scripts\python.exe"
 if (-not (Test-Path -LiteralPath $pythonExe)) {
     throw "Interpréteur Python du projet introuvable : $pythonExe"
 }
@@ -22,6 +28,6 @@ if (-not (Test-Path -LiteralPath $pythonExe)) {
     -A backend_api.workers.celery_app:celery_app `
     worker `
     --loglevel=INFO `
-    --pool=solo `
-    --concurrency=1 `
+    --pool=threads `
+    --concurrency=$workerConcurrency `
     -Q ennosmart.cir

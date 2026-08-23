@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import unicodedata
+from contextvars import ContextVar
 from typing import Any, Literal, Mapping, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -1389,10 +1390,13 @@ class ConversationUnderstandingService:
 
     def __init__(self, llm: LLMClient | None = None) -> None:
         self.llm = llm or LLMClient()
-        self._last_failure: dict[str, str] | None = None
+        self._last_failure_context: ContextVar[dict[str, str] | None] = ContextVar(
+            f"ennosmart_conversation_failure_{id(self)}",
+            default=None,
+        )
 
     def get_last_failure(self) -> dict[str, str]:
-        return dict(self._last_failure or {})
+        return dict(self._last_failure_context.get() or {})
 
     def _generation_meta(self) -> dict[str, Any]:
         reader = getattr(self.llm, "get_last_generation_meta", None)
@@ -1843,7 +1847,7 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
         project_context: Mapping[str, Any],
         current_plan: list[dict[str, Any]],
     ) -> ConversationUnderstanding | None:
-        self._last_failure = None
+        self._last_failure_context.set(None)
         memory = _existing_memory(session)
         history = _recent_history(session)
         compact_context = _compact_project_context(project_context)
@@ -2082,11 +2086,11 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
                 },
             )
         except Exception as exc:
-            self._last_failure = {
+            self._last_failure_context.set({
                 "stage": "structured_conversation",
                 "error_type": type(exc).__name__,
                 "message": _clean(exc, 1800),
-            }
+            })
             logger.exception(
                 "Échec du contrôleur conversationnel structuré; aucune action autorisée."
             )
