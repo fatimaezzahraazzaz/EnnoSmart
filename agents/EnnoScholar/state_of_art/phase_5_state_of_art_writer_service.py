@@ -2836,6 +2836,140 @@ def _enrich_targeted_plan_with_consultant_request(
     return output
 
 
+def _prepare_partial_revision_writer(
+    blueprint: Dict[str, Any],
+    plan_contract: Mapping[str, Any],
+) -> tuple[Dict[str, Any], Dict[str, Any], set[str]]:
+    """Réduit le writer aux seules sections visées d'un brouillon existant.
+
+    La compréhension de la cible appartient au LLM conversationnel. Cette
+    fonction applique uniquement son contrat structuré : si l'ancienne version
+    et toutes les sections hors cible sont disponibles, elles seront conservées
+    telles quelles. Au moindre doute structurel, elle revient à une génération
+    complète plutôt que de fusionner des sections incompatibles.
+    """
+
+    if clean_text(plan_contract.get("generation_mode"), 80) != "partial_revision":
+        return blueprint, {}, set()
+
+    previous_payload_path = clean_text(
+        plan_contract.get("previous_state_of_art_payload_path"),
+        4000,
+    )
+    if not previous_payload_path:
+        return blueprint, {}, set()
+    previous_payload = read_json(previous_payload_path, {}) or {}
+    previous_draft = (
+        dict(previous_payload.get("draft_json") or {})
+        if isinstance(previous_payload, Mapping)
+        else {}
+    )
+    previous_sections = [
+        dict(row)
+        for row in (previous_draft.get("sections") or [])
+        if isinstance(row, Mapping)
+    ]
+    if not previous_sections:
+        return blueprint, {}, set()
+
+    requested_ids = {
+        clean_text(value, 200)
+        for value in (
+            plan_contract.get("consultant_writing_target_section_ids") or []
+        )
+        if clean_text(value, 200)
+    }
+    requested_titles = {
+        _directive_norm(value)
+        for value in (
+            plan_contract.get("consultant_writing_target_section_titles") or []
+        )
+        if _directive_norm(value)
+    }
+    current_sections = [
+        dict(row)
+        for row in (blueprint.get("sections") or [])
+        if isinstance(row, Mapping)
+    ]
+    target_ids = {
+        clean_text(row.get("section_id"), 200)
+        for row in current_sections
+        if (
+            clean_text(row.get("section_id"), 200) in requested_ids
+            or _directive_norm(row.get("title")) in requested_titles
+        )
+    }
+    target_ids.discard("")
+    if not target_ids:
+        return blueprint, {}, set()
+
+    previous_ids = {
+        clean_text(row.get("section_id"), 200)
+        for row in previous_sections
+        if clean_text(row.get("section_id"), 200)
+    }
+    current_ids = {
+        clean_text(row.get("section_id"), 200)
+        for row in current_sections
+        if clean_text(row.get("section_id"), 200)
+    }
+    if not current_ids or not (current_ids - target_ids).issubset(previous_ids):
+        return blueprint, {}, set()
+
+    writer_blueprint = dict(blueprint)
+    writer_blueprint["_full_plan_sections"] = current_sections
+    writer_blueprint["sections"] = [
+        row
+        for row in current_sections
+        if clean_text(row.get("section_id"), 200) in target_ids
+    ]
+    return writer_blueprint, previous_draft, target_ids
+
+
+def _merge_partial_revision_draft(
+    *,
+    blueprint: Mapping[str, Any],
+    previous_draft: Mapping[str, Any],
+    revised_draft: Mapping[str, Any],
+    target_section_ids: set[str],
+) -> Dict[str, Any]:
+    previous_by_id = {
+        clean_text(row.get("section_id"), 200): dict(row)
+        for row in (previous_draft.get("sections") or [])
+        if isinstance(row, Mapping)
+        and clean_text(row.get("section_id"), 200)
+    }
+    revised_by_id = {
+        clean_text(row.get("section_id"), 200): dict(row)
+        for row in (revised_draft.get("sections") or [])
+        if isinstance(row, Mapping)
+        and clean_text(row.get("section_id"), 200)
+    }
+    sections: List[Dict[str, Any]] = []
+    for planned in blueprint.get("sections") or []:
+        if not isinstance(planned, Mapping):
+            continue
+        section_id = clean_text(planned.get("section_id"), 200)
+        if section_id in target_section_ids:
+            selected = revised_by_id.get(section_id)
+        else:
+            selected = previous_by_id.get(section_id)
+        if not isinstance(selected, dict):
+            raise ValueError(
+                f"partial_revision_missing_section:{section_id or 'unknown'}"
+            )
+        sections.append(dict(selected))
+    return {
+        "title": clean_text(
+            previous_draft.get("title")
+            or revised_draft.get("title")
+            or f"État de l'art scientifique — {blueprint.get('project')}",
+            1000,
+        ),
+        "sections": sections,
+    }
+
+
 def _build_llm_prompt(
     blueprint: Dict[str, Any],
     evidence_units: List[Dict[str, Any]],
@@ -2968,7 +3102,11 @@ def _build_section_llm_prompt(
             "level": row.get("level") or 1,
             "parent_id": row.get("parent_id"),
         }
-        for row in blueprint.get("sections") or []
+        for row in (
+            blueprint.get("_full_plan_sections")
+            or blueprint.get("sections")
+            or []
+        )
     ]
     expected_subsections = [
         {
@@ -2992,7 +3130,11 @@ def _build_section_llm_prompt(
         expected_subsections = []
     target_words = _section_target_words(
         section,
-        len(blueprint.get("sections") or []),
+        len(
+            blueprint.get("_full_plan_sections")
+            or blueprint.get("sections")
+            or []
+        ),
     )
     consultant_directive = _consultant_directive_for_section(
         blueprint,
@@ -3115,6 +3257,11 @@ CONTRAT DE RÉDACTION
   explicitement le point demandé dans cette section et mobilise les nouvelles
   sources pertinentes présentes dans les preuves. S'il vaut faux, n'insère pas
   cet ajout dans cette section.
+- Lorsqu'un outil, une méthode, un jeu de données ou un protocole est nommé dans
+  la demande ciblée et documenté par les preuves, consacre-lui une explication
+  substantielle : nature exacte, entrées, transformations ou paramètres, sorties,
+  place dans la chaîne scientifique, apport établi et limites restantes. Ne te
+  contente pas de citer son nom et ne le confonds pas avec l'artefact qu'il traite.
 - Toute affirmation scientifique, tout résultat et toute limite doivent être cités.
 - Place au moins une citation dans CHAQUE phrase qui contient une affirmation
   scientifique. Une citation située dans une autre phrase ou seulement à la
@@ -6550,13 +6697,37 @@ def run_phase_5_state_of_art_writer(
         write_json(cir_evidence_matrix_path, cir_evidence_matrix)
     # END ENNOSCHOLAR_CIR_QUALITY_V3
 
-    prompt = _build_llm_prompt(blueprint, evidence_units)
+    (
+        writer_blueprint,
+        previous_draft_for_revision,
+        partial_revision_target_ids,
+    ) = _prepare_partial_revision_writer(blueprint, plan_contract)
+    prompt = _build_llm_prompt(writer_blueprint, evidence_units)
     llm_draft, llm_report = call_sectional_writer_llm(
-        blueprint,
+        writer_blueprint,
         evidence_units,
         checkpoint_dir=writer_output_dir / "section_checkpoints",
         progress_markdown_path=progress_md_path,
     )
+    if llm_draft and partial_revision_target_ids:
+        llm_draft = _merge_partial_revision_draft(
+            blueprint=blueprint,
+            previous_draft=previous_draft_for_revision,
+            revised_draft=llm_draft,
+            target_section_ids=partial_revision_target_ids,
+        )
+        llm_report = {
+            **llm_report,
+            "generation_mode": "partial_revision",
+            "target_section_ids": sorted(partial_revision_target_ids),
+            "preserved_section_ids": [
+                clean_text(row.get("section_id"), 200)
+                for row in (blueprint.get("sections") or [])
+                if isinstance(row, Mapping)
+                and clean_text(row.get("section_id"), 200)
+                not in partial_revision_target_ids
+            ],
+        }
     if llm_draft:
         strict_llm_guard = validate_draft(
             llm_draft,
@@ -6883,6 +7054,14 @@ def run_phase_5_state_of_art_writer(
             "target_section_titles": consultant_target_section_titles,
             "search_queries": consultant_search_queries,
             "propagated_to_writer": bool(consultant_writing_request),
+            "generation_mode": (
+                "partial_revision"
+                if partial_revision_target_ids
+                else "full_generation"
+            ),
+            "preserved_section_ids": list(
+                llm_report.get("preserved_section_ids") or []
+            ),
         },
         "visual_placements": visual_placements,
         "visual_diagnostics": visual_diagnostics,

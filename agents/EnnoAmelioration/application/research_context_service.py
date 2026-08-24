@@ -11,6 +11,7 @@ from ..domain.models import ImprovementRequest, SectionFunction, TargetScope
 LIGHTWEIGHT_RESEARCH_CONTEXT_VERSION = "v1_1_typed_scientific_research"
 MIN_LOCAL_DOMAIN_CONFIDENCE = 0.35
 MAX_FULL_DOCUMENT_RESEARCH_TARGETS = 16
+MAX_LOCK_FACETS_PER_SECTION = 6
 
 
 _RESEARCH_STRATEGIES: dict[str, dict[str, Any]] = {
@@ -102,6 +103,13 @@ _ANCHOR_STOPWORDS = {
     "utilise", "utiliser", "travaux", "texte", "passage", "resultat", "resultats",
     "scientifique", "scientifiques", "technique", "techniques", "ameliorer", "renforcer",
 }
+
+_LOCK_FACET_SIGNALS = re.compile(
+    r"\b(?:verrou|incertitud|difficult|complex|limit|depend|variab|insuffis|"
+    r"non[ -]?trivial|challenge|uncertain|representativ|validat|erreur|error|"
+    r"failure|echec|robust|generalis)\w*\b",
+    flags=re.I,
+)
 
 
 def _clean(value: Any, limit: int = 0) -> str:
@@ -292,6 +300,97 @@ def _local_search_readiness(title: str, target_text: str) -> dict[str, Any]:
     }
 
 
+def _lock_research_facets(
+    *,
+    target_id: str,
+    section_title: str,
+    target_text: str,
+    target_type: str,
+    research_context: dict[str, Any],
+    strategy: dict[str, Any],
+    research_objective: str,
+) -> list[dict[str, Any]]:
+    """Decoupe une section de verrous agregee en passages scientifiques autonomes."""
+
+    if target_type != "lock_search":
+        return []
+    blocks = [
+        _clean(block, 7000)
+        for block in re.split(r"\n\s*\n+", str(target_text or ""))
+        if len(_clean(block)) >= 120
+    ]
+    scored: list[tuple[int, int, str, dict[str, Any]]] = []
+    for index, block in enumerate(blocks):
+        readiness = _local_search_readiness(section_title, block)
+        signals = len(_LOCK_FACET_SIGNALS.findall(block))
+        if signals < 1 or int(readiness.get("anchor_count") or 0) < 6:
+            continue
+        score = signals * 20 + min(int(readiness.get("anchor_count") or 0), 25)
+        scored.append((score, index, block, readiness))
+
+    # Une section monothématique reste une seule cible. Le decoupage est reserve
+    # aux sections agregees qui expriment plusieurs difficultes independantes.
+    if len(scored) < 3:
+        return []
+    selected = sorted(
+        sorted(scored, key=lambda row: (row[0], len(row[2])), reverse=True)[
+            :MAX_LOCK_FACETS_PER_SECTION
+        ],
+        key=lambda row: row[1],
+    )
+
+    facets: list[dict[str, Any]] = []
+    for ordinal, (_, source_index, block, readiness) in enumerate(selected, start=1):
+        first_sentence = re.split(r"(?<=[.!?])\s+", block, maxsplit=1)[0]
+        facet_title = _clean(first_sentence, 240) or f"Axe scientifique {ordinal}"
+        facet_id = f"{target_id}:facet:{ordinal}"
+        facet_context = {
+            **research_context,
+            "context_kind": "section_lock_facet",
+            "source_section_id": target_id,
+            "source_section_title": section_title,
+            # Le passage reste la cible locale, mais la section complete est le
+            # garde-fou semantique commun. Sans ce parent, des mots ambigus tels
+            # que frequence, recalage ou modele changent facilement de domaine.
+            "parent_section_text": _clean(target_text, 20000),
+            "parent_section_text_chars": len(str(target_text or "").strip()),
+            "research_objective": _clean(research_objective, 3500),
+            "research_target_id": facet_id,
+            "research_target_title": facet_title,
+            "source_passage_index": source_index,
+            "search_readiness": readiness,
+        }
+        facets.append({
+            "research_target_id": facet_id,
+            "research_target_type": target_type,
+            "title": facet_title,
+            "text": block,
+            "parent_section_id": target_id,
+            "parent_section_title": section_title,
+            "source_passage_index": source_index,
+            "raw_item": {
+                "text": block,
+                "source_text": block,
+                "parent_section_text": _clean(target_text, 20000),
+                "research_objective": _clean(research_objective, 3500),
+                "original_title": facet_title,
+                "supporting_passages": [],
+                "source_section_title": section_title,
+                "search_strategy": strategy,
+            },
+            "context": facet_context,
+            "research_context": facet_context,
+            "source_json": {
+                "source_section_title": section_title,
+                "parent_section_id": target_id,
+                "parent_section_text": _clean(target_text, 20000),
+                "research_target_type": target_type,
+                "source_origin": "ennoamel_current_section_lock_facet",
+            },
+        })
+    return facets
+
+
 def _full_document_research_context(
     project: Any,
     request: ImprovementRequest,
@@ -353,12 +452,16 @@ def _full_document_research_context(
     selected_contexts = [
         row[1] for row in candidates[:MAX_FULL_DOCUMENT_RESEARCH_TARGETS]
     ]
-    targets = [
-        target
-        for context in selected_contexts
-        for target in (context.get("research_targets") or [])
-        if isinstance(target, dict)
-    ]
+    targets: list[dict[str, Any]] = []
+    for section_context in selected_contexts:
+        for target in section_context.get("research_targets") or []:
+            if not isinstance(target, dict):
+                continue
+            targets.append(target)
+            if len(targets) >= MAX_FULL_DOCUMENT_RESEARCH_TARGETS:
+                break
+        if len(targets) >= MAX_FULL_DOCUMENT_RESEARCH_TARGETS:
+            break
     target_ids = [
         str(target.get("research_target_id") or "")
         for target in targets
@@ -465,6 +568,8 @@ def build_lightweight_research_context(
         "context_text": context,
         "local_context": context,
         "research_objective": _clean(request.instruction, 3500),
+        "parent_section_text": _clean(target_text, 20000),
+        "parent_section_text_chars": len(target_text),
         "source_section_id": request.target_section_id,
         "source_section_title": request.target_section_title,
         "no_project_fact_inference": True,
@@ -486,6 +591,8 @@ def build_lightweight_research_context(
         "raw_item": {
             "text": target_text,
             "source_text": target_text,
+            "parent_section_text": _clean(target_text, 20000),
+            "research_objective": _clean(request.instruction, 3500),
             "original_title": title,
             "supporting_passages": ([{"text": context}] if context else []),
             "source_section_title": title,
@@ -500,17 +607,38 @@ def build_lightweight_research_context(
             "source_origin": "ennoamel_current_section",
         },
     }
+    facets = _lock_research_facets(
+        target_id=target_id,
+        section_title=title,
+        target_text=target_text,
+        target_type=target_type,
+        research_context=research_context,
+        strategy=strategy,
+        research_objective=request.instruction,
+    )
+    research_targets = facets or [research_target]
+    research_target_ids = [
+        str(row.get("research_target_id") or "")
+        for row in research_targets
+        if str(row.get("research_target_id") or "").strip()
+    ]
     return {
         "version": LIGHTWEIGHT_RESEARCH_CONTEXT_VERSION,
         "mode": "direct_scholar_without_mandatory_diagnostic",
         "domain_detection": domain,
         "research_context": research_context,
-        "research_targets": [research_target],
-        "research_target_ids": [target_id],
+        "research_targets": research_targets,
+        "research_target_ids": research_target_ids,
         "research_target_type": target_type,
         "diagnostic_required": False,
         "diagnostic_policy": strategy["diagnostic_policy"],
         "search_readiness": readiness,
         "search_strategy": strategy,
         "keywords_generated_here": False,
+        "target_decomposition": {
+            "enabled": bool(facets),
+            "policy": "lock_section_passage_facets_v1",
+            "parent_section_id": target_id,
+            "target_count": len(research_targets),
+        },
     }

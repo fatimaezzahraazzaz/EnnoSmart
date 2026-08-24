@@ -699,6 +699,81 @@ def _build_sheet_chunk(
     return "\n\n".join(parts)
 
 
+def _chart_title(chart: Any) -> str:
+    """Extrait le titre OpenXML d'un graphique sans dépendre de son type."""
+    try:
+        rich = chart.title.tx.rich
+        values: list[str] = []
+        for paragraph in rich.p or []:
+            for run in getattr(paragraph, "r", None) or []:
+                value = str(getattr(run, "t", None) or "").strip()
+                if value:
+                    values.append(value)
+            for field in getattr(paragraph, "fld", None) or []:
+                value = str(getattr(field, "t", None) or "").strip()
+                if value:
+                    values.append(value)
+        return " ".join(values)
+    except Exception:
+        return ""
+
+
+def _reference_formula(value: Any) -> str:
+    for attribute in ("strRef", "numRef", "multiLvlStrRef"):
+        reference = getattr(value, attribute, None)
+        formula = str(getattr(reference, "f", None) or "").strip()
+        if formula:
+            return formula
+    return ""
+
+
+def _first_reference(*values: Any) -> Any:
+    return next((value for value in values if value is not None), None)
+
+
+def _extract_chart_summaries(ws: "Worksheet") -> list[str]:
+    """Rend les graphiques Excel interrogeables par le NLP/RAG.
+
+    Les graphiques OpenXML ne sont pas des images. On conserve donc leur type,
+    leur titre et les plages de données de chaque série, ce qui évite de perdre
+    un résultat uniquement visible dans un graphique.
+    """
+    summaries: list[str] = []
+    for index, chart in enumerate(getattr(ws, "_charts", None) or [], start=1):
+        title = _chart_title(chart)
+        chart_type = chart.__class__.__name__.replace("Chart", "") or "Graphique"
+        lines = [
+            f"[GRAPHIQUE {index} | type={chart_type}"
+            + (f" | titre={title}" if title else "")
+            + "]"
+        ]
+        for series_index, series in enumerate(getattr(chart, "ser", None) or [], start=1):
+            label = _reference_formula(getattr(series, "tx", None))
+            categories = _reference_formula(
+                _first_reference(
+                    getattr(series, "cat", None),
+                    getattr(series, "xVal", None),
+                )
+            )
+            values = _reference_formula(
+                _first_reference(
+                    getattr(series, "val", None),
+                    getattr(series, "yVal", None),
+                    getattr(series, "bubbleSize", None),
+                )
+            )
+            details = [f"série {series_index}"]
+            if label:
+                details.append(f"libellé={label}")
+            if categories:
+                details.append(f"catégories={categories}")
+            if values:
+                details.append(f"valeurs={values}")
+            lines.append("  - " + " | ".join(details))
+        summaries.append("\n".join(lines))
+    return summaries
+
+
 # - Pipeline principal openpyxl -----------------------
 
 def _extract_with_openpyxl(path: Path) -> ExcelStructResult:
@@ -756,6 +831,9 @@ def _extract_with_openpyxl(path: Path) -> ExcelStructResult:
 
             # Chunk RAG
             chunk = _build_sheet_chunk(sheet_name, tables, cells, comments)
+            chart_summaries = _extract_chart_summaries(ws)
+            if chart_summaries:
+                chunk += "\n\n[GRAPHIQUES EXCEL]\n" + "\n".join(chart_summaries)
             result.text_chunks.append(chunk)
             
             # Extraction des formules du chunk Excel
@@ -883,6 +961,8 @@ def _build_tags(result: ExcelStructResult) -> list[str]:
         tags.append("HAS_NAMED_RANGES")
     if result.detected_rd_sections:
         tags.append("CIR_SECTIONS")
+    if any("[GRAPHIQUES EXCEL]" in chunk for chunk in result.text_chunks):
+        tags.append("HAS_CHARTS")
 
     for cat in sorted(all_categories):
         tags.append(f"RD:{cat}")

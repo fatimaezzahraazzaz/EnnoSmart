@@ -15,6 +15,7 @@ import {
   Info,
   Loader2,
   Lock,
+  Send,
   Sparkles,
   Upload,
   Video,
@@ -39,7 +40,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 
-import { createProject, getAccessToken, uploadDocument } from "@/lib/api"
+import {
+  checkProjectSelection,
+  createProject,
+  getAccessToken,
+  getProjectCatalog,
+  requestProjectAccess,
+  uploadDocument,
+  type ProjectCatalog,
+  type ProjectSelectionStatus,
+} from "@/lib/api"
 import { setCurrentProjectId } from "@/lib/project-session"
 
 interface NewProjectPageProps {
@@ -185,12 +195,14 @@ async function uploadFinalCirReference(params: {
   file: File
   organisme: string
   projectName: string
+  subprojectName?: string
   year: string
 }) {
   const formData = new FormData()
   formData.append("file", params.file)
   formData.append("organisme", params.organisme || "organisme_unknown")
   formData.append("project", params.projectName || "project_unknown")
+  formData.append("subproject", params.subprojectName || "")
   formData.append("year", params.year || "unknown")
 
   const token = getAccessToken()
@@ -288,8 +300,15 @@ export default function NewProjectPage({
   const presetOrganisme = preset?.organisme || ""
   const organismIsLocked = Boolean(preset?.lockOrganisme && presetOrganisme)
 
-  const [organisme, setOrganisme] = useState(presetOrganisme)
-  const [projectName, setProjectName] = useState("")
+  const [catalog, setCatalog] = useState<ProjectCatalog>({ organisations: [] })
+  const [catalogLoading, setCatalogLoading] = useState(true)
+  const [catalogError, setCatalogError] = useState("")
+  const [organismeChoice, setOrganismeChoice] = useState(presetOrganisme)
+  const [customOrganisme, setCustomOrganisme] = useState("")
+  const [projectChoice, setProjectChoice] = useState("")
+  const [customProjectName, setCustomProjectName] = useState("")
+  const [subprojectChoice, setSubprojectChoice] = useState("__none__")
+  const [customSubprojectName, setCustomSubprojectName] = useState("")
   const [year, setYear] = useState(currentYear())
   const [domainLabel, setDomainLabel] = useState("")
   const [customDomain, setCustomDomain] = useState("")
@@ -307,14 +326,44 @@ export default function NewProjectPage({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const [selectionStatus, setSelectionStatus] = useState<ProjectSelectionStatus | null>(null)
+  const [selectionChecking, setSelectionChecking] = useState(false)
+  const [accessRequestSending, setAccessRequestSending] = useState(false)
+  const [referenceUploadFailed, setReferenceUploadFailed] = useState(false)
 
   const rawFileInputRef = useRef<HTMLInputElement>(null)
   const finalFileInputRef = useRef<HTMLInputElement>(null)
   const pdfUrlsRef = useRef<string[]>([])
 
   useEffect(() => {
-    setOrganisme(presetOrganisme || "")
+    setOrganismeChoice(presetOrganisme || "")
+    setCustomOrganisme("")
+    setProjectChoice("")
+    setCustomProjectName("")
+    setSubprojectChoice("__none__")
+    setCustomSubprojectName("")
   }, [presetOrganisme])
+
+  useEffect(() => {
+    let active = true
+    setCatalogLoading(true)
+    getProjectCatalog()
+      .then((data) => {
+        if (!active) return
+        setCatalog(data)
+        setCatalogError("")
+      })
+      .catch((err) => {
+        if (!active) return
+        setCatalogError(err instanceof Error ? err.message : "Catalogue indisponible.")
+      })
+      .finally(() => {
+        if (active) setCatalogLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -328,6 +377,69 @@ export default function NewProjectPage({
     domainLabel === "__other__"
       ? customDomain.trim()
       : domainLabel.trim()
+
+  const organisme = (
+    organismIsLocked
+      ? presetOrganisme
+      : organismeChoice === "__other__"
+        ? customOrganisme
+        : organismeChoice
+  ).trim()
+  const projectName = (
+    projectChoice === "__other__" ? customProjectName : projectChoice
+  ).trim()
+  const subprojectName = (
+    subprojectChoice === "__other__" ? customSubprojectName :
+      subprojectChoice === "__none__" ? "" : subprojectChoice
+  ).trim()
+
+  const selectedOrganisation = useMemo(
+    () => catalog.organisations.find(
+      (item) => item.name.toLocaleLowerCase("fr") === organisme.toLocaleLowerCase("fr"),
+    ) || null,
+    [catalog, organisme],
+  )
+  const availableProjects = selectedOrganisation?.projects || []
+  const selectedCatalogProject = useMemo(
+    () => availableProjects.find(
+      (item) => item.name.toLocaleLowerCase("fr") === projectName.toLocaleLowerCase("fr"),
+    ) || null,
+    [availableProjects, projectName],
+  )
+  const availableSubprojects = selectedCatalogProject?.subprojects || []
+
+  useEffect(() => {
+    if (!organisme || !projectName || !year) {
+      setSelectionStatus(null)
+      setSelectionChecking(false)
+      return
+    }
+    let active = true
+    setSelectionChecking(true)
+    const timer = window.setTimeout(() => {
+      checkProjectSelection({
+        organisme,
+        project_name: projectName,
+        subproject_name: subprojectName || undefined,
+        year,
+      })
+        .then((result) => {
+          if (active) setSelectionStatus(result)
+        })
+        .catch((err) => {
+          if (!active) return
+          setSelectionStatus(null)
+          setError(err instanceof Error ? err.message : "Vérification du projet impossible.")
+        })
+        .finally(() => {
+          if (active) setSelectionChecking(false)
+        })
+    }, 350)
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [organisme, projectName, subprojectName, year])
 
   const baseFormIsValid = useMemo(() => {
     return (
@@ -346,6 +458,7 @@ export default function NewProjectPage({
   const canSubmit = useMemo(() => {
     if (createdProjectId !== null) return false
     if (!baseFormIsValid) return false
+    if (selectionChecking || (selectionStatus && selectionStatus.status !== "available")) return false
 
     if (depositMode === "reference") {
       return finalCirFile !== null
@@ -357,6 +470,8 @@ export default function NewProjectPage({
     createdProjectId,
     depositMode,
     finalCirFile,
+    selectionChecking,
+    selectionStatus,
   ])
 
   const yearOptions = useMemo(() => {
@@ -441,6 +556,55 @@ export default function NewProjectPage({
     link.remove()
   }
 
+  const openExistingProject = () => {
+    if (!selectionStatus?.project_id) return
+    setCurrentProjectId(selectionStatus.project_id)
+    navigateTo(returnTo || "diagnosis")
+  }
+
+  const handleRequestAccess = async () => {
+    if (!selectionStatus?.project_id || accessRequestSending) return
+    setAccessRequestSending(true)
+    setError("")
+    try {
+      const request = await requestProjectAccess(selectionStatus.project_id)
+      setSelectionStatus((current) => current ? {
+        ...current,
+        access_request_id: request.id,
+        access_request_status: request.status,
+        message: "Votre demande a été envoyée au consultant responsable.",
+      } : current)
+      setSuccess("Demande envoyée. Vous recevrez une notification après la réponse du consultant.")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Impossible d’envoyer la demande.")
+    } finally {
+      setAccessRequestSending(false)
+    }
+  }
+
+  const retryFinalCirIndexing = async () => {
+    if (!createdProjectId || !finalCirFile || submitting) return
+    setSubmitting(true)
+    setError("")
+    try {
+      await uploadFinalCirReference({
+        projectId: createdProjectId,
+        file: finalCirFile,
+        organisme,
+        projectName,
+        subprojectName: subprojectName || undefined,
+        year,
+      })
+      setReferenceUploadFailed(false)
+      setSuccess("CIR final enregistré dans PostgreSQL et indexé dans Chroma.")
+      navigateTo(returnTo || "diagnosis")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Nouvelle tentative impossible.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
 
@@ -458,15 +622,27 @@ export default function NewProjectPage({
       return
     }
 
+    if (selectionChecking) {
+      setError("Patientez pendant la vérification du projet.")
+      return
+    }
+
+    if (selectionStatus && selectionStatus.status !== "available") {
+      setError(selectionStatus.message || "Ce projet existe déjà.")
+      return
+    }
+
     setSubmitting(true)
     setError("")
     setSuccess("")
+    setReferenceUploadFailed(false)
     setTranscriptionPdfs([])
 
     try {
       const createdProject = await createProject({
         organisme: organisme.trim(),
         project_name: projectName.trim(),
+        subproject_name: subprojectName || undefined,
         year: year.trim(),
         domain_label: effectiveDomain,
       })
@@ -475,15 +651,21 @@ export default function NewProjectPage({
       setCreatedProjectId(createdProject.id)
 
       if (depositMode === "reference") {
-        await uploadFinalCirReference({
-          projectId: createdProject.id,
-          file: finalCirFile as File,
-          organisme: organisme.trim(),
-          projectName: projectName.trim(),
-          year: year.trim(),
-        })
+        try {
+          await uploadFinalCirReference({
+            projectId: createdProject.id,
+            file: finalCirFile as File,
+            organisme: organisme.trim(),
+            projectName: projectName.trim(),
+            subprojectName: subprojectName || undefined,
+            year: year.trim(),
+          })
+        } catch (err) {
+          setReferenceUploadFailed(true)
+          throw err
+        }
 
-        setSuccess("Dossier créé et CIR final enregistré comme référence.")
+        setSuccess("Dossier créé, CIR final enregistré dans PostgreSQL et indexé dans Chroma.")
         navigateTo(returnTo || "diagnosis")
         return
       }
@@ -698,9 +880,23 @@ export default function NewProjectPage({
 
         {error && (
           <Card className="rounded-2xl border-destructive/25 bg-destructive/[0.045] shadow-none">
-            <CardContent className="flex items-start gap-3 p-4 text-destructive">
-              <AlertCircle className="mt-0.5 size-5 shrink-0" />
-              <p className="text-sm leading-6">{error}</p>
+            <CardContent className="flex flex-col gap-3 p-4 text-destructive sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 size-5 shrink-0" />
+                <p className="text-sm leading-6">{error}</p>
+              </div>
+              {referenceUploadFailed && createdProjectId && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void retryFinalCirIndexing()}
+                  disabled={submitting}
+                  className="min-h-10 shrink-0 rounded-xl border-destructive/30 text-destructive hover:bg-destructive/5 hover:text-destructive"
+                >
+                  {submitting ? <Loader2 className="size-4 animate-spin" /> : <FileCheck2 className="size-4" />}
+                  Réessayer l’indexation
+                </Button>
+              )}
             </CardContent>
           </Card>
         )}
@@ -710,6 +906,61 @@ export default function NewProjectPage({
             <CardContent className="flex items-start gap-3 p-4 text-success">
               <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
               <p className="text-sm leading-6">{success}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {selectionChecking && organisme && projectName && (
+          <div className="flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm text-muted-foreground" role="status" aria-live="polite">
+            <Loader2 className="size-4 animate-spin text-brand" />
+            Vérification de la disponibilité du projet…
+          </div>
+        )}
+
+        {!selectionChecking && selectionStatus && selectionStatus.status !== "available" && (
+          <Card className={`rounded-2xl shadow-none ${
+            selectionStatus.status === "locked"
+              ? "border-amber-300/70 bg-amber-50/80"
+              : "border-brand/25 bg-brand/[0.045]"
+          }`}>
+            <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                {selectionStatus.status === "locked" ? (
+                  <Lock className="mt-0.5 size-5 shrink-0 text-amber-700" />
+                ) : (
+                  <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-brand" />
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">
+                    {selectionStatus.status === "locked" ? "Projet déjà en cours" : "Projet déjà accessible"}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground" role="status" aria-live="polite">
+                    {selectionStatus.message}
+                  </p>
+                  {!!selectionStatus.activity?.length && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Activité détectée : {selectionStatus.activity.join(" · ")}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {selectionStatus.status === "locked" ? (
+                <Button
+                  type="button"
+                  onClick={handleRequestAccess}
+                  disabled={accessRequestSending || selectionStatus.access_request_status === "pending"}
+                  className="min-h-11 shrink-0 gap-2 rounded-xl"
+                >
+                  {accessRequestSending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                  {selectionStatus.access_request_status === "pending" ? "Demande envoyée" :
+                    selectionStatus.access_request_status === "refused" ? "Renvoyer la demande" : "Envoyer la demande"}
+                </Button>
+              ) : (
+                <Button type="button" onClick={openExistingProject} className="min-h-11 shrink-0 rounded-xl">
+                  Ouvrir le projet
+                </Button>
+              )}
             </CardContent>
           </Card>
         )}
@@ -757,33 +1008,70 @@ export default function NewProjectPage({
                     <div className="relative">
                       <Building2 className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 
-                      <Input
-                        id="organisme"
-                        value={organisme}
-                        onChange={(event) => {
-                          if (!organismIsLocked && createdProjectId === null) {
-                            setOrganisme(event.target.value)
-                          }
-                        }}
-                        placeholder="Exemple : Girodin"
-                        required
-                        readOnly={organismIsLocked || createdProjectId !== null}
-                        className={`h-11 rounded-xl pl-10 ${
-                          organismIsLocked || createdProjectId !== null
-                            ? "cursor-not-allowed bg-muted/60 pr-9"
-                            : ""
-                        }`}
-                      />
+                      {organismIsLocked ? (
+                        <Input
+                          id="organisme"
+                          value={organisme}
+                          readOnly
+                          className="h-11 cursor-not-allowed rounded-xl bg-muted/60 pl-10 pr-9"
+                        />
+                      ) : (
+                        <select
+                          id="organisme"
+                          value={organismeChoice}
+                          onChange={(event) => {
+                            const value = event.target.value
+                            setOrganismeChoice(value)
+                            if (value !== "__other__") setCustomOrganisme("")
+                            setProjectChoice("")
+                            setCustomProjectName("")
+                            setSubprojectChoice("__none__")
+                            setCustomSubprojectName("")
+                            resetMessages()
+                          }}
+                          required
+                          disabled={createdProjectId !== null || catalogLoading}
+                          className="h-11 w-full appearance-none rounded-xl border border-input bg-background pl-10 pr-9 text-sm text-foreground outline-none transition focus:border-brand/40 focus:ring-2 focus:ring-brand/10 disabled:cursor-not-allowed disabled:bg-muted/60"
+                        >
+                          <option value="" disabled>
+                            {catalogLoading ? "Chargement des organismes…" : "Sélectionnez un organisme"}
+                          </option>
+                          {catalog.organisations.map((item) => (
+                            <option key={item.name} value={item.name}>{item.name}</option>
+                          ))}
+                          <option value="__other__">Autre / nouvel organisme</option>
+                        </select>
+                      )}
 
                       {(organismIsLocked || createdProjectId !== null) && (
                         <Lock className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                       )}
+                      {!organismIsLocked && <ChevronDownIcon />}
                     </div>
 
                     {organismIsLocked && (
                       <p className="text-[11px] leading-5 text-muted-foreground">
                         Organisme sélectionné depuis la liste des projets.
                       </p>
+                    )}
+                    {catalogError && !organismIsLocked && (
+                      <p className="text-[11px] leading-5 text-amber-700">
+                        Catalogue indisponible : utilisez « Autre / nouvel organisme ».
+                      </p>
+                    )}
+                    {!organismIsLocked && organismeChoice === "__other__" && (
+                      <div className="space-y-2 animate-fadeIn">
+                        <Label htmlFor="customOrganisme">Nom du nouvel organisme <span className="text-destructive">*</span></Label>
+                        <Input
+                          id="customOrganisme"
+                          value={customOrganisme}
+                          onChange={(event) => setCustomOrganisme(event.target.value)}
+                          placeholder="Exemple : Girodin"
+                          required
+                          readOnly={createdProjectId !== null}
+                          className="h-11 rounded-xl"
+                        />
+                      </div>
                     )}
                   </div>
 
@@ -794,15 +1082,91 @@ export default function NewProjectPage({
                       Nom du projet <span className="text-destructive">*</span>
                     </Label>
 
-                    <Input
-                      id="projectName"
-                      value={projectName}
-                      onChange={(event) => setProjectName(event.target.value)}
-                      placeholder="Exemple : TGM100"
-                      required
-                      readOnly={createdProjectId !== null}
-                      className="h-11 rounded-xl"
-                    />
+                    <div className="relative">
+                      <select
+                        id="projectName"
+                        value={projectChoice}
+                        onChange={(event) => {
+                          const value = event.target.value
+                          setProjectChoice(value)
+                          if (value !== "__other__") setCustomProjectName("")
+                          setSubprojectChoice("__none__")
+                          setCustomSubprojectName("")
+                          resetMessages()
+                        }}
+                        required
+                        disabled={!organisme || createdProjectId !== null}
+                        className="h-11 w-full appearance-none rounded-xl border border-input bg-background px-3 pr-9 text-sm text-foreground outline-none transition focus:border-brand/40 focus:ring-2 focus:ring-brand/10 disabled:cursor-not-allowed disabled:bg-muted/60"
+                      >
+                        <option value="" disabled>
+                          {organisme ? "Sélectionnez un projet" : "Sélectionnez d’abord l’organisme"}
+                        </option>
+                        {availableProjects.map((item) => (
+                          <option key={item.name} value={item.name}>{item.name}</option>
+                        ))}
+                        <option value="__other__">Autre / nouveau projet</option>
+                      </select>
+                      <ChevronDownIcon />
+                    </div>
+
+                    {projectChoice === "__other__" && (
+                      <div className="space-y-2 animate-fadeIn">
+                        <Label htmlFor="customProjectName">Nom du nouveau projet <span className="text-destructive">*</span></Label>
+                        <Input
+                          id="customProjectName"
+                          value={customProjectName}
+                          onChange={(event) => setCustomProjectName(event.target.value)}
+                          placeholder="Exemple : TGM100"
+                          required
+                          readOnly={createdProjectId !== null}
+                          className="h-11 rounded-xl"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sous-projet */}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="subprojectName">Sous-projet <span className="font-normal text-muted-foreground">(facultatif)</span></Label>
+                    <div className="relative">
+                      <select
+                        id="subprojectName"
+                        value={subprojectChoice}
+                        onChange={(event) => {
+                          const value = event.target.value
+                          setSubprojectChoice(value)
+                          if (value !== "__other__") setCustomSubprojectName("")
+                          resetMessages()
+                        }}
+                        disabled={!projectName || createdProjectId !== null}
+                        className="h-11 w-full appearance-none rounded-xl border border-input bg-background px-3 pr-9 text-sm text-foreground outline-none transition focus:border-brand/40 focus:ring-2 focus:ring-brand/10 disabled:cursor-not-allowed disabled:bg-muted/60"
+                      >
+                        <option value="__none__">Aucun sous-projet</option>
+                        {availableSubprojects.map((item) => (
+                          <option key={item} value={item}>{item}</option>
+                        ))}
+                        <option value="__other__">Autre / nouveau sous-projet</option>
+                      </select>
+                      <ChevronDownIcon />
+                    </div>
+                    {subprojectChoice === "__other__" && (
+                      <div className="space-y-2 animate-fadeIn">
+                        <Label htmlFor="customSubprojectName">Nom du sous-projet <span className="text-destructive">*</span></Label>
+                        <Input
+                          id="customSubprojectName"
+                          value={customSubprojectName}
+                          onChange={(event) => setCustomSubprojectName(event.target.value)}
+                          placeholder="Exemple : Chroma — lot optique"
+                          required
+                          readOnly={createdProjectId !== null}
+                          className="h-11 rounded-xl"
+                        />
+                      </div>
+                    )}
+                    <p className="text-[11px] text-muted-foreground">
+                      Les sous-projets connus dans PostgreSQL et Chroma sont proposés automatiquement.
+                    </p>
                   </div>
 
                   {/* Année */}
@@ -1404,6 +1768,7 @@ export default function NewProjectPage({
                   <CardContent className="space-y-4 p-5">
                     <SummaryRow label="Organisme" value={organisme || "—"} />
                     <SummaryRow label="Nom du projet" value={projectName || "—"} />
+                    <SummaryRow label="Sous-projet" value={subprojectName || "Aucun"} />
                     <SummaryRow label="Année CIR" value={year || "—"} />
                     <SummaryRow label="Domaine" value={effectiveDomain || "—"} />
                     <SummaryRow
@@ -1436,7 +1801,9 @@ export default function NewProjectPage({
                           </p>
 
                           <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-                            Les informations du projet resteront disponibles dans le dossier après sa création.
+                            {depositMode === "reference"
+                              ? "Le CIR final sera classé et indexé dans Chroma avec cette identité complète."
+                              : "Les résultats des agents seront conservés dans PostgreSQL pour ce dossier."}
                           </p>
                         </div>
                       </div>

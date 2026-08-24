@@ -872,6 +872,12 @@ class ControlledWriter:
   uniquement en lui ajoutant [A#].
 - Ne cite pas toutes les sources sélectionnées par principe : utilise uniquement une
   source lorsqu'elle apporte un élément réellement utile au raisonnement.
+- Respecte target_bindings et allowed_claim_scope pour chaque source : une preuve liée
+  à un verrou, un passage ou une section ne peut étayer aucun autre passage.
+- Dans une section contenant plusieurs verrous, insère chaque apport seulement à
+  proximité du passage correspondant à son research_target_id ou parent_section_id.
+- Si aucune liaison cible n'autorise l'usage dans le passage courant, n'utilise pas la
+  citation, même si l'article appartient au même domaine général.
 - Si plusieurs sources étayent exactement le même apport, évite l'empilement décoratif
   de citations ; garde celles qui soutiennent effectivement l'affirmation.
 - Ne remplace jamais un argument source par un argument plus moderne, plus fort ou plus
@@ -992,7 +998,7 @@ CONTEXTE PROJET AUTORISÉ
 PREUVES FACTUELLES ENNODIAGNOSTIC
 {_compact_json(diagnostic_evidence, 16000)}
 
-PREUVES FACTUELLES ENNOSCHOLAR — TOUTES LES PREUVES ACCEPTÉES
+PREUVES FACTUELLES ENNOSCHOLAR — SOURCES CIBLÉES ET FACULTATIVES
 {mandatory_scholar_payload}
 
 MANQUES DOCUMENTAIRES SIGNALÉS

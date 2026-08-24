@@ -1088,6 +1088,93 @@ def _ensure_latest_run_final_verrous_synced(db: Session, latest_run: DiagnosticR
 
     return current
 
+
+def _render_structured_cir_continuity(cir_memory_report: Any, max_items: int = 10) -> str:
+    """Présente les comparaisons CIR imbriquées, y compris pour un ancien rapport stocké."""
+    if not isinstance(cir_memory_report, dict):
+        return ""
+
+    comparisons = cir_memory_report.get("verrou_comparisons") or cir_memory_report.get("comparisons") or []
+    if not isinstance(comparisons, list) or not comparisons:
+        return ""
+
+    years = cir_memory_report.get("previous_cir_years_used") or cir_memory_report.get("previous_years") or []
+    if not isinstance(years, list):
+        years = [years] if years else []
+
+    def percent(value: Any) -> str:
+        try:
+            score = float(value)
+        except (TypeError, ValueError):
+            return ""
+        score = score * 100 if abs(score) <= 1 else score
+        return f"{score:.0f}%"
+
+    lines = [
+        "COMPARAISON AVEC LE CIR N-1 — CONTEXTE HISTORIQUE STRUCTURÉ :",
+        f"Année(s) antérieure(s) retenue(s) : {', '.join(str(year) for year in years) if years else 'non précisée(s)' }.",
+        "Cette comparaison qualifie la continuité et l'apport courant ; elle ne constitue pas une preuve du projet courant.",
+    ]
+
+    for index, item in enumerate(comparisons[:max_items], start=1):
+        if not isinstance(item, dict):
+            continue
+        current = item.get("current_item") if isinstance(item.get("current_item"), dict) else {}
+        best_match = item.get("best_match") if isinstance(item.get("best_match"), dict) else {}
+        previous = (
+            best_match.get("previous_candidate")
+            if isinstance(best_match.get("previous_candidate"), dict)
+            else item.get("previous_candidate")
+            if isinstance(item.get("previous_candidate"), dict)
+            else {}
+        )
+        decision = (
+            item.get("decision")
+            if isinstance(item.get("decision"), dict)
+            else best_match.get("final_scores")
+            if isinstance(best_match.get("final_scores"), dict)
+            else {}
+        )
+
+        current_title = _clean(
+            current.get("section_title")
+            or current.get("title")
+            or item.get("current_title")
+            or "Verrou courant"
+        )
+        previous_title = _clean(
+            previous.get("section_title")
+            or previous.get("title")
+            or item.get("previous_title")
+            or "Passage antérieur"
+        )
+        previous_year = _clean(previous.get("previous_year") or previous.get("year") or "N-1")
+        label = _clean(
+            decision.get("label")
+            or decision.get("status")
+            or item.get("status")
+            or "À examiner"
+        )
+        continuity = percent(
+            decision.get("continuity_score")
+            if decision.get("continuity_score") is not None
+            else best_match.get("similarity_score")
+        )
+        novelty = percent(decision.get("novelty_score"))
+
+        details = [
+            f"verrou courant={current_title}",
+            f"passage CIR {previous_year}={previous_title}",
+            f"statut={label}",
+        ]
+        if continuity:
+            details.append(f"continuité={continuity}")
+        if novelty:
+            details.append(f"apport courant={novelty}")
+        lines.append(f"- Comparaison {index} : " + " | ".join(details))
+
+    return "\n".join(lines) if len(lines) > 3 else ""
+
 def _force_display_from_latest_run(display: Dict[str, Any], latest_run: DiagnosticRun | None, project=None) -> Dict[str, Any]:
     display = dict(display or {})
     report, content = _extract_latest_run_report(latest_run)
@@ -1099,11 +1186,12 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
     sections = _extract_sections(content) if content else {}
 
     final_display = _extract_final_display_sections_from_report(report)
-    agent_sections = final_display["diagnostic_sections"]
-    agent_sections_by_key = final_display["diagnostic_sections_by_key"]
+    agent_sections = dict(final_display["diagnostic_sections"] or {})
+    agent_sections_by_key = dict(final_display["diagnostic_sections_by_key"] or {})
     diagnostic_cards = final_display["diagnostic_cards"]
-    static_diagnostic = final_display["static_diagnostic"]
+    static_diagnostic = dict(final_display["static_diagnostic"] or {})
     final_verrous = _extract_final_accepted_verrous_from_report(report)
+    cir_memory_report = report.get("cir_memory_report") if report else {}
 
     def pick(key: str, title: str = "", *legacy_keys: str) -> str:
         if key and agent_sections_by_key.get(key):
@@ -1132,6 +1220,25 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
     demarche = pick("demarche_detectee", "Démarche détectée", "demarche_experimentale_detectee")
     resultats = pick("resultats_metriques", "Résultats / métriques", "resultats_et_metriques_disponibles")
     parametres = pick("parametres_contraintes", "Paramètres et contraintes techniques", "parametres_et_contraintes_techniques")
+    continuite_n1 = pick(
+        "continuite_n1",
+        "Continuité avec le CIR N-1",
+        "comparaison_avec_le_cir_precedent",
+        "continuite_avec_le_cir_n_1",
+    )
+    structured_continuity = _render_structured_cir_continuity(cir_memory_report)
+    if structured_continuity:
+        # Répare également les anciens rapports dont le texte disait à tort
+        # qu'aucun rapprochement n'était exploitable.
+        continuite_n1 = structured_continuity
+        agent_sections_by_key["continuite_n1"] = structured_continuity
+        agent_sections["Continuité avec le CIR N-1"] = structured_continuity
+        static_by_key = dict(static_diagnostic.get("sections_by_key") or {})
+        static_by_title = dict(static_diagnostic.get("sections_by_title") or {})
+        static_by_key["continuite_n1"] = structured_continuity
+        static_by_title["Continuité avec le CIR N-1"] = structured_continuity
+        static_diagnostic["sections_by_key"] = static_by_key
+        static_diagnostic["sections_by_title"] = static_by_title
     points_validation = pick("points_validation", "Points à valider", "points_a_valider_par_le_consultant")
 
     display["source"] = "ennodiagnostic_agent_v132_final_static_display"
@@ -1162,7 +1269,7 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
         "demarche": demarche,
         "resultats": resultats,
         "parametres": parametres,
-        "comparaison_cir": sections.get("comparaison_avec_le_cir_precedent", ""),
+        "comparaison_cir": continuite_n1,
         "points_validation": points_validation,
     }
 
@@ -1223,8 +1330,6 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
         display["document_compare_debug_path"] = doc_compare_dir_value
 
     # Comparaison avec le CIR précédent exposée au frontend.
-    cir_memory_report = report.get("cir_memory_report") if report else {}
-
     if isinstance(cir_memory_report, dict):
         cir_summary = cir_memory_report.get("summary") or {}
         display["cir_memory"] = cir_memory_report
@@ -1898,6 +2003,7 @@ def compare_with_previous_cir(
             project=project.project_name,
             year=str(project.year),
             nlp_result_path=nlp_path,
+            subproject=str(getattr(project, "subproject_name", "") or "").strip(),
         )
 
         return sanitize_json_value(report)
@@ -1946,6 +2052,7 @@ def compare_current_with_previous_cir_independent(
             project=project.project_name,
             year=str(project.year),
             nlp_result_path=nlp_path,
+            subproject=str(getattr(project, "subproject_name", "") or "").strip(),
         )
 
         return sanitize_json_value(report)
@@ -1974,7 +2081,12 @@ def get_latest_previous_cir_comparison(
     try:
         from modules.CIR_MEMORY.cir_memory import comparison_report_path
 
-        path = comparison_report_path(project.organisme, project.project_name, str(project.year))
+        path = comparison_report_path(
+            project.organisme,
+            project.project_name,
+            str(project.year),
+            subproject=str(getattr(project, "subproject_name", "") or "").strip(),
+        )
         if not path.exists():
             return sanitize_json_value({
                 "ok": False,
@@ -2422,7 +2534,7 @@ def upload_previous_cir_final(
     ensure_ennosmart_imports()
 
     try:
-        from modules.CIR_MEMORY.cir_memory import cir_final_dir, cir_final_report_path, comparison_report_path, compare_current_raw_with_cir_memory, write_json
+        from modules.CIR_MEMORY.cir_memory import cir_final_dir, cir_final_report_path, compare_current_raw_with_cir_memory, write_json
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Module CIR_MEMORY indisponible : {exc}")
 
@@ -2431,7 +2543,13 @@ def upload_previous_cir_final(
     if suffix not in {".pdf", ".docx", ".txt"}:
         raise HTTPException(status_code=400, detail="Format non supporté. Utilise PDF, DOCX ou TXT.")
 
-    raw_dir = cir_final_dir(project.organisme, project.project_name, year) / "raw"
+    subproject = str(getattr(project, "subproject_name", "") or "").strip()
+    raw_dir = cir_final_dir(
+        project.organisme,
+        project.project_name,
+        year,
+        subproject=subproject,
+    ) / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     raw_path = raw_dir / safe_name
 
@@ -2459,6 +2577,7 @@ def upload_previous_cir_final(
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "organisme": project.organisme,
         "project": project.project_name,
+        "subproject": subproject or None,
         "year": year,
         "current_project_year": str(project.year),
         "cir_final_file": str(raw_path),
@@ -2469,11 +2588,21 @@ def upload_previous_cir_final(
         "evidence_pack_before_frascati": pack,
     }
 
-    out_path = cir_final_report_path(project.organisme, project.project_name, year)
+    out_path = cir_final_report_path(
+        project.organisme,
+        project.project_name,
+        year,
+        subproject=subproject,
+    )
     write_json(out_path, sanitize_json_value(report))
 
     # Écrit aussi un nlp_result mémoire pour audit humain.
-    nlp_memory_path = cir_final_dir(project.organisme, project.project_name, year) / "cir_final_nlp_memory.json"
+    nlp_memory_path = cir_final_dir(
+        project.organisme,
+        project.project_name,
+        year,
+        subproject=subproject,
+    ) / "cir_final_nlp_memory.json"
     write_json(nlp_memory_path, sanitize_json_value({
         "ok": True,
         "pipeline_type": "cir_final_memory_without_frascati",
@@ -2491,6 +2620,7 @@ def upload_previous_cir_final(
                 project=project.project_name,
                 year=str(project.year),
                 nlp_result_path=current_nlp,
+                subproject=subproject,
             )
     except Exception as exc:
         comparison = {
@@ -2525,7 +2655,11 @@ def list_previous_cir_finals(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Module CIR_MEMORY indisponible : {exc}")
 
-    years_root = STORAGE_DIR / slug(project.organisme) / "projects" / slug(project.project_name) / "years"
+    subproject = str(getattr(project, "subproject_name", "") or "").strip()
+    project_scope = STORAGE_DIR / slug(project.organisme) / "projects" / slug(project.project_name)
+    if subproject:
+        project_scope = project_scope / "subprojects" / slug(subproject)
+    years_root = project_scope / "years"
     if not years_root.exists():
         return {"ok": True, "items": []}
 
@@ -2534,7 +2668,12 @@ def list_previous_cir_finals(
         year = year_dir.name
         if str(year) == str(project.year):
             continue
-        report_path = cir_final_report_path(project.organisme, project.project_name, year)
+        report_path = cir_final_report_path(
+            project.organisme,
+            project.project_name,
+            year,
+            subproject=subproject,
+        )
         if not report_path.exists():
             continue
         try:

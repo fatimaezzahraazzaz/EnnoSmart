@@ -141,9 +141,16 @@ class EnnoRetriever:
         project: str,
         year: Optional[str | int] = None,
         annee: Optional[str | int] = None,
+        subproject: Optional[str] = None,
     ):
-        self.store = ProjectStore(organisme, project, year=year, annee=annee).ensure()
-        self.collection_name = f"ennosmart_{self.store.organisme_id}_{self.store.project_id}_{self.store.year_id}"
+        self.store = ProjectStore(
+            organisme,
+            project,
+            subproject=subproject,
+            year=year,
+            annee=annee,
+        ).ensure()
+        self.collection_name = self.store.collection_name
         self.vector_store = RAGVectorStore(self.store.chroma_dir)
 
     def search(

@@ -173,6 +173,7 @@ def load_previous_verrou_context(
     project: str,
     current_year: str,
     *,
+    subproject: str = "",
     max_previous_years: int = 1,
     max_examples: int = 16,
     max_text_chars: int = 900,
@@ -189,6 +190,7 @@ def load_previous_verrou_context(
             organisme=organisme,
             project=project,
             current_year=current_year,
+            subproject=subproject,
             max_previous_years=max(1, int(max_previous_years)),
         )
     except Exception as exc:
@@ -250,6 +252,7 @@ def load_previous_verrou_context(
         "version": VERSION,
         "organisme": organisme,
         "project": project,
+        "subproject": subproject or None,
         "current_year": str(current_year),
         "previous_years": [str(year) for year in (years or [])],
         "raw_previous_items_count": len(raw_items),

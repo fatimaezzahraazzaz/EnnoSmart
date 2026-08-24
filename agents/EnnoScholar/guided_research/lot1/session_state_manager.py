@@ -182,13 +182,23 @@ class GuidedResearchSessionStateManager:
         *,
         limit: int = 50,
         include_messages: bool = False,
+        entry_module: GuidedResearchEntryModule | str | None = None,
     ) -> list[GuidedResearchSessionData]:
-        statement = (
-            select(GuidedResearchSessionORM)
-            .where(GuidedResearchSessionORM.project_id == project_id)
-            .order_by(GuidedResearchSessionORM.updated_at.desc())
-            .limit(max(1, min(limit, 500)))
+        statement = select(GuidedResearchSessionORM).where(
+            GuidedResearchSessionORM.project_id == project_id,
         )
+        if entry_module is not None:
+            module_value = (
+                entry_module.value
+                if isinstance(entry_module, GuidedResearchEntryModule)
+                else str(entry_module).strip()
+            )
+            statement = statement.where(
+                GuidedResearchSessionORM.entry_module == module_value,
+            )
+        statement = statement.order_by(
+            GuidedResearchSessionORM.updated_at.desc(),
+        ).limit(max(1, min(limit, 500)))
         if include_messages:
             statement = statement.options(
                 selectinload(GuidedResearchSessionORM.messages),

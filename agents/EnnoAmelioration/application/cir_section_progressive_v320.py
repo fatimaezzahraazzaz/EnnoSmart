@@ -99,7 +99,20 @@ def _section_content_word_count(
     max_start = min(12, len(words) - len(title_words))
     for start in range(max_start + 1):
         end = start + len(folded_title)
-        if folded[start:end] == folded_title:
+        candidate = folded[start:end]
+        exact_match = candidate == folded_title
+        # Certains PDF collent le numéro de page au dernier mot du titre
+        # (ex. ``technologiques8``). Ce suffixe n'est pas du contenu à
+        # améliorer et ne doit pas déclencher une recherche en boucle.
+        page_suffix_match = bool(
+            candidate
+            and candidate[:-1] == folded_title[:-1]
+            and re.fullmatch(
+                rf"{re.escape(folded_title[-1])}\d{{1,4}}",
+                candidate[-1],
+            )
+        )
+        if exact_match or page_suffix_match:
             return max(0, len(words) - end)
     return len(words)
 

@@ -69,6 +69,7 @@ class AmbiguityResolution(BaseModel):
 class ScientificRolePlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    domain_anchors: List[EvidenceConcept] = Field(default_factory=list)
     scientific_object: List[EvidenceConcept] = Field(default_factory=list)
     phenomena: List[EvidenceConcept] = Field(default_factory=list)
     independent_variables: List[EvidenceConcept] = Field(default_factory=list)
@@ -82,7 +83,7 @@ class ScientificRolePlan(BaseModel):
     @model_validator(mode="after")
     def _dedupe(self) -> "ScientificRolePlan":
         for field_name in (
-            "scientific_object", "phenomena", "independent_variables",
+            "domain_anchors", "scientific_object", "phenomena", "independent_variables",
             "response_variables", "operating_conditions", "methods",
             "validation_concepts",
         ):
@@ -185,7 +186,7 @@ def _coerce_role_plan(payload: Mapping[str, Any]) -> ScientificRolePlan:
     # They are derived fields, not part of the strict V167 contract, so remove
     # them before Pydantic validation instead of rejecting an otherwise valid plan.
     allowed = {
-        "scientific_object", "phenomena", "independent_variables",
+        "domain_anchors", "scientific_object", "phenomena", "independent_variables",
         "response_variables", "operating_conditions", "methods",
         "validation_concepts", "local_identifiers", "ambiguities",
     }
@@ -854,6 +855,7 @@ def build_rescue_queries(intent: Mapping[str, Any], existing_queries: Sequence[A
 # legacy polluted intent as a scientific fallback.
 
 _V1671_ROLE_FIELDS = (
+    "domain_anchors",
     "scientific_object",
     "phenomena",
     "independent_variables",
@@ -992,6 +994,8 @@ def _v1671_call_llm(
     previous_payload: Optional[Mapping[str, Any]] = None,
     blocking_errors: Sequence[str] = (),
     missing_roles: Sequence[str] = (),
+    domain_context: Sequence[str] = (),
+    research_objective: str = "",
 ) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
     # Backward-compatible test/rolling-deployment hook: if the legacy planner
     # function was explicitly monkeypatched by a caller, honor it. The real
@@ -1009,7 +1013,9 @@ def _v1671_call_llm(
     previous_text = json.dumps(previous_payload or {}, ensure_ascii=False)[:4500]
     prompt = f"""
 Tu construis un plan de recherche bibliographique scientifique multi-domaines.
-Tu ne connais aucun projet ni domaine à l'avance.
+Le domaine détecté, l'objectif et la section parent servent à désambiguïser le
+passage ciblé. Ils ne doivent jamais être ignorés au profit d'une traduction
+littérale hors contexte.
 
 MODE: {mode}
 
@@ -1019,6 +1025,10 @@ NE RECOPIE PAS les phrases sources : le code récupérera lui-même leur texte e
 N'invente jamais un evidence_id.
 
 RÔLES
+- domain_anchors: 1 à 3 expressions anglaises recherchables qui nomment le champ
+  physique/technique précis commun à toute la section (pas seulement
+  "engineering", "model" ou "simulation"). Elles doivent être prouvées par la
+  section parent et ne doivent pas répéter scientific_object.
 - scientific_object: système, composant, matériau, procédé ou objet réellement étudié.
 - independent_variables: paramètres comparés, réglés ou variant dans les essais/calculs.
 - response_variables: grandeurs observées, mesurées ou prédites en réponse.
@@ -1037,6 +1047,16 @@ QUALITÉ
 5. Ignore true/false/null, UUID, noms de fichiers, session/run/request IDs et métadonnées JSON.
 6. Les identifiants locaux suspectés ne doivent pas être réutilisés comme concepts scientifiques transférables.
 7. Retourne le JSON du schéma et rien d'autre.
+8. Résous les termes ambigus avec la section complète et le domaine. Par exemple,
+   une traduction lexicale n'est pas acceptable si elle change de discipline.
+9. Chaque scientific_object et chaque axe doit rester compatible avec au moins
+   un domain_anchor. Si ce lien n'est pas prouvé, retourne [] au lieu d'élargir.
+
+DOMAINE DÉTECTÉ (contrainte de routage, pas vocabulaire à recopier aveuglément)
+{json.dumps(list(domain_context), ensure_ascii=False)}
+
+OBJECTIF DE LA RECHERCHE (guide de sélection, pas source de faits)
+{_legacy._clean(research_objective, 1800)}
 
 IDENTIFIANTS LOCAUX SUSPECTÉS
 {json.dumps(list(explicit_local_ids), ensure_ascii=False)}
@@ -1157,6 +1177,19 @@ def _v1671_resolve_partial(
             if len(plan[field]) >= 8:
                 break
 
+    # Un ancrage de domaine identique à l'objet n'apporte aucune
+    # désambiguïsation. On le retire pour forcer une réparation explicite plutôt
+    # que de prétendre que deux rôles identiques constituent deux preuves.
+    object_terms = {
+        _legacy._norm(row.get("term_en"))
+        for row in plan.get("scientific_object") or []
+        if isinstance(row, Mapping)
+    }
+    plan["domain_anchors"] = [
+        row for row in plan.get("domain_anchors") or []
+        if _legacy._norm(row.get("term_en")) not in object_terms
+    ]
+
     for index, row in enumerate(payload.get("local_identifiers") or []):
         if not isinstance(row, Mapping):
             continue
@@ -1269,6 +1302,8 @@ def _v1671_blocking_errors(plan: Mapping[str, Any], queries: Sequence[Mapping[st
 
 def _v1671_missing_roles(plan: Mapping[str, Any]) -> List[str]:
     missing: List[str] = []
+    if not plan.get("domain_anchors"):
+        missing.append("domain_anchors")
     if not plan.get("scientific_object"):
         missing.append("scientific_object")
     if not _v1671_problem_axis_present(plan):
@@ -1284,7 +1319,12 @@ def _v1671_missing_roles(plan: Mapping[str, Any]) -> List[str]:
 
 def _node_collect(state: QueryWorkflowState) -> Dict[str, Any]:
     intent = dict(state.get("intent") or {})
-    evidence = _legacy._source_evidence(intent)
+    target_evidence = _legacy._clean(_legacy._source_evidence(intent), 6500)
+    parent_section = _legacy._clean(intent.get("parent_section_text"), 6500)
+    evidence_parts = [f"PASSAGE CIBLE. {target_evidence}"] if target_evidence else []
+    if parent_section and _legacy._norm(parent_section) != _legacy._norm(target_evidence):
+        evidence_parts.append(f"SECTION PARENTE COMPLETE. {parent_section}")
+    evidence = "\n".join(evidence_parts)
     units = _v1671_split_evidence(evidence)
     explicit_local = _v1671_safe_explicit_local_identifiers(intent, evidence)
     return {
@@ -1500,6 +1540,8 @@ def _build_queries(plan: Mapping[str, Any]) -> List[Dict[str, Any]]:
 
 def _v1673_core_errors(plan: Mapping[str, Any]) -> List[str]:
     errors: List[str] = []
+    if not plan.get("domain_anchors"):
+        errors.append("missing_domain_anchor")
     if not plan.get("scientific_object"):
         errors.append("missing_scientific_object")
     if not _v1671_problem_axis_present(plan):
@@ -1546,6 +1588,8 @@ def _node_plan(state: QueryWorkflowState) -> Dict[str, Any]:
         units=units,
         explicit_local_ids=explicit_local,
         attempt=1,
+        domain_context=(state.get("intent") or {}).get("domain_context") or [],
+        research_objective=str((state.get("intent") or {}).get("research_objective") or ""),
     )
     plan, warnings = _v1671_resolve_partial(raw, units)
 
@@ -1605,6 +1649,8 @@ def _node_repair(state: QueryWorkflowState) -> Dict[str, Any]:
         previous_payload=state.get("raw_payload"),
         blocking_errors=_v1673_core_errors(previous_plan),
         missing_roles=_v1671_missing_roles(previous_plan),
+        domain_context=(state.get("intent") or {}).get("domain_context") or [],
+        research_objective=str((state.get("intent") or {}).get("research_objective") or ""),
     )
     new_plan, warnings = _v1671_resolve_partial(raw, units)
     merged = _v1671_merge_plans(previous_plan, new_plan)

@@ -7,7 +7,7 @@ import unicodedata
 from collections import Counter
 from typing import Any
 
-from ..domain.models import ImprovementRequest
+from ..domain.models import ImprovementRequest, SectionFunction
 from .diagnostic_orchestration_service import ensure_diagnostic_context
 from .research_context_bridge_v310 import (
     enrich_direct_research_context,
@@ -20,6 +20,13 @@ from .research_context_service import build_lightweight_research_context
 
 RESEARCH_USE_EXISTING = "use_existing_sources"
 RESEARCH_LAUNCH_TARGETED = "launch_targeted_research"
+
+_QUERY_STOPWORDS = {
+    "a", "au", "aux", "avec", "avons", "ce", "ces", "cette", "dans",
+    "de", "des", "doit", "doivent", "du", "en", "et", "la", "le",
+    "les", "leur", "leurs", "notre", "nos", "ou", "par", "pour",
+    "sans", "sur", "un", "une", "cadre", "projet", "section", "texte",
+}
 
 
 def explicitly_forbids_research(value: str | None) -> bool:
@@ -241,6 +248,73 @@ def _precise_scholar_agent() -> Any:
 
 def _clean(value: Any, limit: int = 12000) -> str:
     return re.sub(r"\s+", " ", str(value or "").replace("\x00", " ")).strip()[:limit]
+
+
+def _bounded_context_query(*parts: Any, max_words: int = 12) -> str:
+    """Fusionne titre scientifique et contexte local sans coder de domaine."""
+
+    words: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        for token in re.findall(r"[A-Za-zÀ-ÿ0-9+/_-]+", str(part or "")):
+            key = _norm(token)
+            if not key or key in seen or key in _QUERY_STOPWORDS:
+                continue
+            seen.add(key)
+            words.append(token)
+            if len(words) >= max(3, int(max_words)):
+                return _clean(" ".join(words), 220)
+    return _clean(" ".join(words), 220)
+
+
+def _contextual_queries_for_lock(
+    lock_title: str,
+    direct_context: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Décline les requêtes de la section pour le verrou Diagnostic courant."""
+
+    base_queries: list[dict[str, Any]] = []
+    for target in direct_context.get("research_targets") or []:
+        if not isinstance(target, dict):
+            continue
+        for row in target.get("suggested_queries") or []:
+            if isinstance(row, dict) and str(row.get("query") or "").strip():
+                base_queries.append(dict(row))
+
+    context = dict(direct_context.get("research_context") or {})
+    section_terms = list(context.get("section_terms") or [])
+    output: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    for row in base_queries:
+        query = _bounded_context_query(lock_title, row.get("query"), max_words=12)
+        key = _norm(query)
+        if len(query.split()) < 3 or not key or key in seen:
+            continue
+        seen.add(key)
+        output.append(
+            {
+                "query": query,
+                "kind": "diagnostic_lock_with_active_section_context_v3_10",
+                "research_normalization": "v3_10",
+            }
+        )
+        if len(output) >= 2:
+            break
+
+    if len(output) < 2 and section_terms:
+        query = _bounded_context_query(lock_title, *section_terms[:8], max_words=12)
+        key = _norm(query)
+        if len(query.split()) >= 3 and key and key not in seen:
+            output.append(
+                {
+                    "query": query,
+                    "kind": "diagnostic_lock_with_section_terms_v3_10",
+                    "research_normalization": "v3_10",
+                }
+            )
+
+    return output[:2]
 
 
 def _year_from_value(value: Any) -> int | None:
@@ -478,10 +552,9 @@ def _matched_diagnostic_context(
 ) -> tuple[dict[str, Any], list[str], list[dict[str, Any]]]:
     """Sélectionne les verrous réellement liés à la section cible.
 
-    V2.1 : on ne transmet plus les quatre meilleurs verrous par simple
-    recouvrement lexical. Le meilleur verrou est toujours le primaire ; un
-    verrou secondaire n'est gardé que s'il reste proche du meilleur score et
-    partage lui aussi des éléments discriminants avec la section.
+    Le meilleur verrou est toujours le primaire. Une section agrégée consacrée
+    aux incertitudes peut conserver plusieurs verrous réellement reliés ; une
+    section ordinaire reste limitée au primaire et à un secondaire proche.
     """
 
     if isinstance(diagnostic_override, dict) and diagnostic_override.get("available"):
@@ -525,16 +598,24 @@ def _matched_diagnostic_context(
     matched_items: list[dict[str, Any]] = []
     if rows:
         best_score = rows[0][0]
+        aggregate_lock_section = str(
+            request.research_target_type or ""
+        ).casefold() in {
+            SectionFunction.UNCERTAINTY.value.casefold(),
+            "lock_search",
+        }
+        max_matched = 6 if aggregate_lock_section else 2
+        relative_floor = 0.35 if aggregate_lock_section else 0.50
         # Le primaire est toujours le meilleur verrou local.
         matched_items.append(dict(rows[0][3]))
 
-        # Au plus un secondaire : il doit rester clairement lié au même besoin,
-        # et non seulement partager un mot de domaine très général.
+        # Les secondaires doivent rester clairement liés au même besoin, et non
+        # seulement partager un mot de domaine très général.
         for score, hits, title_hits, item in rows[1:]:
-            if len(matched_items) >= 2:
+            if len(matched_items) >= max_matched:
                 break
             relative = score / best_score if best_score > 0 else 0.0
-            if relative >= 0.50 and (title_hits >= 1 or hits >= 3):
+            if relative >= relative_floor and (title_hits >= 1 or hits >= 3):
                 matched_items.append(dict(item))
 
     target_verrous: list[str] = []
@@ -560,7 +641,12 @@ def _matched_diagnostic_context(
             if isinstance(diagnostic.get("domain_detection"), dict)
             else {}
         ),
-        "selection_policy": "primary_scoped_lock_plus_one_close_secondary_v2_3",
+        "selection_policy": (
+            "aggregate_uncertainty_section_all_close_locks_v3_10"
+            if str(request.research_target_type or "").casefold()
+            in {SectionFunction.UNCERTAINTY.value.casefold(), "lock_search"}
+            else "primary_scoped_lock_plus_one_close_secondary_v2_3"
+        ),
         "source": "EnnoDiagnostic_scoped_current_cir_match",
     }
     return context, target_verrous, matched_items
@@ -936,6 +1022,37 @@ def _extract_precise_candidates(
         result_research_target_type = str(
             article.get("_result_research_target_type") or ""
         ).strip()
+        result_intent = next(
+            (
+                dict(result.get("scientific_intent") or {})
+                for result in result_rows
+                if (
+                    (
+                        result_research_target_id
+                        and str(result.get("research_target_id") or "").strip()
+                        == result_research_target_id
+                    )
+                    or (
+                        result_verrou_id
+                        and str(result.get("verrou_id") or "").strip()
+                        == result_verrou_id
+                    )
+                )
+                and isinstance(result.get("scientific_intent"), dict)
+            ),
+            {},
+        )
+        target_contract = {
+            "research_target_id": result_research_target_id or None,
+            "verrou_id": result_verrou_id or None,
+            "scientific_query_plan": dict(
+                result_intent.get("scientific_query_plan") or {}
+            ),
+            "primary_core_concepts": list(
+                result_intent.get("primary_core_concepts") or []
+            ),
+            "core_concepts": list(result_intent.get("core_concepts") or []),
+        }
 
         if stable in candidate_by_stable:
             existing = candidate_by_stable[stable]
@@ -953,6 +1070,9 @@ def _extract_precise_candidates(
                     if not key.startswith("_result_")
                 }
             )
+            contracts = existing.setdefault("scientific_target_contracts", [])
+            if target_contract not in contracts:
+                contracts.append(target_contract)
             continue
 
         article_target_verrous = [result_verrou_id] if result_verrou_id else list(target_verrous)
@@ -972,6 +1092,8 @@ def _extract_precise_candidates(
             research_target_ids=article_research_targets,
             research_target_type=result_research_target_type or request.research_target_type,
         )
+        candidate["scientific_target_contract"] = target_contract
+        candidate["scientific_target_contracts"] = [target_contract]
         candidate_by_stable[stable] = candidate
         candidates.append(candidate)
         if len(candidates) >= limit:
@@ -1014,6 +1136,20 @@ def _extract_precise_candidates(
         "queries_generated": _dedupe_jsonish(all_generated),
         "scientific_intent": intents[0] if intents else {},
         "scientific_intents": intents,
+        "scientific_intents_by_target": {
+            str(
+                result.get("research_target_id")
+                or result.get("verrou_id")
+                or ""
+            ): dict(result.get("scientific_intent") or {})
+            for result in result_rows
+            if isinstance(result.get("scientific_intent"), dict)
+            and str(
+                result.get("research_target_id")
+                or result.get("verrou_id")
+                or ""
+            ).strip()
+        },
         "search_status": search_statuses[0] if len(search_statuses) == 1 else {
             "per_verrou": search_statuses
         },
@@ -1219,6 +1355,13 @@ def launch_targeted_guided_research(
                 "à la section n'a été confirmé."
             )
         verrous = _research_verrous(request, diagnostic_ctx, matched_items)
+        for verrou in verrous:
+            contextual_queries = _contextual_queries_for_lock(
+                str(verrou.get("title") or ""),
+                direct_context,
+            )
+            if contextual_queries:
+                verrou["suggested_queries"] = contextual_queries
         domain_detection = _domain_detection(project, request, diagnostic_ctx)
         subject_payload: dict[str, Any] = {
             "diagnostic_context": diagnostic_ctx,

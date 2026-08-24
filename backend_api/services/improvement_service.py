@@ -676,6 +676,13 @@ Lance une recherche scientifique ciblée sur les affirmations, méthodes ou verr
 def _public_research_sources(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Vue consultant des résultats, sans exposer l'agent ni son orchestration."""
 
+    def metadata_list(value: Any) -> list[Any]:
+        if value in (None, ""):
+            return []
+        if isinstance(value, (list, tuple, set)):
+            return list(value)
+        return [value]
+
     public: list[dict[str, Any]] = []
     for row in sources:
         if not isinstance(row, dict):
@@ -732,6 +739,13 @@ def _public_research_sources(sources: list[dict[str, Any]]) -> list[dict[str, An
                 "reason": " ".join(str(reason).split())[:1000],
                 "relevance_role": row.get("relevance_role"),
                 "direct_evidence": bool(row.get("direct_evidence")),
+                "section_ids": metadata_list(row.get("section_ids")),
+                "research_target_ids": metadata_list(row.get("research_target_ids")),
+                "target_bindings": [
+                    dict(binding)
+                    for binding in (row.get("target_bindings") or [])
+                    if isinstance(binding, dict)
+                ],
                 "consultant_decision": decision,
                 "selection_origin": row.get("selection_origin"),
                 "auto_selected": bool(row.get("auto_selected")),

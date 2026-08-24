@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     POWER_AUTOMATE_AUDIT_ROOT: str = str(
         PROJECT_ROOT / "storage" / "power_automate_import"
     )
+    ENNOSMART_EXPERIENCE_MEMORY_V2_DIR: str = str(
+        PROJECT_ROOT / "storage" / "experience_memory_v2"
+    )
+    ENNOSMART_MEMORY_V2_ROOT: str = str(PROJECT_ROOT / "storage" / "organismes")
     POWER_AUTOMATE_MAX_FILE_MB: int = 100
     # Optionnel : requis uniquement pour convertir les anciens Word .doc.
     # La conversion est exécutée sur une copie locale placée dans l'audit root.

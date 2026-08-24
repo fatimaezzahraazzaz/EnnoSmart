@@ -48,12 +48,8 @@ BAD_SYNTH = (
     "quelles démarches",
 )
 CONTEXT_ONLY_TYPES = {
-    "norme_reglementation",
-    "plan_schema",
     "administratif",
     "template_formulaire",
-    "publication_scientifique",
-    "etat_art_bibliographie",
 }
 CONTEXT_ONLY_ORIGINS = {"metadata", "state_of_art", "external_context"}
 
@@ -184,6 +180,17 @@ def _is_context_only(item: Dict[str, Any]) -> bool:
     source_policy = str(item.get("source_policy") or "").lower()
     role = str(item.get("semantic_role") or item.get("role") or "").lower()
     hint = str(item.get("section_role_hint") or "").lower()
+
+    # Une affectation explicite au corpus Diagnostic rend le document courant
+    # et probant. Même une section « état de l'art », un tableau ou un schéma
+    # peut alors formuler une incertitude du projet. Seuls les contenus sans
+    # portée technique (administratif/template/métadonnée) restent exclus.
+    if item.get("current_project_evidence") or item.get("declared_raw_document"):
+        return bool(
+            item.get("document_type") in CONTEXT_ONLY_TYPES
+            or item.get("content_origin") == "metadata"
+        )
+
     return (
         item.get("document_type") in CONTEXT_ONLY_TYPES
         or item.get("content_origin") in CONTEXT_ONLY_ORIGINS
@@ -829,13 +836,21 @@ def _mark_lock_candidate(
     # ========================================================
     # 6. PROJECT LOCK SEED
     #
-    # Seul FastJudge peut cr?er le signal verrou.
-    # Les r?gles ci-dessous ne cr?ent donc jamais
-    # un verrou ? partir d'objectif/methode/resultat.
+    # Tout passage de preuve peut proposer une graine s'il exprime lui-même
+    # un problème technique encore ouvert. Le rôle sémantique et le type de
+    # fichier servent au classement, jamais à interdire a priori un verrou.
+    # FastJudge reste un signal important, mais n'est plus l'unique porte
+    # d'entrée : cela évite de perdre les limites présentes dans un tableau,
+    # une légende, une méthode ou un résultat.
     # ========================================================
 
+    semantic_problem_signal = bool(
+        direct_source_problem
+        or contextual_problem
+    )
+
     project_lock_seed = bool(
-        fastjudge_signal
+        (fastjudge_signal or semantic_problem_signal)
         and not _is_context_only(
             item
         )
@@ -856,11 +871,15 @@ def _mark_lock_candidate(
         "fastjudge_verrou_signal"
     ] = fastjudge_signal
 
-    # Compatibilit? :
-    # lock_candidate = signal FastJudge brut.
+    # Compatibilité : ``lock_candidate`` regroupe les signaux FastJudge bruts
+    # et les graines génériques explicites afin qu'aucune preuve ne disparaisse
+    # avant le regroupement.
     item[
         "lock_candidate"
-    ] = fastjudge_signal
+    ] = bool(
+        fastjudge_signal
+        or project_lock_seed
+    )
 
     item[
         "project_lock_seed"
@@ -923,12 +942,36 @@ def _mark_lock_candidate(
         "lock_contextual_bridge"
     ] = contextual_problem
 
+    item[
+        "semantic_problem_signal"
+    ] = semantic_problem_signal
+
 
     # ========================================================
     # 8. STATUT EXPLICABLE
     # ========================================================
 
-    if not fastjudge_signal:
+    if project_lock_seed:
+
+        status = (
+            "project_lock_seed"
+        )
+
+        if fastjudge_signal:
+            reason = (
+                "FastJudge=verrou + problème "
+                "technique non résolu exprimé "
+                "dans le passage ou son contexte "
+                "local cohérent."
+            )
+        else:
+            reason = (
+                "Problème technique non résolu explicitement exprimé "
+                "dans une preuve courante ; promotion indépendante du rôle "
+                "sémantique du passage."
+            )
+
+    elif not fastjudge_signal:
 
         status = (
             "not_fastjudge_verrou"
@@ -972,19 +1015,6 @@ def _mark_lock_candidate(
         reason = (
             "Signal FastJudge conserv?, "
             "mais r?solution technique routini?re."
-        )
-
-    elif project_lock_seed:
-
-        status = (
-            "project_lock_seed"
-        )
-
-        reason = (
-            "FastJudge=verrou + probl?me "
-            "technique non r?solu exprim? "
-            "dans le passage ou son contexte "
-            "local coh?rent."
         )
 
     else:

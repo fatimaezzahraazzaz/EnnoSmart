@@ -149,11 +149,53 @@ export type ProjectRead = {
   consultant_id: number
   organisme: string
   project_name: string
+  subproject_name: string | null
   year: string
   domain_label: string | null
   status: string
   ai_folder: string | null
   created_at: string
+}
+
+export type ProjectCatalog = {
+  organisations: Array<{
+    name: string
+    projects: Array<{ name: string; subprojects: string[] }>
+  }>
+}
+
+export type ProjectSelectionStatus = {
+  status: "available" | "owned" | "granted" | "locked"
+  can_create: boolean
+  project_id?: number
+  owner_name?: string
+  activity?: string[]
+  access_request_id?: number | null
+  access_request_status?: "pending" | "accepted" | "refused" | null
+  message?: string
+}
+
+export type ProjectAccessRequest = {
+  id: number
+  project_id: number
+  requester_id: number
+  requester_name: string
+  owner_id: number
+  owner_name: string
+  organisme: string
+  project_name: string
+  subproject_name: string | null
+  year: string
+  status: "pending" | "accepted" | "refused"
+  direction: "incoming" | "outgoing"
+  unread: boolean
+  created_at: string
+  responded_at: string | null
+}
+
+export type ProjectAccessNotifications = {
+  unread_count: number
+  items: ProjectAccessRequest[]
 }
 
 export type ProjectOverview = {
@@ -594,6 +636,7 @@ export async function getProject(projectId: number) {
 export async function createProject(payload: {
   organisme: string
   project_name: string
+  subproject_name?: string
   year: string
   domain_label?: string
 }) {
@@ -603,6 +646,53 @@ export async function createProject(payload: {
   })
   clearReadCache("project")
   return project
+}
+
+export async function getProjectCatalog() {
+  return cachedRead("project-catalog", 30_000, () =>
+    apiRequest<ProjectCatalog>("/projects/catalog"),
+  )
+}
+
+export async function checkProjectSelection(payload: {
+  organisme: string
+  project_name: string
+  subproject_name?: string
+  year: string
+}) {
+  return apiRequest<ProjectSelectionStatus>("/projects/selection-status", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function getProjectAccessNotifications() {
+  const notifications = await apiRequest<ProjectAccessNotifications>("/projects/access-requests")
+  if (notifications.items.some((item) => item.direction === "outgoing" && item.status === "accepted")) {
+    clearReadCache("project")
+  }
+  return notifications
+}
+
+export async function requestProjectAccess(projectId: number) {
+  return apiRequest<ProjectAccessRequest>(`/projects/${projectId}/access-requests`, {
+    method: "POST",
+  })
+}
+
+export async function respondToProjectAccess(requestId: number, decision: "accepted" | "refused") {
+  const result = await apiRequest<ProjectAccessRequest>(`/projects/access-requests/${requestId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: decision }),
+  })
+  clearReadCache("project")
+  return result
+}
+
+export async function markProjectAccessSeen(requestId: number) {
+  return apiRequest<ProjectAccessRequest>(`/projects/access-requests/${requestId}/seen`, {
+    method: "POST",
+  })
 }
 
 export async function getDocuments(projectId: number) {
@@ -794,6 +884,22 @@ export async function syncVerrous(projectId: number, runId: number) {
 export async function getScholarLatest(projectId: number, compact = true) {
   const query = compact ? "?compact=true" : ""
   return apiRequest<any>(`/projects/${projectId}/scholar/latest${query}`)
+}
+
+export async function runScholarFromSelectedVerrous(projectId: number) {
+  const result = await apiRequest<any>(
+    `/projects/${projectId}/scholar/run-from-selected-verrous?max_verrous=8&limit_per_query=50&offline_dry_run=false`,
+    { method: "POST" },
+  )
+  clearReadCache("project-overviews")
+  return result
+}
+
+export async function syncScholarArticles(projectId: number, runId: number) {
+  return apiRequest<ArticleRead[]>(
+    `/projects/${projectId}/scholar/${runId}/sync-articles`,
+    { method: "POST" },
+  )
 }
 
 
@@ -1339,6 +1445,7 @@ export type GuidedResearchConversationTurn = {
 export type GuidedResearchSession = {
   session_id: string
   project_id: number
+  entry_module: "ennoscholar" | "ennoamel" | string
   state: string
   ready_to_write: boolean
   messages: GuidedResearchConversationTurn[]
@@ -1351,9 +1458,12 @@ export type GuidedResearchSession = {
   updated_at?: string
 }
 
-export async function listGuidedResearchSessions(projectId: number) {
+export async function listGuidedResearchSessions(
+  projectId: number,
+  entryModule: "ennoscholar" | "ennoamel" = "ennoscholar",
+) {
   return apiRequest<{ ok: boolean; sessions: GuidedResearchSession[] }>(
-    `/api/projects/${projectId}/guided-research/sessions`,
+    `/api/projects/${projectId}/guided-research/sessions?entry_module=${encodeURIComponent(entryModule)}`,
   )
 }
 

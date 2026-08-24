@@ -50,19 +50,31 @@ class ProjectStore:
         project: str,
         year: Optional[str | int] = None,
         annee: Optional[str | int] = None,
+        subproject: Optional[str] = None,
         **kwargs: Any,
     ):
         self.organisme_name = organisme
         self.project_name = project
+        self.subproject_name = str(subproject or "").strip()
         self.year = normalize_year(year if year is not None else annee)
         self.annee = self.year
 
         self.organisme_id = slugify(organisme, default="organisme")
         self.project_id = slugify(project, default="projet")
+        self.subproject_id = (
+            slugify(self.subproject_name, default="")
+            if self.subproject_name
+            else ""
+        )
         self.year_id = slugify(self.year, default=str(datetime.now().year))
 
         self.organisme_dir = ORGANISMES_DIR / self.organisme_id
-        self.project_root_dir = self.organisme_dir / "projects" / self.project_id
+        self.base_project_dir = self.organisme_dir / "projects" / self.project_id
+        self.project_root_dir = (
+            self.base_project_dir / "subprojects" / self.subproject_id
+            if self.subproject_id
+            else self.base_project_dir
+        )
         self.project_dir = self.project_root_dir / "years" / self.year_id
 
         self.documents_raw_dir = self.project_dir / "documents" / "raw"
@@ -72,6 +84,14 @@ class ProjectStore:
         self.chroma_dir = self.rag_dir / "chroma"
         self.diagnostics_dir = self.project_dir / "diagnostics"
         self.metadata_path = self.project_dir / "metadata.json"
+
+    @property
+    def collection_name(self) -> str:
+        identity = ["ennosmart", self.organisme_id, self.project_id]
+        if self.subproject_id:
+            identity.append(self.subproject_id)
+        identity.append(self.year_id)
+        return "_".join(identity)
 
     def ensure(self) -> "ProjectStore":
         for p in [
@@ -96,6 +116,8 @@ class ProjectStore:
             "organisme_id": self.organisme_id,
             "project_name": self.project_name,
             "project_id": self.project_id,
+            "subproject_name": self.subproject_name or None,
+            "subproject_id": self.subproject_id or None,
             "year": self.year,
             "annee": self.year,
             "year_id": self.year_id,

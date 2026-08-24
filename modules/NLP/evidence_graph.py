@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-"""Regroupement interdocuments V177, piloté par des graines de verrou.
+"""Regroupement interdocuments V186, piloté par des graines de verrou.
 
 Principes :
-- une preuve de support ne peut jamais créer seule un groupe ;
-- seules les graines exprimant une incertitude technique réelle sont clusterisées ;
+- toute preuve peut devenir graine si elle exprime une incertitude technique ;
+- un support faible ne crée pas seul un groupe ;
 - les preuves complémentaires sont rattachées ensuite au meilleur groupe ;
 - les fenêtres fortement chevauchantes sont dédupliquées ;
 - complete-linkage évite les fusions transitives.
@@ -21,7 +21,7 @@ import unicodedata
 from .candidates import enrich_candidates
 from .cleaner import is_noise_line
 
-VERSION = "lock_evidence_grouping_v185_project_seed_gate_context_semantic_macro_complete_linkage"
+VERSION = "lock_evidence_grouping_v186_all_current_evidence_seed_gate"
 
 ROLE_PAIRS = {
     frozenset(("objectif", "methode")), frozenset(("objectif", "resultat")),
@@ -472,11 +472,14 @@ def _merge_group(
         )
 
 
-    # Seuls les verrous corrobor?s deviennent
-    # des verrous principaux.
+    # Une graine explicite reste visible comme verrou à valider, même sans
+    # corroboration. La corroboration distingue ensuite un verrou structurant
+    # d'un signal unique ; elle ne doit pas faire disparaître ce dernier.
     display_as_main_lock = bool(
-        technical_scope
-        == "project_structuring_lock"
+        technical_scope in {
+            "project_structuring_lock",
+            "lock_to_validate",
+        }
     )
 
 
@@ -2155,7 +2158,9 @@ def build_technical_lock_groups(
         },
         "invariants": {
             "every_group_has_seed": all(int(group.get("direct_candidate_count") or 0) >= 1 for group in groups),
-            "support_cannot_create_group": True,
+            "support_cannot_create_group": False,
+            "any_current_evidence_can_become_seed": True,
+            "weak_support_cannot_create_group": True,
             "micro_complete_linkage": True,
             "context_semantic_macro_complete_linkage": True,
             "macro_group_count_not_hardcoded": True,

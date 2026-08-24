@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from core.config import settings
-from db.database import Base, database_pool_status, engine
+from db.database import Base, database_pool_status, engine, ensure_runtime_schema
 from modules.LLM.llm_concurrency import (
     LLMCapacityTimeoutError,
     llm_concurrency_status,
@@ -78,6 +78,7 @@ def create_app() -> FastAPI:
         )
 
     Base.metadata.create_all(bind=engine)
+    ensure_runtime_schema()
 
     @app.on_event("startup")
     async def configure_request_thread_capacity() -> None:

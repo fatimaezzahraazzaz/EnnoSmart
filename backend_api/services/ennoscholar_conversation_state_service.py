@@ -236,30 +236,61 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
 
     scope = _collect_session_scope(snapshot)
     contract = _contract_from_snapshot(snapshot)
-    # V169.1 : la conversation garde ses candidats locaux mais son corpus accepte
-    # est reconstruit depuis toutes les publications gardees du projet.
+    # Le workflow diagnostic conserve son corpus projet. En autonome, aucune
+    # source d'une autre conversation ne peut être matérialisée dans ce runtime.
     from services.ennoscholar_project_corpus_service import get_effective_guided_sources
+    from services.guided_research_source_preparation_service import (
+        is_scientific_publication_source,
+    )
 
     snapshot_context = dict(snapshot.get("context") or {})
+    standalone_chat = (
+        str(snapshot_context.get("operating_mode") or "").strip().casefold()
+        == "standalone_chat"
+    )
     active_verrou_ids = (
         list(snapshot_context.get("active_verrou_ids") or [])
         if str(snapshot_context.get("review_scope") or "") == "per_verrou"
         else []
     )
-    effective_sources = get_effective_guided_sources(
-        db,
-        project,
-        session_sources=list(snapshot.get("selected_sources") or []),
-        active_verrou_ids=active_verrou_ids,
-    )
+    if standalone_chat:
+        effective_sources = [
+            dict(row)
+            for row in (snapshot.get("selected_sources") or [])
+            if isinstance(row, Mapping)
+        ]
+    else:
+        effective_sources = get_effective_guided_sources(
+            db,
+            project,
+            session_sources=list(snapshot.get("selected_sources") or []),
+            active_verrou_ids=active_verrou_ids,
+        )
     accepted_decisions = {"accepted", "accept", "garde", "gardé", "garder"}
-    sources = [
-        dict(row)
-        for row in effective_sources
-        if isinstance(row, Mapping)
-        and str(row.get("consultant_decision") or "").casefold()
-        in accepted_decisions
-    ]
+    sources: list[dict[str, Any]] = []
+    for raw in effective_sources:
+        if not isinstance(raw, Mapping):
+            continue
+        row = dict(raw)
+        if (
+            str(row.get("consultant_decision") or "").casefold()
+            not in accepted_decisions
+        ):
+            continue
+        if standalone_chat and is_scientific_publication_source(row):
+            preparation = (
+                dict(row.get("fulltext_preparation") or {})
+                if isinstance(row.get("fulltext_preparation"), Mapping)
+                else {}
+            )
+            if not bool(
+                row.get("fulltext_verified")
+                or row.get("scientific_evidence_eligible")
+                or preparation.get("usable_as_scientific_evidence")
+                or preparation.get("ready_for_writing")
+            ):
+                continue
+        sources.append(row)
     from services.guided_research_service import _guided_corpus_run
 
     _, corpus_run, _ = _guided_corpus_run(
@@ -301,6 +332,14 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
         or snapshot_context.get("last_writing_search_queries")
         or []
     )
+    generation_mode = str(
+        snapshot_context.get("generation_mode") or "full_generation"
+    ).strip()
+    previous_phase5_payload_path = (
+        work
+        / "phase_5_state_of_art_writer"
+        / "state_of_art_draft_payload.json"
+    )
     if writing_request:
         materialized_contract["consultant_writing_request"] = writing_request
     materialized_contract["consultant_writing_target_section_ids"] = (
@@ -312,6 +351,17 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
     materialized_contract["consultant_writing_search_queries"] = (
         writing_search_queries
     )
+    materialized_contract["generation_mode"] = generation_mode
+    if (
+        generation_mode == "partial_revision"
+        and previous_phase5_payload_path.is_file()
+    ):
+        # La Phase 5 lit cette version avant d'écrire la suivante. Elle peut
+        # ainsi remplacer uniquement les sections ciblées et conserver les
+        # autres blocs structurés à l'identique.
+        materialized_contract["previous_state_of_art_payload_path"] = str(
+            previous_phase5_payload_path
+        )
     materialized_contract["_conversation"] = {
         "session_id": session_id,
         "project_id": int(project.id),
@@ -326,7 +376,11 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
         sources_path,
         {
             "ok": True,
-            "payload_type": "guided_accepted_sources_project_persistent_v169_1",
+            "payload_type": (
+                "guided_accepted_sources_standalone_private_v1"
+                if standalone_chat
+                else "guided_accepted_sources_project_persistent_v169_1"
+            ),
             "session_id": session_id,
             "updated_at": _now(),
             "sources": sources,
@@ -378,11 +432,12 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
 
     return {
         "session_id": session_id,
-        # Le scope de stockage reste conversationnel pour la tracabilite ; le
-        # corpus scientifique effectif est commun au projet.
         "corpus_scope_id": corpus_scope_id,
-        "effective_corpus_scope_id": f"project:{project.id}",
-        "project_persistent_corpus": True,
+        "effective_corpus_scope_id": (
+            corpus_scope_id if standalone_chat else f"project:{project.id}"
+        ),
+        "project_persistent_corpus": not standalone_chat,
+        "conversation_corpus_isolated": standalone_chat,
         "scholar_run_id": (
             int(corpus_run.id) if corpus_run is not None else None
         ),

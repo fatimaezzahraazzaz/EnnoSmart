@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from core.config import settings
@@ -40,6 +40,25 @@ SessionLocal = sessionmaker(
 )
 
 Base = declarative_base()
+
+
+def ensure_runtime_schema() -> None:
+    """Ajoute les colonnes compatibles aux bases existantes sans Alembic.
+
+    ``create_all`` crée les nouvelles tables, mais ne modifie pas la table
+    ``projects`` déjà présente en production.
+    """
+
+    inspector = inspect(engine)
+    if "projects" not in inspector.get_table_names():
+        return
+    project_columns = {column["name"] for column in inspector.get_columns("projects")}
+    if "subproject_name" in project_columns:
+        return
+    with engine.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE projects ADD COLUMN subproject_name VARCHAR(255)")
+        )
 
 
 def database_pool_status() -> dict[str, int | str]:

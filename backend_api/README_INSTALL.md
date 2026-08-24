@@ -29,6 +29,29 @@ Puis configure, si nécessaire :
 LIBREOFFICE_BIN=/usr/bin/libreoffice
 ```
 
+### Stockage externe de Memory V2
+
+Le code, les documents clients et la mémoire persistante doivent être séparés.
+Memory V2 utilise une seule collection Chroma, `ennosmart_memory_v2_global`.
+Les CIR servent à l'extraction mais ne sont pas recopiés dans le dépôt.
+
+Sur OVH, crée un volume persistant hors de `/opt/ennosmart/app`, puis configure :
+
+```bash
+sudo install -d -o ennosmart -g ennosmart /var/lib/ennosmart/experience_memory_v2
+sudo install -d -o ennosmart -g ennosmart /var/lib/ennosmart/power_automate_import
+```
+
+```text
+ENNOSMART_EXPERIENCE_MEMORY_V2_DIR=/var/lib/ennosmart/experience_memory_v2
+POWER_AUTOMATE_AUDIT_ROOT=/var/lib/ennosmart/power_automate_import
+```
+
+Le déploiement du code ne doit jamais effacer `/var/lib/ennosmart`. Pour
+transférer une mémoire déjà alimentée, arrête le backend, copie le dossier
+`experience_memory_v2` vers ce volume, puis relance le service. Ne pousse ni
+Chroma, ni les journaux d'audit, ni les documents clients dans Git.
+
 Dans PowerShell :
 
 ```powershell

@@ -105,9 +105,10 @@ def index_import_inbox_item(
     payload: dict[str, Any] = Body(default={}),
     _: User = Depends(require_superadmin),
 ):
-    """Action locale explicite : copie dans la bibliothèque CIR puis Memory V2.
+    """Action locale explicite : extraction puis indexation dans Memory V2.
 
     Cette route n'appelle aucun service Microsoft et n'écrit jamais dans le dossier source.
+    Le CIR source n'est pas conservé comme copie permanente dans le dépôt.
     """
     try:
         require_index_confirmation(payload.get("confirm_local_memory_changes"))
@@ -128,6 +129,7 @@ def index_import_inbox_item(
         identity = item.get("detected_identity") or {}
         organisme = str(payload.get("organisme") or identity.get("organisme") or "").strip()
         project = str(payload.get("project") or identity.get("project") or "").strip()
+        subproject = str(payload.get("subproject") or identity.get("subproject") or "").strip()
         year = str(payload.get("year") or identity.get("year") or "").strip()
         if not organisme or not project or not year:
             raise ValueError("Entreprise, projet et année doivent être confirmés avant l'indexation.")
@@ -135,6 +137,7 @@ def index_import_inbox_item(
             digest=str(item.get("sha256") or ""),
             organisme=organisme,
             project=project,
+            subproject=subproject,
             year=year,
         )
         if conflict == "same_hash":
@@ -148,6 +151,7 @@ def index_import_inbox_item(
             staged_path,
             organisme=organisme,
             project=project,
+            subproject=subproject,
             year=year,
             vision_mode="text_only",
             formula_mode="off",
@@ -162,7 +166,12 @@ def index_import_inbox_item(
             scan_id,
             item_id,
             result=result,
-            identity={"organisme": organisme, "project": project, "year": year},
+            identity={
+                "organisme": organisme,
+                "project": project,
+                "subproject": subproject,
+                "year": year,
+            },
         )
         return {
             "ok": True,

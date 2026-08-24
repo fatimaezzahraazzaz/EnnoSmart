@@ -32,7 +32,35 @@ BASE_DIR = Path(
 )
 STORAGE_DIR = BASE_DIR / "storage" / "organismes"
 OUTPUTS_DIR = BASE_DIR / "outputs" / "safe_rag_upload"
-EXPERIENCE_MEMORY_V2_DIR = BASE_DIR / "storage" / "experience_memory_v2"
+
+
+def _configured_experience_memory_v2_dir() -> Path:
+    """Résout la configuration API sans dépendre d'un client ou d'un projet."""
+    direct = str(os.getenv("ENNOSMART_EXPERIENCE_MEMORY_V2_DIR") or "").strip()
+    if direct:
+        return Path(direct).expanduser()
+
+    # Pydantic charge les fichiers .env dans Settings sans nécessairement
+    # recopier leurs valeurs dans os.environ. Les deux imports couvrent le
+    # lancement depuis la racine et celui depuis backend_api.
+    for module_name in ("backend_api.core.config", "core.config"):
+        try:
+            module = __import__(module_name, fromlist=["settings"])
+            configured = str(
+                getattr(module.settings, "ENNOSMART_EXPERIENCE_MEMORY_V2_DIR", "")
+                or ""
+            ).strip()
+            if configured:
+                return Path(configured).expanduser()
+        except Exception:
+            continue
+
+    return BASE_DIR / "storage" / "experience_memory_v2"
+
+
+EXPERIENCE_MEMORY_V2_DIR = Path(
+    _configured_experience_memory_v2_dir()
+).expanduser()
 
 PACK_KEYS = [
     "objectifs_locaux",
@@ -160,16 +188,44 @@ def write_json(path: str | Path, data: Any) -> None:
     p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def year_dir(organisme: str, project: str, year: str) -> Path:
-    return STORAGE_DIR / slug(organisme) / "projects" / slug(project) / "years" / str(year)
+def year_dir(
+    organisme: str,
+    project: str,
+    year: str,
+    subproject: str = "",
+) -> Path:
+    scope = STORAGE_DIR / slug(organisme) / "projects" / slug(project)
+    if clean_text(subproject):
+        scope = scope / "subprojects" / slug(subproject)
+    return scope / "years" / str(year)
 
 
-def cir_final_dir(organisme: str, project: str, year: str) -> Path:
-    return year_dir(organisme, project, year) / "cir_final"
+def cir_final_dir(
+    organisme: str,
+    project: str,
+    year: str,
+    subproject: str = "",
+) -> Path:
+    return year_dir(
+        organisme,
+        project,
+        year,
+        subproject=subproject,
+    ) / "cir_final"
 
 
-def cir_final_report_path(organisme: str, project: str, year: str) -> Path:
-    return cir_final_dir(organisme, project, year) / "cir_final_extracted.json"
+def cir_final_report_path(
+    organisme: str,
+    project: str,
+    year: str,
+    subproject: str = "",
+) -> Path:
+    return cir_final_dir(
+        organisme,
+        project,
+        year,
+        subproject=subproject,
+    ) / "cir_final_extracted.json"
 
 
 def _path_name_variants(value: Any) -> List[str]:
@@ -209,40 +265,73 @@ def current_nlp_candidate_paths(
     organisme: str,
     project: str,
     year: str,
+    subproject: str = "",
 ) -> List[Path]:
     """Construit tous les chemins connus du ``nlp_result.json`` courant."""
     year_value = str(year).strip()
     candidates: List[Path] = []
 
+    wanted_subproject = _canonical_path_token(subproject)
     env_path = clean_text(__import__("os").getenv("ENNOSMART_NLP_RESULT_PATH"))
-    if env_path:
+    if env_path and (
+        not wanted_subproject
+        or wanted_subproject in _canonical_path_token(env_path)
+    ):
         candidates.append(Path(env_path))
 
     org_variants = _path_name_variants(organisme)
     project_variants = _path_name_variants(project)
+    subproject_variants = (
+        _path_name_variants(subproject)
+        if clean_text(subproject)
+        else []
+    )
 
     for org_value in org_variants:
         for project_value in project_variants:
-            # Ancien emplacement du pipeline safe_rag_upload.
-            candidates.append(
-                OUTPUTS_DIR / org_value / project_value / year_value / "nlp_result.json"
-            )
-
-            # Emplacement ProjectStore actuel.
-            project_year_dir = (
+            project_scope = (
                 STORAGE_DIR
                 / org_value
                 / "projects"
                 / project_value
-                / "years"
-                / year_value
             )
-            candidates.extend([
-                project_year_dir / "nlp" / "nlp_result.json",
-                project_year_dir / "nlp_result.json",
-                project_year_dir / "diagnostic" / "nlp_result.json",
-                project_year_dir / "ennodiagnostic" / "nlp_result.json",
-            ])
+            if subproject_variants:
+                for subproject_value in subproject_variants:
+                    project_year_dir = (
+                        project_scope
+                        / "subprojects"
+                        / subproject_value
+                        / "years"
+                        / year_value
+                    )
+                    candidates.extend([
+                        project_year_dir / "nlp" / "nlp_result.json",
+                        project_year_dir / "nlp_result.json",
+                        project_year_dir / "diagnostic" / "nlp_result.json",
+                        project_year_dir / "ennodiagnostic" / "nlp_result.json",
+                        OUTPUTS_DIR
+                        / org_value
+                        / project_value
+                        / subproject_value
+                        / year_value
+                        / "nlp_result.json",
+                    ])
+            else:
+                # Compatibilité avec les projets sans sous-projet.
+                candidates.append(
+                    OUTPUTS_DIR
+                    / org_value
+                    / project_value
+                    / year_value
+                    / "nlp_result.json"
+                )
+                project_year_dir = project_scope / "years" / year_value
+                candidates.extend([
+                    project_year_dir / "nlp" / "nlp_result.json",
+                    project_year_dir / "nlp_result.json",
+                    project_year_dir / "diagnostic" / "nlp_result.json",
+                    project_year_dir / "ennodiagnostic" / "nlp_result.json",
+                ])
 
     unique: List[Path] = []
     seen = set()
@@ -260,6 +349,7 @@ def resolve_current_nlp_result_path(
     project: str,
     year: str,
     *,
+    subproject: str = "",
     required: bool = False,
 ) -> Optional[Path]:
     """
@@ -269,7 +359,12 @@ def resolve_current_nlp_result_path(
     La recherche suit d'abord les chemins déterministes, puis effectue un fallback
     borné dans ``outputs/safe_rag_upload`` et ``storage/organismes``.
     """
-    candidates = current_nlp_candidate_paths(organisme, project, year)
+    candidates = current_nlp_candidate_paths(
+        organisme,
+        project,
+        year,
+        subproject=subproject,
+    )
 
     for candidate in candidates:
         try:
@@ -280,6 +375,7 @@ def resolve_current_nlp_result_path(
 
     wanted_org = _canonical_path_token(organisme)
     wanted_project = _canonical_path_token(project)
+    wanted_subproject = _canonical_path_token(subproject)
     wanted_year = str(year).strip()
     discovered: List[tuple[int, float, Path]] = []
 
@@ -303,6 +399,8 @@ def resolve_current_nlp_result_path(
                     continue
                 if wanted_project and wanted_project not in joined:
                     continue
+                if wanted_subproject and wanted_subproject not in joined:
+                    continue
 
                 score = 0
                 lowered_parts = [part.lower() for part in parts]
@@ -312,6 +410,8 @@ def resolve_current_nlp_result_path(
                     score += 15
                 if "years" in lowered_parts:
                     score += 10
+                if wanted_subproject and "subprojects" in lowered_parts:
+                    score += 25
                 if _canonical_path_token(path.parent.name) == wanted_project:
                     score += 5
 
@@ -327,7 +427,8 @@ def resolve_current_nlp_result_path(
         searched = "\n - ".join(str(path) for path in candidates[:24])
         raise FileNotFoundError(
             "nlp_result.json courant introuvable pour "
-            f"organisme={organisme!r}, projet={project!r}, année={year!r}.\n"
+            f"organisme={organisme!r}, projet={project!r}, "
+            f"sous-projet={subproject!r}, année={year!r}.\n"
             f"Chemins testés :\n - {searched}\n"
             "Lance d'abord Préparer les sources ou définis "
             "ENNOSMART_NLP_RESULT_PATH avec le chemin exact."
@@ -336,21 +437,45 @@ def resolve_current_nlp_result_path(
     return None
 
 
-def current_nlp_default_path(organisme: str, project: str, year: str) -> Path:
+def current_nlp_default_path(
+    organisme: str,
+    project: str,
+    year: str,
+    subproject: str = "",
+) -> Path:
     """Compatibilité : retourne le chemin résolu ou le chemin historique attendu."""
     resolved = resolve_current_nlp_result_path(
         organisme=organisme,
         project=project,
         year=year,
+        subproject=subproject,
         required=False,
     )
     if resolved is not None:
         return resolved
-    return OUTPUTS_DIR / organisme / project / str(year) / "nlp_result.json"
+    return (
+        year_dir(
+            organisme,
+            project,
+            year,
+            subproject=subproject,
+        )
+        / "nlp"
+        / "nlp_result.json"
+    )
 
 
-def comparison_report_path(organisme: str, project: str, year: str) -> Path:
-    return year_dir(organisme, project, year) / "cir_memory" / "cir_memory_comparison_report.json"
+def comparison_report_path(
+    organisme: str,
+    project: str,
+    year: str,
+    subproject: str = "",
+) -> Path:
+    return (
+        year_dir(organisme, project, year, subproject=subproject)
+        / "cir_memory"
+        / "cir_memory_comparison_report.json"
+    )
 
 
 def _safe_pack(pack: Any) -> Dict[str, List[Dict[str, Any]]]:
@@ -1245,6 +1370,11 @@ MEMORY_V2_CONTEXT_KEYS = (
     "project_name",
     "project_slug",
     "dossier",
+    "subproject",
+    "subproject_name",
+    "sub_project",
+    "sous_projet",
+    "sous_project",
     "year",
     "annee",
     "project_year",
@@ -1499,6 +1629,7 @@ def memory_v2_fingerprint(
     organisme: str = "",
     project: str = "",
     current_year: str = "",
+    subproject: str = "",
 ) -> str:
     """
     Empreinte légère utilisée par le cache EnnoDiagnostic.
@@ -1509,6 +1640,7 @@ def memory_v2_fingerprint(
         "cir_memory_memory_v2_fingerprint_v157",
         canonical_project_key(organisme),
         canonical_project_key(project),
+        canonical_project_key(subproject),
         str(current_year),
     ]
 
@@ -1571,11 +1703,34 @@ def _memory_v2_identity_values(item: Dict[str, Any]) -> Tuple[str, str, Optional
     return clean_text(org), clean_text(project), year
 
 
+def _memory_v2_subproject_value(item: Dict[str, Any]) -> str:
+    meta = _meta_from_memory_v2_item(item)
+    subproject = clean_text(
+        meta.get("subproject")
+        or meta.get("subproject_name")
+        or meta.get("sub_project")
+        or meta.get("sous_projet")
+        or meta.get("sous_project")
+        or ""
+    )
+    if subproject:
+        return subproject
+
+    # Certains exports plus anciens ne portent l'identité complète que dans
+    # leur chemin. Le chemin canonique reste alors comparable sans règle client.
+    return clean_text(
+        meta.get("source_path")
+        or item.get("__memory_v2_file_path")
+        or ""
+    )
+
+
 def _memory_v2_item_matches_project(
     item: Dict[str, Any],
     organisme: str,
     project: str,
     year: Optional[int] = None,
+    subproject: str = "",
 ) -> bool:
     org, prj, yi = _memory_v2_identity_values(item)
 
@@ -1598,6 +1753,17 @@ def _memory_v2_item_matches_project(
         or wanted_project in project_key
     ):
         return False
+
+    wanted_subproject = canonical_project_key(subproject)
+    if wanted_subproject:
+        subproject_key = canonical_project_key(
+            _memory_v2_subproject_value(item)
+        )
+        if not subproject_key or not (
+            subproject_key == wanted_subproject
+            or wanted_subproject in subproject_key
+        ):
+            return False
 
     if year is not None and yi != year:
         return False
@@ -1622,6 +1788,7 @@ def list_previous_years_from_memory_v2(
     project: str,
     current_year: str,
     max_previous_years: int = 10,
+    subproject: str = "",
 ) -> List[int]:
     current_int = _year_int(current_year)
     if current_int is None:
@@ -1638,7 +1805,12 @@ def list_previous_years_from_memory_v2(
             item = dict(original_item)
             item["__memory_v2_file_path"] = str(path)
 
-            if not _memory_v2_item_matches_project(item, organisme, project):
+            if not _memory_v2_item_matches_project(
+                item,
+                organisme,
+                project,
+                subproject=subproject,
+            ):
                 continue
 
             _, _, yi = _memory_v2_identity_values(item)
@@ -1654,6 +1826,7 @@ def closest_previous_year_from_memory_v2(
     project: str,
     current_year: str,
     max_previous_years: int = 3,
+    subproject: str = "",
 ) -> Optional[int]:
     available = set(
         list_previous_years_from_memory_v2(
@@ -1661,6 +1834,7 @@ def closest_previous_year_from_memory_v2(
             project,
             current_year,
             max_previous_years=max(10, max_previous_years),
+            subproject=subproject,
         )
     )
 
@@ -1679,6 +1853,7 @@ def load_previous_cir_items_from_memory_v2(
     organisme: str,
     project: str,
     previous_year: int,
+    subproject: str = "",
 ) -> List[Dict[str, Any]]:
     allowed_roles = {
         "objectif",
@@ -1709,6 +1884,7 @@ def load_previous_cir_items_from_memory_v2(
                 organisme,
                 project,
                 previous_year,
+                subproject,
             ):
                 continue
 
@@ -1822,11 +1998,13 @@ def _load_previous_local_items_for_year(
     organisme: str,
     project: str,
     previous_year: int,
+    subproject: str = "",
 ) -> List[Dict[str, Any]]:
     report_path = cir_final_report_path(
         organisme,
         project,
         str(previous_year),
+        subproject=subproject,
     )
     if not report_path.exists():
         return []
@@ -1867,6 +2045,7 @@ def load_previous_cir_memory_items(
     project: str,
     current_year: str,
     max_previous_years: int = 3,
+    subproject: str = "",
 ) -> Tuple[List[str], List[Dict[str, Any]]]:
     """
     Charge un véritable CIR précédent du même organisme et du même projet.
@@ -1891,6 +2070,7 @@ def load_previous_cir_memory_items(
             organisme,
             project,
             previous_year,
+            subproject=subproject,
         )
         if items:
             return [str(previous_year)], items
@@ -1901,6 +2081,7 @@ def load_previous_cir_memory_items(
             organisme,
             project,
             previous_year,
+            subproject=subproject,
         )
         if items:
             return [str(previous_year)], items
@@ -2247,23 +2428,42 @@ def grouped_verrous_to_current_items(verrous: Any) -> List[Dict[str, Any]]:
     return out
 
 
-def _candidate_year_roots_for_report(organisme: str, project: str, year: str) -> List[Path]:
+def _candidate_year_roots_for_report(
+    organisme: str,
+    project: str,
+    year: str,
+    subproject: str = "",
+) -> List[Path]:
     roots: List[Path] = []
     seen = set()
 
     try:
-        nlp_path = resolve_current_nlp_result_path(organisme, project, year, required=False)
+        nlp_path = resolve_current_nlp_result_path(
+            organisme,
+            project,
+            year,
+            subproject=subproject,
+            required=False,
+        )
         if nlp_path is not None:
             # .../years/<year>/nlp/nlp_result.json -> .../years/<year>
             roots.append(nlp_path.parent.parent)
     except Exception:
         pass
 
-    roots.extend([
-        year_dir(organisme, project, year),
-        STORAGE_DIR / str(organisme) / "projects" / str(project) / "years" / str(year),
-        STORAGE_DIR / slug(organisme) / "projects" / slug(project).replace("-", "_") / "years" / str(year),
-    ])
+    roots.append(
+        year_dir(
+            organisme,
+            project,
+            year,
+            subproject=subproject,
+        )
+    )
+    if not clean_text(subproject):
+        roots.extend([
+            STORAGE_DIR / str(organisme) / "projects" / str(project) / "years" / str(year),
+            STORAGE_DIR / slug(organisme) / "projects" / slug(project).replace("-", "_") / "years" / str(year),
+        ])
 
     out: List[Path] = []
     for root in roots:
@@ -2282,10 +2482,16 @@ def load_grouped_verrous_from_ennodiagnostic_report(
     organisme: str,
     project: str,
     year: str,
+    subproject: str = "",
 ) -> Tuple[List[Dict[str, Any]], Optional[Path]]:
     """Fallback pour la route /compare-current appelée après EnnoDiagnostic."""
     candidates: List[Path] = []
-    for root in _candidate_year_roots_for_report(organisme, project, year):
+    for root in _candidate_year_roots_for_report(
+        organisme,
+        project,
+        year,
+        subproject=subproject,
+    ):
         candidates.extend([
             root / "ennodiagnostic" / "ennodiagnostic_report.json",
             root / "ennodiagnostic_report.json",
@@ -2527,6 +2733,7 @@ def compare_current_raw_with_cir_memory(
     max_previous_years: int = 3,
     current_verrous: Optional[List[Dict[str, Any]]] = None,
     shortlist_size: Optional[int] = None,
+    subproject: str = "",
 ) -> Dict[str, Any]:
     if nlp_result_path:
         nlp_path = Path(nlp_result_path).expanduser().resolve()
@@ -2537,6 +2744,7 @@ def compare_current_raw_with_cir_memory(
             organisme=organisme,
             project=project,
             year=year,
+            subproject=subproject,
             required=True,
         )
         if resolved_nlp_path is None:
@@ -2561,6 +2769,7 @@ def compare_current_raw_with_cir_memory(
             organisme=organisme,
             project=project,
             year=year,
+            subproject=subproject,
         )
         if grouped_items:
             current_source = "ennodiagnostic_report.llm_reformulated_verrous"
@@ -2613,6 +2822,7 @@ def compare_current_raw_with_cir_memory(
         project=project,
         current_year=year,
         max_previous_years=max_previous_years,
+        subproject=subproject,
     )
 
     if shortlist_size is None:
@@ -2651,6 +2861,7 @@ def compare_current_raw_with_cir_memory(
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "organisme": organisme,
             "project": project,
+            "subproject": subproject or None,
             "current_year": str(year),
             "nlp_result_path": str(nlp_path),
             "current_pack_source": current_pack_source,
@@ -2726,6 +2937,7 @@ def compare_current_raw_with_cir_memory(
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "organisme": organisme,
             "project": project,
+            "subproject": subproject or None,
             "current_year": str(year),
             "nlp_result_path": str(nlp_path),
             "previous_cir_years_used": previous_years,
@@ -2771,7 +2983,12 @@ def compare_current_raw_with_cir_memory(
             ],
         }
 
-    out_path = comparison_report_path(organisme, project, year)
+    out_path = comparison_report_path(
+        organisme,
+        project,
+        year,
+        subproject=subproject,
+    )
     write_json(out_path, report)
     return report
 

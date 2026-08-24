@@ -30,6 +30,14 @@ ROOT_DIR = Path(
     or Path(__file__).resolve().parents[2]
 )
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT_DIR / ".env", override=False)
+    load_dotenv(ROOT_DIR / "backend_api" / ".env", override=False)
+except Exception:
+    pass
+
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 

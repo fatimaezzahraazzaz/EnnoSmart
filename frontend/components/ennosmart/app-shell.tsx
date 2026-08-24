@@ -12,6 +12,7 @@ import dynamic from "next/dynamic"
 import { cn } from "@/lib/utils"
 
 import {
+  Bell,
   BookOpen,
   BrainCircuit,
   Database,
@@ -51,13 +52,18 @@ import CirMemoryPage from "@/components/ennosmart/cir-memory-page"
 import type { UserRead } from "@/lib/api"
 
 import {
+  getProjectAccessNotifications,
   getProjects,
+  markProjectAccessSeen,
+  respondToProjectAccess,
+  type ProjectAccessNotifications,
   type ProjectRead,
 } from "@/lib/api"
 
 import {
   CURRENT_PROJECT_CHANGE_EVENT,
   getCurrentProjectId,
+  setCurrentProjectId,
 } from "@/lib/project-session"
 
 
@@ -330,6 +336,30 @@ export default function AppShell({
 
 
   const [
+    notificationOpen,
+    setNotificationOpen,
+  ] = useState(false)
+
+
+  const [
+    accessNotifications,
+    setAccessNotifications,
+  ] = useState<ProjectAccessNotifications>({ unread_count: 0, items: [] })
+
+
+  const [
+    notificationBusyId,
+    setNotificationBusyId,
+  ] = useState<number | null>(null)
+
+
+  const [
+    notificationError,
+    setNotificationError,
+  ] = useState("")
+
+
+  const [
     scholarImmersive,
     setScholarImmersive,
   ] =
@@ -368,6 +398,50 @@ export default function AppShell({
         navigationForRole(user.role),
       [user.role],
     )
+
+
+  const refreshAccessNotifications = useCallback(async () => {
+    try {
+      setAccessNotifications(await getProjectAccessNotifications())
+    } catch {
+      // La navigation principale ne doit jamais être bloquée par les notifications.
+    }
+  }, [])
+
+
+  useEffect(() => {
+    void refreshAccessNotifications()
+    const timer = window.setInterval(() => void refreshAccessNotifications(), 30_000)
+    return () => window.clearInterval(timer)
+  }, [refreshAccessNotifications])
+
+
+  const toggleNotifications = async () => {
+    const willOpen = !notificationOpen
+    setNotificationOpen(willOpen)
+    setNotificationError("")
+    setAccountMenuOpen(false)
+    if (!willOpen) return
+    const unread = accessNotifications.items.filter((item) => item.unread)
+    if (unread.length) {
+      await Promise.allSettled(unread.map((item) => markProjectAccessSeen(item.id)))
+    }
+    await refreshAccessNotifications()
+  }
+
+
+  const respondToNotification = async (requestId: number, decision: "accepted" | "refused") => {
+    setNotificationBusyId(requestId)
+    setNotificationError("")
+    try {
+      await respondToProjectAccess(requestId, decision)
+      await refreshAccessNotifications()
+    } catch (error) {
+      setNotificationError(error instanceof Error ? error.message : "Impossible d’enregistrer la réponse.")
+    } finally {
+      setNotificationBusyId(null)
+    }
+  }
 
 
   /* ------------------------------------------------------------------------ */
@@ -622,6 +696,7 @@ export default function AppShell({
       setActivePage(page)
       setSidebarOpen(false)
       setAccountMenuOpen(false)
+      setNotificationOpen(false)
     }
 
 
@@ -1457,7 +1532,7 @@ export default function AppShell({
 
   const projectLabel =
     currentProject
-      ? `${currentProject.organisme} / ${currentProject.project_name}${currentProject.year ? ` / ${currentProject.year}` : ""}`
+      ? `${currentProject.organisme} / ${currentProject.project_name}${currentProject.subproject_name ? ` / ${currentProject.subproject_name}` : ""}${currentProject.year ? ` / ${currentProject.year}` : ""}`
       : ""
 
 
@@ -1597,6 +1672,7 @@ export default function AppShell({
           className={cn(
             `
               relative
+              z-40
               flex
               h-[76px]
               shrink-0
@@ -1679,7 +1755,112 @@ export default function AppShell({
 
           {/* Projet + utilisateur */}
 
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="relative flex shrink-0 items-center gap-3">
+
+            <button
+              type="button"
+              onClick={() => void toggleNotifications()}
+              className="relative grid size-11 place-items-center rounded-xl border border-border bg-card text-muted-foreground shadow-sm transition hover:border-brand/30 hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+              aria-label={`Notifications de projets${accessNotifications.unread_count ? `, ${accessNotifications.unread_count} non lue(s)` : ""}`}
+              aria-expanded={notificationOpen}
+            >
+              <Bell className="size-[18px]" />
+              {accessNotifications.unread_count > 0 && (
+                <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground ring-2 ring-background">
+                  {accessNotifications.unread_count > 9 ? "9+" : accessNotifications.unread_count}
+                </span>
+              )}
+            </button>
+
+            {notificationOpen && (
+              <div className="absolute right-0 top-[52px] z-50 w-[min(92vw,390px)] overflow-hidden rounded-2xl border border-border bg-popover shadow-[0_18px_55px_rgba(35,20,55,0.18)]">
+                <div className="border-b border-border px-4 py-3">
+                  <p className="text-sm font-semibold text-foreground">Demandes d’accès</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Partage des projets entre consultants</p>
+                </div>
+
+                <div className="max-h-[430px] overflow-y-auto p-2">
+                  {notificationError && (
+                    <p className="m-2 rounded-lg bg-destructive/5 px-3 py-2 text-xs leading-5 text-destructive" role="alert">
+                      {notificationError}
+                    </p>
+                  )}
+                  {accessNotifications.items.length === 0 ? (
+                    <div className="px-4 py-8 text-center">
+                      <Bell className="mx-auto size-6 text-muted-foreground/50" />
+                      <p className="mt-2 text-sm font-medium text-foreground">Aucune notification</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Les demandes et réponses apparaîtront ici.</p>
+                    </div>
+                  ) : accessNotifications.items.map((item) => {
+                    const identity = [item.organisme, item.project_name, item.subproject_name, item.year]
+                      .filter(Boolean)
+                      .join(" · ")
+                    const pendingIncoming = item.direction === "incoming" && item.status === "pending"
+                    const title = pendingIncoming
+                      ? `${item.requester_name} demande l’accès`
+                      : item.direction === "outgoing" && item.status === "pending"
+                        ? `Demande envoyée à ${item.owner_name}`
+                        : item.status === "accepted"
+                          ? "Projet déverrouillé"
+                          : "Accès refusé"
+
+                    return (
+                      <article key={item.id} className="rounded-xl border border-transparent p-3 transition hover:border-border hover:bg-accent/40">
+                        <div className="flex items-start gap-3">
+                          <span className={`mt-0.5 size-2.5 shrink-0 rounded-full ${
+                            item.status === "accepted" ? "bg-emerald-500" :
+                              item.status === "refused" ? "bg-destructive" : "bg-amber-500"
+                          }`} aria-hidden="true" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-foreground">{title}</p>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">{identity}</p>
+
+                            {pendingIncoming && (
+                              <div className="mt-3 flex gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="min-h-9 rounded-lg"
+                                  disabled={notificationBusyId === item.id}
+                                  onClick={() => void respondToNotification(item.id, "accepted")}
+                                >
+                                  Accepter
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="min-h-9 rounded-lg"
+                                  disabled={notificationBusyId === item.id}
+                                  onClick={() => void respondToNotification(item.id, "refused")}
+                                >
+                                  Refuser
+                                </Button>
+                              </div>
+                            )}
+
+                            {item.direction === "outgoing" && item.status === "accepted" && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="mt-3 min-h-9 rounded-lg"
+                                onClick={() => {
+                                  setCurrentProjectId(item.project_id)
+                                  navigateTo("project-detail")
+                                }}
+                              >
+                                Ouvrir le projet
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </article>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {currentProject && (
 

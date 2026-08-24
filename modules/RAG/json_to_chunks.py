@@ -116,6 +116,70 @@ def _select_main_lock_groups(items: Any) -> List[Dict[str, Any]]:
     return marked if marked else values
 
 
+def _official_frascati_assessments_by_group(
+    nlp_result: Dict[str, Any],
+) -> Dict[str, Dict[str, Any]]:
+    guard = nlp_result.get("frascati_guard") or {}
+    assessment = (
+        guard.get("frascati_assessment")
+        if isinstance(guard, dict)
+        else {}
+    ) or {}
+    values = (
+        assessment.get("group_assessments")
+        if isinstance(assessment, dict)
+        else []
+    ) or []
+    output: Dict[str, Dict[str, Any]] = {}
+    for value in values:
+        if not isinstance(value, dict):
+            continue
+        group_id = _safe_text(value.get("group_id"))
+        if group_id:
+            output[group_id] = dict(value)
+    return output
+
+
+def _attach_official_frascati_to_main_locks(
+    items: Any,
+    nlp_result: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """Transmet le score officiel déjà calculé, sans aucun recalcul RAG."""
+    assessments = _official_frascati_assessments_by_group(nlp_result)
+    output: List[Dict[str, Any]] = []
+    for raw in items or []:
+        if not isinstance(raw, dict):
+            continue
+        item = dict(raw)
+        group_id = _safe_text(
+            item.get("lock_group_id")
+            or item.get("passage_id")
+            or item.get("id")
+        )
+        official = assessments.get(group_id)
+        if official:
+            score = _safe_float(official.get("eligibility_score"))
+            existing = _safe_float(
+                (item.get("frascati") or {}).get("frascati_score")
+                if isinstance(item.get("frascati"), dict)
+                else item.get("frascati_score")
+            )
+            if existing <= 0 and score >= 0:
+                item["frascati_score"] = score
+                item["upstream_frascati_score"] = score
+                item["frascati_score_source"] = "nlp_group_assessment"
+                frascati = dict(item.get("frascati") or {})
+                frascati["frascati_score"] = score
+                frascati.setdefault(
+                    "decision",
+                    official.get("eligibility_recommendation"),
+                )
+                item["frascati"] = frascati
+            item["frascati_assessment"] = dict(official)
+        output.append(item)
+    return output
+
+
 def _merge_pack_into(target: Dict[str, Any], pack: Any) -> None:
     """
     Fusionne un evidence_pack NLP dans le pack RAG final.
@@ -199,6 +263,12 @@ def get_pack(nlp_result: Dict[str, Any]) -> Dict[str, Any]:
             if main_locks:
                 merged["verrous_rnd_locaux"] = main_locks
                 break
+
+    if isinstance(merged.get("verrous_rnd_locaux"), list):
+        merged["verrous_rnd_locaux"] = _attach_official_frascati_to_main_locks(
+            merged.get("verrous_rnd_locaux"),
+            nlp_result,
+        )
 
     # Dernier fallback ancien format.
     if not any(isinstance(merged.get(k), list) and merged.get(k) for k in PACK_KEYS):

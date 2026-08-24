@@ -315,6 +315,16 @@ def screen_visual_candidate(candidate: Mapping[str, Any]) -> Tuple[bool, List[st
     if len(descriptor.strip()) < 8:
         reasons.append("missing_visual_semantics")
 
+    # Un recadrage de secours n'est pas une preuve fiable lorsque le texte qui
+    # l'entoure se réduit à un titre de page. Dans ce cas, une légende détectée
+    # ailleurs peut être associée à tort à un bandeau « Annex »/chapitre. On ne
+    # fait aucune interprétation visuelle : on conserve seulement les crops dont
+    # le voisinage textuel apporte assez de contexte pour établir l'association.
+    crop_method = _clean(candidate.get("crop_method"), 200).casefold()
+    context_tokens = _tokens(candidate.get("context"))
+    if "fallback" in crop_method and len(context_tokens) < 3:
+        reasons.append("fallback_crop_without_scientific_context")
+
     blocking = {
         "missing_visual_id",
         "explicit_non_scientific_visual",
@@ -328,6 +338,7 @@ def screen_visual_candidate(candidate: Mapping[str, Any]) -> Tuple[bool, List[st
         "near_full_page_capture",
         "text_dominant_crop",
         "missing_visual_semantics",
+        "fallback_crop_without_scientific_context",
     }
     return not any(reason in blocking for reason in reasons), reasons
 

@@ -198,7 +198,8 @@ def evolve_task_memory(*, existing_memory: dict[str, Any] | None, raw_message: s
             "Actions à appliquer maintenant :\n- "
             + "\n- ".join(actions)
             + "\n\nLes publications ont déjà été sélectionnées et validées. "
-              "Utilise TOUTES les preuves acceptées sans exception. "
+              "Utilise uniquement les preuves qui soutiennent directement une affirmation de la cible, "
+              "dans le respect de leur rattachement au verrou ou au passage. Aucune source n'est imposée par quota. "
               "N'ouvre pas un nouveau cycle EnnoScholar et n'effectue aucune nouvelle collecte de publications.\n\n"
               "Le dernier message court ne remplace aucune des actions mémorisées.\n"
             + "Message actuel : " + str(raw_message or "").strip()
@@ -220,7 +221,8 @@ def evolve_task_memory(*, existing_memory: dict[str, Any] | None, raw_message: s
             "CONTRAT MÉMORISÉ DE LA DEMANDE DU CONSULTANT\n"
             + "Actions à appliquer maintenant :\n- "
             + "\n- ".join(actions or ["exécuter la demande d'amélioration mémorisée"])
-            + "\n\nUtilise TOUTES les preuves acceptées sans exception. "
+            + "\n\nUtilise uniquement les preuves directement pertinentes pour la cible et respecte leur rattachement au verrou ou au passage. "
+              "Aucune source n'est imposée par quota. "
               "N'ouvre pas un nouveau cycle EnnoScholar et n'effectue aucune nouvelle collecte de publications.\n"
             + "Message actuel : " + str(raw_message or "").strip()
         ).strip()

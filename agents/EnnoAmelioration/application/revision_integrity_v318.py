@@ -135,6 +135,9 @@ def evidence_payload(evidence: dict[str, Any] | None) -> dict[str, dict[str, Any
         "impact",
         "rationale",
         "relevance",
+        "target_bindings",
+        "allowed_claim_scope",
+        "section_context_gate",
     )
     for row in _accepted_evidence_rows(evidence):
         citation_id = str(row.get("citation_id") or "").strip().upper()
@@ -245,6 +248,8 @@ Pour CHAQUE paire claim_id / citation_id :
 N'utilise AUCUNE connaissance générale. La seule preuve scientifique autorisée
 est le contenu de la source correspondant au citation_id.
 Une citation décorative, seulement thématiquement proche, est unsupported.
+Une citation utilisée hors du verrou, du passage ou de la section indiqué dans
+target_bindings / allowed_claim_scope est également unsupported.
 Si le papier parle d'ISAR, ne transforme pas cela en preuve directe d'un résultat
 SAR différent. Si le papier ne mentionne pas MSTAR, ne valide pas une phrase qui
 lui attribue un résultat MSTAR.
@@ -544,10 +549,10 @@ def render_integrity_retry_instruction(report: dict[str, Any]) -> str:
         "Corrige uniquement les problèmes suivants.\n"
         "- Tout fait source signalé missing/altered doit être réintégré sans changer sa portée.\n"
         "- Toute citation partial/unsupported doit être déplacée, scindée ou reformulée pour "
-        "ne soutenir qu'une affirmation directement démontrée par sa preuve.\n"
+        "ne soutenir qu'une affirmation directement démontrée par sa preuve, ou supprimée si elle est facultative.\n"
         "- N'ajoute aucune citation décorative.\n"
-        "- Toutes les sources acceptées restent obligatoires : si une source soutient seulement "
-        "un fait minimal, utilise uniquement ce fait minimal.\n"
+        "- Une source acceptée n'est pas obligatoire. Ne la conserve que si elle soutient exactement "
+        "une affirmation du verrou ou du passage auquel elle est rattachée.\n"
         "- Ne supprime aucune figure, tableau, référence, mesure ou fait existant.\n"
         + json.dumps(payload, ensure_ascii=False)
     )
@@ -564,8 +569,8 @@ def revision_block_message(issues: list[str]) -> str:
             "La proposition n'a pas été finalisée car au moins une citation ne "
             "soutenait pas directement l'affirmation à laquelle elle était reliée. "
             "Aucune citation décorative n'est conservée et la version active reste "
-            "inchangée. Si une source acceptée ne peut pas être intégrée fidèlement, "
-            "il faut la désélectionner ou choisir une source plus adaptée."
+            "inchangée. Une source facultative non adaptée doit être retirée du texte ; "
+            "si une preuve est nécessaire, il faut choisir une source plus précise."
         )
     if any(
         value.startswith(

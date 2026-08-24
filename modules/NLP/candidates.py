@@ -151,6 +151,11 @@ def _build_doc_candidates(
                 "source_policy": doc.get("source_policy") or "secondary",
                 "document_weight": document_weight,
                 "document_type_confidence": doc.get("document_type_confidence"),
+                "declared_document_type": doc.get("declared_document_type"),
+                "declared_corpus": doc.get("declared_corpus"),
+                "declared_mode": doc.get("declared_mode"),
+                "current_project_evidence": bool(doc.get("current_project_evidence")),
+                "declared_raw_document": bool(doc.get("declared_raw_document")),
                 "structure_type": structure_type,
                 "section_title": title,
                 "section_path": path,
@@ -345,10 +350,10 @@ def classify_candidate(
 ) -> CandidateDecision:
     """Sépare une graine de verrou des preuves de support.
 
-    Nouvelle logique : seule une prédiction ``verrou`` du FastJudge unique peut
-    créer une graine de verrou. Les règles génériques servent uniquement à
-    qualifier/rattacher des preuves de support ; elles ne créent pas un verrou
-    supplémentaire et ne rejettent pas un verrou prédit par le modèle.
+    Toute preuve qui porte ``project_lock_seed`` peut créer une graine, quel que
+    soit son rôle sémantique. Ce marqueur est posé en amont uniquement quand le
+    passage exprime un problème technique encore ouvert ; FastJudge reste
+    traçable, mais n'est plus l'unique porte d'entrée.
 
     ``direct_threshold`` est conservé dans la signature pour compatibilité API,
     mais il n'est plus utilisé pour filtrer une prédiction FastJudge ``verrou``.
@@ -371,13 +376,15 @@ def classify_candidate(
     explicit_unresolved = _has_explicit_unresolved_language(text)
     has_content = len(text) >= 30
 
-    # Une graine de verrou vient uniquement du FastJudge multiclasses.
+    # FastJudge reste tracé séparément pour l'audit.
     fastjudge_verrou = bool(
         original_role == "verrou"
         and item.get("fastjudge_verrou_signal", item.get("lock_candidate", False))
+    )
+    direct = bool(
+        has_content
         and item.get("project_lock_seed", False)
     )
-    direct = bool(has_content and fastjudge_verrou)
 
     # Score descriptif/ranking uniquement, pas une probabilité calibrée.
     direct_score = model_score
@@ -416,8 +423,12 @@ def classify_candidate(
     )
 
     if direct:
-        seed_reason = "fastjudge_verrou_seed"
-        reason = "seed_candidate_from_fastjudge"
+        if fastjudge_verrou:
+            seed_reason = "fastjudge_verrou_seed"
+            reason = "seed_candidate_from_fastjudge"
+        else:
+            seed_reason = "explicit_technical_problem_seed"
+            reason = "seed_candidate_from_current_evidence"
     elif supporting:
         seed_reason = "not_a_seed"
         reason = "supporting_evidence_only"

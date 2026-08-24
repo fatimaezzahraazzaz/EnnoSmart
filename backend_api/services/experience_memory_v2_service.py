@@ -22,15 +22,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
+from core.config import settings
+
 
 ROOT_DIR = Path(os.getenv("ENNOSMART_BASE_DIR", str(Path(__file__).resolve().parents[2])))
 V2_ROOT = Path(
-    os.getenv(
-        "ENNOSMART_EXPERIENCE_MEMORY_V2_DIR",
-        str(ROOT_DIR / "storage" / "experience_memory_v2"),
-    )
+    settings.ENNOSMART_EXPERIENCE_MEMORY_V2_DIR
 )
-ORGANISMES_DIR = ROOT_DIR / "storage" / "organismes"
+ORGANISMES_DIR = Path(
+    settings.ENNOSMART_MEMORY_V2_ROOT
+)
 V2_CATALOG = V2_ROOT / "catalog_v2.json"
 V2_CHROMA_DIR = V2_ROOT / "chroma"
 V2_RUNS_DIR = V2_ROOT / "runs"
@@ -62,8 +63,29 @@ def _identity_key(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "", text) or "unknown"
 
 
-def _project_key(organisme: Any, project: Any, year: Any) -> str:
-    return f"{_identity_key(organisme)}::{_identity_key(project)}::{_clean(year, 12)}"
+def _project_key(organisme: Any, project: Any, year: Any, subproject: Any = "") -> str:
+    return "::".join((
+        _identity_key(organisme),
+        _identity_key(project),
+        _identity_key(subproject),
+        _clean(year, 12),
+    ))
+
+
+def _catalog_identity(raw: Any) -> Dict[str, str] | None:
+    parts = str(raw or "").split("::")
+    if len(parts) == 3:
+        organisme, project, year = parts
+        return {"organisme": organisme, "project": project, "subproject": "", "year": year}
+    if len(parts) == 4:
+        organisme, project, subproject, year = parts
+        return {
+            "organisme": organisme,
+            "project": project,
+            "subproject": subproject,
+            "year": year,
+        }
+    return None
 
 
 def _safe_segment(value: Any, label: str) -> str:
@@ -100,6 +122,7 @@ def _identity_from_library_path(path: Path) -> Dict[str, str]:
     parts = list(path.parts)
     lower = [part.lower() for part in parts]
     organisme = project = year = "unknown"
+    subproject = ""
     try:
         index = lower.index("organismes")
         organisme = parts[index + 1]
@@ -115,7 +138,17 @@ def _identity_from_library_path(path: Path) -> Dict[str, str]:
         year = parts[index + 1]
     except Exception:
         pass
-    return {"organisme": organisme, "project": project, "year": year}
+    try:
+        index = lower.index("subprojects")
+        subproject = parts[index + 1]
+    except Exception:
+        pass
+    return {
+        "organisme": organisme,
+        "project": project,
+        "subproject": subproject,
+        "year": year,
+    }
 
 
 def _library_rows() -> List[Dict[str, Any]]:
@@ -132,7 +165,13 @@ def _library_rows() -> List[Dict[str, Any]]:
                 "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds"),
             }
         )
-    rows.sort(key=lambda row: (row["organisme"].lower(), row["project"].lower(), row["year"], row["file_name"]))
+    rows.sort(key=lambda row: (
+        row["organisme"].lower(),
+        row["project"].lower(),
+        row.get("subproject", "").lower(),
+        row["year"],
+        row["file_name"],
+    ))
     return rows
 
 
@@ -150,6 +189,7 @@ def _run_rows() -> List[Dict[str, Any]]:
                 "source_hash": run.get("source_hash"),
                 "organisme": _clean(run.get("organisme")) or "unknown",
                 "project": _clean(run.get("project")) or "unknown",
+                "subproject": _clean(run.get("subproject")),
                 "year": _clean(run.get("year"), 12) or "unknown",
                 "file_name": run.get("file_name"),
                 "file_path": run.get("file"),
@@ -205,14 +245,14 @@ def get_memory_v2_catalog() -> Dict[str, Any]:
 
     merged: Dict[str, Dict[str, Any]] = {}
     for raw in catalog.get("projects") or []:
-        parts = str(raw or "").split("::", 2)
-        if len(parts) != 3:
+        identity = _catalog_identity(raw)
+        if not identity:
             continue
-        organisme, project, year = parts
-        merged[_project_key(organisme, project, year)] = {
-            "organisme": organisme,
-            "project": project,
-            "year": year,
+        key = _project_key(
+            identity["organisme"], identity["project"], identity["year"], identity["subproject"]
+        )
+        merged[key] = {
+            **identity,
             "indexed": True,
             "source_files": [],
             "chunks_count": 0,
@@ -223,30 +263,37 @@ def get_memory_v2_catalog() -> Dict[str, Any]:
         }
 
     for run in _run_rows():
-        key = _project_key(run["organisme"], run["project"], run["year"])
+        key = _project_key(run["organisme"], run["project"], run["year"], run.get("subproject"))
         row = merged.setdefault(
             key,
             {
                 "organisme": run["organisme"],
                 "project": run["project"],
+                "subproject": run.get("subproject") or "",
                 "year": run["year"],
                 "indexed": True,
                 "source_files": [],
             },
         )
-        row.update({k: v for k, v in run.items() if k not in {"organisme", "project", "year", "file_path", "file_name"}})
+        row.update({
+            k: v for k, v in run.items()
+            if k not in {"organisme", "project", "subproject", "year", "file_path", "file_name"}
+        })
         row["indexed"] = True
         if run.get("file_name"):
             row["indexed_file_name"] = run["file_name"]
             row["indexed_file_path"] = run.get("file_path")
 
     for source in _library_rows():
-        key = _project_key(source["organisme"], source["project"], source["year"])
+        key = _project_key(
+            source["organisme"], source["project"], source["year"], source.get("subproject")
+        )
         row = merged.setdefault(
             key,
             {
                 "organisme": source["organisme"],
                 "project": source["project"],
+                "subproject": source.get("subproject") or "",
                 "year": source["year"],
                 "indexed": False,
                 "chunks_count": 0,
@@ -264,10 +311,17 @@ def get_memory_v2_catalog() -> Dict[str, Any]:
 
     projects = list(merged.values())
     for row in projects:
-        row["id"] = _project_key(row["organisme"], row["project"], row["year"])
+        row["id"] = _project_key(
+            row["organisme"], row["project"], row["year"], row.get("subproject")
+        )
         row["status"] = "indexed" if row.get("indexed") else "pending"
         row["source_count"] = len(row.get("source_files") or [])
-    projects.sort(key=lambda row: (str(row["organisme"]).lower(), str(row["project"]).lower(), -int(row["year"]) if str(row["year"]).isdigit() else 0))
+    projects.sort(key=lambda row: (
+        str(row["organisme"]).lower(),
+        str(row["project"]).lower(),
+        str(row.get("subproject") or "").lower(),
+        -int(row["year"]) if str(row["year"]).isdigit() else 0,
+    ))
 
     collections = _chroma_collections()
     global_collection = next((item for item in collections if item["name"] == "ennosmart_memory_v2_global"), None)
@@ -286,7 +340,8 @@ def get_memory_v2_catalog() -> Dict[str, Any]:
             "v2_root": str(V2_ROOT),
             "catalog": str(V2_CATALOG),
             "chroma": str(V2_CHROMA_DIR),
-            "library": str(ORGANISMES_DIR),
+            "inside_code_repository": V2_ROOT.resolve().is_relative_to(ROOT_DIR.resolve()),
+            "source_documents": "not_retained",
         },
         "stats": {
             "organisms_count": len(organisms),
@@ -306,6 +361,8 @@ def get_memory_v2_catalog() -> Dict[str, Any]:
             "exists": (V2_CHROMA_DIR / "chroma.sqlite3").is_file(),
             "collection": "ennosmart_memory_v2_global",
             "collections": collections,
+            "mode": "single_global_collection",
+            "source_file_copy_policy": "disabled",
             "runtime_dependencies": dependencies,
             "runtime_ready": all(dependencies.values()),
         },
@@ -318,21 +375,28 @@ def get_memory_v2_catalog() -> Dict[str, Any]:
     }
 
 
-def create_library_slot(organisme: Any, project: Any, year: Any) -> Dict[str, Any]:
+def create_library_slot(
+    organisme: Any,
+    project: Any,
+    year: Any,
+    subproject: Any = "",
+) -> Dict[str, Any]:
     organisme_name = _safe_segment(organisme, "Entreprise")
     project_name = _safe_segment(project, "Projet")
+    subproject_name = _safe_segment(subproject, "Sous-projet") if _clean(subproject) else ""
     year_value = _clean(year, 12)
     if not _is_year(year_value):
         raise ValueError("Année invalide.")
-    target = ORGANISMES_DIR / organisme_name / "projects" / project_name / "years" / year_value / "cir_final_consultant" / "current"
-    target.mkdir(parents=True, exist_ok=True)
     return {
         "ok": True,
-        "created": True,
+        "created": False,
+        "logical_only": True,
         "organisme": organisme_name,
         "project": project_name,
+        "subproject": subproject_name,
         "year": year_value,
-        "upload_dir": str(target),
+        "upload_dir": None,
+        "message": "Identité validée. Aucun dossier ni copie de document n'a été créé.",
     }
 
 
@@ -386,13 +450,17 @@ def build_uploaded_cir(
     organisme: Any,
     project: Any,
     year: Any,
+    subproject: Any = "",
     vision_mode: str = "text_only",
     formula_mode: str = "off",
+    rebuild_catalog: bool = True,
+    reset_chroma: bool = True,
 ) -> Dict[str, Any]:
     # Valide l'identité sans créer de dossier visible. La bibliothèque ne doit
     # être matérialisée que par le moteur, pendant l'indexation effective.
     organisme_name = _safe_segment(organisme, "Entreprise")
     project_name = _safe_segment(project, "Projet")
+    subproject_name = _safe_segment(subproject, "Sous-projet") if _clean(subproject) else ""
     year_value = _clean(year, 12)
     if not _is_year(year_value):
         raise ValueError("Année invalide.")
@@ -402,24 +470,35 @@ def build_uploaded_cir(
             temp_file,
             organisme=organisme_name,
             project=project_name,
+            subproject=subproject_name,
             year=year_value,
-            copy_to_library=True,
-            # La collection doit refléter exactement tous les fichiers V2 présents.
-            reset_chroma=True,
+            copy_to_library=False,
+            # En lot, la reconstruction globale est différée jusqu'au dernier
+            # document afin de ne pas réencoder tout le corpus à chaque CIR.
+            reset_chroma=bool(reset_chroma),
             vision_mode=vision_mode if vision_mode in {"text_only", "auto", "fast", "full"} else "text_only",
             formula_mode=formula_mode if formula_mode in {"off", "fast", "explain"} else "off",
+            rebuild_catalog=bool(rebuild_catalog),
         )
     result["catalog"] = get_memory_v2_catalog()
     return result
 
 
-def _resolve_existing_source(organisme: Any, project: Any, year: Any, file_name: Any = "") -> Path:
-    wanted_key = _project_key(organisme, project, year)
+def _resolve_existing_source(
+    organisme: Any,
+    project: Any,
+    year: Any,
+    file_name: Any = "",
+    subproject: Any = "",
+) -> Path:
+    wanted_key = _project_key(organisme, project, year, subproject)
     wanted_name = _clean(file_name).lower()
     candidates: List[Path] = []
     for path in _iter_final_cir_files() or []:
         identity = _identity_from_library_path(path)
-        if _project_key(identity["organisme"], identity["project"], identity["year"]) != wanted_key:
+        if _project_key(
+            identity["organisme"], identity["project"], identity["year"], identity.get("subproject")
+        ) != wanted_key:
             continue
         if wanted_name and path.name.lower() != wanted_name:
             continue
@@ -429,8 +508,14 @@ def _resolve_existing_source(organisme: Any, project: Any, year: Any, file_name:
     return max(candidates, key=lambda item: item.stat().st_mtime)
 
 
-def process_existing_cir(organisme: Any, project: Any, year: Any, file_name: Any = "") -> Dict[str, Any]:
-    source = _resolve_existing_source(organisme, project, year, file_name)
+def process_existing_cir(
+    organisme: Any,
+    project: Any,
+    year: Any,
+    file_name: Any = "",
+    subproject: Any = "",
+) -> Dict[str, Any]:
+    source = _resolve_existing_source(organisme, project, year, file_name, subproject)
     identity = _identity_from_library_path(source)
     engine = _load_engine()
     with BUILD_LOCK:
@@ -438,6 +523,7 @@ def process_existing_cir(organisme: Any, project: Any, year: Any, file_name: Any
             source,
             organisme=identity["organisme"],
             project=identity["project"],
+            subproject=identity.get("subproject") or "",
             year=identity["year"],
             copy_to_library=False,
             reset_chroma=True,
@@ -464,13 +550,20 @@ def _assert_inside(path: Path, parent: Path) -> Path:
     return resolved
 
 
-def _artifact_source_ids_for_project(organisme: str, project: str, year: str) -> set[str]:
-    wanted = _project_key(organisme, project, year)
+def _artifact_source_ids_for_project(
+    organisme: str,
+    project: str,
+    year: str,
+    subproject: str = "",
+) -> set[str]:
+    wanted = _project_key(organisme, project, year, subproject)
     source_ids: set[str] = set()
 
     for run_path in V2_RUNS_DIR.glob("*.run_v2.json") if V2_RUNS_DIR.is_dir() else []:
         run = _read_json(run_path, {})
-        if isinstance(run, dict) and _project_key(run.get("organisme"), run.get("project"), run.get("year")) == wanted:
+        if isinstance(run, dict) and _project_key(
+            run.get("organisme"), run.get("project"), run.get("year"), run.get("subproject")
+        ) == wanted:
             source_ids.add(str(run.get("source_id") or run_path.name.removesuffix(".run_v2.json")))
 
     # Couvre aussi un traitement interrompu après les chunks mais avant le run.
@@ -479,7 +572,12 @@ def _artifact_source_ids_for_project(organisme: str, project: str, year: str) ->
         if not isinstance(chunks, list) or not chunks:
             continue
         metadata = dict((chunks[0] or {}).get("metadata") or {}) if isinstance(chunks[0], dict) else {}
-        if _project_key(metadata.get("organisme"), metadata.get("project"), metadata.get("year") or metadata.get("annee")) == wanted:
+        if _project_key(
+            metadata.get("organisme"),
+            metadata.get("project"),
+            metadata.get("year") or metadata.get("annee"),
+            metadata.get("subproject"),
+        ) == wanted:
             source_ids.add(chunk_path.name.removesuffix(".chunks_v2.json"))
     return {value for value in source_ids if value}
 
@@ -489,6 +587,7 @@ def remove_memory_v2_project(
     project: Any,
     year: Any,
     *,
+    subproject: Any = "",
     confirmation: Any,
 ) -> Dict[str, Any]:
     """Retire un projet de toute la mémoire active, sans toucher à la boîte d'import."""
@@ -497,20 +596,25 @@ def remove_memory_v2_project(
 
     organisme_name = _safe_segment(organisme, "Entreprise")
     project_name = _safe_segment(project, "Projet")
+    subproject_name = _safe_segment(subproject, "Sous-projet") if _clean(subproject) else ""
     year_value = _clean(year, 12)
     if not _is_year(year_value):
         raise ValueError("Année invalide.")
 
-    wanted = _project_key(organisme_name, project_name, year_value)
+    wanted = _project_key(organisme_name, project_name, year_value, subproject_name)
     source_dirs: list[Path] = []
     for source in _iter_final_cir_files() or []:
         identity = _identity_from_library_path(source)
-        if _project_key(identity["organisme"], identity["project"], identity["year"]) == wanted:
+        if _project_key(
+            identity["organisme"], identity["project"], identity["year"], identity.get("subproject")
+        ) == wanted:
             current_dir = _assert_inside(source.parent, ORGANISMES_DIR)
             if current_dir not in source_dirs:
                 source_dirs.append(current_dir)
 
-    source_ids = _artifact_source_ids_for_project(organisme_name, project_name, year_value)
+    source_ids = _artifact_source_ids_for_project(
+        organisme_name, project_name, year_value, subproject_name
+    )
     artifact_paths: list[Path] = []
     suffixes = {
         "extraction": ".extraction.json",
@@ -527,9 +631,12 @@ def remove_memory_v2_project(
 
     catalog = _read_json(V2_CATALOG, {})
     catalog_has_project = any(
-        len(parts := str(raw or "").split("::", 2)) == 3
-        and _project_key(parts[0], parts[1], parts[2]) == wanted
+        identity is not None
+        and _project_key(
+            identity["organisme"], identity["project"], identity["year"], identity["subproject"]
+        ) == wanted
         for raw in (catalog.get("projects") or [])
+        for identity in [_catalog_identity(raw)]
     ) if isinstance(catalog, dict) else False
 
     if not source_dirs and not artifact_paths and not catalog_has_project:
@@ -578,6 +685,7 @@ def remove_memory_v2_project(
             "removed_from_active_memory": True,
             "organisme": organisme_name,
             "project": project_name,
+            "subproject": subproject_name,
             "year": year_value,
             "source_ids": sorted(source_ids),
             "moved_items_count": len(moved),
@@ -609,15 +717,25 @@ def search_memory_v2(
     role_value = _clean(role, 50)
     engine = _load_engine()
     collection = "ennosmart_memory_v2_global"
-    if _clean(organisme):
-        collection = f"ennosmart_memory_v2_{engine.slugify(organisme)}"
-    result = engine.search_v2(question, collection=collection, top_k=top_k, role=role_value)
+    result = engine.search_v2(
+        question,
+        collection=collection,
+        top_k=top_k,
+        role=role_value,
+        organisme=_clean(organisme),
+    )
     result["usage_rule"] = "Contexte historique et style uniquement ; pas une preuve factuelle du dossier courant."
     return result
 
 
-def project_cards(organisme: Any, project: Any, year: Any, limit: int = 40) -> Dict[str, Any]:
-    wanted = _project_key(organisme, project, year)
+def project_cards(
+    organisme: Any,
+    project: Any,
+    year: Any,
+    limit: int = 40,
+    subproject: Any = "",
+) -> Dict[str, Any]:
+    wanted = _project_key(organisme, project, year, subproject)
     cards: List[Dict[str, Any]] = []
     for path in sorted(V2_CARDS_DIR.glob("*.cards.json")) if V2_CARDS_DIR.is_dir() else []:
         data = _read_json(path, [])
@@ -626,7 +744,9 @@ def project_cards(organisme: Any, project: Any, year: Any, limit: int = 40) -> D
         for item in data:
             if not isinstance(item, dict):
                 continue
-            if _project_key(item.get("organisme"), item.get("project"), item.get("year")) == wanted:
+            if _project_key(
+                item.get("organisme"), item.get("project"), item.get("year"), item.get("subproject")
+            ) == wanted:
                 cards.append(item)
                 if len(cards) >= max(1, min(limit, 200)):
                     return {"ok": True, "count": len(cards), "cards": cards}

@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class ProjectCreate(BaseModel):
     organisme: str = Field(min_length=1, max_length=255)
     project_name: str = Field(min_length=1, max_length=255)
+    subproject_name: str | None = Field(default=None, max_length=255)
     year: str = Field(min_length=4, max_length=20)
     domain_label: str | None = None
 
@@ -12,9 +13,21 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     organisme: str | None = None
     project_name: str | None = None
+    subproject_name: str | None = None
     year: str | None = None
     domain_label: str | None = None
     status: str | None = None
+
+
+class ProjectSelection(BaseModel):
+    organisme: str = Field(min_length=1, max_length=255)
+    project_name: str = Field(min_length=1, max_length=255)
+    subproject_name: str | None = Field(default=None, max_length=255)
+    year: str = Field(min_length=4, max_length=20)
+
+
+class ProjectAccessDecision(BaseModel):
+    status: str = Field(pattern="^(accepted|refused)$")
 
 
 class ProjectRead(BaseModel):
@@ -22,6 +35,7 @@ class ProjectRead(BaseModel):
     consultant_id: int
     organisme: str
     project_name: str
+    subproject_name: str | None = None
     year: str
     domain_label: str | None
     status: str

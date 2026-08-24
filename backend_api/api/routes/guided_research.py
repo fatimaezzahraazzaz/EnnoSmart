@@ -48,6 +48,7 @@ def build_guided_research_router(
     def list_sessions(
         project_id: int,
         limit: int = 50,
+        entry_module: str | None = None,
         db: Session = Depends(get_db_dependency),
         current_user: Any = Depends(get_current_user_dependency),
     ):
@@ -57,8 +58,11 @@ def build_guided_research_router(
                 db,
                 project,
                 limit=limit,
+                entry_module=entry_module,
             )
             return {"ok": True, "sessions": sessions}
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -143,12 +147,18 @@ def build_guided_research_router(
     ):
         project = get_project_for_user(db, project_id, current_user)
         try:
-            return remove_guided_research_corpus_article(
-                db,
-                project,
-                session_id=session_id,
-                article_id=article_id,
-            )
+            with session_execution_lock(
+                "guided-research",
+                f"{project.id}:{session_id}",
+            ):
+                return remove_guided_research_corpus_article(
+                    db,
+                    project,
+                    session_id=session_id,
+                    article_id=article_id,
+                )
+        except SessionBusyError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except LookupError as exc:

@@ -12,7 +12,7 @@ import unicodedata
 from contextvars import ContextVar
 from typing import Any, Literal, Mapping, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from modules.LLM.llm_client import LLMClient
 
@@ -23,8 +23,6 @@ from .domain.models import (
     GuidedResearchSessionData,
     IntentClassification,
 )
-from .grounded_request_resolver import repair_contextual_classification
-
 logger = logging.getLogger(__name__)
 
 StructuredModel = TypeVar("StructuredModel", bound=BaseModel)
@@ -92,8 +90,15 @@ class _TurnDecision(BaseModel):
         "other",
         "unspecified",
     ] = "none"
-    assistant_message: str = Field(min_length=1, max_length=6000)
-    memory: ConversationMemory
+    # Le texte conversationnel est facultatif : les services métier savent
+    # générer une réponse fidèle à l'action réellement exécutée. Son omission par
+    # le LLM ne doit jamais annuler un plan, une recherche ou une rédaction déjà
+    # correctement structurés.
+    assistant_message: str = Field(default="", max_length=6000)
+    # La mémoire est un delta facultatif. Son absence signifie simplement que le
+    # tour n'ajoute aucun fait durable ; elle ne doit jamais invalider une action
+    # correctement comprise ni déclencher un appel de réparation supplémentaire.
+    memory: ConversationMemory = Field(default_factory=ConversationMemory)
 
     @field_validator("referenced_plan_version", mode="before")
     @classmethod
@@ -111,7 +116,7 @@ class _SearchRequestPayload(BaseModel):
         "scientific_evidence",
         "direct_scientific_evidence",
         "official_documentation",
-    ]
+    ] = "scientific_evidence"
     entity_name: str = Field(default="", max_length=400)
     entity_names: list[str] = Field(default_factory=list)
     entity_type: str = Field(default="other", max_length=120)
@@ -161,6 +166,72 @@ class _ActionPayload(BaseModel):
     review_scope: Literal["auto", "per_verrou", "global"] = "auto"
     search_requests: list[_SearchRequestPayload] = Field(default_factory=list)
 
+    @field_validator("review_scope", mode="before")
+    @classmethod
+    def normalize_review_scope(cls, value: Any) -> str:
+        """Convertit les variantes neutres du LLM sans reclasser l'intention."""
+        normalized = _clean(value, 80).casefold().replace("-", "_").replace(" ", "_")
+        if normalized in {"per_verrou", "global"}:
+            return normalized
+        # « unchanged/current/same » décrit une absence de changement. Dans le
+        # contrat d'action, la valeur neutre équivalente est ``auto``.
+        return "auto"
+
+
+class _TurnResolution(BaseModel):
+    """Compréhension et matérialisation produites par un seul appel LLM.
+
+    La séparation précédente ``decision -> action`` demandait au second appel de
+    reconstruire une partie du sens du premier. Une demande composée pouvait donc
+    être réduite à une seule action (par exemple approuver/rédiger) et perdre le
+    plan fourni dans le même tour. Le modèle est désormais l'unique interprète :
+    il renvoie simultanément la décision et ses arguments métier.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    decision: _TurnDecision
+    action: _ActionPayload = Field(default_factory=_ActionPayload)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_llm_layout(cls, value: Any) -> Any:
+        """Tolère un placement imparfait des champs par le fournisseur LLM.
+
+        Le modèle comprend parfois correctement le tour mais place les champs de
+        référence au plan dans ``decision.classification`` au lieu de
+        ``decision``. Cette adaptation ne déduit aucune intention : elle déplace
+        uniquement les champs connus vers leur emplacement contractuel, puis
+        ignore les métadonnées étrangères à la classification.
+        """
+        if not isinstance(value, Mapping):
+            return value
+        payload = dict(value)
+        raw_decision = payload.get("decision")
+        if not isinstance(raw_decision, Mapping):
+            return payload
+        decision = dict(raw_decision)
+        raw_classification = decision.get("classification")
+        if isinstance(raw_classification, Mapping):
+            classification = dict(raw_classification)
+            for field_name in (
+                "plan_reference",
+                "referenced_plan_version",
+                "plan_generation_mode",
+                "plan_document_scope",
+            ):
+                misplaced = classification.pop(field_name, None)
+                if field_name not in decision and misplaced is not None:
+                    decision[field_name] = misplaced
+            allowed_classification_fields = set(IntentClassification.model_fields)
+            decision["classification"] = {
+                key: child
+                for key, child in classification.items()
+                if key in allowed_classification_fields
+            }
+        payload["decision"] = decision
+        return payload
+
 
 def _scope_action_payload(
     intent: ConsultantIntent,
@@ -176,6 +247,16 @@ def _scope_action_payload(
     source d'autorité : ces champs sont ignorés au lieu de faire échouer le tour,
     sans jamais pouvoir devenir exécutables.
     """
+
+    normalized_search_requests = [
+        (
+            request.model_copy(update={"require_direct_evidence": True})
+            if request.query_kind == "direct_scientific_evidence"
+            and not request.require_direct_evidence
+            else request
+        )
+        for request in (payload.search_requests or [])
+    ]
 
     if intent in {
         ConsultantIntent.PROPOSE_PLAN,
@@ -211,7 +292,7 @@ def _scope_action_payload(
             verrous=list(payload.verrous or []),
             project_brief=payload.project_brief,
             review_scope=payload.review_scope,
-            search_requests=list(payload.search_requests or []),
+            search_requests=normalized_search_requests,
         )
 
     if intent in {
@@ -220,7 +301,7 @@ def _scope_action_payload(
         ConsultantIntent.REPLACE_SOURCE,
     }:
         return _ActionPayload(
-            search_requests=list(payload.search_requests or []),
+            search_requests=normalized_search_requests,
         )
 
     return _ActionPayload()
@@ -938,6 +1019,52 @@ def _normalize_turn_decision(decision: _TurnDecision) -> _TurnDecision:
     return decision
 
 
+def _honor_llm_action_order(decision: _TurnDecision) -> _TurnDecision:
+    """Réconcilie uniquement les deux représentations produites par le même LLM.
+
+    ``requested_actions`` est explicitement ordonné dans le contrat. Lorsqu'un
+    modèle décrit correctement une demande composée mais place une autre action
+    dans ``intent``, l'exécution doit commencer par la première action demandée,
+    sans qu'un classifieur secondaire réinterprète le message.
+
+    Un paragraphe dans une section existante relève du contenu rédactionnel, pas
+    de la structure du plan. Si une recherche est demandée d'abord, la demande
+    complète est mémorisée comme directive rédactionnelle par le moteur de
+    recherche ; aucune fausse action ADD_TOPIC n'est laissée en attente.
+    """
+
+    classification = decision.classification
+    actions = list(dict.fromkeys(classification.requested_actions or []))
+    executable_actions = [
+        action for action in actions if action in _SUPPORTED_TURN_INTENTS
+    ]
+    if executable_actions:
+        classification.intent = executable_actions[0]
+        classification.requested_actions = executable_actions
+
+    if (
+        classification.content_target == "existing_paragraph"
+        and classification.intent in _SEARCH_PAYLOAD_INTENTS
+    ):
+        classification.requested_actions = [
+            action
+            for action in classification.requested_actions
+            if action not in {
+                ConsultantIntent.PROPOSE_PLAN,
+                ConsultantIntent.ADD_TOPIC,
+                ConsultantIntent.REMOVE_TOPIC,
+                ConsultantIntent.CHANGE_PLAN,
+            }
+        ]
+        if classification.intent not in classification.requested_actions:
+            classification.requested_actions.insert(0, classification.intent)
+        classification.plan_edit_scope = "none"
+        classification.plan_edit_operation = "none"
+        classification.replace_current_plan = False
+
+    return decision
+
+
 def _ground_writing_source_policy(
     consultant_message: str,
     classification: IntentClassification,
@@ -1053,9 +1180,15 @@ def _ground_writing_source_policy(
         classification.writing_source_scope = "all_validated"
         classification.writing_source_identifiers = []
         classification.requested_source_count = explicit_count
-    elif classification.writing_source_scope != "unspecified":
-        # Une politique non prouvée par le tour courant provient nécessairement
-        # du contexte ou d'une extrapolation du modèle : elle n'est pas retenue.
+    elif (
+        classification.writing_source_scope != "unspecified"
+        and not classification.explicit_write_command
+    ):
+        # Hors demande de rédaction, une portée de sources ne doit jamais être
+        # héritée du contexte. Pendant une rédaction explicite, la décision
+        # structurée du LLM reste en revanche l'autorité sémantique : elle doit
+        # comprendre le langage naturel au lieu de dépendre d'une liste fermée
+        # de formulations reconnues localement.
         classification.writing_source_scope = "unspecified"
         classification.writing_source_identifiers = []
         classification.requested_source_count = None
@@ -1076,6 +1209,17 @@ def _decision_consistency_error(decision: _TurnDecision) -> str:
     ):
         return "La version précise du plan doit être indiquée."
     classification = decision.classification
+    requested_actions = set(classification.requested_actions or [])
+    if (
+        classification.explicit_write_command
+        and classification.intent in _PLAN_PAYLOAD_INTENTS
+        and ConsultantIntent.START_WRITING not in requested_actions
+    ):
+        return (
+            "Une modification de plan accompagnée d'un ordre de rédaction doit "
+            "conserver START_WRITING dans requested_actions ; elle ne doit pas "
+            "transformer le contenu scientifique du plan en recherche."
+        )
     if (
         classification.intent
         in {
@@ -1455,7 +1599,12 @@ DEMANDE ORIGINALE
                     raise ValueError(
                         "La réponse ne contient pas d'objet JSON exploitable."
                     )
-                result = model_type.model_validate(parsed)
+                # Les schémas restent stricts pour les objets métier persistés.
+                # À la frontière LLM, une métadonnée explicative supplémentaire
+                # ne doit toutefois pas annuler une intention valide ni provoquer
+                # un second appel coûteux. Les champs connus restent entièrement
+                # validés (types, littéraux, bornes) ; seuls les extras sont ignorés.
+                result = model_type.model_validate(parsed, extra="ignore")
                 if consistency_check is not None:
                     consistency_error = _clean(consistency_check(result), 2000)
                     if consistency_error:
@@ -1500,6 +1649,28 @@ Tu es le contrôleur conversationnel d'un agent scientifique R&D. Comprends le s
 du tour actuel en français libre, fautif, elliptique ou familier. L'historique sert
 uniquement à résoudre les références du tour actuel ; il ne t'autorise jamais à
 continuer spontanément une ancienne tâche.
+
+TOLÉRANCE AU LANGAGE HUMAIN
+- Corrige mentalement les fautes d'orthographe, accords, accents manquants, mots
+  tronqués et erreurs de frappe avant d'interpréter la demande.
+- Une formulation courte ou télégraphique reste exécutable lorsque son sens le plus
+  probable est établi par le tour actuel et l'historique récent. Par exemple, après
+  l'affichage d'un plan, une approbation brève suivie d'un verbe de rédaction porte
+  naturellement sur ce plan.
+- N'utilise UNKNOWN que si au moins deux actions incompatibles restent réellement
+  plausibles et que choisir l'une pourrait modifier le mauvais objet. Une confiance
+  imparfaite sur la grammaire ou l'orthographe ne justifie jamais UNKNOWN à elle seule.
+- corrected_message peut reformuler proprement le tour, mais conserve tous les noms,
+  contraintes, négations et références fournis par le consultant.
+- « Ajouter/enrichir/insérer un paragraphe ou un passage » dans une section existante
+  modifie le contenu rédactionnel, jamais la structure du plan. N'utilise ADD_TOPIC
+  que pour ajouter une section ou sous-section au plan. Sans recherche, une demande
+  de modification du texte existant relève de REVISE_DRAFT.
+- Si le consultant demande d'abord une recherche puis l'ajout d'un paragraphe dans
+  une section, choisis SEARCH_MORE comme première et unique action immédiatement
+  exécutable, conserve existing_paragraph et les target_section_ids exacts. La demande
+  complète sera mémorisée comme directive de rédaction après validation des sources ;
+  ne crée aucune section artificielle et ne demande aucun nouveau plan.
 
 CAPACITÉS AUTORISÉES
 {json.dumps(intent_values, ensure_ascii=False)}
@@ -1562,6 +1733,12 @@ SÉMANTIQUE DE DÉCISION
 - START_WRITING couvre aussi une formulation naturelle qui constate que le plan
   et les sources sont prêts puis demande de commencer, poursuivre ou produire
   l'état de l'art. Ce n'est pas une simple conversation.
+- Lorsqu'un brouillon existe déjà et que le consultant demande de « reprendre »,
+  « refaire », « réécrire », « enrichir » ou mettre à jour uniquement une partie,
+  une section ou un paragraphe, choisis REVISE_DRAFT, content_target=existing_section
+  ou existing_paragraph et résous ses target_section_ids. L'ajout d'articles déjà
+  sélectionnés à cette partie reste une révision locale : ne choisis jamais
+  START_WRITING pour refaire tout le document et ne modifie aucune autre section.
 - « garde le plan », « on peut garder ce plan », « ce plan me convient », « valide ce
   plan » ou « conserve le même plan » constituent une approbation explicite lorsqu'elles
   sont formulées dans le tour courant. Si la même phrase ordonne aussi de rédiger,
@@ -1600,6 +1777,13 @@ RÈGLES
   articles, nouveau verrou, sélection de sources) restent différées.
   Une mention, une hypothèse, une négation ou une action future n'en fait pas partie ;
   place les actions interdites dans forbidden_actions.
+- Distingue toujours le CONTENU demandé pour le futur document de l'ACTION demandée
+  maintenant. Un plan détaillé peut contenir des thèmes comme littérature, méthodes,
+  résultats, limites, comparaison ou validation expérimentale sans demander aucune
+  nouvelle recherche. Si le consultant fournit ou corrige une structure puis ordonne
+  de rédiger avec le corpus déjà retenu, route la modification du plan suivie de
+  ACCEPT_PLAN et START_WRITING ; ne choisis une action de recherche que si le tour
+  demande réellement d'obtenir de nouvelles sources.
 - Analyse la phrase de manière compositionnelle avant de choisir l'intention :
   (1) quel objet le consultant veut-il ajouter/modifier (plan, section, paragraphe,
   source, verrou), (2) quel rôle joue le thème nommé par rapport au verrou
@@ -1707,6 +1891,82 @@ RAPPEL — INTERPRÈTE UNIQUEMENT CE TOUR
 """.strip()
 
     @staticmethod
+    def _resolution_prompt(
+        *,
+        consultant_message: str,
+        history: list[dict[str, Any]],
+        memory: ConversationMemory,
+        project_context: Mapping[str, Any],
+        current_plan: list[dict[str, Any]],
+    ) -> str:
+        """Demande au LLM une compréhension exécutable en un seul passage."""
+
+        decision_prompt = ConversationUnderstandingService._decision_prompt(
+            consultant_message=consultant_message,
+            history=history,
+            memory=memory,
+            project_context=project_context,
+            current_plan=current_plan,
+        )
+        return f"""
+{decision_prompt}
+
+SORTIE UNIQUE — COMPRÉHENSION ET ACTION
+Tu es l'unique interprète sémantique de ce tour. Retourne dans le même objet JSON :
+- decision : l'intention complète, toutes les actions compatibles demandées et la
+  réponse conversationnelle ;
+- action : les arguments métier exacts nécessaires pour exécuter cette décision.
+
+Il n'existe aucun second classifieur qui complétera ou corrigera ton interprétation.
+Tu dois donc préserver toutes les composantes du tour actuel. Une demande peut, dans
+le même tour, fournir/remplacer un plan, l'approuver et ordonner la rédaction. Dans ce
+cas l'intention principale reste l'action de plan, requested_actions contient dans
+l'ordre l'action de plan, ACCEPT_PLAN et START_WRITING, les indicateurs d'approbation
+et de rédaction valent true, et action.plan contient le nouveau plan complet. Ne
+réduis jamais une telle demande à START_WRITING et ne valide jamais le plan courant
+si le consultant vient d'en fournir un autre.
+
+MATÉRIALISATION
+- Les champs plan_reference, referenced_plan_version, plan_generation_mode et
+  plan_document_scope appartiennent directement à decision, jamais à
+  decision.classification.
+- action.review_scope accepte uniquement auto, per_verrou ou global. Pour
+  conserver la portée actuelle sans en imposer une nouvelle, utilise auto.
+- action.plan est non vide uniquement pour PROPOSE_PLAN, ADD_TOPIC, REMOVE_TOPIC ou
+  CHANGE_PLAN. Pour un remplacement complet, restitue toute la structure finale.
+  Pour un ajout ou une modification locale, restitue seulement le patch demandé.
+- Si le tour contient une hiérarchie de titres destinée au livrable, transforme-la
+  fidèlement en objets section_id, title, objective, parent_id et level. Les titres
+  fournis par le consultant font autorité ; n'y substitue pas les axes du plan courant.
+- Pour plan_edit_scope=local_section, recopie les section_id exacts du plan indexé et
+  ne modifie aucune section extérieure à la cible.
+- Pour PROPOSE_PLAN, crée une structure propre au projet et au corpus, sans gabarit
+  fixe. Une alternative doit réellement différer du plan courant.
+- Pour plan_document_scope=state_of_art, organise une analyse de la littérature, de
+  ses méthodes, résultats, validations et limites ; ne transforme pas automatiquement
+  chaque verrou en mini-état de l'art si le consultant demande une narration globale.
+- action.topics et action.constraints sont réservés à DESCRIBE_REQUIREMENTS.
+- action.verrous et action.project_brief ne sont renseignés que lorsque le consultant
+  déclare réellement un nouveau verrou ou un contexte autonome correspondant.
+- Pour SEARCH_MORE, SEARCH_ALTERNATIVE ou REPLACE_SOURCE, action.search_requests
+  contient deux à cinq requêtes complémentaires, courtes et distinctes. Une recherche
+  multidimensionnelle en contient au moins trois. Le contenu souhaité dans le futur
+  document n'est pas une commande de recherche.
+- Pour ADD_VERROU_AND_SEARCH, action.verrous contient les verrous explicitement
+  déclarés et action.search_requests couvre preuves, limites et validation.
+- Pour ACCEPT_PLAN, START_WRITING, REVISE_DRAFT, EXPLAIN_SOURCE, CONVERSE, CANCEL ou
+  UNKNOWN, action reste vide, sauf lorsqu'une action de plan est l'intention principale
+  du même tour composé comme décrit ci-dessus.
+- Tous les champs sans rapport avec les actions réellement demandées restent vides.
+
+CONTRÔLE AVANT DE RÉPONDRE
+Vérifie que decision.classification.rationale décrit toutes les composantes du tour,
+que requested_actions les conserve dans leur ordre, et que action contient chaque
+objet explicitement fourni par le consultant. La structure JSON sert à exécuter ta
+compréhension ; elle ne doit jamais l'appauvrir.
+""".strip()
+
+    @staticmethod
     def _action_prompt(
         *,
         consultant_message: str,
@@ -1784,7 +2044,8 @@ Produis uniquement les arguments nécessaires à cette intention :
   force_create_distinct vaut true seulement si le consultant demande clairement de
   créer un verrou distinct malgré un verrou proche. En operating_mode=standalone_chat,
   project_brief contient les seuls éléments explicitement donnés : project_name,
-  domain, objective et additional_context. N'invente pas les champs absents.
+  domain, objective et additional_context. N'invente pas les champs absents et ne
+  perds jamais un objectif explicitement formulé dans le même message que le verrou.
   review_scope vaut per_verrou pour un seul verrou ciblé, global pour plusieurs
   verrous ou « tous les verrous », sinon auto. search_requests contient 2 à 8
   recherches scientifiques couvrant les preuves favorables, les résultats contraires,
@@ -1800,12 +2061,15 @@ Produis uniquement les arguments nécessaires à cette intention :
 - La demande du consultant est la cible scientifique primaire. Le verrou, la
   section ou le paragraphe cité sert uniquement à rattacher et contextualiser
   cette cible : ne remplace jamais « FEKO pour RCS bistatique » par une recherche
-  générale sur tout le verrou SAR. Copie les noms d'outils, méthodes, phénomènes
-  et conditions explicitement demandés dans entity_name/required_terms.
-- Si un outil, logiciel, protocole ou standard nommé est demandé, émets au moins
-  une requête scientific_evidence exigeant ce nom et une requête distincte
-  official_documentation. La documentation établit les capacités et réglages ;
-  seuls les articles peuvent constituer une preuve scientifique de résultats.
+  générale sur tout le verrou SAR.
+- Distingue un outil ou protocole externe publiquement documenté d'un nom interne
+  de projet, client ou simulateur. Pour un outil externe, émets une requête directe
+  exigeant son nom et une requête official_documentation distincte. Pour un nom
+  interne, conserve au plus une requête directe sur ce nom, puis décompose le besoin
+  en requêtes transférables portant sur les méthodes scientifiques sous-jacentes,
+  le domaine d'application, les protocoles de validation et les limites. Dans ces
+  requêtes transférables, le nom interne ne figure ni dans entity_name ni dans
+  required_terms. Seuls les articles constituent une preuve scientifique de résultats.
 - Pour une méthode recherchée dans un domaine ou une application précise,
   target_context_dimensions contient obligatoirement ce contexte cible et
   required_terms sépare les ancrages indispensables (méthode, domaine, tâche).
@@ -1854,192 +2118,46 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
         compact_plan = _compact_plan(current_plan)
 
         try:
-            decision_prompt = self._decision_prompt(
+            resolution_prompt = self._resolution_prompt(
                 consultant_message=consultant_message,
                 history=history,
                 memory=memory,
                 project_context=compact_context,
                 current_plan=compact_plan,
             )
-            decision, decision_attempts = self._call_structured(
-                prompt=decision_prompt,
-                model_type=_TurnDecision,
-                request_name=(
-                    "ennoscholar:guided_research:conversation_decision"
-                ),
-                max_output_tokens=2200,
-                consistency_check=_decision_consistency_error,
+            allow_standalone_context = (
+                _clean(compact_context.get("operating_mode"), 80)
+                == "standalone_chat"
             )
-            decision = _ground_explicit_plan_edit_decision(
-                decision,
-                consultant_message=consultant_message,
-                current_plan=compact_plan,
+
+            resolution, resolution_attempts = self._call_structured(
+                prompt=resolution_prompt,
+                model_type=_TurnResolution,
+                request_name=(
+                    "ennoscholar:guided_research:conversation_resolution"
+                ),
+                max_output_tokens=7000,
+            )
+            decision = _honor_llm_action_order(resolution.decision)
+            intent = decision.classification.intent
+            action = _scope_action_payload(
+                intent,
+                resolution.action,
+                allow_standalone_context=allow_standalone_context,
+            )
+            reference_plan = _resolve_plan_reference(
+                decision=decision,
                 history=history,
                 project_context=compact_context,
-            )
-            decision = _normalize_turn_decision(decision)
-            decision.classification = _ground_writing_source_policy(
-                consultant_message,
-                decision.classification,
-            )
-            # BEGIN ENNOSCHOLAR_GROUNDED_ROUTE_REPAIR_V1
-            decision.classification = repair_contextual_classification(
-                decision.classification,
-                consultant_message=consultant_message,
-                current_verrous=compact_context.get("current_verrous") or [],
                 current_plan=compact_plan,
-                session_context=compact_context,
             )
-            grounded_repair = (
-                "grounded_project_context_repair_v1"
-                in str(decision.classification.classifier or "")
-            )
-            v170_1_plan_replacement = (
-                "v170_1_explicit_full_plan_replacement"
-                in str(decision.classification.classifier or "")
-            )
-            v170_2_plan_readback = (
-                "v170_2_plan_readback"
-                in str(decision.classification.classifier or "")
-            )
-            v170_2_plan_insertion = (
-                "v170_2_insert_after_section"
-                in str(decision.classification.classifier or "")
-            )
-            if v170_2_plan_readback:
-                decision.plan_reference = "current"
-                decision.plan_generation_mode = "none"
-                decision.plan_document_scope = "state_of_art"
-                decision.assistant_message = (
-                    "Je vous affiche le plan courant réellement enregistré dans cette conversation."
-                )
-            elif v170_2_plan_insertion:
-                decision.plan_reference = "current"
-                decision.plan_generation_mode = "none"
-                decision.plan_document_scope = "state_of_art"
-                decision.assistant_message = (
-                    "J'ai compris : vous ajoutez une nouvelle partie à une position précise du plan courant."
-                )
-            if (
-                v170_1_plan_replacement
-                and decision.classification.intent == ConsultantIntent.CHANGE_PLAN
-            ):
-                # Le premier LLM s'est trompé de capacité ; on recale aussi
-                # les métadonnées qui pilotent le second payload structuré.
-                decision.plan_reference = "current"
-                decision.plan_generation_mode = "none"
-                decision.plan_document_scope = "state_of_art"
-                decision.assistant_message = (
-                    "J'ai compris : le plan que vous venez de fournir remplace "
-                    "entièrement le plan courant de cette conversation."
-                )
-            if grounded_repair and decision.classification.intent == ConsultantIntent.PROPOSE_PLAN:
-                decision.plan_reference = "none"
-                decision.plan_generation_mode = "initial" if not compact_plan else "alternative"
-                decision.plan_document_scope = "state_of_art"
-                decision.assistant_message = (
-                    "J'ai compris : vous souhaitez couvrir l'ensemble des verrous "
-                    "déjà présents dans cette conversation. Je prépare d'abord "
-                    "un plan global à valider avant la rédaction."
-                )
-            elif grounded_repair and decision.classification.intent == ConsultantIntent.START_WRITING:
-                decision.assistant_message = (
-                    "J'ai compris : la rédaction doit utiliser le périmètre de "
-                    "verrous déjà établi, le plan courant et le corpus validé."
-                )
-            elif (
-                "existing_scope_research_repair_v3"
-                in str(decision.classification.classifier or "")
-                and decision.classification.intent
-                == ConsultantIntent.SEARCH_MORE
-            ):
-                decision.assistant_message = (
-                    "J'ai compris : le thème demandé sert à enrichir la section "
-                    "et à argumenter le verrou déjà actif. Je lance une recherche "
-                    "complémentaire sans créer de nouveau verrou."
-                )
-            # END ENNOSCHOLAR_GROUNDED_ROUTE_REPAIR_V1
 
-            # BEGIN ENNOSCHOLAR_CONVERSATION_MEMORY_V2
-            # Une phrase conversationnelle peut contenir un fait projet ou une
-            # préférence durable. On conserve le delta validé du modèle pour
-            # CONVERSE/EXPLAIN_SOURCE ; seul UNKNOWN reste non mémorisable.
-            if decision.classification.intent == ConsultantIntent.UNKNOWN:
+            # La mémoire reste un simple cumul de faits explicitement compris par
+            # le même LLM ; aucune autre couche ne requalifie l'intention.
+            if intent == ConsultantIntent.UNKNOWN:
                 decision.memory = memory
             else:
-                decision.memory = _merge_memory_delta(
-                    memory,
-                    decision.memory,
-                )
-            # END ENNOSCHOLAR_CONVERSATION_MEMORY_V2
-
-            action = _ActionPayload()
-            action_attempts: list[dict[str, Any]] = []
-            reference_plan: list[dict[str, Any]] = []
-            intent = decision.classification.intent
-            if intent in _PLAN_PAYLOAD_INTENTS | _SEARCH_PAYLOAD_INTENTS:
-                allow_standalone_context = (
-                    _clean(compact_context.get("operating_mode"), 80)
-                    == "standalone_chat"
-                )
-                reference_plan = _resolve_plan_reference(
-                    decision=decision,
-                    history=history,
-                    project_context=compact_context,
-                    current_plan=compact_plan,
-                )
-                action_prompt = self._action_prompt(
-                    consultant_message=consultant_message,
-                    decision=decision,
-                    history=history,
-                    project_context=compact_context,
-                    current_plan=compact_plan,
-                    reference_plan=reference_plan,
-                )
-                action, action_attempts = self._call_structured(
-                    prompt=action_prompt,
-                    model_type=_ActionPayload,
-                    request_name=(
-                        "ennoscholar:guided_research:action_payload"
-                    ),
-                    max_output_tokens=4200,
-                    consistency_check=lambda payload: _payload_consistency_error(
-                        intent,
-                        _scope_action_payload(
-                            intent,
-                            payload,
-                            allow_standalone_context=allow_standalone_context,
-                        ),
-                        allow_standalone_context=allow_standalone_context,
-                        reference_plan=reference_plan,
-                        require_reference_coverage=(
-                            decision.plan_reference
-                            in {"previous", "first", "specific"}
-                            and decision.classification.replace_current_plan
-                        ),
-                        require_distinct_from_current=(
-                            intent == ConsultantIntent.PROPOSE_PLAN
-                            and decision.plan_generation_mode == "alternative"
-                        ),
-                        current_plan=compact_plan,
-                    ) or _plan_target_consistency_error(
-                        consultant_message=consultant_message,
-                        candidate_plan=_scope_action_payload(
-                            intent,
-                            payload,
-                            allow_standalone_context=allow_standalone_context,
-                        ).plan,
-                        grounding_plan=(reference_plan or compact_plan),
-                        replace_current_plan=bool(
-                            decision.classification.replace_current_plan
-                        ),
-                    ),
-                )
-                action = _scope_action_payload(
-                    intent,
-                    action,
-                    allow_standalone_context=allow_standalone_context,
-                )
+                decision.memory = _merge_memory_delta(memory, decision.memory)
 
             return ConversationUnderstanding(
                 classification=decision.classification,
@@ -2063,25 +2181,23 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
                 ],
                 memory=decision.memory,
                 interpreter={
-                    "architecture": "decision_then_action_v2_grounded_plan",
-                    "explicit_plan_labels": _message_plan_labels(consultant_message),
+                    "architecture": "single_llm_resolution_v3",
+                    "explicit_plan_labels": [],
                     "resolved_plan_targets": [
                         {
                             "display_label": row.get("display_label"),
                             "section_id": row.get("section_id"),
                             "title": row.get("title"),
                         }
-                        for row in _resolve_explicit_plan_targets(
-                            consultant_message,
-                            reference_plan or compact_plan,
-                        )
+                        for row in _indexed_plan_rows(reference_plan or compact_plan)
+                        if _clean(row.get("section_id"), 160)
+                        in set(decision.classification.target_section_ids or [])
                     ],
-                    "decision_attempts": decision_attempts,
-                    "action_attempts": action_attempts,
-                    "prompt_chars": len(decision_prompt),
+                    "resolution_attempts": resolution_attempts,
+                    "prompt_chars": len(resolution_prompt),
                     "prompt_truncated": any(
                         bool(row.get("prompt_truncated"))
-                        for row in [*decision_attempts, *action_attempts]
+                        for row in resolution_attempts
                     ),
                 },
             )

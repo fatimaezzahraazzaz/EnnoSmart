@@ -8,18 +8,16 @@ EnnoSmart Memory V2 FINAL
 
 Architecture finale :
 CIR final
-→ stockage fichier original dans storage/organismes
 → extraction modules.extraction.router
 → NLP CIR modules.NLP.CIR.cir_pipeline
 → chunks RAG modules.RAG.json_to_chunks
 → normalisation métier V2
 → knowledge cards
 → relations
-→ Chroma V2
+→ collection Chroma V2 globale unique
 
-Aucun dossier V1 permanent.
-Toute la mémoire est dans :
-C:\EnnoSmart\storage\experience_memory_v2
+Les documents clients ne sont pas recopiés dans le dépôt. La racine persistante
+doit être placée hors du code via ``ENNOSMART_EXPERIENCE_MEMORY_V2_DIR``.
 """
 
 import argparse
@@ -45,6 +43,14 @@ from typing import Any, Dict, List, Optional, Tuple
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT_DIR / ".env", override=False)
+    load_dotenv(ROOT_DIR / "backend_api" / ".env", override=False)
+except Exception:
+    pass
+
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -56,7 +62,7 @@ if str(ROOT_DIR) not in sys.path:
 BASE_DIR = Path(os.getenv("ENNOSMART_BASE_DIR") or os.getenv("ENNOSMART_ROOT") or ROOT_DIR).resolve()
 STORAGE_DIR = BASE_DIR / "storage"
 
-ORGANISMES_DIR = STORAGE_DIR / "organismes"
+ORGANISMES_DIR = Path(os.getenv("ENNOSMART_MEMORY_V2_ROOT", str(STORAGE_DIR / "organismes")))
 
 V2_ROOT = Path(os.getenv("ENNOSMART_EXPERIENCE_MEMORY_V2_DIR", str(STORAGE_DIR / "experience_memory_v2")))
 
@@ -151,7 +157,6 @@ def now_iso() -> str:
 
 def ensure_dirs() -> None:
     for p in [
-        ORGANISMES_DIR,
         V2_ROOT,
         V2_EXTRACTION_DIR,
         V2_NLP_DIR,
@@ -465,6 +470,7 @@ def add_source_metadata_to_nlp(
     *,
     organisme: str,
     project: str,
+    subproject: str,
     year: str,
     source_file: str,
     source_path: str,
@@ -485,6 +491,7 @@ def add_source_metadata_to_nlp(
         item.setdefault("source_path", source_path)
         item["organisme"] = organisme
         item["project"] = project
+        item["subproject"] = subproject
         item["year"] = year
         item["annee"] = year
         item["memory_status"] = "validated"
@@ -520,6 +527,7 @@ def add_source_metadata_to_nlp(
     out["experience_memory_v2_metadata"] = {
         "organisme": organisme,
         "project": project,
+        "subproject": subproject,
         "year": year,
         "memory_status": "validated",
         "memory_type": "experience",
@@ -624,6 +632,7 @@ def make_style_chunks_from_sections(
     *,
     organisme: str,
     project: str,
+    subproject: str,
     year: str,
     source_file: str,
     source_path: str,
@@ -667,9 +676,10 @@ def make_style_chunks_from_sections(
             "text": style_text,
             "source_text": style_text,
             "metadata": {
-                "project_id": slugify(project),
+                "project_id": slugify(" ".join(value for value in (project, subproject) if value)),
                 "organisme": organisme,
                 "project": project,
+                "subproject": subproject,
                 "year": str(year),
                 "annee": str(year),
                 "role": "style",
@@ -709,6 +719,7 @@ def make_document_asset_chunks(
     *,
     organisme: str,
     project: str,
+    subproject: str,
     year: str,
     source_file: str,
     source_path: str,
@@ -758,9 +769,10 @@ def make_document_asset_chunks(
         section_id = clean_text(section.get("section_id") or "", 80)
         role = role_for(section)
         common_meta = {
-            "project_id": slugify(project),
+            "project_id": slugify(" ".join(value for value in (project, subproject) if value)),
             "organisme": organisme,
             "project": project,
+            "subproject": subproject,
             "year": str(year),
             "annee": str(year),
             "role": role,
@@ -839,6 +851,7 @@ def enrich_chunk_v2(
     *,
     organisme: str,
     project: str,
+    subproject: str,
     year: str,
     source_file: str,
     source_path: str,
@@ -852,6 +865,8 @@ def enrich_chunk_v2(
 
     organisme = clean_text(meta.get("organisme") or organisme)
     project = normalize_project_name(clean_text(meta.get("project") or project))
+    raw_subproject = clean_text(meta.get("subproject") or subproject)
+    subproject = normalize_project_name(raw_subproject) if raw_subproject else ""
     year = clean_text(meta.get("year") or meta.get("annee") or year)
 
     keywords = extract_keywords(text)
@@ -860,7 +875,7 @@ def enrich_chunk_v2(
 
     chunk_id = clean_text(chunk.get("id") or meta.get("rag_chunk_id"))
     if not chunk_id:
-        chunk_id = f"v2_{slugify(organisme)}_{slugify(project)}_{slugify(year)}_{role}_{stable_id(text)}"
+        chunk_id = f"v2_{slugify(organisme)}_{slugify(project)}_{slugify(subproject)}_{slugify(year)}_{role}_{stable_id(text)}"
 
     enriched_meta = {
         **meta,
@@ -871,6 +886,8 @@ def enrich_chunk_v2(
         "organisme_slug": slugify(organisme),
         "project": project,
         "project_slug": slugify(project),
+        "subproject": subproject,
+        "subproject_slug": slugify(subproject) if subproject else "",
         "year": year,
         "document": clean_text(meta.get("document") or source_file),
         "source_file": clean_text(meta.get("source_file") or source_file),
@@ -894,7 +911,7 @@ def enrich_chunk_v2(
         "consultant_memory_use": "style_only" if memory_class == "style" else "knowledge_and_experience",
         "can_use_as_fact": bool(meta.get("can_use_as_fact", memory_class != "style")),
         "can_use_as_style": bool(meta.get("can_use_as_style", memory_class == "style")),
-        "relation_key_project": f"{slugify(organisme)}::{slugify(project)}::{year}",
+        "relation_key_project": f"{slugify(organisme)}::{slugify(project)}::{slugify(subproject) if subproject else ''}::{year}",
         "relation_key_domain": domains[0]["domain"] if domains else "",
         "relation_key_role": role,
     }
@@ -914,7 +931,7 @@ def make_knowledge_card(enriched_chunk: Dict[str, Any]) -> Dict[str, Any]:
     role = meta.get("role", "autre")
 
     title = meta.get("section_title") or f"{role} — {meta.get('project')} {meta.get('year')}"
-    card_id = f"card_{slugify(meta.get('organisme'))}_{slugify(meta.get('project'))}_{slugify(meta.get('year'))}_{role}_{stable_id(text)}"
+    card_id = f"card_{slugify(meta.get('organisme'))}_{slugify(meta.get('project'))}_{slugify(meta.get('subproject'))}_{slugify(meta.get('year'))}_{role}_{stable_id(text)}"
 
     return {
         "card_id": card_id,
@@ -924,6 +941,7 @@ def make_knowledge_card(enriched_chunk: Dict[str, Any]) -> Dict[str, Any]:
         "summary": clean_text(text, 700),
         "organisme": meta.get("organisme"),
         "project": meta.get("project"),
+        "subproject": meta.get("subproject") or "",
         "year": meta.get("year"),
         "document": meta.get("document"),
         "source_chunk_id": meta.get("chunk_id"),
@@ -1024,6 +1042,25 @@ def chroma_store(chunks: List[Dict[str, Any]], collection_name: str, reset: bool
     return vs.add_chunks(collection_name=collection_name, chunks=chunks, reset=False)
 
 
+def prune_legacy_chroma_collections() -> List[str]:
+    """Conserve uniquement la collection globale de Memory V2."""
+    mod, _, err = import_any(["modules.RAG.vector_store"])
+    if mod is None:
+        raise RuntimeError(f"modules.RAG.vector_store introuvable : {err}")
+    RAGVectorStore = getattr(mod, "RAGVectorStore", None)
+    if RAGVectorStore is None:
+        raise RuntimeError("RAGVectorStore introuvable")
+
+    vector_store = RAGVectorStore(V2_CHROMA_DIR)
+    removed: List[str] = []
+    for raw_collection in vector_store.client.list_collections():
+        name = clean_text(getattr(raw_collection, "name", raw_collection))
+        if name.startswith("ennosmart_memory_v2_") and name != "ennosmart_memory_v2_global":
+            vector_store.client.delete_collection(name)
+            removed.append(name)
+    return sorted(removed)
+
+
 def load_all_v2_chunks() -> List[Dict[str, Any]]:
     chunks: List[Dict[str, Any]] = []
     for p in V2_CHUNKS_DIR.glob("*.chunks_v2.json"):
@@ -1053,14 +1090,9 @@ def rebuild_global_graph_and_catalog(reset_chroma: bool = False) -> Dict[str, An
     chroma_reports = {}
     if chunks:
         chroma_reports["global"] = chroma_store(chunks, "ennosmart_memory_v2_global", reset=reset_chroma)
-
-        by_org = defaultdict(list)
-        for ch in chunks:
-            org = (ch.get("metadata") or {}).get("organisme_slug") or "unknown"
-            by_org[org].append(ch)
-
-        for org_slug, arr in by_org.items():
-            chroma_reports[f"organism_{org_slug}"] = chroma_store(arr, f"ennosmart_memory_v2_{org_slug}", reset=reset_chroma)
+    elif reset_chroma:
+        chroma_reports["global"] = chroma_store([], "ennosmart_memory_v2_global", reset=True)
+    chroma_reports["removed_legacy_collections"] = prune_legacy_chroma_collections()
 
     catalog = {
         "ok": True,
@@ -1071,7 +1103,12 @@ def rebuild_global_graph_and_catalog(reset_chroma: bool = False) -> Dict[str, An
         "cards_count": len(cards),
         "relations_count": len(relations),
         "organisms": sorted(list({c.get("organisme") for c in cards if c.get("organisme")})),
-        "projects": sorted(list({f"{c.get('organisme')}::{c.get('project')}::{c.get('year')}" for c in cards})),
+        "projects": sorted(list({
+            f"{c.get('organisme')}::{c.get('project')}::{c.get('subproject') or ''}::{c.get('year')}"
+            for c in cards
+        })),
+        "subprojects": sorted(list({c.get("subproject") for c in cards if c.get("subproject")})),
+        "chroma_mode": "single_global_collection",
         "role_counts": dict(Counter(c.get("card_type") for c in cards)),
         "domain_counts": dict(Counter(c.get("main_domain") for c in cards if c.get("main_domain"))),
         "outputs": {
@@ -1170,14 +1207,17 @@ def keep_only_explicit_cir_final_chunks(chunks: List[Dict[str, Any]], logs: Opti
 # Build direct V2
 # ---------------------------------------------------------------------------
 
-def original_file_target(src_path: Path, organisme: str, project: str, year: str) -> Path:
-    target_dir = ORGANISMES_DIR / organisme / "projects" / project / "years" / str(year) / "cir_final_consultant" / "current"
+def original_file_target(src_path: Path, organisme: str, project: str, subproject: str, year: str) -> Path:
+    target_dir = ORGANISMES_DIR / organisme / "projects" / project
+    if subproject:
+        target_dir = target_dir / "subprojects" / subproject
+    target_dir = target_dir / "years" / str(year) / "cir_final_consultant" / "current"
     safe_name = re.sub(r"[^\w\-. àâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ]+", "_", src_path.name)
     return target_dir / safe_name
 
 
-def store_original_file(src_path: Path, organisme: str, project: str, year: str) -> Path:
-    target = original_file_target(src_path, organisme, project, year)
+def store_original_file(src_path: Path, organisme: str, project: str, subproject: str, year: str) -> Path:
+    target = original_file_target(src_path, organisme, project, subproject, year)
     target.parent.mkdir(parents=True, exist_ok=True)
 
     if src_path.resolve() != target.resolve():
@@ -1192,7 +1232,8 @@ def build_cir_final_v2(
     organisme: str,
     project: str,
     year: str,
-    copy_to_library: bool = True,
+    subproject: str = "",
+    copy_to_library: bool = False,
     reset_chroma: bool = False,
     vision_mode: str = "text_only",
     formula_mode: str = "off",
@@ -1204,6 +1245,7 @@ def build_cir_final_v2(
 
     organisme = clean_text(organisme)
     project = normalize_project_name(project)
+    subproject = normalize_project_name(subproject) if clean_text(subproject) else ""
     year = clean_text(year)
 
     if not organisme:
@@ -1221,7 +1263,11 @@ def build_cir_final_v2(
     # visible dans la bibliothèque. Un échec ne laisse donc plus une ligne à
     # zéro carte dans l'interface.
     extraction_input = file_path
-    source_path = original_file_target(file_path, organisme, project, year) if copy_to_library else file_path
+    source_path = (
+        original_file_target(file_path, organisme, project, subproject, year)
+        if copy_to_library
+        else Path(file_path.name)
+    )
     source_hash = sha256_file(extraction_input)
     source_id = f"{slugify(source_path.stem)}_{source_hash[:10]}"
 
@@ -1248,12 +1294,14 @@ def build_cir_final_v2(
         nlp_result,
         organisme=organisme,
         project=project,
+        subproject=subproject,
         year=year,
         source_file=source_path.name,
         source_path=str(source_path),
     )
 
-    raw_chunks = nlp_to_chunks(nlp_result, slugify(project), year, logs)
+    project_id = slugify(" ".join(value for value in (project, subproject) if value))
+    raw_chunks = nlp_to_chunks(nlp_result, project_id, year, logs)
 
     # Mémoire CIR final = extraction fidèle uniquement.
     # On retire les verrous implicites reconstruits automatiquement.
@@ -1265,6 +1313,7 @@ def build_cir_final_v2(
         nlp_result,
         organisme=organisme,
         project=project,
+        subproject=subproject,
         year=year,
         source_file=source_path.name,
         source_path=str(source_path),
@@ -1276,6 +1325,7 @@ def build_cir_final_v2(
         nlp_result,
         organisme=organisme,
         project=project,
+        subproject=subproject,
         year=year,
         source_file=source_path.name,
         source_path=str(source_path),
@@ -1299,6 +1349,7 @@ def build_cir_final_v2(
             ch,
             organisme=organisme,
             project=project,
+            subproject=subproject,
             year=year,
             source_file=source_path.name,
             source_path=str(source_path),
@@ -1314,7 +1365,7 @@ def build_cir_final_v2(
         )
 
     if copy_to_library:
-        source_path = store_original_file(extraction_input, organisme, project, year)
+        source_path = store_original_file(extraction_input, organisme, project, subproject, year)
 
     role_counts = Counter((ch.get("metadata") or {}).get("role") for ch in chunks_v2)
     memory_counts = Counter((ch.get("metadata") or {}).get("memory_class") for ch in chunks_v2)
@@ -1360,6 +1411,7 @@ def build_cir_final_v2(
         "file_name": source_path.name,
         "organisme": organisme,
         "project": project,
+        "subproject": subproject,
         "year": year,
         "mode_detected": "cir_final",
         "chunks_count": len(chunks_v2),
@@ -1438,7 +1490,13 @@ def scan_library() -> List[Dict[str, Any]]:
     return rows
 
 
-def search_v2(query: str, collection: str = "ennosmart_memory_v2_global", top_k: int = 8, role: str = "") -> Dict[str, Any]:
+def search_v2(
+    query: str,
+    collection: str = "ennosmart_memory_v2_global",
+    top_k: int = 8,
+    role: str = "",
+    organisme: str = "",
+) -> Dict[str, Any]:
     mod, _, err = import_any(["modules.RAG.vector_store"])
     if mod is None:
         raise RuntimeError(f"modules.RAG.vector_store introuvable : {err}")
@@ -1453,13 +1511,22 @@ def search_v2(query: str, collection: str = "ennosmart_memory_v2_global", top_k:
         query=query,
         top_k=top_k,
         role_filter=role or None,
+        metadata_filter={"organisme": organisme} if organisme else None,
         oversample=6,
     )
+
+    if organisme:
+        wanted = norm(organisme)
+        res = [
+            item for item in res
+            if norm((item.get("metadata") or {}).get("organisme")) == wanted
+        ][:top_k]
 
     return {
         "ok": True,
         "query": query,
         "collection": collection,
+        "organisme_filter": organisme,
         "matches_count": len(res),
         "matches": res,
     }

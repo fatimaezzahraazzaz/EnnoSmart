@@ -27,6 +27,8 @@ import {
   getProjectOverviews,
   getProjects,
   getScholarLatest,
+  runScholarFromSelectedVerrous,
+  syncScholarArticles,
   getStateOfArtHistory,
   getStateOfArtSelectionPreview,
   buildScholarArticleCards,
@@ -3877,6 +3879,8 @@ export function EnnoScholarPage({
   const [fulltextStatusPayload, setFulltextStatusPayload] = useState<any | null>(null)
   const [directExtractStatusPayload, setDirectExtractStatusPayload] = useState<any | null>(null)
   const [uploadingArticleId, setUploadingArticleId] = useState<number | null>(null)
+  const [scholarSearchRunning, setScholarSearchRunning] = useState(false)
+  const [scholarSearchError, setScholarSearchError] = useState("")
 
   const scholarPayload = scholarBundle?.bundle?.payload || scholarBundle?.latest_run?.raw_result_json?.payload || {}
   const scholarReport = scholarBundle?.bundle?.report || scholarBundle?.latest_run?.raw_result_json?.report || {}
@@ -4011,6 +4015,7 @@ export function EnnoScholarPage({
   const loadData = async () => {
     setLoading(true)
     setError("")
+    setScholarSearchError("")
 
     try {
       const [projectList, overviewList] = await Promise.all([
@@ -4143,6 +4148,7 @@ export function EnnoScholarPage({
     setCurrentProjectId(projectId)
     setLoading(true)
     setError("")
+    setScholarSearchError("")
 
     try {
       const selectedProject = projects.find((item) => item.id === projectId) || null
@@ -4209,6 +4215,40 @@ export function EnnoScholarPage({
       if (!exists) return [updated, ...prev]
       return prev.map((article) => (article.id === updated.id ? updated : article))
     })
+  }
+
+  const launchScholarSearch = async () => {
+    if (!project?.id || scholarSearchRunning) return
+
+    setScholarSearchRunning(true)
+    setScholarSearchError("")
+
+    try {
+      const run = await runScholarFromSelectedVerrous(project.id)
+      const rawRunId = run?.id ?? run?.run_id ?? run?.latest_run?.id
+      const runId = Number(rawRunId)
+
+      if (Number.isFinite(runId) && runId > 0) {
+        await syncScholarArticles(project.id, runId)
+      }
+
+      const [latestScholar, latestArticles] = await Promise.all([
+        getScholarLatest(project.id).catch(() => run),
+        getArticles(project.id, true),
+      ])
+
+      setScholarBundle(latestScholar || run)
+      setArticles(latestArticles)
+      setActiveTab("par-verrou")
+    } catch (reason) {
+      setScholarSearchError(
+        reason instanceof Error
+          ? reason.message
+          : "Impossible de lancer la recherche EnnoScholar.",
+      )
+    } finally {
+      setScholarSearchRunning(false)
+    }
   }
 
   const loadStateOfArtPreparationStatus = async () => {
@@ -4523,12 +4563,43 @@ export function EnnoScholarPage({
               ))}
             </select>
           )}
+          {diagnosticAvailable !== false && (
+            <Button
+              size="sm"
+              className="min-h-10 bg-brand hover:bg-brand/90"
+              disabled={scholarSearchRunning}
+              onClick={launchScholarSearch}
+              aria-label={usefulArticlesCount > 0 ? "Relancer la recherche EnnoScholar" : "Lancer la recherche EnnoScholar"}
+            >
+              {scholarSearchRunning ? (
+                <Loader2 className="size-4 animate-spin" data-icon="inline-start" aria-hidden="true" />
+              ) : (
+                <Search className="size-4" data-icon="inline-start" aria-hidden="true" />
+              )}
+              {scholarSearchRunning
+                ? "Recherche en cours..."
+                : usefulArticlesCount > 0
+                  ? "Relancer la recherche"
+                  : "Lancer la recherche"}
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="min-h-10" onClick={loadData}>
             <RefreshCw data-icon="inline-start" aria-hidden="true" />
             Actualiser
           </Button>
         </div>
       </div>
+
+      {scholarSearchError && (
+        <div
+          className="flex items-start gap-2 border-t border-destructive/20 bg-destructive/5 px-4 py-2.5 text-xs text-destructive lg:px-6"
+          role="alert"
+          aria-live="assertive"
+        >
+          <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <span>{scholarSearchError}</span>
+        </div>
+      )}
 
       {standaloneChatMode ? (
         <div className="border-t border-border/60 px-3 py-1.5 sm:px-4 lg:px-6">
@@ -4650,6 +4721,7 @@ export function EnnoScholarPage({
         {scholarWorkspaceHeader}
         <div className="min-h-0 flex-1">
           <EnnoScholarPlanChat
+            key={`ennoscholar-chat-${project.id}`}
             projectId={project.id}
             projectLabel={`${project.organisme} — ${project.project_name} — ${project.year}`}
             immersive
@@ -4887,6 +4959,7 @@ export function EnnoScholarPage({
         <TabsContent value="etat-art-rediges">
           <div className="space-y-4">
             <EnnoScholarPlanChat
+              key={`ennoscholar-chat-${project.id}`}
               projectId={project.id}
               projectLabel={`${project.organisme} — ${project.project_name} — ${project.year}`}
               selectedArticles={consultantSelectedArticles}

@@ -1048,8 +1048,12 @@ export function EnnoScholarPlanChat({
   }, [messages, loading, generating])
 
   async function refreshSessions() {
-    const result = await listGuidedResearchSessions(projectId)
-    const rows = Array.isArray(result?.sessions) ? result.sessions : []
+    const result = await listGuidedResearchSessions(projectId, "ennoscholar")
+    const rows = (Array.isArray(result?.sessions) ? result.sessions : []).filter(
+      (session) =>
+        Number(session.project_id) === Number(projectId) &&
+        String(session.entry_module || "").trim().toLowerCase() === "ennoscholar",
+    )
     setSessions(rows)
     return rows
   }
@@ -1123,6 +1127,15 @@ export function EnnoScholarPlanChat({
       const created = await createGuidedResearchSession(projectId)
       const id = String(created?.session?.session_id || "")
       if (!id) throw new Error("La conversation n’a pas été créée.")
+      if (
+        Number(created?.session?.project_id) !== Number(projectId) ||
+        String(created?.session?.entry_module || "").trim().toLowerCase() !==
+          "ennoscholar"
+      ) {
+        throw new Error(
+          "La conversation créée n’est pas rattachée à l’espace EnnoScholar du projet actif.",
+        )
+      }
       setSessionId(id)
       setMessages(created?.session?.messages || [])
       setOperatingMode(String(created?.session?.context?.operating_mode || ""))
@@ -1558,6 +1571,7 @@ export function EnnoScholarPlanChat({
                       ({
                         session_id: sessionId,
                         project_id: projectId,
+                        entry_module: "ennoscholar",
                         state: "",
                         ready_to_write: false,
                         messages: [],
@@ -1724,12 +1738,19 @@ export function EnnoScholarPlanChat({
               )}
 
               {notice && (
-                <div className="rounded-xl border border-success/25 bg-success/8 px-4 py-3 text-sm text-success">
+                <div
+                  className="rounded-xl border border-success/25 bg-success/8 px-4 py-3 text-sm text-success"
+                  role="status"
+                  aria-live="polite"
+                >
                   {notice}
                 </div>
               )}
               {error && (
-                <div className="rounded-xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive">
+                <div
+                  className="rounded-xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive"
+                  role="alert"
+                >
                   {error}
                 </div>
               )}

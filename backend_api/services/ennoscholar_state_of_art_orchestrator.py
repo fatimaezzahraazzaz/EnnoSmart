@@ -850,6 +850,7 @@ def generate_state_of_art_after_consultant_selection(
         )
     if guided_session_id and conversation_context:
         from services.ennoscholar_project_corpus_service import (
+            get_conversation_corpus_cards_payload,
             get_project_corpus_cards_payload,
         )
 
@@ -860,11 +861,26 @@ def generate_state_of_art_after_consultant_selection(
             if str(guided_context.get("review_scope") or "") == "per_verrou"
             else []
         )
-        article_cards_payload = get_project_corpus_cards_payload(
-            db,
-            project,
-            active_verrou_ids=active_verrou_ids,
+        standalone_chat = (
+            str(guided_context.get("operating_mode") or "").strip().casefold()
+            == "standalone_chat"
         )
+        if standalone_chat:
+            article_cards_payload = get_conversation_corpus_cards_payload(
+                db,
+                project,
+                session_id=guided_session_id,
+                corpus_scope_id=str(
+                    guided_context.get("corpus_scope_id") or guided_session_id
+                ),
+                active_verrou_ids=active_verrou_ids,
+            )
+        else:
+            article_cards_payload = get_project_corpus_cards_payload(
+                db,
+                project,
+                active_verrou_ids=active_verrou_ids,
+            )
     else:
         from services.article_card_builder import get_article_cards_payload
 

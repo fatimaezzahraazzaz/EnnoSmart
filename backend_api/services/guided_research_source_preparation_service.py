@@ -528,6 +528,36 @@ def _compact_extraction_result(result: dict[str, Any] | None) -> dict[str, Any] 
     if not isinstance(result, dict):
         return None
     identity = result.get("identity_verification")
+    candidate_urls: list[str] = []
+    for row in [
+        *(result.get("pdf_candidates") or []),
+        *(result.get("candidates") or []),
+        *(result.get("candidate_attempts") or []),
+    ]:
+        if not isinstance(row, dict):
+            continue
+        for key in (
+            "browser_download_url",
+            "pdf_url",
+            "url",
+            "landing_page_url",
+        ):
+            value = _clean(row.get(key), 4000)
+            if value and value not in candidate_urls:
+                candidate_urls.append(value)
+    consultation_url = next(
+        (
+            _clean(result.get(key), 4000)
+            for key in (
+                "browser_download_url",
+                "pdf_url",
+                "url",
+                "landing_page_url",
+            )
+            if _clean(result.get(key), 4000)
+        ),
+        "",
+    ) or (candidate_urls[0] if candidate_urls else "")
     return {
         "ok": bool(result.get("ok")),
         "status": result.get("status"),
@@ -550,6 +580,17 @@ def _compact_extraction_result(result: dict[str, Any] | None) -> dict[str, Any] 
         ),
         "output_path": result.get("output_path"),
         "error": result.get("error"),
+        "message": result.get("message"),
+        "final_failure_code": (
+            result.get("final_failure_code")
+            or result.get("failure_code")
+            or result.get("mcp_failure_code")
+        ),
+        "needs_consultant_upload": bool(
+            result.get("needs_consultant_upload")
+        ),
+        "consultation_url": consultation_url or None,
+        "candidate_urls": candidate_urls[:5],
     }
 
 
@@ -792,6 +833,8 @@ def prepare_accepted_guided_sources(
             )
             continue
 
+        article = None
+        created = False
         try:
             article, created = _upsert_selected_article(
                 db,
@@ -808,8 +851,6 @@ def prepare_accepted_guided_sources(
                 article,
             )
         except Exception as exc:
-            article = None
-            created = False
             extraction = {
                 "ok": False,
                 "status": "source_preparation_exception",
@@ -821,10 +862,30 @@ def prepare_accepted_guided_sources(
             }
 
         ready = bool(extraction.get("ok"))
-        if ready and article is not None:
-            ready_article_ids.append(int(article.id))
+        if article is not None:
+            # « Accepté dans le chat » ne signifie pas encore « gardé dans le
+            # corpus ». Un article impossible à extraire reste rattaché à sa
+            # carte pour permettre l'import PDF, avec un statut d'attente qui
+            # l'exclut de toutes les sélections scientifiques.
+            article.consultant_status = (
+                "garde" if ready else "en_attente_pdf"
+            )
+            db.add(article)
+            db.commit()
+            db.refresh(article)
+            if ready:
+                ready_article_ids.append(int(article.id))
         source["scientific_evidence_eligible"] = ready
         source["fulltext_verified"] = ready
+        compact_direct = _compact_extraction_result(extraction.get("direct"))
+        compact_legal = _compact_extraction_result(extraction.get("legal_mcp"))
+        failure_detail = (
+            compact_legal
+            if isinstance(compact_legal, dict) and not compact_legal.get("ok")
+            else compact_direct
+            if isinstance(compact_direct, dict) and not compact_direct.get("ok")
+            else {}
+        )
         source["fulltext_preparation"] = {
             "ok": ready,
             "status": extraction.get("status"),
@@ -832,9 +893,26 @@ def prepare_accepted_guided_sources(
             "mcp_called": bool(extraction.get("mcp_called")),
             "article_id": int(article.id) if article is not None else None,
             "article_created": created,
-            "direct": _compact_extraction_result(extraction.get("direct")),
-            "legal_mcp": _compact_extraction_result(extraction.get("legal_mcp")),
+            "direct": compact_direct,
+            "legal_mcp": compact_legal,
             "error": extraction.get("error"),
+            "failure_code": failure_detail.get("final_failure_code"),
+            "failure_message": (
+                failure_detail.get("message")
+                or failure_detail.get("error")
+            ),
+            "needs_consultant_upload": bool(
+                not ready
+                and (
+                    failure_detail.get("needs_consultant_upload")
+                    or article is not None
+                )
+            ),
+            "consultation_url": (
+                failure_detail.get("consultation_url")
+                or _clean(source.get("pdf_url") or source.get("url"), 4000)
+                or None
+            ),
             "usable_as_scientific_evidence": ready,
             "proof_policy": (
                 "fulltext_verified_only"

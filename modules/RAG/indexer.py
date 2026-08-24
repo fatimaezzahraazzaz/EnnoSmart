@@ -26,13 +26,20 @@ def index_nlp_result(
     reset: bool = True,
     year: Optional[str | int] = None,
     annee: Optional[str | int] = None,
+    subproject: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Indexe fidelement les groupes deja finalises par le NLP.
 
     Le RAG ne regroupe, ne separe et ne reclasse aucun verrou. L'identifiant
     ``lock_group_id`` produit avant Frascati reste l'unique identite aval.
     """
-    project_store = ProjectStore(organisme, project, year=year, annee=annee).ensure()
+    project_store = ProjectStore(
+        organisme,
+        project,
+        subproject=subproject,
+        year=year,
+        annee=annee,
+    ).ensure()
     project_store.save_json("nlp/nlp_result.json", nlp_result)
 
     chunks = nlp_json_to_chunks(
@@ -57,9 +64,7 @@ def index_nlp_result(
         encoding="utf-8",
     )
 
-    collection_name = (
-        f"ennosmart_{project_store.organisme_id}_{project_store.project_id}_{project_store.year_id}"
-    )
+    collection_name = project_store.collection_name
     report = RAGVectorStore(project_store.chroma_dir).add_chunks(
         collection_name=collection_name,
         chunks=chunks,
@@ -93,6 +98,7 @@ def index_nlp_result(
     return {
         "organisme_id": project_store.organisme_id,
         "project_id": project_store.project_id,
+        "subproject_id": project_store.subproject_id or None,
         "year": project_store.year,
         "annee": project_store.year,
         "year_id": project_store.year_id,
@@ -126,6 +132,7 @@ def index_nlp_result_file(
     reset: bool = True,
     year: Optional[str | int] = None,
     annee: Optional[str | int] = None,
+    subproject: Optional[str] = None,
 ) -> Dict[str, Any]:
     path = Path(nlp_json_path)
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -136,4 +143,5 @@ def index_nlp_result_file(
         reset=reset,
         year=year,
         annee=annee,
+        subproject=subproject,
     )

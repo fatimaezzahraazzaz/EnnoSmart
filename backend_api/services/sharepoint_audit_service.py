@@ -151,18 +151,40 @@ class LocalReadOnlyImportProvider:
         provider_name: str = "power_automate_inbox",
         source_scope: str = "",
         source_library_root: Path | None = None,
+        recursive: bool = True,
+        allowed_relative_paths: Iterable[str] | None = None,
     ):
         self.provider_name = provider_name
         self.source_scope = str(source_scope or "").strip("/\\")
         self.source_root = source_root.resolve()
         self.source_library_root = (source_library_root or source_root).resolve()
+        self.recursive = bool(recursive)
+        self.allowed_relative_paths = {
+            Path(str(value)).as_posix().strip("/")
+            for value in (allowed_relative_paths or [])
+            if str(value or "").strip("/\\")
+        }
         self.last_read_modes: dict[str, str] = {}
         if not self.source_root.is_dir():
             raise FileNotFoundError(f"Dossier de copies Power Automate introuvable : {self.source_root}")
 
     def list_items(self) -> list[ImportFolderItem]:
         items: list[ImportFolderItem] = []
-        for path in sorted(candidate for candidate in self.source_root.rglob("*") if candidate.is_file()):
+        if self.allowed_relative_paths:
+            candidates = [
+                self.source_root / Path(relative)
+                for relative in sorted(self.allowed_relative_paths)
+            ]
+        elif self.recursive:
+            candidates = list(self.source_root.rglob("*"))
+        else:
+            candidates = list(self.source_root.iterdir())
+
+        for path in sorted(candidate for candidate in candidates if candidate.is_file()):
+            try:
+                path.resolve().relative_to(self.source_root)
+            except ValueError:
+                continue
             if path.suffix.lower() not in SUPPORTED_EXTENSIONS or path.name.startswith("~$"):
                 continue
             relative = path.relative_to(self.source_root).as_posix()
@@ -464,7 +486,10 @@ def detect_document_identity(text: str, *, file_name: str = "", source_path: str
     project = first([
         r"(?:nom du projet|projet|opération de recherche|operation de recherche)\s*[:\-]\s*([^\r\n]{2,120})",
     ])
-    return {"organisme": organisme, "project": project, "year": year}
+    subproject = first([
+        r"(?:sous[\s-]*projet|sous[\s-]*opération|sous[\s-]*operation)\s*[:\-]\s*([^\r\n]{2,120})",
+    ])
+    return {"organisme": organisme, "project": project, "subproject": subproject, "year": year}
 
 
 def _without_full_dates(value: Any) -> str:
@@ -489,6 +514,7 @@ def _identity_group_key(identity: dict[str, Any]) -> str:
     return "::".join((
         _identity_key(identity.get("organisme")),
         _identity_key(identity.get("project")),
+        _identity_key(identity.get("subproject")),
         str(identity.get("year") or "").strip(),
     ))
 
@@ -537,12 +563,15 @@ def _meaningful_project_folder(parts: list[str], organisme: str, year: str) -> s
     return ""
 
 
-def _project_from_filename(file_name: str, organisme: str) -> str:
+def _project_from_filename(file_name: str, *identity_labels: str) -> str:
     value = unicodedata.normalize("NFKC", _without_full_dates(Path(file_name).stem)).replace("_", " ")
-    value = re.sub(re.escape(organisme), " ", value, flags=re.IGNORECASE)
-    for token in re.findall(r"[A-Za-zÀ-ÿ0-9]+", organisme):
-        if len(token) >= 3:
-            value = re.sub(rf"\b{re.escape(token)}\b", " ", value, flags=re.IGNORECASE)
+    for label in identity_labels:
+        if not str(label or "").strip():
+            continue
+        value = re.sub(re.escape(label), " ", value, flags=re.IGNORECASE)
+        for token in re.findall(r"[A-Za-zÀ-ÿ0-9]+", label):
+            if len(token) >= 3:
+                value = re.sub(rf"\b{re.escape(token)}\b", " ", value, flags=re.IGNORECASE)
     value = YEAR_RE.sub(" ", value)
     value = re.sub(
         r"\b(?:CIR|CII|DT|VF\s*\d*|V\s*\d+(?:[.,]\d+)*|ED(?:ITION)?\s*\d+(?:[.,]\d+)*|FINAL(?:E)?|DEFINITIF|VALIDE)\b",
@@ -561,31 +590,46 @@ def infer_audit_identity(
     file_name: str,
     detected: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    """Le classement client/projet/année prime sur les mentions trouvées dans le texte."""
+    """Le classement organisme/projet/sous-projet/année prime sur le texte.
+
+    Un dossier numéroté directement sous l'organisme (par exemple
+    ``6NAPSE GROUP/1. CEVAA``) représente le projet. L'opération portée par le
+    nom du CIR (APACHE, VECAME...) devient alors un sous-projet facultatif.
+    """
     detected = detected or {}
     parts = _all_relative_parts(source_scope, source_path)
     identity_prefix_count = 1
     organisme_source = parts[0] if parts else detected.get("organisme")
-    # Certains groupes classent leurs sociétés au deuxième niveau sous la
-    # forme « 1. CEVAA ». Dans ce cas la filiale, pas le groupe, est l'identité.
+    fixed_project = ""
+    # Certains organismes rangent leurs projets au deuxième niveau sous la
+    # forme « 1. CEVAA ». Le groupe reste l'organisme et CEVAA est le projet.
     if len(parts) > 1 and re.match(r"^\d+[. _-]+", parts[1]):
-        subsidiary = re.sub(r"^\d+[. _-]*", "", parts[1]).strip()
-        if subsidiary:
-            organisme_source = subsidiary
+        numbered_project = re.sub(r"^\d+[. _-]*", "", parts[1]).strip()
+        if numbered_project:
+            fixed_project = _safe_identity_label(numbered_project)
             identity_prefix_count = 2
     organisme = _safe_identity_label(organisme_source, "Entreprise à confirmer")
     identity_parts = parts[identity_prefix_count:]
     year = _detect_path_year(identity_parts, file_name, detected.get("year"))
-    project = _meaningful_project_folder(identity_parts, organisme, year)
-    if not project:
-        project = _project_from_filename(file_name, organisme)
-    if not project:
-        candidate = _safe_identity_label(detected.get("project"))
-        if candidate and len(candidate) <= 90:
-            project = candidate
+    project = fixed_project or _meaningful_project_folder(identity_parts, organisme, year)
+    subproject = ""
+
+    if fixed_project:
+        subproject = _project_from_filename(file_name, organisme, project)
+        detected_operation = _safe_identity_label(detected.get("subproject") or detected.get("project"))
+        if not subproject and detected_operation and _normalise(detected_operation) != _normalise(project):
+            subproject = detected_operation
+    else:
+        if not project:
+            project = _project_from_filename(file_name, organisme)
+        if not project:
+            candidate = _safe_identity_label(detected.get("project"))
+            if candidate and len(candidate) <= 90:
+                project = candidate
+
     if not project:
         project = f"Dossier CIR {year}" if year else "Projet à confirmer"
-    return {"organisme": organisme, "project": project, "year": year}
+    return {"organisme": organisme, "project": project, "subproject": subproject, "year": year}
 
 
 def _version_numbers(file_name: str) -> list[int]:
@@ -628,7 +672,7 @@ def _selection_rank(item: dict[str, Any]) -> tuple[Any, ...]:
 def _memory_records() -> tuple[set[str], set[str]]:
     memory_root = Path(
         os.getenv("ENNOSMART_EXPERIENCE_MEMORY_V2_DIR")
-        or ROOT_DIR / "storage" / "experience_memory_v2"
+        or settings.ENNOSMART_EXPERIENCE_MEMORY_V2_DIR
     )
     hashes: set[str] = set()
     groups: set[str] = set()
@@ -643,6 +687,7 @@ def _memory_records() -> tuple[set[str], set[str]]:
         groups.add(_identity_group_key({
             "organisme": payload.get("organisme"),
             "project": payload.get("project"),
+            "subproject": payload.get("subproject"),
             "year": payload.get("year"),
         }))
     return hashes, groups
@@ -743,12 +788,17 @@ def require_manifest_confirmation(run: dict[str, Any], value: Any) -> None:
 
 
 def memory_identity_conflict(
-    *, digest: str, organisme: Any, project: Any, year: Any,
+    *, digest: str, organisme: Any, project: Any, subproject: Any = "", year: Any,
 ) -> str:
     hashes, groups = _memory_records()
     if str(digest or "").lower() in hashes:
         return "same_hash"
-    group = _identity_group_key({"organisme": organisme, "project": project, "year": year})
+    group = _identity_group_key({
+        "organisme": organisme,
+        "project": project,
+        "subproject": subproject,
+        "year": year,
+    })
     if group in groups:
         return "same_identity_other_version"
     return ""
@@ -1246,6 +1296,7 @@ def mark_audit_item_indexed(
             "indexed_identity": {
                 "organisme": str((identity or {}).get("organisme") or "").strip(),
                 "project": str((identity or {}).get("project") or "").strip(),
+                "subproject": str((identity or {}).get("subproject") or "").strip(),
                 "year": str((identity or {}).get("year") or "").strip(),
             },
             "index_result": {
@@ -1269,11 +1320,17 @@ def mark_matching_items_memory_removed(
     project: Any,
     year: Any,
     *,
+    subproject: Any = "",
     audit_root: Path | None = None,
 ) -> dict[str, Any]:
     """Désolidarise les audits de la mémoire supprimée, sans toucher à l'inbox."""
     root = (audit_root or Path(settings.POWER_AUTOMATE_AUDIT_ROOT or str(DEFAULT_AUDIT_ROOT))).resolve()
-    wanted = (_normalise(organisme), _normalise(project), str(year or "").strip())
+    wanted = (
+        _normalise(organisme),
+        _normalise(project),
+        _normalise(subproject),
+        str(year or "").strip(),
+    )
     updated_items = 0
     updated_runs = 0
 
@@ -1290,6 +1347,7 @@ def mark_matching_items_memory_removed(
             candidate = (
                 _normalise(identity.get("organisme")),
                 _normalise(identity.get("project")),
+                _normalise(identity.get("subproject")),
                 str(identity.get("year") or "").strip(),
             )
             if candidate != wanted:

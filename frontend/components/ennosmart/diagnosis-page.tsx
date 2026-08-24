@@ -153,15 +153,22 @@ function unwrapCirPreviousReportForDisplay(value: any): any {
   if (!value || typeof value !== "object") return {}
 
   const candidates = [
-    value?.report,
+    // Toujours privilégier le rapport CIR structuré. Une enveloppe générale
+    // peut aussi avoir un champ `summary` et masquer les comparaisons imbriquées.
+    value?.cir_memory_report,
+    value?.cir_memory,
+    value?.display?.cir_memory_report,
+    value?.display?.cir_memory,
+    value?.diagnostic?.cir_memory_report,
+    value?.diagnostic?.cir_memory,
     value?.comparison_report,
     value?.comparison,
-    value?.cir_memory_report,
     value?.cir_previous_report,
     value?.previous_cir_report,
     value?.payload,
     value?.data,
     value?.result,
+    value?.report,
     value,
   ]
 
@@ -169,6 +176,8 @@ function unwrapCirPreviousReportForDisplay(value: any): any {
     if (!candidate || typeof candidate !== "object") continue
     if (
       candidate?.has_previous_cir === true ||
+      candidate?.previous_cir_available === true ||
+      candidate?.inputs_status?.previous_cir_available === true ||
       candidate?.summary ||
       firstNonEmptyArray(candidate?.verrou_comparisons, candidate?.comparisons, candidate?.new_or_not_found, candidate?.evolution_or_partial_continuity, candidate?.continuity_strong).length > 0 ||
       firstNonEmptyArray(candidate?.previous_cir_years_used, candidate?.previous_years, candidate?.registered_previous_cirs).length > 0
@@ -201,6 +210,8 @@ function chooseCirMemoryReport(...values: any[]) {
     const report = unwrapCirPreviousReportForDisplay(value)
     if (
       report?.has_previous_cir === true ||
+      report?.previous_cir_available === true ||
+      report?.inputs_status?.previous_cir_available === true ||
       report?.summary ||
       firstNonEmptyArray(report?.previous_cir_years_used, report?.previous_years, report?.registered_previous_cirs).length > 0
     ) {
@@ -753,7 +764,7 @@ function consultantAction(verrou: VerrouRead) {
     return "Piste non retenue pour l’instant : elle reste traçable mais n’est pas transmise à EnnoScholar."
   }
 
-  return "Piste à examiner : choisir Retenir, À consolider ou Non retenir après lecture des preuves."
+  return "Piste à examiner : choisir Retenir ou Non retenir après lecture des preuves."
 }
 
 function splitConsultantItem(value: string) {
@@ -3664,55 +3675,6 @@ async function getArticles(projectId: number) {
   return Array.isArray(data) ? data : []
 }
 
-async function runScholarFromSelectedVerrous(projectId: number) {
-  const token = getAccessToken()
-
-  if (!token) {
-    throw new Error("Utilisateur non authentifié.")
-  }
-
-  const response = await fetch(
-    `${API_BASE_URL}/projects/${projectId}/scholar/run-from-selected-verrous?max_verrous=8&limit_per_query=50&offline_dry_run=false`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  )
-
-  const data = await response.json().catch(() => null)
-
-  if (!response.ok) {
-    throw new Error(typeof data?.detail === "string" ? data.detail : "Erreur lancement EnnoScholar.")
-  }
-
-  return data
-}
-
-async function syncScholarArticles(projectId: number, runId: number) {
-  const token = getAccessToken()
-
-  if (!token) {
-    throw new Error("Utilisateur non authentifié.")
-  }
-
-  const response = await fetch(`${API_BASE_URL}/projects/${projectId}/scholar/${runId}/sync-articles`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  })
-
-  const data = await response.json().catch(() => null)
-
-  if (!response.ok) {
-    throw new Error(typeof data?.detail === "string" ? data.detail : "Erreur synchronisation articles.")
-  }
-
-  return Array.isArray(data) ? data : []
-}
-
 function scholarDecisionClass(decision: string | null | undefined) {
   const value = String(decision || "").toLowerCase()
 
@@ -3963,7 +3925,6 @@ export function DiagnosisPage(
   const [previousCirCompareLoading, setPreviousCirCompareLoading] = useState(false)
   const [scholarBundle, setScholarBundle] = useState<any>(null)
   const [articles, setArticles] = useState<any[]>([])
-  const [scholarLoading, setScholarLoading] = useState(false)
   const [cirFinalRegistered, setCirFinalRegistered] = useState(false)
   const [manualFormOpen, setManualFormOpen] = useState(false)
   const [manualTitle, setManualTitle] = useState("")
@@ -4048,8 +4009,9 @@ export function DiagnosisPage(
     () => chooseCirMemoryReport(
       cirPreviousComparisonReport,
       previousCirComparisonReport,
-      display?.cir_memory,
       display?.cir_memory_report,
+      display?.cir_memory,
+      display,
       diagnosticBundle?.cir_memory_report,
       diagnosticBundle
     ),
@@ -4060,8 +4022,20 @@ export function DiagnosisPage(
       diagnosticBundle,
     ]
   )
-  const cirMemoryOk = Boolean(display?.cir_memory_ok || cirMemory?.ok || cirMemory?.has_previous_cir)
-  const cirMemoryHasPrevious = Boolean(display?.cir_memory_has_previous || cirMemory?.has_previous_cir)
+  const cirMemoryOk = Boolean(
+    display?.cir_memory_ok ||
+    cirMemory?.ok ||
+    cirMemory?.has_previous_cir ||
+    cirMemory?.previous_cir_available ||
+    display?.inputs_status?.previous_cir_available
+  )
+  const cirMemoryHasPrevious = Boolean(
+    display?.cir_memory_has_previous ||
+    cirMemory?.has_previous_cir ||
+    cirMemory?.previous_cir_available ||
+    display?.inputs_status?.previous_cir_available ||
+    diagnosticBundle?.inputs_status?.previous_cir_available
+  )
   const cirMemorySummary = display?.cir_memory_summary || cirMemory?.summary || {}
   const cirMemoryPreviousYears = firstNonEmptyArray(display?.cir_memory_previous_years, cirMemory?.previous_cir_years_used, cirMemory?.previous_years)
   const cirMemoryNoveltyScore = display?.cir_memory_project_novelty_score ?? cirMemorySummary?.project_novelty_score
@@ -4150,6 +4124,8 @@ export function DiagnosisPage(
       cirMemoryHasPrevious ||
       cirMemory?.has_previous_cir === true ||
       display?.cir_memory_has_previous === true ||
+      display?.inputs_status?.previous_cir_available === true ||
+      diagnosticBundle?.inputs_status?.previous_cir_available === true ||
       previousCirDetectedYears.length > 0 ||
       latestReport?.has_previous_cir === true ||
       latestReport?.previous_cir_available === true ||
@@ -5102,43 +5078,6 @@ export function DiagnosisPage(
     }
   }
 
-  const launchEnnoScholar = async () => {
-    if (!project) return
-
-    if (selectedVerrousForScholar.length === 0) {
-      setError("Sélectionne au moins un verrou avec le statut Gardé avant de lancer EnnoScholar.")
-      return
-    }
-
-    setScholarLoading(true)
-    setError("")
-
-    try {
-      const run = await runScholarFromSelectedVerrous(project.id)
-      const runId = run?.id
-
-      if (runId) {
-        await syncScholarArticles(project.id, runId).catch(() => [])
-      }
-
-      const [latestScholar, latestArticles] = await Promise.all([
-        getScholarLatest(project.id).catch(() => null),
-        getArticles(project.id).catch(() => []),
-      ])
-
-      setScholarBundle(latestScholar)
-      setArticles(latestArticles)
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Impossible de lancer EnnoScholar."
-      )
-    } finally {
-      setScholarLoading(false)
-    }
-  }
-
   const updateDecision = async (
     verrouId: number,
     decision: ConsultantDecision
@@ -5844,23 +5783,12 @@ export function DiagnosisPage(
               <div className="flex flex-col justify-center gap-2 border-t border-brand/15 bg-white/65 p-5 lg:border-l lg:border-t-0">
                 <Button
                   className="w-full bg-brand hover:bg-brand/90"
-                  disabled={scholarLoading || pendingReviewCount > 0}
-                  onClick={async () => {
-                    if (!scholarRunId) {
-                      await launchEnnoScholar()
-                    }
-                    onOpenScholar?.()
-                  }}
+                  disabled={pendingReviewCount > 0 || !onOpenScholar}
+                  onClick={() => onOpenScholar?.()}
                 >
-                  {scholarLoading ? (
-                    <Loader2 className="size-4 animate-spin" data-icon="inline-start" />
-                  ) : (
-                    <Search className="size-4" data-icon="inline-start" />
-                  )}
-                  {scholarRunId ? "Ouvrir EnnoScholar" : "Passer à EnnoScholar"}
-                  {!scholarLoading ? (
-                    <ArrowRight className="size-4" data-icon="inline-end" />
-                  ) : null}
+                  <Search className="size-4" data-icon="inline-start" aria-hidden="true" />
+                  Passer à EnnoScholar
+                  <ArrowRight className="size-4" data-icon="inline-end" aria-hidden="true" />
                 </Button>
 
                 <Button
@@ -6640,68 +6568,10 @@ export function DiagnosisPage(
                                 </div>
 
                                 <div
-                                  className="grid gap-1 rounded-lg bg-muted/[0.42] p-1 sm:grid-cols-3"
+                                  className="grid gap-1 rounded-lg bg-muted/[0.42] p-1 sm:grid-cols-2"
                                   role="group"
                                   aria-label={`Décision pour ${verrou.title}`}
                                 >
-                                  <Button
-                                    size="sm"
-                                    variant={
-                                      verrou.consultant_status === "rejete"
-                                        ? "destructive"
-                                        : "ghost"
-                                    }
-                                    className="min-h-10 justify-center rounded-md text-xs"
-                                    aria-pressed={verrou.consultant_status === "rejete"}
-                                    disabled={isLoading || isJsonOnly}
-                                    onClick={() => {
-                                      if (!isJsonOnly) updateDecision(verrou.id, "rejete")
-                                    }}
-                                  >
-                                    {isLoading &&
-                                    verrou.consultant_status === "rejete" ? (
-                                      <Loader2
-                                        className="size-3.5 animate-spin"
-                                        data-icon="inline-start"
-                                      />
-                                    ) : (
-                                      <XCircle
-                                        className="size-3.5"
-                                        data-icon="inline-start"
-                                      />
-                                    )}
-                                    Non retenir
-                                  </Button>
-
-                                  <Button
-                                    size="sm"
-                                    variant={
-                                      verrou.consultant_status === "reformuler"
-                                        ? "secondary"
-                                        : "ghost"
-                                    }
-                                    className="min-h-10 justify-center rounded-md text-xs"
-                                    aria-pressed={verrou.consultant_status === "reformuler"}
-                                    disabled={isLoading || isJsonOnly}
-                                    onClick={() => {
-                                      if (!isJsonOnly) updateDecision(verrou.id, "reformuler")
-                                    }}
-                                  >
-                                    {isLoading &&
-                                    verrou.consultant_status === "reformuler" ? (
-                                      <Loader2
-                                        className="size-3.5 animate-spin"
-                                        data-icon="inline-start"
-                                      />
-                                    ) : (
-                                      <RefreshCw
-                                        className="size-3.5"
-                                        data-icon="inline-start"
-                                      />
-                                    )}
-                                    Consolider
-                                  </Button>
-
                                   <Button
                                     size="sm"
                                     variant={
@@ -6734,6 +6604,35 @@ export function DiagnosisPage(
                                       />
                                     )}
                                     Retenir
+                                  </Button>
+
+                                  <Button
+                                    size="sm"
+                                    variant={
+                                      verrou.consultant_status === "rejete"
+                                        ? "destructive"
+                                        : "ghost"
+                                    }
+                                    className="min-h-10 justify-center rounded-md text-xs"
+                                    aria-pressed={verrou.consultant_status === "rejete"}
+                                    disabled={isLoading || isJsonOnly}
+                                    onClick={() => {
+                                      if (!isJsonOnly) updateDecision(verrou.id, "rejete")
+                                    }}
+                                  >
+                                    {isLoading &&
+                                    verrou.consultant_status === "rejete" ? (
+                                      <Loader2
+                                        className="size-3.5 animate-spin"
+                                        data-icon="inline-start"
+                                      />
+                                    ) : (
+                                      <XCircle
+                                        className="size-3.5"
+                                        data-icon="inline-start"
+                                      />
+                                    )}
+                                    Non retenir
                                   </Button>
                                 </div>
                               </section>

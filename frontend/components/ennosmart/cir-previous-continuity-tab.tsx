@@ -81,12 +81,16 @@ function unwrapReport(value: any): any {
 
   const queue = [
     value?.cir_memory_report,
+    value?.cir_memory,
+    value?.display?.cir_memory_report,
+    value?.display?.cir_memory,
+    value?.diagnostic?.cir_memory,
     value?.comparison_report,
     value?.comparison,
-    value?.report,
     value?.diagnostic?.cir_memory_report,
     value?.data,
     value?.result,
+    value?.report,
     value,
   ]
 
@@ -94,6 +98,8 @@ function unwrapReport(value: any): any {
     if (!candidate || typeof candidate !== "object") continue
     if (
       candidate?.has_previous_cir === true ||
+      candidate?.previous_cir_available === true ||
+      candidate?.inputs_status?.previous_cir_available === true ||
       candidate?.summary ||
       asArray(candidate?.verrou_comparisons).length > 0 ||
       asArray(candidate?.comparisons).length > 0
@@ -519,8 +525,17 @@ export default function CirPreviousContinuityTab({
 
   const year = previousYear(report)
   const hiddenCount = Number(report?.summary?.hidden_comparisons_count || 0)
+  const hasPreviousCir = Boolean(
+    report?.has_previous_cir ||
+    report?.previous_cir_available ||
+    report?.inputs_status?.previous_cir_available ||
+    diagnostic?.has_previous_cir ||
+    diagnostic?.previous_cir_available ||
+    diagnostic?.inputs_status?.previous_cir_available ||
+    comparisons.length > 0
+  )
 
-  if (!report?.has_previous_cir && comparisons.length === 0) {
+  if (!hasPreviousCir) {
     return (
       <Card>
         <CardHeader>
@@ -530,6 +545,23 @@ export default function CirPreviousContinuityTab({
           </CardTitle>
           <CardDescription>
             Aucun rapport de comparaison exploitable n’est disponible.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
+
+  if (comparisons.length === 0) {
+    return (
+      <Card className="border-amber-200 bg-amber-50/60">
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <History className="size-4 text-amber-700" />
+            CIR {year} détecté
+          </CardTitle>
+          <CardDescription className="leading-5">
+            Le CIR précédent est disponible, mais le détail de ses rapprochements
+            n’est pas encore chargé. Actualise la page ou relance uniquement la comparaison CIR.
           </CardDescription>
         </CardHeader>
       </Card>

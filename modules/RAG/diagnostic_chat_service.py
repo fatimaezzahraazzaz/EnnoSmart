@@ -584,22 +584,22 @@ class DiagnosticRAGChatService:
         organisme: str,
         project: str,
         year: str | int,
+        subproject: str | None = None,
     ) -> None:
         self.store = ProjectStore(
             organisme=organisme,
             project=project,
+            subproject=subproject,
             year=year,
         ).ensure()
 
-        self.base_collection_name = (
-            f"ennosmart_{self.store.organisme_id}_"
-            f"{self.store.project_id}_{self.store.year_id}"
-        )
+        self.base_collection_name = self.store.collection_name
         self.raw_collection_name = self.base_collection_name + RAW_COLLECTION_SUFFIX
 
         self.retriever = EnnoRetriever(
             organisme=organisme,
             project=project,
+            subproject=subproject,
             year=year,
         )
         self.vector_store = RAGVectorStore(self.store.chroma_dir)
@@ -4171,4 +4171,3 @@ CATALOGUE DE PREUVES
                 "evidence_limit": evidence_limit,
             },
         }
-

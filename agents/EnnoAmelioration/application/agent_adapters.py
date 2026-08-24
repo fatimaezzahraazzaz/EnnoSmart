@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from typing import Any
 
 
@@ -160,19 +161,122 @@ def _find_domain_detection(value: Any, *, max_depth: int = 8) -> dict[str, Any]:
 
 def _search_terms(text: str) -> set[str]:
     stopwords = {
+        "article",
+        "articles",
+        "approche",
+        "approaches",
+        "amelioration",
+        "ameliorer",
+        "analyse",
+        "application",
+        "applications",
         "cette",
         "comme",
+        "complete",
+        "contexte",
         "dans",
+        "demontre",
+        "developpement",
+        "dossier",
+        "etude",
+        "evaluation",
+        "experimental",
+        "experimentale",
+        "generale",
+        "important",
+        "justification",
+        "methode",
+        "methodes",
+        "modelisation",
+        "modele",
+        "modeles",
+        "nouvelle",
         "pour",
+        "pertinence",
+        "pertinent",
+        "projet",
+        "publication",
+        "publications",
+        "redaction",
+        "recherche",
+        "renforcement",
+        "renforcer",
+        "resultat",
+        "resultats",
+        "scientifique",
+        "scientifiques",
+        "source",
+        "sources",
         "avec",
         "sans",
         "section",
-        "améliorer",
+        "simulation",
+        "systeme",
+        "systemes",
+        "technique",
+        "techniques",
+        "travaux",
+        "utilise",
+        "validation",
+        "verrou",
+        "verrous",
     }
+    normalized = unicodedata.normalize("NFKD", str(text or ""))
+    normalized = "".join(char for char in normalized if not unicodedata.combining(char)).casefold()
     return {
-        token.casefold()
-        for token in re.findall(r"\b[\wÀ-ÿ-]{5,}\b", str(text or ""))
-        if token.casefold() not in stopwords
+        token
+        for token in re.findall(r"\b[a-z0-9-]{5,}\b", normalized)
+        if token not in stopwords
+    }
+
+
+def _normalized_searchable(value: Any) -> str:
+    text = unicodedata.normalize("NFKD", _compact(value, 24000))
+    return "".join(char for char in text if not unicodedata.combining(char)).casefold()
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, (list, tuple, set)):
+        return []
+    return list(dict.fromkeys(
+        str(item).strip() for item in value if str(item or "").strip()
+    ))
+
+
+def _target_bindings(card: dict[str, Any], source_json: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = card.get("target_bindings") or source_json.get("target_bindings") or []
+    if not isinstance(rows, list):
+        rows = []
+    bindings = [dict(row) for row in rows if isinstance(row, dict)]
+    target_ids = _string_list(
+        card.get("research_target_ids") or source_json.get("research_target_ids") or []
+    )
+    section_ids = _string_list(
+        card.get("section_ids") or source_json.get("section_ids") or []
+    )
+    known = {
+        str(row.get("research_target_id") or row.get("parent_section_id") or "").strip()
+        for row in bindings
+    }
+    for target_id in target_ids:
+        if target_id not in known:
+            bindings.append({"research_target_id": target_id})
+            known.add(target_id)
+    for section_id in section_ids:
+        if section_id not in known:
+            bindings.append({"parent_section_id": section_id})
+            known.add(section_id)
+    return bindings
+
+
+def _binding_ids(bindings: list[dict[str, Any]]) -> set[str]:
+    return {
+        str(value).strip()
+        for row in bindings
+        for value in (row.get("research_target_id"), row.get("parent_section_id"))
+        if str(value or "").strip()
     }
 
 
@@ -309,6 +413,8 @@ def scholar_context(
     *,
     allowed_article_ids: list[int] | None = None,
     evidence_scope_id: str | None = None,
+    target_section_id: str | None = None,
+    target_section_title: str | None = None,
 ) -> dict[str, Any]:
     """Lit seulement la sélection consultant et ses preuves scientifiques prêtes."""
 
@@ -343,26 +449,40 @@ def scholar_context(
         payload = get_article_cards_payload(project)
     cards = [row for row in (payload.get("cards") or []) if isinstance(row, dict)]
     selected_ids = {int(row.id) for row in selected}
-    terms = _search_terms(target_text + " " + instruction)
-    candidates: list[tuple[int, dict[str, Any]]] = []
+    terms = _search_terms(
+        " ".join((target_section_title or "", target_text or "", instruction or ""))
+    )
+    explicit_closed_corpus = allowed_article_ids is not None
+    wanted_target_id = str(target_section_id or "").strip()
+    article_by_id = {int(row.id): row for row in selected}
+    candidates: list[tuple[int, dict[str, Any], dict[str, Any], list[dict[str, Any]]]] = []
     for card in cards:
         article_id = card.get("article_id") or (card.get("identity") or {}).get("article_id")
         try:
-            if int(article_id) not in selected_ids:
+            numeric_article_id = int(article_id)
+            if numeric_article_id not in selected_ids:
                 continue
         except (TypeError, ValueError):
             continue
-        searchable = _compact(card, 12000).casefold()
-        candidates.append((sum(1 for term in terms if term in searchable), card))
+        article = article_by_id.get(numeric_article_id)
+        source_json = article.source_json if article and isinstance(article.source_json, dict) else {}
+        bindings = _target_bindings(card, source_json)
+        mapped_ids = _binding_ids(bindings)
+        mapped_to_target = bool(wanted_target_id and wanted_target_id in mapped_ids)
+        if wanted_target_id and mapped_ids and not mapped_to_target:
+            continue
+        searchable = _normalized_searchable({"card": card, "source": source_json})
+        lexical_score = sum(1 for term in terms if term in searchable)
+        if not explicit_closed_corpus and not mapped_to_target and lexical_score < 2:
+            continue
+        candidates.append((lexical_score, card, source_json, bindings))
     candidates.sort(key=lambda item: item[0], reverse=True)
 
-    article_by_id = {int(row.id): row for row in selected}
     evidence: list[dict[str, Any]] = []
-    for _, card in candidates[:12]:
+    for lexical_score, card, source_json, bindings in candidates[:12]:
         identity = card.get("identity") or {}
         article_id = card.get("article_id") or identity.get("article_id")
         article = article_by_id.get(int(article_id)) if str(article_id or "").isdigit() else None
-        source_json = article.source_json if article and isinstance(article.source_json, dict) else {}
         authors = (
             identity.get("authors")
             or card.get("authors")
@@ -406,13 +526,30 @@ def scholar_context(
                     1400,
                 ),
                 "source_url": article.url if article else None,
-                "section_ids": list(
-                    card.get("section_ids")
-                    or card.get("research_target_ids")
-                    or source_json.get("section_ids")
-                    or source_json.get("research_target_ids")
-                    or []
-                ),
+                "section_ids": list(dict.fromkeys([
+                    *_string_list(card.get("section_ids") or source_json.get("section_ids") or []),
+                    *[
+                        str(row.get("parent_section_id") or "").strip()
+                        for row in bindings
+                        if str(row.get("parent_section_id") or "").strip()
+                    ],
+                ])),
+                "research_target_ids": list(dict.fromkeys([
+                    *_string_list(card.get("research_target_ids") or source_json.get("research_target_ids") or []),
+                    *[
+                        str(row.get("research_target_id") or "").strip()
+                        for row in bindings
+                        if str(row.get("research_target_id") or "").strip()
+                    ],
+                ])),
+                "target_bindings": bindings,
+                "allowed_claim_scope": {
+                    "target_bindings": bindings,
+                    "rule": "exact_target_only_no_cross_section_reuse",
+                },
+                "section_context_gate": card.get("section_context_gate") or source_json.get("section_context_gate") or {},
+                "reuse_lexical_score": lexical_score,
+                "citation_required": False,
             }
         )
 
@@ -431,6 +568,11 @@ def scholar_context(
                 "doi": row.get("doi"),
                 "url": row.get("source_url"),
                 "section_ids": row.get("section_ids") or [],
+                "research_target_ids": row.get("research_target_ids") or [],
+                "target_bindings": row.get("target_bindings") or [],
+                "allowed_claim_scope": row.get("allowed_claim_scope") or {},
+                "section_context_gate": row.get("section_context_gate") or {},
+                "citation_required": False,
                 "text": "\n".join(
                     str(row.get(key) or "")
                     for key in ("title", "method", "results", "limits", "impact")
@@ -443,9 +585,21 @@ def scholar_context(
         "available": bool(evidence),
         "agent": "EnnoScholar",
         "selected_article_count": len(selected),
-        "writing_ready_card_count": len(candidates),
+        "writing_ready_card_count": len(evidence),
         "evidence": evidence,
         "evidence_items": evidence_items,
-        "proof_policy": "validated_selection_and_article_cards_only",
+        "proof_policy": "target_scoped_validated_cards_no_zero_relevance_reuse_v3_25",
+        "reuse_filter": {
+            "explicit_closed_corpus": explicit_closed_corpus,
+            "target_section_id": wanted_target_id or None,
+            "meaningful_terms": sorted(terms),
+            "eligible_count": len(evidence),
+            "minimum_lexical_hits_for_unmapped_reuse": 2,
+        },
+        "reason": (
+            None
+            if evidence
+            else "Les références validées existantes ne sont pas reliées à cette cible scientifique."
+        ),
         "requires_research": not bool(evidence),
     }

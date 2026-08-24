@@ -23,6 +23,92 @@ def _looks_like_toc_entry(value: str) -> bool:
     return bool(re.search(r"(?:\.{3,}|…{2,})[ \t]*\d+(?:\s*[-–]\s*\d+)?$", line))
 
 
+def _title_without_glued_page_numbers(value: str) -> list[str]:
+    """Variantes d'un titre dont le numéro de page a été collé au dernier mot."""
+
+    title = str(value or "").strip()
+    trailing = re.search(r"\d{1,6}$", title)
+    if trailing is None:
+        return []
+
+    variants: list[str] = []
+    digit_count = len(trailing.group(0))
+    for removed in range(1, min(4, digit_count) + 1):
+        candidate = title[:-removed].rstrip(" .\t")
+        if (
+            len(candidate) >= 3
+            and any(char.isalpha() for char in candidate)
+            and candidate not in variants
+        ):
+            variants.append(candidate)
+    return variants
+
+
+def _mapped_toc_body_headings(
+    source: str,
+    numbered_candidates: list[tuple[re.Match[str], str]],
+) -> tuple[dict[int, tuple[int, int, str, int]], int | None]:
+    """Rattache un sommaire PDF sans libellé aux vrais titres du corps.
+
+    Certains exports suppriment « Sommaire », les pointillés et la numérotation
+    dans le corps, tout en collant le numéro de page au titre du sommaire. On
+    reconstruit alors la hiérarchie uniquement lorsque plusieurs titres se
+    retrouvent, dans le même ordre, plus loin dans le document.
+    """
+
+    line_matches = list(_LINE.finditer(source))
+    mapped: dict[int, tuple[int, int, str, int]] = {}
+    body_cursor = 0
+
+    for index, (candidate, _) in enumerate(numbered_candidates):
+        # Dès que les candidats numérotés appartiennent déjà au corps, ils ne
+        # doivent pas être remappés vers une répétition ultérieure.
+        if mapped and candidate.start() >= body_cursor:
+            continue
+
+        variants = {
+            _match_text(value): value
+            for value in _title_without_glued_page_numbers(
+                candidate.group("title")
+            )
+            if _match_text(value)
+        }
+        if not variants:
+            continue
+
+        search_from = max(candidate.end(), body_cursor)
+        body_match: re.Match[str] | None = None
+        body_title = ""
+        for line in line_matches:
+            if line.start() < search_from:
+                continue
+            normalized = _match_text(line.group("title"))
+            if normalized in variants:
+                body_match = line
+                body_title = line.group("title").strip()
+                break
+
+        if body_match is None:
+            continue
+
+        prefix = candidate.group("prefix")
+        level = max(1, prefix.count(".")) if prefix[0].isdigit() else 1
+        visible_title = f"{prefix} {body_title}".strip()
+        mapped[index] = (
+            body_match.start(),
+            body_match.end(),
+            visible_title,
+            level,
+        )
+        body_cursor = body_match.end()
+
+    # Une correspondance isolée pourrait être une répétition normale. Trois
+    # titres ordonnés constituent un signal structurel de sommaire.
+    if len(mapped) < 3:
+        return {}, None
+    return mapped, min(value[0] for value in mapped.values())
+
+
 def repair_section_boundaries(text: str) -> str:
     """Restaure un titre Markdown anciennement collé à la phrase précédente.
 
@@ -224,6 +310,11 @@ def parse_sections(text: str) -> list[ParsedSection]:
         prefix_key = match.group("prefix").rstrip(".").casefold()
         numbered_candidates.append((match, prefix_key))
 
+    mapped_toc_headings, inferred_body_start = _mapped_toc_body_headings(
+        source,
+        numbered_candidates,
+    )
+
     # Un sommaire extrait d'un PDF contient souvent les memes numeros que le
     # corps, parfois sans pointilles lorsque le titre est replie sur deux
     # lignes. Pour un numero repete, l'occurrence la plus tardive correspond au
@@ -232,12 +323,22 @@ def parse_sections(text: str) -> list[ParsedSection]:
     best_numbered_occurrence: dict[str, int] = {}
     best_numbered_score: dict[str, tuple[float, int]] = {}
     for index, (candidate, prefix_key) in enumerate(numbered_candidates):
+        if (
+            inferred_body_start is not None
+            and candidate.start() < inferred_body_start
+        ):
+            continue
         rank = (_numbered_heading_score(source, candidate), index)
         if rank > best_numbered_score.get(prefix_key, (-1000.0, -1)):
             best_numbered_score[prefix_key] = rank
             best_numbered_occurrence[prefix_key] = index
 
     for index, (match, prefix_key) in enumerate(numbered_candidates):
+        if (
+            inferred_body_start is not None
+            and match.start() < inferred_body_start
+        ):
+            continue
         if best_numbered_occurrence.get(prefix_key) != index:
             continue
         prefix = match.group("prefix")
@@ -248,6 +349,8 @@ def parse_sections(text: str) -> list[ParsedSection]:
                 continue
         level = max(1, prefix.count(".")) if prefix[0].isdigit() else 1
         matches.append((match.start(), match.end(), match.group("title").strip(), level))
+
+    matches.extend(mapped_toc_headings.values())
 
     numbered_hierarchy_count = sum(
         1

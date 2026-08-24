@@ -436,6 +436,183 @@ def _article_is_writing_usable(article: Article) -> bool:
     )
 
 
+def get_conversation_corpus_run(
+    db: Session,
+    project: Project,
+    *,
+    session_id: str,
+    corpus_scope_id: str | None = None,
+) -> ScholarRun | None:
+    """Résout le ScholarRun privé d'une conversation autonome.
+
+    La résolution repose sur les marqueurs de provenance persistés dans le run,
+    jamais sur le « dernier run du projet ». Une conversation ne peut donc pas
+    récupérer par accident le corpus d'une conversation voisine.
+    """
+    wanted_session_id = _clean(session_id, 160)
+    wanted_scope_id = _clean(corpus_scope_id or session_id, 160)
+    rows = (
+        db.query(ScholarRun)
+        .filter(ScholarRun.project_id == int(project.id))
+        .filter(
+            ScholarRun.status.in_([
+                "guided_conversation_corpus",
+                "guided_research_standalone",
+            ])
+        )
+        .order_by(ScholarRun.created_at.desc(), ScholarRun.id.desc())
+        .all()
+    )
+    for run in rows:
+        raw = run.raw_result_json if isinstance(run.raw_result_json, Mapping) else {}
+        known_session_ids = {
+            _clean(value, 160)
+            for value in (raw.get("guided_session_ids") or [])
+            if _clean(value, 160)
+        }
+        if (
+            _clean(raw.get("corpus_scope_id"), 160) == wanted_scope_id
+            or _clean(raw.get("guided_session_id"), 160) == wanted_session_id
+            or wanted_session_id in known_session_ids
+        ):
+            return run
+    return None
+
+
+def get_conversation_kept_articles(
+    db: Session,
+    project: Project,
+    *,
+    session_id: str,
+    corpus_scope_id: str | None = None,
+    active_verrou_ids: Iterable[Any] | None = None,
+) -> tuple[ScholarRun | None, list[Article]]:
+    """Retourne uniquement les preuves prêtes de la conversation autonome."""
+    run = get_conversation_corpus_run(
+        db,
+        project,
+        session_id=session_id,
+        corpus_scope_id=corpus_scope_id,
+    )
+    if run is None:
+        return None, []
+
+    rows = (
+        db.query(Article)
+        .filter(Article.scholar_run_id == int(run.id))
+        .filter(Article.consultant_status == "garde")
+        .all()
+    )
+    # La décision « garder » et l'admission dans le corpus restent deux étapes
+    # distinctes. Sans texte intégral vérifié, la source demeure dans sa carte
+    # de conversation mais n'entre ni dans les cards ni dans la rédaction.
+    rows = [row for row in rows if _article_is_writing_usable(row)]
+
+    requested_verrous = _as_str_set(active_verrou_ids)
+    if requested_verrous:
+        rows = [
+            row
+            for row in rows
+            if (
+                article_scope_ids(row) & requested_verrous
+                or article_is_project_global(row)
+            )
+        ]
+
+    chosen: dict[str, Article] = {}
+    for article in rows:
+        key = article_identity(article)
+        previous = chosen.get(key)
+        if previous is None or _article_preference(article) > _article_preference(previous):
+            chosen[key] = article
+    articles = sorted(
+        chosen.values(),
+        key=lambda row: (
+            -(float(row.score or 0.0) if str(row.score or "").replace(".", "", 1).isdigit() else 0.0),
+            -(int(row.year or 0)),
+            int(row.id),
+        ),
+    )
+    return run, articles
+
+
+def get_conversation_corpus_cards_payload(
+    db: Session,
+    project: Project,
+    *,
+    session_id: str,
+    corpus_scope_id: str | None = None,
+    active_verrou_ids: Iterable[Any] | None = None,
+) -> dict[str, Any]:
+    """Lit les Article Cards du seul corpus autonome de la conversation."""
+    from services.article_card_builder import get_article_cards_payload
+
+    scope_id = _clean(corpus_scope_id or session_id, 160)
+    run, articles = get_conversation_kept_articles(
+        db,
+        project,
+        session_id=session_id,
+        corpus_scope_id=scope_id,
+        active_verrou_ids=active_verrou_ids,
+    )
+    wanted_ids = {int(article.id) for article in articles}
+    raw_cards: list[Mapping[str, Any]] = []
+    if run is not None and wanted_ids:
+        try:
+            payload = get_article_cards_payload(
+                project,
+                scope_id=scope_id,
+                db=db,
+                scholar_run_id=int(run.id),
+            )
+        except Exception:
+            payload = {}
+        for key in ("cards", "article_cards", "items", "articles"):
+            value = payload.get(key) if isinstance(payload, Mapping) else None
+            if isinstance(value, list):
+                raw_cards = [row for row in value if isinstance(row, Mapping)]
+                break
+
+    cards_by_article: dict[int, dict[str, Any]] = {}
+    for raw in raw_cards:
+        try:
+            article_id = int(raw.get("article_id"))
+        except (TypeError, ValueError):
+            continue
+        if article_id not in wanted_ids:
+            continue
+        cards_by_article[article_id] = dict(raw)
+    cards = [
+        _relabel_project_corpus_card(cards_by_article[key], f"A{index}")
+        for index, key in enumerate(sorted(cards_by_article), start=1)
+    ]
+    card_ids = set(cards_by_article)
+    return {
+        "ok": True,
+        "project_id": int(project.id),
+        "session_id": session_id,
+        "corpus_scope_id": scope_id,
+        "effective_corpus_scope_id": scope_id,
+        "project_corpus": False,
+        "conversation_corpus": True,
+        "corpus_isolated": True,
+        "scholar_run_id": int(run.id) if run is not None else None,
+        "scholar_run_ids": [int(run.id)] if run is not None else [],
+        "cards": cards,
+        "cards_count": len(cards),
+        "selected_articles_count": len(articles),
+        "writing_ready_cards_count": len(cards),
+        "writing_ready_article_ids": sorted(card_ids),
+        "excluded_from_writing_count": max(0, len(articles) - len(cards)),
+        "excluded_article_ids": sorted(wanted_ids - card_ids),
+        "payload_path": (
+            f"db://projects/{int(project.id)}/guided-conversations/"
+            f"{session_id}/cards"
+        ),
+        "version": V169_MARKER,
+    }
+
+
 def serialize_project_corpus_source(article: Article) -> dict[str, Any]:
     src = article.source_json if isinstance(article.source_json, Mapping) else {}
     candidate_id = _clean(src.get("guided_candidate_id"), 300) or f"PROJECT-A{int(article.id)}"

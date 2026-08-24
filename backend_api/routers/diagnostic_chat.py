@@ -62,12 +62,11 @@ def _project_collection_status(project: Any) -> Dict[str, Any]:
     store = ProjectStore(
         organisme=project.organisme,
         project=project.project_name,
+        subproject=getattr(project, "subproject_name", None),
         year=project.year,
     ).ensure()
 
-    collection_name = (
-        f"ennosmart_{store.organisme_id}_{store.project_id}_{store.year_id}"
-    )
+    collection_name = store.collection_name
 
     try:
         client = chromadb.PersistentClient(path=str(store.chroma_dir))
@@ -119,6 +118,7 @@ def diagnostic_chat_status(
         "project_id": project.id,
         "organisme": project.organisme,
         "project_name": project.project_name,
+        "subproject_name": getattr(project, "subproject_name", None),
         "year": str(project.year),
         "diagnostic_ready": diagnostic_ready,
         "chroma_ready": chroma_ready,
@@ -164,6 +164,7 @@ async def diagnostic_chat_message(
     service = DiagnosticRAGChatService(
         organisme=project.organisme,
         project=project.project_name,
+        subproject=getattr(project, "subproject_name", None),
         year=project.year,
     )
 

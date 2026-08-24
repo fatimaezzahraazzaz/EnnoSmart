@@ -102,6 +102,7 @@ class Project(Base):
 
     organisme = Column(String(255), nullable=False)
     project_name = Column(String(255), nullable=False)
+    subproject_name = Column(String(255), nullable=True)
     year = Column(String(20), nullable=False)
     domain_label = Column(String(255), nullable=True)
 
@@ -136,6 +137,36 @@ class Project(Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    access_requests = relationship(
+        "ProjectAccessRequest",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+
+
+class ProjectAccessRequest(Base):
+    """Demande d'accès persistante et droit de collaboration après acceptation."""
+
+    __tablename__ = "project_access_requests"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "requester_id",
+            name="uq_project_access_request_project_requester",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    requester_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(20), default="pending", nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    responded_at = Column(DateTime, nullable=True)
+    owner_seen_at = Column(DateTime, nullable=True)
+    requester_seen_at = Column(DateTime, nullable=True)
+
+    project = relationship("Project", back_populates="access_requests")
 
 
 class ProjectWorkflow(Base):

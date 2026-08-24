@@ -173,21 +173,27 @@ def _object_variants(plan: Mapping[str, Any]) -> List[str]:
     objects = _terms(plan.get("scientific_object") or [])
     if not objects:
         return []
-    full = sanitize_query_text(objects[0], max_words=8)
     variants: List[str] = []
-    broad = full
-    for value in _local_values(plan):
-        candidate = _remove_phrase(broad, value)
-        if candidate:
-            broad = candidate
-    if broad:
-        variants.append(broad)
-    if full and _norm(full) not in {_norm(x) for x in variants}:
-        variants.append(full)
-    return variants or ([full] if full else [])
+    for raw_object in objects[:4]:
+        full = sanitize_query_text(raw_object, max_words=7)
+        broad = full
+        for value in _local_values(plan):
+            candidate = _remove_phrase(broad, value)
+            if candidate:
+                broad = candidate
+        for value in (broad, full):
+            key = _norm(value)
+            if value and key not in {_norm(x) for x in variants}:
+                variants.append(value)
+    return variants
 
 
-def _role_terms_for_safety(plan: Mapping[str, Any]) -> Tuple[List[str], List[str]]:
+def _role_terms_for_safety(plan: Mapping[str, Any]) -> Tuple[List[str], List[str], List[str]]:
+    domains = [
+        sanitize_query_text(x, max_words=6)
+        for x in _terms(plan.get("domain_anchors") or [])
+        if sanitize_query_text(x, max_words=6)
+    ]
     objects = _object_variants(plan)
     axes = (
         _terms(plan.get("independent_variables") or [])
@@ -197,7 +203,7 @@ def _role_terms_for_safety(plan: Mapping[str, Any]) -> Tuple[List[str], List[str
         + _terms(plan.get("methods") or [])
         + _terms(plan.get("validation_concepts") or [])
     )
-    return objects, [sanitize_query_text(x, max_words=8) for x in axes if sanitize_query_text(x, max_words=8)]
+    return domains, objects, [sanitize_query_text(x, max_words=8) for x in axes if sanitize_query_text(x, max_words=8)]
 
 
 def query_is_useful(query: str, plan: Mapping[str, Any]) -> bool:
@@ -210,8 +216,8 @@ def query_is_useful(query: str, plan: Mapping[str, Any]) -> bool:
     tokens = _tokens(q)
     if len(tokens) < 3 or len(tokens) > 14:
         return False
-    objects, axes = _role_terms_for_safety(plan)
-    if not objects or not axes:
+    domains, objects, axes = _role_terms_for_safety(plan)
+    if not domains or not objects or not axes:
         return False
     qset = set(_tokens(q))
 
@@ -219,9 +225,10 @@ def query_is_useful(query: str, plan: Mapping[str, Any]) -> bool:
         tt = set(_tokens(term))
         return bool(tt) and (len(tt & qset) / max(1, len(tt))) >= threshold
 
-    object_hit = any(hit(obj, 0.5) for obj in objects)
+    domain_hit = any(hit(domain, 0.67) for domain in domains)
+    object_hit = any(hit(obj, 0.6) for obj in objects)
     axis_hits = sum(1 for axis in axes if hit(axis, 0.5))
-    return bool(object_hit and axis_hits >= 1)
+    return bool(domain_hit and object_hit and axis_hits >= 1)
 
 
 def _safe_query(query: str, plan: Mapping[str, Any]) -> bool:
@@ -261,10 +268,26 @@ def build_query_portfolio(
     """
     target = max(1, min(int(target or 6), 6))
     objects = _object_variants(plan)
-    if not objects:
+    domain = [
+        sanitize_query_text(x, 6)
+        for x in _terms(plan.get("domain_anchors") or [])
+        if sanitize_query_text(x, 6)
+    ][:1]
+    if not domain or not objects:
         return []
+    domain_tokens = set(_tokens(" ".join(domain)))
+    objects.sort(
+        key=lambda value: (
+            len(domain_tokens & set(_tokens(value))),
+            len(set(_tokens(value))),
+        ),
+        reverse=True,
+    )
     broad_obj = objects[0]
     contextual_obj = objects[-1]
+
+    def anchored(parts: List[Any], max_words: int) -> str:
+        return _join([domain, *parts], max_words=max_words)
 
     indep = [sanitize_query_text(x, 8) for x in _terms(plan.get("independent_variables") or [])]
     resp = [sanitize_query_text(x, 8) for x in _terms(plan.get("response_variables") or [])]
@@ -327,51 +350,51 @@ def build_query_portfolio(
         })
 
     # Strict A: direct relation between object, main input/cause and response.
-    add(_join([[broad_obj], primary_i, primary_r], max_words=10), "strict_core_a")
+    add(anchored([[broad_obj], primary_i, primary_r], max_words=14), "strict_core_a")
 
     # Strict B: alternate scientific formulation. Prefer a validated phenomenon,
     # then operating conditions, then method/validation vocabulary. This is an
     # alternate expression of the same problem, not a broader domain query.
     if phen:
-        strict_b = _join([[broad_obj], phen[:1], primary_i, operating[:1]], max_words=14)
+        strict_b = anchored([[objects[1] if len(objects) > 1 else broad_obj], phen[:1], primary_i, operating[:1]], max_words=14)
     elif operating:
-        strict_b = _join([[broad_obj], primary_i, primary_r, operating[:1]], max_words=13)
+        strict_b = anchored([[broad_obj], primary_i, primary_r, operating[:1]], max_words=14)
     elif methods:
-        strict_b = _join([[broad_obj], primary_i, primary_r, methods[:1]], max_words=13)
+        strict_b = anchored([[broad_obj], primary_i, primary_r, methods[:1]], max_words=14)
     else:
-        strict_b = _join([[broad_obj], primary_i, primary_r, validation[:1]], max_words=13)
+        strict_b = anchored([[broad_obj], primary_i, primary_r, validation[:1]], max_words=14)
     add(strict_b, "strict_core_b")
 
     # Connexe A: same object, secondary causal/input axis while retaining the
     # main response. Useful for transferable operating/physics literature.
     if secondary_i:
-        connexe_a = _join([[broad_obj], secondary_i, primary_r], max_words=11)
+        connexe_a = anchored([[broad_obj], secondary_i, primary_r], max_words=14)
     elif secondary_r:
-        connexe_a = _join([[broad_obj], primary_i, secondary_r], max_words=11)
+        connexe_a = anchored([[broad_obj], primary_i, secondary_r], max_words=14)
     elif methods:
-        connexe_a = _join([[broad_obj], primary_i, methods[:1]], max_words=11)
+        connexe_a = anchored([[broad_obj], primary_i, methods[:1]], max_words=14)
     else:
-        connexe_a = _join([[broad_obj], phen[:1], primary_r], max_words=11)
+        connexe_a = anchored([[broad_obj], phen[:1], primary_r], max_words=14)
     add(connexe_a, "connexe_a")
 
     # Connexe B: deliberately use a different validated axis than Connexe A.
     if secondary_r:
-        connexe_b = _join([[broad_obj], primary_i, secondary_r], max_words=11)
+        connexe_b = anchored([[contextual_obj], primary_i, secondary_r], max_words=14)
     elif methods:
-        connexe_b = _join([[broad_obj], methods[:1], primary_r], max_words=12)
+        connexe_b = anchored([[contextual_obj], methods[:1], primary_r], max_words=14)
     elif validation:
-        connexe_b = _join([[broad_obj], primary_i, validation[:1]], max_words=12)
+        connexe_b = anchored([[contextual_obj], primary_i, validation[:1]], max_words=14)
     else:
-        connexe_b = _join([[broad_obj], operating[:1], primary_r], max_words=11)
+        connexe_b = anchored([[contextual_obj], operating[:1], primary_r], max_words=14)
     add(connexe_b, "connexe_b")
 
     # Fundamental: mechanisms/principles/review, not a target for Direct papers.
     if phen:
-        fundamental = _join([[broad_obj], ["fundamentals", "review"], phen[:1]], max_words=14)
+        fundamental = anchored([[broad_obj], ["fundamentals", "review"], phen[:1]], max_words=14)
     elif methods:
-        fundamental = _join([[broad_obj], ["fundamentals", "review"], methods[:1]], max_words=14)
+        fundamental = anchored([[broad_obj], ["fundamentals", "review"], methods[:1]], max_words=14)
     else:
-        fundamental = _join([[broad_obj], primary_i, primary_r, ["fundamentals", "review"]], max_words=12)
+        fundamental = anchored([[broad_obj], primary_i, primary_r, ["fundamentals", "review"]], max_words=14)
     add(fundamental, "fundamental")
 
     # Technical: keep value-bearing local/project/tool terms and validated
@@ -384,15 +407,15 @@ def build_query_portfolio(
     if not methods:
         technical_parts.append(primary_i)
     technical_parts.append(primary_r)
-    add(_join(technical_parts, max_words=13), "technical")
+    add(anchored(technical_parts, max_words=14), "technical")
 
     # Conservative fill: never invent domain terms and never create hors-sujet.
     fillers = [
-        ("strict_core_b", _join([[broad_obj], primary_i, primary_r, operating[:1] or methods[:1]], max_words=13)),
-        ("connexe_a", _join([[broad_obj], secondary_i or primary_i, secondary_r or primary_r], max_words=11)),
-        ("connexe_b", _join([[broad_obj], methods[:1] or validation[:1], primary_r], max_words=12)),
-        ("fundamental", _join([[broad_obj], primary_r, ["fundamentals", "review"]], max_words=11)),
-        ("technical", _join([[contextual_obj], validation[:1] or methods[:1], primary_i], max_words=12)),
+        ("strict_core_b", anchored([[broad_obj], primary_i, primary_r, operating[:1] or methods[:1]], max_words=14)),
+        ("connexe_a", anchored([[broad_obj], secondary_i or primary_i, secondary_r or primary_r], max_words=14)),
+        ("connexe_b", anchored([[contextual_obj], methods[:1] or validation[:1], primary_r], max_words=14)),
+        ("fundamental", anchored([[broad_obj], primary_r, ["fundamentals", "review"]], max_words=14)),
+        ("technical", anchored([[contextual_obj], validation[:1] or methods[:1], primary_i], max_words=14)),
     ]
     existing_families = {row["family"] for row in out}
     for family, query in fillers:

@@ -19,6 +19,13 @@ ROOT_DIR = Path(
     or os.getenv("ENNOSMART_ROOT")
     or Path(__file__).resolve().parents[2]
 )
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT_DIR / ".env", override=False)
+    load_dotenv(ROOT_DIR / "backend_api" / ".env", override=False)
+except Exception:
+    pass
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -62,13 +69,21 @@ def source_doc(src: Dict[str, Any]) -> str:
 
 def source_project_key(src: Dict[str, Any]) -> str:
     m = meta_of(src)
-    return f"{m.get('organisme')}::{m.get('project')}::{m.get('year')}"
+    return f"{m.get('organisme')}::{m.get('project')}::{m.get('subproject') or ''}::{m.get('year')}"
 
 
 class MemoryV2Retriever:
-    def __init__(self, organisme: str, project: str = "", year: str = "", chroma_dir: Optional[Path] = None):
+    def __init__(
+        self,
+        organisme: str,
+        project: str = "",
+        year: str = "",
+        chroma_dir: Optional[Path] = None,
+        subproject: str = "",
+    ):
         self.organisme = clean_text(organisme)
         self.project = clean_text(project)
+        self.subproject = clean_text(subproject)
         self.year = str(year or "")
         self.chroma_dir = Path(chroma_dir or V2_CHROMA_DIR)
         try:
@@ -87,19 +102,50 @@ class MemoryV2Retriever:
 
     @property
     def organism_collection(self) -> str:
-        return f"ennosmart_memory_v2_{slug(self.organisme)}"
+        # Compatibilité d'API : Memory V2 ne conserve plus de collection par
+        # organisme. Le filtrage est appliqué aux métadonnées du résultat.
+        return self.global_collection
+
+    def _identity_affinity(self, metadata: Dict[str, Any]) -> int:
+        """Priorise le même projet/sous-projet sans exclure les projets proches."""
+        historical_project = clean_text(metadata.get("project"))
+        historical_subproject = clean_text(metadata.get("subproject"))
+        current_combined = clean_text(" ".join(
+            value for value in (self.project, self.subproject) if value
+        ))
+        historical_combined = clean_text(" ".join(
+            value for value in (historical_project, historical_subproject) if value
+        ))
+        if not current_combined:
+            return 0
+
+        current_slug = slug(current_combined)
+        historical_slug = slug(historical_combined)
+        if current_slug == historical_slug:
+            return 100
+
+        score = 0
+        if historical_project and slug(historical_project) == slug(self.project):
+            score += 60
+        current_tokens = set(current_slug.split("_"))
+        historical_tokens = set(historical_slug.split("_"))
+        score += 10 * len(current_tokens & historical_tokens)
+        if historical_subproject and slug(historical_subproject) in current_tokens:
+            score += 30
+        return score
 
     def search(self, query: str, role: Optional[str] = None, memory_class: Optional[str] = None, top_k: int = 8,
                same_organisme_only: bool = True, exclude_current_year: bool = True) -> List[Dict[str, Any]]:
         if not self.available or self.vector_store is None:
             return []
-        collection = self.organism_collection if same_organisme_only else self.global_collection
+        collection = self.global_collection
         try:
             results = self.vector_store.search(
                 collection_name=collection,
                 query=query,
                 role_filter=role or None,
                 top_k=top_k * 5,
+                metadata_filter={"organisme": self.organisme} if same_organisme_only and self.organisme else None,
                 oversample=8,
             )
         except TypeError:
@@ -110,10 +156,12 @@ class MemoryV2Retriever:
         except Exception:
             return []
 
-        out, seen = [], set()
-        for src in results or []:
+        ranked, seen = [], set()
+        for vector_rank, src in enumerate(results or []):
             m = meta_of(src)
             if not m:
+                continue
+            if same_organisme_only and self.organisme and slug(m.get("organisme")) != slug(self.organisme):
                 continue
             if memory_class and clean_text(m.get("memory_class") or m.get("memory_type_v2")) != memory_class:
                 continue
@@ -122,15 +170,16 @@ class MemoryV2Retriever:
             m["historical_memory"] = True
             m["memory_v2_usage"] = "context_only_not_current_fact"
             m["warning"] = "Memory V2: historical context/style only, not current factual proof."
+            affinity = self._identity_affinity(m)
+            m["memory_v2_identity_affinity"] = affinity
             src["metadata"] = m
             sig = (source_project_key(src), clean_text(m.get("role")), truncate(source_text(src), 220))
             if sig in seen:
                 continue
             seen.add(sig)
-            out.append(src)
-            if len(out) >= top_k:
-                break
-        return out
+            ranked.append((affinity, vector_rank, src))
+        ranked.sort(key=lambda item: (-item[0], item[1]))
+        return [src for _, _, src in ranked[:top_k]]
 
     def build_query_from_current_sources(self, sections: Dict[str, List[Dict[str, Any]]], max_chars: int = 3500) -> str:
         parts = []
@@ -171,7 +220,17 @@ class MemoryV2Retriever:
             for src in arr or []:
                 m = meta_of(src)
                 key = source_project_key(src)
-                item = acc.setdefault(key, {"project_key": key, "organisme": m.get("organisme"), "project": m.get("project"), "year": m.get("year"), "roles": {}, "documents": set(), "examples": [], "score": 0})
+                item = acc.setdefault(key, {
+                    "project_key": key,
+                    "organisme": m.get("organisme"),
+                    "project": m.get("project"),
+                    "subproject": m.get("subproject") or "",
+                    "year": m.get("year"),
+                    "roles": {},
+                    "documents": set(),
+                    "examples": [],
+                    "score": 0,
+                })
                 item["roles"][role] = item["roles"].get(role, 0) + 1
                 if source_doc(src):
                     item["documents"].add(source_doc(src))
@@ -197,7 +256,10 @@ class MemoryV2Retriever:
             lines.append("- Aucun projet proche trouvé.")
         for i, p in enumerate(similar_projects[:6], 1):
             roles = ", ".join(f"{k}:{v}" for k, v in (p.get("roles") or {}).items())
-            lines.append(f"- M{i} | {p.get('organisme')} / {p.get('project')} / {p.get('year')} | score={p.get('score')} | rôles={roles}")
+            hierarchy = " / ".join(str(value) for value in (
+                p.get("organisme"), p.get("project"), p.get("subproject"), p.get("year")
+            ) if value)
+            lines.append(f"- M{i} | {hierarchy} | score={p.get('score')} | rôles={roles}")
             for ex in p.get("examples", [])[:2]:
                 lines.append(f"  - {ex.get('role')} : {truncate(ex.get('text'), 260)}")
         lines.append("\n### Verrous / limites historiques proches")

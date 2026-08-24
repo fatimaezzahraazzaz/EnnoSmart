@@ -224,6 +224,11 @@ def classify_document_type(doc: Dict[str, Any]) -> Dict[str, Any]:
 
 def enrich_document_type(doc: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(doc or {})
+    declared_current_evidence = bool(
+        out.get("current_project_evidence")
+        or out.get("declared_raw_document")
+        or str(out.get("declared_mode") or "").strip().lower() == "raw"
+    )
     info = classify_document_type(out)
     out.update(info)
     out["source_weight"] = float(out.get("source_weight") or info.get("document_weight") or 0.55)
@@ -236,4 +241,24 @@ def enrich_document_type(doc: Dict[str, Any]) -> Dict[str, Any]:
     elif info["document_type"] == "cir_final_validated":
         out["cir_final_validated"] = True
         out["content_origin"] = out.get("content_origin") or "cir_final_validated"
+
+    if declared_current_evidence:
+        out.update(
+            {
+                "content_origin": "raw_client_document",
+                "source_policy": "core_or_useful",
+                "current_project_evidence": True,
+                "declared_raw_document": True,
+                "cir_final_validated": False,
+                "not_final_cir": True,
+            }
+        )
+        out["document_weight"] = max(
+            float(out.get("document_weight") or 0.0),
+            1.0,
+        )
+        out["source_weight"] = max(
+            float(out.get("source_weight") or 0.0),
+            float(out["document_weight"]),
+        )
     return out

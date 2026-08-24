@@ -62,9 +62,7 @@ from ..lot1.domain.models import (
 )
 from ..lot1.conversation_understanding_service import (
     ConversationUnderstandingService,
-    _ground_writing_source_policy,
 )
-from ..lot1.grounded_request_resolver import repair_contextual_classification
 from ..lot1.session_state_manager import GuidedResearchSessionStateManager
 from .session_repository import GuidedResearchSessionRepository
 from .web_research_service import WebResearchService
@@ -1178,14 +1176,45 @@ class EnnoScholarGuidedResearchAgent:
             / "article_cards_payload.json"
         )
 
-    @staticmethod
-    def _cards_payload(project: Any, db: Session | None = None) -> dict[str, Any]:
-        # V169.1 : le writer ne lit plus uniquement le dernier ScholarRun / le
-        # ScholarRun privé de la conversation. Il agrège les Article Cards des
-        # publications gardées dans tout le projet.
+    def _cards_payload(
+        self,
+        project: Any,
+        db: Session | None = None,
+        *,
+        session: GuidedResearchSessionData | None = None,
+        snapshot: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if db is None:
             from services.article_card_builder import get_article_cards_payload
             return get_article_cards_payload(project, db=db)
+        context = dict(
+            (snapshot or {}).get("context")
+            or (session.context if session is not None else {})
+            or {}
+        )
+        if (
+            session is not None
+            and _clean(context.get("operating_mode"), 80) == "standalone_chat"
+        ):
+            from services.ennoscholar_project_corpus_service import (
+                get_conversation_corpus_cards_payload,
+            )
+
+            active_ids = (
+                list(context.get("active_verrou_ids") or [])
+                if _clean(context.get("review_scope"), 40) == "per_verrou"
+                else []
+            )
+            return get_conversation_corpus_cards_payload(
+                db,
+                project,
+                session_id=session.session_id,
+                corpus_scope_id=_clean(
+                    context.get("corpus_scope_id") or session.session_id,
+                    160,
+                ),
+                active_verrou_ids=active_ids,
+            )
         from services.ennoscholar_project_corpus_service import (
             get_project_corpus_cards_payload,
         )
@@ -1207,6 +1236,35 @@ class EnnoScholarGuidedResearchAgent:
 
         current = dict(snapshot or self.repository.snapshot(db, session.session_id))
         context = dict(current.get("context") or session.context or {})
+        if _clean(context.get("operating_mode"), 80) == "standalone_chat":
+            from services.guided_research_source_preparation_service import (
+                is_scientific_publication_source,
+            )
+
+            private_sources: list[dict[str, Any]] = []
+            for raw in (current.get("selected_sources") or []):
+                if not isinstance(raw, Mapping):
+                    continue
+                source = dict(raw)
+                if _clean(source.get("consultant_decision"), 40).casefold() != "accepted":
+                    continue
+                if not is_scientific_publication_source(source):
+                    private_sources.append(source)
+                    continue
+                preparation = (
+                    dict(source.get("fulltext_preparation") or {})
+                    if isinstance(source.get("fulltext_preparation"), Mapping)
+                    else {}
+                )
+                if not bool(
+                    source.get("fulltext_verified")
+                    or source.get("scientific_evidence_eligible")
+                    or preparation.get("usable_as_scientific_evidence")
+                    or preparation.get("ready_for_writing")
+                ):
+                    continue
+                private_sources.append(source)
+            return private_sources
         review_scope = _clean(context.get("review_scope"), 40)
         active_ids = (
             list(context.get("active_verrou_ids") or [])
@@ -1326,7 +1384,7 @@ class EnnoScholarGuidedResearchAgent:
         project: Any,
         session: GuidedResearchSessionData,
     ) -> dict[str, Any]:
-        cards_payload = self._cards_payload(project, db=db)
+        cards_payload = self._cards_payload(project, db=db, session=session)
         cards: list[dict[str, Any]] = []
         for key in ("cards", "article_cards", "items", "articles"):
             value = cards_payload.get(key)
@@ -1520,9 +1578,10 @@ class EnnoScholarGuidedResearchAgent:
             self._diagnostic_project_context(db, project)
         )
         # Une nouvelle conversation possède un document indépendant. Le plan,
-        # la mémoire et le brouillon d'une conversation antérieure ne sont jamais
-        # copiés implicitement ; le corpus scientifique du projet reste disponible
-        # comme contexte de lecture seulement.
+        # La mémoire et le brouillon d'une conversation antérieure ne sont jamais
+        # copiés implicitement. Sans diagnostic, le corpus scientifique est lui
+        # aussi privé à cette conversation ; avec diagnostic, le corpus projet
+        # conserve le comportement partagé du workflow Agent 1 -> Agent 2.
         contract: dict[str, Any] = {}
         brief = None
         session = self.state_manager.create_session(
@@ -1577,9 +1636,17 @@ class EnnoScholarGuidedResearchAgent:
                 # Identifiant legacy gardé uniquement pour tracer le ScholarRun
                 # ayant produit de nouveaux candidats dans cette conversation.
                 "corpus_scope_id": session.session_id,
-                "effective_corpus_scope_id": f"project:{project.id}",
-                "corpus_storage_isolated": False,
-                "corpus_isolation_policy": "project_persistent_consultant_corpus",
+                "effective_corpus_scope_id": (
+                    f"project:{project.id}"
+                    if diagnostic_backed
+                    else session.session_id
+                ),
+                "corpus_storage_isolated": not diagnostic_backed,
+                "corpus_isolation_policy": (
+                    "project_persistent_consultant_corpus"
+                    if diagnostic_backed
+                    else "standalone_conversation_private_corpus"
+                ),
             },
         )
         session = self.state_manager.get_session(db, session.session_id)
@@ -1710,25 +1777,10 @@ class EnnoScholarGuidedResearchAgent:
             if understanding is not None
             else _fallback_intent_classification(message)
         )
+        # La compréhension sémantique vient d'un seul appel LLM qui retourne déjà
+        # l'intention et son payload. Cette étape ne fait que normaliser les champs
+        # techniques dérivables ; aucun classifieur lexical ne requalifie le tour.
         classification = _reconcile_contextual_intent(classification)
-        classification = _ground_writing_source_policy(
-            message,
-            classification,
-        )
-        # BEGIN ENNOSCHOLAR_GROUNDED_ROUTE_REPAIR_V1
-        # Deuxième niveau de sécurité : couvre aussi le fallback lorsque le
-        # contrôleur structuré n'a pas produit de ConversationUnderstanding.
-        classification = repair_contextual_classification(
-            classification,
-            consultant_message=message,
-            current_verrous=conversation_project_context.get("current_verrous") or [],
-            current_plan=_contract_sections(contract),
-            session_context=session.context,
-        )
-        # END ENNOSCHOLAR_GROUNDED_ROUTE_REPAIR_V1
-        # BEGIN ENNOSCHOLAR_SAFE_COMPOUND_ROUTER_V2
-        classification = _promote_safe_compound_action(classification, contract)
-        # END ENNOSCHOLAR_SAFE_COMPOUND_ROUTER_V2
         original_intent = classification.intent
         intent = _resolve_routed_intent(classification)
         classification.intent = intent
@@ -3319,6 +3371,9 @@ class EnnoScholarGuidedResearchAgent:
         coverage = self._coverage(
             project,
             brief,
+            cards_payload=self._cards_payload(
+                project, db=db, session=session
+            ),
             supplemental_sources=self._effective_selected_sources(
                 db, project, session
             ),
@@ -3532,11 +3587,7 @@ class EnnoScholarGuidedResearchAgent:
         action_intent: ConsultantIntent = ConsultantIntent.START_WRITING,
         conversation_reply: str = "",
     ) -> ConversationResponse:
-        revision_request = (
-            message
-            if action_intent == ConsultantIntent.REVISE_DRAFT
-            else ""
-        )
+        revision_request = ""
         # BEGIN ENNOSCHOLAR_WRITING_REQUEST_MEMORY_V2
         # L'ordre de rédaction du consultant doit descendre jusqu'au writer, pas
         # seulement servir au routage. On conserve le texte exact comme contrainte
@@ -3557,19 +3608,6 @@ class EnnoScholarGuidedResearchAgent:
                 pending_directives,
                 historical_directive,
             )
-        current_writing_request = _clean(message, 6000)
-        writing_request = _clean(
-            "\n\n".join(
-                _unique([
-                    *(
-                        _clean(row.get("request"), 6000)
-                        for row in pending_directives
-                    ),
-                    current_writing_request,
-                ], limit=12)
-            ),
-            12000,
-        )
         writing_target_section_ids = _unique([
             *(target_section_ids or []),
             *(
@@ -3583,11 +3621,72 @@ class EnnoScholarGuidedResearchAgent:
             for row in pending_directives
             for value in (row.get("target_section_titles") or [])
         )
+
+        # Une révision locale ne doit pas réinjecter dans son instruction toutes
+        # les recherches générales effectuées auparavant dans la conversation.
+        # Les cibles sont celles résolues par le LLM ; ce filtre ne reclassifie
+        # donc pas le langage du consultant, il borne seulement la mémoire à la
+        # section explicitement visée.
+        if writing_target_section_ids or writing_target_section_titles:
+            target_id_set = set(writing_target_section_ids)
+            target_title_set = {
+                _norm(value) for value in writing_target_section_titles
+                if _norm(value)
+            }
+            scoped_directives: list[dict[str, Any]] = []
+            for row in pending_directives:
+                row_ids = set(_unique(row.get("target_section_ids") or []))
+                row_titles = {
+                    _norm(value)
+                    for value in (row.get("target_section_titles") or [])
+                    if _norm(value)
+                }
+                if (row_ids & target_id_set) or (
+                    row_titles & target_title_set
+                ):
+                    scoped_directives.append(row)
+            pending_directives = scoped_directives
+
+        current_writing_request = _clean(message, 6000)
+        writing_request = _clean(
+            "\n\n".join(
+                _unique([
+                    *(
+                        _clean(row.get("request"), 6000)
+                        for row in pending_directives
+                    ),
+                    current_writing_request,
+                ], limit=12)
+            ),
+            12000,
+        )
         writing_search_queries = _unique(
             value
             for row in pending_directives
             for value in (row.get("search_queries") or [])
         )
+
+        existing_snapshot = self.repository.snapshot(db, session.session_id)
+        existing_draft = (
+            existing_snapshot.get("draft")
+            if isinstance(existing_snapshot.get("draft"), Mapping)
+            else {}
+        )
+        has_existing_draft = bool(
+            _clean(existing_draft.get("markdown"), 100000)
+        )
+        targeted_existing_revision = bool(
+            has_existing_draft
+            and (
+                writing_target_section_ids
+                or writing_target_section_titles
+            )
+        )
+        if (
+            action_intent == ConsultantIntent.REVISE_DRAFT
+            or targeted_existing_revision
+        ):
+            revision_request = current_writing_request or writing_request
         writing_contract_fields = {
             "consultant_writing_request": writing_request,
             "consultant_writing_target_section_ids": (
@@ -3635,7 +3734,7 @@ class EnnoScholarGuidedResearchAgent:
             )
         # END ENNOSCHOLAR_WRITING_REQUEST_MEMORY_V2
         if _clean(session.context.get("operating_mode"), 80) == "standalone_chat":
-            snapshot = self.repository.snapshot(db, session.session_id)
+            snapshot = existing_snapshot
             context = dict(snapshot.get("context") or {})
             all_verrous = [
                 dict(row)
@@ -3766,7 +3865,12 @@ class EnnoScholarGuidedResearchAgent:
                     context.get("corpus_scope_id") or session.session_id,
                     160,
                 )
-                cards_payload = self._cards_payload(project, db=db)
+                cards_payload = self._cards_payload(
+                    project,
+                    db=db,
+                    session=session,
+                    snapshot=snapshot,
+                )
                 corpus_run_ids = list(cards_payload.get("scholar_run_ids") or [])
                 corpus_run_id = (
                     int(corpus_run_ids[0]) if len(corpus_run_ids) == 1 else None
@@ -3801,7 +3905,7 @@ class EnnoScholarGuidedResearchAgent:
                     "scholar_run_id": (
                         int(corpus_run_id) if corpus_run_id is not None else None
                     ),
-                    "policy": "project_persistent_ready_article_cards_only",
+                    "policy": "standalone_conversation_ready_article_cards_only",
                 }
             except Exception as exc:
                 print(
@@ -3852,11 +3956,20 @@ class EnnoScholarGuidedResearchAgent:
                 action_intent,
                 GuidedResearchState.WRITING_IN_PROGRESS,
                 (
-                    f"Je lance la rédaction avec le plan validé et les "
-                    f"{ready_cards_count} Article Card(s) exploitable(s) de cette "
-                    "conversation. Les publications sans texte intégral vérifié "
-                    "restent exclues sans bloquer la rédaction. Le dossier va "
-                    "parcourir les Phases 1 à 5 sans nouvelle recherche."
+                    (
+                        "Je reprends uniquement la partie ciblée du document "
+                        "existant avec les nouvelles sources validées. Les autres "
+                        "parties seront conservées sans réécriture. "
+                    )
+                    if revision_request
+                    else (
+                        "Je lance la rédaction avec le plan validé. "
+                    )
+                )
+                + (
+                    f"Le corpus contient {ready_cards_count} Article Card(s) "
+                    "exploitable(s). Les publications sans texte intégral vérifié "
+                    "restent exclues sans bloquer la rédaction."
                 ),
                 NextAction.START_WRITING,
                 session.brief,
@@ -3865,6 +3978,11 @@ class EnnoScholarGuidedResearchAgent:
                     "operating_mode": "standalone_chat",
                     "trigger_state_of_art_generation": True,
                     "standalone_full_pipeline": True,
+                    "generation_mode": (
+                        "partial_revision"
+                        if revision_request
+                        else "full_generation"
+                    ),
                     "phase_1": selection_payload.get("selection_summary") or {},
                     "phase_2": {
                         "cards_count": cards_payload.get("cards_count"),
@@ -3890,7 +4008,12 @@ class EnnoScholarGuidedResearchAgent:
                     selected_sources=self._effective_selected_sources(
                         db, project, session, snapshot
                     ),
-                    cards_payload=self._cards_payload(project, db=db),
+                    cards_payload=self._cards_payload(
+                        project,
+                        db=db,
+                        session=session,
+                        snapshot=snapshot,
+                    ),
                     output_dir=(
                         state_of_art_root(
                             str(project.organisme),
@@ -4143,15 +4266,14 @@ class EnnoScholarGuidedResearchAgent:
             session.session_id,
             action_intent,
             GuidedResearchState.WRITING_IN_PROGRESS,
-            conversation_reply
-            or (
-                (
-                    "Je lance la révision ciblée du document existant. "
-                    "Les sections compatibles seront conservées et les parties concernées, "
-                    "avec leurs transitions, seront recalculées à partir des sources validées."
-                )
+            (
+                "Je lance la révision ciblée du document existant. "
+                "Seules les parties visées seront rédigées à nouveau à partir "
+                "des sources validées ; les autres sections seront conservées "
+                "sans réécriture."
                 if generation_mode == "partial_revision"
-                else (
+                else conversation_reply
+                or (
                     "Je commence la rédaction selon le plan validé. "
                     "Le texte sera construit section par section, avec définitions claires, "
                     "procédures expliquées, résultats argumentés, comparaisons, limites et transitions."
@@ -4494,9 +4616,14 @@ CONSIGNES IMPÉRATIVES
         project: Any,
         brief: ConsultantBrief,
         *,
+        cards_payload: Mapping[str, Any] | None = None,
         supplemental_sources: Iterable[Mapping[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        cards_payload = self._cards_payload(project)
+        cards_payload = dict(
+            self._cards_payload(project)
+            if cards_payload is None
+            else cards_payload
+        )
         cards = []
         for key in ("cards", "article_cards", "items", "articles"):
             value = cards_payload.get(key)
@@ -4880,6 +5007,12 @@ CONSIGNES IMPÉRATIVES
             coverage = self._coverage(
                 project,
                 brief,
+                cards_payload=self._cards_payload(
+                    project,
+                    db=db,
+                    session=session,
+                    snapshot=session_snapshot,
+                ),
                 supplemental_sources=sources,
             )
             approved = bool(
@@ -4960,13 +5093,18 @@ CONSIGNES IMPÉRATIVES
             constraints=general_constraints or [],
         )
         self.state_manager.update_brief(db, session_id, brief)
+        current_snapshot = self.repository.snapshot(db, session_id)
         coverage = self._coverage(
             project,
             brief,
+            cards_payload=self._cards_payload(
+                project,
+                db=db,
+                session=session,
+                snapshot=current_snapshot,
+            ),
             supplemental_sources=(
-                self.repository.snapshot(db, session_id).get(
-                    "selected_sources"
-                ) or []
+                current_snapshot.get("selected_sources") or []
             ),
         )
         self.repository.update(

@@ -166,7 +166,9 @@ class IntentClassification(BaseModel):
     model_config = ConfigDict(extra="forbid", use_enum_values=False)
 
     intent: ConsultantIntent
-    confidence: float = Field(ge=0.0, le=1.0)
+    # Une estimation absente ne doit pas invalider une intention exploitable.
+    # 0.5 signifie simplement « confiance non précisée par le modèle ».
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     rationale: str = ""
     target_topic: str | None = None
     target_source_id: str | None = None

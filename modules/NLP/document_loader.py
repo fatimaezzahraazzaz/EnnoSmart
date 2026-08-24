@@ -5,7 +5,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from .cleaner import clean_text
 from .origin_detector import infer_origin
@@ -144,7 +144,12 @@ def extract_text_from_result(result: Any) -> str:
     )
 
 
-def extract_with_ennosmart_router(path: str) -> Optional[str]:
+def extract_with_ennosmart_router(
+    path: str,
+    *,
+    vision_mode: Optional[str] = None,
+    formula_mode: Optional[str] = None,
+) -> Optional[str]:
     """
     Extraction prioritaire via modules.extraction.router.
 
@@ -161,8 +166,14 @@ def extract_with_ennosmart_router(path: str) -> Optional[str]:
     try:
         result = extract(
             path,
-            vision_mode=os.getenv("ENNOSMART_EXTRACTION_VISION_MODE", "text_only"),
-            formula_mode=os.getenv("ENNOSMART_EXTRACTION_FORMULA_MODE", "off"),
+            vision_mode=(
+                vision_mode
+                or os.getenv("ENNOSMART_EXTRACTION_VISION_MODE", "text_only")
+            ),
+            formula_mode=(
+                formula_mode
+                or os.getenv("ENNOSMART_EXTRACTION_FORMULA_MODE", "off")
+            ),
             enable_transcription=os.getenv("ENNOSMART_ENABLE_TRANSCRIPTION", "1").strip() != "0",
         )
     except Exception:
@@ -431,6 +442,10 @@ def read_msg(path: str) -> str:
 def load_document(
     path: str,
     use_ennosmart_extraction: bool = True,
+    *,
+    metadata: Optional[Mapping[str, Any]] = None,
+    vision_mode: Optional[str] = None,
+    formula_mode: Optional[str] = None,
 ) -> Dict[str, Any]:
     p = Path(path)
     ext = p.suffix.lower()
@@ -446,7 +461,15 @@ def load_document(
             "error": f"Extension non supportée : {ext}",
         }
 
-    text = extract_with_ennosmart_router(str(p)) if use_ennosmart_extraction else None
+    text = (
+        extract_with_ennosmart_router(
+            str(p),
+            vision_mode=vision_mode,
+            formula_mode=formula_mode,
+        )
+        if use_ennosmart_extraction
+        else None
+    )
     loader = "modules.extraction.router" if text else "fallback"
 
     if not text:
@@ -469,6 +492,38 @@ def load_document(
 
     doc = enrich_document_type(doc)
 
+    # Les métadonnées déclarées par l'application sont la source de vérité sur
+    # l'usage du fichier. La classification automatique reste traçable, mais
+    # elle ne doit pas exclure un document explicitement déposé comme preuve
+    # courante, même si son contenu ressemble à un CIR déjà rédigé.
+    declared = dict(metadata or {})
+    if declared:
+        auto_document_type = doc.get("document_type")
+        auto_content_origin = doc.get("content_origin")
+        doc.update(declared)
+        doc["auto_document_type"] = auto_document_type
+        doc["auto_content_origin"] = auto_content_origin
+
+        if str(declared.get("declared_mode") or "").strip().lower() == "raw":
+            doc.update(
+                {
+                    "content_origin": "raw_client_document",
+                    "source_policy": "core_or_useful",
+                    "current_project_evidence": True,
+                    "declared_raw_document": True,
+                    "cir_final_validated": False,
+                    "not_final_cir": True,
+                }
+            )
+            doc["document_weight"] = max(
+                float(doc.get("document_weight") or 0.0),
+                1.0,
+            )
+            doc["source_weight"] = max(
+                float(doc.get("source_weight") or 0.0),
+                float(doc["document_weight"]),
+            )
+
     return doc
 
 
@@ -476,11 +531,25 @@ def load_documents(
     paths: List[str],
     use_ennosmart_extraction: bool = True,
     include_cir_final: bool = False,
+    *,
+    metadata_by_path: Optional[Mapping[str, Mapping[str, Any]]] = None,
+    vision_mode: Optional[str] = None,
+    formula_mode: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     docs: List[Dict[str, Any]] = []
+    metadata_lookup = {
+        str(Path(key).resolve()).lower(): dict(value)
+        for key, value in (metadata_by_path or {}).items()
+    }
 
     for path in paths:
-        d = load_document(path, use_ennosmart_extraction=use_ennosmart_extraction)
+        d = load_document(
+            path,
+            use_ennosmart_extraction=use_ennosmart_extraction,
+            metadata=metadata_lookup.get(str(Path(path).resolve()).lower()),
+            vision_mode=vision_mode,
+            formula_mode=formula_mode,
+        )
 
         if not d.get("text", "").strip():
             # On garde le comportement actuel : les documents sans texte exploitable

@@ -113,6 +113,7 @@ class RAGVectorStore:
         document_type_exclude: Optional[List[str]] = None,
         source_policy_exclude: Optional[List[str]] = None,
         chunk_level_include: Optional[List[str]] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
         oversample: int = 4,
     ) -> List[Dict[str, Any]]:
         collection = self.collection(collection_name)
@@ -126,13 +127,18 @@ class RAGVectorStore:
             show_progress_bar=False,
         ).tolist()[0]
 
-        where = None
+        where = dict(metadata_filter or {}) or None
+        role_where = None
         if isinstance(role_filter, str) and role_filter.strip():
-            where = {"role": role_filter.strip()}
+            role_where = {"role": role_filter.strip()}
         elif role_filter:
             roles = [str(role).strip() for role in role_filter if str(role).strip()]
             if roles:
-                where = {"role": {"$in": roles}}
+                role_where = {"role": {"$in": roles}}
+        if where and role_where:
+            where = {"$and": [where, role_where]}
+        elif role_where:
+            where = role_where
 
         n_results = min(count, max(top_k, top_k * max(1, oversample)))
         result = collection.query(

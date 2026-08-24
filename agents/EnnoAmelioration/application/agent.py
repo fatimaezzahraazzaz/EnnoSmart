@@ -310,7 +310,7 @@ class EnnoAmeliorationAgent:
             )
             if missing_required:
                 last_issues.append(
-                    "preuves_validees_non_utilisees:"
+                    "preuves_explicitement_obligatoires_non_utilisees:"
                     + ",".join(missing_required)
                 )
 
@@ -412,10 +412,9 @@ class EnnoAmeliorationAgent:
 
             if missing_required:
                 retry_instruction += (
-                    "\nToutes les preuves acceptées restent obligatoires. "
+                    "\nSeules les preuves explicitement marquées obligatoires doivent être présentes. "
                     "Intègre chaque citation manquante uniquement derrière une "
-                    "affirmation réellement soutenue par sa preuve. Si nécessaire, "
-                    "utilise un fait minimal mais exact."
+                    "affirmation réellement soutenue par sa preuve et dans sa cible autorisée."
                 )
 
             attempt_request = request.model_copy(
@@ -632,19 +631,58 @@ class EnnoAmeliorationAgent:
         evidence_rows = [
             row for row in (scholar.get("evidence") or []) if isinstance(row, dict)
         ]
-        has_section_mapping = any(row.get("section_ids") for row in evidence_items)
-        if not has_section_mapping:
-            return evidence
         wanted = {str(value) for value in section_ids if str(value or "").strip()}
 
+        def mapped_ids(row: dict[str, Any]) -> set[str]:
+            raw_values: list[Any] = []
+            for key in ("section_ids", "research_target_ids"):
+                value = row.get(key) or []
+                if isinstance(value, (list, tuple, set)):
+                    raw_values.extend(value)
+                else:
+                    raw_values.append(value)
+            values = {
+                str(value).strip()
+                for value in raw_values
+                if str(value or "").strip()
+            }
+            for binding in row.get("target_bindings") or []:
+                if not isinstance(binding, dict):
+                    continue
+                for value in (
+                    binding.get("research_target_id"),
+                    binding.get("parent_section_id"),
+                ):
+                    if str(value or "").strip():
+                        values.add(str(value).strip())
+            return values
+
+        has_section_mapping = any(
+            mapped_ids(row) for row in [*evidence_items, *evidence_rows]
+        )
+        if not has_section_mapping:
+            scoped_scholar = {
+                **scholar,
+                "available": False,
+                "evidence_items": [],
+                "evidence": [],
+                "writing_ready_card_count": 0,
+                "evidence_scope_section_ids": sorted(wanted),
+                "reason": (
+                    "Les preuves Scholar disponibles ne sont rattachées à aucune "
+                    "section : leur réutilisation globale est interdite pour ce groupe."
+                ),
+            }
+            return {**evidence, "scholar": scoped_scholar}
+
         def belongs(row: dict[str, Any]) -> bool:
-            return bool(wanted.intersection(str(value) for value in (row.get("section_ids") or [])))
+            return bool(wanted.intersection(mapped_ids(row)))
 
         scoped_items = [row for row in evidence_items if belongs(row)]
         scoped_rows = [row for row in evidence_rows if belongs(row)]
         scoped_scholar = {
             **scholar,
-            "available": bool(scoped_items),
+            "available": bool(scoped_rows),
             "evidence_items": scoped_items,
             "evidence": scoped_rows,
             "writing_ready_card_count": len(scoped_items),
@@ -828,7 +866,9 @@ class EnnoAmeliorationAgent:
                         "executed": False,
                         "error": str(exc),
                     }
-        if routing.needs_scholar:
+        if routing.needs_scholar and (
+            not routing.needs_new_research or request.evidence_article_ids
+        ):
             package["scholar"] = scholar_context(
                 db,
                 project,
@@ -836,7 +876,26 @@ class EnnoAmeliorationAgent:
                 request.instruction,
                 allowed_article_ids=request.evidence_article_ids,
                 evidence_scope_id=request.evidence_scope_id,
+                target_section_id=request.target_section_id,
+                target_section_title=request.target_section_title,
             )
+        elif routing.needs_scholar:
+            # Une recherche fraiche ouvre un corpus ferme. Les articles gardes
+            # dans un ancien run du projet ne doivent jamais etre exposes au
+            # writer avant que les candidats de ce cycle aient ete controles.
+            package["scholar"] = {
+                "available": False,
+                "agent": "EnnoScholar",
+                "reason": (
+                    "Une recherche ciblee fraiche est en cours ; aucun ancien "
+                    "article du projet n'est autorise dans ce cycle."
+                ),
+                "requires_research": True,
+                "fresh_research_pending": True,
+                "evidence": [],
+                "evidence_items": [],
+                "proof_policy": "fresh_cycle_closed_corpus",
+            }
         gaps: list[dict[str, str]] = []
         for key in ("diagnostic", "scholar"):
             value = package.get(key)
@@ -954,8 +1013,11 @@ class EnnoAmeliorationAgent:
 
         if fresh_policy.mode == FRESH_RESEARCH_MODE:
             fresh_needs_diagnostic = bool(
-                ImprovementIntent.CIR_ELIGIBILITY in routing.intents
-                and routing.needs_diagnostic
+                routing.needs_diagnostic
+                and (
+                    ImprovementIntent.CIR_ELIGIBILITY in routing.intents
+                    or routing.section_function == SectionFunction.UNCERTAINTY
+                )
             )
             fresh_route = (
                 SpecialistRoute.DIAGNOSTIC_SCHOLAR
@@ -1325,44 +1387,113 @@ class EnnoAmeliorationAgent:
                     diagnostic_orchestration=(evidence.get("diagnostic_orchestration") or {}),
                 )
             except Exception as exc:
+                if not fresh_policy.fallback_without_sources:
+                    return ImprovementResult(
+                        ok=False,
+                        state=ImprovementState.REVIEW,
+                        assistant_message=(
+                            "La recherche ciblée n'a pas pu être lancée par EnnoScholar. "
+                            f"Détail : {exc}"
+                        ),
+                        routing=routing,
+                        audit=audit,
+                        evidence=evidence,
+                        agents_used=(
+                            ["EnnoAmelioration", "EnnoDiagnostic", "EnnoScholar"]
+                            if diagnostic_required
+                            else ["EnnoAmelioration", "EnnoScholar"]
+                        ),
+                        actions=research_choice_actions(
+                            existing_sources_available=existing_sources_available
+                        ),
+                        requires_confirmation=True,
+                    )
+                evidence["optional_research_fallback"] = {
+                    "used": True,
+                    "reason": f"{exc.__class__.__name__}: {exc}",
+                    "policy": "rewrite_with_project_facts_only",
+                }
+                research = None
+
+            candidates = list((research or {}).get("candidates") or [])
+            if research is not None and candidates:
                 return ImprovementResult(
-                    ok=False,
-                    state=ImprovementState.REVIEW,
-                    assistant_message=(
-                        "La recherche ciblée n'a pas pu être lancée par EnnoScholar. "
-                        f"Détail : {exc}"
-                    ),
+                    ok=True,
+                    state=ImprovementState.AWAITING_EVIDENCE,
+                    assistant_message=format_research_candidates_message(research),
                     routing=routing,
                     audit=audit,
                     evidence=evidence,
+                    research=research,
                     agents_used=(
                         ["EnnoAmelioration", "EnnoDiagnostic", "EnnoScholar"]
                         if diagnostic_required
                         else ["EnnoAmelioration", "EnnoScholar"]
                     ),
-                    actions=research_choice_actions(
-                        existing_sources_available=existing_sources_available
+                    questions_for_consultant=[
+                        "Validez ou rejetez les sources candidates avant leur utilisation dans la rédaction."
+                    ],
+                    requires_confirmation=True,
+                )
+
+            if research is not None and not fresh_policy.fallback_without_sources:
+                return ImprovementResult(
+                    ok=True,
+                    state=ImprovementState.AWAITING_EVIDENCE,
+                    assistant_message=format_research_candidates_message(research),
+                    routing=routing,
+                    audit=audit,
+                    evidence=evidence,
+                    research=research,
+                    agents_used=(
+                        ["EnnoAmelioration", "EnnoDiagnostic", "EnnoScholar"]
+                        if diagnostic_required
+                        else ["EnnoAmelioration", "EnnoScholar"]
                     ),
                     requires_confirmation=True,
                 )
-            return ImprovementResult(
-                ok=True,
-                state=ImprovementState.AWAITING_EVIDENCE,
-                assistant_message=format_research_candidates_message(research),
-                routing=routing,
-                audit=audit,
-                evidence=evidence,
-                research=research,
-                agents_used=(
-                    ["EnnoAmelioration", "EnnoDiagnostic", "EnnoScholar"]
-                    if diagnostic_required
-                    else ["EnnoAmelioration", "EnnoScholar"]
+
+            if research is not None:
+                evidence["optional_research_fallback"] = {
+                    "used": True,
+                    "reason": "Aucune publication suffisamment pertinente n'a été retenue.",
+                    "policy": "rewrite_with_project_facts_only",
+                    "research": research,
+                }
+
+            # L'appui bibliographique était facultatif : EnnoAmel continue avec
+            # le texte complet de la section et les faits du dossier, sans
+            # fabriquer de référence ni ajouter de nouveau fait externe.
+            evidence["scholar"] = {
+                "available": False,
+                "agent": "EnnoScholar",
+                "reason": (
+                    "Aucune publication suffisamment pertinente n'a ete retenue "
+                    "pour la cible courante."
                 ),
-                questions_for_consultant=[
-                    "Validez ou rejetez les sources candidates avant leur utilisation dans la rédaction."
-                ],
-                requires_confirmation=True,
+                "requires_research": False,
+                "fresh_research_completed_without_sources": True,
+                "evidence": [],
+                "evidence_items": [],
+                "proof_policy": "facts_only_no_stale_source_fallback",
+            }
+            routing = routing.model_copy(
+                update={
+                    "needs_scholar": False,
+                    "needs_new_research": False,
+                    "needs_project_evidence": routing.needs_diagnostic,
+                    "specialist_route": (
+                        SpecialistRoute.DIAGNOSTIC
+                        if routing.needs_diagnostic
+                        else SpecialistRoute.WRITER
+                    ),
+                    "rationale": [
+                        *routing.rationale,
+                        "Recherche facultative sans source exploitable : rédaction poursuivie à faits projet constants.",
+                    ],
+                }
             )
+            research_choice = None
 
         if routing.needs_new_research:
             actions = research_choice_actions(

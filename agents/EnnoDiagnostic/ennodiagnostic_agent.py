@@ -59,7 +59,12 @@ def _path_match_key(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
 
 
-def _resolve_ennosmart_year_root(organisme: str, project: str, year: str) -> Path:
+def _resolve_ennosmart_year_root(
+    organisme: str,
+    project: str,
+    year: str,
+    subproject: str = "",
+) -> Path:
     """Résout génériquement le dossier annuel d'un projet EnnoSmart.
 
     La résolution recherche d'abord les répertoires existants sans dépendre de
@@ -74,12 +79,27 @@ def _resolve_ennosmart_year_root(organisme: str, project: str, year: str) -> Pat
     storage = root / "storage" / "organismes"
     year_value = str(year)
 
-    exact = storage / str(organisme).strip() / "projects" / _clean_part_for_path(project) / "years" / year_value
+    exact_project = (
+        storage
+        / str(organisme).strip()
+        / "projects"
+        / _clean_part_for_path(project)
+    )
+    exact = (
+        exact_project
+        / "subprojects"
+        / _clean_part_for_path(subproject)
+        / "years"
+        / year_value
+        if str(subproject or "").strip()
+        else exact_project / "years" / year_value
+    )
     if exact.exists():
         return exact
 
     org_key = _path_match_key(organisme)
     project_key = _path_match_key(project)
+    subproject_key = _path_match_key(subproject)
     if storage.exists():
         for org_dir in storage.iterdir():
             if not org_dir.is_dir() or _path_match_key(org_dir.name) != org_key:
@@ -90,13 +110,36 @@ def _resolve_ennosmart_year_root(organisme: str, project: str, year: str) -> Pat
             for project_dir in projects_dir.iterdir():
                 if not project_dir.is_dir() or _path_match_key(project_dir.name) != project_key:
                     continue
-                candidate = project_dir / "years" / year_value
+                scope_dir = project_dir
+                if subproject_key:
+                    subprojects_dir = project_dir / "subprojects"
+                    if not subprojects_dir.exists():
+                        continue
+                    scope_dir = next(
+                        (
+                            value
+                            for value in subprojects_dir.iterdir()
+                            if value.is_dir()
+                            and _path_match_key(value.name) == subproject_key
+                        ),
+                        None,
+                    )
+                    if scope_dir is None:
+                        continue
+                candidate = scope_dir / "years" / year_value
                 if candidate.exists():
                     return candidate
 
     org_default = str(organisme or "unknown_organisme").strip() or "unknown_organisme"
     project_default = _clean_part_for_path(project) or "unknown_project"
-    return storage / org_default / "projects" / project_default / "years" / year_value
+    project_scope = storage / org_default / "projects" / project_default
+    if str(subproject or "").strip():
+        project_scope = (
+            project_scope
+            / "subprojects"
+            / (_clean_part_for_path(subproject) or "unknown_subproject")
+        )
+    return project_scope / "years" / year_value
 
 
 # =========================================================
@@ -2714,10 +2757,13 @@ class EnnoDiagnosticAgent:
         gemini_model: Optional[str] = None,
         use_llm: bool = True,
         use_style_memory: bool = True,
+        subproject: Optional[str] = None,
+        subproject_id: Optional[str] = None,
         **kwargs,
     ):
         self.organisme = organisme_id or organisme or "unknown_organisme"
         self.project = project_id or project or "unknown_project"
+        self.subproject = subproject_id or subproject or ""
         self.year = str(year_id or year or "2023")
         self.model = model or gemini_model
         self.use_llm = use_llm
@@ -2729,7 +2775,12 @@ class EnnoDiagnosticAgent:
         if out_dir and not force_storage:
             self.out_dir = Path(out_dir)
         else:
-            self.out_dir = _resolve_ennosmart_year_root(self.organisme, self.project, self.year)
+            self.out_dir = _resolve_ennosmart_year_root(
+                self.organisme,
+                self.project,
+                self.year,
+                self.subproject,
+            )
 
         self.diagnostic_dir = self.out_dir / "ennodiagnostic"
         self.report_path = self.diagnostic_dir / "ennodiagnostic_report.json"
@@ -2739,6 +2790,7 @@ class EnnoDiagnosticAgent:
         self.retriever = EnnoRetriever(
             organisme=self.organisme,
             project=self.project,
+            subproject=self.subproject,
             year=self.year,
         )
 
@@ -3477,6 +3529,7 @@ class EnnoDiagnosticAgent:
                 organisme=self.organisme,
                 project=self.project,
                 current_year=self.year,
+                subproject=self.subproject,
                 max_previous_years=max(
                     1,
                     int(os.getenv("ENNOSMART_DIAG_VERROU_PREVIOUS_MAX_YEARS", "1")),
@@ -3977,22 +4030,97 @@ class EnnoDiagnosticAgent:
             "Cette comparaison sert seulement à qualifier continuité, nouveauté ou évolution.",
             "Elle ne prouve aucun fait du projet courant et ne doit pas créer de verrou supplémentaire.",
         ]
-        safe_keys = (
-            "status", "relation", "comparison", "comparison_status", "current_title", "previous_title",
-            "current_label", "previous_label", "match_type", "similarity", "reason", "explanation",
-        )
         for index, item in enumerate(comparisons[:max_items], start=1):
             if not isinstance(item, dict):
                 continue
+
+            current = item.get("current_item") if isinstance(item.get("current_item"), dict) else {}
+            best_match = item.get("best_match") if isinstance(item.get("best_match"), dict) else {}
+            previous = (
+                best_match.get("previous_candidate")
+                if isinstance(best_match.get("previous_candidate"), dict)
+                else item.get("previous_candidate")
+                if isinstance(item.get("previous_candidate"), dict)
+                else {}
+            )
+            decision = (
+                item.get("decision")
+                if isinstance(item.get("decision"), dict)
+                else best_match.get("final_scores")
+                if isinstance(best_match.get("final_scores"), dict)
+                else {}
+            )
+
+            current_title = clean_text(
+                current.get("section_title")
+                or current.get("title")
+                or item.get("current_title")
+                or item.get("current_label")
+            )
+            previous_title = clean_text(
+                previous.get("section_title")
+                or previous.get("title")
+                or item.get("previous_title")
+                or item.get("previous_label")
+            )
+            previous_year = clean_text(
+                previous.get("previous_year")
+                or previous.get("year")
+                or item.get("previous_year")
+            )
+            label = clean_text(
+                decision.get("label")
+                or decision.get("status")
+                or item.get("status")
+                or item.get("relation")
+                or item.get("comparison_status")
+            )
+
+            def score_text(value: Any) -> str:
+                try:
+                    score = float(value)
+                except (TypeError, ValueError):
+                    return ""
+                percent = score * 100 if abs(score) <= 1 else score
+                return f"{percent:.0f}%"
+
+            continuity = score_text(
+                decision.get("continuity_score")
+                if decision.get("continuity_score") is not None
+                else best_match.get("similarity_score")
+                if best_match.get("similarity_score") is not None
+                else item.get("similarity")
+            )
+            novelty = score_text(decision.get("novelty_score"))
+
             values = []
-            for key in safe_keys:
-                value = item.get(key)
-                if isinstance(value, (str, int, float)) and clean_text(value):
-                    values.append(f"{key}={truncate(value, 260)}")
+            if current_title:
+                values.append(f"verrou courant={truncate(current_title, 300)}")
+            if previous_title:
+                previous_label = f"passage CIR {previous_year}" if previous_year else "passage CIR antérieur"
+                values.append(f"{previous_label}={truncate(previous_title, 300)}")
+            if label:
+                values.append(f"statut={truncate(label, 180)}")
+            if continuity:
+                values.append(f"continuité={continuity}")
+            if novelty:
+                values.append(f"apport courant={novelty}")
+
+            # Compatibilité avec les anciens rapports qui utilisaient des champs plats.
+            if not values:
+                for key in (
+                    "comparison", "match_type", "reason", "explanation",
+                ):
+                    value = item.get(key)
+                    if isinstance(value, (str, int, float)) and clean_text(value):
+                        values.append(f"{key}={truncate(value, 260)}")
             if values:
                 lines.append(f"- Comparaison {index} : " + " | ".join(values))
         if len(lines) == 4:
-            lines.append("- Aucun rapprochement structuré exploitable.")
+            if comparisons:
+                lines.append("- Des rapprochements existent, mais leurs détails ne sont pas lisibles dans ce format de rapport.")
+            else:
+                lines.append("- Aucun rapprochement structuré exploitable.")
         return truncate("\n".join(lines), max_chars)
 
     def render_cir_previous_comparison_section(
@@ -4225,6 +4353,7 @@ class EnnoDiagnosticAgent:
                 organisme=self.organisme,
                 project=self.project,
                 year=self.year,
+                subproject=self.subproject,
                 required=False,
             )
             if resolved is not None:
@@ -4296,6 +4425,7 @@ class EnnoDiagnosticAgent:
             memory_v2_hash = memory_v2_fingerprint(
                 organisme=self.organisme,
                 project=self.project,
+                subproject=self.subproject,
                 current_year=self.year,
             )
 
@@ -4337,6 +4467,7 @@ class EnnoDiagnosticAgent:
                     cache_version,
                     self.organisme,
                     self.project,
+                    self.subproject,
                     self.year,
                     nlp_hash,
                     current_verrous_hash,
@@ -4383,6 +4514,7 @@ class EnnoDiagnosticAgent:
             report = load_or_create_cir_memory_comparison(
                 organisme=self.organisme,
                 project=self.project,
+                subproject=self.subproject,
                 year=self.year,
                 nlp_result_path=nlp_path,
                 max_previous_years=max_previous_years,

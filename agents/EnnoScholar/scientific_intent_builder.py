@@ -3,10 +3,9 @@ from __future__ import annotations
 
 """Universal EnnoScholar scientific intent builder.
 
-The scientific vocabulary is extracted exclusively from the current lock title,
-its linked EnnoDiagnostic evidence/passages, and explicit keywords/concepts
-already present in that payload.  No project/domain/technology ontology is
-encoded here.
+The local passage supplies the precise research axis.  Its complete parent
+section and the detected project domain supply mandatory disambiguation context;
+they guide extraction but never act as a hard-coded ontology.
 """
 
 import re
@@ -135,6 +134,54 @@ def _collect_source_passages(verrou: Dict[str, Any]) -> List[str]:
         if len(unique) >= 10:
             break
     return unique
+
+
+def _collect_known_text(verrou: Dict[str, Any], key: str, max_chars: int) -> str:
+    """Read one explicit semantic field without flattening arbitrary metadata."""
+
+    values: List[str] = []
+    for container in (
+        verrou,
+        verrou.get("raw_item"),
+        verrou.get("research_context"),
+        verrou.get("context"),
+        verrou.get("source_json"),
+    ):
+        if not isinstance(container, dict):
+            continue
+        value = container.get(key)
+        if isinstance(value, str) and value.strip():
+            values.append(_clean_source_text(value, max_chars))
+    return next((value for value in values if value), "")
+
+
+def _domain_context(domain_detection: Dict[str, Any] | None) -> List[str]:
+    """Keep only explicit classifier/project labels as a routing constraint."""
+
+    domain = dict(domain_detection or {})
+    labels: List[str] = []
+    for key in (
+        "display_label", "main_domain_label", "domain_label", "label",
+        "domain_name", "main_domain",
+    ):
+        value = clean_text(domain.get(key), 240)
+        if value:
+            labels.append(value)
+    display = domain.get("display")
+    if isinstance(display, dict):
+        for key in ("display_label", "label", "main_domain_label"):
+            value = clean_text(display.get(key), 240)
+            if value:
+                labels.append(value)
+    for row in domain.get("top_domains") or []:
+        if not isinstance(row, dict):
+            continue
+        for key in ("display_label", "label", "name", "domain"):
+            value = clean_text(row.get(key), 240)
+            if value:
+                labels.append(value)
+                break
+    return dedupe_keep_order(labels, 4)
 
 
 def _collect_explicit_keywords(verrou: Dict[str, Any]) -> List[str]:
@@ -338,11 +385,17 @@ def build_scientific_intent(
     domain_detection: Dict[str, Any] | None = None,
     diagnostic_context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    del domain_detection  # kept only for API compatibility; no domain routing here.
     verrou = dict(verrou or {})
     diagnostic_context = diagnostic_context or {}
 
     passages = _collect_source_passages(verrou)
+    parent_section_text = _collect_known_text(
+        verrou, "parent_section_text", 20000
+    )
+    research_objective = _collect_known_text(
+        verrou, "research_objective", 3500
+    )
+    domain_labels = _domain_context(domain_detection)
     title = _choose_title(verrou, passages)
     explicit_keywords = _collect_explicit_keywords(verrou)
     title_tokens = dedupe_keep_order(_content_tokens(title), 18)
@@ -418,17 +471,23 @@ def build_scientific_intent(
         "literal_source_phrases": dedupe_keep_order(title_terms[:6] + explicit_keywords[:4], 8),
         "literal_source_terms": dedupe_keep_order(title_terms + evidence_terms, 14),
         "source_passages": passages,
+        "parent_section_text": parent_section_text,
+        "research_objective": research_objective,
+        "domain_context": domain_labels,
         "source_basis": {
             "verrou_title": title,
             "linked_passages_count": len(passages),
             "linked_passages_excerpt": passages[:3],
             "explicit_keywords": explicit_keywords,
             "relevant_diagnostic_context": relevant_context,
+            "parent_section_text": parent_section_text,
+            "research_objective": research_objective,
+            "domain_context": domain_labels,
         },
         "query_language": language,
         "intent_confidence": round(min(confidence, 0.95), 3),
         "search_queries": [],
-        "intent_builder_version": "v161_title_passages_verified_keywords_universal",
+        "intent_builder_version": "v168_target_parent_domain_objective_fingerprint",
         "hardcoded_domain_rules": False,
         "project_specific_rules": False,
     }

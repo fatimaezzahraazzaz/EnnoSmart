@@ -3,6 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from agents.EnnoAmelioration.application.intention_service import understand_instruction
+from agents.EnnoAmelioration.application.section_parser import (
+    infer_section_from_instruction,
+    parse_sections,
+)
 from agents.EnnoAmelioration.domain.models import TargetScope
 from sqlalchemy.orm import Session
 
@@ -28,6 +32,32 @@ def _has_explicit_local_target(payload: Any) -> bool:
     target_section_id = str(getattr(payload, "target_section_id", None) or "").strip()
     target_section_title = str(getattr(payload, "target_section_title", None) or "").strip()
     return bool(selected_text or target_section_id or target_section_title)
+
+
+def _message_targets_existing_section(
+    session: ImprovementSession,
+    message: str,
+) -> bool:
+    """Vérifie la cible dans la version active, sans dépendre du scope mémorisé."""
+
+    versions = list(session.versions or [])
+    active = next(
+        (
+            row
+            for row in versions
+            if str(row.id) == str(session.active_version_id or "")
+        ),
+        None,
+    )
+    if active is None and versions:
+        active = max(versions, key=lambda row: int(row.version_number or 0))
+    text = str(getattr(active, "content", "") or "")
+    if not text.strip() or not str(message or "").strip():
+        return False
+    return infer_section_from_instruction(
+        message,
+        parse_sections(text),
+    ) is not None
 
 
 def resolve_background_scope(
@@ -64,6 +94,19 @@ def resolve_background_scope(
             "scope": effective.value,
             "reason": "explicit_local_target",
             "semantic_scope": None,
+        }
+
+    if _message_targets_existing_section(session, message):
+        print(
+            "[V3.21.2][BackgroundRoute] "
+            f"session={session_id} route=sync "
+            "reason=message_targets_existing_section"
+        )
+        return {
+            "background": False,
+            "scope": TargetScope.SECTION.value,
+            "reason": "message_targets_existing_section",
+            "semantic_scope": TargetScope.SECTION.value,
         }
 
     if explicit_scope == TargetScope.FULL_DOCUMENT:

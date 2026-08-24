@@ -1,11 +1,30 @@
-from fastapi import APIRouter, Depends, status
-from sqlalchemy import case, func, or_
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 
 from core.deps import get_current_user, get_db
-from db.models import Article, DiagnosticRun, Document, Project, ScholarRun, User, Verrou
-from schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
+from db.models import (
+    Article,
+    DiagnosticRun,
+    Document,
+    ImprovementSession,
+    Project,
+    ProjectAccessRequest,
+    ScholarRun,
+    User,
+    Verrou,
+)
+from schemas.project import (
+    ProjectAccessDecision,
+    ProjectCreate,
+    ProjectRead,
+    ProjectSelection,
+    ProjectUpdate,
+)
 from services.diagnostic_eligibility_service import extract_diagnostic_eligibility_score
+from services.experience_memory_v2_service import get_memory_v2_catalog
 from services.file_service import clean_path_segment
 from services.project_service import get_project_for_user
 
@@ -16,8 +35,270 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 def _visible_projects_query(db: Session, current_user: User):
     query = db.query(Project)
     if current_user.role not in {"admin", "superadmin"}:
-        query = query.filter(Project.consultant_id == current_user.id)
+        query = query.filter(
+            or_(
+                Project.consultant_id == current_user.id,
+                Project.access_requests.any(
+                    and_(
+                        ProjectAccessRequest.requester_id == current_user.id,
+                        ProjectAccessRequest.status == "accepted",
+                    )
+                ),
+            )
+        )
     return query
+
+
+def _clean_optional(value: str | None) -> str | None:
+    cleaned = str(value or "").strip()
+    return cleaned or None
+
+
+def _identity_query(db: Session, payload: ProjectSelection):
+    subproject = (_clean_optional(payload.subproject_name) or "").lower()
+    return db.query(Project).filter(
+        func.lower(func.trim(Project.organisme)) == payload.organisme.strip().lower(),
+        func.lower(func.trim(Project.project_name)) == payload.project_name.strip().lower(),
+        func.lower(func.trim(func.coalesce(Project.subproject_name, ""))) == subproject,
+        func.lower(func.trim(Project.year)) == payload.year.strip().lower(),
+    )
+
+
+def _activity_labels(db: Session, project_id: int) -> list[str]:
+    labels: list[str] = []
+    if db.query(DiagnosticRun.id).filter(DiagnosticRun.project_id == project_id).first():
+        labels.append("EnnoDiagnostic")
+    if db.query(ScholarRun.id).filter(ScholarRun.project_id == project_id).first():
+        labels.append("EnnoScholar")
+    if db.query(ImprovementSession.id).filter(ImprovementSession.project_id == project_id).first():
+        labels.append("EnnoAmélioration")
+    return labels
+
+
+def _active_identity_projects(db: Session, payload: ProjectSelection) -> list[tuple[Project, list[str]]]:
+    result: list[tuple[Project, list[str]]] = []
+    for project in _identity_query(db, payload).order_by(Project.created_at.desc()).all():
+        activity = _activity_labels(db, project.id)
+        if activity:
+            result.append((project, activity))
+    return result
+
+
+@router.get("/catalog")
+def project_catalog(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Catalogue partagé pour les listes Organisme → Projet → Sous-projet."""
+
+    del current_user
+    identities: list[tuple[str, str, str | None]] = [
+        (row.organisme, row.project_name, row.subproject_name)
+        for row in db.query(Project).order_by(Project.created_at.asc()).all()
+    ]
+    try:
+        memory_catalog = get_memory_v2_catalog()
+        identities.extend(
+            (
+                str(row.get("organisme") or "").strip(),
+                str(row.get("project") or "").strip(),
+                _clean_optional(row.get("subproject")),
+            )
+            for row in memory_catalog.get("projects") or []
+        )
+    except Exception:
+        # Le formulaire reste utilisable même si Chroma est momentanément indisponible.
+        pass
+
+    organisations: dict[str, dict] = {}
+    for organisme, project_name, subproject_name in identities:
+        organisme = str(organisme or "").strip()
+        project_name = str(project_name or "").strip()
+        if not organisme or not project_name:
+            continue
+        org_key = organisme.casefold()
+        org = organisations.setdefault(org_key, {"name": organisme, "projects": {}})
+        project_key = project_name.casefold()
+        project = org["projects"].setdefault(
+            project_key,
+            {"name": project_name, "subprojects": {}},
+        )
+        subproject = _clean_optional(subproject_name)
+        if subproject:
+            project["subprojects"].setdefault(subproject.casefold(), subproject)
+
+    return {
+        "organisations": [
+            {
+                "name": org["name"],
+                "projects": [
+                    {
+                        "name": project["name"],
+                        "subprojects": sorted(
+                            project["subprojects"].values(), key=str.casefold
+                        ),
+                    }
+                    for project in sorted(
+                        org["projects"].values(),
+                        key=lambda item: item["name"].casefold(),
+                    )
+                ],
+            }
+            for org in sorted(organisations.values(), key=lambda item: item["name"].casefold())
+        ]
+    }
+
+
+@router.post("/selection-status")
+def project_selection_status(
+    payload: ProjectSelection,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    active_projects = _active_identity_projects(db, payload)
+    if not active_projects:
+        return {"status": "available", "can_create": True}
+
+    for project, activity in active_projects:
+        if project.consultant_id == current_user.id:
+            return {
+                "status": "owned",
+                "can_create": False,
+                "project_id": project.id,
+                "activity": activity,
+                "message": "Ce dossier existe déjà dans vos projets.",
+            }
+        accepted = (
+            db.query(ProjectAccessRequest)
+            .filter(
+                ProjectAccessRequest.project_id == project.id,
+                ProjectAccessRequest.requester_id == current_user.id,
+                ProjectAccessRequest.status == "accepted",
+            )
+            .first()
+        )
+        if accepted:
+            return {
+                "status": "granted",
+                "can_create": False,
+                "project_id": project.id,
+                "activity": activity,
+                "message": "Ce projet est déverrouillé pour votre compte.",
+            }
+
+    project, activity = active_projects[0]
+    owner = db.query(User).filter(User.id == project.consultant_id).first()
+    request = (
+        db.query(ProjectAccessRequest)
+        .filter(
+            ProjectAccessRequest.project_id == project.id,
+            ProjectAccessRequest.requester_id == current_user.id,
+        )
+        .first()
+    )
+    owner_name = owner.full_name if owner else "un autre consultant"
+    return {
+        "status": "locked",
+        "can_create": False,
+        "project_id": project.id,
+        "owner_name": owner_name,
+        "activity": activity,
+        "access_request_id": request.id if request else None,
+        "access_request_status": request.status if request else None,
+        "message": (
+            f"Ce projet est déjà en cours par {owner_name}. "
+            "Envoyez une demande pour obtenir l’accès."
+        ),
+    }
+
+
+@router.get("/access-requests")
+def list_access_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rows = (
+        db.query(ProjectAccessRequest)
+        .filter(
+            or_(
+                ProjectAccessRequest.owner_id == current_user.id,
+                ProjectAccessRequest.requester_id == current_user.id,
+            )
+        )
+        .order_by(ProjectAccessRequest.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    items = [_access_request_payload(db, row, current_user) for row in rows]
+    return {"unread_count": sum(1 for item in items if item["unread"]), "items": items}
+
+
+@router.post("/access-requests/{request_id}/seen")
+def mark_access_request_seen(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    row = db.query(ProjectAccessRequest).filter(ProjectAccessRequest.id == request_id).first()
+    if not row or current_user.id not in {row.owner_id, row.requester_id}:
+        raise HTTPException(status_code=404, detail="Notification introuvable.")
+    if row.owner_id == current_user.id:
+        row.owner_seen_at = datetime.utcnow()
+    if row.requester_id == current_user.id:
+        row.requester_seen_at = datetime.utcnow()
+    db.commit()
+    db.refresh(row)
+    return _access_request_payload(db, row, current_user)
+
+
+@router.patch("/access-requests/{request_id}")
+def respond_to_access_request(
+    request_id: int,
+    payload: ProjectAccessDecision,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    row = db.query(ProjectAccessRequest).filter(ProjectAccessRequest.id == request_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Demande d’accès introuvable.")
+    if current_user.id != row.owner_id:
+        raise HTTPException(status_code=403, detail="Seul le consultant responsable peut répondre.")
+    row.status = payload.status
+    row.responded_at = datetime.utcnow()
+    row.owner_seen_at = datetime.utcnow()
+    row.requester_seen_at = None
+    db.commit()
+    db.refresh(row)
+    return _access_request_payload(db, row, current_user)
+
+
+def _access_request_payload(db: Session, row: ProjectAccessRequest, current_user: User) -> dict:
+    project = row.project
+    owner = db.query(User).filter(User.id == row.owner_id).first()
+    requester = db.query(User).filter(User.id == row.requester_id).first()
+    is_owner = row.owner_id == current_user.id
+    unread = (
+        row.owner_seen_at is None
+        if is_owner
+        else row.status != "pending" and row.requester_seen_at is None
+    )
+    return {
+        "id": row.id,
+        "project_id": row.project_id,
+        "requester_id": row.requester_id,
+        "requester_name": requester.full_name if requester else "Consultant",
+        "owner_id": row.owner_id,
+        "owner_name": owner.full_name if owner else "Consultant",
+        "organisme": project.organisme,
+        "project_name": project.project_name,
+        "subproject_name": project.subproject_name,
+        "year": project.year,
+        "status": row.status,
+        "direction": "incoming" if is_owner else "outgoing",
+        "unread": unread,
+        "created_at": row.created_at,
+        "responded_at": row.responded_at,
+    }
 
 
 @router.get("", response_model=list[ProjectRead])
@@ -265,18 +546,53 @@ def create_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    ai_folder = "/".join(
-        [
-            clean_path_segment(payload.organisme),
-            clean_path_segment(payload.project_name),
-            clean_path_segment(str(payload.year)),
-        ]
+    selection = ProjectSelection(
+        organisme=payload.organisme,
+        project_name=payload.project_name,
+        subproject_name=payload.subproject_name,
+        year=payload.year,
     )
+    active_projects = _active_identity_projects(db, selection)
+    if active_projects:
+        project, _activity = active_projects[0]
+        owner = db.query(User).filter(User.id == project.consultant_id).first()
+        accepted = (
+            db.query(ProjectAccessRequest.id)
+            .filter(
+                ProjectAccessRequest.project_id == project.id,
+                ProjectAccessRequest.requester_id == current_user.id,
+                ProjectAccessRequest.status == "accepted",
+            )
+            .first()
+        )
+        if project.consultant_id == current_user.id or accepted:
+            message = "Ce dossier existe déjà et vous est accessible. Ouvrez le projet existant."
+        else:
+            owner_name = owner.full_name if owner else "un autre consultant"
+            message = (
+                f"Ce projet est déjà en cours par {owner_name}. "
+                "Envoyez-lui une demande d’accès."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": message, "project_id": project.id, "code": "PROJECT_LOCKED"},
+        )
+
+    subproject_name = _clean_optional(payload.subproject_name)
+    folder_segments = [
+        clean_path_segment(payload.organisme),
+        clean_path_segment(payload.project_name),
+    ]
+    if subproject_name:
+        folder_segments.extend(["subprojects", clean_path_segment(subproject_name)])
+    folder_segments.extend(["years", clean_path_segment(str(payload.year))])
+    ai_folder = "/".join(folder_segments)
 
     project = Project(
         consultant_id=current_user.id,
         organisme=payload.organisme.strip(),
         project_name=payload.project_name.strip(),
+        subproject_name=subproject_name,
         year=str(payload.year).strip(),
         domain_label=payload.domain_label,
         status="Créé",
@@ -287,6 +603,52 @@ def create_project(
     db.commit()
     db.refresh(project)
     return project
+
+
+@router.post("/{project_id}/access-requests", status_code=status.HTTP_201_CREATED)
+def request_project_access(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+    if project.consultant_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Vous êtes déjà responsable de ce projet.")
+    if not _activity_labels(db, project.id):
+        raise HTTPException(status_code=400, detail="Ce projet n’a pas encore d’activité à partager.")
+
+    row = (
+        db.query(ProjectAccessRequest)
+        .filter(
+            ProjectAccessRequest.project_id == project.id,
+            ProjectAccessRequest.requester_id == current_user.id,
+        )
+        .first()
+    )
+    if row and row.status == "accepted":
+        return _access_request_payload(db, row, current_user)
+    if row and row.status == "pending":
+        return _access_request_payload(db, row, current_user)
+    if row:
+        row.status = "pending"
+        row.created_at = datetime.utcnow()
+        row.responded_at = None
+        row.owner_seen_at = None
+        row.requester_seen_at = None
+        row.owner_id = project.consultant_id
+    else:
+        row = ProjectAccessRequest(
+            project_id=project.id,
+            requester_id=current_user.id,
+            owner_id=project.consultant_id,
+            status="pending",
+        )
+        db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _access_request_payload(db, row, current_user)
 
 
 @router.get("/{project_id}", response_model=ProjectRead)
@@ -306,6 +668,11 @@ def update_project(
     current_user: User = Depends(get_current_user),
 ):
     project = get_project_for_user(db, project_id, current_user)
+    if project.consultant_id != current_user.id and current_user.role not in {"admin", "superadmin"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Seul le consultant responsable peut modifier l’identité du projet.",
+        )
 
     for field, value in payload.model_dump(exclude_unset=True).items():
         if value is not None:
@@ -323,6 +690,11 @@ def delete_project(
     current_user: User = Depends(get_current_user),
 ):
     project = get_project_for_user(db, project_id, current_user)
+    if project.consultant_id != current_user.id and current_user.role not in {"admin", "superadmin"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Seul le consultant responsable peut supprimer ce projet.",
+        )
     db.delete(project)
     db.commit()
 

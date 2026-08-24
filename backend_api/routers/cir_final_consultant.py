@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from pathlib import Path
 from datetime import datetime
+import hashlib
 import json
 import re
 import zipfile
@@ -11,6 +12,13 @@ import html
 import shutil
 import unicodedata
 from typing import Optional
+
+from sqlalchemy.orm import Session
+
+from core.deps import get_current_user, get_db
+from db.models import Document, User
+from services.experience_memory_v2_service import build_uploaded_cir
+from services.project_service import get_project_for_user
 
 router = APIRouter(prefix="/projects", tags=["CIR final consultant"])
 
@@ -523,36 +531,37 @@ def sections_from_text(text: str) -> dict:
 # Chemin canonique CIR par organisme / projet / année
 # =============================================================================
 
-def canonical_year_dir(organisme: str, project: str, year: str) -> Path:
+def canonical_year_dir(organisme: str, project: str, year: str, subproject: str = "") -> Path:
     """
     Chemin unique métier.
     C'est CE chemin que doivent utiliser EnnoDiagnostic, comparaison N-1 et mémoire CIR.
     """
-    return (
+    base = (
         root()
         / "storage"
         / "organismes"
         / safe_name(organisme, "organisme_unknown").lower()
         / "projects"
         / safe_name(project, "project_unknown").lower()
-        / "years"
-        / str(year)
     )
+    if str(subproject or "").strip():
+        base = base / "subprojects" / safe_name(subproject, "subproject_unknown").lower()
+    return base / "years" / str(year)
 
 
-def canonical_cir_current_dir(organisme: str, project: str, year: str) -> Path:
-    return canonical_year_dir(organisme, project, year) / "cir_final_consultant" / "current"
+def canonical_cir_current_dir(organisme: str, project: str, year: str, subproject: str = "") -> Path:
+    return canonical_year_dir(organisme, project, year, subproject) / "cir_final_consultant" / "current"
 
 
-def canonical_cir_memory_path(organisme: str, project: str, year: str) -> Path:
-    return canonical_year_dir(organisme, project, year) / "cir_final_memory.json"
+def canonical_cir_memory_path(organisme: str, project: str, year: str, subproject: str = "") -> Path:
+    return canonical_year_dir(organisme, project, year, subproject) / "cir_final_memory.json"
 
 
-def canonical_cir_extracted_path(organisme: str, project: str, year: str) -> Path:
+def canonical_cir_extracted_path(organisme: str, project: str, year: str, subproject: str = "") -> Path:
     """
     Format lu par modules.CIR_MEMORY.cir_memory pour la comparaison N-1.
     """
-    return canonical_year_dir(organisme, project, year) / "cir_final" / "cir_final_extracted.json"
+    return canonical_year_dir(organisme, project, year, subproject) / "cir_final" / "cir_final_extracted.json"
 
 
 def legacy_project_current_dir(project_id: int) -> Path:
@@ -563,7 +572,14 @@ def legacy_project_current_dir(project_id: int) -> Path:
     return root() / "storage" / "projects" / str(project_id) / "cir_final_consultant" / "current"
 
 
-def sections_to_items(sections: dict, organisme: str, project: str, year: str, source_file: str) -> list[dict]:
+def sections_to_items(
+    sections: dict,
+    organisme: str,
+    project: str,
+    year: str,
+    source_file: str,
+    subproject: str = "",
+) -> list[dict]:
     """
     Transforme les sections larges du CIR final en items comparables.
     Nécessaire parce que le module comparaison travaille sur une liste d'items.
@@ -599,6 +615,7 @@ def sections_to_items(sections: dict, organisme: str, project: str, year: str, s
             "item_id": f"{safe_name(project, 'project')}_{year}_{key}",
             "organisme": organisme,
             "project": project,
+            "subproject": subproject,
             "year": str(year),
             "role": role_map.get(key, key),
             "section_key": key,
@@ -611,13 +628,24 @@ def sections_to_items(sections: dict, organisme: str, project: str, year: str, s
     return items
 
 
-def build_cir_memory_payload(project_id: int, organisme: str, project: str, year: str, filename: str, text: str, sections: dict, warnings: list[str]) -> dict:
-    items = sections_to_items(sections, organisme, project, year, filename)
+def build_cir_memory_payload(
+    project_id: int,
+    organisme: str,
+    project: str,
+    year: str,
+    filename: str,
+    text: str,
+    sections: dict,
+    warnings: list[str],
+    subproject: str = "",
+) -> dict:
+    items = sections_to_items(sections, organisme, project, year, filename, subproject)
     return {
         "version": "v61_canonical_cir_memory",
         "project_id": project_id,
         "organisme": organisme,
         "project": project,
+        "subproject": subproject,
         "year": str(year),
         "source_file": filename,
         "text_chars": len(text or ""),
@@ -638,7 +666,14 @@ def build_cir_memory_payload(project_id: int, organisme: str, project: str, year
 # Mémoire de style
 # =============================================================================
 
-def append_style_memory(organisme: str, project: str, year: str, filename: str, sections: dict) -> dict:
+def append_style_memory(
+    organisme: str,
+    project: str,
+    year: str,
+    filename: str,
+    sections: dict,
+    subproject: str = "",
+) -> dict:
     path = root() / "storage" / "organismes" / safe_name(organisme, "organisme_unknown") / "cir_style_memory" / "style_memory.json"
     memory = read_json(path, {"version": "v60_style_memory", "examples": []})
 
@@ -679,6 +714,7 @@ def append_style_memory(organisme: str, project: str, year: str, filename: str, 
                 isinstance(e, dict)
                 and str(e.get("organisme") or "") == str(organisme)
                 and str(e.get("project") or "") == str(project)
+                and str(e.get("subproject") or "") == str(subproject)
                 and str(e.get("year") or "") == str(year)
                 and str(e.get("source_file") or "") == str(filename)
                 and str(e.get("section_key") or "") == str(key)
@@ -689,6 +725,7 @@ def append_style_memory(organisme: str, project: str, year: str, filename: str, 
             "example_id": f"{safe_name(project, 'project')}_{year}_{role}_{len(memory['examples']) + 1}",
             "organisme": organisme,
             "project": project,
+            "subproject": subproject,
             "year": year,
             "role": role,
             "section_key": key,
@@ -723,9 +760,20 @@ async def upload_cir_final_consultant(
     file: UploadFile = File(...),
     organisme: str = Form("organisme_unknown"),
     project: str = Form("project_unknown"),
+    subproject: str = Form(""),
     year: str = Form("unknown"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    filename = file.filename or "cir_final_consultant.docx"
+    project_row = get_project_for_user(db, project_id, current_user)
+    # L'identité autorisée en base prévaut toujours sur les champs du navigateur.
+    del organisme, project, subproject, year
+    organisme_name = project_row.organisme.strip()
+    project_name = project_row.project_name.strip()
+    subproject_name = str(project_row.subproject_name or "").strip()
+    year_value = str(project_row.year).strip()
+
+    filename = Path(file.filename or "cir_final_consultant.docx").name
     ext = Path(filename).suffix.lower()
 
     if ext not in [".docx", ".pdf", ".txt", ".md"]:
@@ -735,14 +783,18 @@ async def upload_cir_final_consultant(
     # L'ancien storage/projects/{id} reste uniquement une copie de compatibilité.
     run_id = "current"
 
-    canonical_dir = canonical_cir_current_dir(organisme, project, year)
+    canonical_dir = canonical_cir_current_dir(
+        organisme_name, project_name, year_value, subproject_name
+    )
     if canonical_dir.exists():
         shutil.rmtree(canonical_dir)
     canonical_dir.mkdir(parents=True, exist_ok=True)
 
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Le fichier CIR final est vide.")
     saved = canonical_dir / filename
-    with saved.open("wb") as f:
-        shutil.copyfileobj(file.file, f)
+    saved.write_bytes(file_bytes)
 
     try:
         text = extract_text(saved)
@@ -754,7 +806,14 @@ async def upload_cir_final_consultant(
         raise HTTPException(status_code=400, detail="Texte extrait trop court.")
 
     sections = sections_from_text(text)
-    style = append_style_memory(organisme, project, year, filename, sections)
+    style = append_style_memory(
+        organisme_name,
+        project_name,
+        year_value,
+        filename,
+        sections,
+        subproject_name,
+    )
 
     warnings = []
     if _contains_toc_noise(text[:2500]):
@@ -765,9 +824,10 @@ async def upload_cir_final_consultant(
 
     cir_memory = build_cir_memory_payload(
         project_id=project_id,
-        organisme=organisme,
-        project=project,
-        year=year,
+        organisme=organisme_name,
+        project=project_name,
+        subproject=subproject_name,
+        year=year_value,
         filename=filename,
         text=text,
         sections=sections,
@@ -775,17 +835,71 @@ async def upload_cir_final_consultant(
     )
 
     # 1) Mémoire canonique lisible par l'interface et les outils projet/année
-    canonical_memory_path = canonical_cir_memory_path(organisme, project, year)
+    canonical_memory_path = canonical_cir_memory_path(
+        organisme_name, project_name, year_value, subproject_name
+    )
     write_json(canonical_memory_path, cir_memory)
 
     # 2) Format directement lu par modules.CIR_MEMORY pour la comparaison N-1
-    canonical_extracted_path = canonical_cir_extracted_path(organisme, project, year)
+    canonical_extracted_path = canonical_cir_extracted_path(
+        organisme_name, project_name, year_value, subproject_name
+    )
     write_json(canonical_extracted_path, cir_memory)
+
+    digest = hashlib.sha256(file_bytes).hexdigest()
+    document = (
+        db.query(Document)
+        .filter(
+            Document.project_id == project_id,
+            Document.file_sha256 == digest,
+            Document.document_type == "CIR final consultant",
+        )
+        .first()
+    )
+    if not document:
+        document = Document(
+            project_id=project_id,
+            filename=filename,
+            stored_filename=filename,
+            file_path=f"db://documents/{digest}",
+            content_type=file.content_type or "application/octet-stream",
+            file_size=len(file_bytes),
+            document_type="CIR final consultant",
+            upload_status="indexé Chroma",
+            file_data=file_bytes,
+            file_sha256=digest,
+            storage_mode="database",
+        )
+        db.add(document)
+        db.flush()
+
+    try:
+        chroma_result = build_uploaded_cir(
+            saved,
+            organisme=organisme_name,
+            project=project_name,
+            subproject=subproject_name,
+            year=year_value,
+        )
+        if chroma_result.get("ok") is False:
+            raise RuntimeError(str(chroma_result.get("error") or "Indexation non confirmée."))
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"CIR enregistré mais indexation Chroma impossible : {exc}",
+        ) from exc
 
     report = {
         "status": "success",
         "version": "v62_canonical_cir_previous_memory_no_legacy",
         "project_id": project_id,
+        "identity": {
+            "organisme": organisme_name,
+            "project": project_name,
+            "subproject": subproject_name,
+            "year": year_value,
+        },
         "run_id": run_id,
         "file": {
             "name": filename,
@@ -813,12 +927,21 @@ async def upload_cir_final_consultant(
             "canonical_memory_path": str(canonical_memory_path),
             "canonical_extracted_path": str(canonical_extracted_path),
             "items_count": len(cir_memory.get("items") or []),
+            "chroma_indexed": bool(chroma_result.get("ok", True)),
+            "chroma_collection": (
+                (chroma_result.get("catalog") or {}).get("vector_db") or {}
+            ).get("collection", "ennosmart_memory_v2_global"),
+        },
+        "postgres": {
+            "document_id": document.id,
+            "stored": True,
+            "sha256": digest,
         },
         "storage": {
             "mode": "canonical_organisme_project_year",
             "canonical_directory": str(canonical_dir),
             "legacy_directory": None,
-            "note": "Le chemin canonique est storage/organismes/{organisme}/projects/{project}/years/{year}. aucun dossier storage/projects/{id} n’est recréé."
+            "note": "Le chemin canonique inclut organisme, projet, sous-projet éventuel et année. Aucun dossier storage/projects/{id} n’est recréé."
         },
         "warnings": warnings,
         "usage_warning": "Ne pas mélanger ce CIR final avec les documents bruts du diagnostic.",
@@ -828,6 +951,7 @@ async def upload_cir_final_consultant(
 
     canonical_report_path = canonical_dir / "cir_final_consultant_report.json"
     write_json(canonical_report_path, report)
+    db.commit()
     # V62 : aucune copie legacy dans storage/projects/{id}.
     # La source officielle est le chemin canonique organisme/projet/année.
 
@@ -835,7 +959,22 @@ async def upload_cir_final_consultant(
 
 
 @router.get("/{project_id}/cir-final-consultant/latest")
-def latest_cir_final_consultant(project_id: int):
+def latest_cir_final_consultant(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project_row = get_project_for_user(db, project_id, current_user)
+    canonical_dir = canonical_cir_current_dir(
+        project_row.organisme,
+        project_row.project_name,
+        project_row.year,
+        project_row.subproject_name or "",
+    )
+    canonical_report = canonical_dir / "cir_final_consultant_report.json"
+    if canonical_report.exists():
+        return read_json(canonical_report, {"status": "error"})
+
     base = root() / "storage" / "projects" / str(project_id) / "cir_final_consultant"
     current_report = base / "current" / "cir_final_consultant_report.json"
     if current_report.exists():
@@ -855,11 +994,27 @@ async def upload_alias(
     file: UploadFile = File(...),
     organisme: str = Form("organisme_unknown"),
     project: str = Form("project_unknown"),
+    subproject: str = Form(""),
     year: str = Form("unknown"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    return await upload_cir_final_consultant(project_id, file, organisme, project, year)
+    return await upload_cir_final_consultant(
+        project_id,
+        file,
+        organisme,
+        project,
+        subproject,
+        year,
+        db,
+        current_user,
+    )
 
 
 @router.get("/{project_id}/cir-previous")
-def latest_alias(project_id: int):
-    return latest_cir_final_consultant(project_id)
+def latest_alias(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return latest_cir_final_consultant(project_id, db, current_user)

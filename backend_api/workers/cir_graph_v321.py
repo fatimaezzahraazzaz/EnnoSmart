@@ -260,12 +260,11 @@ def inspect_node(
         db.close()
 
     workflow = snapshot["workflow"]
-    complete = bool(
-        workflow
-        and not workflow.get("active")
-        and str(workflow.get("phase") or "")
-        == "completed"
-    )
+    # Un workflow inactif est terminal pour le worker, même lorsqu'une
+    # demande ciblée a annulé le parcours CIR complet. Exiger uniquement la
+    # phase ``completed`` faisait alors boucler inspect -> advance sans qu'un
+    # nouvel avancement soit possible, jusqu'à GraphRecursionError.
+    complete = not snapshot["active"]
 
     # Si aucune unité n'existe mais une candidate est déjà prête, on considère
     # le job terminé.

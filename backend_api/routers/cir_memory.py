@@ -720,6 +720,7 @@ def memory_v2_create_library_slot(
             payload.get("organisme") or payload.get("enterprise"),
             payload.get("project") or payload.get("project_name"),
             payload.get("year"),
+            payload.get("subproject") or "",
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -730,6 +731,7 @@ async def memory_v2_upload_and_index(
     file: UploadFile = File(...),
     organisme: str = Form(...),
     project: str = Form(...),
+    subproject: str = Form(""),
     year: str = Form(...),
     vision_mode: str = Form("text_only"),
     formula_mode: str = Form("off"),
@@ -750,6 +752,7 @@ async def memory_v2_upload_and_index(
             temp_path,
             organisme=organisme,
             project=project,
+            subproject=subproject,
             year=year,
             vision_mode=vision_mode,
             formula_mode=formula_mode,
@@ -779,6 +782,7 @@ def memory_v2_process_existing(
             payload.get("project") or payload.get("project_name"),
             payload.get("year"),
             payload.get("file_name") or "",
+            payload.get("subproject") or "",
         )
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -808,11 +812,15 @@ def memory_v2_remove_project(
             payload.get("organisme"),
             payload.get("project") or payload.get("project_name"),
             payload.get("year"),
+            subproject=payload.get("subproject") or "",
             confirmation=payload.get("confirmation"),
         )
         try:
             result["import_audit"] = mark_matching_items_memory_removed(
-                result["organisme"], result["project"], result["year"]
+                result["organisme"],
+                result["project"],
+                result["year"],
+                subproject=result.get("subproject") or "",
             )
         except Exception as audit_exc:
             # La mémoire est déjà supprimée avec succès. Une erreur de mise à
@@ -852,8 +860,9 @@ def memory_v2_search(
 def memory_v2_project_cards(
     organisme: str = Query(...),
     project: str = Query(...),
+    subproject: str = Query(""),
     year: str = Query(...),
     limit: int = Query(40, ge=1, le=200),
     current_user: User = Depends(require_superadmin),
 ):
-    return project_cards(organisme, project, year, limit=limit)
+    return project_cards(organisme, project, year, limit=limit, subproject=subproject)

@@ -614,14 +614,20 @@ def list_guided_research_sessions(
     project: Any,
     *,
     limit: int = 50,
+    entry_module: str | None = None,
 ) -> list[dict[str, Any]]:
     """Retourne les conversations d'un projet avec un libellé exploitable par l'UI."""
+    normalized_entry_module = str(entry_module or "").strip().casefold() or None
+    if normalized_entry_module not in {None, "ennoscholar", "ennoamel"}:
+        raise ValueError("Module de conversation guidée invalide.")
+
     manager = get_guided_research_agent().state_manager
     sessions = manager.list_project_sessions(
         db,
         int(project.id),
         limit=limit,
         include_messages=True,
+        entry_module=normalized_entry_module,
     )
     output: list[dict[str, Any]] = []
     for session in sessions:

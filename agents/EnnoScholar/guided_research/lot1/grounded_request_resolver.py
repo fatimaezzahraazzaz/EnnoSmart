@@ -576,7 +576,20 @@ def repair_contextual_classification(
     # V2 — plan déjà présent + approbation et ordre d'écriture dans le même tour.
     # On route directement vers START_WRITING : _start_writing sait approuver le
     # contrat de manière atomique avant authorize_writing().
-    if not repaired and plan and asks_write and (asks_approval or compound_from_schema):
+    if (
+        not repaired
+        and plan
+        and asks_write
+        and (asks_approval or compound_from_schema)
+        and classification.intent
+        not in {
+            ConsultantIntent.PROPOSE_PLAN,
+            ConsultantIntent.ADD_TOPIC,
+            ConsultantIntent.REMOVE_TOPIC,
+            ConsultantIntent.CHANGE_PLAN,
+        }
+        and not classification.replace_current_plan
+    ):
         classification.intent = ConsultantIntent.START_WRITING
         classification.explicit_write_command = True
         classification.explicit_plan_approval = True

@@ -3,12 +3,14 @@ import json
 import re
 from typing import Any
 
-POLICY_VERSION = "ennoamel_all_accepted_sources_v3_15"
+POLICY_VERSION = "ennoamel_scoped_optional_sources_v3_25"
 _CITATION_RE = re.compile(r"(?<![A-Za-z0-9])A\d+(?![A-Za-z0-9])", re.I)
 _PRIORITY_KEYS = (
     "citation_id","article_id","paper_id","title","authors","author","year","doi","url",
     "source_url","source","abstract","evidence_text","evidence","claim","claims","snippet",
     "fulltext_excerpt","full_text_excerpt","quote","quotes","support","rationale","relevance","section_ids",
+    "research_target_ids","target_bindings","allowed_claim_scope","section_context_gate",
+    "citation_required","required_for_target",
 )
 
 def _scholar(evidence: dict[str, Any] | None) -> dict[str, Any]:
@@ -28,6 +30,13 @@ def accepted_evidence_rows(evidence: dict[str, Any] | None) -> list[dict[str, An
     return out
 
 def required_citation_ids(evidence: dict[str, Any] | None) -> list[str]:
+    return [
+        str(row.get("citation_id") or "").strip().upper()
+        for row in accepted_evidence_rows(evidence)
+        if row.get("citation_required") is True or row.get("required_for_target") is True
+    ]
+
+def eligible_citation_ids(evidence: dict[str, Any] | None) -> list[str]:
     return [str(r.get("citation_id") or "").strip().upper() for r in accepted_evidence_rows(evidence)]
 
 def citation_ids_in_text(text: str | None) -> list[str]:
@@ -35,15 +44,20 @@ def citation_ids_in_text(text: str | None) -> list[str]:
     return sorted(ids, key=lambda v:int(v[1:]) if v[1:].isdigit() else v)
 
 def build_coverage_report(evidence: dict[str, Any] | None, candidate: str | None) -> dict[str, Any]:
+    eligible=eligible_citation_ids(evidence); eligible_set=set(eligible)
     required=required_citation_ids(evidence); used=citation_ids_in_text(candidate); used_set=set(used)
     missing=[cid for cid in required if cid not in used_set]
     used_required=[cid for cid in required if cid in used_set]
     return {
         "policy_version":POLICY_VERSION,
+        "eligible_ids":eligible,
         "required_ids":required,
         "used_ids":used,
+        "used_eligible_ids":[cid for cid in used if cid in eligible_set],
+        "unauthorized_used_ids":[cid for cid in used if cid not in eligible_set],
         "used_required_ids":used_required,
         "missing_required_ids":missing,
+        "eligible_count":len(eligible),
         "required_count":len(required),
         "used_required_count":len(used_required),
         "coverage_ratio":1.0 if not required else round(len(used_required)/len(required),6),
@@ -51,21 +65,27 @@ def build_coverage_report(evidence: dict[str, Any] | None, candidate: str | None
     }
 
 def render_mandatory_evidence_contract(evidence: dict[str, Any] | None) -> str:
-    ids=required_citation_ids(evidence)
-    if not ids:
+    eligible=eligible_citation_ids(evidence)
+    required=required_citation_ids(evidence)
+    if not eligible:
         return "Aucune nouvelle preuve Scholar acceptée n'est attachée à cette cible. N'invente aucune citation."
-    joined=", ".join(ids)
+    joined=", ".join(eligible)
+    required_line = (
+        f"Seules les preuves explicitement indispensables sont obligatoires : {', '.join(required)}."
+        if required
+        else "Aucune preuve n'est obligatoire : une source non pertinente pour une affirmation précise doit rester inutilisée."
+    )
     return (
-        "CONTRAT BLOQUANT — TOUTES LES SOURCES ACCEPTÉES DOIVENT ÊTRE UTILISÉES\n"
-        f"Le consultant a accepté {len(ids)} preuve(s) pour cette cible : {joined}.\n"
-        "- Utilise TOUTES ces preuves sans exception.\n"
-        f"- Chaque identifiant ({joined}) doit apparaître au moins une fois dans le texte final.\n"
-        "- Chaque citation doit suivre une affirmation réellement soutenue par la preuve correspondante.\n"
-        "- Ne cite jamais une source de façon décorative et n'extrapole jamais au-delà de sa preuve.\n"
-        "- Si plusieurs preuves soutiennent le même argument, cite-les ensemble sur la même phrase, par exemple [A2][A3].\n"
-        "- Si une preuve apporte peu d'information, utilise uniquement le fait minimal qu'elle soutient ; ne l'ignore pas.\n"
-        "- Ne supprime aucune information existante pour intégrer les preuves.\n"
-        "- Une sortie qui omet un seul identifiant accepté est invalide."
+        "CONTRAT DE PERTINENCE — SOURCES AUTORISÉES ET CIBLÉES\n"
+        f"Les identifiants autorisés pour cette cible sont : {joined}.\n"
+        f"{required_line}\n"
+        "- Utilise une source uniquement si elle soutient directement l'affirmation scientifique rédigée.\n"
+        "- Respecte strictement target_bindings et allowed_claim_scope : une source liée à un verrou, un passage ou une section ne doit pas être transférée vers un autre.\n"
+        "- Chaque citation doit suivre immédiatement l'affirmation exacte qu'elle étaye.\n"
+        "- Ne cite jamais pour atteindre un quota, compléter une bibliographie ou donner une apparence scientifique.\n"
+        "- Si le lien entre la source et l'affirmation est partiel, formule l'apport avec prudence ou n'utilise pas la source.\n"
+        "- N'extrapole jamais au-delà de la méthode, des résultats et des limites fournis dans la fiche de preuve.\n"
+        "- Ne supprime aucune information existante pour intégrer une preuve."
     )
 
 def _trim(value: Any, max_chars: int, depth: int=0) -> Any:
@@ -95,7 +115,15 @@ def build_mandatory_scholar_payload(evidence: dict[str, Any] | None, max_chars: 
             item=_trim(row,per_row)
             if not isinstance(item,dict): item={"value":item}
             item["citation_id"]=cid; packed.append(item)
-        payload={"available":True,"policy_version":POLICY_VERSION,"accepted_count":len(packed),"required_citation_ids":[r["citation_id"] for r in packed],"evidence":packed}
+        payload={
+            "available":True,
+            "policy_version":POLICY_VERSION,
+            "accepted_count":len(packed),
+            "eligible_citation_ids":[r["citation_id"] for r in packed],
+            "required_citation_ids":required_citation_ids(evidence),
+            "usage_policy":"optional_exact_claim_support_with_target_binding",
+            "evidence":packed,
+        }
         return json.dumps(payload,ensure_ascii=False,default=str,separators=(",",":"))
     per=max(500,int((max_chars-1500)/max(1,len(rows))))
     raw=pack(per)

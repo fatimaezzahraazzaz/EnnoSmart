@@ -19,6 +19,7 @@ class FreshResearchDecision:
     explicit_fresh: bool = False
     natural_strengthening: bool = False
     semantic_strengthening: bool = False
+    fallback_without_sources: bool = False
 
 
 def _norm(value: Any) -> str:
@@ -97,6 +98,22 @@ def explicitly_requests_fresh_research(value: str | None) -> bool:
     return False
 
 
+def allows_facts_only_fallback(value: str | None) -> bool:
+    """Détecte qu'un appui bibliographique est souhaité mais non bloquant."""
+
+    text = _norm(value)
+    return bool(
+        re.search(
+            r"\b(?:si\s+(?:(?:cela|ca|sa)\s+)?(?:permet|aide|utile|pertinent|possible|disponible)"
+            r"|si\s+(?:possible|pertinent|utile|necessaire)"
+            r"|dans\s+la\s+mesure\s+du\s+possible"
+            r"|eventuellement)\b",
+            text,
+            flags=re.I,
+        )
+    )
+
+
 def requests_natural_strengthening(value: str | None) -> bool:
     """Reconnaît une demande de renforcer le fond, sans vocabulaire métier codé en dur."""
 
@@ -162,6 +179,7 @@ def resolve_fresh_research_policy(
 
     explicit_reuse = explicitly_requests_existing_validated_sources(instruction)
     explicit_fresh = explicitly_requests_fresh_research(instruction)
+    facts_only_fallback = allows_facts_only_fallback(instruction)
     natural = requests_natural_strengthening(instruction)
     names = _intent_names(intents)
     semantic = bool({"argumentation", "scientific_enrichment", "research"} & names)
@@ -186,10 +204,15 @@ def resolve_fresh_research_policy(
     if explicit_fresh:
         return FreshResearchDecision(
             MODE_FRESH,
-            "Le consultant demande explicitement une recherche ciblée.",
+            (
+                "Le consultant autorise une recherche ciblée avec repli à faits constants."
+                if facts_only_fallback
+                else "Le consultant demande explicitement une recherche ciblée."
+            ),
             explicit_fresh=True,
             natural_strengthening=natural,
             semantic_strengthening=semantic,
+            fallback_without_sources=facts_only_fallback,
         )
 
     if editorial_only:
@@ -207,9 +230,10 @@ def resolve_fresh_research_policy(
     if natural or semantic:
         return FreshResearchDecision(
             MODE_FRESH,
-            "Renforcement du fond / de l'argumentation demandé : nouvelle recherche EnnoScholar ciblée obligatoire avant rédaction.",
+            "Renforcement du fond / de l'argumentation demandé : recherche EnnoScholar ciblée, avec repli rédactionnel à faits constants si aucune source n'est exploitable.",
             natural_strengthening=natural,
             semantic_strengthening=semantic,
+            fallback_without_sources=True,
         )
 
     return FreshResearchDecision(MODE_NONE, "Aucune nouvelle action de recherche n'est demandée.")

@@ -60,8 +60,8 @@ from .semantic_lock_adjudicator import (
 
 
 VERSION = (
-    "semantic_lock_finalizer_v190_"
-    "role_classifier_only_complete_linkage_unchanged"
+    "semantic_lock_finalizer_v191_"
+    "explicit_seed_review_preservation"
 )
 
 
@@ -2363,6 +2363,7 @@ def finalize_lock_groups(
     # 11. UNASSIGNED SECONDARY / REVIEW
     # ========================================================
 
+    review_main_groups = []
     secondary_groups = []
 
     for index in unassigned:
@@ -2378,10 +2379,6 @@ def finalize_lock_groups(
         )
 
         item[
-            "display_as_main_lock"
-        ] = False
-
-        item[
             "semantic_finalizer_role"
         ] = role
 
@@ -2389,21 +2386,42 @@ def finalize_lock_groups(
             "semantic_finalizer_version"
         ] = VERSION
 
-        if role == "REVIEW":
+        explicit_seed_to_review = bool(
+            _seed_count(item) >= 1
+            and role != "NOISE"
+        )
+
+        if explicit_seed_to_review:
+
+            item[
+                "display_as_main_lock"
+            ] = True
 
             item[
                 "technical_scope"
             ] = "lock_to_validate"
 
+            item[
+                "semantic_review_required"
+            ] = True
+
+            review_main_groups.append(
+                item
+            )
+
         else:
+
+            item[
+                "display_as_main_lock"
+            ] = False
 
             item[
                 "technical_scope"
             ] = "local_technical_subproblem"
 
-        secondary_groups.append(
-            item
-        )
+            secondary_groups.append(
+                item
+            )
 
 
     # ========================================================
@@ -2440,11 +2458,13 @@ def finalize_lock_groups(
         "groups":
             (
                 final_main_groups
+                + review_main_groups
                 + secondary_groups
             ),
 
         "main_groups":
-            final_main_groups,
+            final_main_groups
+            + review_main_groups,
 
         "secondary_groups":
             secondary_groups,
@@ -2490,6 +2510,12 @@ def finalize_lock_groups(
             "final_main_groups_count":
                 len(
                     final_main_groups
+                    + review_main_groups
+                ),
+
+            "explicit_seed_review_groups_count":
+                len(
+                    review_main_groups
                 ),
 
             "secondary_groups_count":

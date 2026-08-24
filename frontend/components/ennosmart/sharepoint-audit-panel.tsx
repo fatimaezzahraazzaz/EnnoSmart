@@ -40,7 +40,7 @@ type AuditItem = {
   classification: string
   confidence: number
   signals?: AuditSignal[]
-  detected_identity?: { organisme?: string; project?: string; year?: string }
+  detected_identity?: { organisme?: string; project?: string; subproject?: string; year?: string }
   preview_excerpt?: string
   preview_chars?: number
   needs_ocr?: boolean
@@ -131,6 +131,7 @@ type AuditConfiguration = {
 type IdentityForm = {
   organisme: string
   project: string
+  subproject: string
   year: string
 }
 
@@ -206,7 +207,7 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
   const [selectedId, setSelectedId] = useState("")
   const [filter, setFilter] = useState("")
   const [classFilter, setClassFilter] = useState("all")
-  const [identity, setIdentity] = useState<IdentityForm>({ organisme: "", project: "", year: "" })
+  const [identity, setIdentity] = useState<IdentityForm>({ organisme: "", project: "", subproject: "", year: "" })
   const [confirmIndex, setConfirmIndex] = useState(false)
   const [loading, setLoading] = useState(false)
   const [notice, setNotice] = useState("")
@@ -227,7 +228,7 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
       if (classFilter === "legacy_doc" && !item.legacy_doc) return false
       if (!['all', 'recommended', 'legacy_doc'].includes(classFilter) && item.classification !== classFilter) return false
       if (!needle) return true
-      return `${item.name} ${item.source_path} ${item.detected_identity?.organisme || ""} ${item.detected_identity?.project || ""}`
+      return `${item.name} ${item.source_path} ${item.detected_identity?.organisme || ""} ${item.detected_identity?.project || ""} ${item.detected_identity?.subproject || ""}`
         .toLocaleLowerCase("fr")
         .includes(needle)
     })
@@ -246,6 +247,7 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
     setIdentity({
       organisme: item.detected_identity?.organisme || scopeParts[0] || "",
       project: item.detected_identity?.project || scopeProject,
+      subproject: item.detected_identity?.subproject || "",
       year: item.detected_identity?.year || scopeYear,
     })
     setConfirmIndex(false)
@@ -340,7 +342,7 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
       setError("Le manifeste signé du scan est absent. Relancez le scan.")
       return
     }
-    if (!window.confirm("Cette action copiera le CIR dans la bibliothèque locale et reconstruira Memory V2. Continuer ?")) return
+    if (!window.confirm("Cette action extraira le CIR depuis la copie de travail puis reconstruira la mémoire externe. Aucun original OneDrive et aucune copie permanente dans le projet ne seront créés. Continuer ?")) return
     setLoading(true)
     setError("")
     setNotice("Indexation locale explicitement autorisée en cours…")
@@ -356,7 +358,7 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
       const refreshed = await request<AuditRun>(`/cir-memory/import-inbox/scans/${encodeURIComponent(run!.scan_id)}`)
       setRun(refreshed)
       await onMemoryChanged?.()
-      setNotice("Le CIR a été indexé localement. Le dossier de copies n’a été ni modifié, ni déplacé, ni supprimé.")
+      setNotice("Le CIR a été indexé dans la mémoire externe. Le dossier de copies n’a été ni modifié, ni déplacé, ni supprimé et aucun duplicata permanent n’a été ajouté au projet.")
       setConfirmIndex(false)
     } catch (reason) {
       setError(errorMessage(reason))
@@ -513,11 +515,13 @@ export default function PowerAutomateImportPanel({ onMemoryChanged }: { onMemory
                 {selected.classification === "legacy_doc_requires_converter" && <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-800">Installez LibreOffice headless sur le serveur, puis relancez ce scan. Aucun traitement n’est effectué sur l’original.</div>}
                 {(selected.classification === "cir_final_confirmed" || selected.classification === "cir_probable") && <div className="mt-5 border-t border-slate-100 pt-5">
                   <p className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Database className="size-4 text-violet-700" />Validation avant Memory V2</p>
-                  <div className="mt-3 space-y-3">
-                    <input value={identity.organisme} onChange={(event) => setIdentity({ ...identity, organisme: event.target.value })} placeholder="Entreprise" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-violet-400" />
-                    <input value={identity.project} onChange={(event) => setIdentity({ ...identity, project: event.target.value })} placeholder="Projet" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-violet-400" />
-                    <input value={identity.year} onChange={(event) => setIdentity({ ...identity, year: event.target.value })} placeholder="Année" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-violet-400" />
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-700">Organisme <span aria-hidden="true">*</span></span><input value={identity.organisme} onChange={(event) => setIdentity({ ...identity, organisme: event.target.value })} placeholder="Ex. 6NAPSE GROUP" required className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:ring-4 focus:ring-violet-100" /></label>
+                    <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-700">Projet <span aria-hidden="true">*</span></span><input value={identity.project} onChange={(event) => setIdentity({ ...identity, project: event.target.value })} placeholder="Ex. CEVAA" required className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:ring-4 focus:ring-violet-100" /></label>
+                    <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-700">Sous-projet <span className="font-normal text-slate-400">(facultatif)</span></span><input value={identity.subproject} onChange={(event) => setIdentity({ ...identity, subproject: event.target.value })} placeholder="Ex. APACHE" className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:ring-4 focus:ring-violet-100" /></label>
+                    <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-700">Année <span aria-hidden="true">*</span></span><input value={identity.year} onChange={(event) => setIdentity({ ...identity, year: event.target.value })} inputMode="numeric" placeholder="2024" required className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-violet-400 focus:ring-4 focus:ring-violet-100" /></label>
                   </div>
+                  <div aria-live="polite" className="mt-3 rounded-xl border border-violet-100 bg-violet-50 px-3 py-2.5 text-xs leading-5 text-violet-900"><span className="font-semibold">Classement retenu :</span> {[identity.organisme, identity.project, identity.subproject, identity.year].filter(Boolean).join(" › ") || "À compléter"}</div>
                   {fakeIsolation ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-800"><strong>Test isolé :</strong> les documents factices ne peuvent pas être envoyés dans la mémoire de production.</div> : <>
                     <label className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-600"><input type="checkbox" checked={confirmIndex} disabled={!selected.recommended_version || !selected.index_eligible} onChange={(event) => setConfirmIndex(event.target.checked)} className="mt-0.5 size-4 accent-violet-700 disabled:opacity-40" /><span>Je confirme l’identité, la version finale recommandée et le manifeste signé. Le fichier OneDrive restera inchangé.</span></label>
                     <button type="button" onClick={indexSelected} disabled={loading || !confirmIndex || selected.indexed || !selected.recommended_version || !selected.index_eligible} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"><Database className="size-4" />{selected.indexed ? "Déjà indexé" : selected.recommended_version && selected.index_eligible ? "Valider, extraire et indexer" : "Version non indexable"}</button>

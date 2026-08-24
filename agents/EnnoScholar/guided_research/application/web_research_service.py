@@ -282,6 +282,117 @@ class WebResearchService:
         )
         return re.sub(r"[^a-z0-9]+", "_", text).strip("_")
 
+    def _expand_scientific_query_strategy(
+        self,
+        requests_list: list[dict[str, Any]],
+        project_context: Mapping[str, Any],
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Compatibilité pour les anciens appelants, hors du flux de recherche.
+
+        Le chemin principal ``search`` conserve désormais la stratégie Git et
+        n'appelle pas cette expansion. Cette méthode reste disponible pour les
+        outils/tests qui demandent explicitement une décomposition scientifique.
+        """
+        report: dict[str, Any] = {
+            "used": False,
+            "status": "not_available" if self.llm is None else "not_needed",
+            "original_count": len(requests_list),
+            "expanded_count": len(requests_list),
+        }
+        if self.llm is None or not requests_list:
+            return requests_list, report
+
+        prompt = (
+            "Décompose ces requêtes scientifiques en conservant la requête "
+            "directe et en ajoutant des requêtes transférables sur les méthodes, "
+            "la validation et les limites. Retourne uniquement search_requests.\n"
+            + json.dumps(
+                {
+                    "requests": requests_list,
+                    "project_context": dict(project_context or {}),
+                },
+                ensure_ascii=False,
+            )
+        )
+        try:
+            raw = self.llm.generate(
+                prompt,
+                temperature=0.0,
+                max_output_tokens=2400,
+                json_mode=True,
+                request_name="ennoscholar:guided_research:query_strategy_expansion",
+            )
+            parsed = _extract_json_object(raw)
+        except Exception as exc:
+            report.update({
+                "status": "llm_error_original_preserved",
+                "error": f"{type(exc).__name__}: {_clean(exc, 500)}",
+            })
+            return requests_list, report
+
+        inherited_scope = {
+            key: list(dict.fromkeys(
+                _clean(value, limit)
+                for request in requests_list
+                for value in (request.get(key) or [])
+                if _clean(value, limit)
+            ))
+            for key, limit in (
+                ("target_verrous", 120),
+                ("section_ids", 160),
+                ("section_titles", 500),
+            )
+        }
+        original_has_direct = any(
+            bool(request.get("require_direct_evidence"))
+            or self._contract_identifier(request.get("query_kind"))
+            == "direct_scientific_evidence"
+            for request in requests_list
+        )
+        generated: list[dict[str, Any]] = []
+        for raw_request in (parsed.get("search_requests") or []):
+            if not isinstance(raw_request, Mapping):
+                continue
+            query = _clean(raw_request.get("query"), 1200)
+            if not query:
+                continue
+            query_kind = self._contract_identifier(raw_request.get("query_kind"))
+            if query_kind not in self.SCIENTIFIC_QUERY_KINDS:
+                query_kind = "scientific_evidence"
+            is_direct = bool(
+                raw_request.get("require_direct_evidence")
+                or query_kind == "direct_scientific_evidence"
+            )
+            if original_has_direct and is_direct:
+                continue
+            generated.append({
+                **dict(raw_request),
+                "query": query,
+                "query_kind": query_kind,
+                "require_direct_evidence": is_direct,
+                "source_preferences": ["scientific_articles"],
+                **inherited_scope,
+            })
+
+        combined: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for request in [*requests_list, *generated]:
+            key = (
+                _norm(request.get("query")),
+                self._contract_identifier(request.get("query_kind")),
+            )
+            if not key[0] or key in seen:
+                continue
+            seen.add(key)
+            combined.append(dict(request))
+        report.update({
+            "used": bool(generated),
+            "status": "expanded" if generated else "invalid_expansion_original_preserved",
+            "generated_count": len(generated),
+            "expanded_count": len(combined),
+        })
+        return combined[:8], report
+
     @classmethod
     def _structured_source_modes(
         cls,

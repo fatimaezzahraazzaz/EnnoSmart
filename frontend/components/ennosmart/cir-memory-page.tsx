@@ -9,7 +9,6 @@ import {
   Clock3,
   Database,
   FileCheck2,
-  FolderPlus,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -32,6 +31,7 @@ type MemoryProject = {
   id: string
   organisme: string
   project: string
+  subproject?: string
   year: string
   indexed: boolean
   status: "indexed" | "pending"
@@ -75,7 +75,7 @@ type Catalog = {
     writing_style: boolean
     usage_rule: string
   }
-  paths: Record<string, string>
+  paths: Record<string, string | boolean>
 }
 
 type SearchMatch = {
@@ -206,7 +206,7 @@ export default function CirMemoryPage() {
   const [loading, setLoading] = useState(false)
   const [notice, setNotice] = useState("")
   const [error, setError] = useState("")
-  const [form, setForm] = useState({ organisme: "Scalian", project: "", year: String(new Date().getFullYear()) })
+  const [form, setForm] = useState({ organisme: "", project: "", subproject: "", year: String(new Date().getFullYear()) })
   const [file, setFile] = useState<File | null>(null)
   const [query, setQuery] = useState("")
   const [searchRole, setSearchRole] = useState("")
@@ -222,7 +222,7 @@ export default function CirMemoryPage() {
     return (catalog?.projects || []).filter((item) => {
       if (organisationFilter !== "all" && item.organisme !== organisationFilter) return false
       if (yearFilter !== "all" && item.year !== yearFilter) return false
-      return !needle || `${item.organisme} ${item.project} ${item.year} ${item.indexed_file_name || ""}`.toLocaleLowerCase("fr").includes(needle)
+      return !needle || `${item.organisme} ${item.project} ${item.subproject || ""} ${item.year} ${item.indexed_file_name || ""}`.toLocaleLowerCase("fr").includes(needle)
     })
   }, [catalog, filter, organisationFilter, yearFilter])
 
@@ -248,7 +248,7 @@ export default function CirMemoryPage() {
     setLoading(true)
     try {
       await api("/cir-memory/v2/library", { method: "POST", body: JSON.stringify(form) })
-      success("L’emplacement du projet a été créé. Tu peux maintenant ajouter son CIR final.")
+      success("L’identité est valide. Aucun dossier ni duplicata du CIR n’a été créé.")
       await loadCatalog(true)
     } catch (reason) { failure(reason) } finally { setLoading(false) }
   }
@@ -265,6 +265,7 @@ export default function CirMemoryPage() {
       data.append("file", file)
       data.append("organisme", form.organisme.trim())
       data.append("project", form.project.trim())
+      data.append("subproject", form.subproject.trim())
       data.append("year", form.year.trim())
       data.append("vision_mode", "text_only")
       data.append("formula_mode", "off")
@@ -283,7 +284,7 @@ export default function CirMemoryPage() {
     try {
       await api("/cir-memory/v2/process-existing", {
         method: "POST",
-        body: JSON.stringify({ organisme: project.organisme, project: project.project, year: project.year, file_name: project.source_files[0]?.file_name || "" }),
+        body: JSON.stringify({ organisme: project.organisme, project: project.project, subproject: project.subproject || "", year: project.year, file_name: project.source_files[0]?.file_name || "" }),
       })
       success("Le CIR existant est maintenant indexé dans la vraie base vectorielle.")
       await loadCatalog(true)
@@ -292,7 +293,7 @@ export default function CirMemoryPage() {
 
   async function rebuild() {
     setLoading(true)
-    setNotice("Reconstruction du catalogue, du graphe et des collections Chroma…")
+    setNotice("Reconstruction du catalogue, du graphe et de la collection Chroma globale…")
     setError("")
     try {
       await api("/cir-memory/v2/rebuild", { method: "POST" })
@@ -314,6 +315,7 @@ export default function CirMemoryPage() {
         body: JSON.stringify({
           organisme: project.organisme,
           project: project.project,
+          subproject: project.subproject || "",
           year: project.year,
           confirmation: "SUPPRIMER_DE_MEMORY_V2",
         }),
@@ -400,7 +402,7 @@ export default function CirMemoryPage() {
                 {visibleProjects.map((item) => (
                   <button key={item.id} onClick={() => { setSelectedId(item.id); setDeleteOpen(false); setDeleteConfirmation("") }} className={`group flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition ${selectedId === item.id ? "border-violet-300 bg-violet-50 shadow-sm" : "border-slate-100 bg-white hover:border-violet-200 hover:bg-slate-50"}`}>
                     <div className={`grid size-11 shrink-0 place-items-center rounded-xl ${item.indexed ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{item.indexed ? <FileCheck2 className="size-5" /> : <Clock3 className="size-5" />}</div>
-                    <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate font-semibold text-slate-900">{item.project}</h3><Pill tone="violet">{item.year}</Pill>{item.indexed ? <Pill tone="green">Indexé</Pill> : <Pill tone="amber">À traiter</Pill>}</div><p className="mt-1 truncate text-xs text-slate-500">{item.organisme} · {item.indexed_file_name || item.source_files[0]?.file_name || "Emplacement créé, CIR à ajouter"}</p></div>
+                    <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate font-semibold text-slate-900">{item.project}</h3>{item.subproject && <Pill>{item.subproject}</Pill>}<Pill tone="violet">{item.year}</Pill>{item.indexed ? <Pill tone="green">Indexé</Pill> : <Pill tone="amber">À traiter</Pill>}</div><p className="mt-1 truncate text-xs text-slate-500">{item.organisme} · {item.indexed_file_name || item.source_files[0]?.file_name || "CIR à ajouter"}</p></div>
                     <div className="hidden text-right sm:block"><p className="text-sm font-bold text-slate-800">{formatNumber(item.cards_count)}</p><p className="text-[11px] text-slate-400">cartes</p></div>
                     <ChevronRight className="size-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-violet-600" />
                   </button>
@@ -412,12 +414,12 @@ export default function CirMemoryPage() {
             <aside className="h-fit rounded-3xl border border-violet-100 bg-white p-5 shadow-[0_12px_36px_rgba(50,20,90,.06)] sm:p-6 lg:sticky lg:top-6">
               {selected ? (
                 <div>
-                  <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-violet-600">{selected.organisme}</p><h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{selected.project}</h2><p className="mt-1 text-sm text-slate-500">Exercice {selected.year}</p></div>{selected.indexed ? <CheckCircle2 className="size-6 text-emerald-600" /> : <Clock3 className="size-6 text-amber-600" />}</div>
+                  <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-violet-600">{selected.organisme}</p><h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{selected.project}</h2>{selected.subproject && <p className="mt-1 text-sm font-medium text-violet-700">Sous-projet · {selected.subproject}</p>}<p className="mt-1 text-sm text-slate-500">Exercice {selected.year}</p></div>{selected.indexed ? <CheckCircle2 className="size-6 text-emerald-600" /> : <Clock3 className="size-6 text-amber-600" />}</div>
                   <div className="mt-5 rounded-2xl bg-slate-50 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">CIR final</p><p className="mt-2 break-words text-sm font-medium text-slate-800">{selected.indexed_file_name || selected.source_files[0]?.file_name || "Aucun fichier ajouté"}</p>{selected.source_files[0] && <p className="mt-1 text-xs text-slate-500">{selected.source_files[0].size_mb} Mo</p>}</div>
                   {selected.indexed && <div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-2xl border border-slate-100 p-3"><p className="text-xl font-bold text-slate-900">{formatNumber(selected.chunks_count)}</p><p className="text-xs text-slate-500">passages</p></div><div className="rounded-2xl border border-slate-100 p-3"><p className="text-xl font-bold text-slate-900">{formatNumber(selected.cards_count)}</p><p className="text-xs text-slate-500">cartes</p></div></div>}
                   <div className="mt-5"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Contenu mémorisé</p><div className="flex flex-wrap gap-2">{Object.entries(selected.role_counts || {}).sort((a, b) => b[1] - a[1]).map(([role, count]) => <Pill key={role}>{labelForRole(role)} · {count}</Pill>)}</div></div>
                   {!selected.indexed && selected.source_files.length > 0 && <PrimaryButton onClick={() => processExisting(selected)} disabled={loading}><Sparkles className="size-4" />Indexer ce CIR existant</PrimaryButton>}
-                  {!selected.indexed && selected.source_files.length === 0 && <div className="mt-5"><PrimaryButton onClick={() => { setForm({ organisme: selected.organisme, project: selected.project, year: selected.year }); setTab("add") }}><UploadCloud className="size-4" />Ajouter le CIR final</PrimaryButton></div>}
+                  {!selected.indexed && selected.source_files.length === 0 && <div className="mt-5"><PrimaryButton onClick={() => { setForm({ organisme: selected.organisme, project: selected.project, subproject: selected.subproject || "", year: selected.year }); setTab("add") }}><UploadCloud className="size-4" />Ajouter le CIR final</PrimaryButton></div>}
                   <p className="mt-5 text-xs leading-5 text-slate-400">Dernière indexation : {formatDate(selected.indexed_at)}</p>
                   <div className="mt-6 border-t border-slate-100 pt-5">
                     {!deleteOpen ? (
@@ -427,7 +429,7 @@ export default function CirMemoryPage() {
                     ) : (
                       <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
                         <p className="text-sm font-semibold text-rose-900">Suppression locale complète</p>
-                        <p className="mt-1 text-xs leading-5 text-rose-700">Le CIR, ses passages, cartes, relations et vecteurs Chroma seront retirés. SharePoint et le dossier Power Automate ne seront jamais modifiés. Une archive locale récupérable sera conservée.</p>
+                        <p className="mt-1 text-xs leading-5 text-rose-700">Ses passages, cartes, relations et vecteurs Chroma seront retirés. SharePoint et le dossier Power Automate ne seront jamais modifiés. Une archive récupérable restera dans la mémoire externe, hors du dépôt.</p>
                         <label className="mt-3 block"><span className="text-xs font-medium text-rose-800">Écris « {selected.project} » pour confirmer</span><input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} className="mt-1.5 w-full rounded-xl border border-rose-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-rose-400 focus:ring-4 focus:ring-rose-100" /></label>
                         <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => { setDeleteOpen(false); setDeleteConfirmation("") }} disabled={loading} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">Annuler</button><button type="button" onClick={() => removeProject(selected)} disabled={loading || deleteConfirmation.trim() !== selected.project} className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-700 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-50">{loading ? <RefreshCw className="size-4 animate-spin" /> : <Trash2 className="size-4" />}Supprimer</button></div>
                       </div>
@@ -441,13 +443,18 @@ export default function CirMemoryPage() {
 
         {tab === "add" && (
           <section className="mx-auto max-w-3xl rounded-3xl border border-violet-100 bg-white p-6 shadow-[0_16px_45px_rgba(50,20,90,.07)] sm:p-8">
-            <div className="flex items-start gap-4"><div className="rounded-2xl bg-violet-100 p-3 text-violet-700"><UploadCloud className="size-6" /></div><div><h2 className="text-2xl font-semibold tracking-tight text-slate-900">Ajouter un CIR final</h2><p className="mt-1 text-sm leading-6 text-slate-500">Si l’entreprise ou le projet n’existe pas, ils seront créés automatiquement. Un seul fichier validé suffit.</p></div></div>
+            <div className="flex items-start gap-4"><div className="rounded-2xl bg-violet-100 p-3 text-violet-700"><UploadCloud className="size-6" /></div><div><h2 className="text-2xl font-semibold tracking-tight text-slate-900">Ajouter un CIR final</h2><p className="mt-1 text-sm leading-6 text-slate-500">L’organisme et le projet sont obligatoires. Le sous-projet reste facultatif. Le document sert à l’extraction puis n’est pas dupliqué dans le dépôt.</p></div></div>
             <form onSubmit={uploadAndIndex} className="mt-7 space-y-5">
-              <div className="grid gap-4 sm:grid-cols-2"><label className="space-y-2"><span className="text-sm font-semibold text-slate-700">Entreprise</span><input list="memory-organisms" value={form.organisme} onChange={(event) => setForm({ ...form, organisme: event.target.value })} placeholder="Ex. Scalian" className="w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100" /><datalist id="memory-organisms">{catalog?.organisms.map((item) => <option key={item} value={item} />)}</datalist></label><label className="space-y-2"><span className="text-sm font-semibold text-slate-700">Année</span><input value={form.year} onChange={(event) => setForm({ ...form, year: event.target.value })} inputMode="numeric" placeholder="2026" className="w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100" /></label></div>
-              <label className="block space-y-2"><span className="text-sm font-semibold text-slate-700">Nom du projet</span><input value={form.project} onChange={(event) => setForm({ ...form, project: event.target.value })} placeholder="Ex. AI-RADAR" className="w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100" /></label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="space-y-2"><span className="text-sm font-semibold text-slate-700">Organisme <span aria-hidden="true">*</span></span><input list="memory-organisms" value={form.organisme} onChange={(event) => setForm({ ...form, organisme: event.target.value })} placeholder="Ex. 6NAPSE GROUP" required className="min-h-11 w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100" /><datalist id="memory-organisms">{catalog?.organisms.map((item) => <option key={item} value={item} />)}</datalist></label>
+                <label className="space-y-2"><span className="text-sm font-semibold text-slate-700">Projet <span aria-hidden="true">*</span></span><input value={form.project} onChange={(event) => setForm({ ...form, project: event.target.value })} placeholder="Ex. CEVAA" required className="min-h-11 w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100" /></label>
+                <label className="space-y-2"><span className="text-sm font-semibold text-slate-700">Sous-projet <span className="font-normal text-slate-400">(facultatif)</span></span><input value={form.subproject} onChange={(event) => setForm({ ...form, subproject: event.target.value })} placeholder="Ex. APACHE" className="min-h-11 w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100" /></label>
+                <label className="space-y-2"><span className="text-sm font-semibold text-slate-700">Année <span aria-hidden="true">*</span></span><input value={form.year} onChange={(event) => setForm({ ...form, year: event.target.value })} inputMode="numeric" placeholder="2024" required className="min-h-11 w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100" /></label>
+              </div>
+              <div aria-live="polite" className="rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-900"><span className="font-semibold">Classement :</span> {[form.organisme, form.project, form.subproject, form.year].filter(Boolean).join(" › ") || "À compléter"}</div>
               <label className={`flex cursor-pointer flex-col items-center rounded-2xl border-2 border-dashed px-5 py-9 text-center transition ${file ? "border-emerald-300 bg-emerald-50" : "border-violet-200 bg-violet-50/50 hover:border-violet-400 hover:bg-violet-50"}`}><input type="file" accept=".pdf,.docx,.txt,.md" className="sr-only" onChange={(event) => setFile(event.target.files?.[0] || null)} />{file ? <><FileCheck2 className="size-8 text-emerald-600" /><p className="mt-3 font-semibold text-emerald-900">{file.name}</p><p className="mt-1 text-xs text-emerald-700">{(file.size / 1024 / 1024).toFixed(2)} Mo · cliquer pour remplacer</p></> : <><UploadCloud className="size-8 text-violet-600" /><p className="mt-3 font-semibold text-slate-800">Choisir le CIR final validé</p><p className="mt-1 text-xs text-slate-500">PDF, DOCX, TXT ou MD</p></>}</label>
-              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-800"><strong>Traitement automatique :</strong> extraction du texte, analyse CIR, création des cartes de connaissance et mise à jour de la collection vectorielle utilisée par les agents.</div>
-              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><SecondaryButton onClick={createSlot} disabled={loading}><FolderPlus className="size-4" />Créer sans fichier</SecondaryButton><PrimaryButton type="submit" disabled={loading || !file}>{loading ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}Ajouter et indexer</PrimaryButton></div>
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-800"><strong>Traitement automatique :</strong> extraction du texte, analyse CIR, création des cartes de connaissance et mise à jour de l’unique collection vectorielle globale. Aucun fichier client permanent n’est copié dans le dépôt.</div>
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><SecondaryButton onClick={createSlot} disabled={loading}><ShieldCheck className="size-4" />Vérifier l’identité</SecondaryButton><PrimaryButton type="submit" disabled={loading || !file}>{loading ? <RefreshCw className="size-4 animate-spin" /> : <Sparkles className="size-4" />}Ajouter et indexer</PrimaryButton></div>
             </form>
           </section>
         )}
@@ -458,7 +465,7 @@ export default function CirMemoryPage() {
           <section className="rounded-3xl border border-violet-100 bg-white p-6 shadow-[0_12px_36px_rgba(50,20,90,.06)] sm:p-8">
             <div className="max-w-3xl"><h2 className="text-2xl font-semibold tracking-tight text-slate-900">Interroger la mémoire vectorielle</h2><p className="mt-1 text-sm leading-6 text-slate-500">Retrouve des projets, méthodes, verrous ou exemples de rédaction proches dans les CIR validés.</p></div>
             <form onSubmit={runSearch} className="mt-6 grid gap-3 lg:grid-cols-[minmax(0,1fr)_170px_190px_auto]"><label className="relative"><Search className="absolute left-3.5 top-3.5 size-4 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Quels projets ont rencontré des verrous similaires ?" className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-3 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100" /></label><select value={searchRole} onChange={(event) => setSearchRole(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-violet-400"><option value="">Tous les rôles</option>{["objectif", "etat_art", "limite", "verrou", "methode", "resultat", "contribution", "style"].map((role) => <option key={role} value={role}>{labelForRole(role)}</option>)}</select><select value={searchOrganisation} onChange={(event) => setSearchOrganisation(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-violet-400"><option value="">Toutes les entreprises</option>{catalog?.organisms.map((item) => <option key={item}>{item}</option>)}</select><PrimaryButton type="submit" disabled={loading}>{loading ? <RefreshCw className="size-4 animate-spin" /> : <Search className="size-4" />}Rechercher</PrimaryButton></form>
-            <div className="mt-7 grid gap-4 lg:grid-cols-2">{matches.map((match, index) => { const metadata = match.metadata || {}; return <article key={match.id || index} className="rounded-2xl border border-slate-100 bg-slate-50 p-5"><div className="flex flex-wrap items-center gap-2"><Pill tone="violet">{labelForRole(String(metadata.role || "mémoire"))}</Pill><Pill>{metadata.project || "Projet"} · {metadata.year || "—"}</Pill></div><h3 className="mt-3 font-semibold text-slate-900">{metadata.section_title || metadata.document || "Passage CIR"}</h3><p className="mt-2 line-clamp-6 whitespace-pre-wrap text-sm leading-6 text-slate-600">{match.text}</p><p className="mt-3 text-xs text-slate-400">{metadata.organisme} · {metadata.memory_class || "expérience"}</p></article> })}</div>
+            <div className="mt-7 grid gap-4 lg:grid-cols-2">{matches.map((match, index) => { const metadata = match.metadata || {}; return <article key={match.id || index} className="rounded-2xl border border-slate-100 bg-slate-50 p-5"><div className="flex flex-wrap items-center gap-2"><Pill tone="violet">{labelForRole(String(metadata.role || "mémoire"))}</Pill><Pill>{[metadata.project || "Projet", metadata.subproject, metadata.year || "—"].filter(Boolean).join(" · ")}</Pill></div><h3 className="mt-3 font-semibold text-slate-900">{metadata.section_title || metadata.document || "Passage CIR"}</h3><p className="mt-2 line-clamp-6 whitespace-pre-wrap text-sm leading-6 text-slate-600">{match.text}</p><p className="mt-3 text-xs text-slate-400">{metadata.organisme} · {metadata.memory_class || "expérience"}</p></article> })}</div>
             {!matches.length && <div className="mt-7 rounded-2xl border border-dashed border-slate-200 py-12 text-center"><BrainCircuit className="mx-auto size-8 text-violet-300" /><p className="mt-3 text-sm text-slate-500">Les résultats vectoriels apparaîtront ici.</p></div>}
           </section>
         )}

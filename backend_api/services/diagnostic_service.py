@@ -107,6 +107,7 @@ def get_project_store(project: Project):
     return ProjectStore(
         organisme=project.organisme,
         project=project.project_name,
+        subproject=getattr(project, "subproject_name", None),
         year=_year(project),
     ).ensure()
 
@@ -297,6 +298,120 @@ def _is_supported_raw_document(path: Path, allowed_ext: set[str]) -> bool:
 
     return path.suffix.lower() in allowed_ext
 
+
+def _diagnostic_document_metadata(
+    project_store: Any,
+    documents: List[Any],
+) -> Dict[str, Dict[str, Any]]:
+    """Relie chaque copie de travail à sa déclaration PostgreSQL.
+
+    L'affectation explicite au corpus Diagnostic signifie « preuve courante ».
+    Cette règle est générique et empêche une détection automatique de type CIR
+    de faire disparaître un fichier que le consultant a choisi d'analyser.
+    """
+    metadata: Dict[str, Dict[str, Any]] = {}
+    for document in documents or []:
+        stored_name = (
+            getattr(document, "stored_filename", None)
+            or getattr(document, "filename", None)
+            or f"document_{getattr(document, 'id', 'unknown')}"
+        )
+        safe_name = (
+            re.sub(r'[\\/:*?"<>|]+', "_", str(stored_name)).strip()
+            or f"document_{getattr(document, 'id', 'unknown')}"
+        )
+        raw_path = project_store.documents_raw_dir / safe_name
+        metadata[str(raw_path.resolve())] = {
+            "document_id": getattr(document, "id", None),
+            "declared_document_type": str(
+                getattr(document, "document_type", None) or "Document brut"
+            ),
+            "declared_corpus": CORPUS_DIAGNOSTIC,
+            "declared_mode": "raw",
+            "diagnostic_corpus_selected": True,
+        }
+    return metadata
+
+
+def _diagnostic_max_candidates(document_count: int) -> int:
+    """Dimensionne le rappel NLP selon le volume documentaire, sans cas client."""
+    explicit = str(os.getenv("ENNOSMART_NLP_MAX_CANDIDATES") or "").strip()
+    if explicit:
+        return max(1, int(explicit))
+
+    minimum = max(1, int(os.getenv("ENNOSMART_NLP_MIN_CANDIDATES", "700")))
+    per_document = max(
+        1,
+        int(os.getenv("ENNOSMART_NLP_CANDIDATES_PER_DOCUMENT", "120")),
+    )
+    cap = max(
+        minimum,
+        int(os.getenv("ENNOSMART_NLP_MAX_CANDIDATES_CAP", "2500")),
+    )
+    return min(cap, max(minimum, max(1, int(document_count)) * per_document))
+
+
+def _reset_generated_diagnostic_artifacts(project_store: Any) -> Dict[str, Any]:
+    """Supprime les seuls artefacts recalculables du périmètre courant.
+
+    Les documents bruts, le CIR final, la Memory V2 et les données en base sont
+    volontairement conservés. Une suppression incomplète fait échouer la
+    préparation afin d'interdire tout mélange silencieux ancien/nouveau.
+    """
+    project_root = Path(project_store.project_dir).resolve()
+    generated_directories = [
+        Path(project_store.documents_processed_dir),
+        Path(project_store.nlp_dir),
+        Path(project_store.rag_dir),
+        Path(project_store.diagnostics_dir),
+        project_root / "ennodiagnostic",
+        project_root / "cir_memory",
+    ]
+    generated_files = [
+        project_root / "selected_verrous_for_scholar.json",
+        project_root / "comparison_cir_vs_raw.json",
+        project_root / "rag_report.json",
+    ]
+
+    removed: List[str] = []
+    for target in [*generated_directories, *generated_files]:
+        resolved = target.resolve()
+        try:
+            resolved.relative_to(project_root)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"Refus de supprimer un artefact hors projet : {resolved}"
+            ) from exc
+        if resolved == project_root:
+            raise RuntimeError(
+                "Refus de supprimer la racine du projet pendant la relance."
+            )
+        if not resolved.exists():
+            continue
+        if resolved.is_dir() and not resolved.is_symlink():
+            shutil.rmtree(resolved)
+        else:
+            resolved.unlink()
+        removed.append(str(resolved))
+
+    project_store.ensure()
+    return {
+        "version": "diagnostic_generated_artifacts_reset_v1",
+        "scope": {
+            "project_dir": str(project_root),
+            "collection_name": project_store.collection_name,
+        },
+        "removed": removed,
+        "removed_count": len(removed),
+        "preserved": [
+            str(Path(project_store.documents_raw_dir).resolve()),
+            str(Path(project_store.metadata_path).resolve()),
+        ],
+        "database_history_deleted": False,
+        "memory_v2_deleted": False,
+        "raw_documents_deleted": False,
+    }
+
 # ============================================================
 # Diagnostic paths
 # ============================================================
@@ -309,33 +424,134 @@ def _report_candidates(project: Project, output_dir: Optional[Path] = None) -> L
     year_raw = _year(project)
     org_slug = _slug(project.organisme, "organisme")
     proj_slug = _slug(project.project_name, "projet")
+    subproject_slug = _slug(
+        getattr(project, "subproject_name", None),
+        "",
+    ) if str(getattr(project, "subproject_name", None) or "").strip() else ""
     year_slug = _slug(year_raw, "year")
 
+    project_scope = (
+        base_dir / "storage" / "organismes" / org_slug / "projects" / proj_slug
+    )
+    if subproject_slug:
+        project_scope = project_scope / "subprojects" / subproject_slug
+    year_scope = project_scope / "years" / year_slug
+
     candidates: List[Path] = [
-        output_dir / "ennodiagnostic_report.json",
-        output_dir / "diagnostic_ennodiagnostic.json",
-        output_dir / "diagnostic_ennodiagnostic_sections.json",
-        output_dir / "ennodiagnostic" / "ennodiagnostic_report.json",
-        output_dir / "diagnostics" / "ennodiagnostic_report.json",
-        output_dir / "diagnostics" / "diagnostic_ennodiagnostic.json",
-        output_dir / "diagnostics" / "diagnostic_ennodiagnostic_sections.json",
-
-        # Nouveau ProjectStore avec année
-        base_dir / "storage" / "organismes" / org_slug / "projects" / proj_slug / "years" / year_slug / "ennodiagnostic" / "ennodiagnostic_report.json",
-        base_dir / "storage" / "organismes" / org_slug / "projects" / proj_slug / "years" / year_slug / "diagnostics" / "ennodiagnostic_report.json",
-        base_dir / "storage" / "organismes" / org_slug / "projects" / proj_slug / "years" / year_slug / "diagnostics" / "diagnostic_ennodiagnostic.json",
-        base_dir / "storage" / "organismes" / org_slug / "projects" / proj_slug / "years" / year_slug / "diagnostics" / "diagnostic_ennodiagnostic_sections.json",
-
-        # Ancien storage sans année
-        base_dir / "storage" / "organismes" / org_slug / "projects" / proj_slug / "diagnostics" / "ennodiagnostic_report.json",
-        base_dir / "storage" / "organismes" / org_slug / "projects" / proj_slug / "diagnostics" / "diagnostic_ennodiagnostic.json",
-        base_dir / "storage" / "organismes" / org_slug / "projects" / proj_slug / "diagnostics" / "diagnostic_ennodiagnostic_sections.json",
-
-        # Ancien Streamlit / safe_rag_upload
-        base_dir / "outputs" / "safe_rag_upload" / org_raw / proj_raw / year_raw / "ennodiagnostic" / "ennodiagnostic_report.json",
-        base_dir / "outputs" / "safe_rag_upload" / org_raw / proj_raw / year_raw / "ennodiagnostic_report.json",
-        base_dir / "outputs" / "safe_rag_upload" / org_raw / proj_raw / year_raw / "diagnostics" / "diagnostic_ennodiagnostic.json",
+        year_scope / "ennodiagnostic" / "ennodiagnostic_report.json",
+        year_scope / "diagnostics" / "ennodiagnostic_report.json",
+        year_scope / "diagnostics" / "diagnostic_ennodiagnostic.json",
+        year_scope / "diagnostics" / "diagnostic_ennodiagnostic_sections.json",
     ]
+
+    # Un sous-projet ne doit jamais relire les sorties historiques du projet
+    # parent : elles peuvent appartenir à un autre périmètre fonctionnel.
+    if not subproject_slug:
+        candidates.extend(
+            [
+                output_dir / "ennodiagnostic_report.json",
+                output_dir / "diagnostic_ennodiagnostic.json",
+                output_dir / "diagnostic_ennodiagnostic_sections.json",
+                output_dir / "ennodiagnostic" / "ennodiagnostic_report.json",
+                output_dir / "diagnostics" / "ennodiagnostic_report.json",
+                output_dir
+                / "diagnostics"
+                / "diagnostic_ennodiagnostic.json",
+                output_dir
+                / "diagnostics"
+                / "diagnostic_ennodiagnostic_sections.json",
+                # Nouveau ProjectStore avec année.
+                base_dir
+                / "storage"
+                / "organismes"
+                / org_slug
+                / "projects"
+                / proj_slug
+                / "years"
+                / year_slug
+                / "ennodiagnostic"
+                / "ennodiagnostic_report.json",
+                base_dir
+                / "storage"
+                / "organismes"
+                / org_slug
+                / "projects"
+                / proj_slug
+                / "years"
+                / year_slug
+                / "diagnostics"
+                / "ennodiagnostic_report.json",
+                base_dir
+                / "storage"
+                / "organismes"
+                / org_slug
+                / "projects"
+                / proj_slug
+                / "years"
+                / year_slug
+                / "diagnostics"
+                / "diagnostic_ennodiagnostic.json",
+                base_dir
+                / "storage"
+                / "organismes"
+                / org_slug
+                / "projects"
+                / proj_slug
+                / "years"
+                / year_slug
+                / "diagnostics"
+                / "diagnostic_ennodiagnostic_sections.json",
+                # Ancien storage sans année.
+                base_dir
+                / "storage"
+                / "organismes"
+                / org_slug
+                / "projects"
+                / proj_slug
+                / "diagnostics"
+                / "ennodiagnostic_report.json",
+                base_dir
+                / "storage"
+                / "organismes"
+                / org_slug
+                / "projects"
+                / proj_slug
+                / "diagnostics"
+                / "diagnostic_ennodiagnostic.json",
+                base_dir
+                / "storage"
+                / "organismes"
+                / org_slug
+                / "projects"
+                / proj_slug
+                / "diagnostics"
+                / "diagnostic_ennodiagnostic_sections.json",
+                # Ancien Streamlit / safe_rag_upload.
+                base_dir
+                / "outputs"
+                / "safe_rag_upload"
+                / org_raw
+                / proj_raw
+                / year_raw
+                / "ennodiagnostic"
+                / "ennodiagnostic_report.json",
+                base_dir
+                / "outputs"
+                / "safe_rag_upload"
+                / org_raw
+                / proj_raw
+                / year_raw
+                / "ennodiagnostic_report.json",
+                base_dir
+                / "outputs"
+                / "safe_rag_upload"
+                / org_raw
+                / proj_raw
+                / year_raw
+                / "diagnostics"
+                / "diagnostic_ennodiagnostic.json",
+            ]
+        )
 
     seen = set()
     out: List[Path] = []
@@ -476,6 +692,12 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
     from modules.RAG.indexer import index_nlp_result
 
     ps = get_project_store(project)
+    reset_report = _reset_generated_diagnostic_artifacts(ps)
+    print(
+        "[prepare-sources][reset] Artefacts générés supprimés : "
+        f"count={reset_report.get('removed_count')}",
+        flush=True,
+    )
 
     print("[prepare-sources][1/6] Reconstruction des documents", flush=True)
     selected_documents = documents_for_corpus(
@@ -515,11 +737,52 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
         flush=True,
     )
 
+    document_metadata = _diagnostic_document_metadata(ps, selected_documents)
+    # Les images sont conservées séparément avec leur ancrage structurel, mais
+    # aucun modèle de vision ne les décrit et elles ne participent pas au NLP.
+    diagnostic_vision_mode = "text_only"
+    diagnostic_formula_mode = os.getenv(
+        "ENNOSMART_DIAGNOSTIC_FORMULA_MODE",
+        "fast",
+    )
     documents = load_documents(
         raw_paths,
         use_ennosmart_extraction=True,
-        include_cir_final=False,
+        # Le corpus a déjà été choisi explicitement dans l'application : un
+        # CIR pré-rédigé déposé comme document brut est une preuve courante.
+        include_cir_final=True,
+        metadata_by_path=document_metadata,
+        vision_mode=diagnostic_vision_mode,
+        formula_mode=diagnostic_formula_mode,
     )
+
+    visual_asset_report: Dict[str, Any] = {
+        "assets_count": 0,
+        "vision_model_used": False,
+        "indexed_for_diagnostic": False,
+    }
+    try:
+        from modules.extraction.visual.asset_retention import persist_visual_assets
+
+        visual_asset_report = persist_visual_assets(
+            store=ps,
+            # Partir des sources sélectionnées, et non des seuls documents qui
+            # ont produit du texte : une image autonome reste ainsi conservée.
+            documents=[
+                {
+                    "document": Path(source_path).name,
+                    "source_path": source_path,
+                }
+                for source_path in raw_paths
+            ],
+        )
+        print(
+            "[prepare-sources][visuals] Images conservées sans modèle de vision : "
+            f"assets={visual_asset_report.get('assets_count')}",
+            flush=True,
+        )
+    except Exception as exc:
+        print(f"[prepare-sources][visuals] WARNING: {exc}", flush=True)
 
     if not documents:
         raise RuntimeError("Aucun texte exploitable extrait des documents bruts.")
@@ -551,9 +814,17 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
 
     nlp_result_raw = run_nlp_pipeline_routed(
         documents=documents,
-        document_modes=None,
-        max_candidates=int(os.getenv("ENNOSMART_NLP_MAX_CANDIDATES", "700")),
+        # Tous les fichiers explicitement inclus dans le corpus Diagnostic
+        # suivent la même voie factuelle, quel que soit leur format ou titre.
+        document_modes={
+            str(document.get("document") or document.get("source_path") or ""): "raw"
+            for document in documents
+        },
+        max_candidates=_diagnostic_max_candidates(len(documents)),
         include_state_of_art_in_candidates=True,
+        organisme=project.organisme,
+        project=project.project_name,
+        year=_year(project),
     )
 
     # Les documents extraits ne sont plus necessaires apres le NLP.
@@ -588,6 +859,7 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
     index_report_raw = index_nlp_result(
         organisme=project.organisme,
         project=project.project_name,
+        subproject=getattr(project, "subproject_name", None),
         nlp_result=nlp_result,
         reset=True,
         year=_year(project),
@@ -616,6 +888,8 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
         "documents_skipped_count": len(skipped_paths),
         "allowed_extensions": sorted(allowed_ext),
         "corpus_manifest": corpus_manifest,
+        "reset_report": sanitize_json_value(reset_report),
+        "visual_asset_report": sanitize_json_value(visual_asset_report),
         # Compatibilite avec le reste du backend, sans contenu NLP massif.
         "nlp_result": {"stats": stats},
         "nlp_stats": stats,
@@ -808,6 +1082,7 @@ def run_true_ennodiagnostic_agent(project: Project, prior_pipeline: Optional[Dic
     agent = EnnoDiagnosticAgent(
         organisme=project.organisme,
         project=project.project_name,
+        subproject=getattr(project, "subproject_name", None),
         year=_year(project),
         out_dir=str(out_dir),
         use_llm=use_llm,
@@ -1179,6 +1454,7 @@ def _build_complete_run_payload(
             "id": project.id,
             "organisme": project.organisme,
             "project_name": project.project_name,
+            "subproject_name": getattr(project, "subproject_name", None),
             "year": _year(project),
         },
         # Source officielle complète : aucune section n'est reconstruite depuis Chroma.
@@ -1563,6 +1839,8 @@ def prepare_ennodiagnostic_sources(db: Session, project: Project) -> Dict[str, A
         "index_report": index_report,
         "nlp_result_path": nlp_rag.get("nlp_result_path"),
         "corpus_manifest": nlp_rag.get("corpus_manifest") or {},
+        "reset_report": nlp_rag.get("reset_report") or {},
+        "visual_asset_report": nlp_rag.get("visual_asset_report") or {},
     }
 
     result = {
@@ -1574,12 +1852,15 @@ def prepare_ennodiagnostic_sources(db: Session, project: Project) -> Dict[str, A
             "id": project.id,
             "organisme": project.organisme,
             "project_name": project.project_name,
+            "subproject_name": getattr(project, "subproject_name", None),
             "year": _year(project),
         },
         "documents_used_count": compact_pipeline["documents_used_count"],
         "documents_loaded_count": compact_pipeline["documents_loaded_count"],
         "documents_used_paths": compact_pipeline["documents_used_paths"],
         "corpus_manifest": compact_pipeline["corpus_manifest"],
+        "reset_report": compact_pipeline["reset_report"],
+        "visual_asset_report": compact_pipeline["visual_asset_report"],
         "nlp_stats": nlp_stats,
         "index_report": index_report,
         "paths": {
@@ -1587,6 +1868,11 @@ def prepare_ennodiagnostic_sources(db: Session, project: Project) -> Dict[str, A
             "raw_dir": str(ps.documents_raw_dir),
             "nlp_result": str(ps.nlp_dir / "nlp_result.json"),
             "rag_chunks": str(ps.rag_dir / "chunks.json"),
+            "visual_assets_manifest": str(
+                ps.documents_processed_dir
+                / "visual_assets_v1"
+                / "manifest.json"
+            ),
             "prepare_report": str(_prepare_report_path(project)),
         },
         "raw_pipeline_result": compact_pipeline,
