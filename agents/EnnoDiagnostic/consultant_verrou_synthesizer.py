@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 
-VERSION = "v189_nlp_group_passthrough_cir_reformulation"
+VERSION = "v190_nlp_group_passthrough_cached_reformulation"
 
 VISIBLE_FIELDS = (
     "title",
@@ -653,9 +653,12 @@ def _compact_cluster(
             "evidence_id": source.get("evidence_id"),
             "document": source.get("document"),
             "section_title": source.get("section_title"),
-            "text": _truncate(source.get("excerpt"), 650),
+            "text": _truncate(source.get("excerpt"), 520),
         }
-        for source in sources[:12]
+        # La fiche finale conserve toutes les sources. Le prompt de
+        # reformulation n'envoie qu'un échantillon représentatif afin de ne pas
+        # multiplier les lots/appels LLM pour répéter des passages proches.
+        for source in sources[:8]
     ]
     return {
         "cluster_id": _clean(cluster.get("cluster_id")),
@@ -667,9 +670,9 @@ def _compact_cluster(
         "cluster_role_reasons": list(cluster.get("cluster_role_reasons") or []),
         "related_cluster_ids": list(cluster.get("related_cluster_ids") or []),
         "representative_label": _truncate(cluster.get("representative_label"), 260),
-        "representative_text": _truncate(cluster.get("representative_text"), 950),
-        "semantic_text": _truncate(cluster.get("semantic_text"), 2200),
-        "measurement_support_text": _truncate(cluster.get("measurement_support_text"), 900),
+        "representative_text": _truncate(cluster.get("representative_text"), 760),
+        "semantic_text": _truncate(cluster.get("semantic_text"), 1600),
+        "measurement_support_text": _truncate(cluster.get("measurement_support_text"), 650),
         "concept_profile": cluster.get("concept_profile") or {},
         "frascati_score": cluster.get("frascati_score"),
         "evidence": evidence,
@@ -1592,6 +1595,7 @@ def synthesize_consultant_verrous(
     previous_cir_context: Optional[Dict[str, Any]] = None,
     lock_clusters: Optional[Dict[str, Any]] = None,
     lock_clusters_path: str | Path | None = None,
+    cache_path: str | Path | None = None,
     **legacy_arguments: Any,
 ) -> Dict[str, Any]:
     """Reformule les groupes NLP avec mémoire antérieure de style uniquement."""
@@ -1618,6 +1622,44 @@ def synthesize_consultant_verrous(
     ]
 
     previous_summary = _previous_context_summary(previous_cir_context)
+
+    # Les groupes NLP sont immuables entre deux relances « Diagnostic » tant
+    # que les sources ne sont pas préparées à nouveau. Réutiliser leur
+    # reformulation évite jusqu'à 7 appels LLM identiques sans modifier un seul
+    # candidat de l'agent 1.
+    cache_key_payload = {
+        "version": VERSION,
+        "clusters": display_clusters,
+        "style_block": style_block,
+        "previous_summary": previous_summary,
+    }
+    cache_key = hashlib.sha256(
+        json.dumps(
+            cache_key_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        ).encode("utf-8", errors="ignore")
+    ).hexdigest()
+    resolved_cache_path = Path(cache_path) if cache_path else None
+    if resolved_cache_path is not None:
+        try:
+            cached = json.loads(resolved_cache_path.read_text(encoding="utf-8"))
+            cached_report = cached.get("report") if isinstance(cached, dict) else None
+            if cached.get("cache_key") == cache_key and isinstance(cached_report, dict):
+                output = dict(cached_report)
+                output["cached"] = True
+                output["cache_key"] = cache_key
+                output["llm_calls_reused"] = int(output.get("llm_calls") or 0)
+                output["llm_calls"] = 0
+                output["qualification_llm_calls"] = 0
+                output["qualification_retry_llm_calls"] = 0
+                output["qualification_final_repair_llm_calls"] = 0
+                output["qualification_title_repair_llm_calls"] = 0
+                output["qualification_title_repair_retry_llm_calls"] = 0
+                return output
+        except Exception:
+            pass
 
     if not display_clusters:
         return {
@@ -1996,7 +2038,7 @@ def synthesize_consultant_verrous(
         )
     ]
 
-    return {
+    output = {
         "ok": True,
         "version": VERSION,
         "mode": "nlp_groups_cir_reformulation_with_title_only_repair",
@@ -2055,4 +2097,20 @@ def synthesize_consultant_verrous(
         "consolidation_support_groups": [_support_output(cluster) for cluster in support_clusters],
         "llm_reformulated_verrous": final_items,
     }
+    output["cache_key"] = cache_key
+    if resolved_cache_path is not None:
+        try:
+            resolved_cache_path.parent.mkdir(parents=True, exist_ok=True)
+            resolved_cache_path.write_text(
+                json.dumps(
+                    {"cache_key": cache_key, "version": VERSION, "report": output},
+                    ensure_ascii=False,
+                    indent=2,
+                    default=str,
+                ),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            output["cache_write_error"] = str(exc)
+    return output
 

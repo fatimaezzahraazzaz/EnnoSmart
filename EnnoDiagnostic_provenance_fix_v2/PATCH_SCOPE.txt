@@ -1,0 +1,18 @@
+EnnoDiagnostic provenance fix V2 — STRICT PROJECT DIRECT
+
+But:
+- corriger les contaminations restantes de l'état de l'art / passages ambigus ;
+- conserver toute la matière pour la recherche de verrous et la nouveauté ;
+- n'autoriser comme faits du projet courant que des preuves `project_direct` ;
+- rendre les erreurs de provenance et les paragraphes sans evidence_id bloquants ;
+- renforcer la sémantique du score Frascati.
+
+NON MODIFIÉ:
+- détection des candidats verrous ;
+- regroupement NLP des verrous ;
+- reformulation des verrous ;
+- scientific_axis_consolidation ;
+- section_context_config.py ;
+- préparation des sources / nlp_result.json.
+
+V2 s'applique PAR-DESSUS V1 et crée sa propre sauvegarde avant toute écriture.

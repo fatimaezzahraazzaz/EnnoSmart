@@ -1,0 +1,694 @@
+--- a/agents/EnnoDiagnostic/ennodiagnostic_agent.py
++++ b/agents/EnnoDiagnostic/ennodiagnostic_agent.py
+@@ -26,6 +26,24 @@
+ from datetime import datetime
+ from pathlib import Path
+ from typing import Any, Dict, List, Optional, Tuple
++
++try:
++    from .evidence_provenance import (
++        PROV_EXTERNAL_LITERATURE,
++        PROV_HISTORICAL,
++        classify_evidence_provenance,
++        is_project_anchor,
++        provenance_allows_section,
++    )
++except Exception:
++    from evidence_provenance import (  # type: ignore
++        PROV_EXTERNAL_LITERATURE,
++        PROV_HISTORICAL,
++        classify_evidence_provenance,
++        is_project_anchor,
++        provenance_allows_section,
++    )
++
+ 
+ 
+ # =========================================================
+@@ -1033,6 +1051,7 @@
+             or metadata.get("highlight_coordinates") or metadata.get("coordinates")
+             or metadata.get("bbox") or metadata.get("bounding_box")
+         )
++    provenance = classify_evidence_provenance(item)
+     return {
+         "evidence_id": passage_id,
+         "passage_id": passage_id,
+@@ -1043,6 +1062,10 @@
+         "document": document,
+         "document_name": document,
+         "source_path": raw_path,
++        "evidence_origin": provenance.get("evidence_origin"),
++        "actor_scope": provenance.get("actor_scope"),
++        "provenance_reason": provenance.get("provenance_reason"),
++        "provenance_confidence": provenance.get("provenance_confidence"),
+         "page_number": item.get("page_number") or item.get("page") or metadata.get("page_number") or metadata.get("page"),
+         "section_title": clean_text(item.get("section_title") or metadata.get("section_title")),
+         "section_path": clean_text(item.get("section_path") or metadata.get("section_path")),
+@@ -1322,6 +1345,19 @@
+     if not joined:
+         return -1000.0
+     reference_like = _is_reference_like_passage(passage)
++    # ENNOSMART_PROVENANCE_PATCH_V1: ce garde est en aval du regroupement des verrous.
++    # L'état de l'art reste autorisé pour uncertainty/novelty, mais ne peut plus
++    # devenir une hypothèse, expérience, résultat ou preuve de démarche du projet.
++    provenance = classify_evidence_provenance(passage)
++    project_fact_purposes = {
++        "hypothesis", "experiment", "result", "learning",
++        "creativity", "systematicity", "transferability",
++    }
++    if (
++        purpose in project_fact_purposes
++        and provenance.get("evidence_origin") in {PROV_EXTERNAL_LITERATURE, PROV_HISTORICAL}
++    ):
++        return -1000.0
+ 
+     role = _diag_norm(
+         passage.get("role")
+--- a/agents/EnnoDiagnostic/diagnostic_static_presenter.py
++++ b/agents/EnnoDiagnostic/diagnostic_static_presenter.py
+@@ -23,6 +23,24 @@
+ import unicodedata
+ from pathlib import Path
+ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
++
++try:
++    from .evidence_provenance import (
++        PROV_EXTERNAL_LITERATURE,
++        PROV_HISTORICAL,
++        classify_evidence_provenance,
++        is_project_anchor,
++        provenance_allows_section,
++    )
++except Exception:
++    from evidence_provenance import (  # type: ignore
++        PROV_EXTERNAL_LITERATURE,
++        PROV_HISTORICAL,
++        classify_evidence_provenance,
++        is_project_anchor,
++        provenance_allows_section,
++    )
++
+ 
+ try:
+     from .section_context_config import (
+@@ -840,6 +858,10 @@
+     seen = set()
+     ranked: List[Tuple[float, Dict[str, Any]]] = []
+     for source in candidates:
++        # ENNODIAG_PROVENANCE_GUARD_V1 — filtre d'usage uniquement.
++        # Aucun candidat/verrou n'est supprimé en amont.
++        if not provenance_allows_section(source, config.key):
++            continue
+         if _technical_evidence_rejection_reason(source, config.key):
+             continue
+         signature = _source_signature(source)
+@@ -904,6 +926,7 @@
+ 
+ def evidence_from_source(source: Dict[str, Any], evidence_id: str, excerpt_limit: int) -> Dict[str, Any]:
+     meta = meta_of(source)
++    provenance = classify_evidence_provenance(source)
+     rag_chunk_id = clean_text(
+         meta.get("rag_chunk_id") or source.get("id") or meta.get("passage_id") or "",
+         240,
+@@ -915,6 +938,10 @@
+         "document_id": clean_text(meta.get("document_id") or "", 240),
+         "document": source_doc(source),
+         "source_path": clean_text(meta.get("source_path") or source.get("source_path") or "", 900),
++        "evidence_origin": provenance.get("evidence_origin"),
++        "actor_scope": provenance.get("actor_scope"),
++        "provenance_reason": provenance.get("provenance_reason"),
++        "provenance_confidence": provenance.get("provenance_confidence"),
+         "page_number": _safe_int(meta.get("page_number") or meta.get("page")),
+         "paragraph_index": _safe_int(meta.get("paragraph_index")),
+         "char_start": _safe_int(meta.get("char_start") or meta.get("start_char") or meta.get("start")),
+@@ -1280,6 +1307,9 @@
+             "document_id": "",
+             "document": "Évaluation NLP/Frascati",
+             "source_path": "",
++            "evidence_origin": "calculated_assessment",
++            "actor_scope": "backend_calculation",
++            "provenance_reason": "deterministic_backend_assessment",
+             "page_number": None,
+             "paragraph_index": None,
+             "char_start": None,
+@@ -1526,6 +1556,19 @@
+     seen = set()
+     document_index = 1
+     for proof in source_proofs:
++        provenance = classify_evidence_provenance(proof)
++        origin = provenance.get("evidence_origin")
++        stage = clean_text(proof.get("operation_function") or proof.get("proof_kind"), 80).lower()
++        # Défense en profondeur : même un cache ancien ne doit pas transformer
++        # l'état de l'art en travaux réalisés par le projet.
++        if purpose in {"demarche_detectee", "resultats_metriques"} and origin == PROV_EXTERNAL_LITERATURE:
++            continue
++        if (
++            purpose == "justification_frascati"
++            and origin == PROV_EXTERNAL_LITERATURE
++            and stage in {"hypothesis", "hypothesis_component", "experiment", "result", "learning", "systematicity", "transferability", "creativity"}
++        ):
++            continue
+         original_id = clean_text(proof.get("evidence_id"), 240)
+         excerpt = clean_text(proof.get("excerpt"), 700)
+         signature = original_id or (clean_text(proof.get("document")), excerpt[:220])
+@@ -1542,6 +1585,10 @@
+             "document": clean_text(proof.get("document") or proof.get("document_name"), 260),
+             "document_name": clean_text(proof.get("document_name") or proof.get("document"), 260),
+             "source_path": clean_text(proof.get("source_path"), 900),
++            "evidence_origin": provenance.get("evidence_origin"),
++            "actor_scope": provenance.get("actor_scope"),
++            "provenance_reason": provenance.get("provenance_reason"),
++            "provenance_confidence": provenance.get("provenance_confidence"),
+             "page_number": _safe_int(proof.get("page_number")),
+             "paragraph_index": _safe_int(proof.get("paragraph_index")),
+             "char_start": _safe_int(proof.get("char_start") or proof.get("sentence_start")),
+@@ -1718,6 +1765,9 @@
+                 "document": document,
+                 "document_name": document,
+                 "source_path": source_path,
++                "evidence_origin": "historical_project",
++                "actor_scope": "project_team_previous_year",
++                "provenance_reason": "previous_cir_temporal_scope",
+                 "page_number": _safe_int(row.get("page_number")),
+                 "paragraph_index": _safe_int(row.get("paragraph_index")),
+                 "char_start": _safe_int(row.get("char_start")),
+@@ -1869,6 +1919,8 @@
+ 
+ CONTRAT :
+ - Utilise exclusivement les PREUVES numérotées du projet courant.
++- `evidence_origin=external_literature` décrit un travail scientifique tiers : il peut contextualiser un verrou, mais jamais devenir un objectif, une démarche, un paramètre ou un résultat réalisé par le projet courant.
++- `actor_scope=external_authors` ne doit jamais être reformulé comme « l'équipe », « nous » ou « le projet ».
+ - Les preuves F/E décrivent l'année courante. Les preuves H sont exclusivement des éléments de continuité du CIR précédent du même projet.
+ - Une preuve H peut ajouter une démarche, un paramètre ou un résultat historique à la section, mais jamais prouver un fait de l'année courante.
+ - Tout élément utilisant une preuve H doit être autonome, commencer par « Historique 20XX — » avec l'année fournie et ne citer aucune preuve F/E dans le même élément.
+@@ -1923,6 +1975,9 @@
+                 "historical_axis_title": ev.get("historical_axis_title"),
+                 "primary_result_evidence": ev.get("primary_result_evidence"),
+                 "reference_like": ev.get("reference_like"),
++                "evidence_origin": ev.get("evidence_origin"),
++                "actor_scope": ev.get("actor_scope"),
++                "provenance_reason": ev.get("provenance_reason"),
+                 "quantitative_values": ev.get("quantitative_values") or [],
+                 "rattachement_operation": ev.get("justification_bridge_fr") or None,
+                 "text": ev["excerpt"],
+@@ -2402,6 +2457,69 @@
+ 
+     return errors
+ 
++
++
++def _provenance_grounding_errors(
++    paragraphs: Sequence[Dict[str, Any]],
++    items: Sequence[Dict[str, Any]],
++    evidence: Sequence[Dict[str, Any]],
++    section_key: str,
++) -> List[str]:
++    """Bloque une mauvaise attribution d'acteur sans modifier les verrous."""
++    guarded_sections = {
++        "synthese_strategique",
++        "objectif_global",
++        "demarche_detectee",
++        "resultats_metriques",
++        "parametres_contraintes",
++        "justification_frascati",
++    }
++    if section_key not in guarded_sections:
++        return []
++
++    evidence_by_id = {
++        str(item.get("evidence_id")): item
++        for item in evidence if isinstance(item, dict)
++    }
++    units = [*paragraphs, *items]
++    errors: List[str] = []
++    execution_claims = {
++        "contexte", "hypothese", "methodes_outils", "etapes_experimentales",
++        "resultats", "apprentissage",
++    }
++
++    for index, unit in enumerate(units, start=1):
++        cited = _unit_evidence(unit, evidence_by_id)
++        if not cited:
++            continue
++        reports = [classify_evidence_provenance(item) for item in cited]
++        external = [
++            report for report in reports
++            if report.get("evidence_origin") == PROV_EXTERNAL_LITERATURE
++        ]
++        claim_kind = _grounding_norm(unit.get("claim_kind") or "")
++
++        if section_key == "justification_frascati":
++            if claim_kind in execution_claims and external:
++                errors.append(
++                    f"affirmation {index}: provenance externe utilisée comme fait du projet courant"
++                )
++            if claim_kind == "verrou":
++                documentary = [
++                    item for item in cited
++                    if str(item.get("evidence_id") or "") != "F0"
++                ]
++                if documentary and not any(is_project_anchor(item) for item in documentary):
++                    errors.append(
++                        f"affirmation {index}: verrou sans ancrage documentaire du projet courant"
++                    )
++            continue
++
++        if external:
++            errors.append(
++                f"élément {index}: provenance externe utilisée comme fait du projet courant"
++            )
++    return errors
+ 
+ def _demarche_operation_errors(
+     items: Sequence[Dict[str, Any]],
+@@ -2606,6 +2724,10 @@
+                 "section_path": item.get("section_path"),
+                 "sentence_start": item.get("sentence_start") or item.get("char_start"),
+                 "role": item.get("role"),
++                "evidence_origin": item.get("evidence_origin"),
++                "actor_scope": item.get("actor_scope"),
++                "provenance_reason": item.get("provenance_reason"),
++                "provenance_confidence": item.get("provenance_confidence"),
+                 "summary_fr": item.get("summary_fr"),
+                 "proof_kind": item.get("proof_kind"),
+                 "result_scope": item.get("result_scope"),
+@@ -2946,6 +3068,9 @@
+     grounding_errors.extend(
+         _strict_claim_grounding_errors(grounding_units, items, evidence, config.key)
+     )
++    grounding_errors.extend(
++        _provenance_grounding_errors(grounding_units, items, evidence, config.key)
++    )
+     if config.key == "demarche_detectee":
+         grounding_errors.extend(_demarche_operation_errors(items, evidence))
+     if config.key == "parametres_contraintes":
+@@ -3401,6 +3526,8 @@
+                 marker in str(error)
+                 for error in retry_validation_errors
+                 for marker in (
++                    "provenance externe utilisée comme fait du projet courant",
++                    "verrou sans ancrage documentaire du projet courant",
+                     "comparateur numérique inversé",
+                     "preuves de plusieurs opérations fusionnées",
+                     "opérations absentes de la démarche",
+--- a/agents/EnnoDiagnostic/structured_eligibility_writer.py
++++ b/agents/EnnoDiagnostic/structured_eligibility_writer.py
+@@ -25,6 +25,19 @@
+ 
+ from pydantic import BaseModel, Field, field_validator
+ from pydantic_ai import Agent, ModelRetry, ModelSettings, RunContext, ToolOutput
++
++try:
++    from .evidence_provenance import (
++        PROV_EXTERNAL_LITERATURE,
++        classify_evidence_provenance,
++        is_project_anchor,
++    )
++except Exception:
++    from evidence_provenance import (  # type: ignore
++        PROV_EXTERNAL_LITERATURE,
++        classify_evidence_provenance,
++        is_project_anchor,
++    )
+ 
+ try:
+     from dotenv import load_dotenv
+@@ -165,6 +178,11 @@
+ _STRONG_SIGNIFICANCE_RE = re.compile(r"\b(?:significatif|significative|significantly|significant)\b", re.I)
+ _FULL_ELIGIBILITY_RE = re.compile(
+     r"\b(?:pleine? [eé]ligibilit[eé]|assurer (?:une|la) [eé]ligibilit[eé]|garantir (?:une|la) [eé]ligibilit[eé])\b",
++    re.I,
++)
++_SCORE_MISINTERPRETATION_RE = re.compile(
++    r"\b(?:part acquise|taux d eligibilite|chance d acceptation|probabilite d acceptation|"
++    r"pourcentage du projet|elements techniques (?:sont )?defendables|travaux (?:sont )?eligibles?)\b",
+     re.I,
+ )
+ 
+@@ -268,6 +286,8 @@
+ 16. Ne transforme pas une marge théorique avant 100 % en résultat expérimental. Les preuves `headroom_context` servent seulement de contexte secondaire.
+ 17. La valeur Frascati est un indice de défendabilité/couverture documentaire, jamais un pourcentage de chance d'acceptation ni une garantie d'éligibilité administrative.
+ 18. `result_facts` est facultatif. Si tu le renseignes, chaque fait quantitatif doit être observé et directement sourcé. Le claim `resultats` ne doit jamais introduire un chiffre absent de ses preuves citées.
++19. ENNODIAG_PYDANTIC_PROVENANCE_V1 : une preuve `evidence_origin=external_literature` ou `actor_scope=external_authors` reste utilisable pour contextualiser l'état de l'art/verrou, mais ne peut jamais être présentée comme une action, une hypothèse, une expérience, un résultat ou un apprentissage réalisé par le projet.
++20. Un pourcentage Frascati est uniquement un indice de couverture/défendabilité documentaire de l'opération de référence. N'écris jamais « X % du projet », « X % des éléments techniques sont défendables », « part acquise X % », taux/chance/probabilité d'acceptation.
+ """.strip()
+ 
+ eligibility_agent: Agent[EligibilityDeps, EligibilityNarrative] = Agent(
+@@ -326,6 +346,29 @@
+ 
+         cited = [ctx.deps.evidence_by_id[eid] for eid in claim.evidence_ids]
+         documentary_ids = [eid for eid in claim.evidence_ids if eid != ctx.deps.score_evidence_id]
++        provenance_reports = [classify_evidence_provenance(item) for item in cited]
++        external_ids = [
++            str(item.get("evidence_id"))
++            for item, report in zip(cited, provenance_reports)
++            if report.get("evidence_origin") == PROV_EXTERNAL_LITERATURE
++            and str(item.get("evidence_id") or "") != ctx.deps.score_evidence_id
++        ]
++
++        # La littérature reste disponible pour comprendre le verrou, mais elle
++        # ne peut jamais devenir le travail réalisé par le projet courant.
++        project_execution_kinds = TECHNICAL_CLAIM_KINDS - {"verrou"}
++        if claim.claim_kind in project_execution_kinds and external_ids:
++            errors.append(
++                f"{claim.claim_kind}: provenance externe utilisée comme fait du projet courant : "
++                + ", ".join(external_ids)
++            )
++        if claim.claim_kind == "verrou":
++            documentary = [
++                item for item in cited
++                if str(item.get("evidence_id") or "") != ctx.deps.score_evidence_id
++            ]
++            if documentary and not any(is_project_anchor(item) for item in documentary):
++                errors.append("verrou: aucune preuve du dossier courant ne rattache ce verrou au projet.")
+ 
+         if claim.claim_kind in TECHNICAL_CLAIM_KINDS and not documentary_ids:
+             errors.append(f"{claim.claim_kind}: une preuve documentaire du projet courant est obligatoire.")
+@@ -353,6 +396,13 @@
+ 
+         if _FULL_ELIGIBILITY_RE.search(claim.text):
+             errors.append(f"{claim.claim_kind}: ne jamais garantir une pleine éligibilité CIR.")
++        if (
++            "%" in claim.text
++            and _SCORE_MISINTERPRETATION_RE.search(_norm_text(claim.text))
++        ):
++            errors.append(
++                f"{claim.claim_kind}: le pourcentage Frascati est un indice documentaire, pas une part du projet ni une probabilité d'acceptation."
++            )
+         if _INTERNAL_TOKEN_RE.search(claim.text):
+             errors.append(f"{claim.claim_kind}: code interne présent dans le texte visible.")
+ 
+@@ -364,6 +414,10 @@
+             errors.append(f"result_facts: preuve invalide pour {fact.subject}.")
+             continue
+         evidence = ctx.deps.evidence_by_id[fact.evidence_id]
++        fact_provenance = classify_evidence_provenance(evidence)
++        if fact_provenance.get("evidence_origin") == PROV_EXTERNAL_LITERATURE:
++            errors.append(f"result_facts: provenance externe utilisée pour {fact.subject}.")
++            continue
+         if bool(evidence.get("reference_like")):
+             errors.append(f"result_facts: référence bibliographique utilisée pour {fact.subject}.")
+             continue
+@@ -393,6 +447,7 @@
+         evidence_id = str(item.get("evidence_id") or "").strip()
+         if not evidence_id:
+             continue
++        provenance = classify_evidence_provenance(item)
+         compact.append(
+             {
+                 "evidence_id": evidence_id,
+@@ -405,6 +460,10 @@
+                 "result_scope": item.get("result_scope") or None,
+                 "primary_result_evidence": bool(item.get("primary_result_evidence")),
+                 "reference_like": bool(item.get("reference_like")),
++                "evidence_origin": provenance.get("evidence_origin"),
++                "actor_scope": provenance.get("actor_scope"),
++                "provenance_reason": provenance.get("provenance_reason"),
++                "provenance_confidence": provenance.get("provenance_confidence"),
+                 "hypothesis_explicit": item.get("hypothesis_explicit"),
+                 "hypothesis_anchor": item.get("hypothesis_anchor"),
+                 "quantitative_values": item.get("quantitative_values") or [],
+--- a/agents/EnnoDiagnostic/evidence_provenance.py
++++ b/agents/EnnoDiagnostic/evidence_provenance.py
+@@ -0,0 +1,281 @@
++# -*- coding: utf-8 -*-
++from __future__ import annotations
++
++"""Qualification de provenance des preuves EnnoDiagnostic.
++
++Ce module est volontairement indépendant de la logique qui détecte/regroupe les
++verrous. Il ajoute une deuxième dimension à une preuve : qui produit le fait ?
++
++Une preuve peut donc rester utile à la détection d'un verrou/à l'état de l'art,
++tout en étant interdite comme preuve d'un objectif, d'une démarche ou d'un
++résultat réalisé par le projet courant.
++"""
++
++import re
++import unicodedata
++from typing import Any, Dict
++
++PROV_PROJECT_DIRECT = "project_direct"
++PROV_EXTERNAL_LITERATURE = "external_literature"
++PROV_AMBIGUOUS = "ambiguous_current_dossier"
++PROV_HISTORICAL = "historical_project"
++PROV_CALCULATION = "calculated_assessment"
++
++ACTOR_PROJECT = "project_team"
++ACTOR_EXTERNAL = "external_authors"
++ACTOR_UNKNOWN = "unknown"
++ACTOR_HISTORICAL = "project_team_previous_year"
++ACTOR_BACKEND = "backend_calculation"
++
++_ALLOWED_ORIGINS = {
++    PROV_PROJECT_DIRECT,
++    PROV_EXTERNAL_LITERATURE,
++    PROV_AMBIGUOUS,
++    PROV_HISTORICAL,
++    PROV_CALCULATION,
++}
++
++_STATE_OF_ART_SECTION_RE = re.compile(
++    r"\b(?:etat de l['’ ]?art|state of the art|related works?|related work|"
++    r"literature review|revue de la litterature|revue de litterature|"
++    r"travaux connexes|bibliograph(?:ie|y)|references?|background research|"
++    r"existing work|prior art)\b",
++    re.I,
++)
++
++_EXTERNAL_ORIGIN_RE = re.compile(
++    r"\b(?:external[_ -]?literature|literature|scientific[_ -]?article|paper|"
++    r"state[_ -]?of[_ -]?the[_ -]?art|bibliograph(?:y|ie)|reference)\b",
++    re.I,
++)
++
++_THIRD_PARTY_ATTRIBUTION_RE = re.compile(
++    r"\b(?:les auteurs?|the authors?|according to|selon (?:les auteurs?|l['’]etude|"
++    r"l['’]article)|reported by|proposed by|demonstrated by|shown by|"
++    r"the paper|previous work|prior work|"
++    r"travaux anterieurs|et al\.)\b",
++    re.I,
++)
++
++_PROJECT_SECTION_RE = re.compile(
++    r"\b(?:travaux realises?|travaux menes?|demarche experimentale|"
++    r"protocole experimental|experimentations?|essais? realises?|"
++    r"resultats? obtenus?|resultats? du projet|nos travaux|"
++    r"developpements? realises?|mise en oeuvre|implementation du projet|"
++    r"compte rendu|reunion technique|synthese des travaux)\b",
++    re.I,
++)
++
++_STRONG_PROJECT_ATTRIBUTION_RE = re.compile(
++    r"\b(?:dans ce projet|dans le cadre (?:de ce|du) projet|l['’]equipe (?:a|a pu|"
++    r"a developpe|a teste|a evalue|a mesure|a realise)|nous avons (?:developpe|"
++    r"implemente|teste|evalue|mesure|compare|entraine|realise|concu|mis en oeuvre)|"
++    r"le projet (?:a|a permis|a developpe|a teste|a evalue|a mesure))\b",
++    re.I,
++)
++
++# Le simple "we evaluated" n'est volontairement PAS suffisant : dans un article
++# copié dans le dossier courant, "we" désigne les auteurs du papier, pas le client.
++_WE_ONLY_RE = re.compile(
++    r"\bwe (?:developed|implemented|tested|evaluated|measured|compared|trained|"
++    r"generated|proposed|conducted|performed)\b",
++    re.I,
++)
++
++_PROJECT_NARRATIVE_SECTIONS = {
++    "synthese_strategique",
++    "objectif_global",
++    "demarche_detectee",
++    "resultats_metriques",
++    "parametres_contraintes",
++}
++
++_HISTORICAL_ALLOWED_SECTIONS = {
++    "demarche_detectee",
++    "resultats_metriques",
++    "parametres_contraintes",
++}
++
++
++def _norm(value: Any) -> str:
++    text = unicodedata.normalize("NFKD", str(value or "").lower())
++    text = "".join(ch for ch in text if not unicodedata.combining(ch))
++    text = re.sub(r"\s+", " ", text).strip()
++    return text
++
++
++def _metadata(source: Dict[str, Any]) -> Dict[str, Any]:
++    value = source.get("metadata") if isinstance(source, dict) else {}
++    return value if isinstance(value, dict) else {}
++
++
++def _first(source: Dict[str, Any], *keys: str) -> Any:
++    meta = _metadata(source)
++    for key in keys:
++        value = source.get(key)
++        if value not in (None, ""):
++            return value
++        value = meta.get(key)
++        if value not in (None, ""):
++            return value
++    return None
++
++
++def _section_text(source: Dict[str, Any]) -> str:
++    meta = _metadata(source)
++    return _norm(" ".join(
++        str(value or "")
++        for value in (
++            source.get("section_path"),
++            source.get("section_title"),
++            source.get("section"),
++            meta.get("section_path"),
++            meta.get("section_title"),
++            meta.get("section"),
++        )
++    ))
++
++
++def _body_text(source: Dict[str, Any]) -> str:
++    meta = _metadata(source)
++    return _norm(" ".join(
++        str(value or "")
++        for value in (
++            source.get("context_before"),
++            source.get("text"),
++            source.get("excerpt"),
++            source.get("source_text_original"),
++            source.get("analysis_text"),
++            source.get("context_after"),
++            source.get("summary_fr"),
++            meta.get("analysis_text"),
++        )
++    ))
++
++
++def classify_evidence_provenance(source: Dict[str, Any]) -> Dict[str, Any]:
++    """Classe la provenance sans décider de l'existence d'un verrou.
++
++    Priorité volontaire :
++    1) provenance explicitement déjà qualifiée ;
++    2) N-1 / calcul backend ;
++    3) section d'état de l'art (prioritaire sur les pronoms "we/nous") ;
++    4) attribution explicite à des auteurs tiers ;
++    5) section/action explicitement rattachée au projet ;
++    6) ambigu : on conserve la preuve, mais on ne la certifie pas comme fait projet.
++    """
++    item = source if isinstance(source, dict) else {}
++    explicit_origin = _norm(_first(item, "evidence_origin", "provenance_origin"))
++    explicit_actor = _norm(_first(item, "actor_scope", "provenance_actor"))
++
++    if explicit_origin in _ALLOWED_ORIGINS:
++        actor = explicit_actor or {
++            PROV_PROJECT_DIRECT: ACTOR_PROJECT,
++            PROV_EXTERNAL_LITERATURE: ACTOR_EXTERNAL,
++            PROV_HISTORICAL: ACTOR_HISTORICAL,
++            PROV_CALCULATION: ACTOR_BACKEND,
++        }.get(explicit_origin, ACTOR_UNKNOWN)
++        return {
++            "evidence_origin": explicit_origin,
++            "actor_scope": actor,
++            "provenance_reason": "explicit_metadata",
++            "provenance_confidence": 1.0,
++        }
++
++    temporal_scope = _norm(_first(item, "temporal_scope"))
++    if temporal_scope in {"previous_cir_continuity", "previous year", "historical"}:
++        return {
++            "evidence_origin": PROV_HISTORICAL,
++            "actor_scope": ACTOR_HISTORICAL,
++            "provenance_reason": "previous_cir_temporal_scope",
++            "provenance_confidence": 1.0,
++        }
++
++    evidence_id = str(_first(item, "evidence_id") or "").strip()
++    role = _norm(_first(item, "role"))
++    if evidence_id == "F0" or role == "calculated_assessment":
++        return {
++            "evidence_origin": PROV_CALCULATION,
++            "actor_scope": ACTOR_BACKEND,
++            "provenance_reason": "deterministic_backend_assessment",
++            "provenance_confidence": 1.0,
++        }
++
++    section = _section_text(item)
++    body = _body_text(item)
++    declared_origin = _norm(_first(item, "content_origin", "source_type", "content_type"))
++
++    # Le titre/contexte documentaire gagne toujours sur "we/nous" dans le texte.
++    if _STATE_OF_ART_SECTION_RE.search(section):
++        return {
++            "evidence_origin": PROV_EXTERNAL_LITERATURE,
++            "actor_scope": ACTOR_EXTERNAL,
++            "provenance_reason": "state_of_art_section",
++            "provenance_confidence": 0.99,
++        }
++
++    if _EXTERNAL_ORIGIN_RE.search(declared_origin) and "project_core" not in declared_origin:
++        return {
++            "evidence_origin": PROV_EXTERNAL_LITERATURE,
++            "actor_scope": ACTOR_EXTERNAL,
++            "provenance_reason": "external_content_origin",
++            "provenance_confidence": 0.97,
++        }
++
++    if _THIRD_PARTY_ATTRIBUTION_RE.search(body):
++        return {
++            "evidence_origin": PROV_EXTERNAL_LITERATURE,
++            "actor_scope": ACTOR_EXTERNAL,
++            "provenance_reason": "third_party_attribution",
++            "provenance_confidence": 0.9,
++        }
++
++    if _PROJECT_SECTION_RE.search(section):
++        return {
++            "evidence_origin": PROV_PROJECT_DIRECT,
++            "actor_scope": ACTOR_PROJECT,
++            "provenance_reason": "project_work_section",
++            "provenance_confidence": 0.94,
++        }
++
++    if _STRONG_PROJECT_ATTRIBUTION_RE.search(body):
++        return {
++            "evidence_origin": PROV_PROJECT_DIRECT,
++            "actor_scope": ACTOR_PROJECT,
++            "provenance_reason": "explicit_project_attribution",
++            "provenance_confidence": 0.9,
++        }
++
++    # Un "we evaluated" isolé reste ambigu, précisément pour ne pas confondre
++    # les auteurs d'un article et l'équipe du projet.
++    reason = "english_we_without_project_anchor" if _WE_ONLY_RE.search(body) else "no_reliable_actor_anchor"
++    return {
++        "evidence_origin": PROV_AMBIGUOUS,
++        "actor_scope": ACTOR_UNKNOWN,
++        "provenance_reason": reason,
++        "provenance_confidence": 0.35,
++    }
++
++
++def is_external_literature(source: Dict[str, Any]) -> bool:
++    return classify_evidence_provenance(source)["evidence_origin"] == PROV_EXTERNAL_LITERATURE
++
++
++def is_project_anchor(source: Dict[str, Any]) -> bool:
++    return classify_evidence_provenance(source)["evidence_origin"] in {
++        PROV_PROJECT_DIRECT,
++        PROV_AMBIGUOUS,
++    }
++
++
++def provenance_allows_section(source: Dict[str, Any], section_key: str) -> bool:
++    """Autorisation d'usage, jamais logique de détection de verrou."""
++    report = classify_evidence_provenance(source)
++    origin = report["evidence_origin"]
++    key = str(section_key or "")
++
++    if key in _PROJECT_NARRATIVE_SECTIONS and origin == PROV_EXTERNAL_LITERATURE:
++        return False
++    if origin == PROV_HISTORICAL and key not in _HISTORICAL_ALLOWED_SECTIONS:
++        return False
++    return True

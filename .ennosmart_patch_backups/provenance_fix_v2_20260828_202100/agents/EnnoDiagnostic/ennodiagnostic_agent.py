@@ -27,6 +27,24 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+try:
+    from .evidence_provenance import (
+        PROV_EXTERNAL_LITERATURE,
+        PROV_HISTORICAL,
+        classify_evidence_provenance,
+        is_project_anchor,
+        provenance_allows_section,
+    )
+except Exception:
+    from evidence_provenance import (  # type: ignore
+        PROV_EXTERNAL_LITERATURE,
+        PROV_HISTORICAL,
+        classify_evidence_provenance,
+        is_project_anchor,
+        provenance_allows_section,
+    )
+
+
 
 # =========================================================
 # Constantes vocabulaire métier
@@ -535,6 +553,29 @@ _RESULT_OBSERVATION_PATTERN = re.compile(
     re.I,
 )
 
+# Une cible, une ligne de feuille de route ou une question de préparation CIR
+# n'est pas un résultat observé, même si elle contient le mot « précision » et
+# une valeur. Cette distinction doit précéder le classement des métriques.
+_TARGET_OR_KPI_PATTERN = re.compile(
+    r"\b(?:target|objective|goal|threshold|expected|projection|roadmap|planned|to be reviewed|"
+    r"cible|objectif|seuil|attendu|projection|feuille de route|planification|travaux pr[eé]vus|"
+    r"[aà] revoir|doit (?:atteindre|garantir|[eê]tre)|fix[eé] [aà]|kpi)\b",
+    re.I,
+)
+
+_NON_RESULT_PROMPT_PATTERN = re.compile(
+    r"\b(?:d[eé]crire les?|peut-on consid[eé]rer|quelle est l['’]incertitude|"
+    r"sans mentionner les r[eé]sultats|ce verrou permet de traiter la probl[eé]matique)\b",
+    re.I,
+)
+
+_STRONG_OBSERVED_OUTCOME_PATTERN = re.compile(
+    r"\b(?:we (?:found|measured|observed|achieved|obtained)|nous avons (?:mesur[eé]|observ[eé]|obtenu|constat[eé])|"
+    r"was measured|were measured|a [eé]t[eé] mesur[eé]|ont [eé]t[eé] mesur[eé]s?|"
+    r"achieved|obtained|found|observed|constat[eé]|mesur[eé]|d[eé]montr[eé])\b",
+    re.I,
+)
+
 _QUANTITATIVE_PATTERN = re.compile(
     r"(?<![A-Za-z0-9])[-+]?\d+(?:[.,]\d+)?\s*(?:%|ms|s|m|cm|mm|km|"
     r"db|hz|khz|mhz|ghz|bar|pa|kpa|mpa|w|kw|mw|v|a|kg|g|°c)?(?![A-Za-z0-9])",
@@ -921,7 +962,12 @@ def _result_scope(passage: Dict[str, Any], fragment: Optional[str] = None) -> st
     per_item = bool(_PER_ITEM_RESULT_PATTERN.search(joined))
     headroom = bool(_HEADROOM_OR_BOUND_PATTERN.search(joined))
     observed = bool(_RESULT_OBSERVATION_PATTERN.search(joined))
-    if pairwise and has_values and not per_item:
+    strong_observed = bool(_STRONG_OBSERVED_OUTCOME_PATTERN.search(joined))
+    if _NON_RESULT_PROMPT_PATTERN.search(joined) and not strong_observed:
+        return "planning_or_question"
+    if _TARGET_OR_KPI_PATTERN.search(joined) and not strong_observed:
+        return "target_metric" if has_values else "target_context"
+    if pairwise and has_values and observed and not per_item:
         return "global_comparison"
     if observed_gain and has_values and not per_item:
         return "observed_gain"
@@ -1005,6 +1051,7 @@ def _nlp_passage_proof(passage: Any) -> Dict[str, Any]:
             or metadata.get("highlight_coordinates") or metadata.get("coordinates")
             or metadata.get("bbox") or metadata.get("bounding_box")
         )
+    provenance = classify_evidence_provenance(item)
     return {
         "evidence_id": passage_id,
         "passage_id": passage_id,
@@ -1015,6 +1062,10 @@ def _nlp_passage_proof(passage: Any) -> Dict[str, Any]:
         "document": document,
         "document_name": document,
         "source_path": raw_path,
+        "evidence_origin": provenance.get("evidence_origin"),
+        "actor_scope": provenance.get("actor_scope"),
+        "provenance_reason": provenance.get("provenance_reason"),
+        "provenance_confidence": provenance.get("provenance_confidence"),
         "page_number": item.get("page_number") or item.get("page") or metadata.get("page_number") or metadata.get("page"),
         "section_title": clean_text(item.get("section_title") or metadata.get("section_title")),
         "section_path": clean_text(item.get("section_path") or metadata.get("section_path")),
@@ -1249,6 +1300,9 @@ def _best_source_fragment(passage: Dict[str, Any], purpose: str) -> Tuple[str, s
                     "qualitative_observation": 22.0,
                     "per_item_metric": -18.0,
                     "headroom_context": -65.0,
+                    "target_metric": -120.0,
+                    "target_context": -125.0,
+                    "planning_or_question": -150.0,
                     "result_context": -40.0,
                 }.get(scope, 0.0)
             elif purpose == "hypothesis":
@@ -1291,6 +1345,19 @@ def _purpose_score(
     if not joined:
         return -1000.0
     reference_like = _is_reference_like_passage(passage)
+    # ENNOSMART_PROVENANCE_PATCH_V1: ce garde est en aval du regroupement des verrous.
+    # L'état de l'art reste autorisé pour uncertainty/novelty, mais ne peut plus
+    # devenir une hypothèse, expérience, résultat ou preuve de démarche du projet.
+    provenance = classify_evidence_provenance(passage)
+    project_fact_purposes = {
+        "hypothesis", "experiment", "result", "learning",
+        "creativity", "systematicity", "transferability",
+    }
+    if (
+        purpose in project_fact_purposes
+        and provenance.get("evidence_origin") in {PROV_EXTERNAL_LITERATURE, PROV_HISTORICAL}
+    ):
+        return -1000.0
 
     role = _diag_norm(
         passage.get("role")
@@ -1382,6 +1449,9 @@ def _purpose_score(
             "qualitative_observation": 25.0,
             "per_item_metric": -35.0,
             "headroom_context": -115.0,
+            "target_metric": -180.0,
+            "target_context": -190.0,
+            "planning_or_question": -220.0,
             "result_context": -80.0,
         }.get(scope, 0.0)
         outcome_signal = bool(
@@ -4030,6 +4100,55 @@ class EnnoDiagnosticAgent:
             "Cette comparaison sert seulement à qualifier continuité, nouveauté ou évolution.",
             "Elle ne prouve aucun fait du projet courant et ne doit pas créer de verrou supplémentaire.",
         ]
+        strict_rows = cir_memory_report.get("strict_axis_continuity") or []
+        if isinstance(strict_rows, list) and strict_rows:
+            lines.append("Statuts officiels issus du réconciliateur strict :")
+            for index, item in enumerate(strict_rows[:max_items], start=1):
+                if not isinstance(item, dict):
+                    continue
+                title = clean_text(item.get("title")) or f"Axe {index}"
+                status = clean_text(item.get("status")) or "uncertain"
+                families = item.get("historical_family_titles") or []
+                family_text = "; ".join(clean_text(value) for value in families if clean_text(value))
+                lines.append(
+                    f"Axe {index} — {title} | statut strict : {status}"
+                    + (f" | famille(s) N-1 : {family_text}" if family_text else "")
+                    + "."
+                )
+                methods = item.get("historical_method_context") or []
+                if methods and isinstance(methods[0], dict) and clean_text(methods[0].get("text")):
+                    lines.append(
+                        "Démarche N-1 à confronter aux preuves courantes (contexte, pas preuve N) : "
+                        + clean_text(methods[0].get("text"))
+                    )
+            lines.append(
+                "Les rapprochements de passages ci-dessous sont secondaires et servent uniquement à l'audit."
+            )
+        family_coverage = cir_memory_report.get("historical_family_coverage") or []
+        if isinstance(family_coverage, list) and family_coverage:
+            labels = {
+                "matched_current_candidate": "retrouvée dans les preuves courantes",
+                "recovered_with_current_year_evidence": "récupérée avec preuves courantes — à valider",
+                "not_found_in_current_year_evidence": "non retrouvée dans les preuves courantes — à vérifier",
+                "similarity_detected_but_continuity_not_validated": "rapprochement détecté mais continuité non validée",
+            }
+            lines.append("Contrôle d'exhaustivité des familles de verrous du CIR N-1 :")
+            for row in family_coverage[:max_items]:
+                if not isinstance(row, dict):
+                    continue
+                title = clean_text(row.get("previous_family_title")) or clean_text(row.get("previous_family_id"))
+                status = labels.get(
+                    clean_text(row.get("coverage_status")),
+                    clean_text(row.get("coverage_status")) or "à vérifier",
+                )
+                current_ids = ", ".join(
+                    clean_text(value) for value in (row.get("current_ids") or []) if clean_text(value)
+                )
+                lines.append(
+                    f"- Famille N-1 : {truncate(title, 260)} | {status}"
+                    + (f" | candidat(s) N : {current_ids}" if current_ids else "")
+                    + "."
+                )
         for index, item in enumerate(comparisons[:max_items], start=1):
             if not isinstance(item, dict):
                 continue
@@ -5459,6 +5578,24 @@ Contraintes :
                 lines.append(f"Incertitude à qualifier : {uncertainty}")
             if documents:
                 lines.append(f"Documents courants associés : {documents}")
+            history = item.get("historical_continuity") if isinstance(item.get("historical_continuity"), dict) else {}
+            if history:
+                history_status = clean_text(history.get("status"))
+                previous_year = clean_text(history.get("previous_year"))
+                family_title = clean_text(history.get("historical_family_title"))
+                if history_status:
+                    lines.append(
+                        "Continuité historique : "
+                        + history_status
+                        + (f" | {previous_year}" if previous_year else "")
+                        + (f" | famille N-1 : {family_title}" if family_title else "")
+                        + "."
+                    )
+            subproblems = item.get("subproblems_current") if isinstance(item.get("subproblems_current"), list) else []
+            if len(subproblems) > 1:
+                lines.append("Sous-problèmes courants regroupés : " + "; ".join(clean_text(value) for value in subproblems if clean_text(value)) + ".")
+            if item.get("historical_gap_recovered"):
+                lines.append("Origine : candidat récupéré par contrôle N-1 puis confirmé uniquement par des preuves de l'année courante ; à valider.")
             lines.append(f"Statut : {status} — validation consultant nécessaire.")
         return "\n\n".join(lines)
 
@@ -5515,8 +5652,9 @@ Contraintes :
         }
         if current_project_only:
             # Ne charge pas de texte d'autres projets dans la génération du diagnostic courant.
-            # Les comparaisons historiques éventuelles restent des vues séparées et ne servent
-            # jamais à produire Objectif / Synthèse / Verrous / Démarche / Résultats / Paramètres.
+            # La continuité du même projet est chargée plus tard par le réconciliateur :
+            # elle peut compléter Verrous / Démarche / Résultats / Paramètres avec une
+            # étiquette N-1 explicite, sans devenir une preuve factuelle de l'année N.
             style_memory_report = {
                 "ok": False, "available": False, "disabled_for_current_project_only": True,
                 "principle": "current_project_only",
@@ -5546,6 +5684,8 @@ Contraintes :
         core_result: Dict[str, Any] = {}
         static_diagnostic: Dict[str, Any] = {}
         presenter_error: Optional[str] = None
+        presenter_generate_core = None
+        presenter_build_final = None
         try:
             try:
                 from agents.EnnoDiagnostic.diagnostic_static_presenter import (
@@ -5557,15 +5697,8 @@ Contraintes :
                     build_final_static_diagnostic,
                     generate_structured_diagnostic_core,
                 )
-
-            core_result = generate_structured_diagnostic_core(
-                llm=self.llm,
-                sections=sections,
-                frascati_summary=frascati_summary,
-                style_memory_report=None if current_project_only else style_memory_report,
-                ai_detection_report=ai_detection_report,
-                memory_v2_report=None if current_project_only else memory_v2_report,
-            )
+            presenter_generate_core = generate_structured_diagnostic_core
+            presenter_build_final = build_final_static_diagnostic
         except Exception as exc:
             presenter_error = str(exc)
             print(f"[EnnoDiagnostic][V182_PRESENTER][WARN] {exc}")
@@ -5580,9 +5713,187 @@ Contraintes :
             llm_reformulated_verrous,
             frascati_summary,
         )
+
+        # V200 - PASS 2 LONGITUDINAL.
+        # IMPORTANT: la première détection ci-dessus reste 100% année N.
+        # Le CIR N-1 intervient seulement maintenant pour réconcilier la continuité,
+        # regrouper les sous-problèmes d'une même famille historique et lancer un
+        # gap probe ciblé dans les PREUVES COURANTES si un verrou N-1 semble absent.
+        pre_reconciliation_verrous_count = len(llm_reformulated_verrous)
+        try:
+            try:
+                from agents.EnnoDiagnostic.historical_continuity_reconciler import (
+                    VERSION as historical_continuity_reconciler_v300,
+                    reconcile_historical_continuity,
+                )
+            except Exception:
+                from historical_continuity_reconciler import (
+                    VERSION as historical_continuity_reconciler_v300,
+                    reconcile_historical_continuity,
+                )
+
+            historical_continuity_report = reconcile_historical_continuity(
+                organisme=self.organisme,
+                project=self.project,
+                subproject=self.subproject,
+                year=self.year,
+                current_verrous=llm_reformulated_verrous,
+                current_sections=sections,
+                search_current=self.search_chroma,
+                llm=self.llm,
+                output_dir=self.diagnostic_dir,
+            )
+            reconciled_verrous = historical_continuity_report.get("reconciled_verrous")
+            if isinstance(reconciled_verrous, list):
+                llm_reformulated_verrous = [
+                    item for item in reconciled_verrous if isinstance(item, dict)
+                ]
+            # Re-attache les scores Frascati officiels aux groupes conservés / fusionnés.
+            # Aucun score n'est recalculé par la réconciliation historique.
+            llm_reformulated_verrous = self._enrich_verrous_with_frascati(
+                llm_reformulated_verrous,
+                frascati_summary,
+            )
+        except Exception as exc:
+            historical_continuity_report = {
+                "ok": False,
+                "version": "historical_continuity_reconciler_v301_n1_coverage",
+                "error": str(exc),
+                "has_previous_cir": False,
+                "current_before_count": pre_reconciliation_verrous_count,
+                "reconciled_count": len(llm_reformulated_verrous),
+                "reconciled_verrous": llm_reformulated_verrous,
+                "policy": "fail-open: keep independent current-year diagnostic unchanged",
+            }
+            print(f"[EnnoDiagnostic][V300_HISTORICAL_RECONCILIATION][WARN] {exc}", flush=True)
+
+        # La liste réconciliée est la sortie officielle à persister. Le rapport du
+        # synthétiseur conserve la liste atomique initiale pour l'audit, mais ne
+        # doit plus pouvoir reprendre la priorité sur la sortie finale (sinon la
+        # base et l'UI réaffichent les candidats antérieurs à la passe N-1).
+        synthesis_report = getattr(self, "_last_verrou_synthesis_report", {})
+        synthesis_report = dict(synthesis_report) if isinstance(synthesis_report, dict) else {}
+        synthesis_report.setdefault(
+            "pre_historical_reconciliation_verrous",
+            list(synthesis_report.get("llm_reformulated_verrous") or []),
+        )
+        synthesis_report["llm_reformulated_verrous"] = llm_reformulated_verrous
+        synthesis_report["final_items"] = llm_reformulated_verrous
+        synthesis_report["final_count"] = len(llm_reformulated_verrous)
+        synthesis_report["historical_reconciliation_applied"] = bool(
+            historical_continuity_report.get("ok")
+        )
+        self._last_verrou_synthesis_report = synthesis_report
+
+        # Vue consultant : les groupes NLP/réconciliés restent la granularité
+        # atomique d'audit, puis une couche parent regroupe uniquement les
+        # sous-problèmes d'un même mécanisme scientifique. Aucun quota d'axes.
+        atomic_reconciled_verrous = list(llm_reformulated_verrous)
+        try:
+            try:
+                from agents.EnnoDiagnostic.scientific_axis_synthesizer import (
+                    synthesize_scientific_axes,
+                )
+            except Exception:
+                from scientific_axis_synthesizer import synthesize_scientific_axes
+
+            scientific_axis_report = synthesize_scientific_axes(
+                current_verrous=atomic_reconciled_verrous,
+                historical_continuity_report=historical_continuity_report,
+                current_sections=sections,
+                current_year=self.year,
+                llm=self.llm,
+                output_dir=self.diagnostic_dir,
+            )
+            consolidated_axes = scientific_axis_report.get("scientific_axes")
+            if scientific_axis_report.get("ok") and isinstance(consolidated_axes, list):
+                llm_reformulated_verrous = [
+                    item for item in consolidated_axes if isinstance(item, dict)
+                ]
+        except Exception as exc:
+            scientific_axis_report = {
+                "ok": False,
+                "version": "scientific_axis_synthesizer_v2_explicit_lock_coverage",
+                "error": str(exc),
+                "policy": "fail-open: keep historically reconciled atomic candidates",
+                "atomic_verrous": atomic_reconciled_verrous,
+                "scientific_axes": [],
+            }
+            print(f"[EnnoDiagnostic][SCIENTIFIC_AXIS][WARN] {exc}", flush=True)
+
+        # Les trois sections techniques sont générées seulement après la passe
+        # longitudinale. Elles peuvent ainsi intégrer, avec une étiquette N-1
+        # explicite, les démarches, paramètres et résultats d'une continuité
+        # validée. Les autres faits restent strictement ceux de l'année N.
+        if presenter_generate_core is not None:
+            try:
+                core_result = presenter_generate_core(
+                    llm=self.llm,
+                    sections=sections,
+                    frascati_summary=frascati_summary,
+                    style_memory_report=None if current_project_only else style_memory_report,
+                    ai_detection_report=ai_detection_report,
+                    memory_v2_report=None if current_project_only else memory_v2_report,
+                    historical_axes=llm_reformulated_verrous,
+                )
+            except Exception as exc:
+                presenter_error = str(exc)
+                print(f"[EnnoDiagnostic][V193_PRESENTER][WARN] {exc}")
+
+        synthesis_report = dict(getattr(self, "_last_verrou_synthesis_report", {}) or {})
+        synthesis_report["atomic_reconciled_verrous"] = atomic_reconciled_verrous
+        synthesis_report["scientific_axis_report"] = scientific_axis_report
+        synthesis_report["llm_reformulated_verrous"] = llm_reformulated_verrous
+        synthesis_report["final_items"] = llm_reformulated_verrous
+        synthesis_report["final_count"] = len(llm_reformulated_verrous)
+        synthesis_report["scientific_axis_consolidation_applied"] = bool(
+            scientific_axis_report.get("ok")
+        )
+        self._last_verrou_synthesis_report = synthesis_report
+
         cir_memory_report = self.load_cir_memory_report(
             current_verrous=llm_reformulated_verrous,
         )
+        # Les statuts du réconciliateur strict, agrégés au niveau des axes,
+        # priment sur les similarités larges du comparateur CIR classique.
+        strict_axis_continuity = []
+        for axis in llm_reformulated_verrous:
+            if not isinstance(axis, dict):
+                continue
+            continuity = axis.get("historical_continuity")
+            continuity = continuity if isinstance(continuity, dict) else {}
+            strict_axis_continuity.append({
+                "axis_id": axis.get("axis_id") or axis.get("group_id"),
+                "title": axis.get("title"),
+                "status": continuity.get("status") or "uncertain",
+                "component_statuses": continuity.get("component_statuses") or [],
+                "historical_family_titles": continuity.get("historical_family_titles") or [],
+                "historical_lock_context": continuity.get("historical_lock_context") or [],
+                "historical_method_context": continuity.get("historical_method_context") or [],
+                "historical_parameter_context": continuity.get("historical_parameter_context") or [],
+                "historical_result_context": continuity.get("historical_result_context") or [],
+                "integrated_with_current_lock_card": bool(
+                    continuity.get("integrated_with_current_lock_card")
+                ),
+                "history_is_current_proof": False,
+            })
+        strict_counts: Dict[str, int] = {}
+        for row in strict_axis_continuity:
+            status = clean_text(row.get("status")) or "uncertain"
+            strict_counts[status] = strict_counts.get(status, 0) + 1
+        if isinstance(cir_memory_report, dict):
+            cir_memory_report["authoritative_continuity_source"] = (
+                "historical_continuity_reconciler_v301_then_axis_aggregation"
+            )
+            cir_memory_report["strict_axis_continuity"] = strict_axis_continuity
+            cir_memory_report["strict_axis_continuity_counts"] = strict_counts
+            cir_memory_report["historical_family_coverage"] = (
+                historical_continuity_report.get("historical_family_coverage") or []
+            )
+            cir_memory_report["historical_family_coverage_counts"] = (
+                historical_continuity_report.get("historical_family_coverage_counts") or {}
+            )
+            cir_memory_report["broad_similarity_comparisons_are_audit_only"] = True
         self._last_cir_memory_report = cir_memory_report
         memory_v2_usage_report = self.build_memory_v2_usage_report(
             memory_v2_report=memory_v2_report,
@@ -5594,7 +5905,7 @@ Contraintes :
         prompt = clean_text(core_result.get("prompt"))
         if core_result:
             try:
-                static_diagnostic = build_final_static_diagnostic(
+                static_diagnostic = presenter_build_final(
                     core_result=core_result,
                     sections=sections,
                     frascati_summary=frascati_summary,
@@ -5602,6 +5913,8 @@ Contraintes :
                     memory_v2_usage_report=memory_v2_usage_report,
                     llm_reformulated_verrous=llm_reformulated_verrous,
                 )
+                static_diagnostic["historical_continuity_report"] = historical_continuity_report
+                static_diagnostic["scientific_axis_report"] = scientific_axis_report
                 values = static_diagnostic.get("sections_by_key") or {}
                 n1_body = self._cir_previous_comparison_block(
                     cir_memory_report,
@@ -5692,7 +6005,7 @@ Contraintes :
         report: Dict[str, Any] = {
             "ok": True,
             "status": "completed",
-            "version": "ennodiagnostic_v190_traceable_unified_eligibility_analysis",
+            "version": "ennodiagnostic_v321_consultant_sections_without_raw_fallback",
             "mode": core_result.get("status") or "fast_prompt_fallback",
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "organisme": self.organisme,
@@ -5716,6 +6029,8 @@ Contraintes :
             "memory_v2_report": memory_v2_report,
             "memory_v2_usage_report": memory_v2_usage_report,
             "previous_verrou_context_report": previous_verrou_context,
+            "historical_continuity_report": historical_continuity_report,
+            "scientific_axis_report": scientific_axis_report,
             "cir_memory_report": cir_memory_report,
             "chroma_sections": sections,
             "context_engineering": core_result,
@@ -5724,6 +6039,12 @@ Contraintes :
                 "style_memory_available": bool(style_memory_report.get("ok")),
                 "memory_v2_available": bool(memory_v2_report.get("ok")),
                 "previous_verrou_context_available": bool(previous_verrou_context.get("available")),
+                "historical_continuity_available": bool(historical_continuity_report.get("has_previous_cir")),
+                "historical_gap_recovery_count": int(historical_continuity_report.get("recovered_gap_candidates_count") or 0),
+                "scientific_axis_consolidation_available": bool(scientific_axis_report.get("ok")),
+                "explicit_lock_inventory_available": bool(
+                    (scientific_axis_report.get("explicit_lock_inventory") or {}).get("entries_count")
+                ),
                 "previous_cir_available": bool(cir_memory_report.get("has_previous_cir")),
             },
             "telemetry": {
@@ -5731,13 +6052,31 @@ Contraintes :
                 "presenter_error": presenter_error,
                 "prompt_chars": len(prompt),
                 "main_verrous_count": len(llm_reformulated_verrous),
+                "main_verrous_before_historical_reconciliation": pre_reconciliation_verrous_count,
+                "atomic_verrous_after_historical_reconciliation": len(atomic_reconciled_verrous),
+                "scientific_axis_count": int(scientific_axis_report.get("axis_count") or 0),
+                "scientific_axis_contextual_count": int(scientific_axis_report.get("contextual_count") or 0),
+                "explicit_lock_inventory_entries": int(
+                    (scientific_axis_report.get("explicit_lock_inventory") or {}).get("entries_count") or 0
+                ),
+                "explicit_lock_inventory_families": int(
+                    (scientific_axis_report.get("explicit_lock_inventory") or {}).get("families_count") or 0
+                ),
+                "explicit_lock_families_recovered": int(
+                    (scientific_axis_report.get("explicit_lock_family_coverage_counts") or {}).get(
+                        "recovered_as_declared_axis"
+                    ) or 0
+                ),
+                "historical_reconciliation_merged_groups": int(historical_continuity_report.get("merged_groups_count") or 0),
+                "historical_reconciliation_gap_recovered": int(historical_continuity_report.get("recovered_gap_candidates_count") or 0),
+                "historical_reconciliation_history_is_current_proof": False,
                 "previous_verrou_examples_count": int(previous_verrou_context.get("examples_count") or 0),
                 "previous_verrou_context_in_prompt": bool(previous_verrou_context.get("available")),
                 "previous_verrou_context_factual_use_allowed": False,
                 "demarche_llm_review_recommended": bool(
                     (frascati_summary.get("demarche_legibility") or {}).get("llm_review_recommended")
                 ),
-                "demarche_llm_review_policy": "reuse_existing_demarche_section_call_no_extra_call",
+                "demarche_llm_review_policy": "atomic_llm_explanation_after_historical_continuity_without_raw_fallback",
             },
             "output_path": str(self.report_path),
         }
@@ -5752,7 +6091,7 @@ Contraintes :
                 "items": llm_reformulated_verrous,
             })
         print(
-            f"✅ EnnoDiagnostic V191 terminé | sections={len(diagnostic_sections_by_key)} "
+            f"✅ EnnoDiagnostic V300 terminé | sections={len(diagnostic_sections_by_key)} "
             f"| verrous={len(llm_reformulated_verrous)} | N-1={bool(cir_memory_report.get('has_previous_cir'))} "
             f"| temps={elapsed}s",
             flush=True,

@@ -1,0 +1,18 @@
+EnnoDiagnostic provenance fix v1
+Target branch: codex/ovh-deployment-v2
+
+UNCHANGED BY DESIGN
+- lock candidate extraction
+- lock grouping / lock_group_id creation
+- verrou_reformulation
+- scientific_axis_consolidation
+- section_context_config.py
+- any fixed expected number of verrous
+
+CHANGED
+1) Downstream evidence provenance annotation.
+2) Downstream evidence ranking gate: external literature cannot prove project-performed hypothesis/experiment/result/learning/systematicity/transferability/creativity.
+   uncertainty + novelty stay available to state-of-art/verrou analysis.
+3) Presenter source filtering and hard provenance grounding guard.
+4) PydanticAI provenance validation.
+5) Frascati percentage semantics guard.

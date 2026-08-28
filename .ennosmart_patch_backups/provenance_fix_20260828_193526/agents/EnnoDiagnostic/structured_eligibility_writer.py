@@ -27,23 +27,6 @@ from pydantic import BaseModel, Field, field_validator
 from pydantic_ai import Agent, ModelRetry, ModelSettings, RunContext, ToolOutput
 
 try:
-    from .evidence_provenance import (
-        PROV_EXTERNAL_LITERATURE,
-        classify_evidence_execution,
-        classify_evidence_provenance,
-        execution_allows_claim,
-        is_project_anchor,
-    )
-except Exception:
-    from evidence_provenance import (  # type: ignore
-        PROV_EXTERNAL_LITERATURE,
-        classify_evidence_execution,
-        classify_evidence_provenance,
-        execution_allows_claim,
-        is_project_anchor,
-    )
-
-try:
     from dotenv import load_dotenv
 
     load_dotenv()
@@ -184,13 +167,6 @@ _FULL_ELIGIBILITY_RE = re.compile(
     r"\b(?:pleine? [eé]ligibilit[eé]|assurer (?:une|la) [eé]ligibilit[eé]|garantir (?:une|la) [eé]ligibilit[eé])\b",
     re.I,
 )
-_SCORE_MISINTERPRETATION_RE = re.compile(
-    r"\b(?:part acquise|acquis(?:e|es)? solide|taux d eligibilite|chance d acceptation|"
-    r"probabilite d acceptation|pourcentage du projet|elements techniques (?:sont )?defendables|"
-    r"travaux (?:sont )?eligibles?|documentes? et valides?|criteres?.{0,90}valides?|"
-    r"garantir (?:la )?(?:robustesse|generalisation|eligibilite))\b",
-    re.I,
-)
 
 _CLAIM_ALLOWED_PROOF_KINDS: Dict[str, Set[str]] = {
     "verrou": {"uncertainty"},
@@ -292,10 +268,6 @@ Règles :
 16. Ne transforme pas une marge théorique avant 100 % en résultat expérimental. Les preuves `headroom_context` servent seulement de contexte secondaire.
 17. La valeur Frascati est un indice de défendabilité/couverture documentaire, jamais un pourcentage de chance d'acceptation ni une garantie d'éligibilité administrative.
 18. `result_facts` est facultatif. Si tu le renseignes, chaque fait quantitatif doit être observé et directement sourcé. Le claim `resultats` ne doit jamais introduire un chiffre absent de ses preuves citées.
-19. ENNODIAG_PYDANTIC_PROVENANCE_V2 : pour tout fait attribué au projet courant (contexte technique, hypothèse, méthode, étape expérimentale, résultat, apprentissage), utilise uniquement des preuves `evidence_origin=project_direct`.
-20. `ambiguous_current_dossier` signifie que l'acteur n'est pas prouvé : cette preuve est interdite pour affirmer un fait du projet, même si elle provient d'un fichier du dossier courant.
-21. La littérature externe peut contextualiser un verrou seulement si au moins une preuve `project_direct` rattache ce verrou au projet.
-22. Un pourcentage Frascati est uniquement un indice de couverture/défendabilité documentaire de l'opération de référence. N'écris jamais « X % du projet », « X % des critères sont validés », « part acquise », taux/chance/probabilité d'acceptation ou garantie de robustesse/généralisation.
 """.strip()
 
 eligibility_agent: Agent[EligibilityDeps, EligibilityNarrative] = Agent(
@@ -354,61 +326,6 @@ async def validate_eligibility_output(
 
         cited = [ctx.deps.evidence_by_id[eid] for eid in claim.evidence_ids]
         documentary_ids = [eid for eid in claim.evidence_ids if eid != ctx.deps.score_evidence_id]
-        provenance_reports = [classify_evidence_provenance(item) for item in cited]
-        documentary_pairs = [
-            (item, report)
-            for item, report in zip(cited, provenance_reports)
-            if str(item.get("evidence_id") or "") != ctx.deps.score_evidence_id
-        ]
-        project_direct_ids = [
-            str(item.get("evidence_id"))
-            for item, report in documentary_pairs
-            if report.get("evidence_origin") == "project_direct"
-        ]
-        non_project_ids = [
-            str(item.get("evidence_id"))
-            for item, report in documentary_pairs
-            if report.get("evidence_origin") != "project_direct"
-        ]
-
-        # V2 : « présent dans le dossier » ne signifie pas « réalisé par le projet ».
-        project_execution_kinds = TECHNICAL_CLAIM_KINDS - {"verrou"}
-        if claim.claim_kind in project_execution_kinds:
-            if non_project_ids:
-                errors.append(
-                    f"{claim.claim_kind}: preuve non project_direct utilisée comme fait du projet : "
-                    + ", ".join(non_project_ids)
-                )
-            if not project_direct_ids:
-                errors.append(
-                    f"{claim.claim_kind}: au moins une preuve project_direct est obligatoire."
-                )
-            incompatible_execution = [
-                str(item.get("evidence_id"))
-                for item, report in documentary_pairs
-                if report.get("evidence_origin") == "project_direct"
-                and not execution_allows_claim(item, claim.claim_kind)
-            ]
-            if incompatible_execution:
-                errors.append(
-                    f"{claim.claim_kind}: statut d'exécution incompatible avec le fait affirmé : "
-                    + ", ".join(incompatible_execution)
-                )
-
-        if claim.claim_kind == "verrou":
-            documentary = [item for item, _report in documentary_pairs]
-            if documentary and not any(is_project_anchor(item) for item in documentary):
-                errors.append("verrou: aucune preuve project_direct ne rattache ce verrou au projet.")
-            ambiguous_ids = [
-                str(item.get("evidence_id"))
-                for item, report in documentary_pairs
-                if report.get("evidence_origin") == "ambiguous_current_dossier"
-            ]
-            if ambiguous_ids:
-                errors.append(
-                    "verrou: une preuve ambiguë ne peut pas servir d'ancrage projet : "
-                    + ", ".join(ambiguous_ids)
-                )
 
         if claim.claim_kind in TECHNICAL_CLAIM_KINDS and not documentary_ids:
             errors.append(f"{claim.claim_kind}: une preuve documentaire du projet courant est obligatoire.")
@@ -436,13 +353,6 @@ async def validate_eligibility_output(
 
         if _FULL_ELIGIBILITY_RE.search(claim.text):
             errors.append(f"{claim.claim_kind}: ne jamais garantir une pleine éligibilité CIR.")
-        if (
-            _SCORE_MISINTERPRETATION_RE.search(_norm_text(claim.text))
-            and (claim.claim_kind in FRASCATI_CLAIM_KINDS or "%" in claim.text)
-        ):
-            errors.append(
-                f"{claim.claim_kind}: sémantique Frascati invalide ; parler uniquement d'indice/couverture documentaire, jamais de part acquise, critères validés ou garantie."
-            )
         if _INTERNAL_TOKEN_RE.search(claim.text):
             errors.append(f"{claim.claim_kind}: code interne présent dans le texte visible.")
 
@@ -454,17 +364,6 @@ async def validate_eligibility_output(
             errors.append(f"result_facts: preuve invalide pour {fact.subject}.")
             continue
         evidence = ctx.deps.evidence_by_id[fact.evidence_id]
-        fact_provenance = classify_evidence_provenance(evidence)
-        if fact_provenance.get("evidence_origin") != "project_direct":
-            errors.append(
-                f"result_facts: preuve non project_direct utilisée pour {fact.subject}."
-            )
-            continue
-        if not execution_allows_claim(evidence, "result_facts"):
-            errors.append(
-                f"result_facts: {fact.evidence_id} n'est pas un résultat observé ou mesuré."
-            )
-            continue
         if bool(evidence.get("reference_like")):
             errors.append(f"result_facts: référence bibliographique utilisée pour {fact.subject}.")
             continue
@@ -494,8 +393,6 @@ def _compact_evidence_for_prompt(evidence: List[Dict[str, Any]]) -> List[Dict[st
         evidence_id = str(item.get("evidence_id") or "").strip()
         if not evidence_id:
             continue
-        provenance = classify_evidence_provenance(item)
-        execution = classify_evidence_execution(item)
         compact.append(
             {
                 "evidence_id": evidence_id,
@@ -508,13 +405,6 @@ def _compact_evidence_for_prompt(evidence: List[Dict[str, Any]]) -> List[Dict[st
                 "result_scope": item.get("result_scope") or None,
                 "primary_result_evidence": bool(item.get("primary_result_evidence")),
                 "reference_like": bool(item.get("reference_like")),
-                "evidence_origin": provenance.get("evidence_origin"),
-                "actor_scope": provenance.get("actor_scope"),
-                "provenance_reason": provenance.get("provenance_reason"),
-                "provenance_confidence": provenance.get("provenance_confidence"),
-                "execution_status": execution.get("execution_status"),
-                "execution_reason": execution.get("execution_reason"),
-                "execution_confidence": execution.get("execution_confidence"),
                 "hypothesis_explicit": item.get("hypothesis_explicit"),
                 "hypothesis_anchor": item.get("hypothesis_anchor"),
                 "quantitative_values": item.get("quantitative_values") or [],
@@ -552,8 +442,7 @@ def _prompt_from_evidence(
         "Choisis les preuves les plus pertinentes pour chaque claim ; ne te sens pas obligé d'utiliser toutes les preuves. "
         "Une référence bibliographique, une table des matières, une affiliation ou une citation d'un travail tiers ne doit "
         "pas servir de preuve d'une expérimentation menée par le projet. Si une preuve est ambiguë, préfère une autre preuve "
-        "plus directe ou indique que le maillon reste à consolider. Respecte aussi `execution_status` : planned/proposed n'est "
-        "jamais une action réalisée, et seuls observed/measured prouvent un résultat. Pour `result_facts`, extrais seulement les faits quantitatifs "
+        "plus directe ou indique que le maillon reste à consolider. Pour `result_facts`, extrais seulement les faits quantitatifs "
         "observés depuis les preuves de résultat principales ; ne transforme pas une métrique par classe en performance globale et "
         "ne reconstruis aucune plage, moyenne ou différence absente du passage source.\n\n"
         + json.dumps(payload, ensure_ascii=False, indent=2, default=str)

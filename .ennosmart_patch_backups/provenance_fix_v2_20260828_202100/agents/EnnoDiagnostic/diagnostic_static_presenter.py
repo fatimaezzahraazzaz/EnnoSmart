@@ -28,9 +28,7 @@ try:
     from .evidence_provenance import (
         PROV_EXTERNAL_LITERATURE,
         PROV_HISTORICAL,
-        classify_evidence_execution,
         classify_evidence_provenance,
-        execution_allows_claim,
         is_project_anchor,
         provenance_allows_section,
     )
@@ -38,9 +36,7 @@ except Exception:
     from evidence_provenance import (  # type: ignore
         PROV_EXTERNAL_LITERATURE,
         PROV_HISTORICAL,
-        classify_evidence_execution,
         classify_evidence_provenance,
-        execution_allows_claim,
         is_project_anchor,
         provenance_allows_section,
     )
@@ -862,7 +858,7 @@ def select_sources_for_section(
     seen = set()
     ranked: List[Tuple[float, Dict[str, Any]]] = []
     for source in candidates:
-        # ENNODIAG_PROVENANCE_GUARD_V2 — filtre d'usage strict project_direct, jamais filtre de verrou.
+        # ENNODIAG_PROVENANCE_GUARD_V1 — filtre d'usage uniquement.
         # Aucun candidat/verrou n'est supprimé en amont.
         if not provenance_allows_section(source, config.key):
             continue
@@ -931,7 +927,6 @@ def _safe_int(value: Any) -> Optional[int]:
 def evidence_from_source(source: Dict[str, Any], evidence_id: str, excerpt_limit: int) -> Dict[str, Any]:
     meta = meta_of(source)
     provenance = classify_evidence_provenance(source)
-    execution = classify_evidence_execution(source)
     rag_chunk_id = clean_text(
         meta.get("rag_chunk_id") or source.get("id") or meta.get("passage_id") or "",
         240,
@@ -947,9 +942,6 @@ def evidence_from_source(source: Dict[str, Any], evidence_id: str, excerpt_limit
         "actor_scope": provenance.get("actor_scope"),
         "provenance_reason": provenance.get("provenance_reason"),
         "provenance_confidence": provenance.get("provenance_confidence"),
-        "execution_status": execution.get("execution_status"),
-        "execution_reason": execution.get("execution_reason"),
-        "execution_confidence": execution.get("execution_confidence"),
         "page_number": _safe_int(meta.get("page_number") or meta.get("page")),
         "paragraph_index": _safe_int(meta.get("paragraph_index")),
         "char_start": _safe_int(meta.get("char_start") or meta.get("start_char") or meta.get("start")),
@@ -1318,8 +1310,6 @@ def _official_frascati_evidence(
             "evidence_origin": "calculated_assessment",
             "actor_scope": "backend_calculation",
             "provenance_reason": "deterministic_backend_assessment",
-            "execution_status": "unknown",
-            "execution_reason": "backend_calculation_not_project_execution",
             "page_number": None,
             "paragraph_index": None,
             "char_start": None,
@@ -1567,26 +1557,16 @@ def _official_frascati_evidence(
     document_index = 1
     for proof in source_proofs:
         provenance = classify_evidence_provenance(proof)
-        execution = classify_evidence_execution(proof)
         origin = provenance.get("evidence_origin")
         stage = clean_text(proof.get("operation_function") or proof.get("proof_kind"), 80).lower()
-        # V2 — défense en profondeur : pour les faits du projet courant,
-        # `ambiguous_current_dossier` est bloqué au même titre que la littérature.
-        # Cela n'affecte pas les cartes/verrous, seulement les preuves narratives aval.
-        if purpose in {"demarche_detectee", "resultats_metriques"} and origin != "project_direct":
-            continue
-        if purpose == "demarche_detectee" and not execution_allows_claim(proof, "experiment"):
-            continue
-        if purpose == "resultats_metriques" and not execution_allows_claim(proof, "result"):
+        # Défense en profondeur : même un cache ancien ne doit pas transformer
+        # l'état de l'art en travaux réalisés par le projet.
+        if purpose in {"demarche_detectee", "resultats_metriques"} and origin == PROV_EXTERNAL_LITERATURE:
             continue
         if (
             purpose == "justification_frascati"
-            and stage in {
-                "uncertainty", "hypothesis", "hypothesis_component", "experiment",
-                "result", "learning", "systematicity", "transferability",
-                "creativity", "novelty",
-            }
-            and origin != "project_direct"
+            and origin == PROV_EXTERNAL_LITERATURE
+            and stage in {"hypothesis", "hypothesis_component", "experiment", "result", "learning", "systematicity", "transferability", "creativity"}
         ):
             continue
         original_id = clean_text(proof.get("evidence_id"), 240)
@@ -1609,9 +1589,6 @@ def _official_frascati_evidence(
             "actor_scope": provenance.get("actor_scope"),
             "provenance_reason": provenance.get("provenance_reason"),
             "provenance_confidence": provenance.get("provenance_confidence"),
-            "execution_status": execution.get("execution_status"),
-            "execution_reason": execution.get("execution_reason"),
-            "execution_confidence": execution.get("execution_confidence"),
             "page_number": _safe_int(proof.get("page_number")),
             "paragraph_index": _safe_int(proof.get("paragraph_index")),
             "char_start": _safe_int(proof.get("char_start") or proof.get("sentence_start")),
@@ -1791,8 +1768,6 @@ def _historical_axis_evidence(
                 "evidence_origin": "historical_project",
                 "actor_scope": "project_team_previous_year",
                 "provenance_reason": "previous_cir_temporal_scope",
-                "execution_status": clean_text(row.get("execution_status")) or "unknown",
-                "execution_reason": "previous_cir_temporal_scope",
                 "page_number": _safe_int(row.get("page_number")),
                 "paragraph_index": _safe_int(row.get("paragraph_index")),
                 "char_start": _safe_int(row.get("char_start")),
@@ -1944,12 +1919,8 @@ Tu es EnnoDiagnostic. Rédige uniquement « {config.title} » en français.
 
 CONTRAT :
 - Utilise exclusivement les PREUVES numérotées du projet courant.
-- Pour une action, une démarche, un résultat, un apprentissage ou un paramètre du projet courant, la preuve doit avoir `evidence_origin=project_direct`.
-- `external_literature` reste disponible pour l'état de l'art/verrou mais ne prouve jamais un travail réalisé par le projet.
-- `ambiguous_current_dossier` peut servir uniquement à cadrer le sujet et la cible dans Synthèse/Objectif lorsqu'il provient du dossier courant. Il ne prouve jamais une action réalisée, un résultat acquis ou un paramètre effectivement utilisé.
-- `actor_scope=external_authors` ou `unknown` ne doit jamais être reformulé comme « l'équipe », « nous » ou « le projet ».
-- Respecte `execution_status` mot pour mot : `planned`/`proposed` restent des objectifs ou pistes ; seuls `implemented`/`experimented` décrivent une démarche réalisée ; seuls `observed`/`measured` décrivent un résultat acquis.
-- N'écris jamais « l'équipe a réalisé/obtenu/confirmé » depuis une preuve `planned`, `proposed` ou `unknown`.
+- `evidence_origin=external_literature` décrit un travail scientifique tiers : il peut contextualiser un verrou, mais jamais devenir un objectif, une démarche, un paramètre ou un résultat réalisé par le projet courant.
+- `actor_scope=external_authors` ne doit jamais être reformulé comme « l'équipe », « nous » ou « le projet ».
 - Les preuves F/E décrivent l'année courante. Les preuves H sont exclusivement des éléments de continuité du CIR précédent du même projet.
 - Une preuve H peut ajouter une démarche, un paramètre ou un résultat historique à la section, mais jamais prouver un fait de l'année courante.
 - Tout élément utilisant une preuve H doit être autonome, commencer par « Historique 20XX — » avec l'année fournie et ne citer aucune preuve F/E dans le même élément.
@@ -2007,8 +1978,6 @@ PREUVES :
                 "evidence_origin": ev.get("evidence_origin"),
                 "actor_scope": ev.get("actor_scope"),
                 "provenance_reason": ev.get("provenance_reason"),
-                "execution_status": ev.get("execution_status"),
-                "execution_reason": ev.get("execution_reason"),
                 "quantitative_values": ev.get("quantitative_values") or [],
                 "rattachement_operation": ev.get("justification_bridge_fr") or None,
                 "text": ev["excerpt"],
@@ -2496,12 +2465,7 @@ def _provenance_grounding_errors(
     evidence: Sequence[Dict[str, Any]],
     section_key: str,
 ) -> List[str]:
-    """V2 : une affirmation projet doit être portée par une preuve project_direct.
-
-    Les preuves externes/ambiguës ne sont pas supprimées du corpus de verrous.
-    Elles sont seulement interdites lorsqu'une section affirme que l'équipe projet
-    a visé, réalisé, mesuré, paramétré ou appris quelque chose.
-    """
+    """Bloque une mauvaise attribution d'acteur sans modifier les verrous."""
     guarded_sections = {
         "synthese_strategique",
         "objectif_global",
@@ -2523,154 +2487,38 @@ def _provenance_grounding_errors(
         "contexte", "hypothese", "methodes_outils", "etapes_experimentales",
         "resultats", "apprentissage",
     }
-    historical_allowed_sections = {
-        "demarche_detectee", "resultats_metriques", "parametres_contraintes",
-    }
 
     for index, unit in enumerate(units, start=1):
         cited = _unit_evidence(unit, evidence_by_id)
         if not cited:
-            # Le garde générique signale déjà « sans evidence_id » ; cette erreur
-            # devient hard en V2 dans generate_one_section.
             continue
-
-        documentary = [
-            item for item in cited
-            if str(item.get("evidence_id") or "") != "F0"
-        ]
-        reports = [classify_evidence_provenance(item) for item in documentary]
-        direct = [
-            item for item, report in zip(documentary, reports)
-            if report.get("evidence_origin") == "project_direct"
-        ]
-        historical = [
-            item for item, report in zip(documentary, reports)
-            if report.get("evidence_origin") == "historical_project"
-            or item.get("temporal_scope") == "previous_cir_continuity"
-        ]
-        allowed_current = [
-            item for item, report in zip(documentary, reports)
-            if report.get("evidence_origin") == "project_direct"
-            or (
-                section_key in {"synthese_strategique", "objectif_global"}
-                and provenance_allows_section(item, section_key)
-            )
-        ]
-        non_confirmed_current = [
-            item for item, report in zip(documentary, reports)
-            if item not in allowed_current
-            and report.get("evidence_origin") != "historical_project"
+        reports = [classify_evidence_provenance(item) for item in cited]
+        external = [
+            report for report in reports
+            if report.get("evidence_origin") == PROV_EXTERNAL_LITERATURE
         ]
         claim_kind = _grounding_norm(unit.get("claim_kind") or "")
 
         if section_key == "justification_frascati":
-            if claim_kind in execution_claims:
-                if non_confirmed_current:
-                    errors.append(
-                        f"affirmation {index}: preuve non confirmée projet utilisée comme fait du projet courant"
-                    )
-                if not direct:
-                    errors.append(
-                        f"affirmation {index}: fait du projet sans preuve project_direct"
-                    )
-            elif claim_kind == "verrou":
-                # La littérature peut contextualiser un verrou, mais le rattachement
-                # au projet exige au moins un ancrage direct du dossier courant.
-                if not direct:
+            if claim_kind in execution_claims and external:
+                errors.append(
+                    f"affirmation {index}: provenance externe utilisée comme fait du projet courant"
+                )
+            if claim_kind == "verrou":
+                documentary = [
+                    item for item in cited
+                    if str(item.get("evidence_id") or "") != "F0"
+                ]
+                if documentary and not any(is_project_anchor(item) for item in documentary):
                     errors.append(
                         f"affirmation {index}: verrou sans ancrage documentaire du projet courant"
                     )
-                ambiguous = [
-                    item for item, report in zip(documentary, reports)
-                    if report.get("evidence_origin") == "ambiguous_current_dossier"
-                ]
-                if ambiguous:
-                    errors.append(
-                        f"affirmation {index}: preuve ambiguë interdite pour rattacher le verrou au projet"
-                    )
             continue
 
-        # Historique N-1 : chemin dédié, contrôlé ensuite par _historical_temporal_errors.
-        if (
-            historical
-            and section_key in historical_allowed_sections
-            and len(historical) == len(documentary)
-        ):
-            continue
-
-        if non_confirmed_current:
+        if external:
             errors.append(
-                f"élément {index}: preuve non confirmée projet utilisée comme fait du projet courant"
+                f"élément {index}: provenance externe utilisée comme fait du projet courant"
             )
-        if documentary and not allowed_current:
-            errors.append(
-                f"élément {index}: fait du projet sans preuve courante autorisée"
-            )
-    return errors
-
-
-def _execution_grounding_errors(
-    paragraphs: Sequence[Dict[str, Any]],
-    items: Sequence[Dict[str, Any]],
-    evidence: Sequence[Dict[str, Any]],
-    section_key: str,
-) -> List[str]:
-    """Empêche une intention d'être réécrite comme action ou résultat acquis."""
-    guarded = {
-        "synthese_strategique", "objectif_global", "demarche_detectee",
-        "resultats_metriques", "parametres_contraintes", "justification_frascati",
-    }
-    if section_key not in guarded:
-        return []
-
-    evidence_by_id = {
-        str(item.get("evidence_id")): item
-        for item in evidence if isinstance(item, dict)
-    }
-    completed_markers = (
-        "a realise", "ont realise", "a mis en place", "ont mis en place",
-        "a developpe", "ont developpe", "a teste", "ont teste", "a evalue",
-        "ont evalue", "a compare", "ont compare", "a utilise", "ont utilise",
-    )
-    result_markers = (
-        "resultats obtenus", "resultat obtenu", "a obtenu", "ont obtenu",
-        "a confirme", "ont confirme", "montre que", "demontrent que",
-        "a permis", "ont permis", "atteint", "mesure",
-    )
-    errors: List[str] = []
-    for index, unit in enumerate([*paragraphs, *items], start=1):
-        cited = _unit_evidence(unit, evidence_by_id)
-        documentary = [
-            source for source in cited
-            if str(source.get("evidence_id") or "") != "F0"
-            and classify_evidence_provenance(source).get("evidence_origin") == "project_direct"
-        ]
-        if not documentary:
-            continue
-        statuses = {
-            classify_evidence_execution(source).get("execution_status")
-            for source in documentary
-        }
-        text = _grounding_norm(unit.get("text") or unit.get("description") or "")
-        claims_completed = any(marker in text for marker in completed_markers)
-        claims_result = any(marker in text for marker in result_markers)
-        has_executed = bool(statuses & {"implemented", "experimented", "observed", "measured"})
-        has_result = bool(statuses & {"observed", "measured"})
-
-        if claims_completed and not has_executed:
-            errors.append(
-                f"élément {index}: intention ou statut inconnu transformé en travail réalisé"
-            )
-        if claims_result and not has_result:
-            errors.append(
-                f"élément {index}: cible ou démarche transformée en résultat acquis"
-            )
-        if section_key == "demarche_detectee" and not has_executed:
-            errors.append(f"élément {index}: démarche sans preuve d'exécution")
-        if section_key == "resultats_metriques" and not has_result:
-            errors.append(f"élément {index}: résultat sans preuve observée ou mesurée")
-        if section_key == "objectif_global" and claims_result:
-            errors.append(f"élément {index}: l'objectif global contient une conclusion de résultat")
     return errors
 
 def _demarche_operation_errors(
@@ -2880,9 +2728,6 @@ def _attach_proof_quotes(
                 "actor_scope": item.get("actor_scope"),
                 "provenance_reason": item.get("provenance_reason"),
                 "provenance_confidence": item.get("provenance_confidence"),
-                "execution_status": item.get("execution_status"),
-                "execution_reason": item.get("execution_reason"),
-                "execution_confidence": item.get("execution_confidence"),
                 "summary_fr": item.get("summary_fr"),
                 "proof_kind": item.get("proof_kind"),
                 "result_scope": item.get("result_scope"),
@@ -3226,9 +3071,6 @@ def parse_section_result(
     grounding_errors.extend(
         _provenance_grounding_errors(grounding_units, items, evidence, config.key)
     )
-    grounding_errors.extend(
-        _execution_grounding_errors(grounding_units, items, evidence, config.key)
-    )
     if config.key == "demarche_detectee":
         grounding_errors.extend(_demarche_operation_errors(items, evidence))
     if config.key == "parametres_contraintes":
@@ -3544,21 +3386,6 @@ def generate_one_section(
         "display_mode": config.display_mode,
     }
 
-    # La conclusion Frascati calculée est déterministe par défaut. Les anciens
-    # runs dépensaient deux à trois appels structurés (souvent en retry) pour
-    # reformuler un score déjà calculé, jusqu'à plusieurs dizaines de secondes,
-    # sans améliorer la preuve. Le mode LLM reste opt-in pour comparaison.
-    use_frascati_llm = str(
-        os.getenv("ENNOSMART_DIAG_FRASCATI_USE_LLM", "0")
-    ).strip().lower() in {"1", "true", "yes", "oui"}
-    if config.key == "justification_frascati" and not use_frascati_llm:
-        fallback = _eligibility_fallback_from_report(frascati_summary, evidence)
-        fallback.update({
-            "status": "deterministic_frascati_without_redundant_llm",
-            "telemetry": {**telemetry, "frascati_llm_skipped": True},
-        })
-        return fallback, prompt
-
     # La conclusion Frascati ne passe plus par du JSON texte libre.
     # PydanticAI force le schéma, valide et relance automatiquement le modèle
     # si la structure ou le contrat factuel ne sont pas respectés.
@@ -3700,16 +3527,7 @@ def generate_one_section(
                 for error in retry_validation_errors
                 for marker in (
                     "provenance externe utilisée comme fait du projet courant",
-                    "preuve non confirmée projet utilisée comme fait du projet courant",
-                    "fait du projet sans preuve project_direct",
-                    "preuve ambiguë interdite pour rattacher le verrou au projet",
                     "verrou sans ancrage documentaire du projet courant",
-                    "transformé en travail réalisé",
-                    "transformée en résultat acquis",
-                    "démarche sans preuve d'exécution",
-                    "résultat sans preuve observée ou mesurée",
-                    "l'objectif global contient une conclusion de résultat",
-                    "sans evidence_id",
                     "comparateur numérique inversé",
                     "preuves de plusieurs opérations fusionnées",
                     "opérations absentes de la démarche",
@@ -3781,77 +3599,6 @@ def generate_one_section(
         return fallback, prompt
 
 
-_SECTION_CACHE_VERSION = "ennodiagnostic_section_cache_v195_execution_provenance"
-
-
-def _section_cache_identity(key: str, prompt: str, llm: Any) -> str:
-    model = clean_text(
-        getattr(llm, "model", None)
-        or getattr(llm, "model_name", None)
-        or getattr(llm, "default_model", None)
-        or "default"
-    )
-    raw = "|".join([_SECTION_CACHE_VERSION, key, model, prompt])
-    return hashlib.sha256(raw.encode("utf-8", errors="ignore")).hexdigest()
-
-
-def _read_section_cache(cache_dir: Optional[Path], key: str, cache_key: str) -> Optional[Dict[str, Any]]:
-    if cache_dir is None:
-        return None
-    path = Path(cache_dir) / f"section_{key}_cache_v195.json"
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    payload = data.get("payload") if isinstance(data, dict) else None
-    if data.get("cache_key") != cache_key or not isinstance(payload, dict):
-        return None
-    if not clean_text(payload.get("body"), 12000):
-        return None
-    cached = dict(payload)
-    cached["telemetry"] = {
-        **dict(cached.get("telemetry") or {}),
-        "section_cache_hit": True,
-        "section_cache_version": _SECTION_CACHE_VERSION,
-    }
-    cached["status"] = f"cached:{clean_text(cached.get('status')) or 'valid'}"
-    return cached
-
-
-def _write_section_cache(
-    cache_dir: Optional[Path],
-    key: str,
-    cache_key: str,
-    payload: Dict[str, Any],
-) -> None:
-    if cache_dir is None or not isinstance(payload, dict) or not clean_text(payload.get("body"), 12000):
-        return
-    if payload.get("error"):
-        return
-    status = clean_text(payload.get("status"), 160).lower()
-    # Un fallback ou une sortie seulement tolérée par avertissement ne doit pas
-    # figer une réponse médiocre : le prochain rerun doit pouvoir la réécrire.
-    if (
-        "fallback" in status
-        or "warning" in status
-        or not bool(payload.get("valid", True))
-    ) and status != "deterministic_frascati_without_redundant_llm":
-        return
-    try:
-        path = Path(cache_dir) / f"section_{key}_cache_v195.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps({
-                "cache_version": _SECTION_CACHE_VERSION,
-                "cache_key": cache_key,
-                "payload": payload,
-            }, ensure_ascii=False, indent=2, default=str),
-            encoding="utf-8",
-        )
-    except Exception as exc:
-        print(f"[EnnoDiagnostic][SECTION_CACHE][WARN] section={key} error={exc}")
-
-
 def generate_structured_diagnostic_core(
     llm: Any,
     sections: Dict[str, List[Dict[str, Any]]],
@@ -3860,7 +3607,6 @@ def generate_structured_diagnostic_core(
     ai_detection_report: Optional[Dict[str, Any]] = None,
     memory_v2_report: Optional[Dict[str, Any]] = None,
     historical_axes: Optional[Sequence[Dict[str, Any]]] = None,
-    cache_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
     del ai_detection_report
     configs = all_section_configs()
@@ -3870,7 +3616,8 @@ def generate_structured_diagnostic_core(
     errors: Dict[str, str] = {}
 
     for key in CORE_LLM_KEYS:
-        preview_prompt, _preview_evidence = build_section_context(
+        payload, prompt = generate_one_section(
+            llm,
             configs[key],
             sections,
             frascati_summary,
@@ -3878,21 +3625,6 @@ def generate_structured_diagnostic_core(
             memory_v2_report=memory_v2_report,
             historical_axes=historical_axes,
         )
-        cache_key = _section_cache_identity(key, preview_prompt, llm)
-        payload = _read_section_cache(cache_dir, key, cache_key)
-        if payload is not None:
-            prompt = preview_prompt
-        else:
-            payload, prompt = generate_one_section(
-                llm,
-                configs[key],
-                sections,
-                frascati_summary,
-                style_memory_report=style_memory_report,
-                memory_v2_report=memory_v2_report,
-                historical_axes=historical_axes,
-            )
-            _write_section_cache(cache_dir, key, cache_key, payload)
         section_payloads[key] = payload
         prompts[key] = prompt
         body_limit = 12000 if key in {
@@ -3913,14 +3645,8 @@ def generate_structured_diagnostic_core(
         "llm_section_json_with_validation_warnings",
         "llm_section_json_salvaged_for_consultant",
     }
-    def is_llm_status(status: Any) -> bool:
-        value = clean_text(status)
-        if value.startswith("cached:"):
-            value = value.split(":", 1)[1]
-        return value in llm_statuses
-
-    all_llm = all(is_llm_status(status) for status in statuses.values())
-    any_llm = any(is_llm_status(status) for status in statuses.values())
+    all_llm = all(status in llm_statuses for status in statuses.values())
+    any_llm = any(status in llm_statuses for status in statuses.values())
     status = "llm_sectional_context_engineering" if all_llm else (
         "llm_sectional_with_fallbacks" if any_llm else "fallback_sectional"
     )
@@ -3936,7 +3662,7 @@ def generate_structured_diagnostic_core(
         "section_payloads_by_key": section_payloads,
         "token_usage_by_section": token_usage,
         "section_statuses": statuses,
-        "context_engineering_version": "v195_provenance_execution_and_section_cache",
+        "context_engineering_version": "v193_consultant_rewrite_without_raw_evidence_fallback",
     }
 
 

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 
-VERSION = "scientific_axis_synthesizer_v2_explicit_lock_coverage"
+VERSION = "scientific_axis_synthesizer_v4_cached_complete_coverage"
 
 _ELIGIBLE_STATUSES = {"rnd_core_defendable", "rnd_core_partial"}
 _CONTEXT_STATUSES = {"classical_engineering", "insufficient_evidence"}
@@ -280,31 +280,43 @@ def _repair_placeholder_lock(item: Mapping[str, Any]) -> Dict[str, Any]:
 
 def _is_metric_or_method_only_lock(item: Mapping[str, Any]) -> bool:
     """Évite de promouvoir un KPI ou un outil de contrôle en verrou autonome."""
+    core_text = " ".join([
+        _clean(item.get("title")),
+        _clean(item.get("scientific_lock")),
+    ])
+    core = _norm(core_text)
     source_text = " ".join(
         _clean(source.get("excerpt") or source.get("text"), 1400)
         for source in (item.get("sources") or [])
         if isinstance(source, Mapping)
     )
-    normalized = _norm(source_text)
     has_explicit_uncertainty = bool(re.search(
         r"\b(?:incertitude|impossibilite|non (?:maitris|garanti)|reste a demontrer|"
         r"aucune solution|etat de l art.*(?:limite|peu de methode))\w*\b",
-        normalized,
+        core,
         flags=re.I,
     ))
     has_explicit_lock_heading = bool(re.search(
-        r"\b(?:sous[ -]?verrou|verrou)\s+\d+(?:[-.]\d+)*\s*:\s*",
-        source_text,
+        r"\b(?:sous[ -]?verrou|verrou(?:s? scientifiques?|s? techniques?)?)"
+        r"(?:\s+\d+(?:[-.]\d+)*)?\s*(?::|\])",
+        f"{core_text} {source_text}",
         flags=re.I,
     ))
     metric_or_tool_markers = len(re.findall(
         r"\b(?:kpi|metrique|mesure|score|precision|taux|seuil|cible|objectif|"
         r"benchmark|mise a jour|update|outil|visualisation|tableau)\w*\b",
-        normalized,
+        core,
+        flags=re.I,
+    ))
+    procedural_markers = len(re.findall(
+        r"\b(?:demarche|methode|strategie|protocole|pipeline|etape|procedure|"
+        r"utiliser|analyser|extraire|creer|configurer|incorporer|interroger|"
+        r"generation|execution|evaluation|selection|classement|regroupement)\w*\b",
+        core,
         flags=re.I,
     ))
     return (
-        metric_or_tool_markers >= 3
+        (metric_or_tool_markers >= 3 or procedural_markers >= 4)
         and not has_explicit_uncertainty
         and not has_explicit_lock_heading
     )
@@ -1456,6 +1468,37 @@ def synthesize_scientific_axes(
         output_dir=output_dir,
         current_year=_clean(current_year, 20),
     )
+    continuity = historical_continuity_report or {}
+    cache_key = hashlib.sha256(
+        json.dumps(
+            {
+                "version": VERSION,
+                "current": current,
+                "explicit_inventory": explicit_inventory,
+                "previous_years": continuity.get("previous_years") or [],
+                "historical_family_coverage": continuity.get("historical_family_coverage") or [],
+                "has_previous_cir": bool(continuity.get("has_previous_cir")),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        ).encode("utf-8", errors="ignore")
+    ).hexdigest()
+    cache_report_path = Path(output_dir) / "scientific_axis_report.json" if output_dir is not None else None
+    if cache_report_path is not None:
+        try:
+            cached = json.loads(cache_report_path.read_text(encoding="utf-8"))
+            if (
+                cached.get("cache_key") == cache_key
+                and cached.get("ok")
+                and isinstance(cached.get("scientific_axes"), list)
+            ):
+                cached["cached"] = True
+                cached["llm_report_reused"] = cached.get("llm_report")
+                cached["llm_report"] = {"ok": True, "used": False, "cached": True}
+                return cached
+        except Exception:
+            pass
     compact = [_compact_item(item, index) for index, item in enumerate(current, start=1)]
     llm_report = _llm_proposal(llm, compact)
     proposal = llm_report.get("data") if isinstance(llm_report.get("data"), Mapping) else {}
@@ -1506,6 +1549,7 @@ def synthesize_scientific_axes(
         "validation_warnings": validation_errors if ok else [],
         "fatal_validation_errors": fatal_errors,
         "llm_report": llm_report,
+        "cache_key": cache_key,
         "historical_reconciliation_version": _clean(
             (historical_continuity_report or {}).get("version"), 120
         ),
