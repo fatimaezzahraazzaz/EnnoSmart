@@ -661,26 +661,24 @@ def _extract_docx(path: Path, file_type: str = OfficeFileType.DOCX.value) -> Off
     except Exception as exc:
         msg = str(exc)
 
-        # Certains .docm macro-enabled sont refusés par python-docx
-        # à cause du content type interne :
-        # application/vnd.ms-word.document.macroEnabled.main+xml
-        if path.suffix.lower() == ".docm" or "macroEnabled" in msg or "macroEnabled.main+xml" in msg:
-            fallback = _extract_docm_xml_fallback(path, file_type=file_type)
+        # Le XML principal peut rester parfaitement exploitable même si
+        # python-docx refuse le paquet (DOCM, média annexe au CRC invalide,
+        # relation non standard, etc.). Le fallback ne lit que les parties XML
+        # textuelles et évite qu'une image corrompue annule tout le CIR.
+        fallback = _extract_docm_xml_fallback(path, file_type=file_type)
 
-            # Si le fallback XML a réussi, ce n'est pas une erreur bloquante.
-            # On garde la trace en tag, pas dans extraction_errors.
-            if fallback.text_chunks:
-                fallback.tags.append("PYTHON_DOCX_FALLBACK_USED")
+        if fallback.text_chunks:
+            fallback.tags.append("PYTHON_DOCX_FALLBACK_USED")
+            if path.suffix.lower() == ".docm" or "macroEnabled" in msg or "macroEnabled.main+xml" in msg:
                 fallback.tags.append("DOCM_CONTENT_TYPE_FALLBACK")
             else:
-                fallback.extraction_errors.append(
-                    f"python-docx a refusé le document et le fallback XML n'a pas extrait de chunks : {exc}"
-                )
-
+                fallback.tags.append("DOCX_PARTIAL_ZIP_FALLBACK")
             return fallback
 
-        result.extraction_errors.append(f"Impossible d'ouvrir le DOCX : {exc}")
-        return result
+        fallback.extraction_errors.append(
+            f"python-docx a refusé le document et le fallback XML n'a pas extrait de chunks : {exc}"
+        )
+        return fallback
 
     all_text_parts: list[str] = []
     block_index = 0

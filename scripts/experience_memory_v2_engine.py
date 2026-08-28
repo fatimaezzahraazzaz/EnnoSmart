@@ -1344,6 +1344,103 @@ def build_cir_final_v2(
 
     all_chunks = normalized_chunks + style_chunks + asset_chunks
 
+    # ------------------------------------------------------------------
+    # fallback_explicit_extracted_text
+    #
+    # Certains anciens CIR finaux (PDF historiques/scann?s) contiennent
+    # bien du texte exploitable, mais leur structure ne correspond pas
+    # aux sections attendues par le pipeline NLP CIR moderne.
+    #
+    # Dans ce cas uniquement, on conserve fid?lement le texte r?ellement
+    # extrait du CIR. Aucun contenu n'est invent?/reconstruit.
+    # ------------------------------------------------------------------
+    if not all_chunks:
+        fallback_text = clean_text(extracted_text)
+
+        if len(fallback_text) >= 300:
+            fallback_chunks = []
+
+            start = 0
+            block_index = 0
+            max_chars = 2400
+
+            while start < len(fallback_text):
+                end = min(
+                    len(fallback_text),
+                    start + max_chars,
+                )
+
+                # ?vite autant que possible de couper un mot.
+                if end < len(fallback_text):
+                    cut = fallback_text.rfind(
+                        " ",
+                        start + 1200,
+                        end,
+                    )
+
+                    if cut > start:
+                        end = cut
+
+                block = clean_text(
+                    fallback_text[start:end]
+                )
+
+                if len(block) >= 120:
+                    block_index += 1
+
+                    chunk_id = (
+                        f"fallback_{slugify(source_id)}_"
+                        f"{block_index:04d}"
+                    )
+
+                    fallback_chunks.append({
+                        "id": chunk_id,
+                        "text": block,
+                        "source_text": block,
+                        "metadata": {
+                            "role": "autre",
+                            "memory_status": "validated",
+                            "memory_type": "experience",
+                            "source_kind": "cir_final_consultant",
+                            "document_type": "cir_final_consultant",
+                            "content_origin": "cir_final_consultant",
+                            "source_policy": "validated_experience",
+                            "document": source_path.name,
+                            "source_file": source_path.name,
+                            "source_path": str(source_path),
+                            "content_kind": "prose",
+                            "section_title": "Texte CIR final historique",
+                            "can_use_as_fact": True,
+                            "can_use_as_style": True,
+                            "fallback_extraction": True,
+                            "rag_chunk_id": chunk_id,
+                        },
+                        "raw_item": {
+                            "source": "explicit_extracted_text",
+                            "fallback": True,
+                        },
+                    })
+
+                if end <= start:
+                    break
+
+                start = end
+
+            if fallback_chunks:
+                all_chunks = fallback_chunks
+
+                add_log(
+                    logs,
+                    "fallback_explicit_extracted_text",
+                    "ok",
+                    (
+                        "Ancien format CIR : utilisation fid?le "
+                        "du texte r?ellement extrait."
+                    ),
+                    text_chars=len(fallback_text),
+                    chunks_count=len(fallback_chunks),
+                )
+
     chunks_v2 = [
         enrich_chunk_v2(
             ch,

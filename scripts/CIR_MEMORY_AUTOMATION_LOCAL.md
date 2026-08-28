@@ -84,10 +84,12 @@ complet. Relancer ensuite le scan sans `-MaxScopes`.
 .\scripts\run_all_clients_cir.ps1 scan
 ```
 
-Le scan global est non récursif par périmètre : il ouvre uniquement les
-fichiers candidats listés dans chaque dossier final. Un CIR final placé à la
-racine d'un client ne déclenche donc plus le téléchargement de toute
-l'arborescence OneDrive du client.
+Le scan global est non récursif et choisit un seul fichier prioritaire par
+organisme/projet/sous-projet/année : d'abord dans `Versions finales` ou
+`Dossier technique final`, sinon dans `Dossier technique` ou
+`Dossier justificatif`. Les autres versions restent des replis et ne sont
+ouvertes que si la version prioritaire est illisible ou non indexable. Le scan
+ne parcourt jamais les autres dossiers du projet.
 
 Par défaut, seuls les CIR finaux confirmés sont retenus. Les CIR seulement
 probables restent à vérifier manuellement. Pour les inclure explicitement :

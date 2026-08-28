@@ -12,6 +12,8 @@ import {
   History,
   Library,
   Loader2,
+  Maximize2,
+  Minimize2,
   MessageSquareText,
   PanelLeftClose,
   PanelLeftOpen,
@@ -66,6 +68,7 @@ import {
 import { getCurrentProjectId, setCurrentProjectId } from "@/lib/project-session"
 import { cn } from "@/lib/utils"
 import { LoadingState } from "@/components/ennosmart/workspace-ui"
+import { ImprovementPdfComparator } from "@/components/ennosmart/improvement-pdf-comparator"
 
 function normalizeSourceDecision(value: unknown) {
   const decision = String(value || "").trim().toLowerCase()
@@ -504,6 +507,11 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
   const [navigatorView, setNavigatorView] = useState<"conversations" | "sections">("conversations")
   const [leftOpen, setLeftOpen] = useState(false)
   const [rightOpen, setRightOpen] = useState(false)
+  const [proposalFullscreen, setProposalFullscreen] = useState(true)
+  useEffect(() => {
+    if (rightOpen) setProposalFullscreen(true)
+  }, [rightOpen])
+
   const [sourcePreviewUrl, setSourcePreviewUrl] = useState("")
   const [sourcePreviewLoading, setSourcePreviewLoading] = useState(false)
   const [sourcePreviewError, setSourcePreviewError] = useState("")
@@ -2029,24 +2037,81 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
         <>
           <button
             type="button"
-            className="absolute inset-0 z-20 bg-foreground/5 backdrop-blur-[1px]"
+            className={cn(
+              proposalFullscreen
+                ? "fixed inset-0 z-40 bg-foreground/10 backdrop-blur-[2px]"
+                : "absolute inset-0 z-20 bg-foreground/5 backdrop-blur-[1px]",
+            )}
             aria-label="Fermer le panneau d'amélioration"
             onClick={() => setRightOpen(false)}
           />
-          <aside className="absolute inset-y-0 right-0 z-30 flex h-full min-h-0 w-[min(94vw,640px)] flex-col overflow-hidden border-l bg-card shadow-[-22px_0_55px_rgba(45,20,80,0.14)] sm:w-[min(88vw,640px)] xl:w-[min(48vw,640px)]">
+          <aside
+            className={cn(
+              "flex min-h-0 flex-col overflow-hidden bg-card transition-[inset,width,height,border-radius] duration-200",
+              proposalFullscreen
+                ? "fixed inset-2 z-50 h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] rounded-2xl border shadow-2xl sm:inset-3 sm:h-[calc(100vh-1.5rem)] sm:w-[calc(100vw-1.5rem)]"
+                : "absolute inset-y-0 right-0 z-30 h-full w-[min(96vw,1120px)] max-w-[96vw] resize-x border-l shadow-[-22px_0_55px_rgba(45,20,80,0.14)] sm:min-w-[560px] sm:w-[min(92vw,1120px)] xl:w-[min(76vw,1120px)]",
+            )}
+          >
           <div className="flex h-14 items-center gap-2 border-b px-4">
             <Sparkles className="size-4 text-primary" />
             <p className="flex-1 text-sm font-semibold">Proposition d'amélioration</p>
             {candidate ? <Badge>Proposition V{candidate.version_number}</Badge> : <Badge variant="outline">Version active</Badge>}
+            {candidate && (
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="size-8 rounded-lg border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                  disabled={busy}
+                  onClick={() => decide("rejected")}
+                  aria-label="Rejeter la proposition"
+                  title="Rejeter la proposition"
+                >
+                  <X className="size-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  className="size-8 rounded-lg"
+                  disabled={busy}
+                  onClick={() => decide("accepted")}
+                  aria-label="Accepter la proposition"
+                  title="Accepter la proposition"
+                >
+                  <Check className="size-4" />
+                </Button>
+              </div>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0 rounded-lg"
+              onClick={() => setProposalFullscreen((value) => !value)}
+              aria-label={proposalFullscreen ? "Restaurer la fenêtre" : "Agrandir la fenêtre"}
+              title={proposalFullscreen ? "Restaurer la fenêtre" : "Plein écran"}
+            >
+              {proposalFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0 rounded-lg"
+              onClick={() => setRightOpen(false)}
+              aria-label="Fermer la proposition"
+              title="Fermer"
+            >
+              <X className="size-4" />
+            </Button>
           </div>
-          <Tabs defaultValue="improved" className="min-h-0 flex-1 gap-0">
+          <Tabs defaultValue="diff" className="min-h-0 flex-1 gap-0">
             <div className="border-b px-3 py-2">
-              <TabsList className={cn("grid w-full", current.source_document_id ? "grid-cols-5" : "grid-cols-4")}>
-                <TabsTrigger value="improved">Améliorée</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="diff">Comparatif</TabsTrigger>
-                <TabsTrigger value="audit">Audit</TabsTrigger>
                 <TabsTrigger value="sources">Sources</TabsTrigger>
-                {current.source_document_id && <TabsTrigger value="document">Document</TabsTrigger>}
               </TabsList>
             </div>
             <TabsContent value="improved" className="min-h-0 overflow-hidden p-0">
@@ -2071,106 +2136,14 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
               </div>
             </TabsContent>
             <TabsContent value="diff" className="min-h-0 overflow-hidden p-0">
-              <ScrollArea className="h-full">
-                <div className="space-y-5 p-4">
-                  <div className="grid gap-3 xl:grid-cols-2">
-                    <div className="overflow-hidden rounded-xl border">
-                      <div className="border-b bg-muted/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Texte original</div>
-                      <Textarea
-                        readOnly
-                        value={comparisonOriginal?.content || ""}
-                        wrap="soft"
-                        className="min-h-72 resize-none rounded-none border-0 text-xs leading-5 shadow-none focus-visible:ring-0"
-                      />
-                    </div>
-                    <div className="overflow-hidden rounded-xl border border-primary/30">
-                      <div className="border-b bg-primary/5 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-primary">Version améliorée</div>
-                      <Textarea
-                        readOnly
-                        value={(candidate || activeVersion)?.content || ""}
-                        wrap="soft"
-                        className="min-h-72 resize-none rounded-none border-0 text-xs leading-5 shadow-none focus-visible:ring-0"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="mr-auto text-sm font-semibold">Pourquoi ces modifications ?</h3>
-                    </div>
-                    <div className="mt-2.5 space-y-2.5">
-                      {comparisonChanges.map((change, index) => {
-                        const linkedSources = sourcesForComparisonChange(change, comparisonSources)
-                        return <div key={change.change_id || index} className="rounded-xl border p-3">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-[10px]">{change.operation || "modification"}</Badge>
-                            {(change.section_ref || change.section_title) && (
-                              <span className="text-xs font-medium text-muted-foreground">
-                                {[change.section_ref, change.section_title].filter(Boolean).join(" · ")}
-                              </span>
-                            )}
-                            {(change.evidence_refs || []).map((reference: string) => (
-                              <Badge key={reference} className="text-[10px]">{evidenceReferenceLabel(reference)}</Badge>
-                            ))}
-                            {(change.style_refs || []).length > 0 && <Badge variant="outline" className="text-[10px]">Pattern CIR</Badge>}
-                          </div>
-                          {change.before && (
-                            <div className="mt-3 rounded-lg bg-red-50/70 p-2 text-xs text-red-900">
-                              <p className="mb-1 font-semibold uppercase tracking-wide">Passage original</p>
-                              <p className="whitespace-pre-wrap leading-5">{change.before}</p>
-                            </div>
-                          )}
-                          {change.after && (
-                            <div className="mt-2 rounded-lg bg-emerald-50/70 p-2 text-xs text-emerald-900">
-                              <p className="mb-1 font-semibold uppercase tracking-wide">Passage amélioré</p>
-                              <p className="whitespace-pre-wrap leading-5">{change.after}</p>
-                            </div>
-                          )}
-                          <p className="mt-2 text-xs leading-5 text-muted-foreground">{change.reason}</p>
-                          {linkedSources.length > 0 && (
-                            <div className="mt-3 space-y-2 border-t pt-3">
-                              <p className="text-xs font-semibold">Articles mobilisés pour ce passage</p>
-                              {linkedSources.map((source, sourceIndex) => {
-                                const consultUrl = articleConsultUrl(source)
-                                const excerpt = sourceEvidenceExcerpt(source)
-                                return (
-                                  <div key={sourceIdentity(source) || sourceIndex} className="rounded-lg bg-primary/5 p-2.5 text-xs">
-                                    <p className="font-semibold">
-                                      {source.citation_id ? `[${source.citation_id}] ` : ""}{source.title || "Article scientifique"}
-                                    </p>
-                                    <p className="mt-1 text-muted-foreground">
-                                      {[Array.isArray(source.authors) ? source.authors.slice(0, 4).join(", ") : "", source.year].filter(Boolean).join(" · ")}
-                                    </p>
-                                    {excerpt && (
-                                      <div className="mt-2 rounded-md border-l-2 border-primary bg-background/80 px-2 py-1.5">
-                                        <p className="font-medium text-foreground">Passage justificatif extrait</p>
-                                        <p className="mt-1 whitespace-pre-wrap leading-5 text-muted-foreground">{excerpt}</p>
-                                      </div>
-                                    )}
-                                    {consultUrl && (
-                                      <a
-                                        href={consultUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="mt-2 inline-flex h-8 items-center rounded-lg border bg-background px-3 font-medium text-primary hover:bg-muted"
-                                      >
-                                        Consulter l’article
-                                      </a>
-                                    )}
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      })}
-                      {candidate && comparisonChanges.length === 0 && (
-                        <p className="text-sm text-muted-foreground">La proposition est disponible, mais aucun passage détaillé n’a été sérialisé pour cette ancienne version.</p>
-                      )}
-                      {!candidate && <p className="text-sm text-muted-foreground">Aucune proposition en attente.</p>}
-                    </div>
-                  </div>
-                </div>
-              </ScrollArea>
+              <ImprovementPdfComparator
+                projectId={projectId}
+                sessionId={current.session_id}
+                versionId={candidate?.version_id || ""}
+                activeVersionId={activeVersion?.version_id || ""}
+                changes={comparisonChanges}
+                sourceFilename={sourceDocument?.filename || "Document source"}
+              />
             </TabsContent>
             <TabsContent value="audit" className="min-h-0 overflow-hidden p-0">
               <ScrollArea className="h-full">
@@ -2395,13 +2368,6 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
               </TabsContent>
             )}
           </Tabs>
-
-          {candidate && (
-            <div className="grid grid-cols-2 gap-2 border-t p-3">
-              <Button variant="outline" className="gap-2" disabled={busy} onClick={() => decide("rejected")}><X className="size-4" /> Rejeter</Button>
-              <Button className="gap-2" disabled={busy} onClick={() => decide("accepted")}><Check className="size-4" /> Accepter</Button>
-            </div>
-          )}
           <div className="border-t p-3">
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold"><History className="size-3.5" /> Historique des versions</div>
             <div className="flex gap-2 overflow-x-auto pb-1">

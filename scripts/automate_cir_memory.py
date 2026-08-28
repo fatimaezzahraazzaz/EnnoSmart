@@ -44,9 +44,12 @@ from core.config import settings
 from services.experience_memory_v2_service import build_uploaded_cir
 from services.sharepoint_audit_service import (
     LocalReadOnlyImportProvider,
+    _embedded_date_rank,
+    _version_numbers,
     apply_final_version_policy,
     get_sharepoint_audit,
     get_sharepoint_audit_item,
+    infer_audit_identity,
     mark_audit_item_indexed,
     memory_identity_conflict,
     require_manifest_confirmation,
@@ -65,6 +68,10 @@ FINAL_FOLDER_MARKERS = (
     "dossiers finaux",
     "dossier technique final",
     "livraison dts",
+)
+TECHNICAL_FOLDER_MARKERS = (
+    "dossier technique",
+    "dossier justificatif",
 )
 EXCLUDED_FOLDER_MARKERS = (
     "brouillon",
@@ -201,14 +208,27 @@ def candidate_file_name(name: str) -> bool:
     return (has_cir and has_final) or technical_final
 
 
-def discover_candidate_scopes(max_scopes: int | None = None) -> list[dict[str, Any]]:
-    """Repère les fichiers finaux sans ouvrir leur contenu OneDrive.
+def _candidate_rank(candidate: dict[str, Any]) -> tuple[Any, ...]:
+    suffix = Path(str(candidate.get("name") or "")).suffix.lower()
+    return (
+        1 if candidate.get("folder_kind") == "final" else 0,
+        1 if candidate_file_name(str(candidate.get("name") or "")) else 0,
+        tuple(_version_numbers(str(candidate.get("name") or ""))),
+        int(_embedded_date_rank(str(candidate.get("name") or ""))),
+        2 if suffix == ".pdf" else 1 if suffix == ".docx" else 0,
+        int(candidate.get("mtime_ns") or 0),
+        int(candidate.get("size") or 0),
+    )
 
-    Chaque périmètre reste strictement non récursif. Cela évite qu'un CIR final
-    placé à la racine d'un client transforme cette racine en scan de dizaines de
-    milliers de documents.
+
+def discover_candidate_scopes(max_scopes: int | None = None) -> list[dict[str, Any]]:
+    """Présélectionne une version finale par projet sans ouvrir les fichiers.
+
+    Ordre de préférence : dossier de versions finales, puis dossier technique
+    ou justificatif. Les autres versions sont conservées comme replis et ne sont
+    ouvertes que si la meilleure version est illisible ou non indexable.
     """
-    candidates: dict[Path, set[str]] = {}
+    candidates: list[dict[str, Any]] = []
     for current, directory_names, file_names in os.walk(SOURCE_ROOT, topdown=True, followlinks=False):
         current_path = Path(current)
         relative = current_path.relative_to(SOURCE_ROOT)
@@ -228,21 +248,77 @@ def discover_candidate_scopes(max_scopes: int | None = None) -> list[dict[str, A
         if not supported_names:
             continue
         final_folder = any(marker in relative_normalized for marker in FINAL_FOLDER_MARKERS)
-        selected_names = (
-            supported_names
-            if final_folder
-            else [name for name in supported_names if candidate_file_name(name)]
+        technical_folder = any(
+            marker in relative_normalized for marker in TECHNICAL_FOLDER_MARKERS
         )
-        if selected_names:
-            candidates.setdefault(relative, set()).update(selected_names)
+        if final_folder:
+            selected_names = supported_names
+            folder_kind = "final"
+        elif technical_folder:
+            selected_names = [name for name in supported_names if candidate_file_name(name)]
+            folder_kind = "technical"
+        else:
+            selected_names = []
 
-    ordered = sorted(candidates, key=lambda item: normalise(item.as_posix()))
+        for name in selected_names:
+            path = current_path / name
+            try:
+                stat = path.stat()
+                size = int(stat.st_size)
+                mtime_ns = int(stat.st_mtime_ns)
+            except OSError:
+                size = 0
+                mtime_ns = 0
+            identity = infer_audit_identity(
+                source_scope=relative.as_posix(),
+                source_path=name,
+                file_name=name,
+            )
+            group = identity_key(identity)
+            if not re.fullmatch(r"(?:19|20)\d{2}", str(identity.get("year") or "")):
+                # Ne jamais fusionner deux dossiers dont l'année n'est pas sûre.
+                group = f"{group}::{normalise(relative.as_posix())}::{normalise(name)}"
+            candidates.append({
+                "scope": relative.as_posix(),
+                "name": name,
+                "identity": identity,
+                "identity_group": group,
+                "folder_kind": folder_kind,
+                "size": size,
+                "mtime_ns": mtime_ns,
+            })
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for candidate in candidates:
+        grouped.setdefault(str(candidate["identity_group"]), []).append(candidate)
+
     scopes: list[dict[str, Any]] = []
-    for candidate in ordered:
+    for group in sorted(grouped, key=normalise):
+        group_candidates = grouped[group]
+        final_candidates = sorted(
+            (item for item in group_candidates if item["folder_kind"] == "final"),
+            key=_candidate_rank,
+            reverse=True,
+        )
+        technical_candidates = sorted(
+            (item for item in group_candidates if item["folder_kind"] == "technical"),
+            key=_candidate_rank,
+            reverse=True,
+        )
+        ordered = final_candidates + technical_candidates
+        if not ordered:
+            continue
+        primary = ordered[0]
         scopes.append({
-            "scope": candidate.as_posix(),
-            "files": sorted(candidates[candidate], key=normalise),
+            "scope": primary["scope"],
+            "files": [primary["name"]],
             "recursive": False,
+            "identity_hint": primary["identity"],
+            "candidate_versions_count": len(ordered),
+            "alternatives": [
+                {"scope": item["scope"], "files": [item["name"]], "recursive": False}
+                for item in ordered[1:]
+            ],
         })
         if max_scopes is not None and len(scopes) >= max(0, max_scopes):
             break
@@ -264,58 +340,90 @@ def _audit_scopes(
     scopes = list(scopes)
     for index, scope_entry in enumerate(scopes, start=1):
         if isinstance(scope_entry, dict):
-            scope = str(scope_entry.get("scope") or "").strip("/\\")
-            allowed_files = [
-                str(value).strip("/\\")
-                for value in (scope_entry.get("files") or [])
-                if str(value or "").strip("/\\")
+            variants = [
+                {"scope": scope_entry.get("scope"), "files": scope_entry.get("files") or []},
+                *(scope_entry.get("alternatives") or []),
             ]
-            scope_root = (SOURCE_ROOT / Path(scope)).resolve()
-            if not is_inside(scope_root, SOURCE_ROOT):
-                raise PermissionError(f"Périmètre hors OneDrive autorisé : {scope}")
-            provider = LocalReadOnlyImportProvider(
-                scope_root,
-                provider_name="power_automate_inbox",
-                source_scope=scope,
-                source_library_root=SOURCE_ROOT,
-                recursive=False,
-                allowed_relative_paths=allowed_files,
+            candidate_versions_count = int(
+                scope_entry.get("candidate_versions_count") or len(variants)
             )
-            print(
-                f"[{index}/{len(scopes)}] Scan lecture seule non récursif : "
-                f"{scope} ({len(allowed_files)} fichier(s) candidat(s))",
-                flush=True,
-            )
-            run = run_sharepoint_audit(
-                provider=provider,
-                audit_root=AUDIT_ROOT,
-                initiated_by=f"local-automation-{mode}",
-                deep_scan=False,
-            )
+            runs = []
+            for attempt, variant in enumerate(variants, start=1):
+                scope = str(variant.get("scope") or "").strip("/\\")
+                allowed_files = [
+                    str(value).strip("/\\")
+                    for value in (variant.get("files") or [])
+                    if str(value or "").strip("/\\")
+                ]
+                scope_root = (SOURCE_ROOT / Path(scope)).resolve()
+                if not is_inside(scope_root, SOURCE_ROOT):
+                    raise PermissionError(f"Périmètre hors OneDrive autorisé : {scope}")
+                provider = LocalReadOnlyImportProvider(
+                    scope_root,
+                    provider_name="power_automate_inbox",
+                    source_scope=scope,
+                    source_library_root=SOURCE_ROOT,
+                    recursive=False,
+                    allowed_relative_paths=allowed_files,
+                )
+                suffix = (
+                    f" — repli {attempt}/{len(variants)}"
+                    if attempt > 1 else ""
+                )
+                print(
+                    f"[{index}/{len(scopes)}] Scan final prioritaire : "
+                    f"{scope} / {allowed_files[0] if allowed_files else '?'}{suffix}",
+                    flush=True,
+                )
+                run = run_sharepoint_audit(
+                    provider=provider,
+                    audit_root=AUDIT_ROOT,
+                    initiated_by=f"local-automation-{mode}",
+                    deep_scan=False,
+                )
+                runs.append(run)
+                usable = any(
+                    item.get("classification") == "cir_final_confirmed"
+                    and item.get("indexable") is True
+                    for item in (run.get("items") or [])
+                )
+                if not usable and include_probable:
+                    usable = any(
+                        item.get("classification") == "cir_probable"
+                        and item.get("indexable") is True
+                        for item in (run.get("items") or [])
+                    )
+                if usable:
+                    break
         else:
             scope = str(scope_entry).strip("/\\")
             print(f"[{index}/{len(scopes)}] Scan lecture seule : {scope}", flush=True)
-            run = run_sharepoint_audit(
+            runs = [run_sharepoint_audit(
                 provider_name="inbox",
                 initiated_by=f"local-automation-{mode}",
                 deep_scan=False,
                 relative_folder=scope,
-            )
-        total_source_writes += int(run.get("source_write_operations") or 0)
-        integrity = integrity and run.get("source_integrity_verified") is True
-        scans.append({
-            "scan_id": run.get("scan_id"),
-            "source_scope": run.get("source_scope"),
-            "manifest_sha256": run.get("manifest_sha256"),
-            "counts": run.get("counts") or {},
-            "source_write_operations": run.get("source_write_operations"),
-        })
-        for item in run.get("items") or []:
-            copied = dict(item)
-            copied["_scan_id"] = run.get("scan_id")
-            copied["_scan_manifest_sha256"] = run.get("manifest_sha256")
-            copied["_source_scope"] = run.get("source_scope")
-            all_items.append(copied)
+            )]
+            candidate_versions_count = 1
+        for run in runs:
+            total_source_writes += int(run.get("source_write_operations") or 0)
+            integrity = integrity and run.get("source_integrity_verified") is True
+            scans.append({
+                "scan_id": run.get("scan_id"),
+                "source_scope": run.get("source_scope"),
+                "manifest_sha256": run.get("manifest_sha256"),
+                "counts": run.get("counts") or {},
+                "source_write_operations": run.get("source_write_operations"),
+            })
+            for item in run.get("items") or []:
+                copied = dict(item)
+                copied["_scan_id"] = run.get("scan_id")
+                copied["_scan_manifest_sha256"] = run.get("manifest_sha256")
+                copied["_source_scope"] = run.get("source_scope")
+                copied["_metadata_alternative_versions_count"] = max(
+                    0, candidate_versions_count - 1
+                )
+                all_items.append(copied)
 
     # Refait la sélection sur l'ensemble des scans : une seule version finale
     # par organisme/projet/sous-projet/année, même si elle existe dans deux dossiers.
@@ -348,7 +456,10 @@ def _audit_scopes(
             },
             "selection_status": item.get("selection_status"),
             "index_eligible": bool(item.get("index_eligible")),
-            "alternative_versions_count": int(item.get("alternative_versions_count") or 0),
+            "alternative_versions_count": max(
+                int(item.get("alternative_versions_count") or 0),
+                int(item.get("_metadata_alternative_versions_count") or 0),
+            ),
         })
 
     selected.sort(key=lambda item: identity_key(item["identity"]))

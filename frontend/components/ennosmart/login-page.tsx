@@ -250,6 +250,48 @@ function AuthPanel({
     setConfirmPassword("")
   }
 
+  async function beginDirectPasswordReset() {
+    const normalizedEmail = email.trim()
+
+    setError("")
+    setSuccess("")
+
+    if (!normalizedEmail) {
+      setError(
+        "Saisissez d’abord votre adresse e-mail dans le formulaire de connexion.",
+      )
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await forgotPassword(normalizedEmail)
+
+      // En local / développement, le backend renvoie un jeton temporaire
+      // à usage unique. On saute l'ancien écran « Envoyer le lien ».
+      if (response.preview_token) {
+        setResetToken(response.preview_token)
+        setPassword("")
+        setConfirmPassword("")
+        setMode("reset")
+        return
+      }
+
+      // En production le jeton n'est volontairement jamais exposé
+      // au navigateur : on conserve la sécurité du flux par e-mail.
+      setSuccess(response.message)
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Impossible de démarrer la réinitialisation.",
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault()
     setLoading(true)
@@ -338,7 +380,7 @@ function AuthPanel({
         </div>
       )}
 
-      {(mode === "forgot" || mode === "reset") && (
+      {mode === "reset" && (
         <button
           type="button"
           className="ennoma-auth-back"
@@ -438,7 +480,8 @@ function AuthPanel({
               <button
                 type="button"
                 className="ennoma-auth-forgot"
-                onClick={() => switchMode("forgot")}
+                onClick={() => void beginDirectPasswordReset()}
+                disabled={loading}
               >
                 Mot de passe oublié ?
               </button>

@@ -35,6 +35,11 @@ from services.improvement_service import (
 )
 from services.project_service import get_project_for_user
 from services.improvement_context_service import get_improvement_project_context
+from services.improvement_comparison_service import (
+    build_comparison_preview,
+    build_version_document_preview,
+    comparison_file_response,
+)
 
 
 router = APIRouter(
@@ -225,6 +230,51 @@ def create_improvement_message(
         raise _http_error(exc) from exc
 
 
+
+
+@router.get("/sessions/{session_id}/versions/{version_id}/comparison-preview")
+def get_improvement_comparison_preview(
+    project_id: int,
+    session_id: str,
+    version_id: str,
+    side: str = Query(..., pattern="^(original|proposed)$"),
+    change_index: int = Query(..., ge=0, le=1000),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Comparatif PDF visuel Agent 3.
+    project = get_project_for_user(
+        db,
+        project_id,
+        current_user,
+    )
+    preview = build_comparison_preview(
+        db,
+        project_id=project.id,
+        session_id=session_id,
+        version_id=version_id,
+        side=side,
+        change_index=change_index,
+    )
+    return comparison_file_response(preview)
+
+
+@router.get("/sessions/{session_id}/versions/{version_id}/document-preview")
+def get_improvement_version_document_preview(
+    project_id: int,
+    session_id: str,
+    version_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_project_for_user(db, project_id, current_user)
+    preview = build_version_document_preview(
+        db,
+        project_id=project.id,
+        session_id=session_id,
+        version_id=version_id,
+    )
+    return comparison_file_response(preview)
 
 @router.post("/sessions/{session_id}/versions/{version_id}/decision")
 def decide_improvement_version(

@@ -59,6 +59,7 @@ interface NewProjectPageProps {
 }
 
 type DepositMode = "diagnostic" | "reference"
+type DiagnosticUploadTab = "documents" | "media"
 type FileStatus = "pending" | "uploading" | "done" | "error"
 type TranscriptionStatus = "pending" | "transcribing" | "ready" | "error"
 
@@ -105,6 +106,21 @@ const VIDEO_EXTENSIONS = new Set([
   "mpeg",
   "mpg",
   "3gp",
+])
+
+const DOCUMENT_EXTENSIONS = new Set([
+  "pdf",
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "ppt",
+  "pptx",
+  "png",
+  "jpg",
+  "jpeg",
+  "msg",
+  "txt",
 ])
 
 const commonDomains = [
@@ -155,6 +171,10 @@ function isVideoFile(file: File) {
 
 function isMediaFile(file: File) {
   return isAudioFile(file) || isVideoFile(file)
+}
+
+function isDocumentFile(file: File) {
+  return DOCUMENT_EXTENSIONS.has(getExtension(file.name))
 }
 
 function getFileTypeLabel(name: string) {
@@ -314,6 +334,8 @@ export default function NewProjectPage({
   const [customDomain, setCustomDomain] = useState("")
 
   const [depositMode, setDepositMode] = useState<DepositMode>("diagnostic")
+  const [diagnosticUploadTab, setDiagnosticUploadTab] =
+    useState<DiagnosticUploadTab>("documents")
 
   const [files, setFiles] = useState<LocalFile[]>([])
   const [finalCirFile, setFinalCirFile] = useState<File | null>(null)
@@ -455,6 +477,14 @@ export default function NewProjectPage({
     [files]
   )
 
+  const documentFiles = useMemo(
+    () => files.filter((item) => !isMediaFile(item.file)),
+    [files]
+  )
+
+  const visibleDiagnosticFiles =
+    diagnosticUploadTab === "media" ? mediaFiles : documentFiles
+
   const canSubmit = useMemo(() => {
     if (createdProjectId !== null) return false
     if (!baseFormIsValid) return false
@@ -481,10 +511,19 @@ export default function NewProjectPage({
     )
   }, [])
 
-  const addRawFiles = (fileList: FileList) => {
+  const addRawFiles = (
+    fileList: FileList,
+    targetTab: DiagnosticUploadTab = diagnosticUploadTab
+  ) => {
     if (createdProjectId !== null) return
 
-    const items = Array.from(fileList).map((file) => ({
+    const selectedFiles = Array.from(fileList)
+    const acceptedFiles = selectedFiles.filter((file) =>
+      targetTab === "media" ? isMediaFile(file) : isDocumentFile(file)
+    )
+    const rejectedCount = selectedFiles.length - acceptedFiles.length
+
+    const items = acceptedFiles.map((file) => ({
       id: safeId(file),
       file,
       name: file.name,
@@ -494,8 +533,17 @@ export default function NewProjectPage({
       status: "pending" as const,
     }))
 
-    setFiles((prev) => [...prev, ...items])
-    setError("")
+    if (items.length > 0) {
+      setFiles((prev) => [...prev, ...items])
+    }
+
+    setError(
+      rejectedCount > 0
+        ? targetTab === "media"
+          ? "Ce format n’est pas un média pris en charge. Utilisez l’onglet Documents pour les fichiers de travail."
+          : "Ce format n’est pas un document pris en charge. Utilisez l’onglet Vidéo / Audio pour les médias."
+        : ""
+    )
     setSuccess("")
   }
 
@@ -511,7 +559,7 @@ export default function NewProjectPage({
     if (createdProjectId !== null) return
 
     if (event.dataTransfer.files.length > 0) {
-      addRawFiles(event.dataTransfer.files)
+      addRawFiles(event.dataTransfer.files, diagnosticUploadTab)
     }
   }
 
@@ -684,9 +732,10 @@ export default function NewProjectPage({
 
       let uploadedCount = 0
       let uploadErrors = 0
-      const uploadedMediaFiles: LocalFile[] = []
 
-      for (const item of files) {
+      // Les documents restent dans le corpus Diagnostic. Les médias ne sont
+      // jamais envoyés à cette route : PostgreSQL ne doit pas stocker le MP4.
+      for (const item of documentFiles) {
         setFiles((prev) =>
           prev.map((file) =>
             file.id === item.id
@@ -698,10 +747,6 @@ export default function NewProjectPage({
         try {
           await uploadDocument(createdProject.id, item.file, "Document brut")
           uploadedCount += 1
-
-          if (isMediaFile(item.file)) {
-            uploadedMediaFiles.push(item)
-          }
 
           setFiles((prev) =>
             prev.map((file) =>
@@ -729,12 +774,6 @@ export default function NewProjectPage({
             )
           )
 
-          if (isMediaFile(item.file)) {
-            updateTranscriptionItem(item.id, {
-              status: "error",
-              error: "Le média n’a pas pu être importé dans le dossier.",
-            })
-          }
         }
       }
 
@@ -743,7 +782,15 @@ export default function NewProjectPage({
 
       // Traitement séquentiel : un média à la fois pour éviter plusieurs
       // gros modèles concurrents en mémoire GPU.
-      for (const item of uploadedMediaFiles) {
+      for (const item of mediaFiles) {
+        setFiles((prev) =>
+          prev.map((file) =>
+            file.id === item.id
+              ? { ...file, status: "uploading", progress: 35, error: undefined }
+              : file
+          )
+        )
+
         updateTranscriptionItem(item.id, {
           status: "transcribing",
           error: undefined,
@@ -757,11 +804,63 @@ export default function NewProjectPage({
 
           const pdfUrl = window.URL.createObjectURL(pdfBlob)
           pdfUrlsRef.current.push(pdfUrl)
+          const pdfName = buildPdfDownloadName(item.name)
+
+          try {
+            const transcriptionFile = new File([pdfBlob], pdfName, {
+              type: "application/pdf",
+            })
+
+            await uploadDocument(
+              createdProject.id,
+              transcriptionFile,
+              "Document brut"
+            )
+            uploadedCount += 1
+          } catch (storageError) {
+            uploadErrors += 1
+
+            const storageMessage =
+              storageError instanceof Error
+                ? storageError.message
+                : "Ajout du PDF au dossier impossible."
+
+            setFiles((prev) =>
+              prev.map((file) =>
+                file.id === item.id
+                  ? {
+                      ...file,
+                      status: "error",
+                      progress: 100,
+                      error: `Transcription terminée, mais le PDF n’a pas été ajouté au dossier : ${storageMessage}`,
+                    }
+                  : file
+              )
+            )
+
+            updateTranscriptionItem(item.id, {
+              status: "ready",
+              pdfUrl,
+              pdfName,
+              error: "PDF généré, mais non ajouté au dossier. Téléchargez-le ci-dessous.",
+            })
+
+            readyPdfCount += 1
+            continue
+          }
+
+          setFiles((prev) =>
+            prev.map((file) =>
+              file.id === item.id
+                ? { ...file, status: "done", progress: 100, error: undefined }
+                : file
+            )
+          )
 
           updateTranscriptionItem(item.id, {
             status: "ready",
             pdfUrl,
-            pdfName: buildPdfDownloadName(item.name),
+            pdfName,
             error: undefined,
           })
 
@@ -769,12 +868,27 @@ export default function NewProjectPage({
         } catch (err) {
           transcriptionErrorCount += 1
 
+          const transcriptionMessage =
+            err instanceof Error
+              ? err.message
+              : "Erreur inconnue pendant la transcription."
+
+          setFiles((prev) =>
+            prev.map((file) =>
+              file.id === item.id
+                ? {
+                    ...file,
+                    status: "error",
+                    progress: 100,
+                    error: transcriptionMessage,
+                  }
+                : file
+            )
+          )
+
           updateTranscriptionItem(item.id, {
             status: "error",
-            error:
-              err instanceof Error
-                ? err.message
-                : "Erreur inconnue pendant la transcription.",
+            error: transcriptionMessage,
           })
         }
       }
@@ -1379,15 +1493,74 @@ export default function NewProjectPage({
                 <Card className="overflow-hidden rounded-2xl border-border/80 shadow-sm">
                   <CardHeader className="border-b border-border/70 bg-muted/[0.10] px-5 py-4 sm:px-6">
                     <CardTitle className="text-sm font-semibold">
-                      Documents de travail à analyser
+                      Sources à analyser
                     </CardTitle>
                     <CardDescription className="mt-1 text-xs">
-                      Les fichiers audio et vidéo seront transcrits après la création du dossier.
+                      Séparez les documents des vidéos et fichiers audio pour utiliser le traitement adapté.
                     </CardDescription>
                   </CardHeader>
 
                   <CardContent className="space-y-4 p-5 sm:p-6">
                     <div
+                      className="inline-flex max-w-full flex-wrap rounded-xl border border-border bg-muted/30 p-1"
+                      role="tablist"
+                      aria-label="Type de source à ajouter"
+                    >
+                      <Button
+                        id="diagnostic-documents-tab"
+                        type="button"
+                        size="sm"
+                        variant={
+                          diagnosticUploadTab === "documents"
+                            ? "default"
+                            : "ghost"
+                        }
+                        className="min-h-10 rounded-lg"
+                        role="tab"
+                        aria-selected={diagnosticUploadTab === "documents"}
+                        aria-controls="diagnostic-upload-panel"
+                        onClick={() => {
+                          setDiagnosticUploadTab("documents")
+                          setDraggingRaw(false)
+                          if (createdProjectId === null) resetMessages()
+                        }}
+                      >
+                        <FileText className="size-4" aria-hidden="true" />
+                        Documents ({documentFiles.length})
+                      </Button>
+
+                      <Button
+                        id="diagnostic-media-tab"
+                        type="button"
+                        size="sm"
+                        variant={
+                          diagnosticUploadTab === "media" ? "default" : "ghost"
+                        }
+                        className="min-h-10 rounded-lg"
+                        role="tab"
+                        aria-selected={diagnosticUploadTab === "media"}
+                        aria-controls="diagnostic-upload-panel"
+                        onClick={() => {
+                          setDiagnosticUploadTab("media")
+                          setDraggingRaw(false)
+                          if (createdProjectId === null) resetMessages()
+                        }}
+                      >
+                        <Video className="size-4" aria-hidden="true" />
+                        Vidéo / Audio ({mediaFiles.length})
+                      </Button>
+                    </div>
+
+                    <div
+                      id="diagnostic-upload-panel"
+                      role="tabpanel"
+                      aria-labelledby={
+                        diagnosticUploadTab === "media"
+                          ? "diagnostic-media-tab"
+                          : "diagnostic-documents-tab"
+                      }
+                      aria-disabled={createdProjectId !== null}
+                      tabIndex={createdProjectId === null ? 0 : -1}
                       onDragOver={(event) => {
                         event.preventDefault()
                         if (createdProjectId === null) {
@@ -1398,6 +1571,15 @@ export default function NewProjectPage({
                       onDrop={handleRawDrop}
                       onClick={() => {
                         if (createdProjectId === null) {
+                          rawFileInputRef.current?.click()
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        if (
+                          createdProjectId === null &&
+                          (event.key === "Enter" || event.key === " ")
+                        ) {
+                          event.preventDefault()
                           rawFileInputRef.current?.click()
                         }
                       }}
@@ -1416,21 +1598,32 @@ export default function NewProjectPage({
                         type="file"
                         multiple
                         disabled={createdProjectId !== null}
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.msg,.txt,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4,.mov,.avi,.mkv,.webm,.mpeg,.mpg,.3gp,audio/*,video/*"
+                        accept={
+                          diagnosticUploadTab === "media"
+                            ? ".mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.wma,.mp4,.mov,.avi,.mkv,.webm,.mpeg,.mpg,.3gp,audio/*,video/*"
+                            : ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.msg,.txt"
+                        }
                         className="hidden"
                         onChange={(event) => {
                           if (event.target.files?.length) {
-                            addRawFiles(event.target.files)
+                            addRawFiles(event.target.files, diagnosticUploadTab)
                           }
+                          event.currentTarget.value = ""
                         }}
                       />
 
                       <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-brand/10 text-brand transition group-hover:scale-105">
-                        <Upload className="size-6" />
+                        {diagnosticUploadTab === "media" ? (
+                          <Video className="size-6" aria-hidden="true" />
+                        ) : (
+                          <Upload className="size-6" aria-hidden="true" />
+                        )}
                       </div>
 
                       <p className="mt-4 text-sm font-semibold text-foreground">
-                        Glissez-déposez vos fichiers ici
+                        {diagnosticUploadTab === "media"
+                          ? "Glissez-déposez vos vidéos ou audios ici"
+                          : "Glissez-déposez vos documents ici"}
                       </p>
 
                       <p className="mt-1 text-xs text-muted-foreground">
@@ -1438,13 +1631,15 @@ export default function NewProjectPage({
                       </p>
 
                       <p className="mx-auto mt-3 max-w-xl text-[11px] leading-5 text-muted-foreground/80">
-                        PDF, DOCX, XLSX, PPTX, images, MSG, TXT, MP3, WAV, M4A, MP4, MOV, AVI, MKV…
+                        {diagnosticUploadTab === "media"
+                          ? "MP4, MOV, AVI, MKV, WEBM, MP3, WAV, M4A… Le PDF de transcription sera ajouté au dossier CIR."
+                          : "PDF, DOCX, XLSX, PPTX, images, MSG et TXT"}
                       </p>
                     </div>
 
-                    {files.length > 0 && (
+                    {visibleDiagnosticFiles.length > 0 && (
                       <div className="space-y-2">
-                        {files.map((item) => {
+                        {visibleDiagnosticFiles.map((item) => {
                           const media = isMediaFile(item.file)
 
                           return (
@@ -1475,12 +1670,15 @@ export default function NewProjectPage({
 
                                     {media && (
                                       <p className="mt-1 text-[11px] text-brand">
-                                        Un PDF de transcription sera préparé automatiquement.
+                                        Le média sera transcrit sans être stocké dans PostgreSQL.
                                       </p>
                                     )}
 
                                     {item.error && (
-                                      <p className="mt-1 text-[11px] text-destructive">
+                                      <p
+                                        className="mt-1 text-[11px] text-destructive"
+                                        role="alert"
+                                      >
                                         {item.error}
                                       </p>
                                     )}
@@ -1491,12 +1689,13 @@ export default function NewProjectPage({
                                   type="button"
                                   onClick={() => removeRawFile(item.id)}
                                   className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition hover:bg-destructive/5 hover:text-destructive"
+                                  aria-label={`Retirer ${item.name}`}
                                   disabled={
                                     item.status === "uploading" ||
                                     createdProjectId !== null
                                   }
                                 >
-                                  <X className="size-4" />
+                                  <X className="size-4" aria-hidden="true" />
                                 </button>
                               </div>
 
@@ -1504,7 +1703,11 @@ export default function NewProjectPage({
                                 <div className="mt-3 flex items-center gap-3">
                                   <Progress value={item.progress} className="h-1.5 flex-1" />
                                   <Badge variant="outline" className="rounded-full text-[10px]">
-                                    {item.status}
+                                    {item.status === "pending" && "En attente"}
+                                    {item.status === "uploading" &&
+                                      (media ? "Transcription" : "Envoi")}
+                                    {item.status === "done" && "Terminé"}
+                                    {item.status === "error" && "Erreur"}
                                   </Badge>
                                 </div>
                               )}
@@ -1669,7 +1872,7 @@ export default function NewProjectPage({
                                 {item.status === "transcribing" &&
                                   "Transcription et génération du PDF en cours…"}
                                 {item.status === "ready" &&
-                                  "PDF prêt à être téléchargé."}
+                                  (item.error || "PDF prêt à être téléchargé.")}
                                 {item.status === "error" &&
                                   (item.error || "Erreur pendant la transcription.")}
                               </p>
@@ -1781,10 +1984,16 @@ export default function NewProjectPage({
                     />
 
                     {depositMode === "diagnostic" && (
-                      <SummaryRow
-                        label="Fichiers"
-                        value={`${files.length} document${files.length > 1 ? "s" : ""}`}
-                      />
+                      <>
+                        <SummaryRow
+                          label="Documents"
+                          value={`${documentFiles.length} fichier${documentFiles.length > 1 ? "s" : ""}`}
+                        />
+                        <SummaryRow
+                          label="Vidéo / Audio"
+                          value={`${mediaFiles.length} média${mediaFiles.length > 1 ? "s" : ""}`}
+                        />
+                      </>
                     )}
 
                     {depositMode === "reference" && finalCirFile && (

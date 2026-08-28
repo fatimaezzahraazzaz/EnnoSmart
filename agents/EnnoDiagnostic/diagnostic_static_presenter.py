@@ -21,6 +21,7 @@ import json
 import os
 import re
 import unicodedata
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 try:
@@ -250,6 +251,17 @@ def sanitize_generated_text(value: Any, max_chars: int = 2400) -> str:
         line = _FILE_REFERENCE_RE.sub("", line)
         line = strip_internal_evidence_references(line)
         line = re.sub(r"\bSources?\s+\d+(?:\s*[,;]\s*\d+)*\b", "", line, flags=re.I)
+        # Les identifiants doivent vivre dans ``evidence_ids`` uniquement. Une
+        # fois E1/F2 retirés, le modèle pouvait toutefois laisser des coquilles
+        # visibles telles que « (preuves, , ) » ou « dans les preuves et. ».
+        line = re.sub(r"\s*\(\s*preuves?\s*(?:[,;]\s*)*\)", "", line, flags=re.I)
+        line = re.sub(
+            r"\s*,?\s*(?:comme\s+)?(?:pr[ée]cis[ée]e?|indiqu[ée]e?|r[ée]f[ée]renc[ée]e?)"
+            r"\s+dans\s+(?:la|les)\s+preuves?(?:\s+et)?(?=\s*[.,;:]|$)",
+            "",
+            line,
+            flags=re.I,
+        )
         line = re.sub(r"\bIndice\s*:\s*", "", line, flags=re.I)
         line = clean_text(line, max_chars=max_chars)
         if line:
@@ -465,6 +477,243 @@ _METHOD_RE = re.compile(
     re.I,
 )
 _QUANT_RE = re.compile(r"(?<![A-Za-z0-9])[-+]?\d+(?:[.,]\d+)?(?:\s*%|\s*°|\s*[A-Za-z]{1,5})?")
+_ADMINISTRATIVE_EVIDENCE_RE = re.compile(
+    r"\b(?:pourriez[- ]vous|merci de pr[eé]ciser|pr[eé]ciser ici|"
+    r"d[eé]crire (?:les?|la) (?:crit[eè]res?|d[eé]marche|obstacles?|contexte)|"
+    r"rajouter des paragraphes|surligner les missions|date commentaire|"
+    r"commentaires? en rouge|typologie de commentaire|formulation\s*\|\s*0[.,]4)\b|"
+    r"(?:^|\s)ffl(?:\s|$)|01/01/1900",
+    re.I,
+)
+_AUDIT_MATRIX_RE = re.compile(
+    r"\b(?:grand principe de la solution|m[eé]thodologie\s*/\s*protocole|"
+    r"protocole d['’][eé]valuation|une boucle it[eé]rative compl[eè]te)\b",
+    re.I,
+)
+_USE_CASE_SCENARIO_RE = re.compile(
+    r"(?:\[SLIDE\].*\bcas\b|\bcas\s+\d+\b|\bcas similaires?\b|\buse cases?\b)",
+    re.I,
+)
+_OBSERVED_RESULT_RE = re.compile(
+    r"\b(?:nous avons (?:observ[eé]|mesur[eé]|obtenu|constat[eé]|trouv[eé])|"
+    r"we (?:found|observed|measured)|achieved|demonstrated|showed|"
+    r"r[eé]sultats? (?:montre|montrent|indique|indiquent)|s['’]?[eé]tablit|"
+    r"a atteint|ont atteint|correspondance|match|heavily dependent|fortement d[eé]pend|"
+    r"s['’]est av[eé]r[eé]|a permis de confirmer|ont permis de confirmer)\b",
+    re.I,
+)
+_RESULT_TARGET_RE = re.compile(
+    r"\b(?:attendu|cible|objectif|projection|[aà] atteindre|s['’]assurer|garantir|"
+    r"d[eé]finir un taux|[aà] revoir|apr[eè]s chaque|vise [aà]|permettra|"
+    r"will (?:allow|enable)|aims? to|target|expected)\b",
+    re.I,
+)
+_CONSTRAINT_RE = re.compile(
+    r"\b(?:contrainte|limite|restriction|d[eé]pendance|confidentialit[eé]|s[eé]curit[eé]|"
+    r"co[uû]t|latence|capacit[eé]|volume|disponibilit[eé]|interop[eé]rabilit[eé]|"
+    r"scalabilit[eé]|passage [aà] l['’][eé]chelle)\b",
+    re.I,
+)
+
+
+def _section_evidence_text(source: Dict[str, Any]) -> str:
+    return clean_text(source.get("excerpt") or source.get("text") or source_text(source), 5200)
+
+
+def _technical_evidence_rejection_reason(
+    source: Dict[str, Any],
+    section_key: str,
+) -> str:
+    """Écarte les lignes de gabarit, de suivi et les faux résultats.
+
+    Les règles portent sur la fonction documentaire, jamais sur un nom de
+    projet, un client, une technologie ou une valeur attendue particulière.
+    """
+    text = _section_evidence_text(source)
+    if not text:
+        return "empty"
+    if source.get("temporal_scope") == "previous_cir_continuity":
+        if re.search(
+            r"\b(?:pr[eé]sent[eé]e? en annexe|voir annexe|fournit un support complet|"
+            r"description des travaux r[eé]alis[eé]s)\b",
+            text,
+            flags=re.I,
+        ):
+            return "historical_cross_reference_without_content"
+        return ""
+    section = clean_text(source.get("section_title") or _source_section_title(source), 500)
+    document = clean_text(source.get("document") or source_doc(source), 500)
+    joined = f"{section} {text}"
+    normalized = _grounding_norm(joined)
+    role = clean_text(source.get("role") or _source_role(source), 100).lower()
+    result_scope = _grounding_norm(source.get("result_scope") or "")
+
+    if _ADMINISTRATIVE_EVIDENCE_RE.search(joined):
+        return "administrative_or_template_instruction"
+    if re.search(r"\buse cases?\b", _grounding_norm(document), flags=re.I):
+        return "illustrative_use_case_document"
+    if _USE_CASE_SCENARIO_RE.search(joined):
+        return "illustrative_use_case"
+    if re.search(
+        r"consultant\s*\|\s*titre du verrou\s*\|\s*contexte du projet",
+        joined,
+        flags=re.I,
+    ):
+        return "portfolio_example_table"
+    if re.search(r"\ble verrou identifi[eé] dans le projet\b", joined, flags=re.I):
+        return "other_project_lock_example"
+    if (
+        text.count("|") >= 3
+        and _AUDIT_MATRIX_RE.search(joined)
+        and len(re.findall(r"\b(?:oui|non|partiel|action|commentaire|trait[eé])\b", joined, re.I)) >= 2
+    ):
+        return "audit_matrix"
+    if section_key == "demarche_detectee" and text.count("|") >= 6:
+        return "flattened_planning_row"
+    if (
+        len(re.findall(r"\b(?:activit[eé]|d[eé]but|dur[eé]e|responsable|pourcentage accompli|janvier|f[eé]vrier|mars|avril)\b", joined, re.I))
+        >= 5
+    ):
+        return "planning_table_header"
+
+    if section_key == "resultats_metriques":
+        if re.search(r"\bthis is achieved by\b|\bwe (?:improved|implemented)\b", joined, flags=re.I):
+            return "method_statement_not_result"
+        observed = bool(_OBSERVED_RESULT_RE.search(joined))
+        target_only = bool(_RESULT_TARGET_RE.search(joined)) and not observed
+        accepted_scope = result_scope in {
+            "global comparison", "global metric", "observed gain",
+            "observed metric", "qualitative observation", "historical result",
+        }
+        if target_only:
+            return "target_or_planning_not_result"
+        if not observed:
+            return "no_observed_result"
+
+    if section_key == "demarche_detectee":
+        operation_function = _grounding_norm(source.get("operation_function") or "")
+        method_signal = bool(
+            _PROJECT_ACTION_RE.search(joined)
+            or re.search(
+                r"\b(?:concevoir|conception de|cr[eé]er|pouvoir cr[eé]er|g[eé]n[eé]rer|"
+                r"impl[eé]ment[eé]|entra[iî]ner|ajuster|r[eé]entra[iî]ner|annoter|corriger|"
+                r"confronter|examiner|appliquer|performed|implemented|generated|trained|"
+                r"reviewed|evaluated)\b",
+                joined,
+                flags=re.I,
+            )
+            or (
+                _METHOD_RE.search(joined)
+                and re.search(r"\b(?:nous|we|a [eé]t[eé]|ont [eé]t[eé]|vise [aà]|permet de|pour)\b", joined, re.I)
+            )
+        )
+        if operation_function not in {"experiment", "hypothesis", "learning", "historical method"} and not method_signal:
+            return "not_a_method"
+        if not method_signal:
+            return "method_not_described"
+
+    if section_key == "parametres_contraintes":
+        if text.count("|") >= 5 and len(re.findall(
+            r"\b(?:j\d+|v\d+(?:[.-]\d+)*|mission|jalon|d[eé]ploiement|"
+            r"travaux|d[eé]but|dur[eé]e|pourcentage accompli)\b",
+            joined,
+            flags=re.I,
+        )) >= 2:
+            return "planning_row_not_parameter"
+        has_parameter = bool(_PARAMETER_RE.search(joined))
+        has_constraint = bool(_CONSTRAINT_RE.search(joined))
+        if not has_parameter and not has_constraint:
+            return "not_a_parameter_or_technical_constraint"
+
+    return ""
+
+
+def _filter_and_dedupe_section_evidence(
+    evidence: Sequence[Dict[str, Any]],
+    section_key: str,
+) -> List[Dict[str, Any]]:
+    if section_key not in {
+        "demarche_detectee", "resultats_metriques", "parametres_contraintes",
+    }:
+        return [dict(item) for item in evidence if isinstance(item, dict)]
+    output: List[Dict[str, Any]] = []
+    signatures = set()
+    for raw in evidence:
+        if not isinstance(raw, dict):
+            continue
+        if _technical_evidence_rejection_reason(raw, section_key):
+            continue
+        item = dict(raw)
+        text = _section_evidence_text(item)
+        if section_key == "resultats_metriques":
+            sentences = [
+                clean_text(value, 1200)
+                for value in re.split(r"(?<=[.!?;])\s+", text)
+                if clean_text(value, 1200)
+            ]
+            observed_sentences = [
+                value for value in sentences
+                if _OBSERVED_RESULT_RE.search(value)
+                and not (_RESULT_TARGET_RE.search(value) and not _OBSERVED_RESULT_RE.search(value))
+            ]
+            if observed_sentences:
+                text = clean_text(" ".join(observed_sentences), 1800)
+                item["excerpt"] = text
+        normalized = _grounding_norm(text)
+        signature = normalized[:700]
+        if not signature or signature in signatures or any(
+            min(len(signature), len(previous)) >= 70
+            and (signature in previous or previous in signature)
+            for previous in signatures
+        ):
+            continue
+        current_doc = clean_text(item.get("document"), 500).lower()
+        current_tokens = {
+            token for token in normalized.split()
+            if len(token) >= 4 and token not in _PROJECT_SCOPE_STOPWORDS
+        }
+        near_duplicate = False
+        for previous in output:
+            previous_doc = clean_text(previous.get("document"), 500).lower()
+            if not current_doc or current_doc != previous_doc:
+                continue
+            previous_tokens = {
+                token for token in _grounding_norm(_section_evidence_text(previous)).split()
+                if len(token) >= 4 and token not in _PROJECT_SCOPE_STOPWORDS
+            }
+            overlap = len(current_tokens & previous_tokens) / max(
+                1, min(len(current_tokens), len(previous_tokens))
+            )
+            if overlap >= 0.68:
+                near_duplicate = True
+                break
+        if near_duplicate:
+            continue
+
+        # Deux formulations du même résultat chiffré sont une seule preuve à
+        # expliquer, même si le classifieur amont les a rattachées à deux groupes.
+        if section_key == "resultats_metriques":
+            numbers = tuple(sorted(value.strip().lower() for value in _QUANT_RE.findall(text)))
+            tokens = current_tokens
+            duplicate = False
+            for previous in output:
+                previous_text = _section_evidence_text(previous)
+                previous_numbers = tuple(sorted(value.strip().lower() for value in _QUANT_RE.findall(previous_text)))
+                if not numbers or numbers != previous_numbers:
+                    continue
+                previous_tokens = {
+                    token for token in _grounding_norm(previous_text).split()
+                    if len(token) >= 4 and token not in _PROJECT_SCOPE_STOPWORDS
+                }
+                overlap = len(tokens & previous_tokens) / max(1, min(len(tokens), len(previous_tokens)))
+                if overlap >= 0.20:
+                    duplicate = True
+                    break
+            if duplicate:
+                continue
+        signatures.add(signature)
+        output.append(item)
+    return output
 
 
 def _source_role(source: Dict[str, Any]) -> str:
@@ -591,6 +840,8 @@ def select_sources_for_section(
     seen = set()
     ranked: List[Tuple[float, Dict[str, Any]]] = []
     for source in candidates:
+        if _technical_evidence_rejection_reason(source, config.key):
+            continue
         signature = _source_signature(source)
         if signature in seen:
             continue
@@ -601,7 +852,44 @@ def select_sources_for_section(
             continue
         ranked.append((score, source))
     ranked.sort(key=lambda item: item[0], reverse=True)
-    return [source for _, source in ranked[: config.top_k_evidence]]
+    if config.key not in {
+        "demarche_detectee", "resultats_metriques", "parametres_contraintes",
+    }:
+        return [source for _, source in ranked[: config.top_k_evidence]]
+
+    # Une opération très riche ne doit pas évincer toutes les autres. Prendre
+    # d'abord une preuve par groupe, puis une deuxième, conserve la pertinence
+    # du classement tout en assurant une couverture transversale.
+    buckets: Dict[str, List[Dict[str, Any]]] = {}
+    for rank_index, (_score, source) in enumerate(ranked):
+        meta = meta_of(source)
+        coverage_key = clean_text(
+            meta.get("operation_group_id")
+            or meta.get("lock_group_id")
+            or meta.get("operation_id")
+            or meta.get("group_id")
+            or source.get("operation_group_id")
+            or source.get("lock_group_id")
+            or source_doc(source)
+            or f"preuve_{rank_index}",
+            260,
+        )
+        buckets.setdefault(coverage_key, []).append(source)
+
+    balanced: List[Dict[str, Any]] = []
+    depth = 0
+    while len(balanced) < config.top_k_evidence:
+        added = False
+        for values in buckets.values():
+            if depth < len(values):
+                balanced.append(values[depth])
+                added = True
+                if len(balanced) >= config.top_k_evidence:
+                    break
+        if not added:
+            break
+        depth += 1
+    return balanced
 
 
 def _safe_int(value: Any) -> Optional[int]:
@@ -685,44 +973,82 @@ _SECTION_INSTRUCTIONS = {
         "automatiquement une insuffisance en ingénierie classique."
     ),
     "demarche_detectee": (
-        "Organise les travaux dans l'ordre logique sous forme de démarches numérotées. Une démarche correspond à une opération "
+        "Réexplique les travaux un par un, en français clair pour un consultant qui ne connaît pas le domaine. Organise-les dans "
+        "l'ordre logique sous forme de démarches numérotées. Chaque élément doit former une explication autonome comprenant : "
+        "(1) ce que l'équipe cherchait à vérifier, (2) ce qu'elle a concrètement fait, (3) les données, outils ou conditions employés, "
+        "et (4) ce que cette étape devait permettre de décider ou d'apprendre. N'utilise jamais le mot « test » seul : précise toujours "
+        "l'objet comparé ou vérifié et la raison de cette vérification. Une démarche correspond à une opération "
         "ou à une sous-étape cohérente d'une même opération : ne fusionne jamais des preuves portant des numéros d'opération différents. "
         "Chaque démarche doit nommer l'objectif de l'étape, la méthode réellement appliquée, les données/conditions utilisées et ce qu'elle "
         "cherche à vérifier. Préserve strictement la nature des données : une production de données synthétiques ne devient pas une acquisition "
         "de mesures réelles. Ne déduis jamais un intervalle, une plage ou un nombre total à partir d'autres nombres ; reprends seulement les valeurs "
         "explicitement écrites. Si un nombre de positions, un pas ou une plage semblent contradictoires entre preuves, expose les valeurs sans les "
         "réconcilier et demande une validation consultant. Une hypothèse peut être reconstruite à partir de plusieurs preuves de la même opération. "
-        "Ne considère jamais le nombre d'étapes comme une preuve de R&D et distingue l'expérimentation R&D, le support nécessaire et l'ingénierie classique."
+        "Ne considère jamais le nombre d'étapes comme une preuve de R&D et distingue l'expérimentation R&D, le support nécessaire et l'ingénierie classique. "
+        "Couvre chaque numéro d'opération présent dans les preuves au moins une fois avant d'ajouter un second détail sur une opération déjà décrite. "
+        "Rédige deux à quatre phrases naturelles par démarche. Ne recopie jamais une ligne de planning, une matrice d'audit, une consigne de rédaction "
+        "ou un scénario illustratif : si une preuve ne décrit pas une action méthodologique exploitable, ne crée aucun élément à partir d'elle."
     ),
     "resultats_metriques": (
-        "Rédige des paragraphes thématiques séparant les familles de résultats : comparaison globale, gain observé, étude d'ablation, "
+        "Réexplique chaque résultat observé séparément, sous forme d'éléments numérotés compréhensibles par un consultant non spécialiste. "
+        "Chaque élément précise : l'objet mesuré, la condition ou version concernée, la valeur ou l'observation réellement obtenue, puis "
+        "ce que l'on peut conclure et ce qui reste incertain. Rédige des éléments séparant les familles de résultats : comparaison globale, "
+        "gain observé, étude d'ablation, "
         "métriques par classe/cas et limites. Ne mélange jamais deux expériences différentes dans la même conclusion causale. Utilise en priorité "
         "les preuves marquées primary_result_evidence et les scopes global_comparison, global_metric, observed_gain ou observed_metric. Une métrique "
         "par classe/cible ne doit jamais être présentée comme performance globale. Une marge théorique vers une borne (par exemple vers 100 %) n'est "
         "pas un résultat expérimental principal. Ne calcule aucun gain ni écart : il doit être explicitement écrit dans une preuve. Ignore références "
         "bibliographiques, auteurs, affiliations, titres et métadonnées. Une comparaison explicitement faite avec un travail précédent/une ancienne "
         "version est un résultat historique séparé : ne la transforme jamais en comparaison entre les méthodes du protocole courant. Si le contexte "
-        "d'une valeur est ambigu, omets-la plutôt que de l'attribuer à la mauvaise expérience. Chaque valeur doit être associée à son sujet, sa métrique et sa condition."
+        "d'une valeur est ambigu, omets-la plutôt que de l'attribuer à la mauvaise expérience. Chaque valeur doit être associée à son sujet, sa métrique et sa condition. "
+        "Une projection KPI, une valeur « à revoir », une planification, une question ou une consigne « décrire... » n'est jamais un résultat acquis. "
+        "N'impose pas artificiellement un résultat à chaque opération : signale seulement une lacune si une preuve la formule explicitement. "
+        "Rédige deux à quatre phrases naturelles par résultat et traduis fidèlement les preuves anglaises. Ne recopie jamais un tableau, une consigne, "
+        "un commentaire de relecture ou une ligne de planning."
     ),
     "parametres_contraintes": (
-        "Organise les paramètres et contraintes en éléments numérotés. Pour chacun, indique d'abord sa nature : paramètre du protocole, "
+        "Réexplique chaque paramètre ou contrainte séparément, en français clair pour un consultant non spécialiste. Pour chacun, indique : "
+        "son nom exact, ce qu'il règle ou limite concrètement, la valeur/condition documentée lorsqu'elle existe, puis la raison pour laquelle "
+        "il doit être contrôlé dans l'expérience. Organise les paramètres et contraintes en éléments numérotés. Indique d'abord sa nature : paramètre du protocole, "
         "paramètre de simulation/modèle, contrainte d'un jeu de données ou benchmark, ou limite documentaire. Ne transforme pas une contrainte "
         "propre à un jeu de référence en paramètre général du projet. Reprends les valeurs exactement telles qu'elles figurent dans les preuves. "
         "Explique une influence sur validité, robustesse, représentativité ou coût seulement si ce lien est explicitement soutenu par la preuve ; "
         "sinon indique simplement que le paramètre doit être contrôlé/interprété. Ne déduis pas qu'une densité, un nombre de configurations ou une "
         "plage 'augmente la représentativité' sans preuve explicite. Le nom du paramètre (azimut, incidence, dépression, densité, etc.) doit être "
-        "explicitement présent dans le texte contextualisé de la preuve ; ne le déduis jamais du titre de section seul."
+        "explicitement présent dans le texte contextualisé de la preuve ; ne le déduis jamais du titre de section seul. "
+        "Lorsqu'une preuve contient un tableau aplati avec plusieurs lignes KPI, rattache une valeur uniquement au nom de paramètre situé dans "
+        "la même ligne logique, entre les séparateurs `|`. Ne déplace jamais une valeur de la ligne précédente ou suivante. Préserve exactement "
+        "le comparateur écrit (`<`, `>`, inférieur, supérieur) ; en cas d'ambiguïté, cite la séquence comme ambiguë et demande une validation. "
+        "Répartis les éléments entre les groupes/opérations disponibles afin de ne pas limiter la section aux paramètres du passage le mieux classé. "
+        "Rédige deux à quatre phrases naturelles par paramètre. Une ligne de planning, une consigne de rédaction, une matrice d'audit ou un exemple "
+        "d'un autre cas d'usage n'est pas un paramètre du projet et doit être ignoré."
     ),
 }
 
 
 def _schema_for(config: SectionContextConfig) -> Dict[str, Any]:
     if config.display_mode == "numbered_items":
+        label = {
+            "demarche_detectee": "Démarche 1",
+            "resultats_metriques": "Résultat 1",
+            "parametres_contraintes": "Paramètre ou contrainte 1",
+        }.get(config.key, "Point 1")
+        explanation = {
+            "demarche_detectee": (
+                "Objectif vérifié ; action menée ; données/outils/conditions ; décision ou apprentissage recherché."
+            ),
+            "resultats_metriques": (
+                "Objet mesuré ; condition ; observation obtenue ; portée et limite de la conclusion."
+            ),
+            "parametres_contraintes": (
+                "Nom et nature ; valeur/condition ; rôle concret dans la validité de l'expérience."
+            ),
+        }.get(config.key, "Explication complète.")
         return {
             "items": [
                 {
-                    "label": "Démarche 1" if config.key == "demarche_detectee" else "Point 1",
-                    "text": "Explication complète.",
+                    "label": label,
+                    "text": explanation,
                     "evidence_ids": ["E1"],
                 }
             ]
@@ -981,7 +1307,7 @@ def _official_frascati_evidence(
     result_proofs = [
         proof for proof in (report.get("prioritized_result_evidence") or [])
         if isinstance(proof, dict)
-    ][:3]
+    ]
     operations = [item for item in (report.get("operations") or []) if isinstance(item, dict)]
 
     def operation_proofs_round_robin() -> List[Dict[str, Any]]:
@@ -1051,10 +1377,126 @@ def _official_frascati_evidence(
                     append_proof(preferred, operation_index, operation_group_id, stage)
         return tagged
 
+    def result_proofs_round_robin() -> List[Dict[str, Any]]:
+        """Conserve au moins un résultat par opération avant les détails."""
+        operation_numbers = {
+            clean_text(operation.get("group_id")): index
+            for index, operation in enumerate(operations, start=1)
+            if clean_text(operation.get("group_id"))
+        }
+        per_operation: List[Tuple[int, str, List[Dict[str, Any]]]] = []
+        for operation in operations:
+            group_id = clean_text(operation.get("group_id"))
+            functional = operation.get("functional_evidence")
+            functional = functional if isinstance(functional, dict) else {}
+            proofs = [proof for proof in (functional.get("result") or []) if isinstance(proof, dict)]
+            if proofs:
+                proofs.sort(key=lambda proof: not bool(proof.get("primary_result_evidence")))
+                per_operation.append((operation_numbers.get(group_id, 1), group_id, proofs))
+
+        output: List[Dict[str, Any]] = []
+        seen = set()
+        depth = 0
+        while True:
+            added = False
+            for operation_number, group_id, proofs in per_operation:
+                if depth >= len(proofs):
+                    continue
+                proof = proofs[depth]
+                signature = clean_text(proof.get("evidence_id")) or (
+                    clean_text(proof.get("document")), clean_text(proof.get("excerpt"))[:220]
+                )
+                if signature in seen:
+                    continue
+                seen.add(signature)
+                output.append({
+                    **proof,
+                    "operation_number": operation_number,
+                    "operation_group_id": group_id or None,
+                    "operation_function": "result",
+                })
+                added = True
+            if not added:
+                break
+            depth += 1
+
+        # Les preuves déjà priorisées peuvent inclure des mesures transverses
+        # absentes de functional_evidence : elles restent disponibles sans doublon.
+        for proof in result_proofs:
+            signature = clean_text(proof.get("evidence_id")) or (
+                clean_text(proof.get("document")), clean_text(proof.get("excerpt"))[:220]
+            )
+            if signature in seen:
+                continue
+            seen.add(signature)
+            semantic = proof.get("semantic_link") if isinstance(proof.get("semantic_link"), dict) else {}
+            group_id = clean_text(semantic.get("operation_id"))
+            output.append({
+                **proof,
+                "operation_number": operation_numbers.get(group_id),
+                "operation_group_id": group_id or None,
+                "operation_function": "result",
+            })
+        return output
+
+    def method_proofs_round_robin() -> List[Dict[str, Any]]:
+        """Sélectionne les démarches réellement décrites, pas les verrous.
+
+        L'ancien parcours commençait par ``uncertainty``. Avec de nombreuses
+        opérations, le budget était donc entièrement consommé avant d'atteindre
+        la moindre preuve ``experiment``. On privilégie maintenant les essais,
+        validations et protocoles, tout en écartant les opérations déjà classées
+        ingénierie classique.
+        """
+        operation_numbers = {
+            clean_text(operation.get("group_id")): index
+            for index, operation in enumerate(operations, start=1)
+            if clean_text(operation.get("group_id"))
+        }
+        eligible_operations = [
+            operation for operation in operations
+            if clean_text(operation.get("operation_status")) != "classical_engineering"
+        ]
+        output: List[Dict[str, Any]] = []
+        seen_content = set()
+        for depth in range(3):
+            for operation in eligible_operations:
+                group_id = clean_text(operation.get("group_id"))
+                functional = operation.get("functional_evidence")
+                functional = functional if isinstance(functional, dict) else {}
+                ranked_proofs: List[Tuple[str, Dict[str, Any]]] = []
+                for stage in ("experiment", "hypothesis", "learning"):
+                    for proof in functional.get(stage) or []:
+                        if isinstance(proof, dict):
+                            ranked_proofs.append((stage, proof))
+                usable: List[Tuple[str, Dict[str, Any]]] = []
+                for stage, proof in ranked_proofs:
+                    probe = {**proof, "operation_function": stage}
+                    if not _technical_evidence_rejection_reason(probe, "demarche_detectee"):
+                        usable.append((stage, proof))
+                if depth >= len(usable):
+                    continue
+                stage, proof = usable[depth]
+                excerpt = clean_text(proof.get("excerpt"), 900)
+                content_signature = (
+                    clean_text(proof.get("document") or proof.get("document_name"), 260).lower(),
+                    _grounding_norm(excerpt)[:620],
+                )
+                if not excerpt or content_signature in seen_content:
+                    continue
+                seen_content.add(content_signature)
+                output.append({
+                    **proof,
+                    "operation_number": operation_numbers.get(group_id, 1),
+                    "operation_group_id": group_id or None,
+                    "operation_function": stage,
+                })
+        return output
+
     if purpose == "resultats_metriques":
-        source_proofs.extend(result_proofs)
+        source_proofs.extend(result_proofs_round_robin())
     elif purpose == "demarche_detectee":
-        source_proofs.extend(operation_proofs_round_robin())
+        source_proofs.extend(method_proofs_round_robin())
     else:
         # La conclusion d'éligibilité raconte UNE opération de référence. Les
         # preuves détaillées des autres opérations ne sont pas injectées dans le
@@ -1227,12 +1669,94 @@ def _compact_frascati_for_prompt(summary: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _historical_axis_evidence(
+    historical_axes: Optional[Sequence[Dict[str, Any]]],
+    section_key: str,
+    max_items: int,
+) -> List[Dict[str, Any]]:
+    """Expose N-1 dans les sections métier sans le transformer en preuve N."""
+    mapping = {
+        "demarche_detectee": ("historical_method_context", "methode", "historical_method"),
+        "parametres_contraintes": ("historical_parameter_context", "parametre", "historical_parameter"),
+        "resultats_metriques": ("historical_result_context", "resultat", "historical_result"),
+    }
+    if section_key not in mapping:
+        return []
+    history_key, role, result_scope = mapping[section_key]
+    output: List[Dict[str, Any]] = []
+    seen = set()
+    for axis in historical_axes or []:
+        if not isinstance(axis, dict):
+            continue
+        continuity = axis.get("historical_continuity")
+        continuity = continuity if isinstance(continuity, dict) else {}
+        if not continuity.get("integrated_with_current_lock_card"):
+            continue
+        axis_id = clean_text(axis.get("axis_id") or axis.get("group_id"), 100)
+        axis_title = clean_text(axis.get("title"), 320)
+        for row in continuity.get(history_key) or []:
+            if not isinstance(row, dict):
+                continue
+            text_value = clean_text(row.get("text") or row.get("excerpt"), 1100)
+            previous_year = clean_text(
+                row.get("previous_year")
+                or (continuity.get("previous_years") or [""])[0],
+                20,
+            )
+            signature = (axis_id, previous_year, _grounding_norm(text_value))
+            if not text_value or signature in seen:
+                continue
+            seen.add(signature)
+            evidence_id = f"H{len(output) + 1}"
+            source_path = clean_text(row.get("source_path"), 900)
+            document = clean_text(row.get("document") or Path(source_path).name, 300)
+            output.append({
+                "evidence_id": evidence_id,
+                "rag_chunk_id": clean_text(row.get("passage_id"), 240),
+                "passage_id": clean_text(row.get("passage_id"), 240) or evidence_id,
+                "document_id": row.get("document_id") or "",
+                "document": document,
+                "document_name": document,
+                "source_path": source_path,
+                "page_number": _safe_int(row.get("page_number")),
+                "paragraph_index": _safe_int(row.get("paragraph_index")),
+                "char_start": _safe_int(row.get("char_start")),
+                "char_end": _safe_int(row.get("char_end")),
+                "sentence_start": _safe_int(row.get("sentence_start")),
+                "section_title": clean_text(row.get("section_title"), 240),
+                "section_path": clean_text(row.get("section_path"), 500),
+                "role": role,
+                "proof_kind": result_scope,
+                "result_scope": result_scope,
+                "operation_group_id": f"history:{axis_id}:{previous_year}:{role}",
+                "operation_function": role,
+                "primary_result_evidence": section_key == "resultats_metriques",
+                "quantitative_values": _QUANT_RE.findall(text_value)[:12],
+                "reference_like": False,
+                "excerpt": clean_text(
+                    f"Historique CIR {previous_year} — {text_value}"
+                    if previous_year else f"Historique CIR antérieur — {text_value}",
+                    1200,
+                ),
+                "source_text_original": text_value,
+                "temporal_scope": "previous_cir_continuity",
+                "previous_year": previous_year,
+                "history_is_current_proof": False,
+                "historical_axis_id": axis_id,
+                "historical_axis_title": axis_title,
+            })
+            if len(output) >= max_items:
+                return output
+    return output
+
+
 def build_section_context(
     config: SectionContextConfig,
     sections: Dict[str, List[Dict[str, Any]]],
     frascati_summary: Dict[str, Any],
     style_memory_report: Optional[Dict[str, Any]] = None,
     memory_v2_report: Optional[Dict[str, Any]] = None,
+    historical_axes: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> Tuple[str, List[Dict[str, Any]]]:
     sources = select_sources_for_section(sections, config)
     evidence: List[Dict[str, Any]] = (
@@ -1244,6 +1768,15 @@ def build_section_context(
         if config.key in {"justification_frascati", "demarche_detectee", "resultats_metriques"}
         else []
     )
+    evidence = _filter_and_dedupe_section_evidence(evidence, config.key)
+    official_current_evidence_count = len(evidence)
+    if config.key in {"demarche_detectee", "resultats_metriques", "parametres_contraintes"}:
+        evidence.extend(_historical_axis_evidence(
+            historical_axes,
+            config.key,
+            max_items=min(8, max(1, config.top_k_evidence // 3)),
+        ))
+        evidence = _filter_and_dedupe_section_evidence(evidence, config.key)
 
     base = {
         "section": config.title,
@@ -1336,9 +1869,16 @@ Tu es EnnoDiagnostic. Rédige uniquement « {config.title} » en français.
 
 CONTRAT :
 - Utilise exclusivement les PREUVES numérotées du projet courant.
-- Aucun autre projet, Memory V2, CIR précédent ou exemple de style ne peut fournir un fait.
+- Les preuves F/E décrivent l'année courante. Les preuves H sont exclusivement des éléments de continuité du CIR précédent du même projet.
+- Une preuve H peut ajouter une démarche, un paramètre ou un résultat historique à la section, mais jamais prouver un fait de l'année courante.
+- Tout élément utilisant une preuve H doit être autonome, commencer par « Historique 20XX — » avec l'année fournie et ne citer aucune preuve F/E dans le même élément.
+- Aucun autre projet, Memory V2 ou exemple de style ne peut fournir un fait.
 - N'invente ni objet, ni méthode, ni paramètre, ni résultat, ni causalité, ni chiffre.
 - Chaque paragraphe/élément doit citer au moins un evidence_id autorisé.
+- Pour Démarche, Paramètres et Résultats, produis une explication autonome par objet ou opération ; ne copie jamais un tableau aplati et ne fusionne pas plusieurs opérations.
+- Ignore toute consigne de rédaction, commentaire de relecture, matrice d'audit, ligne de planning ou scénario illustratif qui subsisterait dans les preuves.
+- Chaque élément doit comporter deux à quatre phrases naturelles : contexte fonctionnel, action/mesure, puis interprétation ou limite. Une simple paraphrase de la preuve est insuffisante.
+- Réexplique les termes techniques par leur fonction dans le projet, sans les remplacer par un autre concept et sans supposer que le consultant connaît le domaine.
 - Un nombre visible doit exister tel quel dans la preuve citée ; ne calcule aucun écart ou gain.
 - Ne transforme pas un résultat en objectif ni une contrainte de benchmark en paramètre général du projet.
 - Pour une preuve fragmentée, utilise son texte contextualisé ; le titre de section sert de localisation, pas de preuve sémantique.
@@ -1360,65 +1900,82 @@ PREUVES :
     # disponibles, ne pas réinjecter ensuite des chunks RAG génériques : c'était la
     # principale source de mélange entre opérations, littérature et résultats locaux.
     official_only_sections = {"justification_frascati", "demarche_detectee", "resultats_metriques"}
-    sources_to_append = [] if (config.key in official_only_sections and evidence) else sources
+    sources_to_append = (
+        []
+        if config.key in official_only_sections and official_current_evidence_count > 0
+        else sources
+    )
+
+    def evidence_prompt_rows(values: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [
+            {
+                "evidence_id": ev["evidence_id"],
+                "role": ev.get("role"),
+                "section_title": ev.get("section_title"),
+                "proof_kind": ev.get("proof_kind"),
+                "operation_number": ev.get("operation_number"),
+                "operation_group_id": ev.get("operation_group_id"),
+                "operation_function": ev.get("operation_function"),
+                "result_scope": ev.get("result_scope"),
+                "temporal_scope": ev.get("temporal_scope") or "current_year",
+                "previous_year": ev.get("previous_year"),
+                "history_is_current_proof": ev.get("history_is_current_proof"),
+                "historical_axis_title": ev.get("historical_axis_title"),
+                "primary_result_evidence": ev.get("primary_result_evidence"),
+                "reference_like": ev.get("reference_like"),
+                "quantitative_values": ev.get("quantitative_values") or [],
+                "rattachement_operation": ev.get("justification_bridge_fr") or None,
+                "text": ev["excerpt"],
+            }
+            for ev in values
+        ]
+
+    def render_prompt(values: Sequence[Dict[str, Any]]) -> str:
+        return base_prompt.replace(
+            "{evidence_json}",
+            json.dumps(evidence_prompt_rows(values), ensure_ascii=False, indent=2),
+        )
+
+    # Les preuves officielles sont déjà ordonnées en round-robin par opération.
+    # Si leur totalité dépasse le budget, retirer les derniers détails conserve
+    # donc d'abord une preuve de chaque opération au lieu de laisser le client LLM
+    # tronquer arbitrairement la fin du prompt.
+    # PydanticAI construit son propre prompt structuré pour la justification
+    # Frascati et reçoit ``evidence`` séparément. Appliquer ici le budget de
+    # l'ancien prompt libre supprimait toutes les preuves (y compris F0), puis
+    # faisait échouer la validation structurée. Les autres sections continuent
+    # d'être retaillées normalement.
+    if config.key != "justification_frascati":
+        while evidence and estimate_tokens(render_prompt(evidence)) > config.max_input_tokens:
+            removable_current = next(
+                (
+                    index for index in range(len(evidence) - 1, -1, -1)
+                    if evidence[index].get("temporal_scope") != "previous_cir_continuity"
+                ),
+                None,
+            )
+            # Réserve de couverture N-1 : on réduit d'abord les détails courants
+            # redondants. Une continuité validée ne doit plus être supprimée
+            # mécaniquement parce qu'elle se trouve à la fin du prompt.
+            if removable_current is not None and any(
+                item.get("temporal_scope") == "previous_cir_continuity"
+                for item in evidence
+            ):
+                evidence.pop(removable_current)
+            else:
+                evidence.pop()
 
     for index, source in enumerate(sources_to_append, start=1):
         item = evidence_from_source(source, f"E{index}", config.max_chars_per_evidence)
-        candidate = evidence + [item]
-        prompt_candidate = base_prompt.replace(
-            "{evidence_json}",
-            json.dumps(
-                [
-                    {
-                        "evidence_id": ev["evidence_id"],
-                        "role": ev.get("role"),
-                        "section_title": ev.get("section_title"),
-                        "proof_kind": ev.get("proof_kind"),
-                        "operation_number": ev.get("operation_number"),
-                        "operation_group_id": ev.get("operation_group_id"),
-                        "operation_function": ev.get("operation_function"),
-                        "result_scope": ev.get("result_scope"),
-                        "primary_result_evidence": ev.get("primary_result_evidence"),
-                        "reference_like": ev.get("reference_like"),
-                        "quantitative_values": ev.get("quantitative_values") or [],
-                        "rattachement_operation": ev.get("justification_bridge_fr") or None,
-                        "text": ev["excerpt"],
-                    }
-                    for ev in candidate
-                ],
-                ensure_ascii=False,
-                indent=2,
-            ),
-        )
+        candidate = _filter_and_dedupe_section_evidence(evidence + [item], config.key)
+        if len(candidate) <= len(evidence):
+            continue
+        prompt_candidate = render_prompt(candidate)
         if estimate_tokens(prompt_candidate) > config.max_input_tokens:
             break
         evidence = candidate
 
-    prompt = base_prompt.replace(
-        "{evidence_json}",
-        json.dumps(
-            [
-                {
-                    "evidence_id": ev["evidence_id"],
-                    "role": ev.get("role"),
-                    "section_title": ev.get("section_title"),
-                    "proof_kind": ev.get("proof_kind"),
-                    "operation_number": ev.get("operation_number"),
-                    "operation_group_id": ev.get("operation_group_id"),
-                    "operation_function": ev.get("operation_function"),
-                    "result_scope": ev.get("result_scope"),
-                    "primary_result_evidence": ev.get("primary_result_evidence"),
-                    "reference_like": ev.get("reference_like"),
-                    "quantitative_values": ev.get("quantitative_values") or [],
-                    "rattachement_operation": ev.get("justification_bridge_fr") or None,
-                    "text": ev["excerpt"],
-                }
-                for ev in evidence
-            ],
-            ensure_ascii=False,
-            indent=2,
-        ),
-    )
+    prompt = render_prompt(evidence)
     return prompt, evidence
 
 
@@ -1476,6 +2033,8 @@ def _label_for(config: SectionContextConfig, index: int, proposed: Any) -> str:
         return f"Démarche {index}"
     if config.key == "parametres_contraintes":
         return f"Paramètre ou contrainte {index}"
+    if config.key == "resultats_metriques":
+        return f"Résultat {index}"
     label = sanitize_generated_text(proposed, 100)
     return label or f"Point {index}"
 
@@ -1506,6 +2065,8 @@ def _technical_tokens(value: Any) -> List[str]:
     tokens: List[str] = []
     for token in re.findall(r"\b[A-Z][A-Z0-9_-]{1,}(?:s)?\b", raw):
         if re.fullmatch(r"(?:E|F)\d+|G\d+\.S\d+", token, flags=re.I):
+            continue
+        if re.fullmatch(r"N[-_]?1", token, flags=re.I):
             continue
         if len(token) >= 2 and token not in tokens:
             tokens.append(token)
@@ -1575,7 +2136,10 @@ def _current_project_scope_errors(
         for item in evidence
         if isinstance(item, dict)
     )
-    scope_text = clean_text(project_scope_text, 90000) or evidence_text
+    # Les preuves sélectionnées appartiennent nécessairement au projet courant.
+    # Les ajouter au corpus global évite un faux rejet lorsqu'un terme légitime
+    # se trouve après la troncature du corpus documentaire.
+    scope_text = clean_text(f"{project_scope_text} {evidence_text}", 110000)
     norm_scope = " " + _grounding_norm(scope_text) + " "
     errors: List[str] = []
 
@@ -1686,6 +2250,38 @@ def _unit_evidence(
     ]
 
 
+def _numeric_comparators(value: Any) -> Dict[str, set]:
+    """Retourne, par valeur, les directions explicites ``lt``/``gt``.
+
+    Le texte est normalisé pour couvrir les accents et les variantes usuelles,
+    tandis que les symboles ``<``/``>`` sont lus sur le texte original.
+    """
+    raw = unicodedata.normalize("NFKD", str(value or ""))
+    raw = "".join(char for char in raw if not unicodedata.combining(char)).lower()
+    output: Dict[str, set] = {}
+
+    def add(number: str, direction: str) -> None:
+        tokens = _number_tokens(number)
+        if tokens:
+            output.setdefault(tokens[0], set()).add(direction)
+
+    for match in re.finditer(r"([<>])\s*([-+]?\d+(?:[.,]\d+)?)(?:\s*%)?", raw):
+        add(match.group(2), "lt" if match.group(1) == "<" else "gt")
+
+    phrase_pattern = re.compile(
+        r"\b(inferieur(?:e|es|s)?|moins de|au plus|maximum(?: de)?|"
+        r"superieur(?:e|es|s)?|plus de|au moins|minimum(?: de)?)"
+        r"\s+(?:a\s+)?([-+]?\d+(?:[.,]\d+)?)(?:\s*%)?",
+        flags=re.I,
+    )
+    for match in phrase_pattern.finditer(raw):
+        direction = "lt" if re.match(
+            r"inferieur|moins de|au plus|maximum", match.group(1), flags=re.I
+        ) else "gt"
+        add(match.group(2), direction)
+    return output
+
+
 def _strict_claim_grounding_errors(
     paragraphs: Sequence[Dict[str, Any]],
     items: Sequence[Dict[str, Any]],
@@ -1703,7 +2299,9 @@ def _strict_claim_grounding_errors(
     Cette distinction évite que le garde-fou rejette une bonne conclusion parce
     qu'un claim "70 % / 30 %" ne cite naturellement que le calcul déterministe.
     """
-    if section_key not in {"justification_frascati", "resultats_metriques"}:
+    if section_key not in {
+        "justification_frascati", "resultats_metriques", "parametres_contraintes",
+    }:
         return []
 
     evidence_by_id = {
@@ -1736,6 +2334,20 @@ def _strict_claim_grounding_errors(
                 f"affirmation {index}: nombres absents des preuves citées: "
                 + ", ".join(unsupported_numbers)
             )
+
+        # La présence du bon nombre ne suffit pas : « < 90 % » ne doit jamais
+        # devenir « supérieur à 90 % ». Le contrôle est local à chaque élément
+        # et aux seules preuves qu'il cite.
+        generated_comparators = _numeric_comparators(text)
+        source_comparators = _numeric_comparators(cited_text)
+        for number, generated_directions in generated_comparators.items():
+            source_directions = source_comparators.get(number) or set()
+            if source_directions and generated_directions.isdisjoint(source_directions):
+                errors.append(
+                    f"affirmation {index}: comparateur numérique inversé pour {number} "
+                    f"(généré={','.join(sorted(generated_directions))}, "
+                    f"preuve={','.join(sorted(source_directions))})"
+                )
 
         # 2) Causalité forte uniquement. On ne bloque plus une simple comparaison
         # ou une phrase de liaison procédurale.
@@ -1774,7 +2386,173 @@ def _strict_claim_grounding_errors(
                 errors.append(
                     f"affirmation {index}: le récit technique doit citer au moins une preuve documentaire du projet"
                 )
+        elif section_key == "resultats_metriques":
+            result_scopes = {
+                _grounding_norm(item.get("result_scope") or "") for item in cited
+            }
+            acceptable_scopes = {
+                "global comparison", "global metric", "observed gain",
+                "observed metric", "qualitative observation", "historical result",
+            }
+            if cited and not (result_scopes & acceptable_scopes):
+                errors.append(
+                    f"affirmation {index}: aucune preuve de résultat observé ; "
+                    "seulement une cible, une planification ou un contexte"
+                )
 
+    return errors
+
+
+def _demarche_operation_errors(
+    items: Sequence[Dict[str, Any]],
+    evidence: Sequence[Dict[str, Any]],
+) -> List[str]:
+    """Une démarche ne mélange pas plusieurs opérations et couvre le corpus fourni."""
+    evidence_by_id = {
+        str(item.get("evidence_id")): item
+        for item in evidence if isinstance(item, dict)
+    }
+    expected = {
+        int(item.get("operation_number"))
+        for item in evidence
+        if isinstance(item, dict) and str(item.get("operation_number") or "").isdigit()
+    }
+    covered = set()
+    errors: List[str] = []
+    for index, item in enumerate(items, start=1):
+        operations = {
+            int(proof.get("operation_number"))
+            for proof in _unit_evidence(item, evidence_by_id)
+            if str(proof.get("operation_number") or "").isdigit()
+        }
+        covered.update(operations)
+        if len(operations) > 1:
+            errors.append(
+                f"démarche {index}: preuves de plusieurs opérations fusionnées "
+                f"({', '.join(str(value) for value in sorted(operations))})"
+            )
+    missing = sorted(expected - covered)
+    if missing:
+        errors.append(
+            "opérations absentes de la démarche : " + ", ".join(str(value) for value in missing)
+        )
+    return errors
+
+
+def _historical_temporal_errors(
+    items: Sequence[Dict[str, Any]],
+    evidence: Sequence[Dict[str, Any]],
+) -> List[str]:
+    evidence_by_id = {
+        str(item.get("evidence_id")): item
+        for item in evidence if isinstance(item, dict)
+    }
+    errors: List[str] = []
+    for index, item in enumerate(items, start=1):
+        cited = _unit_evidence(item, evidence_by_id)
+        historical = [
+            proof for proof in cited
+            if proof.get("temporal_scope") == "previous_cir_continuity"
+            or str(proof.get("evidence_id") or "").startswith("H")
+        ]
+        current = [proof for proof in cited if proof not in historical]
+        text = _grounding_norm(item.get("text") or "")
+        if historical and current:
+            errors.append(
+                f"élément {index}: preuves N et N-1 fusionnées dans la même explication"
+            )
+        if historical:
+            years = {
+                clean_text(proof.get("previous_year"), 20)
+                for proof in historical if clean_text(proof.get("previous_year"), 20)
+            }
+            has_temporal_label = "historique" in text or "n 1" in text or any(
+                year and year in str(item.get("text") or "") for year in years
+            )
+            if not has_temporal_label:
+                errors.append(
+                    f"élément {index}: continuité N-1 non signalée comme historique"
+                )
+    return errors
+
+
+def _consultant_explanation_errors(
+    items: Sequence[Dict[str, Any]],
+    section_key: str,
+) -> List[str]:
+    if section_key not in {
+        "demarche_detectee", "resultats_metriques", "parametres_contraintes",
+    }:
+        return []
+    errors: List[str] = []
+    for index, item in enumerate(items, start=1):
+        text = clean_text(item.get("text"), 2200)
+        if "|" in text:
+            errors.append(
+                f"élément {index}: tableau brut recopié au lieu d'une explication consultant"
+            )
+        if len(text) < 85:
+            errors.append(
+                f"élément {index}: explication trop courte pour être comprise sans le document source"
+            )
+    return errors
+
+
+def _flattened_table_value_alignment_errors(
+    items: Sequence[Dict[str, Any]],
+    evidence: Sequence[Dict[str, Any]],
+) -> List[str]:
+    """Empêche le déplacement d'une valeur entre deux lignes d'un tableau aplati."""
+    evidence_by_id = {
+        str(item.get("evidence_id")): item
+        for item in evidence if isinstance(item, dict)
+    }
+    generic = _PROJECT_SCOPE_STOPWORDS | {
+        "parametre", "contrainte", "qualite", "efficacite", "garantir",
+        "assurer", "controle", "controler", "valeur", "apres", "chaque",
+        "mise", "jour", "update", "doit", "etre", "fixe", "mesure",
+    }
+    errors: List[str] = []
+    for index, item in enumerate(items, start=1):
+        text = str(item.get("text") or "")
+        for number in _number_tokens(text):
+            number_match = next(
+                (
+                    match for match in _NUMBER_RE.finditer(text)
+                    if number in _number_tokens(match.group(0))
+                ),
+                None,
+            )
+            topic_text = text[:number_match.start()] if number_match is not None else text
+            topic_tokens = {
+                token for token in _grounding_norm(topic_text).split()
+                if len(token) >= 4 and token not in generic
+            }
+            if len(topic_tokens) < 2:
+                continue
+
+            comparable_windows: List[str] = []
+            for proof in _unit_evidence(item, evidence_by_id):
+                excerpt = str(proof.get("excerpt") or "")
+                if "|" not in excerpt:
+                    continue
+                for match in _NUMBER_RE.finditer(excerpt):
+                    if number not in _number_tokens(match.group(0)):
+                        continue
+                    comparable_windows.append(excerpt[max(0, match.start() - 190):match.end()])
+            if not comparable_windows:
+                continue
+            aligned = any(
+                len(topic_tokens & {
+                    token for token in _grounding_norm(window).split()
+                    if len(token) >= 4 and token not in generic
+                }) >= 2
+                for window in comparable_windows
+            )
+            if not aligned:
+                errors.append(
+                    f"élément {index}: valeur {number} déplacée depuis une autre ligne du tableau aplati"
+                )
     return errors
 
 
@@ -2090,7 +2868,7 @@ def parse_section_result(
         for index, raw_item in enumerate(raw_items[:config.max_items], start=1):
             if not isinstance(raw_item, dict):
                 continue
-            text = sanitize_generated_text(raw_item.get("text"), max_chars=900)
+            text = sanitize_generated_text(raw_item.get("text"), max_chars=1700)
             if not text:
                 continue
             evidence_ids = _valid_evidence_ids(raw_item.get("evidence_ids"), allowed)
@@ -2168,6 +2946,12 @@ def parse_section_result(
     grounding_errors.extend(
         _strict_claim_grounding_errors(grounding_units, items, evidence, config.key)
     )
+    if config.key == "demarche_detectee":
+        grounding_errors.extend(_demarche_operation_errors(items, evidence))
+    if config.key == "parametres_contraintes":
+        grounding_errors.extend(_flattened_table_value_alignment_errors(items, evidence))
+    grounding_errors.extend(_historical_temporal_errors(items, evidence))
+    grounding_errors.extend(_consultant_explanation_errors(items, config.key))
     if config.key == "justification_frascati":
         grounding_errors.extend(_eligibility_narrative_errors(body, paragraphs, evidence))
         grounding_errors.extend(_repetition_errors(paragraph_claims or paragraphs, items))
@@ -2180,7 +2964,7 @@ def parse_section_result(
         else len(paragraphs) >= config.min_items
     )
     return {
-        "body": clean_text(body, 5200),
+        "body": clean_text(body, 12000),
         "paragraphs": paragraphs,
         "items": items,
         "evidence_ids": used_ids,
@@ -2192,6 +2976,39 @@ def parse_section_result(
 
 
 def _fallback_from_evidence(config: SectionContextConfig, evidence: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if config.key in {
+        "demarche_detectee", "resultats_metriques", "parametres_contraintes",
+    }:
+        messages = {
+            "demarche_detectee": (
+                "Les preuves restantes ne décrivent pas une séquence expérimentale assez complète "
+                "pour produire une explication fiable. Le consultant doit préciser l’objectif de "
+                "l’essai, les actions réalisées, les conditions et l’apprentissage obtenu."
+            ),
+            "resultats_metriques": (
+                "Aucun résultat observé suffisamment qualifié n’a pu être reformulé sans risque de "
+                "confondre une mesure acquise avec une cible, une planification ou une consigne de rédaction."
+            ),
+            "parametres_contraintes": (
+                "Les preuves restantes ne permettent pas d’isoler avec certitude un paramètre ou une "
+                "contrainte technique, sa valeur ou condition, et son rôle dans l’expérimentation."
+            ),
+        }
+        text = messages[config.key]
+        item = {
+            "label": _label_for(config, 1, ""),
+            "text": text,
+            "evidence_ids": [],
+        }
+        return {
+            "body": f"{item['label']} — {text}",
+            "paragraphs": [],
+            "items": [item],
+            "evidence_ids": [],
+            "evidence": [],
+            "valid": True,
+            "consultant_safe_fallback": True,
+        }
     if not evidence:
         body = "Information insuffisante dans les preuves du projet courant ; cette section doit être complétée par le consultant."
         return {"body": body, "paragraphs": [{"text": body, "evidence_ids": []}], "items": [], "evidence_ids": [], "evidence": [], "valid": True}
@@ -2221,6 +3038,90 @@ def _fallback_from_evidence(config: SectionContextConfig, evidence: List[Dict[st
     used = [eid for item in paragraphs for eid in item["evidence_ids"]]
     _attach_proof_quotes(paragraphs, evidence)
     return {"body": body, "paragraphs": paragraphs, "items": [], "evidence_ids": used, "evidence": selected[:len(paragraphs)], "valid": bool(body)}
+
+
+def _salvage_consultant_explanations(
+    parsed: Dict[str, Any],
+    config: SectionContextConfig,
+    evidence: List[Dict[str, Any]],
+    project_scope_text: str,
+) -> Optional[Dict[str, Any]]:
+    """Conserve les explications LLM sûres au lieu de recopier les preuves.
+
+    Les erreurs de garde désignent généralement l'élément concerné. On retire
+    uniquement ces éléments, on revalide le reste et on conserve les alertes
+    globales comme avertissements. Cette stratégie est plus sûre et infiniment
+    plus lisible qu'un retour aux tableaux/extraits bruts.
+    """
+    if config.key not in {
+        "demarche_detectee", "resultats_metriques", "parametres_contraintes",
+    }:
+        return None
+    working = [dict(item) for item in (parsed.get("items") or []) if isinstance(item, dict)]
+    if not working:
+        return None
+    dropped: List[int] = []
+    latest: Dict[str, Any] = parsed
+    for _ in range(4):
+        latest = parse_section_result(
+            {"items": working},
+            config,
+            evidence,
+            project_scope_text=project_scope_text,
+        )
+        invalid_indexes = set()
+        for error in latest.get("validation_errors") or []:
+            match = re.search(
+                r"\b(?:d[eé]marche|[eé]l[eé]ment|affirmation|param[eè]tre|r[eé]sultat)\s+(\d+)\b",
+                str(error),
+                flags=re.I,
+            )
+            if match:
+                invalid_indexes.add(int(match.group(1)))
+        if not invalid_indexes:
+            break
+        dropped.extend(sorted(invalid_indexes))
+        working = [
+            item for index, item in enumerate(working, start=1)
+            if index not in invalid_indexes
+        ]
+        if not working:
+            return None
+
+    # Une explication autonome, sourcée et lisible vaut mieux que douze lignes
+    # brutes. Les absences de couverture sont conservées dans les avertissements.
+    if not working or any(
+        not clean_text(item.get("text"), 2200)
+        or "|" in clean_text(item.get("text"), 2200)
+        or not item.get("evidence_ids")
+        for item in working
+    ):
+        return None
+    latest = parse_section_result(
+        {"items": working},
+        config,
+        evidence,
+        project_scope_text=project_scope_text,
+    )
+    remaining_errors = latest.get("validation_errors") or []
+    if any(
+        re.search(
+            r"\b(?:d[eé]marche|[eé]l[eé]ment|affirmation|param[eè]tre|r[eé]sultat)\s+\d+\b",
+            str(error),
+            flags=re.I,
+        )
+        for error in remaining_errors
+    ):
+        return None
+    latest.update({
+        "valid": True,
+        "status": "llm_section_json_salvaged_for_consultant",
+        "validation_errors": remaining_errors,
+        "validation_warnings_only": bool(remaining_errors),
+        "dropped_invalid_item_indexes": sorted(set(dropped)),
+        "raw_evidence_fallback_forbidden": True,
+    })
+    return latest
 
 
 def _eligibility_fallback_from_report(
@@ -2276,12 +3177,12 @@ def _eligibility_fallback_from_report(
     }.get(reference_status, "la qualification de l'opération de référence doit être validée")
 
     claim1 = (
-        "La génération projet-spécifique n'a pas satisfait le contrôle factuel ; le système conserve donc uniquement "
-        f"la lecture déterministe : {status_text}. Les preuves cliquables de l'opération de référence sont disponibles "
-        "pour permettre au consultant de reconstruire le verrou, l'hypothèse, l'expérimentation et les résultats sans hallucination."
+        f"Conclusion documentaire de l'opération de référence : {status_text}. L'indice présenté mesure la couverture des cinq critères "
+        "Frascati pour l'opération de référence et non une probabilité d'acceptation du projet. Les preuves rattachées "
+        "au verrou, à l'hypothèse, à la démarche et aux résultats restent à confirmer par le consultant."
     )
     claim2 = (
-        f"L'indice de défendabilité R&D est de {_percent_text(score)}. "
+        f"L'indice documentaire Frascati de l'opération de référence est de {_percent_text(score)}. "
         + (
             "Les critères intégralement documentés sont : " + ", ".join(documented) + "."
             if documented else "Aucun critère n'est intégralement documenté dans l'opération de référence."
@@ -2340,6 +3241,7 @@ def generate_one_section(
     frascati_summary: Dict[str, Any],
     style_memory_report: Optional[Dict[str, Any]] = None,
     memory_v2_report: Optional[Dict[str, Any]] = None,
+    historical_axes: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> Tuple[Dict[str, Any], str]:
     prompt, evidence = build_section_context(
         config,
@@ -2347,6 +3249,7 @@ def generate_one_section(
         frascati_summary,
         style_memory_report=style_memory_report,
         memory_v2_report=memory_v2_report,
+        historical_axes=historical_axes,
     )
     project_scope_text = _project_scope_text_from_sections(sections)
     telemetry: Dict[str, Any] = {
@@ -2463,6 +3366,23 @@ def generate_one_section(
                 })
                 return retry_parsed, retry_prompt
 
+            salvaged = _salvage_consultant_explanations(
+                retry_parsed,
+                config,
+                evidence,
+                project_scope_text,
+            )
+            if salvaged is not None:
+                telemetry["consultant_explanations_salvaged"] = True
+                telemetry["raw_evidence_fallback_forbidden"] = True
+                salvaged["telemetry"] = telemetry
+                print(
+                    f"[EnnoDiagnostic][SECTION_GUARD] section={config.key} "
+                    f"mode=salvage kept={len(salvaged.get('items') or [])} "
+                    f"dropped={len(salvaged.get('dropped_invalid_item_indexes') or [])}"
+                )
+                return salvaged, retry_prompt
+
             # Pour l'objectif global, un rejet d'ancrage ne doit jamais être
             # accepté en warning_only : on préfère un extrait directement sourcé
             # du projet courant à un objectif potentiellement contaminé.
@@ -2470,6 +3390,31 @@ def generate_one_section(
                 grounded = _fallback_from_evidence(config, evidence)
                 grounded.update({
                     "status": "grounded_evidence_fallback_after_objective_reject",
+                    "validation_errors": retry_validation_errors,
+                    "telemetry": telemetry,
+                })
+                return grounded, retry_prompt
+
+            # Une inversion de seuil change le sens scientifique de la preuve ;
+            # elle ne peut donc pas être rétrogradée en simple avertissement.
+            hard_grounding_error = any(
+                marker in str(error)
+                for error in retry_validation_errors
+                for marker in (
+                    "comparateur numérique inversé",
+                    "preuves de plusieurs opérations fusionnées",
+                    "opérations absentes de la démarche",
+                    "aucune preuve de résultat observé",
+                    "déplacée depuis une autre ligne du tableau aplati",
+                    "preuves N et N-1 fusionnées",
+                    "continuité N-1 non signalée comme historique",
+                    "tableau brut recopié",
+                )
+            )
+            if hard_grounding_error:
+                grounded = _fallback_from_evidence(config, evidence)
+                grounded.update({
+                    "status": "grounded_evidence_fallback_after_hard_grounding_reject",
                     "validation_errors": retry_validation_errors,
                     "telemetry": telemetry,
                 })
@@ -2534,6 +3479,7 @@ def generate_structured_diagnostic_core(
     style_memory_report: Optional[Dict[str, Any]] = None,
     ai_detection_report: Optional[Dict[str, Any]] = None,
     memory_v2_report: Optional[Dict[str, Any]] = None,
+    historical_axes: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     del ai_detection_report
     configs = all_section_configs()
@@ -2550,10 +3496,14 @@ def generate_structured_diagnostic_core(
             frascati_summary,
             style_memory_report=style_memory_report,
             memory_v2_report=memory_v2_report,
+            historical_axes=historical_axes,
         )
         section_payloads[key] = payload
         prompts[key] = prompt
-        values[key] = clean_text(payload.get("body"), 5000)
+        body_limit = 12000 if key in {
+            "demarche_detectee", "resultats_metriques", "parametres_contraintes",
+        } else 5000
+        values[key] = clean_text(payload.get("body"), body_limit)
         if payload.get("error"):
             errors[key] = str(payload["error"])
 
@@ -2562,7 +3512,12 @@ def generate_structured_diagnostic_core(
         for key, payload in section_payloads.items()
     }
     statuses = {key: payload.get("status") for key, payload in section_payloads.items()}
-    llm_statuses = {"llm_section_json", "llm_section_json_after_grounding_retry", "llm_section_json_with_validation_warnings"}
+    llm_statuses = {
+        "llm_section_json",
+        "llm_section_json_after_grounding_retry",
+        "llm_section_json_with_validation_warnings",
+        "llm_section_json_salvaged_for_consultant",
+    }
     all_llm = all(status in llm_statuses for status in statuses.values())
     any_llm = any(status in llm_statuses for status in statuses.values())
     status = "llm_sectional_context_engineering" if all_llm else (
@@ -2580,7 +3535,7 @@ def generate_structured_diagnostic_core(
         "section_payloads_by_key": section_payloads,
         "token_usage_by_section": token_usage,
         "section_statuses": statuses,
-        "context_engineering_version": "v191_current_project_nlp_pack_pydantic_relaxed",
+        "context_engineering_version": "v193_consultant_rewrite_without_raw_evidence_fallback",
     }
 
 
@@ -2616,12 +3571,13 @@ def frascati_summary_text(frascati_summary: Dict[str, Any]) -> str:
     parts: List[str] = []
     if score is not None:
         parts.append(
-            f"L'indice de défendabilité R&D est de {_percent_text(score)}. "
+            f"L'indice documentaire Frascati de l'opération de référence est de {_percent_text(score)}. "
             f"La part documentaire restant à consolider est de {_percent_text(remaining)}."
         )
     if basis:
         parts.append(
-            "Cet indice conserve la couverture Frascati calculée en amont pour l’opération désignée par le calcul officiel."
+            "Cet indice mesure la couverture des cinq critères pour le groupe documentaire de référence le mieux étayé. "
+            "Il ne signifie pas que tous les axes du projet obtiennent ce même niveau."
         )
     elif documentary_coverage is not None:
         parts.append(
@@ -2634,27 +3590,36 @@ def frascati_summary_text(frascati_summary: Dict[str, Any]) -> str:
             "insufficient_evidence": "preuves insuffisantes, validation requise",
             "classical_engineering": "ingénierie classique",
         }
-        reference_index = next(
-            (
-                index for index, operation in enumerate(report.get("operations") or [], start=1)
-                if isinstance(operation, dict) and operation.get("group_id") == reference.get("group_id")
-            ),
-            1,
-        )
         parts.append(
-            f"L’opération {reference_index} est retenue comme référence pour l’étude des preuves. Sa lecture documentaire est : "
+            "La lecture documentaire de cette opération de référence est : "
             + status_labels.get(clean_text(reference.get("operation_status")), "à qualifier")
             + "."
         )
 
+    group_average = summary.get("main_groups_average_frascati_score")
+    group_count = summary.get("main_groups_scores_count") or summary.get("scores_count")
+    if group_average is not None and group_count:
+        parts.append(
+            f"À titre descriptif, la moyenne des {group_count} groupes candidats est de "
+            f"{_percent_text(group_average)}. Cette moyenne sert à repérer les groupes moins documentés ; "
+            "elle ne remplace pas l'indice de l'opération de référence."
+        )
+
     criteria = [item for item in (basis.get("criteria") or []) if isinstance(item, dict)]
     if criteria:
+        criterion_status_labels = {
+            "documented": "documenté",
+            "partial": "partiel",
+            "missing": "manquant",
+            "contradictory": "contradictoire",
+        }
         criterion_lines = []
         for item in criteria:
             contribution = _percent_text(item.get("contribution_to_index"))
             gap = _percent_text(item.get("remaining_gap_to_full_coverage"))
             criterion_lines.append(
-                f"{item.get('label') or item.get('criterion')} : statut {item.get('status')}, "
+                f"{item.get('label') or item.get('criterion')} : statut "
+                f"{criterion_status_labels.get(clean_text(item.get('status')), 'à qualifier')}, "
                 f"{contribution} acquis et {gap} à compléter. {clean_text(item.get('reason'), 360)}"
             )
         parts.append(
@@ -2793,8 +3758,8 @@ def _legacy_frascati_text(result: Dict[str, Any]) -> str:
     return ""
 
 
-def paragraphs_from_body(body: str, max_items: int = 6) -> List[str]:
-    return [clean_text(item, 1100) for item in re.split(r"\n\s*\n+", clean_text(body, 6000)) if item.strip()][:max_items]
+def paragraphs_from_body(body: str, max_items: int = 12) -> List[str]:
+    return [clean_text(item, 1600) for item in re.split(r"\n\s*\n+", clean_text(body, 14000)) if item.strip()][:max_items]
 
 
 def build_cards(
@@ -2804,7 +3769,7 @@ def build_cards(
     cards: List[Dict[str, Any]] = []
     for definition in STATIC_SECTION_DEFINITIONS:
         key = definition["key"]
-        body = clean_text(sections_by_key.get(key), 6000)
+        body = clean_text(sections_by_key.get(key), 14000)
         payload = payloads_by_key.get(key) if isinstance(payloads_by_key.get(key), dict) else {}
         cards.append({
             "key": key,
@@ -2846,7 +3811,7 @@ def build_final_static_diagnostic(
     core = core_result if isinstance(core_result, dict) else {}
     raw_values = core.get("sections_by_key") if isinstance(core.get("sections_by_key"), dict) else {}
     payloads = dict(core.get("section_payloads_by_key") or {}) if isinstance(core.get("section_payloads_by_key"), dict) else {}
-    sections_by_key = {key: clean_text(value, 6000) for key, value in raw_values.items()}
+    sections_by_key = {key: clean_text(value, 14000) for key, value in raw_values.items()}
     # Suppression définitive de l'ancienne section, y compris si un ancien
     # résultat en cache la fournit encore.
     sections_by_key.pop("points_validation", None)
@@ -2916,11 +3881,11 @@ def build_final_static_diagnostic(
 
     demarche_audit = demarche_legibility_text(frascati_summary)
     if demarche_audit:
-        generated_demarche = clean_text(sections_by_key.get("demarche_detectee"), 4200)
+        generated_demarche = clean_text(sections_by_key.get("demarche_detectee"), 12000)
         sections_by_key["demarche_detectee"] = clean_text(
             demarche_audit
             + ("\n\nDémarches relevées dans les preuves\n\n" + generated_demarche if generated_demarche else ""),
-            6000,
+            14000,
         )
 
     for definition in STATIC_SECTION_DEFINITIONS:

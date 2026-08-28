@@ -362,12 +362,17 @@ def _reset_generated_diagnostic_artifacts(project_store: Any) -> Dict[str, Any]:
     generated_directories = [
         Path(project_store.documents_processed_dir),
         Path(project_store.nlp_dir),
-        Path(project_store.rag_dir),
+        # Windows / Chroma :
+        # ne pas supprimer rag_dir car rag/chroma/chroma.sqlite3 peut rester
+        # ouvert par chromadb.PersistentClient dans le processus.
+        # index_nlp_result(..., reset=True) réinitialise ensuite la COLLECTION.
         Path(project_store.diagnostics_dir),
         project_root / "ennodiagnostic",
         project_root / "cir_memory",
     ]
     generated_files = [
+        # Fichier RAG régénérable. Le dossier rag/chroma reste intact.
+        Path(project_store.rag_dir) / "chunks.json",
         project_root / "selected_verrous_for_scholar.json",
         project_root / "comparison_cir_vs_raw.json",
         project_root / "rag_report.json",
@@ -396,7 +401,7 @@ def _reset_generated_diagnostic_artifacts(project_store: Any) -> Dict[str, Any]:
 
     project_store.ensure()
     return {
-        "version": "diagnostic_generated_artifacts_reset_v1",
+        "version": "diagnostic_generated_artifacts_reset_v2_chroma_safe",
         "scope": {
             "project_dir": str(project_root),
             "collection_name": project_store.collection_name,
@@ -406,10 +411,13 @@ def _reset_generated_diagnostic_artifacts(project_store: Any) -> Dict[str, Any]:
         "preserved": [
             str(Path(project_store.documents_raw_dir).resolve()),
             str(Path(project_store.metadata_path).resolve()),
+            str(Path(project_store.chroma_dir).resolve()),
         ],
         "database_history_deleted": False,
         "memory_v2_deleted": False,
         "raw_documents_deleted": False,
+        "chroma_filesystem_deleted": False,
+        "chroma_collection_reset_later": True,
     }
 
 # ============================================================
@@ -621,9 +629,58 @@ def diagnostic_paths(project: Project) -> Dict[str, Path]:
     }
 
 
+def _report_with_latest_ai_detection(
+    project: Project,
+    report_path: Path,
+) -> tuple[Dict[str, Any], Optional[Path]]:
+    """Expose un recalcul IA récent sans imposer un diagnostic complet."""
+    report = load_json_file(report_path)
+    if not isinstance(report, dict):
+        report = {}
+
+    try:
+        ps = get_project_store(project)
+        ai_path = _first_existing(
+            [
+                ps.project_dir / "ennodiagnostic" / "ai_detection_report.json",
+                ps.diagnostics_dir / "ai_detection_report.json",
+            ]
+        )
+    except Exception:
+        ai_path = None
+
+    if ai_path is None:
+        return report, None
+
+    try:
+        report_mtime = report_path.stat().st_mtime if report_path.exists() else 0.0
+        ai_mtime = ai_path.stat().st_mtime
+    except Exception:
+        report_mtime = 0.0
+        ai_mtime = 0.0
+
+    # Pendant un pipeline complet, le rapport principal est enregistré après le
+    # score IA et contient déjà la même donnée. En revanche, un recalcul IA seul
+    # doit devenir visible immédiatement dans /diagnostic/latest.
+    if ai_mtime < report_mtime:
+        return report, None
+
+    ai_report = load_json_file(ai_path)
+    if not isinstance(ai_report, dict) or not ai_report.get("ok"):
+        return report, None
+
+    merged = dict(report)
+    merged["ai_detection_report_runtime"] = ai_report
+    return merged, ai_path
+
+
 def read_diagnostic_bundle(project: Project, *, compact: bool = False) -> Dict[str, Any]:
     paths = diagnostic_paths(project)
     existing_reports = [str(p) for p in _report_candidates(project, paths["output_dir"]) if p.exists() and p.is_file()]
+    report, ai_report_path = _report_with_latest_ai_detection(
+        project,
+        paths["report"],
+    )
 
     if compact:
         # La vue React est reconstruite depuis le rapport officiel. Charger ici
@@ -634,8 +691,9 @@ def read_diagnostic_bundle(project: Project, *, compact: bool = False) -> Dict[s
         # champs publics avant l'unique sanitation finale.
         return {
             "output_dir": str(paths["output_dir"]),
-            "report": load_json_file(paths["report"]),
+            "report": report,
             "report_path_used": str(paths["report"]) if paths["report"].exists() else None,
+            "ai_detection_report_path_used": str(ai_report_path) if ai_report_path else None,
             "report_candidates_found": existing_reports,
             "nlp_path_used": str(paths["nlp_result"]) if paths["nlp_result"].exists() else None,
             "rag_chunks_path": str(paths["rag_chunks"]) if paths["rag_chunks"].exists() else None,
@@ -651,8 +709,9 @@ def read_diagnostic_bundle(project: Project, *, compact: bool = False) -> Dict[s
 
     return sanitize_json_value({
         "output_dir": str(paths["output_dir"]),
-        "report": load_json_file(paths["report"]),
+        "report": report,
         "report_path_used": str(paths["report"]) if paths["report"].exists() else None,
+        "ai_detection_report_path_used": str(ai_report_path) if ai_report_path else None,
         "report_candidates_found": existing_reports,
         "nlp_result": load_json_file(paths["nlp_result"]),
         "nlp_path_used": str(paths["nlp_result"]) if paths["nlp_result"].exists() else None,
@@ -1011,10 +1070,8 @@ def run_ai_detector_if_enabled(project: Project, agent_out_dir: Path) -> Dict[st
     """
     Lance le détecteur IA existant dans agents/EnnoDiagnostic.
 
-    Important :
-    - On ne modifie pas l'agent.
-    - On ne passe pas year=... au service de l'agent.
-    - Le backend prépare seulement les fichiers au format attendu par l'agent.
+    Le périmètre projet complet (sous-projet et année inclus) est transmis au
+    détecteur pour que chaque passage reste relié au bon document source.
     """
     if os.getenv("ENNOSMART_RUN_AI_DETECTOR", "1").strip() != "1":
         return {"ok": False, "skipped": True, "message": "Détection IA désactivée."}
@@ -1024,12 +1081,24 @@ def run_ai_detector_if_enabled(project: Project, agent_out_dir: Path) -> Dict[st
     try:
         from agents.EnnoDiagnostic.ai_content_detector import EnnoAIDetectionService
 
-        adapter_report = _mirror_year_files_for_agent_ai(project)
+        project_store = get_project_store(project)
+        adapter_report = {
+            "policy": "direct_project_store_scope",
+            "project_root": str(project_store.project_root_dir),
+            "year_root": str(project_store.project_dir),
+            "legacy_mirror_used": False,
+            "note": (
+                "Le détecteur lit directement le projet, le sous-projet et "
+                "l'année demandés sans recopier les fichiers dans le projet parent."
+            ),
+        }
 
         # API originale de ton agent : pas de paramètre year.
         service = EnnoAIDetectionService(
             organisme=project.organisme,
             project=project.project_name,
+            subproject=getattr(project, "subproject_name", None),
+            year=_year(project),
             allow_rag_fallback=True,
         )
 
@@ -1196,12 +1265,15 @@ def _extract_final_verrous_from_report(report: Dict[str, Any]) -> List[Dict[str,
     synthesis = synthesis if isinstance(synthesis, dict) else {}
 
     candidates = (
-        synthesis.get("llm_reformulated_verrous")
+        # La racine du rapport est la sortie finale de l'agent (après les
+        # réconciliations et consolidations). Le rapport du synthétiseur reste
+        # une piste d'audit et ne doit jamais reprendre la priorité.
+        report.get("llm_reformulated_verrous")
+        or report.get("consultant_verrous_cir")
         or synthesis.get("final_items")
+        or synthesis.get("llm_reformulated_verrous")
         or synthesis.get("accepted_items")
         or synthesis.get("final_verrous")
-        or report.get("llm_reformulated_verrous")
-        or report.get("consultant_verrous_cir")
         or report.get("verrous_reformules")
         or []
     )

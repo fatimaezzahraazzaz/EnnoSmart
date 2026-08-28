@@ -574,12 +574,23 @@ def _project_from_filename(file_name: str, *identity_labels: str) -> str:
                 value = re.sub(rf"\b{re.escape(token)}\b", " ", value, flags=re.IGNORECASE)
     value = YEAR_RE.sub(" ", value)
     value = re.sub(
+        r"\b(?:annexe|annex|pi[eè]ce\s+jointe)\s*(?:n[°o]\s*)?\d+[a-z]?\b",
+        " ", value, flags=re.IGNORECASE,
+    )
+    value = re.sub(
         r"\b(?:CIR|CII|DT|VF\s*\d*|V\s*\d+(?:[.,]\d+)*|ED(?:ITION)?\s*\d+(?:[.,]\d+)*|FINAL(?:E)?|DEFINITIF|VALIDE)\b",
         " ", value, flags=re.IGNORECASE,
     )
     value = re.sub(r"\b(?:dossier|technique|justificatif|version|document|rapport|complet)\b", " ", value, flags=re.IGNORECASE)
     value = re.sub(r"[-–—]+", " ", value)
     value = re.sub(r"\s+", " ", value).strip(" .-_")
+    known_aliases = {
+        "corpalux": "Corplaux",
+        "corplaux": "Corplaux",
+    }
+    alias = known_aliases.get(_normalise(value))
+    if alias:
+        return alias
     return _safe_identity_label(value.title()) if len(_normalise(value)) >= 3 else ""
 
 
@@ -1199,11 +1210,14 @@ def run_sharepoint_audit(
                 item_id = _safe_name(str(item.get("external_id") or ""), "item")
                 _json_write(items_dir / f"{item_id}.json", item)
 
+            # Les fichiers volontairement ignorés (trop volumineux, non pris en
+            # charge) n'ont pas de copie locale à vérifier. L'intégrité porte
+            # uniquement sur les fichiers effectivement lus et hashés.
             source_integrity_verified = all(
                 bool(item.get("source_copy_verified"))
                 and bool(item.get("source_metadata_stable_after_read"))
                 for item in run["items"]
-                if item.get("classification") != "scan_error"
+                if item.get("sha256")
             )
             counts: dict[str, int] = {}
             for item in run["items"]:

@@ -83,17 +83,29 @@ class RAGVectorStore:
             for chunk in safe_chunks
         ]
         metadatas = [self._clean_metadata(chunk.get("metadata", {})) for chunk in safe_chunks]
-        embeddings = self.model.encode(
-            embedding_texts,
-            normalize_embeddings=True,
-            show_progress_bar=False,
-        ).tolist()
-        collection.add(
-            ids=ids,
-            documents=documents,
-            metadatas=metadatas,
-            embeddings=embeddings,
-        )
+        # Chroma impose une taille maximale par op?ration add().
+        # On travaille volontairement par lots de 1000 afin de rester
+        # largement sous la limite du backend et de garder une consommation
+        # m?moire stable lorsque Memory V2 devient volumineuse.
+        batch_size = 1000
+
+        for start in range(0, len(safe_chunks), batch_size):
+            end = min(start + batch_size, len(safe_chunks))
+
+            batch_embedding_texts = embedding_texts[start:end]
+
+            batch_embeddings = self.model.encode(
+                batch_embedding_texts,
+                normalize_embeddings=True,
+                show_progress_bar=False,
+            ).tolist()
+
+            collection.add(
+                ids=ids[start:end],
+                documents=documents[start:end],
+                metadatas=metadatas[start:end],
+                embeddings=batch_embeddings,
+            )
         return {
             "added": len(safe_chunks),
             "deduplicated": len(chunks) - len(safe_chunks),

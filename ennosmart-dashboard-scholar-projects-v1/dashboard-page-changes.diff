@@ -1,0 +1,16 @@
+--- frontend/components/ennosmart/dashboard-page.tsx
++++ frontend/components/ennosmart/dashboard-page.tsx
+
+@@ Stats
+- const articles = somme de item.scholar.articles.count
++ suppression du compteur global d'articles
+
+@@ KPI EnnoScholar
+- value={stats.articles}
+- detail="X dossier(s) · articles synchronisés"
++ value={stats.scholarProjects}
++ detail="X projet(s) avec résultats EnnoScholar"
+
+@@ Dossiers récents
+- nombre d'articles EnnoScholar
++ badge "Disponible" / "Non lancé"

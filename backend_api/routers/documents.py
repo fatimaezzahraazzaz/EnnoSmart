@@ -29,7 +29,7 @@ from services.document_corpus_service import (
     ensure_document_corpus,
     set_diagnostic_decision,
 )
-from services.file_service import project_output_dir
+from services.file_service import project_output_dir, validate_upload_file
 from services.project_service import get_project_for_user
 
 
@@ -473,13 +473,32 @@ async def upload_document(
     project = get_project_for_user(db, project_id, current_user)
 
     original_filename = file.filename or "document"
-    file_bytes = await file.read()
+    suffix = Path(original_filename).suffix.lower()
+    declared_content_type = (file.content_type or "").lower()
+
+    if (
+        suffix in AUDIO_VIDEO_EXTENSIONS
+        or declared_content_type.startswith("audio/")
+        or declared_content_type.startswith("video/")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=(
+                "Les fichiers audio et vidéo doivent être envoyés depuis "
+                "l’onglet Vidéo / Audio pour être transcrits."
+            ),
+        )
+
+    max_bytes = int(settings.MAX_UPLOAD_SIZE_MB) * 1024 * 1024
+    file_bytes = await file.read(max_bytes + 1)
 
     if not file_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Fichier vide ou illisible.",
         )
+
+    validate_upload_file(file, len(file_bytes))
 
     sha256 = hashlib.sha256(file_bytes).hexdigest()
     stored_filename = _make_stored_filename(original_filename, sha256)
@@ -551,21 +570,28 @@ async def transcribe_video(
             ),
         )
 
-    file_bytes = await file.read()
-
-    if not file_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Fichier vide ou illisible.",
-        )
-
     tmp_path: Path | None = None
 
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(file_bytes)
+            file_size = 0
+
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+
+                file_size += len(chunk)
+                tmp.write(chunk)
+
             tmp.flush()
             tmp_path = Path(tmp.name)
+
+        if file_size == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Fichier vide ou illisible.",
+            )
 
         # extract() est synchrone et potentiellement coûteux.
         # On l'exécute dans un thread pour ne pas bloquer la boucle FastAPI.

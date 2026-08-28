@@ -47,6 +47,10 @@ from services.experience_memory_v2_service import (
     search_memory_v2,
 )
 from services.sharepoint_audit_service import mark_matching_items_memory_removed
+from services.cir_memory_source_preview_service import (
+    build_memory_source_download,
+    build_memory_source_preview,
+)
 
 
 router = APIRouter(tags=["cir-memory"], dependencies=[Depends(require_agent_enabled("cir_memory"))])
@@ -855,6 +859,22 @@ def memory_v2_search(
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Recherche vectorielle indisponible : {exc}") from exc
 
+
+
+@router.get("/cir-memory/v2/projects/{memory_id}/source-preview")
+def memory_v2_source_preview(
+    memory_id: str,
+    current_user: User = Depends(require_superadmin),
+):
+    return build_memory_source_preview(memory_id)
+
+
+@router.get("/cir-memory/v2/projects/{memory_id}/source-download")
+def memory_v2_source_download(
+    memory_id: str,
+    current_user: User = Depends(require_superadmin),
+):
+    return build_memory_source_download(memory_id)
 
 @router.get("/cir-memory/v2/cards")
 def memory_v2_project_cards(

@@ -354,10 +354,26 @@ function cleanSourceDocumentName(value: string) {
     .trim()
 }
 
+function isAggregatedSourceDocumentLabel(value: string) {
+  const text = cleanDisplayText(String(value || ""))
+
+  if (!text || !text.includes(";")) {
+    return false
+  }
+
+  const parts = text
+    .split(/\s*;\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+  return parts.length > 1
+}
+
 function getVerrouSourceDocuments(verrou: VerrouRead): VerrouSourceDocument[] {
   const sourceJson = verrou.source_json || {}
   const rawSources: any[] = []
 
+  // Les vraies sources / preuves du verrou.
   for (const value of [
     sourceJson.sources,
     sourceJson.evidence_sources,
@@ -369,13 +385,27 @@ function getVerrouSourceDocuments(verrou: VerrouRead): VerrouSourceDocument[] {
     if (Array.isArray(value)) rawSources.push(...value)
   }
 
+  // Compatibilité avec les diagnostics où un document unique est stocké
+  // directement dans sourceJson.document / filename.
+  //
+  // IMPORTANT :
+  // certains diagnostics contiennent ici plusieurs noms concaténés :
+  // "doc1 ; doc2 ; doc3 ; doc4".
+  // Ce champ agrégé ne doit pas devenir une 5e carte de document.
   const directDocument =
     sourceJson.document ||
     sourceJson.source_document ||
     sourceJson.filename ||
     sourceJson.document_name
 
-  if (directDocument) rawSources.push({ document: directDocument })
+  const directDocumentText = cleanDisplayText(String(directDocument || ""))
+
+  if (
+    directDocumentText &&
+    !isAggregatedSourceDocumentLabel(directDocumentText)
+  ) {
+    rawSources.push({ document: directDocumentText })
+  }
 
   const grouped = new Map<string, VerrouSourceDocument>()
 
@@ -404,7 +434,16 @@ function getVerrouSourceDocuments(verrou: VerrouRead): VerrouSourceDocument[] {
 
     if (!document && !sourcePath) return
 
-    const canonicalDocument = document || sourcePath.split(/[\\/]/).pop() || sourcePath
+    const canonicalDocument =
+      document ||
+      sourcePath.split(/[\\/]/).pop() ||
+      sourcePath
+
+    // Sécurité supplémentaire : même si une concaténation arrive depuis
+    // une autre propriété de source_json, elle n'est jamais affichée
+    // comme un document réel.
+    if (isAggregatedSourceDocumentLabel(canonicalDocument)) return
+
     const key = normalizeKeyV93(sourcePath || canonicalDocument)
     if (!key) return
 
@@ -482,6 +521,7 @@ function getVerrouSourceDocuments(verrou: VerrouRead): VerrouSourceDocument[] {
     }
 
     current.passagesCount = current.evidence.length
+
     if (excerpt && !current.excerpts.includes(excerpt)) {
       current.excerpts.push(excerpt)
     }
@@ -490,7 +530,12 @@ function getVerrouSourceDocuments(verrou: VerrouRead): VerrouSourceDocument[] {
   })
 
   return Array.from(grouped.values())
-    .sort((a, b) => b.passagesCount - a.passagesCount || a.displayName.localeCompare(b.displayName))
+    .filter((item) => !isAggregatedSourceDocumentLabel(item.document))
+    .sort(
+      (a, b) =>
+        b.passagesCount - a.passagesCount ||
+        a.displayName.localeCompare(b.displayName)
+    )
 }
 
 function getSources(verrou: VerrouRead) {
@@ -589,6 +634,84 @@ type VerrouExplanationSections = {
   uncertainty: string
   notSimpleEngineering: string
   evidence: string
+}
+
+type HistoricalLockContinuity = {
+  status: string
+  previousYears: string[]
+  familyTitles: string[]
+  locks: string[]
+  methods: string[]
+  parameters: string[]
+  results: string[]
+}
+
+function getHistoricalLockContinuity(verrou: VerrouRead): HistoricalLockContinuity | null {
+  const sourceJson = verrou.source_json || {}
+  const full = isObjectV107(sourceJson?.full_persisted_verrou)
+    ? sourceJson.full_persisted_verrou
+    : {}
+  const history =
+    (isObjectV107((verrou as any)?.historical_continuity) && (verrou as any).historical_continuity) ||
+    (isObjectV107(sourceJson?.historical_continuity) && sourceJson.historical_continuity) ||
+    (isObjectV107(full?.historical_continuity) && full.historical_continuity) ||
+    null
+
+  if (!history || history?.history_is_current_proof === true) return null
+
+  const rows = (value: any): string[] => {
+    if (!Array.isArray(value)) return []
+    return value
+      .map((item: any) => cleanDisplayText(
+        typeof item === "string"
+          ? item
+          : item?.text || item?.title || item?.excerpt || ""
+      ))
+      .filter(Boolean)
+      .filter((value: string, index: number, all: string[]) => all.indexOf(value) === index)
+      .slice(0, 8)
+  }
+
+  const story = isObjectV107(history?.historical_story) ? history.historical_story : {}
+  const familyTitles = [
+    ...rows(history?.historical_family_titles),
+    cleanDisplayText(history?.historical_family_title || ""),
+  ].filter(Boolean).filter((value, index, all) => all.indexOf(value) === index)
+  const locks = [
+    ...rows(history?.historical_lock_context),
+    cleanDisplayText(history?.historical_excerpt || ""),
+  ].filter(Boolean).filter((value, index, all) => all.indexOf(value) === index)
+  const methods = [...rows(history?.historical_method_context), ...rows(story?.methode)]
+    .filter((value, index, all) => all.indexOf(value) === index)
+  const parameters = [...rows(history?.historical_parameter_context), ...rows(story?.parametre)]
+    .filter((value, index, all) => all.indexOf(value) === index)
+  const results = [...rows(history?.historical_result_context), ...rows(story?.resultat)]
+    .filter((value, index, all) => all.indexOf(value) === index)
+  const previousYears = [
+    ...rows(history?.previous_years),
+    cleanDisplayText(history?.previous_year || ""),
+  ].filter(Boolean).filter((value, index, all) => all.indexOf(value) === index)
+  const status = cleanDisplayText(history?.status || "")
+
+  if (!status && !familyTitles.length && !locks.length && !methods.length && !parameters.length && !results.length) {
+    return null
+  }
+
+  return { status, previousYears, familyTitles, locks, methods, parameters, results }
+}
+
+function historicalContinuityLabel(status: string): string {
+  const labels: Record<string, string> = {
+    continued: "Continuité confirmée",
+    refined: "Verrou affiné",
+    sub_lock: "Sous-verrou poursuivi",
+    partially_lifted: "Partiellement levé",
+    extended_scope: "Périmètre étendu",
+    mixed_continuity: "Continuité multiple",
+    mixed_continuity_and_new_subproblems: "Continuité avec nouveaux sous-problèmes",
+    continued_to_confirm: "Continuité récupérée à confirmer",
+  }
+  return labels[status] || cleanDisplayText(status) || "Continuité N-1"
 }
 
 function getVerrouExplanationSections(verrou: VerrouRead): VerrouExplanationSections {
@@ -3446,6 +3569,858 @@ function shortDocText(value: any, limit = 420) {
 }
 
 
+type DocComparisonViewKind = "different" | "only_a" | "only_b" | "identical"
+
+type DocComparisonViewItem = {
+  id: string
+  kind: DocComparisonViewKind
+  label: string
+  aText: string
+  bText: string
+  score: any
+  numericConflict: boolean
+}
+
+type DocComparisonToken = {
+  value: string
+  changed: boolean
+}
+
+
+function buildDocComparisonLabelV202({
+  rawLabel,
+  aText,
+  bText,
+  fallbackPrefix,
+  index,
+}: {
+  rawLabel: any
+  aText: string
+  bText: string
+  fallbackPrefix: string
+  index: number
+}) {
+  const cleanedLabel = cleanDisplayText(String(rawLabel || ""))
+  const invalidLabels = new Set(["", "unknown", "n/a", "null", "undefined"])
+
+  if (!invalidLabels.has(cleanedLabel.toLowerCase())) {
+    return cleanedLabel
+  }
+
+  const sourceText = cleanDisplayText(String(aText || bText || ""))
+  if (!sourceText) {
+    return `${fallbackPrefix} ${index + 1}`
+  }
+
+  const words = sourceText.split(/\s+/).filter(Boolean).slice(0, 8)
+  return words.join(" ")
+}
+
+function buildDocComparisonEvidenceV202({
+  item,
+  side,
+  summary,
+}: {
+  item: DocComparisonViewItem | null
+  side: "a" | "b"
+  summary: any
+}): SourceEvidence | null {
+  if (!item) return null
+
+  const documentName =
+    side === "a"
+      ? cleanDisplayText(String(summary?.doc_a || ""))
+      : cleanDisplayText(String(summary?.doc_b || ""))
+
+  const excerpt =
+    side === "a"
+      ? cleanDisplayText(String(item?.aText || ""))
+      : cleanDisplayText(String(item?.bText || ""))
+
+  if (!documentName && !excerpt) return null
+
+  return {
+    evidence_id: `doc-compare-${item.id}-${side}`,
+    passage_id: `doc-compare-${item.id}-${side}`,
+    document: documentName || undefined,
+    document_name: documentName || undefined,
+    role:
+      side === "a"
+        ? "Comparaison documentaire — passage A"
+        : "Comparaison documentaire — passage B",
+    excerpt: excerpt || undefined,
+    source_text_original: excerpt || undefined,
+    text: excerpt || undefined,
+    metadata: {
+      comparison_kind: item.kind,
+      comparison_label: item.label,
+      comparison_side: side,
+    },
+  } as SourceEvidence
+}
+
+function normalizeDocComparisonItemsV201(comparison: any): Record<DocComparisonViewKind, DocComparisonViewItem[]> {
+  const different = Array.isArray(comparison?.different_between_a_b)
+    ? comparison.different_between_a_b
+    : []
+  const onlyA = Array.isArray(comparison?.only_in_a)
+    ? comparison.only_in_a
+    : []
+  const onlyB = Array.isArray(comparison?.only_in_b)
+    ? comparison.only_in_b
+    : []
+  const identical = Array.isArray(comparison?.identical)
+    ? comparison.identical
+    : []
+
+  return {
+    different: different.map((item: any, index: number) => {
+      const aText = cleanDisplayText(String(item?.a_text || item?.a || ""))
+      const bText = cleanDisplayText(String(item?.b_text || item?.b || ""))
+
+      return {
+        id: `different-${index}`,
+        kind: "different" as const,
+        label: buildDocComparisonLabelV202({
+          rawLabel: item?.context_key,
+          aText,
+          bText,
+          fallbackPrefix: "Différence",
+          index,
+        }),
+        aText,
+        bText,
+        score: item?.score,
+        numericConflict: Boolean(item?.numeric_conflict),
+      }
+    }),
+    only_a: onlyA.map((item: any, index: number) => {
+      const aText = cleanDisplayText(String(item?.text || item?.a_text || ""))
+
+      return {
+        id: `only-a-${index}`,
+        kind: "only_a" as const,
+        label: buildDocComparisonLabelV202({
+          rawLabel: item?.context_key,
+          aText,
+          bText: "",
+          fallbackPrefix: "Seulement A",
+          index,
+        }),
+        aText,
+        bText: "",
+        score: item?.score,
+        numericConflict: false,
+      }
+    }),
+    only_b: onlyB.map((item: any, index: number) => {
+      const bText = cleanDisplayText(String(item?.text || item?.b_text || ""))
+
+      return {
+        id: `only-b-${index}`,
+        kind: "only_b" as const,
+        label: buildDocComparisonLabelV202({
+          rawLabel: item?.context_key,
+          aText: "",
+          bText,
+          fallbackPrefix: "Seulement B",
+          index,
+        }),
+        aText: "",
+        bText,
+        score: item?.score,
+        numericConflict: false,
+      }
+    }),
+    identical: identical.map((item: any, index: number) => {
+      const textValue = cleanDisplayText(
+        String(item?.text || item?.a_text || item?.b_text || "")
+      )
+
+      return {
+        id: `identical-${index}`,
+        kind: "identical" as const,
+        label: buildDocComparisonLabelV202({
+          rawLabel: item?.context_key,
+          aText: textValue,
+          bText: textValue,
+          fallbackPrefix: "Commun",
+          index,
+        }),
+        aText: textValue,
+        bText: textValue,
+        score: item?.score,
+        numericConflict: false,
+      }
+    }),
+  }
+}
+
+function tokenizeDocComparisonV201(value: string) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .split(/(\s+|[.,;:!?()[\]{}"“”'’/\\\-–—])/)
+    .filter((token) => token !== "")
+}
+
+function docComparisonTokenComparableV201(value: string) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("fr")
+}
+
+function computeDocComparisonDiffV201(aText: string, bText: string): {
+  a: DocComparisonToken[]
+  b: DocComparisonToken[]
+} {
+  const aTokens = tokenizeDocComparisonV201(aText)
+  const bTokens = tokenizeDocComparisonV201(bText)
+
+  // Garde-fou pour des extraits anormalement longs.
+  // Les comparaisons backend sont normalement des passages courts.
+  if (aTokens.length > 700 || bTokens.length > 700) {
+    return {
+      a: aTokens.map((value) => ({ value, changed: true })),
+      b: bTokens.map((value) => ({ value, changed: true })),
+    }
+  }
+
+  const aComparable = aTokens.map(docComparisonTokenComparableV201)
+  const bComparable = bTokens.map(docComparisonTokenComparableV201)
+
+  const rows = aTokens.length + 1
+  const cols = bTokens.length + 1
+  const dp: number[][] = Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () => 0)
+  )
+
+  for (let i = aTokens.length - 1; i >= 0; i -= 1) {
+    for (let j = bTokens.length - 1; j >= 0; j -= 1) {
+      if (aComparable[i] === bComparable[j]) {
+        dp[i][j] = dp[i + 1][j + 1] + 1
+      } else {
+        dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1])
+      }
+    }
+  }
+
+  const aResult: DocComparisonToken[] = []
+  const bResult: DocComparisonToken[] = []
+
+  let i = 0
+  let j = 0
+
+  while (i < aTokens.length && j < bTokens.length) {
+    if (aComparable[i] === bComparable[j]) {
+      aResult.push({ value: aTokens[i], changed: false })
+      bResult.push({ value: bTokens[j], changed: false })
+      i += 1
+      j += 1
+      continue
+    }
+
+    if (dp[i + 1][j] >= dp[i][j + 1]) {
+      aResult.push({ value: aTokens[i], changed: true })
+      i += 1
+    } else {
+      bResult.push({ value: bTokens[j], changed: true })
+      j += 1
+    }
+  }
+
+  while (i < aTokens.length) {
+    aResult.push({ value: aTokens[i], changed: true })
+    i += 1
+  }
+
+  while (j < bTokens.length) {
+    bResult.push({ value: bTokens[j], changed: true })
+    j += 1
+  }
+
+  return { a: aResult, b: bResult }
+}
+
+function DocComparisonHighlightedTextV201({
+  tokens,
+  side,
+}: {
+  tokens: DocComparisonToken[]
+  side: "a" | "b"
+}) {
+  const changedClass =
+    side === "a"
+      ? "border-warning/35 bg-warning/15 text-foreground"
+      : "border-brand/30 bg-brand/10 text-foreground"
+
+  return (
+    <p className="whitespace-pre-wrap text-sm leading-7 text-foreground [overflow-wrap:anywhere]">
+      {tokens.map((token, index) => {
+        if (/^\s+$/.test(token.value) || !token.changed) {
+          return <span key={index}>{token.value}</span>
+        }
+
+        return (
+          <span
+            key={index}
+            className={`rounded border px-0.5 ${changedClass}`}
+          >
+            {token.value}
+          </span>
+        )
+      })}
+    </p>
+  )
+}
+
+
+type InlineDocumentPreviewStateV203 = {
+  loading: boolean
+  error: string
+  objectUrl: string
+  mediaType: string
+  highlightPage: number | null
+  highlightExact: boolean | null
+}
+
+const EMPTY_INLINE_DOCUMENT_PREVIEW_V203: InlineDocumentPreviewStateV203 = {
+  loading: false,
+  error: "",
+  objectUrl: "",
+  mediaType: "",
+  highlightPage: null,
+  highlightExact: null,
+}
+
+function normalizeDocumentNameV203(value: any) {
+  return String(value || "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .pop()!
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("fr")
+    .replace(/\.[a-z0-9]{2,6}$/i, "")
+    .replace(/_[a-f0-9]{10,64}$/i, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function findComparisonSourceDocumentV203(
+  rawName: string,
+  sourceDocuments: DbSourceDocument[],
+) {
+  const wanted = normalizeDocumentNameV203(rawName)
+  if (!wanted) return null
+
+  let best: DbSourceDocument | null = null
+  let bestScore = 0
+
+  for (const document of sourceDocuments || []) {
+    const candidates = [
+      normalizeDocumentNameV203(document?.filename),
+      normalizeDocumentNameV203(document?.stored_filename),
+    ].filter(Boolean)
+
+    for (const candidate of candidates) {
+      let score = 0
+
+      if (candidate === wanted) {
+        score = 100
+      } else if (candidate.includes(wanted) || wanted.includes(candidate)) {
+        score = 92
+      } else {
+        const wantedWords = new Set(wanted.split(" ").filter(Boolean))
+        const candidateWords = new Set(candidate.split(" ").filter(Boolean))
+        let common = 0
+
+        wantedWords.forEach((word) => {
+          if (candidateWords.has(word)) common += 1
+        })
+
+        const ratio =
+          common /
+          Math.max(1, Math.min(wantedWords.size, candidateWords.size))
+
+        if (common >= 2 && ratio >= 0.7) {
+          score = Math.round(70 + ratio * 20)
+        }
+      }
+
+      if (score > bestScore) {
+        bestScore = score
+        best = document
+      }
+    }
+  }
+
+  return bestScore >= 70 ? best : null
+}
+
+function InlineComparisonDocumentViewerV203({
+  projectId,
+  documentName,
+  sourceDocuments,
+  selectedItem,
+  side,
+}: {
+  projectId: number | string
+  documentName: string
+  sourceDocuments: DbSourceDocument[]
+  selectedItem: DocComparisonViewItem | null
+  side: "a" | "b"
+}) {
+  const [preview, setPreview] = useState<InlineDocumentPreviewStateV203>(
+    EMPTY_INLINE_DOCUMENT_PREVIEW_V203,
+  )
+
+  const excerpt =
+    side === "a"
+      ? cleanDisplayText(String(selectedItem?.aText || ""))
+      : cleanDisplayText(String(selectedItem?.bText || ""))
+
+  const resolvedDocument = useMemo(
+    () => findComparisonSourceDocumentV203(documentName, sourceDocuments),
+    [documentName, sourceDocuments],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    let createdObjectUrl = ""
+
+    const load = async () => {
+      if (!projectId || !documentName) {
+        setPreview({
+          loading: false,
+          error: "Document non résolu.",
+          objectUrl: "",
+          mediaType: "",
+          highlightPage: null,
+          highlightExact: null,
+        })
+        return
+      }
+
+      setPreview({
+        loading: true,
+        error: "",
+        objectUrl: "",
+        mediaType: "",
+        highlightPage: null,
+        highlightExact: null,
+      })
+
+      const token = getAccessToken()
+      const authHeaders = token
+        ? { Authorization: `Bearer ${token}` }
+        : {}
+
+      try {
+        let response: Response | null = null
+
+        // Toujours essayer la prévisualisation surlignée en premier :
+        // elle renvoie le document complet (HTML/PDF/image) avec le passage
+        // sélectionné mis en évidence.
+        if (excerpt) {
+          response = await fetch(
+            `${API_BASE_URL}/projects/${projectId}/source-highlight/preview`,
+            {
+              method: "POST",
+              headers: {
+                ...authHeaders,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                document_id:
+                  resolvedDocument && Number(resolvedDocument.id) > 0
+                    ? resolvedDocument.id
+                    : null,
+                source_name: documentName,
+                document_name: documentName,
+                passage_id: selectedItem?.id || null,
+                excerpt,
+              }),
+            },
+          )
+
+          if (!response.ok) {
+            response = null
+          }
+        }
+
+        // Fallback : document brut complet si le surlignage n'est pas disponible.
+        if (
+          !response &&
+          resolvedDocument &&
+          Number(resolvedDocument.id) > 0
+        ) {
+          response = await fetch(
+            `${API_BASE_URL}/projects/${projectId}/source-documents/${resolvedDocument.id}/open`,
+            {
+              headers: authHeaders,
+            },
+          )
+
+          if (!response.ok) {
+            response = null
+          }
+        }
+
+        if (!response) {
+          throw new Error(
+            "Le document complet n'a pas pu être prévisualisé.",
+          )
+        }
+
+        // Le backend indique la page où le passage a réellement été retrouvé.
+        // On la lit AVANT response.blob(), puis on l'utilise dans le fragment
+        // du PDF (#page=N). Ainsi, quand le consultant sélectionne un passage,
+        // les deux documents A/B se positionnent automatiquement sur la bonne page.
+        const highlightPageRaw = response.headers.get(
+          "X-EnnoSmart-Highlight-Page",
+        )
+        const highlightExactRaw = response.headers.get(
+          "X-EnnoSmart-Highlight-Exact",
+        )
+
+        const parsedHighlightPage = Number(highlightPageRaw)
+        const highlightPage =
+          Number.isFinite(parsedHighlightPage) && parsedHighlightPage > 0
+            ? parsedHighlightPage
+            : null
+
+        const highlightExact =
+          highlightExactRaw === "true"
+            ? true
+            : highlightExactRaw === "false"
+              ? false
+              : null
+
+        const blob = await response.blob()
+        createdObjectUrl = URL.createObjectURL(blob)
+
+        const mediaType = String(
+          response.headers.get("content-type") || blob.type || "",
+        ).toLocaleLowerCase("fr")
+
+        if (!cancelled) {
+          setPreview({
+            loading: false,
+            error: "",
+            objectUrl: createdObjectUrl,
+            mediaType,
+            highlightPage,
+            highlightExact,
+          })
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPreview({
+            loading: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Prévisualisation documentaire indisponible.",
+            objectUrl: "",
+            mediaType: "",
+            highlightPage: null,
+            highlightExact: null,
+          })
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      cancelled = true
+      if (createdObjectUrl) {
+        URL.revokeObjectURL(createdObjectUrl)
+      }
+    }
+  }, [
+    projectId,
+    documentName,
+    excerpt,
+    resolvedDocument?.id,
+    selectedItem?.id,
+    side,
+  ])
+
+  const isImage = preview.mediaType.startsWith("image/")
+  const isPdf =
+    preview.mediaType.includes("application/pdf") ||
+    preview.mediaType.includes("pdf")
+
+  // Chrome/Edge PDF viewer comprend #page=N.
+  // Le key de l'iframe inclut selectedItem?.id : à chaque sélection,
+  // l'iframe est recréée et s'ouvre directement à la page du passage.
+  const documentViewerUrl =
+    preview.objectUrl && isPdf && preview.highlightPage
+      ? `${preview.objectUrl}#page=${preview.highlightPage}&zoom=page-width`
+      : preview.objectUrl
+
+  return (
+    <div className="relative h-[760px] min-w-0 overflow-hidden bg-white">
+      {preview.loading ? (
+        <div className="flex h-full items-center justify-center">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Chargement du document complet…
+          </div>
+        </div>
+      ) : preview.error ? (
+        <div className="flex h-full items-center justify-center p-6">
+          <div className="max-w-sm rounded-xl border border-warning/30 bg-warning/5 p-4 text-center">
+            <AlertTriangle className="mx-auto size-5 text-warning" />
+            <p className="mt-2 text-sm font-medium text-foreground">
+              Prévisualisation indisponible
+            </p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {preview.error}
+            </p>
+          </div>
+        </div>
+      ) : isImage && preview.objectUrl ? (
+        <div className="h-full overflow-auto p-4">
+          <img
+            src={preview.objectUrl}
+            alt={documentName}
+            className="mx-auto max-w-full rounded-lg border"
+          />
+        </div>
+      ) : documentViewerUrl ? (
+        <iframe
+          key={`${documentViewerUrl}:${selectedItem?.id || "document"}:${side}`}
+          src={documentViewerUrl}
+          title={documentName}
+          className="h-full w-full border-0 bg-white"
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function DocumentComparisonSideBySideV201({
+  summary,
+  comparison,
+  projectId,
+  sourceDocuments,
+}: {
+  summary: any
+  comparison: any
+  projectId: number | string
+  sourceDocuments: DbSourceDocument[]
+}) {
+  const itemsByKind = useMemo(
+    () => normalizeDocComparisonItemsV201(comparison),
+    [comparison]
+  )
+
+  const [filter, setFilter] = useState<DocComparisonViewKind>("different")
+  const [selectedIndex, setSelectedIndex] = useState(0)
+
+  useEffect(() => {
+    setSelectedIndex(0)
+  }, [filter, comparison])
+
+  const items = itemsByKind[filter] || []
+  const selected = items[selectedIndex] || items[0] || null
+
+  const documentA = cleanDisplayText(String(summary?.doc_a || "Document A"))
+  const documentB = cleanDisplayText(String(summary?.doc_b || "Document B"))
+
+  const tabs: Array<{
+    key: DocComparisonViewKind
+    label: string
+    count: number
+  }> = [
+    {
+      key: "different",
+      label: "Différences",
+      count: itemsByKind.different.length,
+    },
+    {
+      key: "only_a",
+      label: "Seulement A",
+      count: itemsByKind.only_a.length,
+    },
+    {
+      key: "only_b",
+      label: "Seulement B",
+      count: itemsByKind.only_b.length,
+    },
+    {
+      key: "identical",
+      label: "Commun",
+      count: itemsByKind.identical.length,
+    },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          {tabs.map((tab) => (
+            <Button
+              key={tab.key}
+              type="button"
+              size="sm"
+              variant={filter === tab.key ? "default" : "outline"}
+              className={filter === tab.key ? "bg-brand hover:bg-brand/90" : ""}
+              onClick={() => setFilter(tab.key)}
+            >
+              {tab.label}
+              <Badge
+                variant="secondary"
+                className="ml-1.5 min-w-5 justify-center px-1.5 text-[10px]"
+              >
+                {tab.count}
+              </Badge>
+            </Button>
+          ))}
+        </div>
+
+        {selected ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">
+              Passage {selectedIndex + 1}/{Math.max(items.length, 1)}
+            </Badge>
+            {selected.score !== null && selected.score !== undefined ? (
+              <Badge variant="outline">
+                Similarité {formatScore(selected.score)}
+              </Badge>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      {items.length === 0 ? (
+        <div className="rounded-xl border border-dashed bg-muted/10 p-8 text-center">
+          <p className="text-sm font-medium text-foreground">
+            Aucun passage dans cette catégorie.
+          </p>
+        </div>
+      ) : (
+        <div className="grid min-w-0 gap-4 xl:grid-cols-[250px_minmax(0,1fr)]">
+          <aside className="min-w-0 rounded-xl border bg-muted/10 p-3">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Sélectionner un passage
+              </p>
+              <Badge variant="outline" className="text-[10px]">
+                {items.length}
+              </Badge>
+            </div>
+
+            <div className="max-h-[820px] space-y-2 overflow-y-auto pr-1">
+              {items.map((item, index) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setSelectedIndex(index)}
+                  className={`w-full rounded-xl border p-3 text-left transition-colors ${
+                    selectedIndex === index
+                      ? "border-brand/45 bg-brand/5 shadow-sm"
+                      : "bg-white hover:bg-muted/40"
+                  }`}
+                >
+                  <p className="text-xs font-semibold leading-5 text-foreground">
+                    {index + 1}. {item.label}
+                  </p>
+
+                  <p className="mt-2 line-clamp-3 text-xs leading-5 text-muted-foreground">
+                    {item.aText || item.bText || "Passage non disponible"}
+                  </p>
+
+                  {item.numericConflict ? (
+                    <Badge
+                      variant="outline"
+                      className="mt-2 border-destructive/30 bg-destructive/10 text-[10px] text-destructive"
+                    >
+                      Conflit numérique
+                    </Badge>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          <section className="min-w-0 space-y-3">
+            <div className="rounded-xl border bg-muted/10 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Documents complets
+              </p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Les deux vrais documents restent ouverts côte à côte. Lorsque vous
+                sélectionnez un passage dans la liste, EnnoSmart recharge les deux
+                documents avec le passage correspondant surligné automatiquement.
+              </p>
+            </div>
+
+            <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+              <div className="min-w-0 overflow-hidden rounded-xl border bg-white shadow-sm">
+                <div className="border-b bg-warning/[0.055] px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-warning">
+                    Document A
+                  </p>
+                  <p
+                    className="mt-1 truncate text-xs font-medium text-foreground"
+                    title={documentA}
+                  >
+                    {documentA}
+                  </p>
+                </div>
+
+                <InlineComparisonDocumentViewerV203
+                  projectId={projectId}
+                  documentName={documentA}
+                  sourceDocuments={sourceDocuments}
+                  selectedItem={selected}
+                  side="a"
+                />
+              </div>
+
+              <div className="min-w-0 overflow-hidden rounded-xl border bg-white shadow-sm">
+                <div className="border-b bg-brand/[0.055] px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-brand">
+                    Document B
+                  </p>
+                  <p
+                    className="mt-1 truncate text-xs font-medium text-foreground"
+                    title={documentB}
+                  >
+                    {documentB}
+                  </p>
+                </div>
+
+                <InlineComparisonDocumentViewerV203
+                  projectId={projectId}
+                  documentName={documentB}
+                  sourceDocuments={sourceDocuments}
+                  selectedItem={selected}
+                  side="b"
+                />
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-white px-4 py-3">
+              <p className="text-xs leading-5 text-muted-foreground">
+                Légende : surlignage beige = passage correspondant dans A ·
+                surlignage violet = passage correspondant dans B. Le reste du
+                document reste visible pour conserver tout le contexte.
+              </p>
+            </div>
+          </section>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 async function uploadPreviousCirFinal(projectId: number, year: string, file: File) {
   const token = getAccessToken()
 
@@ -6245,6 +7220,26 @@ export function DiagnosisPage(
                       const whyVerrou = getShortVerrouRationale(verrou)
                       const action = consultantAction(verrou)
                       const consultantCheck = getConsultantCheckText(verrou)
+                      const historicalContinuity = getHistoricalLockContinuity(verrou)
+                      const groupedSubproblems = Array.from(
+                        new Set(
+                          [
+                            ...(Array.isArray((verrou as any)?.subproblems_current)
+                              ? (verrou as any).subproblems_current
+                              : []),
+                            ...(Array.isArray((verrou as any)?.absorbed_scientific_axis_titles)
+                              ? (verrou as any).absorbed_scientific_axis_titles
+                              : []),
+                          ]
+                            .map((value) => cleanDisplayText(value))
+                            .filter(
+                              (value) =>
+                                Boolean(value) &&
+                                value.toLocaleLowerCase("fr") !==
+                                  cleanDisplayText(verrou.title).toLocaleLowerCase("fr")
+                            )
+                        )
+                      )
                       const sourcePassagesCount = sourceDocumentsForVerrou.reduce(
                         (total, item) => total + item.passagesCount,
                         0
@@ -6376,6 +7371,26 @@ export function DiagnosisPage(
                                   </div>
                                 </section>
 
+                                {groupedSubproblems.length > 0 && (
+                                  <section className="rounded-xl border border-brand/15 bg-white p-4 sm:p-5">
+                                    <div className="mb-3">
+                                      <h4 className="text-sm font-semibold text-foreground">
+                                        Sous-verrous et difficultés regroupés
+                                      </h4>
+                                      <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">
+                                        Ces points restent visibles et traçables même lorsqu’ils relèvent du même verrou scientifique principal.
+                                      </p>
+                                    </div>
+                                    <ol className="space-y-2 pl-5 text-xs leading-6 text-foreground sm:text-sm">
+                                      {groupedSubproblems.map((subproblem) => (
+                                        <li key={subproblem} className="list-decimal pl-1">
+                                          {subproblem}
+                                        </li>
+                                      ))}
+                                    </ol>
+                                  </section>
+                                )}
+
                                 <section
                                   className="rounded-xl border border-brand/15 bg-white p-4 sm:p-5"
                                   aria-labelledby={`verrou-check-${verrou.id}`}
@@ -6402,6 +7417,78 @@ export function DiagnosisPage(
                                   </p>
                                 </section>
                               </div>
+
+                              {historicalContinuity && (
+                                <section className="overflow-hidden rounded-xl border border-blue-200 bg-blue-50/45">
+                                  <div className="flex flex-col gap-2 border-b border-blue-200 bg-white/75 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                      <p className="text-xs font-semibold text-blue-900">
+                                        Continuité intégrée du CIR précédent
+                                      </p>
+                                      <p className="mt-0.5 text-[11px] leading-5 text-blue-800/75">
+                                        Ces éléments N-1 complètent ce verrou ; ils restent distingués des preuves et résultats de l’année courante.
+                                      </p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      <Badge variant="outline" className="border-blue-300 bg-white text-[10px] text-blue-800">
+                                        {historicalContinuityLabel(historicalContinuity.status)}
+                                      </Badge>
+                                      {historicalContinuity.previousYears.map((year) => (
+                                        <Badge key={year} variant="secondary" className="text-[10px]">
+                                          CIR {year}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-3 p-4">
+                                    {(historicalContinuity.familyTitles.length > 0 || historicalContinuity.locks.length > 0) && (
+                                      <div className="rounded-lg border border-blue-100 bg-white p-3.5">
+                                        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-blue-800">
+                                          Verrou et incertitude N-1
+                                        </p>
+                                        {historicalContinuity.familyTitles.map((text) => (
+                                          <p key={`family-${text}`} className="mt-2 text-xs font-semibold leading-5 text-foreground sm:text-sm">
+                                            {text}
+                                          </p>
+                                        ))}
+                                        {historicalContinuity.locks.map((text) => (
+                                          <p key={`lock-${text}`} className="mt-2 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
+                                            {text}
+                                          </p>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    <div className="grid gap-3 lg:grid-cols-3">
+                                      {[
+                                        ["Démarche N-1", historicalContinuity.methods],
+                                        ["Paramètres N-1", historicalContinuity.parameters],
+                                        ["Résultats N-1", historicalContinuity.results],
+                                      ].map(([label, values]) => (
+                                        Array.isArray(values) && values.length > 0 ? (
+                                          <div key={String(label)} className="rounded-lg border border-blue-100 bg-white p-3.5">
+                                            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-blue-800">
+                                              {String(label)}
+                                            </p>
+                                            <div className="mt-2 space-y-2">
+                                              {values.map((text: string) => (
+                                                <p key={`${String(label)}-${text}`} className="whitespace-pre-wrap text-xs leading-5 text-foreground">
+                                                  {text}
+                                                </p>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ) : null
+                                      ))}
+                                    </div>
+
+                                    <p className="text-[10px] leading-4 text-blue-800/75">
+                                      Règle de preuve : le CIR N-1 confirme la trajectoire historique. Toute affirmation sur l’année courante doit rester soutenue par un document de l’année courante.
+                                    </p>
+                                  </div>
+                                </section>
+                              )}
 
                               {/* Action consultant : bandeau léger et non une grosse carte */}
                               <section
@@ -6720,25 +7807,174 @@ export function DiagnosisPage(
                   Aucun passage suspect exposé par le backend.
                 </p>
               ) : (
-                <div className="space-y-3">
-                  {aiPassages.slice(0, 8).map((item: any, index: number) => (
-                    <div key={`${item.passage_id || index}`} className="p-3 rounded-md border bg-muted/30">
-                      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                        <Badge variant="outline" className={`text-xs ${riskClass(item.risk_level)}`}>
-                          {item.risk_level || "niveau inconnu"}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          Score {formatScore(item.ai_score)}
-                        </Badge>
+                <div className="space-y-4">
+                  {aiPassages.slice(0, 8).map((item: any, index: number) => {
+                    const metadata =
+                      item?.metadata && typeof item.metadata === "object"
+                        ? item.metadata
+                        : {}
+
+                    const source =
+                      item?.source && typeof item.source === "object"
+                        ? item.source
+                        : {}
+
+                    const sourceJson =
+                      item?.source_json && typeof item.source_json === "object"
+                        ? item.source_json
+                        : {}
+
+                    const excerpt = cleanDisplayText(
+                      String(
+                        item?.text_excerpt ||
+                          item?.source_text_original ||
+                          item?.excerpt ||
+                          item?.text ||
+                          item?.source_text ||
+                          metadata?.source_text_original ||
+                          metadata?.excerpt ||
+                          metadata?.text ||
+                          ""
+                      )
+                    ).slice(0, 900)
+
+                    const documentName = cleanDisplayText(
+                      String(
+                        item?.document ||
+                          item?.document_name ||
+                          item?.source_document ||
+                          item?.filename ||
+                          item?.file_name ||
+                          item?.source_name ||
+                          source?.document ||
+                          source?.document_name ||
+                          source?.filename ||
+                          sourceJson?.document ||
+                          sourceJson?.document_name ||
+                          sourceJson?.source_document ||
+                          sourceJson?.filename ||
+                          metadata?.document ||
+                          metadata?.document_name ||
+                          metadata?.source_document ||
+                          metadata?.filename ||
+                          metadata?.file_name ||
+                          metadata?.source_name ||
+                          ""
+                      )
+                    )
+
+                    const sourcePath = cleanDisplayText(
+                      String(
+                        item?.source_path ||
+                          item?.path ||
+                          source?.source_path ||
+                          source?.path ||
+                          sourceJson?.source_path ||
+                          sourceJson?.path ||
+                          metadata?.source_path ||
+                          metadata?.path ||
+                          ""
+                      )
+                    )
+
+                    const evidence: SourceEvidence = {
+                      ...item,
+                      evidence_id:
+                        item?.evidence_id ||
+                        metadata?.evidence_id ||
+                        `ai-passage-${item?.passage_id || index + 1}`,
+                      rag_chunk_id:
+                        item?.rag_chunk_id ||
+                        metadata?.rag_chunk_id,
+                      passage_id:
+                        item?.passage_id ||
+                        metadata?.passage_id ||
+                        metadata?.original_passage_id,
+                      document_id:
+                        item?.document_id ||
+                        source?.document_id ||
+                        sourceJson?.document_id ||
+                        metadata?.document_id,
+                      document: documentName || undefined,
+                      document_name: documentName || undefined,
+                      filename:
+                        item?.filename ||
+                        source?.filename ||
+                        sourceJson?.filename ||
+                        metadata?.filename,
+                      source_path: sourcePath || undefined,
+                      page_number:
+                        item?.page_number ??
+                        source?.page_number ??
+                        metadata?.page_number ??
+                        metadata?.page,
+                      paragraph_index:
+                        item?.paragraph_index ??
+                        source?.paragraph_index ??
+                        metadata?.paragraph_index,
+                      char_start:
+                        item?.char_start ??
+                        source?.char_start ??
+                        metadata?.char_start ??
+                        metadata?.start_char ??
+                        metadata?.start,
+                      char_end:
+                        item?.char_end ??
+                        source?.char_end ??
+                        metadata?.char_end ??
+                        metadata?.end_char ??
+                        metadata?.end,
+                      sentence_start:
+                        item?.sentence_start ??
+                        source?.sentence_start ??
+                        metadata?.sentence_start,
+                      section_title:
+                        item?.section_title ||
+                        source?.section_title ||
+                        metadata?.section_title,
+                      section_path:
+                        item?.section_path ||
+                        source?.section_path ||
+                        metadata?.section_path,
+                      role: "Passage suspect IA",
+                      source_text_original: excerpt,
+                      excerpt,
+                      text: excerpt,
+                      metadata,
+                    }
+
+                    return (
+                      <div
+                        key={`${item?.passage_id || item?.evidence_id || index}`}
+                        className="min-w-0"
+                      >
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${riskClass(item?.risk_level)}`}
+                          >
+                            {item?.risk_level || "niveau inconnu"}
+                          </Badge>
+
+                          <span className="text-xs font-medium text-muted-foreground">
+                            Score {formatScore(item?.ai_score)}
+                          </span>
+                        </div>
+
+                        <p className="text-sm leading-7 text-foreground whitespace-pre-wrap">
+                          {excerpt || "Passage non disponible."}
+                          {excerpt ? (
+                            <SourceEvidenceCitations
+                              projectId={project.id}
+                              documents={sourceDocuments}
+                              evidence={[evidence]}
+                              citationNumbers={[index + 1]}
+                            />
+                          ) : null}
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground mb-1">
-                        {item.document || "Document non renseigné"}
-                      </p>
-                      <p className="text-sm whitespace-pre-wrap">
-                        {(item.text_excerpt || item.text || "").slice(0, 900)}
-                      </p>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </CardContent>
@@ -7199,113 +8435,81 @@ export function DiagnosisPage(
               )}
 
               {documentCompareReport && (
-                <Card className="border-brand/30">
-                  <CardHeader>
-                    <CardTitle className="text-sm">Rapport de comparaison A/B</CardTitle>
-                    <CardDescription className="text-xs">
-                      {docCompareSummary?.doc_a || "Document A"} VS {docCompareSummary?.doc_b || "Document B"}
-                    </CardDescription>
+                <Card className="overflow-hidden border-brand/30">
+                  <CardHeader className="border-b bg-gradient-to-r from-brand/[0.045] via-white to-white">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <CardTitle className="text-sm">
+                          Comparaison visuelle A / B
+                        </CardTitle>
+                        <CardDescription className="mt-1 text-xs">
+                          Les deux documents sources complets sont affichés côte à côte. Sélectionnez un passage : il est recherché et surligné automatiquement dans chaque document.
+                        </CardDescription>
+                      </div>
+
+                      <Badge
+                        variant="outline"
+                        className="shrink-0 border-brand/30 bg-white text-brand"
+                      >
+                        {formatScore(docCompareSummary?.change_rate)} de changement
+                      </Badge>
+                    </div>
                   </CardHeader>
 
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                      <div className="p-3 rounded-md border">
-                        <p className="text-xs text-muted-foreground">Taux changement</p>
-                        <p className="text-xl font-bold mt-1">{formatScore(docCompareSummary?.change_rate)}</p>
+                  <CardContent className="space-y-5 pt-5">
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                      <div className="rounded-xl border bg-white p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Changement
+                        </p>
+                        <p className="mt-1 text-xl font-semibold text-foreground">
+                          {formatScore(docCompareSummary?.change_rate)}
+                        </p>
                       </div>
-                      <div className="p-3 rounded-md border">
-                        <p className="text-xs text-muted-foreground">Commun</p>
-                        <p className="text-xl font-bold mt-1">{docCompareSummary?.identical_count ?? 0}</p>
+
+                      <div className="rounded-xl border bg-success/[0.045] p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-success">
+                          Commun
+                        </p>
+                        <p className="mt-1 text-xl font-semibold text-foreground">
+                          {docCompareSummary?.identical_count ?? 0}
+                        </p>
                       </div>
-                      <div className="p-3 rounded-md border">
-                        <p className="text-xs text-muted-foreground">Différent</p>
-                        <p className="text-xl font-bold mt-1">{docCompareSummary?.different_count ?? 0}</p>
+
+                      <div className="rounded-xl border bg-warning/[0.045] p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-warning">
+                          Différent
+                        </p>
+                        <p className="mt-1 text-xl font-semibold text-foreground">
+                          {docCompareSummary?.different_count ?? 0}
+                        </p>
                       </div>
-                      <div className="p-3 rounded-md border">
-                        <p className="text-xs text-muted-foreground">Seulement A</p>
-                        <p className="text-xl font-bold mt-1">{docCompareSummary?.only_in_a_count ?? 0}</p>
+
+                      <div className="rounded-xl border bg-blue-50/40 p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700">
+                          Seulement A
+                        </p>
+                        <p className="mt-1 text-xl font-semibold text-foreground">
+                          {docCompareSummary?.only_in_a_count ?? 0}
+                        </p>
                       </div>
-                      <div className="p-3 rounded-md border">
-                        <p className="text-xs text-muted-foreground">Seulement B</p>
-                        <p className="text-xl font-bold mt-1">{docCompareSummary?.only_in_b_count ?? 0}</p>
+
+                      <div className="rounded-xl border bg-violet-50/40 p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+                          Seulement B
+                        </p>
+                        <p className="mt-1 text-xl font-semibold text-foreground">
+                          {docCompareSummary?.only_in_b_count ?? 0}
+                        </p>
                       </div>
                     </div>
 
-                    <Accordion className="w-full">
-                      <AccordionItem value="different">
-                        <AccordionTrigger>
-                          Différent entre A et B ({docCompareComparison?.different_between_a_b?.length || 0})
-                        </AccordionTrigger>
-                        <AccordionContent className="space-y-3">
-                          {(docCompareComparison?.different_between_a_b || []).slice(0, 12).map((item: any, index: number) => (
-                            <div key={`diff-${index}`} className="p-3 rounded-md border bg-warning/5">
-                              <div className="flex gap-2 mb-2 flex-wrap">
-                                <Badge variant="outline" className="text-xs bg-warning/10 text-warning border-warning/30">
-                                  score {formatScore(item.score)}
-                                </Badge>
-                                {item.numeric_conflict && (
-                                  <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/30">
-                                    conflit numérique
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-xs font-semibold text-muted-foreground mb-1">A</p>
-                              <p className="text-sm whitespace-pre-wrap mb-3">{shortDocText(item.a_text, 900)}</p>
-                              <p className="text-xs font-semibold text-muted-foreground mb-1">B</p>
-                              <p className="text-sm whitespace-pre-wrap">{shortDocText(item.b_text, 900)}</p>
-                            </div>
-                          ))}
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="only-a">
-                        <AccordionTrigger>
-                          Seulement dans A ({docCompareComparison?.only_in_a?.length || 0})
-                        </AccordionTrigger>
-                        <AccordionContent className="space-y-3">
-                          {(docCompareComparison?.only_in_a || []).slice(0, 12).map((item: any, index: number) => (
-                            <div key={`only-a-${index}`} className="p-3 rounded-md border bg-muted/30">
-                              <Badge variant="outline" className="text-xs mb-2">
-                                {item.context_key || "contexte inconnu"}
-                              </Badge>
-                              <p className="text-sm whitespace-pre-wrap">{shortDocText(item.text, 900)}</p>
-                            </div>
-                          ))}
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="only-b">
-                        <AccordionTrigger>
-                          Seulement dans B ({docCompareComparison?.only_in_b?.length || 0})
-                        </AccordionTrigger>
-                        <AccordionContent className="space-y-3">
-                          {(docCompareComparison?.only_in_b || []).slice(0, 12).map((item: any, index: number) => (
-                            <div key={`only-b-${index}`} className="p-3 rounded-md border bg-muted/30">
-                              <Badge variant="outline" className="text-xs mb-2">
-                                {item.context_key || "contexte inconnu"}
-                              </Badge>
-                              <p className="text-sm whitespace-pre-wrap">{shortDocText(item.text, 900)}</p>
-                            </div>
-                          ))}
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="identical">
-                        <AccordionTrigger>
-                          Commun aux deux ({docCompareComparison?.identical?.length || 0})
-                        </AccordionTrigger>
-                        <AccordionContent className="space-y-3">
-                          {(docCompareComparison?.identical || []).slice(0, 10).map((item: any, index: number) => (
-                            <div key={`same-${index}`} className="p-3 rounded-md border bg-success/5">
-                              <Badge variant="outline" className="text-xs bg-success/10 text-success border-success/30 mb-2">
-                                score {formatScore(item.score)}
-                              </Badge>
-                              <p className="text-sm whitespace-pre-wrap">{shortDocText(item.text, 700)}</p>
-                            </div>
-                          ))}
-                        </AccordionContent>
-                      </AccordionItem>
-                    </Accordion>
+                    <DocumentComparisonSideBySideV201
+                      summary={docCompareSummary}
+                      comparison={docCompareComparison}
+                      projectId={project.id}
+                      sourceDocuments={sourceDocuments}
+                    />
                   </CardContent>
                 </Card>
               )}

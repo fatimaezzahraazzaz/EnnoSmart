@@ -689,13 +689,6 @@ export default function DashboardPage({
         0,
       )
 
-    const articles =
-      items.reduce(
-        (sum, item) =>
-          sum +
-          item.scholar.articles.count,
-        0,
-      )
 
     const projectsWithDocuments =
       items.filter(
@@ -723,7 +716,6 @@ export default function DashboardPage({
       completedDiagnostics,
       scholarProjects,
       documents,
-      articles,
       projectsWithDocuments,
       collectionProjects,
       diagnosticProjects,
@@ -890,9 +882,9 @@ export default function DashboardPage({
         <KpiCard
           label="EnnoScholar"
           value={
-            stats.articles
+            stats.scholarProjects
           }
-          detail={`${stats.scholarProjects} dossier(s) · articles synchronisés`}
+          detail={`${stats.scholarProjects} projet(s) avec résultats EnnoScholar`}
           icon={BookOpen}
           theme="indigo"
         />
@@ -1162,13 +1154,20 @@ export default function DashboardPage({
                             EnnoScholar
                           </p>
 
-                          <p className="text-left text-lg font-bold text-indigo-600 lg:text-center">
-                            {
-                              item.scholar
-                                .articles
-                                .count
-                            }
-                          </p>
+                          <div className="lg:text-center">
+                            <Badge
+                              variant="outline"
+                              className={
+                                scholarIsAvailable(item)
+                                  ? "h-6 rounded-full border-indigo-200 bg-indigo-50 px-2 text-[9px] font-semibold text-indigo-700"
+                                  : "h-6 rounded-full border-slate-200 bg-slate-50 px-2 text-[9px] font-medium text-slate-500"
+                              }
+                            >
+                              {scholarIsAvailable(item)
+                                ? "Disponible"
+                                : "Non lancé"}
+                            </Badge>
+                          </div>
                         </div>
 
                         {/* Risque */}

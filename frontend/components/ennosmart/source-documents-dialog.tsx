@@ -53,6 +53,8 @@ export type SourceEvidence = {
   evidence_id?: string | null
   rag_chunk_id?: string | null
   passage_id?: string | null
+  parent_passage_id?: string | null
+  original_passage_id?: string | null
   document_id?: string | number | null
   document?: string | null
   document_name?: string | null
@@ -350,22 +352,48 @@ function inferVirtualContentType(value: string): string {
 function virtualDocumentFromEvidence(
   evidence: SourceEvidence,
 ): DbSourceDocument | null {
-  const sourcePath = String(evidence.source_path || "").trim()
+  const sourcePath = String(
+    evidence.source_path ||
+      (evidence.metadata && typeof evidence.metadata === "object"
+        ? evidence.metadata.source_path || evidence.metadata.path
+        : "") ||
+      "",
+  ).trim()
+
   const rawName = evidenceDocumentName(evidence) || sourcePath
   const filename = cleanDisplayDocumentName(rawName)
+  const excerpt = evidenceText(evidence)
 
-  if (!sourcePath && !filename) return null
+  const passageIdentity = String(
+    evidence.parent_passage_id ||
+      evidence.original_passage_id ||
+      evidence.passage_id ||
+      evidence.rag_chunk_id ||
+      evidence.evidence_id ||
+      "",
+  ).trim()
 
-  const identity = sourcePath || filename
+  const identity =
+    sourcePath ||
+    filename ||
+    passageIdentity ||
+    excerpt.slice(0, 240)
+
+  if (!identity) return null
+
   return {
     id: stableNegativeId(identity),
     project_id: 0,
-    filename: filename || "Document source externe",
+    filename: filename || "Document source",
     stored_filename: filename || null,
     content_type: inferVirtualContentType(sourcePath || filename),
-    document_type: "source_historique",
-    upload_status: "memory_v2",
-    storage_mode: "source_path",
+    document_type: "source_documentaire",
+    upload_status: "resolved_from_evidence",
+    storage_mode: sourcePath
+      ? "source_path"
+      : passageIdentity
+        ? "passage_resolution"
+        : "excerpt_resolution",
     has_file_data: false,
   }
 }
@@ -919,7 +947,10 @@ export function SourceDocumentDialog({
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              document_id: Number(document.id) > 0 ? document.id : null,
+              document_id:
+                Number(document.id) > 0
+                  ? document.id
+                  : evidenceDocumentId(selectedEvidence),
               excerpt,
               source_path: selectedEvidence.source_path || null,
               source_name:
@@ -931,6 +962,8 @@ export function SourceDocumentDialog({
                 document.stored_filename ||
                 null,
               passage_id:
+                selectedEvidence.parent_passage_id ||
+                selectedEvidence.original_passage_id ||
                 selectedEvidence.passage_id ||
                 selectedEvidence.rag_chunk_id ||
                 selectedEvidence.evidence_id ||

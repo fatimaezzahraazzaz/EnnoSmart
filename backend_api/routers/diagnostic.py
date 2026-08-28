@@ -528,12 +528,14 @@ def _extract_final_accepted_verrous_from_report(report: dict) -> list[dict[str, 
         verrou_report = {}
 
     candidates = (
-        verrou_report.get("llm_reformulated_verrous")
+        # Sortie officielle de l'agent après réconciliation/consolidation.
+        # Le synthétiseur contient aussi les candidats intermédiaires d'audit.
+        report.get("llm_reformulated_verrous")
+        or report.get("consultant_verrous_cir")
         or verrou_report.get("final_items")
+        or verrou_report.get("llm_reformulated_verrous")
         or verrou_report.get("accepted_items")
         or verrou_report.get("final_verrous")
-        or report.get("llm_reformulated_verrous")
-        or report.get("consultant_verrous_cir")
         or report.get("verrous_reformules")
         or report.get("verrous")
         or []
@@ -1095,7 +1097,15 @@ def _render_structured_cir_continuity(cir_memory_report: Any, max_items: int = 1
         return ""
 
     comparisons = cir_memory_report.get("verrou_comparisons") or cir_memory_report.get("comparisons") or []
-    if not isinstance(comparisons, list) or not comparisons:
+    strict_rows = cir_memory_report.get("strict_axis_continuity") or []
+    family_coverage = cir_memory_report.get("historical_family_coverage") or []
+    if not isinstance(comparisons, list):
+        comparisons = []
+    if not isinstance(strict_rows, list):
+        strict_rows = []
+    if not isinstance(family_coverage, list):
+        family_coverage = []
+    if not comparisons and not strict_rows and not family_coverage:
         return ""
 
     years = cir_memory_report.get("previous_cir_years_used") or cir_memory_report.get("previous_years") or []
@@ -1115,6 +1125,54 @@ def _render_structured_cir_continuity(cir_memory_report: Any, max_items: int = 1
         f"Année(s) antérieure(s) retenue(s) : {', '.join(str(year) for year in years) if years else 'non précisée(s)' }.",
         "Cette comparaison qualifie la continuité et l'apport courant ; elle ne constitue pas une preuve du projet courant.",
     ]
+
+    if strict_rows:
+        lines.append("Statuts officiels issus du réconciliateur strict :")
+        for index, item in enumerate(strict_rows[:max_items], start=1):
+            if not isinstance(item, dict):
+                continue
+            title = _clean(item.get("title") or f"Axe {index}")
+            status = _clean(item.get("status") or "uncertain")
+            families = item.get("historical_family_titles") or []
+            family_text = "; ".join(_clean(value) for value in families if _clean(value))
+            lines.append(
+                f"Axe {index} — {title} | statut strict : {status}"
+                + (f" | famille(s) N-1 : {family_text}" if family_text else "")
+                + "."
+            )
+            methods = item.get("historical_method_context") or []
+            if methods and isinstance(methods[0], dict) and _clean(methods[0].get("text")):
+                lines.append(
+                    "Démarche N-1 à confronter aux preuves courantes (contexte, pas preuve N) : "
+                    + _clean(methods[0].get("text"))
+                )
+        if comparisons:
+            lines.append("Les rapprochements de passages suivants sont secondaires et conservés pour audit.")
+
+    if family_coverage:
+        labels = {
+            "matched_current_candidate": "retrouvée dans les preuves courantes",
+            "recovered_with_current_year_evidence": "récupérée avec preuves courantes — à valider",
+            "not_found_in_current_year_evidence": "non retrouvée dans les preuves courantes — à vérifier",
+            "similarity_detected_but_continuity_not_validated": "rapprochement détecté mais continuité non validée",
+        }
+        lines.append("Contrôle d'exhaustivité des familles de verrous du CIR N-1 :")
+        for row in family_coverage[:max_items]:
+            if not isinstance(row, dict):
+                continue
+            title = _clean(row.get("previous_family_title") or row.get("previous_family_id"))
+            status = labels.get(
+                _clean(row.get("coverage_status")),
+                _clean(row.get("coverage_status") or "à vérifier"),
+            )
+            current_ids = ", ".join(
+                _clean(value) for value in (row.get("current_ids") or []) if _clean(value)
+            )
+            lines.append(
+                f"- Famille N-1 : {title} | {status}"
+                + (f" | candidat(s) N : {current_ids}" if current_ids else "")
+                + "."
+            )
 
     for index, item in enumerate(comparisons[:max_items], start=1):
         if not isinstance(item, dict):
