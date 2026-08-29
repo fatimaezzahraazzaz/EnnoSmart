@@ -32,7 +32,6 @@ try:
         classify_evidence_provenance,
         execution_allows_claim,
         is_project_anchor,
-        is_trusted_current_project_evidence,
         provenance_allows_section,
     )
 except Exception:
@@ -43,7 +42,6 @@ except Exception:
         classify_evidence_provenance,
         execution_allows_claim,
         is_project_anchor,
-        is_trusted_current_project_evidence,
         provenance_allows_section,
     )
 
@@ -548,11 +546,10 @@ def _technical_evidence_rejection_reason(
     source: Dict[str, Any],
     section_key: str,
 ) -> str:
-    """Applique le contrat NLP, puis un secours lexical pour les anciens packs.
+    """Écarte les lignes de gabarit, de suivi et les faux résultats.
 
-    Un rôle sémantique structuré et autorisé par la provenance ne doit jamais
-    être annulé par une liste de mots. Les règles lexicales plus bas restent
-    uniquement compatibles avec les anciens packs dépourvus de rôle NLP.
+    Les règles portent sur la fonction documentaire, jamais sur un nom de
+    projet, un client, une technologie ou une valeur attendue particulière.
     """
     text = _section_evidence_text(source)
     if not text:
@@ -573,40 +570,6 @@ def _technical_evidence_rejection_reason(
     role = clean_text(source.get("role") or _source_role(source), 100).lower()
     result_scope = _grounding_norm(source.get("result_scope") or "")
 
-    metadata = source.get("metadata") if isinstance(source.get("metadata"), dict) else {}
-    semantic_role = clean_text(
-        source.get("semantic_role")
-        or metadata.get("semantic_role")
-        or source.get("original_model_role")
-        or metadata.get("original_model_role")
-        or role,
-        100,
-    ).lower()
-    source_policy = clean_text(
-        source.get("source_policy") or metadata.get("source_policy"), 120
-    ).lower()
-    if source.get("accepted_for_synthesis") is False:
-        return "rejected_by_upstream_nlp"
-    if bool(source.get("reference_like") or metadata.get("reference_like")):
-        return "reference_only"
-    if source_policy in {"context_only", "style_only", "secondary_context"}:
-        return "context_only_source"
-
-    authoritative_roles = {
-        "demarche_detectee": {"methode", "method", "demarche", "démarche"},
-        "resultats_metriques": {"resultat", "résultat", "result", "contribution"},
-        "parametres_contraintes": {
-            "parametre", "paramètre", "parameter", "limite", "constraint",
-        },
-    }
-    expected_roles = authoritative_roles.get(section_key, set())
-    if (
-        semantic_role in expected_roles
-        and provenance_allows_section(source, section_key)
-    ):
-        return ""
-
-    # Compatibilité legacy seulement : aucun rôle structuré exploitable.
     if _ADMINISTRATIVE_EVIDENCE_RE.search(joined):
         return "administrative_or_template_instruction"
     if re.search(r"\buse cases?\b", _grounding_norm(document), flags=re.I):
@@ -646,8 +609,7 @@ def _technical_evidence_rejection_reason(
         }
         if target_only:
             return "target_or_planning_not_result"
-        nlp_result_role = role in {"resultat", "result", "contribution"}
-        if not observed and not nlp_result_role:
+        if not observed:
             return "no_observed_result"
 
     if section_key == "demarche_detectee":
@@ -667,10 +629,9 @@ def _technical_evidence_rejection_reason(
                 and re.search(r"\b(?:nous|we|a [eé]t[eé]|ont [eé]t[eé]|vise [aà]|permet de|pour)\b", joined, re.I)
             )
         )
-        nlp_method_role = role in {"methode", "method", "demarche"}
-        if operation_function not in {"experiment", "hypothesis", "learning", "historical method"} and not method_signal and not nlp_method_role:
+        if operation_function not in {"experiment", "hypothesis", "learning", "historical method"} and not method_signal:
             return "not_a_method"
-        if not method_signal and not nlp_method_role:
+        if not method_signal:
             return "method_not_described"
 
     if section_key == "parametres_contraintes":
@@ -683,8 +644,7 @@ def _technical_evidence_rejection_reason(
             return "planning_row_not_parameter"
         has_parameter = bool(_PARAMETER_RE.search(joined))
         has_constraint = bool(_CONSTRAINT_RE.search(joined))
-        nlp_parameter_role = role in {"parametre", "parameter", "limite", "constraint"}
-        if not has_parameter and not has_constraint and not nlp_parameter_role:
+        if not has_parameter and not has_constraint:
             return "not_a_parameter_or_technical_constraint"
 
     return ""
@@ -902,7 +862,7 @@ def select_sources_for_section(
     seen = set()
     ranked: List[Tuple[float, Dict[str, Any]]] = []
     for source in candidates:
-        # ENNODIAG_ROLE_AUTHORITY_V3_1 — rôle NLP autoritaire + garde provenance; aucun recalcul de rôle.
+        # ENNODIAG_PROVENANCE_GUARD_V2 — filtre d'usage strict project_direct, jamais filtre de verrou.
         # Aucun candidat/verrou n'est supprimé en amont.
         if not provenance_allows_section(source, config.key):
             continue
@@ -995,21 +955,7 @@ def evidence_from_source(source: Dict[str, Any], evidence_id: str, excerpt_limit
         "char_start": _safe_int(meta.get("char_start") or meta.get("start_char") or meta.get("start")),
         "char_end": _safe_int(meta.get("char_end") or meta.get("end_char") or meta.get("end")),
         "section_title": clean_text(meta.get("section_title") or meta.get("section") or "", 240),
-        "section_path": clean_text(meta.get("section_path") or source.get("section_path") or "", 500),
-        "heading_path": clean_text(meta.get("heading_path") or source.get("heading_path") or "", 500),
-        "source_zone": clean_text(meta.get("source_zone") or source.get("source_zone") or "", 120),
-        "document_section_type": clean_text(meta.get("document_section_type") or source.get("document_section_type") or "", 120),
         "role": clean_text(meta.get("role") or meta.get("final_role") or source.get("role") or "", 80),
-        "semantic_role": clean_text(meta.get("semantic_role") or source.get("semantic_role") or "", 80),
-        "original_model_role": clean_text(meta.get("original_model_role") or source.get("original_model_role") or "", 80),
-        "content_origin": clean_text(meta.get("content_origin") or source.get("content_origin") or "", 120),
-        "source_type": clean_text(meta.get("source_type") or source.get("source_type") or "", 120),
-        "source_kind": clean_text(meta.get("source_kind") or source.get("source_kind") or "", 120),
-        "document_type": clean_text(meta.get("document_type") or source.get("document_type") or "", 120),
-        "document_category": clean_text(meta.get("document_category") or source.get("document_category") or "", 120),
-        "declared_corpus": clean_text(meta.get("declared_corpus") or source.get("declared_corpus") or "", 120),
-        "diagnostic_corpus_selected": bool(meta.get("diagnostic_corpus_selected") or source.get("diagnostic_corpus_selected")),
-        "temporal_scope": clean_text(meta.get("temporal_scope") or source.get("temporal_scope") or "", 120),
         "proof_kind": clean_text(meta.get("proof_kind") or "", 80),
         "operation_number": meta.get("operation_number"),
         "operation_group_id": clean_text(meta.get("operation_group_id") or "", 240) or None,
@@ -1017,9 +963,6 @@ def evidence_from_source(source: Dict[str, Any], evidence_id: str, excerpt_limit
         "result_scope": clean_text(meta.get("result_scope") or "", 80),
         "primary_result_evidence": bool(meta.get("primary_result_evidence")),
         "reference_like": _source_reference_like(source),
-        "is_state_of_art": bool(meta.get("is_state_of_art") or source.get("is_state_of_art")),
-        "is_external_literature": bool(meta.get("is_external_literature") or source.get("is_external_literature")),
-        "literature_only": bool(meta.get("literature_only") or source.get("literature_only")),
         "quantitative_values": _QUANT_RE.findall(source_text(source))[:12],
         "excerpt": clean_text(source_text(source), excerpt_limit),
     }
@@ -1359,10 +1302,8 @@ def _official_frascati_evidence(
         f"({percent_literal(report.get('remaining_documentary_gap'))}). "
         f"Statut de l'opération de référence: {clean_text(reference.get('operation_status')) or 'à qualifier'}. "
         f"Périmètre des opérations: {json.dumps(operation_status_counts, ensure_ascii=False)}. "
-        "Règle: la couverture documentaire repose sur cinq critères de poids égal; "
-        "documenté apporte 0.2, partiel 0.1, manquant ou contradictoire 0. "
-        "Le score de défendabilité R&D est distinct : il tient aussi compte de la nature "
-        "de l'opération et de la complétude de la chaîne verrou-hypothèse-expérience-résultat-apprentissage. "
+        "Règle: cinq critères de poids égal; documenté apporte 0.2, partiel 0.1, "
+        "manquant ou contradictoire 0. "
         + "; ".join(formula_parts)
     )
     evidence: List[Dict[str, Any]] = []
@@ -1629,23 +1570,25 @@ def _official_frascati_evidence(
         execution = classify_evidence_execution(proof)
         origin = provenance.get("evidence_origin")
         stage = clean_text(proof.get("operation_function") or proof.get("proof_kind"), 80).lower()
-        # Un seul contrat de provenance gouverne les sections et la justification.
-        # Cela empêche un résultat bibliographique étiqueté ``resultat`` par le
-        # NLP d'être reformulé comme un résultat du projet.
-        if purpose in {"demarche_detectee", "resultats_metriques", "parametres_contraintes"}:
-            if not provenance_allows_section(proof, purpose):
-                continue
-        if purpose == "justification_frascati":
-            if stage in {"experiment", "systematicity", "creativity"}:
-                allowed = provenance_allows_section(proof, "demarche_detectee")
-            elif stage in {"result", "learning", "transferability"}:
-                allowed = provenance_allows_section(proof, "resultats_metriques")
-            elif stage in {"uncertainty", "novelty"}:
-                allowed = provenance_allows_section(proof, "verrou")
-            else:
-                allowed = provenance_allows_section(proof, "justification_frascati")
-            if not allowed:
-                continue
+        # V2 — défense en profondeur : pour les faits du projet courant,
+        # `ambiguous_current_dossier` est bloqué au même titre que la littérature.
+        # Cela n'affecte pas les cartes/verrous, seulement les preuves narratives aval.
+        if purpose in {"demarche_detectee", "resultats_metriques"} and origin != "project_direct":
+            continue
+        if purpose == "demarche_detectee" and not execution_allows_claim(proof, "experiment"):
+            continue
+        if purpose == "resultats_metriques" and not execution_allows_claim(proof, "result"):
+            continue
+        if (
+            purpose == "justification_frascati"
+            and stage in {
+                "uncertainty", "hypothesis", "hypothesis_component", "experiment",
+                "result", "learning", "systematicity", "transferability",
+                "creativity", "novelty",
+            }
+            and origin != "project_direct"
+        ):
+            continue
         original_id = clean_text(proof.get("evidence_id"), 240)
         excerpt = clean_text(proof.get("excerpt"), 700)
         signature = original_id or (clean_text(proof.get("document")), excerpt[:220])
@@ -1706,6 +1649,7 @@ def _official_frascati_evidence(
         if len(evidence) >= max_items:
             break
     return evidence
+
 
 def _compact_frascati_for_prompt(summary: Dict[str, Any]) -> Dict[str, Any]:
     """Réduit le résumé Frascati afin de toujours garder de la place aux preuves."""
@@ -2000,10 +1944,10 @@ Tu es EnnoDiagnostic. Rédige uniquement « {config.title} » en français.
 
 CONTRAT :
 - Utilise exclusivement les PREUVES numérotées du projet courant.
-- Pour une action, une démarche, un résultat, un apprentissage ou un paramètre, utilise une preuve `project_direct` ou une preuve du corpus diagnostic courant dont le `semantic_role` correspond exactement à la section.
-- `external_literature` reste toujours interdite comme travail réalisé par le projet ; elle peut seulement contextualiser l'état de l'art/verrou.
-- `ambiguous_current_dossier` n'est utilisable que s'il appartient au corpus diagnostic courant : Synthèse/Objectif pour le cadrage, ou la section métier correspondant exactement à son rôle NLP. Il ne change jamais de rôle.
-- Une cible/planification ne doit jamais devenir un résultat acquis. Objectif et synthèse restent soumis à un ancrage projet direct.
+- Pour une action, une démarche, un résultat, un apprentissage ou un paramètre du projet courant, la preuve doit avoir `evidence_origin=project_direct`.
+- `external_literature` reste disponible pour l'état de l'art/verrou mais ne prouve jamais un travail réalisé par le projet.
+- `ambiguous_current_dossier` peut servir uniquement à cadrer le sujet et la cible dans Synthèse/Objectif lorsqu'il provient du dossier courant. Il ne prouve jamais une action réalisée, un résultat acquis ou un paramètre effectivement utilisé.
+- `actor_scope=external_authors` ou `unknown` ne doit jamais être reformulé comme « l'équipe », « nous » ou « le projet ».
 - Respecte `execution_status` mot pour mot : `planned`/`proposed` restent des objectifs ou pistes ; seuls `implemented`/`experimented` décrivent une démarche réalisée ; seuls `observed`/`measured` décrivent un résultat acquis.
 - N'écris jamais « l'équipe a réalisé/obtenu/confirmé » depuis une preuve `planned`, `proposed` ou `unknown`.
 - Les preuves F/E décrivent l'année courante. Les preuves H sont exclusivement des éléments de continuité du CIR précédent du même projet.
@@ -2552,10 +2496,19 @@ def _provenance_grounding_errors(
     evidence: Sequence[Dict[str, Any]],
     section_key: str,
 ) -> List[str]:
-    """V3.1 : bloque l'externe, pas un rôle NLP courant déjà qualifié."""
+    """V2 : une affirmation projet doit être portée par une preuve project_direct.
+
+    Les preuves externes/ambiguës ne sont pas supprimées du corpus de verrous.
+    Elles sont seulement interdites lorsqu'une section affirme que l'équipe projet
+    a visé, réalisé, mesuré, paramétré ou appris quelque chose.
+    """
     guarded_sections = {
-        "synthese_strategique", "objectif_global", "demarche_detectee",
-        "resultats_metriques", "parametres_contraintes", "justification_frascati",
+        "synthese_strategique",
+        "objectif_global",
+        "demarche_detectee",
+        "resultats_metriques",
+        "parametres_contraintes",
+        "justification_frascati",
     }
     if section_key not in guarded_sections:
         return []
@@ -2566,78 +2519,95 @@ def _provenance_grounding_errors(
     }
     units = [*paragraphs, *items]
     errors: List[str] = []
+    execution_claims = {
+        "contexte", "hypothese", "methodes_outils", "etapes_experimentales",
+        "resultats", "apprentissage",
+    }
     historical_allowed_sections = {
         "demarche_detectee", "resultats_metriques", "parametres_contraintes",
-    }
-    execution_to_section = {
-        "methodes_outils": "demarche_detectee",
-        "etapes_experimentales": "demarche_detectee",
-        "resultats": "resultats_metriques",
-        "apprentissage": "resultats_metriques",
     }
 
     for index, unit in enumerate(units, start=1):
         cited = _unit_evidence(unit, evidence_by_id)
         if not cited:
+            # Le garde générique signale déjà « sans evidence_id » ; cette erreur
+            # devient hard en V2 dans generate_one_section.
             continue
+
         documentary = [
             item for item in cited
             if str(item.get("evidence_id") or "") != "F0"
         ]
+        reports = [classify_evidence_provenance(item) for item in documentary]
+        direct = [
+            item for item, report in zip(documentary, reports)
+            if report.get("evidence_origin") == "project_direct"
+        ]
+        historical = [
+            item for item, report in zip(documentary, reports)
+            if report.get("evidence_origin") == "historical_project"
+            or item.get("temporal_scope") == "previous_cir_continuity"
+        ]
+        allowed_current = [
+            item for item, report in zip(documentary, reports)
+            if report.get("evidence_origin") == "project_direct"
+            or (
+                section_key in {"synthese_strategique", "objectif_global"}
+                and provenance_allows_section(item, section_key)
+            )
+        ]
+        non_confirmed_current = [
+            item for item, report in zip(documentary, reports)
+            if item not in allowed_current
+            and report.get("evidence_origin") != "historical_project"
+        ]
         claim_kind = _grounding_norm(unit.get("claim_kind") or "")
 
         if section_key == "justification_frascati":
-            trust_section = execution_to_section.get(claim_kind)
-            if claim_kind == "verrou":
-                trust_section = "verrou"
-            elif claim_kind in {"contexte", "hypothese"}:
-                trust_section = None
-
-            for item in documentary:
-                report = classify_evidence_provenance(item)
-                if report.get("evidence_origin") == "project_direct":
-                    continue
-                if (
-                    (trust_section and is_trusted_current_project_evidence(item, trust_section))
-                    or provenance_allows_section(item, "justification_frascati")
-                ):
-                    continue
-                errors.append(
-                    f"affirmation {index}: preuve non confirmée projet utilisée comme fait du projet courant"
-                )
-            if documentary and not any(
-                classify_evidence_provenance(item).get("evidence_origin") == "project_direct"
-                or (trust_section and is_trusted_current_project_evidence(item, trust_section))
-                or provenance_allows_section(item, "justification_frascati")
-                for item in documentary
-            ):
-                errors.append(
-                    f"affirmation {index}: fait du projet sans preuve project_direct ou rôle NLP courant qualifié"
-                )
+            if claim_kind in execution_claims:
+                if non_confirmed_current:
+                    errors.append(
+                        f"affirmation {index}: preuve non confirmée projet utilisée comme fait du projet courant"
+                    )
+                if not direct:
+                    errors.append(
+                        f"affirmation {index}: fait du projet sans preuve project_direct"
+                    )
+            elif claim_kind == "verrou":
+                # La littérature peut contextualiser un verrou, mais le rattachement
+                # au projet exige au moins un ancrage direct du dossier courant.
+                if not direct:
+                    errors.append(
+                        f"affirmation {index}: verrou sans ancrage documentaire du projet courant"
+                    )
+                ambiguous = [
+                    item for item, report in zip(documentary, reports)
+                    if report.get("evidence_origin") == "ambiguous_current_dossier"
+                ]
+                if ambiguous:
+                    errors.append(
+                        f"affirmation {index}: preuve ambiguë interdite pour rattacher le verrou au projet"
+                    )
             continue
 
-        historical = [
-            item for item in documentary
-            if classify_evidence_provenance(item).get("evidence_origin") == "historical_project"
-            or item.get("temporal_scope") == "previous_cir_continuity"
-        ]
-        if historical and section_key in historical_allowed_sections and len(historical) == len(documentary):
+        # Historique N-1 : chemin dédié, contrôlé ensuite par _historical_temporal_errors.
+        if (
+            historical
+            and section_key in historical_allowed_sections
+            and len(historical) == len(documentary)
+        ):
             continue
 
-        for item in documentary:
-            if provenance_allows_section(item, section_key):
-                continue
+        if non_confirmed_current:
             errors.append(
                 f"élément {index}: preuve non confirmée projet utilisée comme fait du projet courant"
             )
-        if documentary and not any(
-            provenance_allows_section(item, section_key)
-            for item in documentary
-        ):
+        if documentary and not allowed_current:
             errors.append(
-                f"élément {index}: fait du projet sans preuve project_direct ou rôle NLP courant qualifié"
+                f"élément {index}: fait du projet sans preuve courante autorisée"
             )
     return errors
+
 
 def _execution_grounding_errors(
     paragraphs: Sequence[Dict[str, Any]],
@@ -3289,6 +3259,39 @@ def parse_section_result(
 
 
 def _fallback_from_evidence(config: SectionContextConfig, evidence: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if config.key in {
+        "demarche_detectee", "resultats_metriques", "parametres_contraintes",
+    }:
+        messages = {
+            "demarche_detectee": (
+                "Les preuves restantes ne décrivent pas une séquence expérimentale assez complète "
+                "pour produire une explication fiable. Le consultant doit préciser l’objectif de "
+                "l’essai, les actions réalisées, les conditions et l’apprentissage obtenu."
+            ),
+            "resultats_metriques": (
+                "Aucun résultat observé suffisamment qualifié n’a pu être reformulé sans risque de "
+                "confondre une mesure acquise avec une cible, une planification ou une consigne de rédaction."
+            ),
+            "parametres_contraintes": (
+                "Les preuves restantes ne permettent pas d’isoler avec certitude un paramètre ou une "
+                "contrainte technique, sa valeur ou condition, et son rôle dans l’expérimentation."
+            ),
+        }
+        text = messages[config.key]
+        item = {
+            "label": _label_for(config, 1, ""),
+            "text": text,
+            "evidence_ids": [],
+        }
+        return {
+            "body": f"{item['label']} — {text}",
+            "paragraphs": [],
+            "items": [item],
+            "evidence_ids": [],
+            "evidence": [],
+            "valid": True,
+            "consultant_safe_fallback": True,
+        }
     if not evidence:
         body = "Information insuffisante dans les preuves du projet courant ; cette section doit être complétée par le consultant."
         return {"body": body, "paragraphs": [{"text": body, "evidence_ids": []}], "items": [], "evidence_ids": [], "evidence": [], "valid": True}
@@ -3421,9 +3424,6 @@ def _eligibility_fallback_from_report(
     criteria = [item for item in ((reference or basis).get("criteria") or []) if isinstance(item, dict)]
 
     score = report.get("score")
-    coverage = report.get("documentary_coverage")
-    if coverage is None:
-        coverage = report.get("documented_share")
     remaining = report.get("remaining_documentary_gap")
     reference_status = clean_text(reference.get("operation_status"))
 
@@ -3460,14 +3460,12 @@ def _eligibility_fallback_from_report(
     }.get(reference_status, "la qualification de l'opération de référence doit être validée")
 
     claim1 = (
-        f"Conclusion de l'opération de référence : {status_text}. La qualification compare les travaux réellement "
-        "décrits à une chaîne R&D complète : verrou non résolu par l'état de l'art, hypothèse, essais "
-        "systématiques, résultats interprétés et apprentissage transférable. Une simple configuration, "
-        "intégration ou optimisation connue reste de l'ingénierie, même si elle est bien documentée."
+        f"Conclusion documentaire de l'opération de référence : {status_text}. L'indice présenté mesure la couverture des cinq critères "
+        "Frascati pour l'opération de référence et non une probabilité d'acceptation du projet. Les preuves rattachées "
+        "au verrou, à l'hypothèse, à la démarche et aux résultats restent à confirmer par le consultant."
     )
     claim2 = (
-        f"Le score de défendabilité R&D est de {_percent_text(score)} et la couverture documentaire "
-        f"des cinq critères Frascati est de {_percent_text(coverage)}. "
+        f"L'indice documentaire Frascati de l'opération de référence est de {_percent_text(score)}. "
         + (
             "Les critères intégralement documentés sont : " + ", ".join(documented) + "."
             if documented else "Aucun critère n'est intégralement documenté dans l'opération de référence."
@@ -3546,11 +3544,12 @@ def generate_one_section(
         "display_mode": config.display_mode,
     }
 
-    # La conclusion doit analyser les travaux du projet, et pas seulement réciter
-    # le score. Le rédacteur structuré est donc actif par défaut ; une variable
-    # d'environnement permet toujours de le désactiver explicitement.
+    # La conclusion Frascati calculée est déterministe par défaut. Les anciens
+    # runs dépensaient deux à trois appels structurés (souvent en retry) pour
+    # reformuler un score déjà calculé, jusqu'à plusieurs dizaines de secondes,
+    # sans améliorer la preuve. Le mode LLM reste opt-in pour comparaison.
     use_frascati_llm = str(
-        os.getenv("ENNOSMART_DIAG_FRASCATI_USE_LLM", "1")
+        os.getenv("ENNOSMART_DIAG_FRASCATI_USE_LLM", "0")
     ).strip().lower() in {"1", "true", "yes", "oui"}
     if config.key == "justification_frascati" and not use_frascati_llm:
         fallback = _eligibility_fallback_from_report(frascati_summary, evidence)
@@ -3782,7 +3781,7 @@ def generate_one_section(
         return fallback, prompt
 
 
-_SECTION_CACHE_VERSION = "ennodiagnostic_section_cache_v324_provenance_locks_rnd_score"
+_SECTION_CACHE_VERSION = "ennodiagnostic_section_cache_v195_execution_provenance"
 
 
 def _section_cache_identity(key: str, prompt: str, llm: Any) -> str:
@@ -3799,7 +3798,7 @@ def _section_cache_identity(key: str, prompt: str, llm: Any) -> str:
 def _read_section_cache(cache_dir: Optional[Path], key: str, cache_key: str) -> Optional[Dict[str, Any]]:
     if cache_dir is None:
         return None
-    path = Path(cache_dir) / f"section_{key}_cache_v323.json"
+    path = Path(cache_dir) / f"section_{key}_cache_v195.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
@@ -3839,7 +3838,7 @@ def _write_section_cache(
     ) and status != "deterministic_frascati_without_redundant_llm":
         return
     try:
-        path = Path(cache_dir) / f"section_{key}_cache_v323.json"
+        path = Path(cache_dir) / f"section_{key}_cache_v195.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             json.dumps({
@@ -3937,7 +3936,7 @@ def generate_structured_diagnostic_core(
         "section_payloads_by_key": section_payloads,
         "token_usage_by_section": token_usage,
         "section_statuses": statuses,
-        "context_engineering_version": "v324_provenance_locks_rnd_score",
+        "context_engineering_version": "v195_provenance_execution_and_section_cache",
     }
 
 
@@ -3965,23 +3964,21 @@ def frascati_summary_text(frascati_summary: Dict[str, Any]) -> str:
     basis = report.get("score_basis_operation") if isinstance(report.get("score_basis_operation"), dict) else {}
     reference = report.get("reference_operation") if isinstance(report.get("reference_operation"), dict) else basis
     remaining = report.get("remaining_documentary_gap")
-    if remaining is None and documentary_coverage is not None:
+    if remaining is None and score is not None:
         try:
-            remaining = max(0.0, 1.0 - float(documentary_coverage))
+            remaining = max(0.0, 1.0 - float(score))
         except Exception:
             remaining = None
     parts: List[str] = []
     if score is not None:
         parts.append(
-            f"Le score de défendabilité R&D de l'opération de référence est de {_percent_text(score)}. "
-            f"Sa couverture documentaire Frascati est de {_percent_text(documentary_coverage)} et la part "
-            f"documentaire restant à consolider est de {_percent_text(remaining)}."
+            f"L'indice documentaire Frascati de l'opération de référence est de {_percent_text(score)}. "
+            f"La part documentaire restant à consolider est de {_percent_text(remaining)}."
         )
     if basis:
         parts.append(
-            "Le score tient compte à la fois des critères documentés et de la nature de la démarche ; "
-            "la couverture documentaire reste indiquée séparément. Il ne signifie pas que tous les axes "
-            "du projet obtiennent ce même niveau."
+            "Cet indice mesure la couverture des cinq critères pour le groupe documentaire de référence le mieux étayé. "
+            "Il ne signifie pas que tous les axes du projet obtiennent ce même niveau."
         )
     elif documentary_coverage is not None:
         parts.append(
@@ -4144,26 +4141,7 @@ def verrous_text_from_items(items: List[Dict[str, Any]], max_items: Optional[int
                 or bool(item.get("not_final_cir"))
             )
             label = "Contexte à qualifier" if context_only else "Signal R&D candidat"
-            block = [clean_text(f"{label} {index} — {title}. {explanation}", 1100)]
-            sublocks = [
-                clean_text(value, 420)
-                for value in (
-                    item.get("subproblems_current")
-                    or item.get("sublocks")
-                    or item.get("sous_verrous")
-                    or []
-                )
-                if clean_text(value, 420)
-            ]
-            if sublocks:
-                block.append(
-                    "Sous-verrous / sous-problèmes associés : "
-                    + " ".join(
-                        f"{sub_index}. {value}"
-                        for sub_index, value in enumerate(dict.fromkeys(sublocks), start=1)
-                    )
-                )
-            output.append(clean_text("\n\n".join(block), 3200))
+            output.append(clean_text(f"{label} {index} — {title}. {explanation}", 1100))
     return "\n\n".join(output) or "Aucun signal de verrou R&D exploitable n'a été consolidé automatiquement."
 
 

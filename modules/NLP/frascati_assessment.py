@@ -511,24 +511,33 @@ def _eligibility_assessment_score(
     documentary_coverage: float,
     demarche: Mapping[str, Any],
 ) -> float:
-    """Indice de defendabilite, sans multiplication par un ratio de passages.
+    """Sépare couverture documentaire et défendabilité R&D de la démarche.
 
-    La couverture Frascati est conservee telle quelle pour une operation
-    potentiellement eligible. L'etude de demarche agit separement sur le risque
-    et bloque uniquement une operation effectivement classique.
+    Un dossier peut citer les cinq critères tout en ne décrivant qu'une mise en
+    œuvre d'ingénierie. Le score affiché ne doit donc plus être la simple copie
+    de la couverture documentaire. La complétude de la chaîne causale, déjà
+    calculée par ``demarche_legibility``, calibre le noyau R&D partiel.
     """
-    if not recommendation:
-        return 0.0
+    coverage = max(0.0, min(1.0, float(documentary_coverage or 0.0)))
     operation_status = str(
         demarche.get("project_status")
         or demarche.get("operation_status")
         or ""
     )
     if operation_status == "classical_engineering":
+        # Une opération purement classique peut être très bien documentée sans
+        # devenir de la R&D. Le plancher non nul signale que l'analyse a bien eu
+        # lieu, sans suggérer une éligibilité potentielle.
+        return 0.01 if coverage > 0 else 0.0
+    if not recommendation or operation_status == "insufficient_evidence":
         return 0.0
-    # Les preuves insuffisantes et le raccourci potentiel modifient le risque
-    # et la confiance, pas la couverture des cinq criteres Frascati.
-    return round(float(documentary_coverage), 4)
+    if operation_status == "rnd_core_partial":
+        causal_readability = max(
+            0.0,
+            min(1.0, float(demarche.get("readability_score") or 0.0)),
+        )
+        return round(coverage * causal_readability, 4)
+    return round(coverage, 4)
 
 
 def assess_group_frascati(group: Mapping[str, Any]) -> Dict[str, Any]:
@@ -604,7 +613,7 @@ def assess_group_frascati(group: Mapping[str, Any]) -> Dict[str, Any]:
         "eligibility_score": coverage,
         "eligibility_score_semantics": "legacy_alias_of_documentary_coverage_not_probability_not_official_frascati_score",
         "eligibility_assessment_score": eligibility_assessment_score,
-        "eligibility_assessment_score_semantics": "rnd_defensibility_index_equal_to_frascati_documentary_coverage_when_operation_not_classical_not_official_cir_probability",
+        "eligibility_assessment_score_semantics": "rnd_defensibility_index_separate_from_documentary_coverage_calibrated_by_operation_nature_and_causal_chain_not_official_cir_probability",
         "rnd_defensibility_index": eligibility_assessment_score,
         "eligibility_recommendation": recommendation,
         "recommendation_label": recommendation_label,
@@ -807,8 +816,8 @@ def assess_project_frascati(groups: Iterable[Mapping[str, Any]]) -> Dict[str, An
         "dimensions": project_criteria,
         "criteria_summary": summary,
         "documentary_coverage": coverage,
-        "documented_share": eligibility_assessment_score,
-        "remaining_documentary_gap": round(max(0.0, 1.0 - eligibility_assessment_score), 4),
+        "documented_share": coverage,
+        "remaining_documentary_gap": round(max(0.0, 1.0 - coverage), 4),
         "score_basis_group_id": score_basis.get("group_id"),
         "score_basis_operation_status": (
             (score_basis.get("demarche_legibility") or {}).get("operation_status")
@@ -817,14 +826,14 @@ def assess_project_frascati(groups: Iterable[Mapping[str, Any]]) -> Dict[str, An
         ),
         "score_basis_criteria_breakdown": basis_breakdown,
         "score_basis_guard_blocked": recommendation == 0,
-        "score_formula": "equal_weight_20_percent_per_frascati_criterion_documented_20_partial_10_missing_or_contradictory_0_then_separate_classical_engineering_guard",
+        "score_formula": "five_equal_weight_frascati_criteria_for_documentary_coverage_then_rnd_defensibility_calibrated_by_operation_nature_and_causal_chain",
         "documentary_coverage_semantics": "best_complete_operation_coverage_not_cross_operation_merge_not_probability",
         "portfolio_criteria_coverage": portfolio_coverage,
         "portfolio_criteria_coverage_semantics": "descriptive_cross_operation_summary_not_used_for_project_recommendation",
         "eligibility_score": coverage,
         "eligibility_score_semantics": "legacy_alias_of_documentary_coverage_not_probability_not_official_frascati_score",
         "eligibility_assessment_score": eligibility_assessment_score,
-        "eligibility_assessment_score_semantics": "rnd_defensibility_index_equal_to_frascati_documentary_coverage_when_at_least_one_operation_is_potentially_eligible_not_official_cir_probability",
+        "eligibility_assessment_score_semantics": "rnd_defensibility_index_separate_from_documentary_coverage_calibrated_by_operation_nature_and_causal_chain_not_official_cir_probability",
         "rnd_defensibility_index": eligibility_assessment_score,
         "eligibility_recommendation": recommendation,
         "recommendation_label": recommendation_label,

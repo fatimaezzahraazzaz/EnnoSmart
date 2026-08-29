@@ -1018,9 +1018,6 @@ def _nlp_passage_proof(passage: Any) -> Dict[str, Any]:
         "page_number": item.get("page_number") or item.get("page") or metadata.get("page_number") or metadata.get("page"),
         "section_title": clean_text(item.get("section_title") or metadata.get("section_title")),
         "section_path": clean_text(item.get("section_path") or metadata.get("section_path")),
-        "heading_path": clean_text(item.get("heading_path") or metadata.get("heading_path")),
-        "source_zone": clean_text(item.get("source_zone") or metadata.get("source_zone")),
-        "document_section_type": clean_text(item.get("document_section_type") or metadata.get("document_section_type")),
         "sentence_start": item.get("sentence_start") if item.get("sentence_start") is not None else metadata.get("sentence_start"),
         "paragraph_index": item.get("paragraph_index") if item.get("paragraph_index") is not None else metadata.get("paragraph_index"),
         "char_start": (
@@ -1035,26 +1032,7 @@ def _nlp_passage_proof(passage: Any) -> Dict[str, Any]:
             item.get("role") or item.get("semantic_role") or item.get("original_model_role")
             or metadata.get("role") or metadata.get("semantic_role")
         ),
-        "semantic_role": clean_text(item.get("semantic_role") or metadata.get("semantic_role")),
         "original_role": clean_text(item.get("original_model_role")),
-        "original_model_role": clean_text(item.get("original_model_role") or metadata.get("original_model_role")),
-        "content_origin": clean_text(item.get("content_origin") or metadata.get("content_origin")),
-        "source_type": clean_text(item.get("source_type") or metadata.get("source_type")),
-        "source_kind": clean_text(item.get("source_kind") or metadata.get("source_kind")),
-        "document_type": clean_text(item.get("document_type") or metadata.get("document_type")),
-        "document_category": clean_text(item.get("document_category") or metadata.get("document_category")),
-        "declared_corpus": clean_text(item.get("declared_corpus") or metadata.get("declared_corpus")),
-        "diagnostic_corpus_selected": bool(item.get("diagnostic_corpus_selected") or metadata.get("diagnostic_corpus_selected")),
-        "current_project_evidence": bool(item.get("current_project_evidence") or metadata.get("current_project_evidence")),
-        "declared_raw_document": bool(item.get("declared_raw_document") or metadata.get("declared_raw_document")),
-        "temporal_scope": clean_text(item.get("temporal_scope") or metadata.get("temporal_scope")),
-        "evidence_origin": clean_text(item.get("evidence_origin") or metadata.get("evidence_origin")),
-        "actor_scope": clean_text(item.get("actor_scope") or metadata.get("actor_scope")),
-        "execution_status": clean_text(item.get("execution_status") or metadata.get("execution_status")),
-        "reference_like": bool(item.get("reference_like") or metadata.get("reference_like")),
-        "is_state_of_art": bool(item.get("is_state_of_art") or metadata.get("is_state_of_art")),
-        "is_external_literature": bool(item.get("is_external_literature") or metadata.get("is_external_literature")),
-        "literature_only": bool(item.get("literature_only") or metadata.get("literature_only")),
         "analysis_text_used": bool(item.get("analysis_text")),
         "context_before_used": bool(item.get("context_before")),
         "context_after_used": bool(item.get("context_after")),
@@ -2214,10 +2192,6 @@ def _build_eligibility_evidence_report(
         score = round(float(assessment.get("rnd_defensibility_index") or assessment.get("eligibility_assessment_score") or 0.0), 4)
     except Exception:
         score = 0.0
-    try:
-        documentary_coverage = round(float(assessment.get("documentary_coverage") or 0.0), 4)
-    except Exception:
-        documentary_coverage = 0.0
     reference_passage_pool = passage_pool_by_group.get(reference_group_id, [])
     project_hypothesis_evidence = _build_hypothesis_evidence(
         reference_passage_pool,
@@ -2240,11 +2214,10 @@ def _build_eligibility_evidence_report(
         chain["result_or_learning_evidence_ids"] = prioritized_result_evidence
         reference_operation["causal_chain_evidence"] = chain
     return {
-        "version": "eligibility_evidence_report_v5_separate_coverage_and_rnd_defensibility",
+        "version": "eligibility_evidence_report_v4_reference_safe_hypothesis_result_scope",
         "score": score,
-        "documentary_coverage": documentary_coverage,
-        "documented_share": documentary_coverage,
-        "remaining_documentary_gap": round(max(0.0, 1.0 - documentary_coverage), 4),
+        "documented_share": score,
+        "remaining_documentary_gap": round(max(0.0, 1.0 - score), 4),
         "score_formula": assessment.get("score_formula") or "five_equal_weight_frascati_criteria_20_percent_each",
         "score_basis_group_id": basis_group_id or None,
         "score_basis_operation": basis,
@@ -5486,24 +5459,6 @@ Contraintes :
                 lines.append(f"Incertitude à qualifier : {uncertainty}")
             if documents:
                 lines.append(f"Documents courants associés : {documents}")
-            sublocks = [
-                clean_text(value)
-                for value in (
-                    item.get("subproblems_current")
-                    or item.get("sublocks")
-                    or item.get("sous_verrous")
-                    or []
-                )
-                if clean_text(value)
-            ]
-            if sublocks:
-                lines.append(
-                    "Sous-verrous / sous-problèmes associés : "
-                    + " ".join(
-                        f"{sub_index}. {value}"
-                        for sub_index, value in enumerate(dict.fromkeys(sublocks), start=1)
-                    )
-                )
             lines.append(f"Statut : {status} — validation consultant nécessaire.")
         return "\n\n".join(lines)
 
@@ -5591,8 +5546,6 @@ Contraintes :
         core_result: Dict[str, Any] = {}
         static_diagnostic: Dict[str, Any] = {}
         presenter_error: Optional[str] = None
-        presenter_generate_core = None
-        presenter_build_final = None
         try:
             try:
                 from agents.EnnoDiagnostic.diagnostic_static_presenter import (
@@ -5604,8 +5557,15 @@ Contraintes :
                     build_final_static_diagnostic,
                     generate_structured_diagnostic_core,
                 )
-            presenter_generate_core = generate_structured_diagnostic_core
-            presenter_build_final = build_final_static_diagnostic
+
+            core_result = generate_structured_diagnostic_core(
+                llm=self.llm,
+                sections=sections,
+                frascati_summary=frascati_summary,
+                style_memory_report=None if current_project_only else style_memory_report,
+                ai_detection_report=ai_detection_report,
+                memory_v2_report=None if current_project_only else memory_v2_report,
+            )
         except Exception as exc:
             presenter_error = str(exc)
             print(f"[EnnoDiagnostic][V182_PRESENTER][WARN] {exc}")
@@ -5620,122 +5580,6 @@ Contraintes :
             llm_reformulated_verrous,
             frascati_summary,
         )
-
-        # La réconciliation N/N-1 reste une passe de continuité séparée. Elle ne
-        # recalcule jamais le score Frascati et ne transforme jamais l'historique
-        # en preuve du projet courant.
-        pre_reconciliation_verrous_count = len(llm_reformulated_verrous)
-        historical_continuity_report: Dict[str, Any] = {
-            "ok": False,
-            "has_previous_cir": False,
-            "policy": "fail-open: keep current NLP candidates",
-            "reconciled_verrous": llm_reformulated_verrous,
-        }
-        try:
-            try:
-                from agents.EnnoDiagnostic.historical_continuity_reconciler import (
-                    reconcile_historical_continuity,
-                )
-            except Exception:
-                from historical_continuity_reconciler import reconcile_historical_continuity
-
-            historical_continuity_report = reconcile_historical_continuity(
-                organisme=self.organisme,
-                project=self.project,
-                subproject=self.subproject,
-                year=self.year,
-                current_verrous=llm_reformulated_verrous,
-                current_sections=sections,
-                search_current=self.search_chroma,
-                llm=self.llm,
-                output_dir=self.diagnostic_dir,
-            )
-            reconciled = historical_continuity_report.get("reconciled_verrous")
-            if isinstance(reconciled, list):
-                llm_reformulated_verrous = [
-                    item for item in reconciled if isinstance(item, dict)
-                ]
-            llm_reformulated_verrous = self._enrich_verrous_with_frascati(
-                llm_reformulated_verrous,
-                frascati_summary,
-            )
-        except Exception as exc:
-            historical_continuity_report = {
-                **historical_continuity_report,
-                "ok": False,
-                "error": str(exc),
-                "reconciled_verrous": llm_reformulated_verrous,
-            }
-            print(f"[EnnoDiagnostic][HISTORICAL_CONTINUITY][WARN] {exc}", flush=True)
-
-        # La vue consultant est construite après les groupes NLP officiels :
-        # un axe parent peut ainsi regrouper plusieurs sous-verrous sans modifier
-        # leurs scores Frascati ni supprimer les candidats atomiques d'audit.
-        atomic_verrous = list(llm_reformulated_verrous)
-        scientific_axis_report: Dict[str, Any] = {
-            "ok": False,
-            "policy": "fail-open: keep NLP atomic candidates",
-            "atomic_verrous": atomic_verrous,
-            "scientific_axes": [],
-        }
-        try:
-            try:
-                from agents.EnnoDiagnostic.scientific_axis_synthesizer import (
-                    synthesize_scientific_axes,
-                )
-            except Exception:
-                from scientific_axis_synthesizer import synthesize_scientific_axes
-
-            scientific_axis_report = synthesize_scientific_axes(
-                current_verrous=atomic_verrous,
-                historical_continuity_report=historical_continuity_report,
-                current_sections=sections,
-                current_year=self.year,
-                llm=self.llm,
-                output_dir=self.diagnostic_dir,
-            )
-            consolidated_axes = scientific_axis_report.get("scientific_axes")
-            if scientific_axis_report.get("ok") and isinstance(consolidated_axes, list):
-                llm_reformulated_verrous = [
-                    item for item in consolidated_axes if isinstance(item, dict)
-                ]
-        except Exception as exc:
-            scientific_axis_report = {
-                **scientific_axis_report,
-                "ok": False,
-                "error": str(exc),
-            }
-            print(f"[EnnoDiagnostic][SCIENTIFIC_AXIS][WARN] {exc}", flush=True)
-
-        synthesis_report = dict(getattr(self, "_last_verrou_synthesis_report", {}) or {})
-        synthesis_report["atomic_verrous"] = atomic_verrous
-        synthesis_report["scientific_axis_report"] = scientific_axis_report
-        synthesis_report["llm_reformulated_verrous"] = llm_reformulated_verrous
-        synthesis_report["final_items"] = llm_reformulated_verrous
-        synthesis_report["final_count"] = len(llm_reformulated_verrous)
-        synthesis_report["scientific_axis_consolidation_applied"] = bool(
-            scientific_axis_report.get("ok")
-        )
-        self._last_verrou_synthesis_report = synthesis_report
-
-        # Les sections sont rédigées après la structure verrou/sous-verrou. Le
-        # LLM reçoit donc le même graphe consultant que celui qui sera affiché.
-        if presenter_generate_core is not None:
-            try:
-                core_result = presenter_generate_core(
-                    llm=self.llm,
-                    sections=sections,
-                    frascati_summary=frascati_summary,
-                    style_memory_report=None if current_project_only else style_memory_report,
-                    ai_detection_report=ai_detection_report,
-                    memory_v2_report=None if current_project_only else memory_v2_report,
-                    historical_axes=llm_reformulated_verrous,
-                    cache_dir=self.diagnostic_dir / "cache",
-                )
-            except Exception as exc:
-                presenter_error = str(exc)
-                print(f"[EnnoDiagnostic][V323_PRESENTER][WARN] {exc}")
-
         cir_memory_report = self.load_cir_memory_report(
             current_verrous=llm_reformulated_verrous,
         )
@@ -5748,9 +5592,9 @@ Contraintes :
 
         content = ""
         prompt = clean_text(core_result.get("prompt"))
-        if core_result and presenter_build_final is not None:
+        if core_result:
             try:
-                static_diagnostic = presenter_build_final(
+                static_diagnostic = build_final_static_diagnostic(
                     core_result=core_result,
                     sections=sections,
                     frascati_summary=frascati_summary,
@@ -5758,8 +5602,6 @@ Contraintes :
                     memory_v2_usage_report=memory_v2_usage_report,
                     llm_reformulated_verrous=llm_reformulated_verrous,
                 )
-                static_diagnostic["historical_continuity_report"] = historical_continuity_report
-                static_diagnostic["scientific_axis_report"] = scientific_axis_report
                 values = static_diagnostic.get("sections_by_key") or {}
                 n1_body = self._cir_previous_comparison_block(
                     cir_memory_report,
@@ -5850,7 +5692,7 @@ Contraintes :
         report: Dict[str, Any] = {
             "ok": True,
             "status": "completed",
-            "version": "ennodiagnostic_v323_nlp_authority_grouped_sections",
+            "version": "ennodiagnostic_v190_traceable_unified_eligibility_analysis",
             "mode": core_result.get("status") or "fast_prompt_fallback",
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "organisme": self.organisme,
@@ -5874,8 +5716,6 @@ Contraintes :
             "memory_v2_report": memory_v2_report,
             "memory_v2_usage_report": memory_v2_usage_report,
             "previous_verrou_context_report": previous_verrou_context,
-            "historical_continuity_report": historical_continuity_report,
-            "scientific_axis_report": scientific_axis_report,
             "cir_memory_report": cir_memory_report,
             "chroma_sections": sections,
             "context_engineering": core_result,
@@ -5884,28 +5724,20 @@ Contraintes :
                 "style_memory_available": bool(style_memory_report.get("ok")),
                 "memory_v2_available": bool(memory_v2_report.get("ok")),
                 "previous_verrou_context_available": bool(previous_verrou_context.get("available")),
-                "historical_continuity_available": bool(historical_continuity_report.get("has_previous_cir")),
-                "scientific_axis_consolidation_available": bool(scientific_axis_report.get("ok")),
                 "previous_cir_available": bool(cir_memory_report.get("has_previous_cir")),
             },
             "telemetry": {
                 "elapsed_seconds": elapsed,
                 "presenter_error": presenter_error,
-                "structured_presenter_loaded": presenter_generate_core is not None,
                 "prompt_chars": len(prompt),
                 "main_verrous_count": len(llm_reformulated_verrous),
-                "main_verrous_before_historical_reconciliation": pre_reconciliation_verrous_count,
-                "atomic_verrous_count": len(atomic_verrous),
-                "scientific_axis_count": int(scientific_axis_report.get("axis_count") or 0),
-                "historical_reconciliation_merged_groups": int(historical_continuity_report.get("merged_groups_count") or 0),
-                "historical_reconciliation_gap_recovered": int(historical_continuity_report.get("recovered_gap_candidates_count") or 0),
                 "previous_verrou_examples_count": int(previous_verrou_context.get("examples_count") or 0),
                 "previous_verrou_context_in_prompt": bool(previous_verrou_context.get("available")),
                 "previous_verrou_context_factual_use_allowed": False,
                 "demarche_llm_review_recommended": bool(
                     (frascati_summary.get("demarche_legibility") or {}).get("llm_review_recommended")
                 ),
-                "demarche_llm_review_policy": "section_generation_after_nlp_axis_consolidation",
+                "demarche_llm_review_policy": "reuse_existing_demarche_section_call_no_extra_call",
             },
             "output_path": str(self.report_path),
         }

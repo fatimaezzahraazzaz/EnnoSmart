@@ -42,6 +42,19 @@ LOCK_ROLES = {"verrou_scientifique", "verrou_a_verifier"}
 CONTEXT_ROLES = {"hypothese_methodologique", "resultat_technique", "contexte_technique"}
 SUPPORT_ROLES = {"limite_de_mesure"}
 
+_DECLARED_LOCK_SIGNAL_RE = re.compile(
+    r"\b(?:verrou(?:s)? (?:important|majeur|technique|scientifique)?(?:\s+\w+){0,4}\s+"
+    r"(?:tient|reside|concerne|provient|est lie)|forte contrainte|contrainte non negociable|"
+    r"exigence non negociable|difficulte majeure|impossibilite de|non maitrise|"
+    r"reste a demontrer|aucune solution (?:connue|satisfaisante)|limitation structurelle)\b",
+    re.I,
+)
+_EXTERNAL_SECTION_RE = re.compile(
+    r"\b(?:etat de l art|revue (?:de la litterature|bibliographique|des usages)|"
+    r"travaux connexes|related work|state of the art|references?)\b",
+    re.I,
+)
+
 INTERNAL_MARKERS = (
     "llm", "nlp", "parser", "fallback", "erreur", "sortie invalide",
     "contrat json", "cluster absent", "frascati en amont",
@@ -400,12 +413,59 @@ def _nlp_group_report_from_sections(
         for source in (preferred or [])
         if isinstance(source, dict)
     ]
+    # Certains documents expriment un verrou dans le corps d'un paragraphe
+    # (contrainte forte, exigence non négociable) sans que le premier passage ait
+    # reçu le rôle ``verrou``. On récupère ces déclarations dans toutes les
+    # sections courantes, sans vocabulaire propre à un projet.
+    seen_sources = {
+        (
+            _clean((_metadata(source).get("passage_id") or source.get("id"))),
+            _norm(_source_text(source))[:360],
+        )
+        for source in raw_sources
+    }
+    for section_values in sections.values():
+        if not isinstance(section_values, list):
+            continue
+        for source in section_values:
+            if not isinstance(source, dict):
+                continue
+            meta = _metadata(source)
+            role = _norm(
+                meta.get("role") or meta.get("semantic_role")
+                or source.get("role") or source.get("semantic_role")
+            )
+            section_title = _norm(meta.get("section_title") or source.get("section_title"))
+            text_value = _source_text(source)
+            declared = role in {
+                "verrou", "verrou scientifique", "verrou a verifier", "limite",
+                "incertitude", "constraint", "lock",
+            } or bool(_DECLARED_LOCK_SIGNAL_RE.search(_norm(text_value)))
+            if not declared or _EXTERNAL_SECTION_RE.search(section_title):
+                continue
+            signature = (
+                _clean(meta.get("passage_id") or source.get("id")),
+                _norm(text_value)[:360],
+            )
+            if signature in seen_sources:
+                continue
+            seen_sources.add(signature)
+            raw_sources.append(source)
 
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for source in raw_sources:
         meta = _metadata(source)
-        role = _norm(meta.get("role") or source.get("role"))
-        if role != "verrou":
+        role = _norm(
+            meta.get("role") or meta.get("semantic_role")
+            or source.get("role") or source.get("semantic_role")
+        )
+        explicitly_declared = bool(
+            _DECLARED_LOCK_SIGNAL_RE.search(_norm(_source_text(source)))
+        )
+        if role not in {
+            "verrou", "verrou scientifique", "verrou a verifier", "limite",
+            "incertitude", "constraint", "lock",
+        } and not explicitly_declared:
             continue
         if meta.get("display_as_main_lock") is False:
             continue
@@ -474,6 +534,12 @@ def _nlp_group_report_from_sections(
                     "document": _clean(meta.get("document") or source.get("document")),
                     "source_path": _clean(meta.get("source_path") or source.get("source_path")),
                     "section_title": _clean(meta.get("section_title")),
+                    "role": role,
+                    "semantic_role": _clean(meta.get("semantic_role") or source.get("semantic_role")),
+                    "content_origin": _clean(meta.get("content_origin") or source.get("content_origin")),
+                    "source_type": _clean(meta.get("source_type") or source.get("source_type")),
+                    "declared_corpus": _clean(meta.get("declared_corpus") or source.get("declared_corpus")),
+                    "diagnostic_corpus_selected": bool(meta.get("diagnostic_corpus_selected") or source.get("diagnostic_corpus_selected")),
                     "text": _source_text(source),
                 })
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-"""Qualification de provenance et de maturité des preuves EnnoDiagnostic.
+"""Qualification de provenance des preuves EnnoDiagnostic.
 
 Ce module V2 est volontairement indépendant de la logique qui détecte/regroupe les
 verrous. Il ajoute une deuxième dimension à une preuve : qui produit le fait ?
@@ -9,11 +9,6 @@ verrous. Il ajoute une deuxième dimension à une preuve : qui produit le fait ?
 Une preuve peut donc rester utile à la détection d'un verrou/à l'état de l'art,
 tout en étant interdite comme preuve d'un objectif, d'une démarche ou d'un
 résultat réalisé par le projet courant.
-
-Le rôle sémantique produit par le NLP est l'autorité métier. Ce module ne le
-reclasse pas avec des listes de mots : il vérifie seulement le corpus, la
-provenance et, lorsqu'il existe, le statut d'exécution structuré. Les anciens
-signaux textuels ne servent plus qu'à qualifier une provenance sans métadonnées.
 """
 
 import re
@@ -31,26 +26,6 @@ ACTOR_EXTERNAL = "external_authors"
 ACTOR_UNKNOWN = "unknown"
 ACTOR_HISTORICAL = "project_team_previous_year"
 ACTOR_BACKEND = "backend_calculation"
-
-EXEC_PLANNED = "planned"
-EXEC_PROPOSED = "proposed"
-EXEC_IMPLEMENTED = "implemented"
-EXEC_EXPERIMENTED = "experimented"
-EXEC_OBSERVED = "observed"
-EXEC_MEASURED = "measured"
-EXEC_ACTIVE_CONSTRAINT = "active_constraint"
-EXEC_UNKNOWN = "unknown"
-
-_ALLOWED_EXECUTION_STATUSES = {
-    EXEC_PLANNED,
-    EXEC_PROPOSED,
-    EXEC_IMPLEMENTED,
-    EXEC_EXPERIMENTED,
-    EXEC_OBSERVED,
-    EXEC_MEASURED,
-    EXEC_ACTIVE_CONSTRAINT,
-    EXEC_UNKNOWN,
-}
 
 _ALLOWED_ORIGINS = {
     PROV_PROJECT_DIRECT,
@@ -77,48 +52,15 @@ _EXTERNAL_ORIGIN_RE = re.compile(
 _THIRD_PARTY_ATTRIBUTION_RE = re.compile(
     r"\b(?:les auteurs?|the authors?|according to|selon (?:les auteurs?|l['’]etude|"
     r"l['’]article)|reported by|proposed by|demonstrated by|shown by|"
-    r"the paper|previous work|prior work|certaines [eé]tudes (?:sugg[eè]rent|montrent|indiquent)|"
-    r"des [eé]tudes (?:r[eé]centes )?(?:sugg[eè]rent|montrent|indiquent)|"
+    r"the paper|previous work|prior work|"
     r"travaux anterieurs|et al\.)\b",
-    re.I,
-)
-
-# Compatibilité des anciens packs sans ``execution_status``. Ces expressions ne
-# choisissent jamais la section ni le rôle : elles distinguent seulement une
-# intention d'un fait accompli après la décision sémantique du NLP.
-_LEGACY_PLANNED_RE = re.compile(
-    r"\b(?:objectif|cible|prévu|prevu|planifié|planifie|reste à|reste a|"
-    r"doit|doivent|devons|à tester|a tester|à mesurer|a mesurer|"
-    r"expected|planned|target|to be tested|to be measured)\b",
-    re.I,
-)
-_LEGACY_EXPERIMENTED_RE = re.compile(
-    r"\b(?:avons|a été|a ete|ont été|ont ete|was|were)\s+"
-    r"(?:testé|teste|testés|testes|évalué|evalue|évalués|evalues|"
-    r"comparé|compare|comparés|compares|expérimenté|experimente|tested|evaluated|compared)\b",
-    re.I,
-)
-_LEGACY_MEASURED_RE = re.compile(
-    r"\b(?:mesuré|mesuree?|mesurés|mesurees|measured|quantifié|quantifie|quantified)\b",
-    re.I,
-)
-_LEGACY_OBSERVED_RE = re.compile(
-    r"\b(?:observé|observe|observés|observes|constaté|constate|"
-    r"obtenu|obtenue|obtenus|obtenues|observed|obtained)\b",
-    re.I,
-)
-_LEGACY_ACTIVE_CONSTRAINT_RE = re.compile(
-    r"\b(?:contrainte|limite|maximum|minimum|seuil|plafond|fenetre|"
-    r"fix[eé]e?\s+[aà]|r[eé]gl[eé]e?\s+[aà]|compris entre|"
-    r"inf[eé]rieur(?:e)?\s+[aà]|sup[eé]rieur(?:e)?\s+[aà])\b",
     re.I,
 )
 
 _PROJECT_SECTION_RE = re.compile(
     r"\b(?:travaux realises?|travaux menes?|demarche experimentale|"
     r"protocole experimental|experimentations?|essais? realises?|"
-    r"resultats? obtenus?|resultats? du projet|resultats? et analyse des donnees|"
-    r"description des travaux|conclusion et contribution|nos travaux|"
+    r"resultats? obtenus?|resultats? du projet|nos travaux|"
     r"developpements? realises?|mise en oeuvre|implementation du projet|"
     r"compte rendu|reunion technique|synthese des travaux)\b",
     re.I,
@@ -179,12 +121,6 @@ def _first(source: Dict[str, Any], *keys: str) -> Any:
     return None
 
 
-def _truthy(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    return _norm(value) in {"1", "true", "yes", "oui"}
-
-
 def _section_text(source: Dict[str, Any]) -> str:
     meta = _metadata(source)
     return _norm(" ".join(
@@ -193,15 +129,9 @@ def _section_text(source: Dict[str, Any]) -> str:
             source.get("section_path"),
             source.get("section_title"),
             source.get("section"),
-            source.get("heading_path"),
-            source.get("source_zone"),
-            source.get("document_section_type"),
             meta.get("section_path"),
             meta.get("section_title"),
             meta.get("section"),
-            meta.get("heading_path"),
-            meta.get("source_zone"),
-            meta.get("document_section_type"),
         )
     ))
 
@@ -258,33 +188,9 @@ def classify_evidence_provenance(source: Dict[str, Any]) -> Dict[str, Any]:
 
     section = _section_text(item)
     body = _body_text(item)
-    declared_origin = _norm(_first(
-        item,
-        "content_origin",
-        "source_type",
-        "content_type",
-        "source_kind",
-        "document_type",
-        "document_category",
-    ))
-    structured_external = any(
-        _truthy(_first(item, key))
-        for key in (
-            "is_state_of_art",
-            "state_of_art",
-            "is_external_literature",
-            "external_literature",
-            "literature_only",
-            "bibliographic_source",
-            "reference_only",
-        )
-    )
+    declared_origin = _norm(_first(item, "content_origin", "source_type", "content_type"))
 
-    if (
-        explicit_origin == PROV_EXTERNAL_LITERATURE
-        or structured_external
-        or _STATE_OF_ART_SECTION_RE.search(section)
-    ):
+    if explicit_origin == PROV_EXTERNAL_LITERATURE or _STATE_OF_ART_SECTION_RE.search(section):
         return {
             "evidence_origin": PROV_EXTERNAL_LITERATURE,
             "actor_scope": ACTOR_EXTERNAL,
@@ -364,8 +270,6 @@ _ROLE_ALIASES = {
 }
 
 _SECTION_ROLE_REQUIREMENTS = {
-    "synthese_strategique": {"objectif", "contribution", "methode", "verrou", "limite"},
-    "objectif_global": {"objectif", "contribution"},
     "demarche_detectee": {"methode", "parametre"},
     "resultats_metriques": {"resultat", "contribution"},
     "parametres_contraintes": {"parametre", "limite"},
@@ -378,8 +282,7 @@ def _role_values(source: Dict[str, Any]) -> set[str]:
     values = []
     for key in (
         "role", "semantic_role", "original_model_role", "final_role",
-        "model_role", "candidate_role", "section_role_hint", "section_type",
-        "operation_function",
+        "model_role", "section_type", "operation_function",
     ):
         values.extend([source.get(key), meta.get(key)])
     output: set[str] = set()
@@ -396,9 +299,6 @@ def _role_values(source: Dict[str, Any]) -> set[str]:
 
 def _current_corpus_signal(source: Dict[str, Any]) -> bool:
     meta = _metadata(source)
-    if _truthy(_first(source, "current_project_evidence", "declared_raw_document")):
-        return True
-
     selected = source.get("diagnostic_corpus_selected")
     if selected is None:
         selected = meta.get("diagnostic_corpus_selected")
@@ -407,10 +307,6 @@ def _current_corpus_signal(source: Dict[str, Any]) -> bool:
 
     declared = _norm(_first(source, "declared_corpus"))
     if "diagnostic" in declared:
-        return True
-
-    source_type = _norm(_first(source, "source_type"))
-    if source_type in {"nlp_result_current_project", "current_project"}:
         return True
 
     temporal = _norm(_first(source, "temporal_scope"))
@@ -424,116 +320,6 @@ def _current_corpus_signal(source: Dict[str, Any]) -> bool:
     origin = _norm(_first(source, "evidence_origin", "provenance_origin"))
     has_document = bool(_first(source, "document", "source_path", "document_id"))
     return origin == PROV_AMBIGUOUS and has_document and bool(_role_values(source))
-
-
-def classify_evidence_execution(source: Dict[str, Any]) -> Dict[str, Any]:
-    """Lit la maturité structurée sans reclasser le texte par mots-clés.
-
-    L'ordre d'autorité est : statut explicite, fonction/scope NLP structuré,
-    puis rôle sémantique. Ce dernier fallback maintient la compatibilité avec les
-    anciens ``nlp_result.json`` qui ne portaient pas encore ``execution_status``.
-    """
-    item = source if isinstance(source, dict) else {}
-    explicit = _norm(_first(item, "execution_status", "fact_status", "maturity_status"))
-    if explicit in _ALLOWED_EXECUTION_STATUSES:
-        return {
-            "execution_status": explicit,
-            "execution_reason": "explicit_metadata",
-            "execution_confidence": 1.0,
-        }
-
-    operation_function = _norm(_first(item, "operation_function", "activity_function"))
-    operation_statuses = {
-        "experiment": EXEC_EXPERIMENTED,
-        "historical method": EXEC_EXPERIMENTED,
-        "result": EXEC_OBSERVED,
-        "learning": EXEC_OBSERVED,
-        "parameter": EXEC_ACTIVE_CONSTRAINT,
-        "constraint": EXEC_ACTIVE_CONSTRAINT,
-        "hypothesis": EXEC_PROPOSED,
-        "hypothesis component": EXEC_PROPOSED,
-    }
-    if operation_function in operation_statuses:
-        return {
-            "execution_status": operation_statuses[operation_function],
-            "execution_reason": "structured_operation_function",
-            "execution_confidence": 0.96,
-        }
-
-    result_scope = _norm(_first(item, "result_scope"))
-    if result_scope in {
-        "global comparison", "global metric", "observed gain",
-        "observed metric", "qualitative observation", "historical result",
-    }:
-        return {
-            "execution_status": EXEC_MEASURED if "metric" in result_scope or "comparison" in result_scope else EXEC_OBSERVED,
-            "execution_reason": "structured_result_scope",
-            "execution_confidence": 0.94,
-        }
-    if result_scope in {"target metric", "target context", "planning or question"}:
-        return {
-            "execution_status": EXEC_PLANNED,
-            "execution_reason": "structured_target_scope",
-            "execution_confidence": 0.94,
-        }
-
-    roles = _role_values(item)
-    claim_text = _body_text(item)
-    if _LEGACY_PLANNED_RE.search(claim_text):
-        return {
-            "execution_status": EXEC_PLANNED,
-            "execution_reason": "legacy_temporal_fallback_after_nlp_role",
-            "execution_confidence": 0.72,
-        }
-    if "methode" in roles and _LEGACY_EXPERIMENTED_RE.search(claim_text):
-        return {
-            "execution_status": EXEC_EXPERIMENTED,
-            "execution_reason": "legacy_temporal_fallback_after_nlp_role",
-            "execution_confidence": 0.72,
-        }
-    if {"resultat", "contribution"} & roles:
-        if _LEGACY_MEASURED_RE.search(claim_text):
-            return {
-                "execution_status": EXEC_MEASURED,
-                "execution_reason": "legacy_temporal_fallback_after_nlp_role",
-                "execution_confidence": 0.72,
-            }
-        if _LEGACY_OBSERVED_RE.search(claim_text):
-            return {
-                "execution_status": EXEC_OBSERVED,
-                "execution_reason": "legacy_temporal_fallback_after_nlp_role",
-                "execution_confidence": 0.72,
-            }
-        document_type = _norm(_first(item, "document_type", "declared_document_type"))
-        if document_type in {"resultats_mesures", "résultats_mesures", "measurement_results"}:
-            return {
-                "execution_status": EXEC_MEASURED,
-                "execution_reason": "structured_measurement_document_type",
-                "execution_confidence": 0.88,
-            }
-    if {"parametre", "limite"} & roles and _LEGACY_ACTIVE_CONSTRAINT_RE.search(claim_text):
-        return {
-            "execution_status": EXEC_ACTIVE_CONSTRAINT,
-            "execution_reason": "legacy_active_constraint_after_nlp_role",
-            "execution_confidence": 0.78,
-        }
-    role_statuses = (
-        ({"objectif"}, EXEC_PLANNED),
-        ({"methode"}, EXEC_IMPLEMENTED),
-        ({"resultat", "contribution"}, EXEC_OBSERVED),
-    )
-    for expected_roles, status in role_statuses:
-        if roles & expected_roles:
-            return {
-                "execution_status": status,
-                "execution_reason": "authoritative_nlp_semantic_role",
-                "execution_confidence": 0.82,
-            }
-    return {
-        "execution_status": EXEC_UNKNOWN,
-        "execution_reason": "no_structured_execution_signal",
-        "execution_confidence": 0.0,
-    }
 
 
 def is_trusted_current_project_evidence(source: Dict[str, Any], section_key: str) -> bool:
@@ -568,46 +354,13 @@ def provenance_allows_section(source: Dict[str, Any], section_key: str) -> bool:
     key = str(section_key or "")
 
     if key in {"synthese_strategique", "objectif_global"}:
-        # Les anciens packs ne portaient pas toujours ``project_direct``. Leur
-        # rôle NLP explicite reste utilisable après les gardes anti-littérature.
-        return origin == PROV_PROJECT_DIRECT or is_trusted_current_project_evidence(
-            source, key
-        )
+        return origin == PROV_PROJECT_DIRECT
 
     if key in _HISTORICAL_ALLOWED_SECTIONS and origin == PROV_HISTORICAL:
         return True
 
     if key in {"demarche_detectee", "resultats_metriques", "parametres_contraintes"}:
-        # Le rôle NLP du corpus courant assure la compatibilité des anciens
-        # packs, mais uniquement après exclusion de l'état de l'art, des
-        # références et des attributions à des tiers.
-        origin_allowed = (
-            origin == PROV_PROJECT_DIRECT
-            or is_trusted_current_project_evidence(source, key)
-        )
-        if not origin_allowed:
-            return False
-        required = _SECTION_ROLE_REQUIREMENTS[key]
-        roles = _role_values(source)
-        if roles and not (roles & required):
-            return False
-        status = classify_evidence_execution(source)["execution_status"]
-        allowed_statuses = {
-            "demarche_detectee": {
-                EXEC_IMPLEMENTED, EXEC_EXPERIMENTED, EXEC_OBSERVED, EXEC_MEASURED,
-            },
-            "resultats_metriques": {EXEC_OBSERVED, EXEC_MEASURED},
-            "parametres_contraintes": {
-                EXEC_ACTIVE_CONSTRAINT, EXEC_IMPLEMENTED, EXEC_EXPERIMENTED,
-                EXEC_OBSERVED, EXEC_MEASURED,
-            },
-        }
-        return status in allowed_statuses[key]
-
-    if key == "verrou":
-        return origin == PROV_PROJECT_DIRECT or is_trusted_current_project_evidence(
-            source, "verrou"
-        )
+        return origin == PROV_PROJECT_DIRECT or is_trusted_current_project_evidence(source, key)
 
     if key == "justification_frascati":
         if origin == PROV_PROJECT_DIRECT:
@@ -623,34 +376,3 @@ def provenance_allows_section(source: Dict[str, Any], section_key: str) -> bool:
         return False
     return True
 
-
-def execution_allows_claim(source: Dict[str, Any], claim_kind: str) -> bool:
-    """Vérifie la compatibilité entre statut structuré et type d'affirmation."""
-    status = classify_evidence_execution(source)["execution_status"]
-    kind = _norm(claim_kind).replace(" ", "_")
-    if kind in {
-        "etapes_experimentales", "experiment", "methodes_outils", "systematicity",
-    }:
-        return status in {
-            EXEC_IMPLEMENTED, EXEC_EXPERIMENTED, EXEC_OBSERVED, EXEC_MEASURED,
-        }
-    if kind in {
-        "resultats", "result", "apprentissage", "learning", "result_facts",
-    }:
-        return status in {EXEC_OBSERVED, EXEC_MEASURED}
-    if kind in {"hypothese", "hypothesis", "hypothesis_component"}:
-        return status in {
-            EXEC_PLANNED, EXEC_PROPOSED, EXEC_IMPLEMENTED, EXEC_EXPERIMENTED,
-        }
-    return True
-
-
-__all__ = [
-    "PROV_PROJECT_DIRECT", "PROV_EXTERNAL_LITERATURE", "PROV_AMBIGUOUS",
-    "PROV_HISTORICAL", "PROV_CALCULATION", "classify_evidence_provenance",
-    "classify_evidence_execution", "is_external_literature", "is_project_anchor",
-    "is_trusted_current_project_evidence", "provenance_allows_section",
-    "execution_allows_claim", "EXEC_PLANNED", "EXEC_PROPOSED",
-    "EXEC_IMPLEMENTED", "EXEC_EXPERIMENTED", "EXEC_OBSERVED", "EXEC_MEASURED",
-    "EXEC_ACTIVE_CONSTRAINT", "EXEC_UNKNOWN",
-]

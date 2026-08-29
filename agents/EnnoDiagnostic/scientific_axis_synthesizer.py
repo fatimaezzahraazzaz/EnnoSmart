@@ -71,6 +71,23 @@ _EXPLICIT_LOCK_HEADING_RE = re.compile(
     r"(?P<number>\d+(?:\s*[-.]\s*\d*)?)?\s*:\s*(?P<title>.+?)\s*$",
     re.I,
 )
+_DECLARED_LOCK_SIGNAL_RE = re.compile(
+    r"\b(?:verrou(?:s)? (?:important|majeur|technique|scientifique)?(?:\s+\w+){0,4}\s+"
+    r"(?:tient|reside|concerne|provient|est lie)|forte contrainte|contrainte non negociable|"
+    r"exigence non negociable|difficulte majeure|impossibilite de|non maitrise|"
+    r"reste a demontrer|aucune solution (?:connue|satisfaisante)|limitation structurelle)\b",
+    re.I,
+)
+_GENERIC_LOCK_SECTION_RE = re.compile(
+    r"^(?:verrous?(?: et incertitudes?)?|incertitudes?|contraintes?|limites?|"
+    r"difficultes?|risques?)\s*$",
+    re.I,
+)
+_STATE_OF_ART_SECTION_PATTERN = re.compile(
+    r"\b(?:etat de l art|revue (?:de la litterature|bibliographique|des usages)|"
+    r"travaux connexes|related work|state of the art|references?)\b",
+    re.I,
+)
 
 
 def _clean(value: Any, max_chars: int = 2000) -> str:
@@ -285,40 +302,63 @@ def _is_metric_or_method_only_lock(item: Mapping[str, Any]) -> bool:
         _clean(item.get("scientific_lock")),
     ])
     core = _norm(core_text)
+    source_rows = [
+        source for source in (item.get("sources") or []) if isinstance(source, Mapping)
+    ]
     source_text = " ".join(
         _clean(source.get("excerpt") or source.get("text"), 1400)
-        for source in (item.get("sources") or [])
-        if isinstance(source, Mapping)
+        for source in source_rows
+    )
+    source_norm = _norm(source_text)
+    source_roles = {
+        _norm(
+            source.get("role")
+            or source.get("semantic_role")
+            or source.get("original_model_role")
+            or ((source.get("metadata") or {}).get("role") if isinstance(source.get("metadata"), Mapping) else "")
+        )
+        for source in source_rows
+    }
+    source_roles.discard("")
+    has_declared_lock_role = bool(
+        source_roles
+        & {"verrou", "verrou scientifique", "verrou a verifier", "limite", "incertitude", "constraint", "lock"}
     )
     has_explicit_uncertainty = bool(re.search(
-        r"\b(?:incertitude|impossibilite|non (?:maitris|garanti)|reste a demontrer|"
+        r"\b(?:verrou|incertitude|impossibilite|forte contrainte|contrainte non negociable|"
+        r"exigence non negociable|non (?:maitris|garanti)|reste a demontrer|"
         r"aucune solution|etat de l art.*(?:limite|peu de methode))\w*\b",
-        core,
+        source_norm,
         flags=re.I,
     ))
     has_explicit_lock_heading = bool(re.search(
         r"\b(?:sous[ -]?verrou|verrou(?:s? scientifiques?|s? techniques?)?)"
         r"(?:\s+\d+(?:[-.]\d+)*)?\s*(?::|\])",
-        f"{core_text} {source_text}",
+        source_text,
         flags=re.I,
     ))
     metric_or_tool_markers = len(re.findall(
         r"\b(?:kpi|metrique|mesure|score|precision|taux|seuil|cible|objectif|"
         r"benchmark|mise a jour|update|outil|visualisation|tableau)\w*\b",
-        core,
+        f"{core} {source_norm}",
         flags=re.I,
     ))
     procedural_markers = len(re.findall(
         r"\b(?:demarche|methode|strategie|protocole|pipeline|etape|procedure|"
         r"utiliser|analyser|extraire|creer|configurer|incorporer|interroger|"
         r"generation|execution|evaluation|selection|classement|regroupement)\w*\b",
-        core,
+        f"{core} {source_norm}",
         flags=re.I,
     ))
     return (
-        (metric_or_tool_markers >= 3 or procedural_markers >= 4)
+        (
+            metric_or_tool_markers >= 3
+            or procedural_markers >= 4
+            or bool(source_roles & {"methode", "method", "demarche"})
+        )
         and not has_explicit_uncertainty
         and not has_explicit_lock_heading
+        and not has_declared_lock_role
     )
 
 
@@ -477,6 +517,84 @@ def _explicit_lock_inventory(
             "current_document_evidence": True,
         })
 
+    def add_declared_entry(
+        *,
+        heading: Any = "",
+        text_value: Any = "",
+        role: Any = "",
+        document: Any = "",
+        source_path: Any = "",
+        origin: str,
+    ) -> None:
+        """Récupère une contrainte explicitement déclarée, sans taxonomie projet.
+
+        Les titres ``Verrou n:`` restent prioritaires. Ce second chemin couvre
+        les documents d'entrée qui formulent le verrou dans le corps du texte
+        (par exemple « forte contrainte » ou « exigence non négociable »)
+        sans numérotation. Une simple description de méthode ne suffit jamais.
+        """
+        heading_text = _clean(heading, 520)
+        body = _clean(text_value, 2200)
+        normalized_heading = _norm(heading_text)
+        if _STATE_OF_ART_SECTION_PATTERN.search(normalized_heading):
+            return
+        normalized_role = _norm(role)
+        declared_role = normalized_role in {
+            "verrou", "verrou scientifique", "verrou a verifier", "limite",
+            "incertitude", "constraint", "lock",
+        }
+        sentences = [
+            _clean(value, 700)
+            for value in re.split(r"(?<=[.!?])\s+|[\r\n]+", body)
+            if _clean(value, 700)
+        ]
+        declared_sentence = next(
+            (value for value in sentences if _DECLARED_LOCK_SIGNAL_RE.search(_norm(value))),
+            "",
+        )
+        if not declared_role and not declared_sentence:
+            return
+        # Avec un rôle verrou explicite, le texte source reste obligatoire afin
+        # de ne pas restaurer un label vide ou une invention de reformulation.
+        if not body and not heading_text:
+            return
+        title = heading_text
+        if not title or _GENERIC_LOCK_SECTION_RE.match(normalized_heading):
+            title = declared_sentence or (sentences[0] if sentences else body)
+        title = _clean(title, 520)
+        if len(title) < 12:
+            return
+        doc = _clean(document, 500)
+        signature = (_norm(doc), _norm(title))
+        if signature in seen:
+            return
+        seen.add(signature)
+        years = list(dict.fromkeys(re.findall(r"\b20\d{2}\b", title)))
+        temporal_status = "current_document_undated"
+        if current_year and current_year in years:
+            temporal_status = "current_explicit"
+        elif years:
+            temporal_status = "historical_declared_in_current_corpus"
+        entry_id = "EL-" + hashlib.sha1(
+            f"{doc}|{title}".encode("utf-8", errors="ignore")
+        ).hexdigest()[:12]
+        entries.append({
+            "kind": "parent_lock",
+            "number": "",
+            "parent_number": "",
+            "title": title,
+            "declared_title": title,
+            "year_markers": years,
+            "explicit_lock_id": entry_id,
+            "document": doc,
+            "source_path": _clean(source_path, 900),
+            "excerpt": body or title,
+            "origin": origin,
+            "temporal_status": temporal_status,
+            "current_document_evidence": True,
+            "declared_in_body": True,
+        })
+
     # Premier niveau : les passages déjà sélectionnés par le diagnostic.
     for values in (current_sections or {}).values():
         if not isinstance(values, list):
@@ -494,6 +612,20 @@ def _explicit_lock_inventory(
                 document=document,
                 source_path=source_path,
                 origin="selected_current_section",
+            )
+            add_declared_entry(
+                heading=meta.get("section_title") or source.get("section_title"),
+                text_value=(
+                    source.get("text") or source.get("source_text")
+                    or source.get("excerpt") or source.get("analysis_text") or ""
+                ),
+                role=(
+                    meta.get("role") or meta.get("semantic_role")
+                    or source.get("role") or source.get("semantic_role")
+                ),
+                document=document,
+                source_path=source_path,
+                origin="selected_current_declared_body",
             )
 
     # Niveau exhaustif : titres de section des documents complets déjà extraits.
@@ -518,6 +650,14 @@ def _explicit_lock_inventory(
                     document=document,
                     source_path=source_path,
                     origin="fulltext_current_document_heading",
+                )
+                add_declared_entry(
+                    heading=section.get("section_title"),
+                    text_value=section.get("text"),
+                    role=section.get("role") or section.get("semantic_role"),
+                    document=document,
+                    source_path=source_path,
+                    origin="fulltext_current_document_body",
                 )
 
     parent_by_number = {

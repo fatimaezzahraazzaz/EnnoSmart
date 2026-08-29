@@ -33,7 +33,6 @@ try:
         classify_evidence_provenance,
         execution_allows_claim,
         is_project_anchor,
-        provenance_allows_section,
     )
 except Exception:
     from evidence_provenance import (  # type: ignore
@@ -42,7 +41,6 @@ except Exception:
         classify_evidence_provenance,
         execution_allows_claim,
         is_project_anchor,
-        provenance_allows_section,
     )
 
 try:
@@ -284,7 +282,7 @@ Règles :
 6. N'utilise pas de formulation générique si les preuves permettent de nommer concrètement l'objet technique, les méthodes et les résultats.
 7. Si une étape n'est pas prouvée, dis clairement qu'elle reste insuffisamment documentée au lieu de l'inventer.
 8. Les critères Frascati et les pourcentages proviennent uniquement de F0.
-9. La conclusion doit expliquer séparément le score de défendabilité R&D, la couverture documentaire acquise et ce qui reste à consolider.
+9. La conclusion doit expliquer pourquoi la part acquise est acquise et pourquoi la part restante doit être consolidée.
 10. N'utilise jamais les codes internes de classification dans le texte visible.
 11. Ne renvoie pas de champ paragraphe global : renvoie uniquement les claims structurés demandés. Le backend concatène les claims.
 12. Respecte la fonction documentaire des preuves : un verrou doit citer une preuve `uncertainty`, une hypothèse une preuve `hypothesis_component`, une expérimentation une preuve `experiment`, et un résultat une preuve de résultat.
@@ -292,12 +290,12 @@ Règles :
 14. Pour les résultats, privilégie `primary_result_evidence=true` et les scopes `global_comparison`, `global_metric` ou `observed_metric`. Une métrique par classe/cible ne doit jamais être généralisée à toute la méthode.
 15. Ne crée jamais une plage « de X à Y », une moyenne, un gain, un écart ou une amélioration significative si cette relation n'est pas formulée explicitement dans UNE preuve citée.
 16. Ne transforme pas une marge théorique avant 100 % en résultat expérimental. Les preuves `headroom_context` servent seulement de contexte secondaire.
-17. Le score de défendabilité R&D et la couverture documentaire sont deux valeurs distinctes ; aucune n'est une probabilité d'acceptation ni une garantie administrative.
+17. La valeur Frascati est un indice de défendabilité/couverture documentaire, jamais un pourcentage de chance d'acceptation ni une garantie d'éligibilité administrative.
 18. `result_facts` est facultatif. Si tu le renseignes, chaque fait quantitatif doit être observé et directement sourcé. Le claim `resultats` ne doit jamais introduire un chiffre absent de ses preuves citées.
-19. ENNODIAG_PYDANTIC_PROVENANCE_V3 : pour tout fait attribué au projet courant, utilise uniquement une preuve autorisée par son origine, son corpus et son rôle sémantique ; toute littérature externe reste interdite comme fait projet.
-20. `ambiguous_current_dossier` n'est utilisable que lorsque le backend l'a conservée comme preuve du corpus courant avec un rôle compatible ; ne l'élargis jamais à une autre fonction.
+19. ENNODIAG_PYDANTIC_PROVENANCE_V2 : pour tout fait attribué au projet courant (contexte technique, hypothèse, méthode, étape expérimentale, résultat, apprentissage), utilise uniquement des preuves `evidence_origin=project_direct`.
+20. `ambiguous_current_dossier` signifie que l'acteur n'est pas prouvé : cette preuve est interdite pour affirmer un fait du projet, même si elle provient d'un fichier du dossier courant.
 21. La littérature externe peut contextualiser un verrou seulement si au moins une preuve `project_direct` rattache ce verrou au projet.
-22. Un pourcentage Frascati qualifie soit la défendabilité R&D, soit la couverture documentaire de l'opération de référence. Ne les fusionne pas et n'écris jamais « X % du projet », taux/chance/probabilité d'acceptation ou garantie de robustesse/généralisation.
+22. Un pourcentage Frascati est uniquement un indice de couverture/défendabilité documentaire de l'opération de référence. N'écris jamais « X % du projet », « X % des critères sont validés », « part acquise », taux/chance/probabilité d'acceptation ou garantie de robustesse/généralisation.
 """.strip()
 
 eligibility_agent: Agent[EligibilityDeps, EligibilityNarrative] = Agent(
@@ -399,15 +397,12 @@ async def validate_eligibility_output(
 
         if claim.claim_kind == "verrou":
             documentary = [item for item, _report in documentary_pairs]
-            if documentary and not any(
-                provenance_allows_section(item, "verrou") for item in documentary
-            ):
-                errors.append("verrou: aucune preuve courante qualifiée ne rattache ce verrou au projet.")
+            if documentary and not any(is_project_anchor(item) for item in documentary):
+                errors.append("verrou: aucune preuve project_direct ne rattache ce verrou au projet.")
             ambiguous_ids = [
                 str(item.get("evidence_id"))
                 for item, report in documentary_pairs
                 if report.get("evidence_origin") == "ambiguous_current_dossier"
-                and not provenance_allows_section(item, "verrou")
             ]
             if ambiguous_ids:
                 errors.append(

@@ -349,7 +349,7 @@ def _empty_report() -> Dict[str, Any]:
         },
         "direct_final_solution_assessment": "not_assessable",
         "direct_final_solution_risk": False,
-        "eligibility_impact": "documentation_gap_changes_risk_not_score",
+        "eligibility_impact": "causal_chain_completeness_calibrates_rnd_defensibility_score",
         "risk_adjustment": "raise_to_medium_or_human_review",
         "llm_review_recommended": False,
         "llm_review_reasons": [],
@@ -538,7 +538,7 @@ def assess_group_demarche_legibility(group: Mapping[str, Any]) -> Dict[str, Any]
         confidence = "high"
     elif operation_status == "rnd_core_partial":
         label = "mixed_or_partially_justified_trajectory"
-        impact = "documentation_gap_changes_risk_not_score"
+        impact = "causal_chain_completeness_calibrates_rnd_defensibility_score"
         risk_adjustment = "raise_to_medium"
         confidence = "medium"
     elif operation_status == "classical_engineering":
@@ -548,7 +548,7 @@ def assess_group_demarche_legibility(group: Mapping[str, Any]) -> Dict[str, Any]
         confidence = "high" if routine_activity_records else "medium"
     else:
         label = "insufficient_documentation"
-        impact = "insufficient_evidence_changes_risk_not_score"
+        impact = "insufficient_evidence_blocks_rnd_defensibility_score"
         risk_adjustment = "raise_to_medium_or_human_review"
         confidence = "low"
 
@@ -707,7 +707,7 @@ def assess_project_demarche_legibility(groups: Iterable[Mapping[str, Any]]) -> D
         risk_adjustment = "raise_to_medium_for_perimeter" if mixed_perimeter else "none_from_approach"
     elif project_status == "rnd_core_partial":
         label = "mixed_or_partially_justified_trajectory"
-        impact = "documentation_gap_changes_risk_not_score"
+        impact = "causal_chain_completeness_calibrates_rnd_defensibility_score"
         risk_adjustment = "raise_to_medium"
     elif project_status == "classical_engineering":
         label = "routine_engineering_dominant"
@@ -715,7 +715,7 @@ def assess_project_demarche_legibility(groups: Iterable[Mapping[str, Any]]) -> D
         risk_adjustment = "high_and_non_eligible"
     else:
         label = "insufficient_documentation"
-        impact = "insufficient_evidence_changes_risk_not_score"
+        impact = "insufficient_evidence_blocks_rnd_defensibility_score"
         risk_adjustment = "raise_to_medium_or_human_review"
 
     questions: List[str] = []
