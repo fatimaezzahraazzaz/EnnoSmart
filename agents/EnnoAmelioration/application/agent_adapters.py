@@ -415,6 +415,8 @@ def scholar_context(
     evidence_scope_id: str | None = None,
     target_section_id: str | None = None,
     target_section_title: str | None = None,
+    include_all_accepted: bool = False,
+    authorized_cards: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Lit seulement la sélection consultant et ses preuves scientifiques prêtes."""
 
@@ -425,14 +427,15 @@ def scholar_context(
         from db.models import Article, ScholarRun
 
         allowed = {int(value) for value in allowed_article_ids}
-        selected = (
+        query = (
             db.query(Article)
             .join(ScholarRun, Article.scholar_run_id == ScholarRun.id)
             .filter(ScholarRun.project_id == project.id)
             .filter(Article.id.in_(allowed))
-            .filter(Article.consultant_status == "garde")
-            .all()
         )
+        if authorized_cards is None:
+            query = query.filter(Article.consultant_status == "garde")
+        selected = query.all()
     else:
         selected = get_current_selected_articles(db, project)
     if not selected:
@@ -444,9 +447,12 @@ def scholar_context(
             "evidence_items": [],
         }
 
-    payload = get_article_cards_payload(project, scope_id=evidence_scope_id)
-    if evidence_scope_id and not (payload.get("cards") or []):
-        payload = get_article_cards_payload(project)
+    if authorized_cards is not None:
+        payload = {"cards": authorized_cards}
+    else:
+        payload = get_article_cards_payload(project, scope_id=evidence_scope_id)
+        if evidence_scope_id and not (payload.get("cards") or []):
+            payload = get_article_cards_payload(project)
     cards = [row for row in (payload.get("cards") or []) if isinstance(row, dict)]
     selected_ids = {int(row.id) for row in selected}
     terms = _search_terms(
@@ -479,7 +485,7 @@ def scholar_context(
     candidates.sort(key=lambda item: item[0], reverse=True)
 
     evidence: list[dict[str, Any]] = []
-    for lexical_score, card, source_json, bindings in candidates[:12]:
+    for lexical_score, card, source_json, bindings in (candidates if include_all_accepted else candidates[:12]):
         identity = card.get("identity") or {}
         article_id = card.get("article_id") or identity.get("article_id")
         article = article_by_id.get(int(article_id)) if str(article_id or "").isdigit() else None

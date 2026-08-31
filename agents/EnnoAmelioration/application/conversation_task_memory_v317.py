@@ -4,6 +4,9 @@ import re
 import unicodedata
 from typing import Any
 
+from .evidence_coverage_v315 import requests_all_accepted_sources
+from .fresh_research_policy_v314 import explicitly_requests_fresh_research
+
 POLICY_VERSION = "ennoamel_conversation_task_memory_v3_17"
 _MEANINGFUL = {
     "clarity", "style", "structure", "concision", "argumentation",
@@ -166,6 +169,11 @@ def evolve_task_memory(*, existing_memory: dict[str, Any] | None, raw_message: s
     if not _same_target(contract, section_id, section_title, scope):
         contract = recover_contract_from_history(analyzed_history, section_id, section_title, scope)
 
+    # A new style-only section request must not inherit a previous scientific
+    # enrichment mandate when the consultant explicitly locks the facts.
+    if scope == "section" and _flag(routing, "editorial_only") and _flag(routing, "strict_fact_preservation"):
+        contract = _make_contract(raw_message, routing, section_id, section_title, scope, "current_consultant_request")
+
     resume = bool(
         has_accepted_sources
         and contract
@@ -173,7 +181,13 @@ def evolve_task_memory(*, existing_memory: dict[str, Any] | None, raw_message: s
         and is_resume_message(raw_message)
     )
 
-    if resume:
+    fresh_section_research = scope == "section" and explicitly_requests_fresh_research(raw_message)
+    if fresh_section_research:
+        # A current explicit search order must not inherit the closed-corpus
+        # wording of an earlier writing/validation turn.
+        contract = _make_contract(raw_message, routing, section_id, section_title, scope, "current_consultant_request")
+        effective = str(raw_message or "").strip()
+    elif resume:
         actions = []
         if contract.get("style_requested"):
             actions.append("améliorer réellement le style rédactionnel")
@@ -237,6 +251,27 @@ def evolve_task_memory(*, existing_memory: dict[str, Any] | None, raw_message: s
         ).strip()
     else:
         effective = str(raw_message or "").strip()
+
+    if scope == "section":
+        # Avoid turning our own wording « aucune source ... quota » into an
+        # unintended prohibition of scientific enrichment on the next route.
+        effective = effective.replace(
+            "Aucune source n'est imposée par quota.",
+            "Chaque citation doit soutenir une affirmation précise.",
+        )
+        effective = effective.replace(
+            "N'ouvre pas un nouveau cycle EnnoScholar et n'effectue aucune nouvelle collecte de publications.",
+            "Utilise les articles déjà validés pour cette section, sans nouvelle recherche.",
+        )
+        if contract and has_accepted_sources and not fresh_section_research and effective != raw_message.strip():
+            original_instruction = str(contract.get("instruction") or "").strip()
+            if original_instruction and not explicitly_requests_fresh_research(original_instruction):
+                effective += "\n\nDemande mémorisée à appliquer à cette section :\n" + original_instruction
+        if contract and requests_all_accepted_sources(str(contract.get("instruction") or "")):
+            effective += (
+                "\nLa demande mémorisée impose d'utiliser tous les articles gardés et exploitables "
+                "pour cette section : intégrer leurs apports pertinents et signaler explicitement les sources non utilisables."
+            )
 
     history = [dict(x) for x in (memory.get("history") or []) if isinstance(x, dict)]
     history.append({

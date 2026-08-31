@@ -306,6 +306,23 @@ function decisionLabel(status: string) {
   }
 }
 
+function getValidationDecisionGroups(verrous: VerrouRead[]) {
+  return [
+    { status: "garde", label: "Retenu" },
+    { status: "rejete", label: "Non retenu" },
+    { status: "en_attente", label: "En attente" },
+  ].map((group) => ({
+    ...group,
+    items: verrous.filter((verrou) => {
+      const status = verrou.consultant_status
+      // Legacy requests to consolidate are still pending a final decision.
+      // This is a display grouping only; do not rewrite saved decisions.
+      const validationStatus = status === "garde" || status === "rejete" ? status : "en_attente"
+      return validationStatus === group.status
+    }),
+  }))
+}
+
 function isManualConsultantVerrou(verrou: VerrouRead) {
   const sourceJson = verrou.source_json || {}
   return Boolean(
@@ -3102,60 +3119,24 @@ function UnifiedEligibilityStudyCardV191({
   const criteria = Array.isArray(scoreBasisOperation?.criteria) && scoreBasisOperation.criteria.length > 0
     ? scoreBasisOperation.criteria
     : Array.isArray(referenceOperation?.criteria) ? referenceOperation.criteria : []
-  const frenchClaims = (proofClaims || []).filter((claim: any) => isStrongProjectEligibilityTextV192(claim?.text))
-  const atomicNarrativeClaims = frenchClaims.flatMap((claim: any) =>
-    Array.isArray(claim?.claims) ? claim.claims : []
-  ).filter((claim: any) => cleanDisplayText(String(claim?.text || "")))
-  const narrativeParts = atomicNarrativeClaims.length > 0 ? atomicNarrativeClaims : frenchClaims
+  // Typed claims have already passed the backend's factual guards. Requiring
+  // three technical stages in each paragraph discards the limits and Frascati.
+  const atomicNarrativeClaims = (proofClaims || []).flatMap((paragraph: any, paragraphIndex: number) =>
+    (Array.isArray(paragraph?.claims) ? paragraph.claims : [])
+      .filter((claim: any) => claim?.claim_kind && cleanDisplayText(String(claim?.text || "")))
+      .map((claim: any) => ({ ...claim, paragraphIndex }))
+  )
+  const legacyNarrativeClaims = (proofClaims || [])
+    .filter((claim: any) => isStrongProjectEligibilityTextV192(claim?.text))
+    .map((claim: any, paragraphIndex: number) => ({ ...claim, paragraphIndex }))
+  const narrativeParts = atomicNarrativeClaims.length > 0 ? atomicNarrativeClaims : legacyNarrativeClaims
   const generatedNarrative = cleanDisplayText(
     narrativeParts.map((claim: any) => cleanDisplayText(String(claim?.text || ""))).filter(Boolean).join(" ")
   )
-  const demarcheLabels: Record<string, string> = {
-    rnd_core_defendable: "les preuves soutiennent un noyau R&D défendable",
-    rnd_core_partial: "un noyau R&D est identifiable mais doit être consolidé",
-    classical_engineering: "les travaux relèvent de l’ingénierie classique selon les preuves disponibles",
-    insufficient_evidence: "les preuves sont insuffisantes et nécessitent une validation du consultant",
-  }
-  const demarcheStatus = String(demarche?.project_status || demarche?.operation_status || "insufficient_evidence")
-  const operationNarrative = operations
-    .map((operation: any) => cleanDisplayText(String(operation?.justification_fr || "")))
-    .filter(Boolean)
-    .join(" ")
-  const criteriaNarrative = criteria
-    .map((criterion: any) => cleanDisplayText(String(criterion?.reason_fr || "")))
-    .filter(Boolean)
-    .join(" ")
-  const documentedCriteriaNarrative = criteria
-    .filter((criterion: any) => String(criterion?.status || "") === "documented")
-    .map((criterion: any) => {
-      const label = cleanDisplayText(String(criterion?.label || criterion?.criterion || "critère"))
-      const reason = cleanDisplayText(String(criterion?.reason_fr || criterion?.reason || ""))
-      return `${label} est documenté${reason ? ` : ${reason}` : ""}`
-    })
-    .join(" ; ")
-  const weakCriteriaNarrative = criteria
-    .filter((criterion: any) => String(criterion?.status || "") !== "documented")
-    .map((criterion: any) => {
-      const label = cleanDisplayText(String(criterion?.label || criterion?.criterion || "critère"))
-      const reason = cleanDisplayText(String(criterion?.reason_fr || criterion?.reason || ""))
-      const gap = formatScore(criterion?.remaining_gap_to_full_coverage)
-      return `${gap !== "—" ? `${gap} restent à consolider pour ` : "Le critère "}${label}${reason ? `, car ${reason}` : ""}`
-    })
-    .join(" ; ")
-  const remainingGap = formatScore(evidenceReport?.remaining_documentary_gap)
-  const fallbackConclusion = demarcheStatus === "classical_engineering"
-    ? "EnnoDiagnostic considère donc l’opération comme non éligible au titre d’une activité de R&D, sous réserve de validation par le consultant CIR."
-    : demarcheStatus === "insufficient_evidence"
-      ? "Les preuves disponibles ne permettent pas encore de conclure à une éligibilité potentielle ; le consultant CIR doit confirmer la qualification."
-      : "EnnoDiagnostic considère ainsi l’opération comme potentiellement éligible au CIR, sous réserve de validation par le consultant."
-  const fallbackNarrative = cleanDisplayText(
-    `${operationNarrative || cleanDisplayText(reading || justification)} ` +
-    `${demarcheLabels[demarcheStatus] || "La nature de la démarche reste à qualifier"}. ` +
-    `${documentedCriteriaNarrative ? `Les critères Frascati acquis s’expliquent ainsi : ${documentedCriteriaNarrative}. ` : ""}` +
-    `${weakCriteriaNarrative ? `La part restant à consolider se répartit ainsi : ${weakCriteriaNarrative}. ` : criteriaNarrative} ` +
-    `Ces éléments conduisent à un niveau de défendabilité R&D de ${formatScore(score)}${remainingGap !== "—" ? `, avec ${remainingGap} restant à consolider` : ""}. ` +
-    fallbackConclusion
-  )
+  // Never manufacture a conclusion by concatenating the per-operation audit.
+  // Keep the backend explanation (including its safe failure message) intact.
+  const fallbackNarrative = cleanDisplayText(justification) ||
+    "La conclusion explicative n’est pas disponible. Relancez EnnoDiagnostic pour la générer à partir des preuves ; le score seul ne permet pas de conclure à l’éligibilité. Validation du consultant CIR requise."
   const narrative = generatedNarrative || fallbackNarrative
 
   const referenceFunctional = referenceOperation?.functional_evidence && typeof referenceOperation.functional_evidence === "object"
@@ -3196,12 +3177,19 @@ function UnifiedEligibilityStudyCardV191({
           .map((proof: any) => ({ proof, citationNumber: sourceProofNumbers.get(eligibilityProofKeyV193(proof)) }))
           .filter((item: any) => Number.isFinite(item.citationNumber))
         return {
+          paragraphIndex: claim.paragraphIndex,
           text: cleanDisplayText(String(claim?.text || "")),
           evidence: proofs.map((item: any) => eligibilityProofToEvidenceV191(item.proof)),
           citationNumbers: proofs.map((item: any) => Number(item.citationNumber)),
         }
       }).filter((claim: any) => claim.text)
     : []
+  const narrativeParagraphs = sourcedNarrativeParts.reduce((groups: any[][], claim: any) => {
+    const previous = groups[groups.length - 1]
+    if (previous && previous[0].paragraphIndex === claim.paragraphIndex) previous.push(claim)
+    else groups.push([claim])
+    return groups
+  }, [])
   const operationsCount = Number(demarche?.operations_count || operations.length || signalsCount || 0)
 
   return (
@@ -3226,29 +3214,33 @@ function UnifiedEligibilityStudyCardV191({
       <CardContent className="min-w-0 space-y-5 pt-5">
         <div className="min-w-0 rounded-xl border border-brand/20 bg-white p-4 sm:p-5">
           <p className="text-sm font-semibold text-foreground">Conclusion globale d’éligibilité</p>
-          <p className="mt-3 text-sm leading-7 text-foreground">
-            {sourcedNarrativeParts.length > 0 ? sourcedNarrativeParts.map((claim: any, index: number) => (
-              <span key={`${claim.text.slice(0, 80)}:${index}`}>
-                {claim.text}
-                {projectId && claim.evidence.length > 0 ? (
-                  <SourceEvidenceCitations
-                    projectId={projectId}
-                    documents={sourceDocuments}
-                    evidence={claim.evidence}
-                    citationNumbers={claim.citationNumbers}
-                  />
-                ) : null}
-                {index < sourcedNarrativeParts.length - 1 ? " " : null}
-              </span>
-            )) : narrative}
-            {sourcedNarrativeParts.length === 0 && projectId && sourceEvidence.length > 0 ? (
+          <div className="mt-3 space-y-3 text-sm leading-7 text-foreground">
+            {narrativeParagraphs.length > 0 ? narrativeParagraphs.map((paragraph: any[], paragraphIndex: number) => (
+              <p key={paragraphIndex}>
+                {paragraph.map((claim: any, index: number) => (
+                  <span key={`${claim.text.slice(0, 80)}:${index}`}>
+                    {claim.text}
+                    {projectId && claim.evidence.length > 0 ? (
+                      <SourceEvidenceCitations
+                        projectId={projectId}
+                        documents={sourceDocuments}
+                        evidence={claim.evidence}
+                        citationNumbers={claim.citationNumbers}
+                      />
+                    ) : null}
+                    {index < paragraph.length - 1 ? " " : null}
+                  </span>
+                ))}
+              </p>
+            )) : <p>{narrative}</p>}
+            {!generatedNarrative && cleanDisplayText(justification) && projectId && sourceEvidence.length > 0 ? (
               <SourceEvidenceCitations
                 projectId={projectId}
                 documents={sourceDocuments}
                 evidence={sourceEvidence}
               />
             ) : null}
-          </p>
+          </div>
         </div>
 
 
@@ -5343,6 +5335,7 @@ export function DiagnosisPage(
 
 
   const decisions = useMemo(() => countByDecision(verrous), [verrous])
+  const validationDecisionGroups = useMemo(() => getValidationDecisionGroups(verrous), [verrous])
   const decisionSegments = useMemo(() => [
     {
       key: "garde",
@@ -6809,7 +6802,7 @@ export function DiagnosisPage(
               <div className="flex flex-col justify-center gap-2 border-t border-brand/15 bg-white/65 p-5 lg:border-l lg:border-t-0">
                 <Button
                   className="w-full bg-brand hover:bg-brand/90"
-                  disabled={pendingReviewCount > 0 || !onOpenScholar}
+                  disabled={selectedVerrousForScholar.length === 0 || !onOpenScholar}
                   onClick={() => onOpenScholar?.()}
                 >
                   <Search className="size-4" data-icon="inline-start" aria-hidden="true" />
@@ -6820,10 +6813,7 @@ export function DiagnosisPage(
                 <Button
                   variant="ghost"
                   className="w-full"
-                  onClick={() => {
-                    setActiveTab("diagnostic")
-                    setDiagnosticSection("verrous")
-                  }}
+                  onClick={() => setActiveTab("validation")}
                 >
                   Revoir les verrous
                 </Button>
@@ -8635,16 +8625,14 @@ export function DiagnosisPage(
             </CardContent>
           </Card>
 
-          <div className="grid gap-3 sm:grid-cols-4">
-            {["garde", "reformuler", "rejete", "en_attente"].map((status) => {
-              const count = decisions[status as keyof typeof decisions]
-
+          <div className="grid gap-3 sm:grid-cols-3">
+            {validationDecisionGroups.map(({ status, label, items }) => {
               return (
                 <div key={status} className="rounded-xl border bg-card px-4 py-3">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                    {decisionLabel(status)}
+                    {label}
                   </p>
-                  <p className="mt-1 text-xl font-semibold text-foreground">{count}</p>
+                  <p className="mt-1 text-xl font-semibold text-foreground">{items.length}</p>
                 </div>
               )
             })}
@@ -8658,14 +8646,12 @@ export function DiagnosisPage(
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {["garde", "reformuler", "rejete", "en_attente"].map((status) => {
-                const items = verrous.filter((v) => v.consultant_status === status)
-
+              {validationDecisionGroups.map(({ status, label, items }) => {
                 return (
                   <div key={status} className="p-3 rounded-md border border-border">
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <p className="text-sm font-medium text-foreground">
-                        {decisionLabel(status)}
+                        {label}
                       </p>
                       <Badge variant="outline" className={`text-xs ${decisionClass(status)}`}>
                         {items.length}

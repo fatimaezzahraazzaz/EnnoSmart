@@ -354,6 +354,7 @@ def decide_improvement_sources(
                 candidate_ids=payload.candidate_ids,
                 decision=payload.decision,
                 reason=payload.reason,
+                guided_session_id=payload.guided_session_id,
             )
         return {"ok": True, "session": serialize_session(session)}
     except Exception as exc:

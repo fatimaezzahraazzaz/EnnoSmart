@@ -707,6 +707,16 @@ export async function getDiagnosticCorpusReview(projectId: number) {
   )
 }
 
+export async function deleteDocument(projectId: number, documentId: number) {
+  const result = await apiRequest<{ ok: boolean; document_id: number }>(
+    `/projects/${projectId}/documents/${documentId}`,
+    { method: "DELETE" },
+  )
+  clearReadCache(`documents:${projectId}`)
+  clearReadCache("project-overviews")
+  return result
+}
+
 export async function updateDiagnosticCorpusReview(
   projectId: number,
   decisions: Array<{ document_id: number; keep: boolean }>,
@@ -1762,12 +1772,13 @@ export async function decideImprovementSources(
   candidateIds: string[],
   decision: "accepted" | "rejected",
   reason = "",
+  guidedSessionId?: string,
 ) {
   return apiRequest<{ ok: boolean; session: ImprovementSession }>(
     `/api/projects/${projectId}/improvements/sessions/${encodeURIComponent(sessionId)}/sources/decision`,
     {
       method: "POST",
-      body: JSON.stringify({ candidate_ids: candidateIds, decision, reason }),
+      body: JSON.stringify({ candidate_ids: candidateIds, decision, reason, guided_session_id: guidedSessionId }),
     },
   )
 }

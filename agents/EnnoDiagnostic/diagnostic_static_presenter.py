@@ -83,12 +83,19 @@ except Exception:
 # Si la dépendance n'est pas installée, le presenter conserve temporairement
 # l'ancien chemin LLM afin de ne pas casser le reste du diagnostic.
 try:
-    from .structured_eligibility_writer import generate_eligibility_section_with_pydantic_ai
+    from .structured_eligibility_writer import (
+        ELIGIBILITY_WRITER_VERSION,
+        generate_eligibility_section_with_pydantic_ai,
+    )
 except Exception:
     try:
-        from structured_eligibility_writer import generate_eligibility_section_with_pydantic_ai  # type: ignore
+        from structured_eligibility_writer import (  # type: ignore
+            ELIGIBILITY_WRITER_VERSION,
+            generate_eligibility_section_with_pydantic_ai,
+        )
     except Exception:
         generate_eligibility_section_with_pydantic_ai = None  # type: ignore
+        ELIGIBILITY_WRITER_VERSION = "unavailable"
 
 
 STATIC_SECTION_DEFINITIONS: List[Dict[str, str]] = [
@@ -1686,10 +1693,12 @@ def _official_frascati_evidence(
             "char_end": None,
             "section_title": "Règle de calcul et opération de référence",
             "role": "calculated_assessment",
+            "operation_status_counts": dict(operation_status_counts),
             "sentence_start": None,
             "excerpt": clean_text(score_text, 1800),
             "criteria_assessment": [
                 {
+                    "criterion": item.get("criterion"),
                     "label": item.get("label") or item.get("criterion"),
                     "status": item.get("status"),
                     "contribution_to_index": item.get("contribution_to_index"),
@@ -1909,6 +1918,22 @@ def _official_frascati_evidence(
             proof for proof in operation_proofs
             if clean_text(proof.get("operation_group_id")) == reference_group_id
         ])
+        # The five criteria need their own documentary support before secondary
+        # operation examples consume the conclusion's existing evidence budget.
+        criterion_proofs: List[Dict[str, Any]] = []
+        for criterion in criteria:
+            proofs = criterion.get("evidence") or []
+            if isinstance(proofs, list):
+                tagged = [
+                    {**proof, "operation_group_id": (
+                        proof.get("operation_group_id")
+                        or (proof.get("semantic_link") or {}).get("operation_id")
+                        or (basis or narrative_operation).get("group_id")
+                    )}
+                    for proof in proofs[:2] if isinstance(proof, dict)
+                ]
+                source_proofs.extend(tagged[:1])
+                criterion_proofs.extend(tagged)
         for status in ("classical_engineering", "insufficient_evidence", "rnd_core_partial"):
             example = next((
                 operation for operation in operations
@@ -1942,10 +1967,7 @@ def _official_frascati_evidence(
             if not reference_group_id
             or clean_text((proof.get("semantic_link") or {}).get("operation_id")) in {"", reference_group_id}
         ])
-        for criterion in criteria:
-            proofs = criterion.get("evidence") or []
-            if isinstance(proofs, list):
-                source_proofs.extend(proof for proof in proofs[:2] if isinstance(proof, dict))
+        source_proofs.extend(criterion_proofs)
 
     seen = set()
     document_index = 1
@@ -2029,8 +2051,43 @@ def _official_frascati_evidence(
             "justification_bridge_fr": clean_text(proof.get("justification_bridge_fr"), 900),
             "excerpt": excerpt,
         })
+        if purpose == "justification_frascati":
+            # Keep the original NLP role and corpus metadata. The display label
+            # "opération N — experiment" is not a semantic role, and must not
+            # make an already-authorized method/result fail the writer's guard.
+            evidence[-1].update({
+                key: source_value(proof, key)
+                for key in (
+                    "current_project_evidence", "diagnostic_corpus_selected",
+                    "declared_corpus", "temporal_scope", "content_origin",
+                    "document_type", "semantic_role_conflicts",
+                )
+                if source_value(proof, key) is not None
+            })
+            evidence[-1]["semantic_role"] = clean_text(
+                source_value(proof, "semantic_role", "role"), 80
+            )
+            evidence[-1]["proof_kind"] = clean_text(
+                proof.get("proof_kind") or proof.get("operation_function"), 80
+            )
         if len(evidence) >= max_items:
             break
+    if purpose == "justification_frascati" and evidence and evidence[0].get("evidence_id") == "F0":
+        # Link the existing assessment to the retained documents, without
+        # adding sources or altering scores, statuses or provenance decisions.
+        retained_ids = {
+            str(item["rag_chunk_id"]): str(item["evidence_id"])
+            for item in evidence[1:] if item.get("rag_chunk_id")
+        }
+        for assessment, criterion in zip(evidence[0]["criteria_assessment"], criteria):
+            original_ids = [
+                *[str(value) for value in criterion.get("evidence_ids") or []],
+                *[str(proof.get("evidence_id")) for proof in criterion.get("evidence") or []
+                  if isinstance(proof, dict) and proof.get("evidence_id")],
+            ]
+            assessment["documentary_evidence_ids"] = list(dict.fromkeys(
+                retained_ids[value] for value in original_ids if value in retained_ids
+            ))
     return evidence
 
 def _compact_frascati_for_prompt(summary: Dict[str, Any]) -> Dict[str, Any]:
@@ -2824,8 +2881,11 @@ PREUVES :
 
     # Si un budget très serré a permis plusieurs lignes puis devient trop grand
     # après sérialisation, retirer les détails de fin sans toucher au socle E1.
+    # Même exemption Frascati que plus haut : ce prompt legacy n'est pas celui
+    # envoyé à PydanticAI ; il ne doit supprimer ni F0 ni les preuves techniques.
     while (
-        len(evidence) > required_source_evidence
+        config.key != "justification_frascati"
+        and len(evidence) > required_source_evidence
         and estimate_tokens(render_prompt(evidence)) > config.max_input_tokens
     ):
         evidence.pop()
@@ -4458,6 +4518,33 @@ def _normalize_section_json_shape(
     return json.dumps(normalized, ensure_ascii=False)
 
 
+def _eligibility_validation_errors(exc: Exception) -> List[str]:
+    """Keep the final structured-output rejection, never raw model inputs."""
+    from pydantic import ValidationError
+
+    current: Optional[BaseException] = exc
+    visited = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        retry = getattr(current, "tool_retry", None)
+        content = getattr(retry, "content", None)
+        # Schema rejection can be the direct cause of UnexpectedModelBehavior,
+        # without a ToolRetryError wrapper (e.g. F0 leaves a technical list empty).
+        if isinstance(current, ValidationError):
+            content = current.errors(include_input=False, include_url=False)
+        if isinstance(content, str):
+            return [content]
+        if isinstance(content, list):
+            return [
+                f"{'.'.join(str(part) for part in item.get('loc', []))}: {item.get('msg', '')}"
+                for item in content if isinstance(item, dict)
+            ]
+        if type(current).__name__ == "ModelRetry":
+            return [str(current)]
+        current = current.__cause__ or current.__context__
+    return []
+
+
 def generate_one_section(
     llm: Any,
     config: SectionContextConfig,
@@ -4517,9 +4604,11 @@ def generate_one_section(
             )
             return structured, clean_text(structured.get("framework_prompt") or prompt, 30000)
         except Exception as exc:
+            validation_errors = _eligibility_validation_errors(exc)
             print(
                 "[EnnoDiagnostic][PYDANTIC_AI_ERROR] "
-                f"section={config.key} error={type(exc).__name__}: {exc}"
+                f"section={config.key} error={type(exc).__name__}: {exc} "
+                f"validation_errors={json.dumps(validation_errors, ensure_ascii=False)}"
             )
             # Ne jamais retomber sur l'ancien gros JSON libre : c'est ce chemin
             # qui tronquait la sortie puis produisait parsed_keys=[]. Si le
@@ -4529,6 +4618,7 @@ def generate_one_section(
             fallback.update({
                 "status": "pydantic_ai_failed_deterministic_fallback",
                 "error": f"{type(exc).__name__}: {exc}",
+                "validation_errors": validation_errors,
                 "telemetry": telemetry,
             })
             return fallback, prompt
@@ -4791,7 +4881,10 @@ def _section_cache_identity(key: str, prompt: str, llm: Any) -> str:
         or "default"
     )
     narrative_mode = os.getenv("ENNOSMART_DIAG_FRASCATI_USE_LLM", "1") if key == "justification_frascati" else ""
-    raw = "|".join([_SECTION_CACHE_VERSION, key, model, narrative_mode, prompt])
+    version = _SECTION_CACHE_VERSION
+    if key == "justification_frascati":
+        version = f"{version}:{ELIGIBILITY_WRITER_VERSION}"
+    raw = "|".join([version, key, model, narrative_mode, prompt])
     return hashlib.sha256(raw.encode("utf-8", errors="ignore")).hexdigest()
 
 
@@ -5324,7 +5417,7 @@ def build_final_static_diagnostic(
     frascati_justification = clean_text(
         sections_by_key.get("justification_frascati")
         or _legacy_frascati_text(frascati_justification_result or {}),
-        3600,
+        6000,
     )
     if not frascati_justification:
         frascati_justification = (

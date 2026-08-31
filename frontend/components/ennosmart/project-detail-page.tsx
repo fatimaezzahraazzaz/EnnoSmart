@@ -17,9 +17,9 @@ import {
   FileText,
   FolderKanban,
   Loader2,
-  MoreHorizontal,
   RefreshCw,
   Search,
+  Trash2,
   Upload,
 } from "lucide-react"
 
@@ -36,6 +36,7 @@ import {
 import { Input } from "@/components/ui/input"
 
 import {
+  deleteDocument,
   getDocuments,
   getProjectOverviews,
   importExistingDiagnostic,
@@ -219,6 +220,9 @@ export default function ProjectDetailPage({
   const [documentTypeFilter, setDocumentTypeFilter] = useState("all")
   const [documentPage, setDocumentPage] = useState(1)
   const [documentPageSize, setDocumentPageSize] = useState(10)
+  const [deletingDocumentId, setDeletingDocumentId] = useState<number | null>(null)
+  const [documentDeleteError, setDocumentDeleteError] = useState("")
+  const [documentDeleteNotice, setDocumentDeleteNotice] = useState("")
 
   const selectedProjectId = project?.id
 
@@ -311,6 +315,10 @@ export default function ProjectDetailPage({
     setDocumentPage(1)
   }, [documentSearch, documentTypeFilter, documentPageSize])
 
+  useEffect(() => {
+    setDocumentPage((page) => Math.min(page, totalDocumentPages))
+  }, [totalDocumentPages])
+
   /* ---------------------------------------------------------------------- */
   /* Chargement                                                             */
   /* ---------------------------------------------------------------------- */
@@ -369,6 +377,8 @@ export default function ProjectDetailPage({
     setCurrentProjectId(projectId)
     setLoading(true)
     setError("")
+    setDocumentDeleteError("")
+    setDocumentDeleteNotice("")
 
     try {
       const selected =
@@ -486,6 +496,27 @@ export default function ProjectDetailPage({
       )
     } finally {
       setActionLoading(null)
+    }
+  }
+
+  const removeDocument = async (document: DocumentRead) => {
+    if (!selectedProjectId || deletingDocumentId !== null) return
+    const name = sourceFileName(document)
+    if (!window.confirm(
+      `Supprimer « ${name} » du projet ?\n\nLe fichier ne sera plus disponible dans EnnoSmart. Les conversations et versions existantes seront conservées. Le fichier original sur disque ou OneDrive ne sera pas supprimé.`,
+    )) return
+
+    setDeletingDocumentId(document.id)
+    setDocumentDeleteError("")
+    setDocumentDeleteNotice("")
+    try {
+      await deleteDocument(selectedProjectId, document.id)
+      setDocuments((current) => current.filter((item) => item.id !== document.id))
+      setDocumentDeleteNotice(`« ${name} » a été supprimé du projet.`)
+    } catch (err) {
+      setDocumentDeleteError(err instanceof Error ? err.message : "Impossible de supprimer le document. Réessayez.")
+    } finally {
+      setDeletingDocumentId(null)
     }
   }
 
@@ -699,6 +730,7 @@ export default function ProjectDetailPage({
               {projects.length > 1 && (
                 <select
                   value={project.id}
+                  disabled={deletingDocumentId !== null}
                   onChange={(event) =>
                     changeProject(Number(event.target.value))
                   }
@@ -715,6 +747,7 @@ export default function ProjectDetailPage({
               <Button
                 variant="outline"
                 onClick={loadData}
+                disabled={deletingDocumentId !== null}
                 className="h-10 rounded-xl"
               >
                 <RefreshCw className="size-4" />
@@ -1053,7 +1086,7 @@ export default function ProjectDetailPage({
                   size="sm"
                   className="h-9 rounded-xl"
                   onClick={importDocuments}
-                  disabled={actionLoading === "documents"}
+                  disabled={actionLoading === "documents" || deletingDocumentId !== null}
                 >
                   {actionLoading === "documents" ? (
                     <Loader2 className="size-4 animate-spin" />
@@ -1076,6 +1109,16 @@ export default function ProjectDetailPage({
           </CardHeader>
 
           <CardContent className="p-0">
+            {documentDeleteError && (
+              <p role="alert" className="mx-5 mt-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                {documentDeleteError}
+              </p>
+            )}
+            {documentDeleteNotice && (
+              <p role="status" className="mx-5 mt-4 text-sm text-foreground">
+                {documentDeleteNotice}
+              </p>
+            )}
             {documents.length === 0 ? (
               <div className="m-5 rounded-xl border border-dashed p-8 text-center">
                 <p className="text-sm font-medium text-foreground">
@@ -1103,7 +1146,7 @@ export default function ProjectDetailPage({
                 {/* Table desktop */}
 
                 <div className="hidden lg:block">
-                  <div className="grid grid-cols-[minmax(280px,1.5fr)_150px_150px_140px_90px_60px] gap-4 border-b border-border/70 bg-muted/[0.16] px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  <div className="grid grid-cols-[minmax(180px,1.5fr)_150px_150px_140px_90px_116px] gap-4 border-b border-border/70 bg-muted/[0.16] px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                     <span>Nom</span>
                     <span>Type</span>
                     <span>Date</span>
@@ -1119,7 +1162,7 @@ export default function ProjectDetailPage({
                     return (
                       <div
                         key={doc.id}
-                        className="grid min-h-[52px] grid-cols-[minmax(280px,1.5fr)_150px_150px_140px_90px_60px] items-center gap-4 border-b border-border/55 px-5 py-2.5 text-xs transition last:border-b-0 hover:bg-brand/[0.018]"
+                        className="grid min-h-[52px] grid-cols-[minmax(180px,1.5fr)_150px_150px_140px_90px_116px] items-center gap-4 border-b border-border/55 px-5 py-2.5 text-xs transition last:border-b-0 hover:bg-brand/[0.018]"
                       >
                         <div className="flex min-w-0 items-center gap-2.5">
                           <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-brand/[0.065] text-brand">
@@ -1165,14 +1208,12 @@ export default function ProjectDetailPage({
                         </span>
 
                         <div className="flex justify-center">
-                          <button
-                            type="button"
-                            className="grid size-8 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                            title={name}
-                            aria-label={`Détails de ${name}`}
-                          >
-                            <MoreHorizontal className="size-4" />
-                          </button>
+                          <DocumentDeleteButton
+                            name={name}
+                            deleting={deletingDocumentId === doc.id}
+                            disabled={deletingDocumentId !== null || actionLoading === "documents"}
+                            onClick={() => void removeDocument(doc)}
+                          />
                         </div>
                       </div>
                     )
@@ -1227,6 +1268,12 @@ export default function ProjectDetailPage({
                               {formatSize(doc.size_bytes)}
                             </span>
                           ) : null}
+                          <DocumentDeleteButton
+                            name={name}
+                            deleting={deletingDocumentId === doc.id}
+                            disabled={deletingDocumentId !== null || actionLoading === "documents"}
+                            onClick={() => void removeDocument(doc)}
+                          />
                         </div>
                       </div>
                     )
@@ -1335,6 +1382,28 @@ export default function ProjectDetailPage({
 /* -------------------------------------------------------------------------- */
 /* Sous-composants                                                            */
 /* -------------------------------------------------------------------------- */
+
+function DocumentDeleteButton({ name, deleting, disabled, onClick }: {
+  name: string
+  deleting: boolean
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-9 rounded-lg px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+      aria-label={`Supprimer ${name}`}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {deleting ? <Loader2 aria-hidden="true" className="size-4 animate-spin" /> : <Trash2 aria-hidden="true" className="size-4" />}
+      {deleting ? "Suppression…" : "Supprimer"}
+    </Button>
+  )
+}
 
 function OverviewCard({
   icon: Icon,

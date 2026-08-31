@@ -14,6 +14,7 @@ from ..domain.models import (
     ImprovementRequest,
     RoutingDecision,
     SectionFunction,
+    TargetScope,
 )
 from .evidence_coverage_v315 import (
     build_coverage_report,
@@ -791,14 +792,24 @@ class ControlledWriter:
         scholar_evidence = evidence.get("scholar") or {}
         mandatory_evidence_contract = render_mandatory_evidence_contract(evidence)
         mandatory_scholar_payload = build_mandatory_scholar_payload(evidence, max_chars=30000)
+        section_all_sources = bool(
+            request.target_scope == TargetScope.SECTION
+            and (evidence.get("scholar") or {}).get("use_all_accepted_sources")
+        )
+        if section_all_sources:
+            max_output_tokens = min(8000, max(max_output_tokens, int((word_count + 130 * len(allowed_citations)) * 2.2)))
         conservative_mode = not any(
             intent.value == "concision" for intent in routing.intents
         )
         scientific_additive_mode = _scientific_additive_mode(routing)
+        section_scientific_enrichment = bool(
+            request.target_scope == TargetScope.SECTION and scientific_additive_mode
+        )
         context_structural_mode = bool(
             routing.section_function == SectionFunction.CONTEXT
             and not routing.candidate_revision
             and conservative_mode
+            and not section_scientific_enrichment
         )
         uncertainty_evidence_mode = bool(
             routing.section_function == SectionFunction.UNCERTAINTY
@@ -902,7 +913,33 @@ class ControlledWriter:
             if routing.strict_fact_preservation or routing.editorial_only
             else ""
         )
+        if section_all_sources:
+            scientific_additive_contract = scientific_additive_contract.replace(
+                "- Ne cite pas toutes les sources sélectionnées par principe : utilise uniquement une\n  source lorsqu'elle apporte un élément réellement utile au raisonnement.",
+                "- Le consultant demande l'utilisation de tous les articles autorisés : intègre les apports pertinents de chaque fiche, sans citation décorative ni affirmation inventée.",
+            )
         section_contract = render_section_improvement_contract(routing.section_function)
+        if section_scientific_enrichment and routing.section_function == SectionFunction.CONTEXT:
+            section_contract = """CONTEXTE — ENRICHISSEMENT SCIENTIFIQUE EXPLICITEMENT DEMANDÉ
+- Conserve le rôle de contexte de cette section et la progression des informations déjà présentes.
+- Le consultant demande ici un renforcement avec les articles gardés, pas une simple reformulation à faits constants.
+- Intègre les méthodes, résultats ou limites documentés par les preuves autorisées lorsqu'ils étayent les arguments de la section, avec leurs citations exactes.
+- Présente ces apports comme ceux des publications : ils ne prouvent pas que le projet a réalisé ces travaux ni obtenu ces résultats.
+- N'invente aucun fait du projet, verrou, méthode, résultat ou contribution ; ne transforme pas le contexte en une autre section et ne modifie aucun autre passage du document.
+"""
+        if (
+            routing.editorial_only
+            and request.target_scope == TargetScope.SECTION
+            and not routing.candidate_revision
+        ):
+            strict_fact_contract += """
+RÉÉCRITURE DE LA SECTION ENTIÈRE
+- Traite le TEXTE CIBLE comme un seul bloc rédactionnel : retravaille tous ses paragraphes, du début à la fin, et pas seulement l'introduction ou la conclusion.
+- Ne sélectionne pas les seuls paragraphes jugés faibles. Préserver les faits ne signifie pas recopier les autres paragraphes sans les retravailler.
+- Améliore la formulation et les transitions dans l'ensemble de la section, sans substitution mécanique de synonymes ni ajout ou suppression d'information.
+- Conserve à l'identique les titres, citations, chiffres et blocs documentaires immuables ; ne modifie aucune autre section du document.
+- Les CIR similaires servent uniquement de modèles de style, jamais de source de faits nouveaux.
+"""
         candidate_revision_contract = (
             """MODE CORRECTION DE LA PROPOSITION COURANTE
 - Le TEXTE CIBLE est la proposition courante à corriger. Ne repars pas d'une autre version et ne reconstruis pas toute la section.
@@ -998,7 +1035,7 @@ CONTEXTE PROJET AUTORISÉ
 PREUVES FACTUELLES ENNODIAGNOSTIC
 {_compact_json(diagnostic_evidence, 16000)}
 
-PREUVES FACTUELLES ENNOSCHOLAR — SOURCES CIBLÉES ET FACULTATIVES
+PREUVES FACTUELLES ENNOSCHOLAR — {'TOUS LES ARTICLES AUTORISÉS DEMANDÉS' if section_all_sources else 'SOURCES CIBLÉES ET FACULTATIVES'}
 {mandatory_scholar_payload}
 
 MANQUES DOCUMENTAIRES SIGNALÉS

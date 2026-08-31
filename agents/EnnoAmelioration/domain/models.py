@@ -128,6 +128,7 @@ class ImprovementRequest(BaseModel):
     project_domain: str = ""
     evidence_article_ids: list[int] | None = None
     evidence_scope_id: str | None = None
+    evidence_cards: list[dict[str, Any]] | None = None
     research_choice: str | None = None
     guided_research_session_id: str | None = None
     # Fonction scientifique transmise à EnnoScholar. Ce champ décrit une cible

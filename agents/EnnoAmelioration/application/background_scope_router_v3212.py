@@ -82,6 +82,16 @@ def resolve_background_scope(
     stored_scope = _scope_enum(getattr(session, "target_scope", None))
     message = str(getattr(payload, "message", None) or "").strip()
 
+    # Le choix local du frontend prime sur les mots du message et sur un
+    # ancien scope FULL_DOCUMENT mémorisé par la conversation.
+    if explicit_scope is not None and explicit_scope != TargetScope.FULL_DOCUMENT:
+        return {
+            "background": False,
+            "scope": explicit_scope.value,
+            "reason": "explicit_local_scope",
+            "semantic_scope": None,
+        }
+
     if _has_explicit_local_target(payload):
         effective = explicit_scope if explicit_scope is not None else TargetScope.SECTION
         print(
@@ -96,7 +106,7 @@ def resolve_background_scope(
             "semantic_scope": None,
         }
 
-    if _message_targets_existing_section(session, message):
+    if explicit_scope is None and _message_targets_existing_section(session, message):
         print(
             "[V3.21.2][BackgroundRoute] "
             f"session={session_id} route=sync "

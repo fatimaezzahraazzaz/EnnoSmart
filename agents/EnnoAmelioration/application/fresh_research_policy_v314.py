@@ -53,6 +53,11 @@ def _intent_names(intents: Iterable[Any] | None) -> set[str]:
 
 def explicitly_requests_existing_validated_sources(value: str | None) -> bool:
     positives = (
+        # The action and the kept-source status carry the intent; do not depend
+        # on a perfectly spelled connector (avec / grâce à / ...).
+        r"\b(?:renforc|consolid|enrich|etay|redig|reecri)\w*\b[^.!?;]{0,140}"
+        r"\b(?:sources?|articles?|publications?|references?|citations?|preuves?)\b"
+        r"[^.!?;]{0,100}\b(?:garde\w*|valid\w*|selectionn\w*|accept\w*|retenu\w*)\b",
         r"\butilis\w*\b[^.!?;]{0,140}\b(?:sources?|articles?|publications?|references?|citations?|preuves?)\b"
         r"[^.!?;]{0,140}\b(?:garde\w*|valid\w*|selectionn\w*|accept\w*|deja)\b",
         r"\b(?:avec|a partir de|sur la base de)\b[^.!?;]{0,100}"
@@ -162,6 +167,22 @@ def _is_write_after_validation(value: str | None) -> bool:
         and not requests_natural_strengthening(text)
         and not explicitly_requests_fresh_research(text)
     )
+
+
+def allows_strengthening_search_when_corpus_empty(value: str | None) -> bool:
+    """A preference for kept articles is not an exclusive closed-corpus order."""
+    if not requests_natural_strengthening(value):
+        return False
+    source = r"(?:articles?|sources?|publications?|references?|preuves?|corpus|bibliographie)"
+    restrictions = (
+        rf"\b(?:uniquement|seulement|exclusivement)\s+(?:(?:avec|a partir de)\s+)?"
+        rf"(?:(?:les|des|ces|mes|nos|vos|leurs|le|la|ce|du)\s+){{0,2}}{source}\b",
+        rf"\b{source}\b[^.!?;]{{0,80}}\b(?:uniquement|seulement|exclusivement)\b",
+        rf"\b(?:limite|restreins|borne)\w*(?:[- ](?:toi|vous))?\b[^.!?;]{{0,45}}\b{source}\b",
+        r"\bne\s+(?:relanc|recherch|cherch|collect)\w*\s+pas\b",
+        r"\bn[' ]?ouvre\s+pas\b[^.!?;]{0,60}\b(?:recherche|ennoscholar)\b",
+    )
+    return not any(re.search(pattern, clause) for clause in _clauses(value) for pattern in restrictions)
 
 
 def resolve_fresh_research_policy(

@@ -52,6 +52,7 @@ CANONICAL_PDF_ROOT = COMPARE_ROOT / "canonical_pdf"
 
 DOCX_EXTENSIONS = {".docx", ".docm"}
 TEXT_EXTENSIONS = {".txt", ".md"}
+DOCX_PATCH_VERSION = "agent3-docx-patch-v403"
 
 WORD_TO_PDF_TIMEOUT_SECONDS = int(
     os.getenv("ENNOSMART_WORD_CONVERT_TIMEOUT", "240")
@@ -772,7 +773,74 @@ def _insert_after_paragraph(paragraph: Any, text: str) -> bool:
         return False
 
 
-def _apply_change_to_docx(document: Any, change: dict[str, Any]) -> bool:
+def _context_tokens(text: str) -> list[tuple[str, int, int]]:
+    return [
+        (value, match.start(), match.end())
+        for match in re.finditer(r"\S+", text)
+        if (value := _normalized(match.group()))
+    ]
+
+
+def _insert_from_version_content(document: Any, after: str, content: str) -> bool:
+    """Locate an unanchored insertion using its persisted neighbouring text.
+
+    The model may return an insert with no `before` or section hint. The saved
+    candidate, not a guessed section or a new LLM call, is the location authority.
+    Only a unique context match is allowed; drawings and existing runs are kept.
+    """
+    content = _clean(content)
+    if not after or content.count(after) != 1:
+        return False
+    position = content.index(after)
+    contexts = (
+        (_context_tokens(content[:position]), True),
+        (_context_tokens(content[position + len(after):]), False),
+    )
+    paragraphs = [
+        (paragraph, _context_tokens(paragraph.text))
+        for paragraph in _paragraphs_in_document(document)
+        if not _paragraph_contains_drawing(paragraph)
+    ]
+    for context, preceding in contexts:
+        for size in sorted({min(len(context), n) for n in (32, 16, 8, 4)}, reverse=True):
+            if not size:
+                continue
+            words = [token[0] for token in (context[-size:] if preceding else context[:size])]
+            if len(" ".join(words)) < 24:
+                continue
+            matches = []
+            for paragraph, tokens in paragraphs:
+                values = [token[0] for token in tokens]
+                for start in range(len(tokens) - size + 1):
+                    if values[start:start + size] == words:
+                        offset = tokens[start + size - 1][2] if preceding else tokens[start][1]
+                        matches.append((paragraph, offset))
+            if len(matches) != 1:
+                continue
+            paragraph, offset = matches[0]
+            current = paragraph.text
+            if not current[offset:].strip():
+                return _insert_after_paragraph(paragraph, after)
+            if not current[:offset].strip():
+                paragraph.insert_paragraph_before(after, style=paragraph.style)
+                return True
+            # Keep formatting and embedded elements of an inline insertion.
+            if "".join(run.text for run in paragraph.runs) != current:
+                continue
+            prefix = "" if current[offset - 1].isspace() else " "
+            suffix = "" if current[offset].isspace() else " "
+            for run in paragraph.runs:
+                if offset <= len(run.text):
+                    left, right = run.text[:offset], run.text[offset:]
+                    run.text = left + prefix + after + suffix + right
+                    return True
+                offset -= len(run.text)
+    return False
+
+
+def _apply_change_to_docx(
+    document: Any, change: dict[str, Any], *, version_content: str = ""
+) -> bool:
     before = _change_before(change)
     after = _change_after(change)
 
@@ -784,6 +852,8 @@ def _apply_change_to_docx(document: Any, change: dict[str, Any]) -> bool:
         return _replace_multi_paragraph(paragraphs, before, after)
 
     if after:
+        if _insert_from_version_content(document, after, version_content):
+            return True
         hints = _section_hints(change)
         paragraphs = _paragraphs_in_document(document)
         for hint in hints:
@@ -814,10 +884,12 @@ def _candidate_docx(
     stat = source.stat()
     rows = _changes(version)
     key = _hash(
+        DOCX_PATCH_VERSION,
         source.resolve(),
         stat.st_size,
         stat.st_mtime_ns,
         version.id,
+        _hash(version.content),
         json.dumps(rows, ensure_ascii=False, sort_keys=True, default=str),
     )
 
@@ -829,7 +901,8 @@ def _candidate_docx(
         / key
     )
     directory.mkdir(parents=True, exist_ok=True)
-    target = directory / f"{source.stem}_proposition{source.suffix}"
+    # Replaying ancestors must not grow the filename at every version.
+    target = directory / f"{source.stem.removesuffix('_proposition')}_proposition{source.suffix}"
     manifest_path = directory / "manifest.json"
 
     if target.exists() and target.stat().st_size > 0 and manifest_path.exists():
@@ -845,14 +918,14 @@ def _candidate_docx(
     missed: list[int] = []
 
     for index, change in enumerate(rows):
-        if _apply_change_to_docx(document, change):
+        if _apply_change_to_docx(document, change, version_content=version.content or ""):
             applied.append(index)
         else:
             missed.append(index)
 
     document.save(str(target))
     manifest = {
-        "version": "agent3-docx-patch-v402",
+        "version": DOCX_PATCH_VERSION,
         "source": str(source),
         "version_id": version.id,
         "changes_total": len(rows),
@@ -866,6 +939,30 @@ def _candidate_docx(
         encoding="utf-8",
     )
     return target.resolve(), manifest
+
+
+def _parent_docx_source(
+    db: Session, source: Path, version: ImprovementVersion, project_id: int
+) -> Path:
+    """Replay only this version's ancestors, without changing stored versions."""
+    if source.suffix.lower() not in DOCX_EXTENSIONS or version.status == "original":
+        return source
+    ancestors = []
+    seen = {version.id}
+    parent_id = version.parent_version_id
+    while parent_id:
+        if parent_id in seen:
+            raise HTTPException(status_code=422, detail="Historique des versions incohérent.")
+        seen.add(parent_id)
+        parent = _version(db, version.session_id, parent_id)
+        if parent.status == "original":
+            break
+        ancestors.append(parent)
+        parent_id = parent.parent_version_id
+    for parent in reversed(ancestors):
+        if _changes(parent):
+            source, _manifest = _candidate_docx(source, parent, project_id)
+    return source
 
 
 def _base_proposed_pdf(
@@ -1037,6 +1134,19 @@ def _proposed_preview(
     proposed_pdf, mode, manifest = _base_proposed_pdf(
         source, original_pdf, version, project_id
     )
+    if (
+        source.suffix.lower() in DOCX_EXTENSIONS
+        and not _change_before(change)
+        and _change_after(change)
+        and change_index in manifest.get("missed", [])
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Cette modification est enregistrée mais n'a pas pu être positionnée "
+                "dans l'aperçu PDF. Consultez le comparatif texte ; le document reste inchangé."
+            ),
+        )
     stat = proposed_pdf.stat()
     target = (
         COMPARE_ROOT
@@ -1210,7 +1320,11 @@ def build_version_document_preview(
         int(session.source_document_id),
     )
     source = _materialize_document(source_document, project_id)
-    original_pdf = _as_pdf(source, project_id, source_document)
+    parent_source = _parent_docx_source(db, source, version, project_id)
+    original_pdf = _as_pdf(
+        parent_source, project_id, source_document if parent_source == source else None
+    )
+    source = parent_source
 
     rows = _changes(version)
     if version.status == "original" or not rows:
@@ -1276,13 +1390,14 @@ def build_comparison_preview(
         int(session.source_document_id),
     )
     source = _materialize_document(source_document, project_id)
-    # V4.02 : le document vient directement de session.source_document_id.
-    # Un PDF est utilisé tel quel ; un Word est converti via Word/LibreOffice.
+    # The comparison baseline is the parent version, not the initial upload.
+    parent_source = _parent_docx_source(db, source, version, project_id)
     original_pdf = _as_pdf(
-        source,
+        parent_source,
         project_id,
-        source_document,
+        source_document if parent_source == source else None,
     )
+    source = parent_source
     change = _change_at(version, change_index)
 
     normalized_side = str(side or "").strip().lower()

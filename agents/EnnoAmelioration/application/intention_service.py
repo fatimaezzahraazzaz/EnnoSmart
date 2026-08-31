@@ -318,7 +318,7 @@ def _revision_requests_project_evidence(text: str) -> bool:
     return False
 
 
-def _requests_scientific_enrichment(text: str) -> bool:
+def _requests_scientific_enrichment(text: str, *, section_kept_sources: bool = False) -> bool:
     """Détecte une utilisation Scholar demandée, sans réagir aux contraintes.
 
     Le simple mot « source » dans « n'invente rien absent des sources » n'est
@@ -335,6 +335,11 @@ def _requests_scientific_enrichment(text: str) -> bool:
             r"\b(?:avec|depuis|à partir de|uniquement)\b[^.!?;]{0,70}\b(?:articles?|publications?|sources?|citations?|article cards?)\b[^.!?;]{0,40}\b(?:valid|sélection|disponib|existant)",
             r"\b(?:utilis|intégr|appui|étay)\w*\b[^.!?;]{0,70}\b(?:articles?|publications?|sources?|citations?)\b",
         )
+        if section_kept_sources:
+            uses_existing = uses_existing or _has(
+                clause,
+                r"\b(?:avec|depuis|à partir de|uniquement)\b[^.!?;]{0,70}\b(?:articles?|publications?|sources?|citations?)\b[^.!?;]{0,40}\b(?:gard|reten|accept)",
+            )
         if forbidden and not uses_existing:
             continue
         folded = _fold(clause)
@@ -436,7 +441,9 @@ def understand_instruction(instruction: str, default_scope: TargetScope) -> Rout
     asks_new_research = _requests_new_research(normalized)
     if candidate_revision and asks_new_research:
         revision_allows_evidence_enrichment = True
-    explicit_scientific_enrichment = _requests_scientific_enrichment(normalized)
+    explicit_scientific_enrichment = _requests_scientific_enrichment(
+        normalized, section_kept_sources=default_scope == TargetScope.SECTION,
+    )
     strict_fact_preservation = _forbids_new_factual_content(normalized)
 
     # Une correction de candidate est fermée par défaut : EnnoAmel corrige ce
@@ -495,6 +502,22 @@ def understand_instruction(instruction: str, default_scope: TargetScope) -> Rout
 
     if not intents:
         intents = [ImprovementIntent.GENERAL_REVISION]
+
+    # « Qualité de l'argumentation » peut viser la présentation des faits
+    # existants. Dans une réécriture locale à faits constants, ce mot seul ne
+    # justifie pas de diagnostic. Les demandes explicites de preuves restent
+    # dans leur parcours scientifique, comme le traitement du CIR complet.
+    if (
+        default_scope in {TargetScope.SECTION, TargetScope.SELECTION, TargetScope.PARAGRAPH}
+        and editorial_reformulation
+        and strict_fact_preservation
+        and not project_evidence_only
+        and not _revision_requests_project_evidence(normalized)
+        and not explicit_scientific_enrichment
+        and not asks_new_research
+        and ImprovementIntent.CIR_ELIGIBILITY not in intents
+    ):
+        intents = [intent for intent in intents if intent != ImprovementIntent.ARGUMENTATION]
 
     intent_set = set(intents)
     editorial_only = bool(

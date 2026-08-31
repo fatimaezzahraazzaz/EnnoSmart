@@ -55,6 +55,7 @@ from .fresh_research_policy_v314 import (
     MODE_FRESH as FRESH_RESEARCH_MODE,
     MODE_REUSE as REUSE_RESEARCH_MODE,
     POLICY_VERSION as FRESH_RESEARCH_POLICY_VERSION,
+    allows_strengthening_search_when_corpus_empty,
     resolve_fresh_research_policy,
 )
 from .traceability_service import build_revision_trace
@@ -63,7 +64,7 @@ from .writer_service import (
     _allowed_citation_ids,
     validate_conservative_revision,
 )
-from .evidence_coverage_v315 import build_coverage_report
+from .evidence_coverage_v315 import build_coverage_report, prepare_section_source_usage, requests_all_accepted_sources
 
 
 
@@ -263,10 +264,16 @@ class EnnoAmeliorationAgent:
         )
 
         # V3.25 — les contrôles sont un audit destiné au consultant, pas un
-        # pare-feu de génération. Une seule rédaction est produite : aucune
-        # alerte d'intégrité ne déclenche une réécriture automatique susceptible
-        # d'effacer une bonne première candidate ou ses sources scientifiques.
-        max_attempts = 1
+        # pare-feu de génération. Une seule rédaction est produite par défaut.
+        # Seule la demande explicite de toutes les sources d'une section
+        # autorise une correction bornée des citations manquantes.
+        section_all_sources = bool(
+            request.target_scope == TargetScope.SECTION
+            and (evidence.get("scholar") or {}).get("use_all_accepted_sources")
+        )
+        # One bounded repair only when the consultant explicitly requested all
+        # section sources. Default and full-CIR generation remain single-pass.
+        max_attempts = 2 if section_all_sources else 1
         attempts: list[dict[str, Any]] = []
         attempt_request = request
         last_issues: list[str] = []
@@ -360,7 +367,7 @@ class EnnoAmeliorationAgent:
             # ne perd aucun élément protégé. Les alertes lexicales non bloquantes
             # restent consultables par le consultant.
             if routing.editorial_only or routing.strict_fact_preservation:
-                if not hard_conservation_issues(last_issues):
+                if not hard_conservation_issues(last_issues) and not (section_all_sources and missing_required):
                     return improved, {
                         **dict(meta),
                         "strategy": "visible_editorial_candidate_v318",
@@ -394,6 +401,9 @@ class EnnoAmeliorationAgent:
                     "call_count": attempt,
                     "attempts": attempts,
                 }
+
+            if section_all_sources and not missing_required:
+                break
 
             retry_instruction = (
                 request.instruction
@@ -439,7 +449,7 @@ class EnnoAmeliorationAgent:
 
         # V3.25 — politique « audit consultatif uniquement ». Les anomalies
         # détectées restent détaillées dans le comparatif, mais ne deviennent
-        # jamais des statuts bloquants et ne provoquent aucun retry automatique.
+        # jamais des statuts bloquants ni de nouvelle boucle de correction.
         review_issues = list(
             dict.fromkeys(
                 [*last_issues]
@@ -876,8 +886,13 @@ class EnnoAmeliorationAgent:
                 request.instruction,
                 allowed_article_ids=request.evidence_article_ids,
                 evidence_scope_id=request.evidence_scope_id,
+                authorized_cards=request.evidence_cards,
                 target_section_id=request.target_section_id,
                 target_section_title=request.target_section_title,
+                include_all_accepted=(
+                    request.target_scope == TargetScope.SECTION
+                    and requests_all_accepted_sources(request.instruction)
+                ),
             )
         elif routing.needs_scholar:
             # Une recherche fraiche ouvre un corpus ferme. Les articles gardes
@@ -902,6 +917,8 @@ class EnnoAmeliorationAgent:
             if isinstance(value, dict) and not value.get("available"):
                 gaps.append({"source": key, "reason": str(value.get("reason") or "indisponible")})
         package["gaps"] = gaps
+        if request.target_scope == TargetScope.SECTION and routing.needs_scholar:
+            package = prepare_section_source_usage(package, request.instruction)
         return package
 
     def improve(self, db: Any, project: Any, request: ImprovementRequest) -> ImprovementResult:
@@ -1223,6 +1240,7 @@ class EnnoAmeliorationAgent:
 
         resume_with_validated_sources = bool(
             request.evidence_article_ids
+            and not routing.editorial_only
             and not hard_forbid_scholar
             and not routing.needs_new_research
         )
@@ -1311,6 +1329,35 @@ class EnnoAmeliorationAgent:
 
         evidence = self._evidence_package(db, project, request, routing)
         existing_sources_available = bool((evidence.get("scholar") or {}).get("available"))
+
+        # In a new/empty section conversation, mentioning kept articles is a
+        # preference, not a reason to stop an authorized strengthening request.
+        # Keep explicit closed-corpus choices and the full-CIR route unchanged.
+        if (
+            request.target_scope == TargetScope.SECTION
+            and research_choice == RESEARCH_USE_EXISTING
+            and not existing_sources_available
+            and not routing.editorial_only
+            and not routing.candidate_revision
+            and not hard_forbid_research
+            and not hard_forbid_scholar
+            and detect_research_choice(request.research_choice) != RESEARCH_USE_EXISTING
+            and allows_strengthening_search_when_corpus_empty(request.instruction)
+        ):
+            research_choice = RESEARCH_LAUNCH_TARGETED
+            routing = routing.model_copy(update={
+                "needs_scholar": True,
+                "needs_new_research": True,
+                "forbids_new_research": False,
+                "forbids_scholar": False,
+                "specialist_route": (
+                    SpecialistRoute.DIAGNOSTIC_SCHOLAR if routing.needs_diagnostic else SpecialistRoute.SCHOLAR
+                ),
+                "rationale": [
+                    *routing.rationale,
+                    "Renforcement demandé sans source validée pertinente : lancer la recherche ciblée sur la section et l'instruction du consultant.",
+                ],
+            })
 
         diagnostic_required = bool(
             routing.needs_diagnostic
@@ -1759,6 +1806,17 @@ class EnnoAmeliorationAgent:
                 " La cible a été améliorée à faits constants ; aucun enrichissement scientifique nouveau "
                 "n'a été ajouté faute de source validée."
             )
+        if request.target_scope == TargetScope.SECTION and (evidence.get("scholar") or {}).get("use_all_accepted_sources"):
+            coverage = build_coverage_report(evidence, improved_target)
+            message += (
+                f" Articles exploités : {len(coverage['used_eligible_ids'])}/{coverage['eligible_count']} "
+                "parmi les preuves autorisées pour cette section."
+            )
+            if coverage["missing_required_ids"]:
+                message += (
+                    " La demande d'utiliser tous les articles n'est pas entièrement satisfaite ; "
+                    "sources non intégrées : " + ", ".join(coverage["missing_required_ids"]) + "."
+                )
         return ImprovementResult(
             ok=True,
             state=ImprovementState.CANDIDATE_READY,

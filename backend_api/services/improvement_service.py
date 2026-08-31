@@ -29,8 +29,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from sqlalchemy import case, func
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session, undefer
+from services.improvement_research_history import (
+    research_history, with_research_history, record_research, resolve_source_search,
+)
 
 from agents.EnnoAmelioration import EnnoAmeliorationAgent
 from agents.EnnoAmelioration.application.section_parser import (
@@ -306,8 +309,13 @@ def _publication_site_url(source: dict[str, Any]) -> str | None:
     return None
 
 
-def _sections_payload(text: str) -> list[dict[str, Any]]:
-    return [section.model_dump(mode="json") for section in parse_sections(text)]
+def _sections_payload(
+    text: str, *, source_kind: str = "", scope: str = "",
+) -> list[dict[str, Any]]:
+    return [section.model_dump(mode="json") for section in parse_sections(
+        text,
+        paragraph_fallback=not (source_kind == "pasted_text" and scope == "section"),
+    )]
 
 
 
@@ -721,6 +729,7 @@ def _public_research_sources(sources: list[dict[str, Any]]) -> list[dict[str, An
         public.append(
             {
                 "candidate_id": candidate_id,
+                "guided_session_id": row.get("guided_session_id"),
                 "candidate_kind": row.get("candidate_kind") or "scientific_article",
                 "title": row.get("title") or "Source sans titre",
                 "authors": list(row.get("authors") or []),
@@ -754,6 +763,7 @@ def _public_research_sources(sources: list[dict[str, Any]]) -> list[dict[str, An
                 "article_card_ready": bool(
                     fulltext.get("ready_for_writing")
                     or fulltext.get("article_card_ready")
+                    or row.get("article_card_ready")
                 ),
             }
         )
@@ -852,183 +862,101 @@ def _start_typed_research_inside_improvement(
     return handoff
 
 
+def _load_conversation_research(db: Session, session: ImprovementSession) -> dict[str, Any]:
+    """Recover only searches explicitly owned by or linked to this conversation."""
+    from agents.EnnoScholar.guided_research.lot1.domain.models import GuidedResearchSessionORM
+
+    context = dict(session.context_json or {})
+    history = research_history(context, list(session.messages or []))
+    by_id = {row["guided_session_id"]: row for row in history}
+    owned = GuidedResearchSessionORM.context_json["improvement_session_id"].astext == str(session.id)
+    rows = (
+        db.query(GuidedResearchSessionORM)
+        .filter(GuidedResearchSessionORM.project_id == session.project_id)
+        .filter(GuidedResearchSessionORM.entry_module == "ennoamel")
+        .filter(or_(GuidedResearchSessionORM.id.in_(list(by_id)), owned))
+        .order_by(GuidedResearchSessionORM.created_at.asc())
+        .all()
+    )
+    for row in rows:
+        owner = str((row.context_json or {}).get("improvement_session_id") or "")
+        if owner and owner != str(session.id):
+            by_id.pop(str(row.id), None)
+            continue
+        if not owner and str(row.id) not in by_id:
+            continue
+        search_id = str(row.id)
+        previous = by_id.get(search_id, {})
+        by_id[search_id] = {
+            **previous,
+            "guided_session_id": search_id,
+            "corpus_scope_id": previous.get("corpus_scope_id") or (row.context_json or {}).get("corpus_scope_id") or search_id,
+            "sources": [
+                {**source, "guided_session_id": search_id}
+                for source in _public_research_sources(list(row.selected_sources_json or []))
+            ],
+        }
+    return with_research_history(context, list(by_id.values()))
+
+
 def _accepted_evidence_bundle(
     db: Session,
     project: Project,
     session: ImprovementSession,
 ) -> dict[str, Any]:
-    """Isole les preuves de cette conversation des anciens corpus du projet."""
+    """Combine ready kept sources from all searches of this conversation only."""
+    from services.article_card_builder import get_article_cards_payload
 
-    context = dict(session.context_json or {})
-    source_rows = [
-        dict(row)
-        for row in (context.get("accepted_research_sources") or [])
-        if isinstance(row, dict) and row.get("consultant_decision") == "accepted"
-    ]
-    guided_session_id = str(
-        (context.get("scholar_handoff") or {}).get("guided_session_id") or ""
-    ).strip()
-    handoff_scope_id = str(
-        (context.get("scholar_handoff") or {}).get("corpus_scope_id") or ""
-    ).strip()
-    conversation_scope_id = str(context.get("corpus_scope_id") or "").strip()
-    corpus_scope_id = handoff_scope_id or conversation_scope_id
-    if not source_rows:
-        source_rows = [
-            dict(row)
-            for row in (context.get("research_sources") or [])
-            if isinstance(row, dict) and row.get("consultant_decision") == "accepted"
-        ]
-
-    # La session Guided Research reste la source de verite de la preparation
-    # des publications. La vue publique stockee dans la conversation peut avoir
-    # ete projetee avant la fin de l'extraction plein texte, ou contenir un
-    # statut ancien apres un tour de chat interrompu.
-    if guided_session_id:
-        try:
-            from services.guided_research_service import read_guided_research_session
-
-            snapshot = read_guided_research_session(db, guided_session_id)
-            guided_sources = [
-                dict(row)
-                for row in (
-                    (snapshot.get("artifacts") or {}).get("selected_sources") or []
-                )
-                if isinstance(row, dict)
-                and row.get("consultant_decision") == "accepted"
-            ]
-            if guided_sources:
-                source_rows = guided_sources
-        except Exception:
-            # Compatibilite avec les anciennes sessions : les donnees deja
-            # isolees dans la conversation restent utilisables en fallback.
-            pass
-
-    # Compatibilité pour une conversation ayant subi l'ancien bug : le second
-    # handoff avait écrasé le premier dans context_json. On récupère alors la
-    # dernière recherche EnnoAmelioration de ce consultant contenant des choix.
-    # V3.12 : ce fallback historique n'est permis que lorsqu'aucune
-    # recherche courante n'est liée à la conversation.
-    if not source_rows and not guided_session_id:
-        try:
-            from agents.EnnoScholar.guided_research.lot1.domain.models import (
-                GuidedResearchSessionORM,
-            )
-
-            rows = (
-                db.query(GuidedResearchSessionORM)
-                .filter(GuidedResearchSessionORM.project_id == project.id)
-                .filter(GuidedResearchSessionORM.entry_module == "ennoamel")
-                .order_by(GuidedResearchSessionORM.updated_at.desc())
-                .limit(30)
-                .all()
-            )
-            for row in rows:
-                if (
-                    session.created_by_user_id is not None
-                    and row.created_by_user_id is not None
-                    and int(row.created_by_user_id) != int(session.created_by_user_id)
-                ):
-                    continue
-                accepted = [
-                    dict(source)
-                    for source in (row.selected_sources_json or [])
-                    if isinstance(source, dict)
-                    and source.get("consultant_decision") == "accepted"
-                ]
-                if accepted:
-                    source_rows = accepted
-                    guided_session_id = str(row.id)
-                    corpus_scope_id = str(
-                        (row.context_json or {}).get("corpus_scope_id")
-                        or corpus_scope_id
-                        or row.id
-                    )
-                    break
-        except Exception:
-            source_rows = []
-
-    if not source_rows:
-        return {
-            "guided_session_id": guided_session_id or None,
-            "corpus_scope_id": corpus_scope_id or None,
-            "sources": [],
-            "article_ids": [],
+    context = _load_conversation_research(db, session)
+    history = context.get("research_history") or []
+    if session.target_scope == TargetScope.FULL_DOCUMENT.value:
+        # The progressive CIR route still uses the current unit's corpus.
+        current_search = (context.get("scholar_handoff") or {}).get("guided_session_id")
+        history = [row for row in history if row["guided_session_id"] == current_search]
+    cards_by_article: dict[int, dict[str, Any]] = {}
+    normalized_sources = []
+    for search in history:
+        accepted = [row for row in search.get("sources") or [] if row.get("consultant_decision") == "accepted"]
+        if not accepted:
+            continue
+        search_id = search["guided_session_id"]
+        cards = list(get_article_cards_payload(project, scope_id=search_id).get("cards") or [])
+        scoped_cards = {
+            int(card.get("article_id") or (card.get("identity") or {}).get("article_id")): card
+            for card in cards if isinstance(card, dict)
+            and str(card.get("article_id") or (card.get("identity") or {}).get("article_id") or "").isdigit()
         }
+        for source in accepted:
+            article_id = int(source.get("article_id") or 0)
+            ready = article_id in scoped_cards
+            normalized_sources.append({**source, "article_card_ready": ready})
+            if ready and article_id not in cards_by_article:
+                cards_by_article[article_id] = {**scoped_cards[article_id], "guided_session_id": search_id}
 
-    resolved_card_scope_id = ""
-    try:
-        from services.article_card_builder import get_article_cards_payload
-
-        cards = []
-        # Les fiches produites pendant la recherche sont rangees sous l'ID de
-        # la session Guided Research. Cet ID doit donc primer sur l'ID de la
-        # conversation d'amelioration, qui isole un autre niveau du flux.
-        scope_candidates = list(
-            dict.fromkeys(
-                value
-                for value in (
-                    guided_session_id,
-                    handoff_scope_id,
-                    conversation_scope_id,
-                )
-                if value
-            )
-        )
-        for scope_id in scope_candidates:
-            scoped_payload = get_article_cards_payload(project, scope_id=scope_id)
-            cards = list(scoped_payload.get("cards") or [])
-            if cards:
-                resolved_card_scope_id = scope_id
-                break
-        if not cards:
-            scoped_payload = get_article_cards_payload(project)
-            cards = list(scoped_payload.get("cards") or [])
-    except Exception:
-        cards = []
-    card_article_ids: set[int] = set()
-    for card in cards:
-        if not isinstance(card, dict):
-            continue
-        identity = card.get("identity") if isinstance(card.get("identity"), dict) else {}
-        try:
-            card_article_ids.add(int(card.get("article_id") or identity.get("article_id")))
-        except (TypeError, ValueError):
-            continue
-
-    ready_article_ids: list[int] = []
-    normalized_sources: list[dict[str, Any]] = []
-    for source in source_rows:
-        prepared = dict(source.get("fulltext_preparation") or {})
-        try:
-            article_id = int(source.get("article_id") or prepared.get("article_id"))
-        except (TypeError, ValueError):
-            article_id = 0
-        # Une fiche article n'est creee dans ce corpus qu'apres preparation de
-        # la preuve. Sa presence est plus fiable qu'un booleen public ancien.
-        actually_ready = bool(article_id and article_id in card_article_ids)
-        prepared.update(
-            {
-                "article_id": article_id or None,
-                "article_card_ready": actually_ready,
-                "ready_for_writing": actually_ready,
-            }
-        )
-        normalized = {**source, "fulltext_preparation": prepared}
-        normalized_sources.append(normalized)
-        if actually_ready:
-            ready_article_ids.append(article_id)
-
+    # Each search can number its cards from A1. Keep conversation citations
+    # stable across searches and revisions, without authorizing other articles.
+    citation_map = dict(context.get("research_citation_ids") or {})
+    for version in session.versions or []:
+        for row in ((version.evidence_json or {}).get("scholar") or {}).get("evidence") or []:
+            article_id, citation = str(row.get("article_id") or ""), str(row.get("citation_id") or "")
+            if article_id and re.fullmatch(r"A\d+", citation) and citation not in citation_map.values():
+                citation_map.setdefault(article_id, citation)
+    for article_id, card in cards_by_article.items():
+        key = str(article_id)
+        if key not in citation_map:
+            preferred = str(card.get("citation_id") or (card.get("identity") or {}).get("citation_id") or "")
+            used = set(citation_map.values())
+            next_number = max([int(value[1:]) for value in used if re.fullmatch(r"A\d+", value)] or [0]) + 1
+            citation_map[key] = preferred if re.fullmatch(r"A\d+", preferred) and preferred not in used else f"A{next_number}"
+        card["citation_id"] = citation_map[key]
+    context["research_citation_ids"] = citation_map
+    session.context_json = context
     return {
-        "guided_session_id": guided_session_id or None,
-        "corpus_scope_id": (
-            resolved_card_scope_id
-            or guided_session_id
-            or corpus_scope_id
-            or None
-        ),
-        "sources": _public_research_sources(normalized_sources),
-        "article_ids": list(dict.fromkeys(ready_article_ids)),
+        "guided_session_id": (context.get("scholar_handoff") or {}).get("guided_session_id"),
+        "corpus_scope_id": history[0]["guided_session_id"] if len(history) == 1 else str(session.id),
+        "sources": normalized_sources,
+        "article_ids": list(cards_by_article),
+        "cards": list(cards_by_article.values()),
     }
 
 
@@ -1040,15 +968,14 @@ def decide_research_sources(
     candidate_ids: list[str],
     decision: str,
     reason: str = "",
+    guided_session_id: str | None = None,
 ) -> ImprovementSession:
     """Valide les sources liées sans faire quitter EnnoAmelioration."""
 
     session = get_session(db, project.id, session_id)
-    context = dict(session.context_json or {})
-    handoff = dict(context.get("scholar_handoff") or {})
-    guided_session_id = str(handoff.get("guided_session_id") or "").strip()
-    if not guided_session_id:
-        raise LookupError("Aucune recherche scientifique n'est liée à cette conversation.")
+    context = _load_conversation_research(db, session)
+    handoff = dict(resolve_source_search(context["research_history"], candidate_ids, guided_session_id))
+    guided_session_id = handoff["guided_session_id"]
 
     from services.guided_research_service import (
         decide_guided_research_sources,
@@ -1068,6 +995,7 @@ def decide_research_sources(
     sources = _public_research_sources(
         list((snapshot.get("artifacts") or {}).get("selected_sources") or [])
     )
+    sources = [{**source, "guided_session_id": guided_session_id} for source in sources]
     accepted = [row for row in sources if row.get("consultant_decision") == "accepted"]
     rejected = [row for row in sources if row.get("consultant_decision") == "rejected"]
     ready = [row for row in accepted if row.get("article_card_ready") is True]
@@ -1084,16 +1012,13 @@ def decide_research_sources(
             ),
         }
     )
-    session.context_json = {
-        **context,
-        "scholar_handoff": handoff,
-        "research_sources": sources,
-        "accepted_research_sources": accepted,
-    }
+    history = [handoff if row["guided_session_id"] == guided_session_id else row for row in context["research_history"]]
+    session.context_json = with_research_history(context, history)
     progressive = _progressive_context(session)
     if progressive and progressive.get("active"):
         current = progressive_current_unit(progressive)
-        if current is not None and current.get("action") == "research":
+        if (current is not None and current.get("action") == "research"
+                and (context.get("scholar_handoff") or {}).get("guided_session_id") == guided_session_id):
             research_meta = dict(current.get("research") or {})
             research_meta.update(
                 {
@@ -1115,6 +1040,9 @@ def decide_research_sources(
             )
             _progressive_store(session, progressive)
 
+    if not (progressive and progressive.get("active")):
+        accepted = list(session.context_json.get("accepted_research_sources") or [])
+        ready = [row for row in accepted if row.get("article_card_ready") is True]
     session.state = "evidence_ready" if ready else "awaiting_evidence"
     session.updated_at = _utcnow()
     _add_message(
@@ -1135,6 +1063,7 @@ def decide_research_sources(
         intent="research_sources_decided",
         metadata={
             "candidate_ids": candidate_ids,
+            "guided_session_id": guided_session_id,
             "decision": decision,
             "accepted_count": len(accepted),
             "ready_count": len(ready),
@@ -1187,7 +1116,9 @@ def create_session(
         target_section_title=target_section_title,
         source_document_id=document.id if document else source_document_id,
         context_json={
-            "sections": _sections_payload(text),
+            "sections": _sections_payload(
+                text, source_kind="document" if document else "pasted_text", scope=target_scope,
+            ),
             "source_kind": "document" if document else "pasted_text" if text else "empty",
             "document_structure": document_structure,
             "document_preservation": dict(
@@ -3401,13 +3332,52 @@ def send_message(
         # pas une série de fausses sections dans la prochaine proposition.
         full_text = _clean_extracted_document_text(full_text)
     scope = initial_scope
-    sections = parse_sections(full_text)
+    source_kind = str((session.context_json or {}).get("source_kind") or "")
+    # La portée section prime sur les anciens pseudo-titres de paragraphes.
+    # Cela répare aussi les conversations où le dernier paragraphe avait été
+    # mémorisé comme section. Sélections et portée paragraphe restent locales.
+    sections = parse_sections(
+        full_text,
+        paragraph_fallback=not (
+            source_kind == "pasted_text"
+            and scope == TargetScope.SECTION
+            and not str(selected_text or "").strip()
+        ),
+    )
     inferred_section = (
         infer_section_from_instruction(message, sections)
         if not (selected_text and selected_text.strip())
         else None
     )
-    source_kind = str((session.context_json or {}).get("source_kind") or "")
+    if (
+        source_kind == "pasted_text"
+        and scope == TargetScope.SECTION
+        and not str(selected_text or "").strip()
+        and inferred_section is None
+    ):
+        # A follow-up without a fresh manual selection keeps the last target.
+        # Otherwise the whole-paste fallback silently labels it as sections[0].
+        by_id = {section.section_id: section for section in sections}
+        retained = by_id.get(target_section_id or (session.target_section_id if not target_section_title else None))
+        if retained is None and not target_section_id:
+            retained = next((section for section in sections if section.title == (
+                target_section_title or session.target_section_title
+            )), None)
+        if retained is not None and not any(char.isalnum() for char in retained.content):
+            # Repair affected conversations whose target became a bare Markdown
+            # marker. Never replace a real preamble or another meaningful target.
+            for previous in reversed(list(session.messages or [])):
+                if str(getattr(previous, "role", "")) != "consultant":
+                    continue
+                previous_meta = dict(getattr(previous, "metadata_json", None) or {})
+                previous_section = by_id.get(previous_meta.get("target_section_id"))
+                if previous_meta.get("target_scope") == "section" and previous_section is not None and any(
+                    char.isalnum() for char in previous_section.content
+                ):
+                    retained = previous_section
+                    break
+        if retained is not None:
+            target_section_id, target_section_title = retained.section_id, retained.title
     pasted_whole_section = _pasted_section_is_whole_target(
         source_kind=source_kind,
         scope=scope,
@@ -3498,9 +3468,14 @@ def send_message(
     )
     if effective_instruction.strip() != message.strip():
         print('[EnnoAmel][TaskMemory] resume_contract=True ' + f'target={(resolved_section.section_id if resolved_section else effective_section_id)!r} ' + f'raw={message[:100]!r}')
+        if effective_scope == TargetScope.SECTION:
+            # Select the evidence with the same effective instruction that the
+            # writer receives, including a short resumption after validation.
+            preliminary_routing = understand_instruction(effective_instruction, effective_scope)
 
     if (
         not preliminary_routing.needs_new_research
+        and not preliminary_routing.editorial_only
         and not preliminary_routing.forbids_scholar
         and (preliminary_routing.needs_scholar or has_linked_accepted_sources)
     ):
@@ -3527,16 +3502,19 @@ def send_message(
         },
     )
 
-    progressive_result = _start_or_resume_progressive_cir(
-        db,
-        project,
-        session,
-        message=message.strip(),
-        effective_scope=effective_scope,
-        preliminary_routing=preliminary_routing,
-    )
-    if progressive_result is not None:
-        return progressive_result
+    # Le parcours est choisi dans le frontend, pas par « tout/l'ensemble »
+    # dans une demande visant une section. Le parcours CIR complet reste intact.
+    if initial_scope == TargetScope.FULL_DOCUMENT:
+        progressive_result = _start_or_resume_progressive_cir(
+            db,
+            project,
+            session,
+            message=message.strip(),
+            effective_scope=effective_scope,
+            preliminary_routing=preliminary_routing,
+        )
+        if progressive_result is not None:
+            return progressive_result
 
     request = ImprovementRequest(
         instruction=effective_instruction.strip(),
@@ -3556,8 +3534,11 @@ def send_message(
             or ""
         ),
         evidence_article_ids=(
-            list(evidence_bundle.get("article_ids") or []) or None
+            list(evidence_bundle.get("article_ids") or [])
+            if effective_scope == TargetScope.SECTION and not preliminary_routing.editorial_only
+            else list(evidence_bundle.get("article_ids") or []) or None
         ),
+        evidence_cards=evidence_bundle.get("cards"),
         evidence_scope_id=str(
             evidence_bundle.get("corpus_scope_id") or ""
         ) or None,
@@ -3684,10 +3665,9 @@ def send_message(
     session.target_section_id = resolved_section.section_id if resolved_section else effective_section_id
     session.target_section_title = resolved_section.title if resolved_section else effective_section_title
     previous_context = dict(session.context_json or {})
-    resolved_handoff = previous_context.get("scholar_handoff")
-    resolved_sources = list(previous_context.get("research_sources") or [])
-    accepted_sources = list(previous_context.get("accepted_research_sources") or [])
+    resolved_handoff = None
     if research_handoff is not None:
+        previous_context = _load_conversation_research(db, session)
         resolved_handoff = {
             **research_handoff,
             "target_section_id": (
@@ -3701,28 +3681,22 @@ def send_message(
             ).hexdigest(),
             "fresh_research_cycle": True,
         }
-        resolved_sources = list(research_handoff.get("sources") or [])
-        accepted_sources = []
-    elif evidence_bundle.get("sources"):
-        accepted_sources = list(evidence_bundle.get("sources") or [])
-        resolved_sources = accepted_sources
-        resolved_handoff = {
-            **(
-                dict(resolved_handoff)
-                if isinstance(resolved_handoff, dict)
-                else {}
-            ),
-            "guided_session_id": evidence_bundle.get("guided_session_id"),
-            "corpus_scope_id": evidence_bundle.get("corpus_scope_id"),
-            "sources": accepted_sources,
-            "accepted_count": len(accepted_sources),
-            "ready_count": len(evidence_bundle.get("article_ids") or []),
-            "recovered_validated_corpus": True,
-        }
+        previous_context = record_research(previous_context, resolved_handoff)
+        resolved_handoff = previous_context["scholar_handoff"]
+        # Persist ownership independently of the current-search pointer.
+        from agents.EnnoScholar.guided_research.lot1.domain.models import GuidedResearchSessionORM
+        linked_search = db.get(GuidedResearchSessionORM, resolved_handoff["guided_session_id"])
+        if linked_search is not None and linked_search.project_id == project.id:
+            owner = str((linked_search.context_json or {}).get("improvement_session_id") or "")
+            if owner and owner != str(session.id):
+                raise ValueError("Cette recherche appartient à une autre conversation.")
+            linked_search.context_json = {**dict(linked_search.context_json or {}), "improvement_session_id": str(session.id)}
 
     session.context_json = {
         **previous_context,
-        "sections": _sections_payload(full_text),
+        "sections": _sections_payload(
+            full_text, source_kind=source_kind, scope=effective_scope.value,
+        ),
         "last_routing": result.routing.model_dump(mode="json"),
         "last_audit": [item.model_dump(mode="json") for item in result.audit],
         "last_trace": {
@@ -3732,19 +3706,17 @@ def send_message(
             "unsupported_claims": result.unsupported_claims,
             "questions_for_consultant": result.questions_for_consultant,
         },
-        "scholar_handoff": resolved_handoff,
-        "research_sources": resolved_sources,
-        "accepted_research_sources": accepted_sources,
         "improvement_task_memory": task_memory,
     }
     session.updated_at = _utcnow()
-    _add_message(
+    assistant_message = _add_message(
         db,
         session.id,
         "assistant",
         result.assistant_message,
         intent=result.state.value,
         metadata={
+            **({"scholar_handoff": resolved_handoff} if resolved_handoff else {}),
             "candidate_version_id": candidate.id if candidate else None,
             "routing": result.routing.model_dump(mode="json"),
             "requires_confirmation": result.requires_confirmation,
@@ -3753,6 +3725,8 @@ def send_message(
             "questions_for_consultant": result.questions_for_consultant,
         },
     )
+    if resolved_handoff:
+        session.context_json = record_research(session.context_json, resolved_handoff, message_id=assistant_message.id)
     db.commit()
     db.refresh(session)
     return session, candidate
@@ -3782,7 +3756,10 @@ def decide_version(
         version.status = "accepted"
         session.active_version_id = version.id
         session.state = "published"
-        session.context_json = {**dict(session.context_json or {}), "sections": _sections_payload(version.content)}
+        session.context_json = {**dict(session.context_json or {}), "sections": _sections_payload(
+            version.content, source_kind=str((session.context_json or {}).get("source_kind") or ""),
+            scope=session.target_scope,
+        )}
         response = f"La version {version.version_number} est maintenant la version active. L'original reste conservé."
     else:
         version.status = "rejected"
@@ -3816,7 +3793,10 @@ def restore_version(
         raise LookupError("Cette version ne peut pas être restaurée.")
     session.active_version_id = version.id
     session.state = "published"
-    session.context_json = {**dict(session.context_json or {}), "sections": _sections_payload(version.content)}
+    session.context_json = {**dict(session.context_json or {}), "sections": _sections_payload(
+        version.content, source_kind=str((session.context_json or {}).get("source_kind") or ""),
+        scope=session.target_scope,
+    )}
     session.updated_at = _utcnow()
     _add_message(
         db,
@@ -3860,9 +3840,13 @@ def serialize_session(session: ImprovementSession, *, detailed: bool = True) -> 
     }
     if not detailed:
         return data
+    context = dict(session.context_json or {})
+    history = research_history(context, list(session.messages or []))
+    if history:
+        context = with_research_history(context, history)
     data.update(
         {
-            "context": dict(session.context_json or {}),
+            "context": context,
             "messages": [
                 {
                     "message_id": row.id,

@@ -289,7 +289,7 @@ def _paragraph_sections(source: str) -> list[ParsedSection]:
     return sections
 
 
-def parse_sections(text: str) -> list[ParsedSection]:
+def parse_sections(text: str, *, paragraph_fallback: bool = True) -> list[ParsedSection]:
     """Découpe un document selon sa structure réelle, sans liste de titres imposée."""
 
     source = str(text or "")
@@ -375,7 +375,9 @@ def parse_sections(text: str) -> list[ParsedSection]:
 
     matches.sort(key=lambda item: item[0])
     if not matches:
-        paragraph_sections = _paragraph_sections(source)
+        # Une section collée n'est pas un document composé de sous-sections :
+        # ses paragraphes restent un seul bloc lorsqu'elle est la cible.
+        paragraph_sections = _paragraph_sections(source) if paragraph_fallback else []
         if paragraph_sections:
             return paragraph_sections
         return [

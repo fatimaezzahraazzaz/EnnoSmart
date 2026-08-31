@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 
 from core.config import settings
 from core.deps import get_current_user, get_db
-from db.models import Document, User
+from db.models import Document, ImprovementSession, User
 from modules.extraction.router import extract
 from schemas.document import (
     DiagnosticCorpusDecisionRequest,
@@ -397,6 +397,38 @@ def list_documents(
         .order_by(Document.created_at.desc())
         .all()
     )
+
+
+@router.delete("/{document_id}")
+def delete_document(
+    project_id: int,
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_project_for_user(db, project_id, current_user)
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.project_id == project.id,
+    ).first()
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable dans ce projet.")
+
+    try:
+        # Preserve conversation text and versions; only the deleted binary
+        # stops being available as their source/preview.
+        db.query(ImprovementSession).filter(
+            ImprovementSession.project_id == project.id,
+            ImprovementSession.source_document_id == document.id,
+        ).update({ImprovementSession.source_document_id: None}, synchronize_session="fetch")
+        # Corpus assignments are removed by the Document relationship cascade.
+        # Never unlink a legacy file_path: it may point to the user's original.
+        db.delete(document)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {"ok": True, "document_id": document_id}
 
 
 @router.get("/diagnostic-review", response_model=DiagnosticCorpusReview)

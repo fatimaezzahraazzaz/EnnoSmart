@@ -39,6 +39,7 @@ class ImprovementSourceDecisionCreate(BaseModel):
     candidate_ids: list[str] = Field(min_length=1, max_length=50)
     decision: Literal["accepted", "rejected"]
     reason: str = Field(default="", max_length=2000)
+    guided_session_id: str | None = Field(default=None, max_length=100)
 
 
 class ImprovementSessionUpdate(BaseModel):

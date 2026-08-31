@@ -222,6 +222,26 @@ DEMANDE CONSULTANT
         if base.strict_fact_preservation and base.editorial_only:
             return base
 
+        # Un classement éditorial explicite peut corriger un faux positif
+        # lexical « argumentation », sans modifier le routage du CIR complet
+        # ni retirer une demande explicite de preuves scientifiques.
+        if (
+            base.target_scope in {TargetScope.SECTION, TargetScope.SELECTION, TargetScope.PARAGRAPH}
+            and goal == "editorial_rewrite"
+            and evidence_mode == "none"
+            and not semantic.get("wants_argumentation")
+            and not semantic.get("wants_scientific_strengthening")
+            and not semantic.get("wants_new_external_research")
+            and not set(intents) & {
+                ImprovementIntent.CIR_ELIGIBILITY,
+                ImprovementIntent.SCIENTIFIC_ENRICHMENT,
+                ImprovementIntent.RESEARCH,
+            }
+        ):
+            intents = [intent for intent in intents if intent != ImprovementIntent.ARGUMENTATION]
+            if not set(intents) & _EDITORIAL_INTENTS:
+                intents.append(ImprovementIntent.STYLE)
+
         if semantic.get("wants_argumentation") or goal in {
             "project_argumentation",
             "scientific_strengthening",
@@ -535,6 +555,10 @@ SECTIONS
         sections: list[ParsedSection] | None = None,
     ) -> RoutingDecision:
         base = understand_instruction(instruction, scope)
+        if scope in {TargetScope.SECTION, TargetScope.SELECTION, TargetScope.PARAGRAPH}:
+            # La cible choisie par le consultant ne devient jamais un document
+            # complet à cause d'un marqueur linguistique dans la consigne.
+            base = base.model_copy(update={"target_scope": scope})
 
         semantic_instruction = self._semantic_instruction_intent(instruction)
         base = self._merge_semantic_instruction(base, semantic_instruction)

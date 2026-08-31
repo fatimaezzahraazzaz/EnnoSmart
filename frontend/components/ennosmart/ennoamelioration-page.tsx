@@ -57,6 +57,7 @@ import {
   restoreImprovementVersion,
   sendImprovementMessage,
   uploadDocument,
+  uploadAndExtractArticlePdf,
   type DocumentRead,
   type ImprovementBackgroundJob,
   type ImprovementSession,
@@ -69,13 +70,8 @@ import { getCurrentProjectId, setCurrentProjectId } from "@/lib/project-session"
 import { cn } from "@/lib/utils"
 import { LoadingState } from "@/components/ennosmart/workspace-ui"
 import { ImprovementPdfComparator } from "@/components/ennosmart/improvement-pdf-comparator"
-
-function normalizeSourceDecision(value: unknown) {
-  const decision = String(value || "").trim().toLowerCase()
-  if (["accept", "accepted", "garde", "kept"].includes(decision)) return "accepted"
-  if (["reject", "rejected", "rejete", "rejeté", "ecarte", "écarté"].includes(decision)) return "rejected"
-  return "pending"
-}
+import { ImprovementSourceActions } from "@/components/ennosmart/improvement-source-actions"
+import { improvementResearchByMessage, normalizeSourceDecision, researchSourceArticleId, researchSourceSearchId } from "@/lib/improvement-research-sources"
 
 function isDirectPdfUrl(value: unknown) {
   const url = String(value || "").trim().toLowerCase()
@@ -628,26 +624,6 @@ function versionLabel(version: ImprovementVersion) {
 
 
 
-function messageResearchSources(message: any) {
-  const metadata = message?.metadata && typeof message.metadata === "object"
-    ? message.metadata
-    : {}
-
-  const candidates = [
-    message?.research_sources,
-    message?.sources,
-    metadata?.research_sources,
-    metadata?.sources,
-    metadata?.research?.sources,
-    metadata?.research?.candidates,
-    metadata?.scholar_handoff?.sources,
-    metadata?.scholar?.sources,
-  ]
-
-  const rows = candidates.find((value) => Array.isArray(value))
-  return uniqueComparisonSources(Array.isArray(rows) ? rows : [])
-}
-
 function researchRoleLabel(source: Record<string, any>) {
   const raw = String(
     source.relevance_role
@@ -668,10 +644,12 @@ function ResearchAttachment({
   sources,
   busy,
   onDecision,
+  onUploadPdf,
 }: {
   sources: Array<Record<string, any>>
   busy: boolean
-  onDecision: (candidateId: string, decision: "accepted" | "rejected") => void
+  onDecision: (candidateId: string, decision: "accepted" | "rejected", guidedSessionId?: string) => void
+  onUploadPdf: (source: Record<string, any>, file: File) => Promise<void>
 }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -720,6 +698,11 @@ function ResearchAttachment({
                   <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
                     {[researchRoleLabel(source), source.year, source.provider || source.source].filter(Boolean).join(" · ")}
                   </p>
+                  {normalizeSourceDecision(source.consultant_decision) === "accepted" && (
+                    <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                      <Check className="size-3" aria-hidden="true" /> Gardé
+                    </span>
+                  )}
                 </div>
               </div>
             ))}
@@ -737,7 +720,6 @@ function ResearchAttachment({
         <div className="space-y-2.5 p-3 sm:p-4">
           {sources.map((source, index) => {
             const decision = normalizeSourceDecision(source.consultant_decision)
-            const candidateId = String(source.candidate_id || "").trim()
             const consultUrl = articleConsultUrl(source)
             const excerpt = sourceEvidenceExcerpt(source)
 
@@ -784,17 +766,8 @@ function ResearchAttachment({
                           Consulter
                         </a>
                       )}
-                      {candidateId && decision !== "accepted" && (
-                        <Button size="sm" className="min-h-9 rounded-lg" disabled={busy} onClick={() => onDecision(candidateId, "accepted")}>
-                          <Check className="size-3.5" /> Garder
-                        </Button>
-                      )}
-                      {candidateId && decision !== "rejected" && (
-                        <Button size="sm" variant="outline" className="min-h-9 rounded-lg" disabled={busy} onClick={() => onDecision(candidateId, "rejected")}>
-                          <X className="size-3.5" /> Écarter
-                        </Button>
-                      )}
                     </div>
+                    <ImprovementSourceActions source={source} busy={busy} onDecision={onDecision} onUploadPdf={onUploadPdf} />
                   </div>
                 </div>
               </article>
@@ -918,34 +891,10 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
     || current?.context?.scholar_handoff?.sources
     || []
   ) as Array<Record<string, any>>
-  const researchSourcesByMessage = useMemo(() => {
-    const messages = (current?.messages || []) as Array<any>
-    const canonical = new Map(
-      researchSources
-        .filter((source) => sourceIdentity(source))
-        .map((source) => [sourceIdentity(source), source]),
-    )
-    const result = new Map<string, Array<Record<string, any>>>()
-
-    messages.forEach((message, index) => {
-      const rows = messageResearchSources(message).map((source) => ({
-        ...source,
-        ...(canonical.get(sourceIdentity(source)) || {}),
-      }))
-      if (rows.length > 0) result.set(String(message.message_id || index), rows)
-    })
-
-    if (result.size === 0 && researchSources.length > 0) {
-      for (let index = messages.length - 1; index >= 0; index -= 1) {
-        if (messages[index]?.role === "assistant") {
-          result.set(String(messages[index].message_id || index), researchSources)
-          break
-        }
-      }
-    }
-
-    return result
-  }, [current?.messages, researchSources])
+  const researchSourcesByMessage = useMemo(
+    () => improvementResearchByMessage(current?.messages || [], current?.context || {}),
+    [current?.messages, current?.context],
+  )
   const backgroundActive = isBackgroundJobActive(backgroundJob)
   const backgroundStatus = String(backgroundJob?.status || "").toLowerCase()
   const completedCandidateId = String(backgroundJob?.candidate_version_id || "").trim()
@@ -1306,7 +1255,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
     }
   }
 
-  const decideSource = async (candidateId: string, decision: "accepted" | "rejected") => {
+  const decideSource = async (candidateId: string, decision: "accepted" | "rejected", guidedSessionId?: string) => {
     if (!projectId || !current || busy || backgroundActive) return
     setBusy(true)
     setError("")
@@ -1316,11 +1265,33 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
         current.session_id,
         [candidateId],
         decision,
+        "",
+        guidedSessionId,
       )
       setCurrent(response.session)
       await refreshList(projectId)
     } catch (requestError) {
       setError(getErrorMessage(requestError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const uploadSourcePdf = async (source: Record<string, any>, file: File) => {
+    if (!projectId || !current || busy || backgroundActive) throw new Error("Un traitement est déjà en cours. Réessayez à sa fin.")
+    const articleId = researchSourceArticleId(source)
+    const candidateId = String(source.candidate_id || "").trim()
+    const guidedSessionId = researchSourceSearchId(source, current.context || {})
+    if (!articleId || !candidateId || !guidedSessionId) throw new Error("Cet article n’est pas encore relié à la recherche de cette conversation.")
+    setBusy(true)
+    setError("")
+    try {
+      await uploadAndExtractArticlePdf(projectId, articleId, file, articleConsultUrl(source) || null, guidedSessionId)
+      // Reuse the existing selection endpoint to persist the updated extraction
+      // status in this improvement session as well as its linked research corpus.
+      const response = await decideImprovementSources(projectId, current.session_id, [candidateId], "accepted", "", guidedSessionId)
+      setCurrent(response.session)
+      await refreshList(projectId)
     } finally {
       setBusy(false)
     }
@@ -2018,7 +1989,8 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                           <ResearchAttachment
                             sources={attachedSources}
                             busy={busy || backgroundActive}
-                            onDecision={(candidateId, decision) => void decideSource(candidateId, decision)}
+                            onDecision={(candidateId, decision, searchId) => void decideSource(candidateId, decision, searchId)}
+                            onUploadPdf={uploadSourcePdf}
                           />
                         )}
                       </div>
@@ -2585,7 +2557,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                                   {[Array.isArray(source.authors) ? source.authors.slice(0, 3).join(", ") : "", source.year, source.provider].filter(Boolean).join(" · ")}
                                 </p>
                               </div>
-                              <Badge variant={decision === "accepted" ? "default" : "outline"} className="shrink-0 text-[10px]">
+                              <Badge variant={decision === "accepted" ? "default" : "outline"} className={cn("shrink-0 text-[10px]", decision === "accepted" && "bg-emerald-700 text-white dark:bg-emerald-800")}>
                                 {decision === "accepted" ? "Gardée" : decision === "rejected" ? "Écartée" : "À valider"}
                               </Badge>
                             </div>
@@ -2612,21 +2584,9 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                                   Ouvrir le PDF
                                 </a>
                               )}
-                              {decision !== "rejected" && (
-                                  <Button variant="outline" size="sm" className="h-7 text-[11px]" disabled={busy} onClick={() => decideSource(source.candidate_id, "rejected")}>
-                                    <X className="size-3" /> Écarter
-                                  </Button>
-                              )}
-                              {decision !== "accepted" && (
-                                  <Button size="sm" className="h-7 text-[11px]" disabled={busy} onClick={() => decideSource(source.candidate_id, "accepted")}>
-                                    <Check className="size-3" /> Garder
-                                  </Button>
-                              )}
-                              {source.article_card_ready && <span className="text-[10px] text-emerald-700">Preuve préparée pour la rédaction</span>}
-                              {decision === "accepted" && !source.article_card_ready && (
-                                <span className="text-[10px] text-amber-700">Gardée, mais preuve exploitable pour la rédaction encore indisponible</span>
-                              )}
                             </div>
+                            <ImprovementSourceActions source={source} busy={busy || backgroundActive}
+                              onDecision={(candidateId, decision, searchId) => void decideSource(candidateId, decision, searchId)} onUploadPdf={uploadSourcePdf} />
                           </div>
                         )
                       })}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import re
+import unicodedata
 from typing import Any
 
 POLICY_VERSION = "ennoamel_scoped_optional_sources_v3_25"
@@ -12,6 +13,52 @@ _PRIORITY_KEYS = (
     "research_target_ids","target_bindings","allowed_claim_scope","section_context_gate",
     "citation_required","required_for_target",
 )
+
+
+def requests_all_accepted_sources(instruction: str | None) -> bool:
+    """Explicit coverage request, independent of project, article titles or count."""
+    text = unicodedata.normalize("NFKD", str(instruction or "").casefold())
+    text = "".join(char for char in text if not unicodedata.combining(char)).replace("’", "'")
+    requested = False
+    for clause in re.split(r"[.!?;\n]+", text):
+        if re.search(
+            r"\b(?:tous|toutes|chaque|chacun|chacune|l'ensemble|la\s+totalite)\s+"
+            r"(?:(?:de|les|des|mes|ces|vos|nos|leurs|\d+)\s+){0,3}"
+            r"(?:articles?|sources?|publications?|references?)\b", clause,
+        ):
+            requested = not bool(
+                re.search(r"\b(?:pas|sans)\s+(?:necessairement\s+)?(?:tous|toutes|chaque)\b", clause)
+                or re.search(r"\bne\b[^.!?;]{0,35}\b(?:utilis|cit|integr|exploit)\w*\s+pas\b", clause)
+            )
+    return requested
+
+
+def prepare_section_source_usage(evidence: dict[str, Any], instruction: str) -> dict[str, Any]:
+    """Keep scientific content and honor explicit coverage for a section only.
+
+    The caller owns scope isolation; this does not retrieve or authorize sources.
+    """
+    scholar = _scholar(evidence)
+    if not scholar:
+        return evidence
+    use_all = requests_all_accepted_sources(instruction)
+    rows = []
+    for original in scholar.get("evidence") or []:
+        row = dict(original)
+        scientific_content = {
+            key: row[key] for key in ("method", "results", "limits", "impact") if row.get(key)
+        }
+        if scientific_content:
+            # `evidence` is preserved by the compact payload serializer, unlike
+            # the adapter's standalone method/results/limits/impact fields.
+            row["evidence"] = {**(row.get("evidence") if isinstance(row.get("evidence"), dict) else {}), **scientific_content}
+        if use_all:
+            row["citation_required"] = True
+        rows.append(row)
+    return {
+        **evidence,
+        "scholar": {**scholar, "evidence": rows, "use_all_accepted_sources": use_all},
+    }
 
 def _scholar(evidence: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(evidence, dict): return {}
@@ -86,6 +133,14 @@ def render_mandatory_evidence_contract(evidence: dict[str, Any] | None) -> str:
         "- Si le lien entre la source et l'affirmation est partiel, formule l'apport avec prudence ou n'utilise pas la source.\n"
         "- N'extrapole jamais au-delà de la méthode, des résultats et des limites fournis dans la fiche de preuve.\n"
         "- Ne supprime aucune information existante pour intégrer une preuve."
+        + (
+            "\nDEMANDE EXPLICITE : UTILISER TOUS LES ARTICLES GARDÉS EXPLOITABLES\n"
+            "- Examine chaque fiche et intègre son apport documenté (méthode, résultat ou limite) dans la section, avec sa citation.\n"
+            "- Développe le raisonnement à partir des preuves, sans te limiter à une reformulation suivie d'une citation finale.\n"
+            "- Ne remplace pas les faits internes du projet par ceux d'une publication.\n"
+            "- Si une source ne peut soutenir aucune affirmation pertinente, ne fabrique pas de lien : laisse-la inutilisée ; son absence sera signalée au consultant."
+            if _scholar(evidence).get("use_all_accepted_sources") else ""
+        )
     )
 
 def _trim(value: Any, max_chars: int, depth: int=0) -> Any:
@@ -121,7 +176,11 @@ def build_mandatory_scholar_payload(evidence: dict[str, Any] | None, max_chars: 
             "accepted_count":len(packed),
             "eligible_citation_ids":[r["citation_id"] for r in packed],
             "required_citation_ids":required_citation_ids(evidence),
-            "usage_policy":"optional_exact_claim_support_with_target_binding",
+            "usage_policy":(
+                "all_accepted_sources_requested_with_exact_claim_support"
+                if scholar.get("use_all_accepted_sources")
+                else "optional_exact_claim_support_with_target_binding"
+            ),
             "evidence":packed,
         }
         return json.dumps(payload,ensure_ascii=False,default=str,separators=(",",":"))

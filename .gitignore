@@ -221,3 +221,6 @@ modules/llm_gateway/
 /_visual_filter_hotfix/
 .codex_tmp/
 .ennosmart_patch_backups/
+
+.codex_tmp/
+.ennosmart_patch_backups/
