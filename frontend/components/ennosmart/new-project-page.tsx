@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   Download,
   FileAudio,
-  FileCheck2,
   FileText,
   FolderPlus,
   Info,
@@ -58,7 +57,6 @@ interface NewProjectPageProps {
   returnTo?: AppPage | null
 }
 
-type DepositMode = "diagnostic" | "reference"
 type DiagnosticUploadTab = "documents" | "media"
 type FileStatus = "pending" | "uploading" | "done" | "error"
 type TranscriptionStatus = "pending" | "transcribing" | "ready" | "error"
@@ -210,57 +208,6 @@ function safeId(file: File) {
   return `${file.name}-${file.size}-${random}`
 }
 
-async function uploadFinalCirReference(params: {
-  projectId: number
-  file: File
-  organisme: string
-  projectName: string
-  subprojectName?: string
-  year: string
-}) {
-  const formData = new FormData()
-  formData.append("file", params.file)
-  formData.append("organisme", params.organisme || "organisme_unknown")
-  formData.append("project", params.projectName || "project_unknown")
-  formData.append("subproject", params.subprojectName || "")
-  formData.append("year", params.year || "unknown")
-
-  const token = getAccessToken()
-  const headers = new Headers()
-
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`)
-  }
-
-  const response = await fetch(
-    `${API_BASE_URL}/projects/${params.projectId}/cir-final-consultant/upload`,
-    {
-      method: "POST",
-      headers,
-      body: formData,
-    }
-  )
-
-  let data: any = null
-
-  try {
-    data = await response.json()
-  } catch {
-    data = null
-  }
-
-  if (!response.ok) {
-    const detail =
-      typeof data?.detail === "string"
-        ? data.detail
-        : "Erreur lors de l’enregistrement du CIR final."
-
-    throw new Error(detail)
-  }
-
-  return data
-}
-
 async function transcribeMediaToPdf(projectId: number, file: File) {
   const token = getAccessToken()
 
@@ -333,17 +280,14 @@ export default function NewProjectPage({
   const [domainLabel, setDomainLabel] = useState("")
   const [customDomain, setCustomDomain] = useState("")
 
-  const [depositMode, setDepositMode] = useState<DepositMode>("diagnostic")
   const [diagnosticUploadTab, setDiagnosticUploadTab] =
     useState<DiagnosticUploadTab>("documents")
 
   const [files, setFiles] = useState<LocalFile[]>([])
-  const [finalCirFile, setFinalCirFile] = useState<File | null>(null)
   const [transcriptionPdfs, setTranscriptionPdfs] = useState<TranscriptionPdfItem[]>([])
   const [createdProjectId, setCreatedProjectId] = useState<number | null>(null)
 
   const [draggingRaw, setDraggingRaw] = useState(false)
-  const [draggingFinal, setDraggingFinal] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
@@ -351,10 +295,8 @@ export default function NewProjectPage({
   const [selectionStatus, setSelectionStatus] = useState<ProjectSelectionStatus | null>(null)
   const [selectionChecking, setSelectionChecking] = useState(false)
   const [accessRequestSending, setAccessRequestSending] = useState(false)
-  const [referenceUploadFailed, setReferenceUploadFailed] = useState(false)
 
   const rawFileInputRef = useRef<HTMLInputElement>(null)
-  const finalFileInputRef = useRef<HTMLInputElement>(null)
   const pdfUrlsRef = useRef<string[]>([])
 
   useEffect(() => {
@@ -489,17 +431,10 @@ export default function NewProjectPage({
     if (createdProjectId !== null) return false
     if (!baseFormIsValid) return false
     if (selectionChecking || (selectionStatus && selectionStatus.status !== "available")) return false
-
-    if (depositMode === "reference") {
-      return finalCirFile !== null
-    }
-
     return true
   }, [
     baseFormIsValid,
     createdProjectId,
-    depositMode,
-    finalCirFile,
     selectionChecking,
     selectionStatus,
   ])
@@ -563,20 +498,6 @@ export default function NewProjectPage({
     }
   }
 
-  const handleFinalDrop = (event: React.DragEvent) => {
-    event.preventDefault()
-    setDraggingFinal(false)
-
-    if (createdProjectId !== null) return
-
-    const file = event.dataTransfer.files?.[0]
-    if (file) {
-      setFinalCirFile(file)
-      setError("")
-      setSuccess("")
-    }
-  }
-
   const resetMessages = () => {
     setError("")
     setSuccess("")
@@ -630,39 +551,11 @@ export default function NewProjectPage({
     }
   }
 
-  const retryFinalCirIndexing = async () => {
-    if (!createdProjectId || !finalCirFile || submitting) return
-    setSubmitting(true)
-    setError("")
-    try {
-      await uploadFinalCirReference({
-        projectId: createdProjectId,
-        file: finalCirFile,
-        organisme,
-        projectName,
-        subprojectName: subprojectName || undefined,
-        year,
-      })
-      setReferenceUploadFailed(false)
-      setSuccess("CIR final enregistré dans PostgreSQL et indexé dans Chroma.")
-      navigateTo(returnTo || "diagnosis")
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nouvelle tentative impossible.")
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
 
     if (!baseFormIsValid) {
       setError("Renseignez l’organisme, le projet, l’année et le domaine avant de créer le dossier.")
-      return
-    }
-
-    if (depositMode === "reference" && !finalCirFile) {
-      setError("Ajoutez le CIR final validé ou le CIR précédent avant de continuer.")
       return
     }
 
@@ -683,7 +576,6 @@ export default function NewProjectPage({
     setSubmitting(true)
     setError("")
     setSuccess("")
-    setReferenceUploadFailed(false)
     setTranscriptionPdfs([])
 
     try {
@@ -697,26 +589,6 @@ export default function NewProjectPage({
 
       setCurrentProjectId(createdProject.id)
       setCreatedProjectId(createdProject.id)
-
-      if (depositMode === "reference") {
-        try {
-          await uploadFinalCirReference({
-            projectId: createdProject.id,
-            file: finalCirFile as File,
-            organisme: organisme.trim(),
-            projectName: projectName.trim(),
-            subprojectName: subprojectName || undefined,
-            year: year.trim(),
-          })
-        } catch (err) {
-          setReferenceUploadFailed(true)
-          throw err
-        }
-
-        setSuccess("Dossier créé, CIR final enregistré dans PostgreSQL et indexé dans Chroma.")
-        navigateTo(returnTo || "diagnosis")
-        return
-      }
 
       const initialTranscriptions: TranscriptionPdfItem[] = mediaFiles.map(
         (item) => ({
@@ -745,7 +617,7 @@ export default function NewProjectPage({
         )
 
         try {
-          await uploadDocument(createdProject.id, item.file, "Document brut")
+          await uploadDocument(createdProject.id, item.file, "Élément de travail")
           uploadedCount += 1
 
           setFiles((prev) =>
@@ -814,7 +686,7 @@ export default function NewProjectPage({
             await uploadDocument(
               createdProject.id,
               transcriptionFile,
-              "Document brut"
+              "Élément de travail"
             )
             uploadedCount += 1
           } catch (storageError) {
@@ -967,7 +839,7 @@ export default function NewProjectPage({
                 </h1>
 
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Renseignez le projet, choisissez le type de dépôt puis ajoutez les documents utiles.
+                  Renseignez le projet puis ajoutez les éléments de travail utiles à l’analyse.
                 </p>
               </div>
             </div>
@@ -994,23 +866,9 @@ export default function NewProjectPage({
 
         {error && (
           <Card className="rounded-2xl border-destructive/25 bg-destructive/[0.045] shadow-none">
-            <CardContent className="flex flex-col gap-3 p-4 text-destructive sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="mt-0.5 size-5 shrink-0" />
-                <p className="text-sm leading-6">{error}</p>
-              </div>
-              {referenceUploadFailed && createdProjectId && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void retryFinalCirIndexing()}
-                  disabled={submitting}
-                  className="min-h-10 shrink-0 rounded-xl border-destructive/30 text-destructive hover:bg-destructive/5 hover:text-destructive"
-                >
-                  {submitting ? <Loader2 className="size-4 animate-spin" /> : <FileCheck2 className="size-4" />}
-                  Réessayer l’indexation
-                </Button>
-              )}
+            <CardContent className="flex items-start gap-3 p-4 text-destructive">
+              <AlertCircle className="mt-0.5 size-5 shrink-0" />
+              <p className="text-sm leading-6">{error}</p>
             </CardContent>
           </Card>
         )}
@@ -1384,119 +1242,16 @@ export default function NewProjectPage({
               </Card>
 
               {/* ---------------------------------------------------------- */}
-              {/* Type de dépôt                                              */}
+              {/* Éléments de travail                                        */}
               {/* ---------------------------------------------------------- */}
 
               <Card className="overflow-hidden rounded-2xl border-border/80 shadow-sm">
-                <CardHeader className="border-b border-border/70 bg-muted/[0.10] px-5 py-4 sm:px-6">
-                  <CardTitle className="text-sm font-semibold">
-                    Que souhaitez-vous déposer ?
-                  </CardTitle>
-                  <CardDescription className="mt-1 text-xs">
-                    Séparez les documents de travail des CIR déjà finalisés.
-                  </CardDescription>
-                </CardHeader>
-
-                <CardContent className="grid gap-3 p-5 sm:p-6 md:grid-cols-2">
-
-                  {/* Diagnostic */}
-
-                  <button
-                    type="button"
-                    disabled={createdProjectId !== null}
-                    onClick={() => {
-                      setDepositMode("diagnostic")
-                      resetMessages()
-                    }}
-                    className={`group min-h-[150px] rounded-2xl border p-4 text-left transition-all ${
-                      depositMode === "diagnostic"
-                        ? "border-brand bg-brand/[0.045] ring-2 ring-brand/15"
-                        : "border-border bg-background hover:border-brand/35 hover:bg-brand/[0.018]"
-                    } ${
-                      createdProjectId !== null
-                        ? "cursor-not-allowed opacity-70"
-                        : ""
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand">
-                        <Upload className="size-5" />
-                      </span>
-
-                      <div className="min-w-0">
-                        <div className="flex items-start justify-between gap-3">
-                          <p className="text-sm font-semibold text-foreground">
-                            Documents de travail à analyser
-                          </p>
-
-                          {depositMode === "diagnostic" && (
-                            <CheckCircle2 className="size-4 shrink-0 text-brand" />
-                          )}
-                        </div>
-
-                        <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                          Rapports, essais, notes, mails, schémas, tableaux, audio et vidéo destinés à EnnoDiagnostic.
-                        </p>
-                      </div>
-                    </div>
-                  </button>
-
-                  {/* Référence */}
-
-                  <button
-                    type="button"
-                    disabled={createdProjectId !== null}
-                    onClick={() => {
-                      setDepositMode("reference")
-                      resetMessages()
-                    }}
-                    className={`group min-h-[150px] rounded-2xl border p-4 text-left transition-all ${
-                      depositMode === "reference"
-                        ? "border-emerald-500/45 bg-emerald-500/[0.045] ring-2 ring-emerald-500/10"
-                        : "border-border bg-background hover:border-emerald-500/30 hover:bg-emerald-500/[0.018]"
-                    } ${
-                      createdProjectId !== null
-                        ? "cursor-not-allowed opacity-70"
-                        : ""
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600">
-                        <FileCheck2 className="size-5" />
-                      </span>
-
-                      <div className="min-w-0">
-                        <div className="flex items-start justify-between gap-3">
-                          <p className="text-sm font-semibold text-foreground">
-                            CIR final validé ou CIR précédent
-                          </p>
-
-                          {depositMode === "reference" && (
-                            <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
-                          )}
-                        </div>
-
-                        <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                          CIR déjà finalisé conservé comme référence, séparé des documents bruts du diagnostic.
-                        </p>
-                      </div>
-                    </div>
-                  </button>
-                </CardContent>
-              </Card>
-
-              {/* ---------------------------------------------------------- */}
-              {/* Dépôt diagnostic                                           */}
-              {/* ---------------------------------------------------------- */}
-
-              {depositMode === "diagnostic" && (
-                <Card className="overflow-hidden rounded-2xl border-border/80 shadow-sm">
                   <CardHeader className="border-b border-border/70 bg-muted/[0.10] px-5 py-4 sm:px-6">
                     <CardTitle className="text-sm font-semibold">
-                      Sources à analyser
+                      Éléments de travail à analyser
                     </CardTitle>
                     <CardDescription className="mt-1 text-xs">
-                      Séparez les documents des vidéos et fichiers audio pour utiliser le traitement adapté.
+                      Tout fichier ajouté ici, y compris un pré-CIR ou un CIR précédent, alimente EnnoDiagnostic comme élément de travail.
                     </CardDescription>
                   </CardHeader>
 
@@ -1623,7 +1378,7 @@ export default function NewProjectPage({
                       <p className="mt-4 text-sm font-semibold text-foreground">
                         {diagnosticUploadTab === "media"
                           ? "Glissez-déposez vos vidéos ou audios ici"
-                          : "Glissez-déposez vos documents ici"}
+                          : "Glissez-déposez vos éléments de travail ici"}
                       </p>
 
                       <p className="mt-1 text-xs text-muted-foreground">
@@ -1633,7 +1388,7 @@ export default function NewProjectPage({
                       <p className="mx-auto mt-3 max-w-xl text-[11px] leading-5 text-muted-foreground/80">
                         {diagnosticUploadTab === "media"
                           ? "MP4, MOV, AVI, MKV, WEBM, MP3, WAV, M4A… Le PDF de transcription sera ajouté au dossier CIR."
-                          : "PDF, DOCX, XLSX, PPTX, images, MSG et TXT"}
+                          : "PDF, DOCX, XLSX, PPTX, images, MSG et TXT — un pré-CIR ou CIR précédent est traité comme tout autre élément de travail."}
                       </p>
                     </div>
 
@@ -1718,113 +1473,6 @@ export default function NewProjectPage({
                     )}
                   </CardContent>
                 </Card>
-              )}
-
-              {/* ---------------------------------------------------------- */}
-              {/* Dépôt référence                                            */}
-              {/* ---------------------------------------------------------- */}
-
-              {depositMode === "reference" && (
-                <Card className="overflow-hidden rounded-2xl border-border/80 shadow-sm">
-                  <CardHeader className="border-b border-border/70 bg-muted/[0.10] px-5 py-4 sm:px-6">
-                    <CardTitle className="text-sm font-semibold">
-                      CIR final validé / CIR précédent
-                    </CardTitle>
-                    <CardDescription className="mt-1 text-xs">
-                      Ce fichier est conservé comme référence et reste séparé des documents de diagnostic.
-                    </CardDescription>
-                  </CardHeader>
-
-                  <CardContent className="space-y-4 p-5 sm:p-6">
-                    <div
-                      onDragOver={(event) => {
-                        event.preventDefault()
-                        if (createdProjectId === null) {
-                          setDraggingFinal(true)
-                        }
-                      }}
-                      onDragLeave={() => setDraggingFinal(false)}
-                      onDrop={handleFinalDrop}
-                      onClick={() => {
-                        if (createdProjectId === null) {
-                          finalFileInputRef.current?.click()
-                        }
-                      }}
-                      className={`group rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-all ${
-                        createdProjectId !== null
-                          ? "cursor-not-allowed opacity-70"
-                          : "cursor-pointer"
-                      } ${
-                        draggingFinal
-                          ? "border-emerald-500 bg-emerald-500/[0.045]"
-                          : "border-border bg-muted/[0.12] hover:border-emerald-500/40 hover:bg-emerald-500/[0.02]"
-                      }`}
-                    >
-                      <input
-                        ref={finalFileInputRef}
-                        type="file"
-                        className="hidden"
-                        disabled={createdProjectId !== null}
-                        accept=".docx,.pdf,.txt,.md"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0]
-
-                          if (file) {
-                            setFinalCirFile(file)
-                            resetMessages()
-                          }
-                        }}
-                      />
-
-                      <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-600 transition group-hover:scale-105">
-                        <FileCheck2 className="size-6" />
-                      </div>
-
-                      <p className="mt-4 text-sm font-semibold text-foreground">
-                        Glissez le CIR final ici
-                      </p>
-
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        ou cliquez pour parcourir
-                      </p>
-
-                      <p className="mt-3 text-[11px] text-muted-foreground/80">
-                        PDF, DOCX, TXT ou Markdown
-                      </p>
-                    </div>
-
-                    {finalCirFile && (
-                      <div className="flex items-start justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.045] p-3">
-                        <div className="flex min-w-0 items-start gap-3">
-                          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-background text-emerald-600 shadow-sm">
-                            <FileCheck2 className="size-4" />
-                          </span>
-
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-foreground">
-                              {finalCirFile.name}
-                            </p>
-
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                              {getFileTypeLabel(finalCirFile.name)} ·{" "}
-                              {formatSize(finalCirFile.size)}
-                            </p>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => setFinalCirFile(null)}
-                          className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition hover:bg-destructive/5 hover:text-destructive"
-                          disabled={submitting || createdProjectId !== null}
-                        >
-                          <X className="size-4" />
-                        </button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
 
               {/* ---------------------------------------------------------- */}
               {/* Transcriptions                                             */}
@@ -1932,8 +1580,6 @@ export default function NewProjectPage({
                   >
                     {submitting ? (
                       <Loader2 className="size-4 animate-spin" />
-                    ) : depositMode === "reference" ? (
-                      <FileCheck2 className="size-4" />
                     ) : (
                       <FolderPlus className="size-4" />
                     )}
@@ -1942,9 +1588,7 @@ export default function NewProjectPage({
                       ? mediaFiles.length > 0
                         ? "Création et transcription…"
                         : "Création du dossier…"
-                      : depositMode === "reference"
-                        ? "Créer et enregistrer le CIR final"
-                        : "Créer et ouvrir EnnoDiagnostic"}
+                      : "Créer et ouvrir EnnoDiagnostic"}
                   </Button>
                 )}
               </div>
@@ -1975,30 +1619,17 @@ export default function NewProjectPage({
                     <SummaryRow label="Année CIR" value={year || "—"} />
                     <SummaryRow label="Domaine" value={effectiveDomain || "—"} />
                     <SummaryRow
-                      label="Type de dépôt"
-                      value={
-                        depositMode === "diagnostic"
-                          ? "Documents de travail"
-                          : "CIR final / précédent"
-                      }
+                      label="Éléments de travail"
+                      value={`${files.length} fichier${files.length > 1 ? "s" : ""}`}
                     />
-
-                    {depositMode === "diagnostic" && (
-                      <>
-                        <SummaryRow
-                          label="Documents"
-                          value={`${documentFiles.length} fichier${documentFiles.length > 1 ? "s" : ""}`}
-                        />
-                        <SummaryRow
-                          label="Vidéo / Audio"
-                          value={`${mediaFiles.length} média${mediaFiles.length > 1 ? "s" : ""}`}
-                        />
-                      </>
-                    )}
-
-                    {depositMode === "reference" && finalCirFile && (
-                      <SummaryRow label="Fichier" value={finalCirFile.name} />
-                    )}
+                    <SummaryRow
+                      label="Documents"
+                      value={`${documentFiles.length} fichier${documentFiles.length > 1 ? "s" : ""}`}
+                    />
+                    <SummaryRow
+                      label="Vidéo / Audio"
+                      value={`${mediaFiles.length} média${mediaFiles.length > 1 ? "s" : ""}`}
+                    />
 
                     <div className="rounded-xl border border-brand/10 bg-brand/[0.035] p-3.5">
                       <div className="flex items-start gap-2.5">
@@ -2010,9 +1641,7 @@ export default function NewProjectPage({
                           </p>
 
                           <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-                            {depositMode === "reference"
-                              ? "Le CIR final sera classé et indexé dans Chroma avec cette identité complète."
-                              : "Les résultats des agents seront conservés dans PostgreSQL pour ce dossier."}
+                            Un CIR ajouté depuis ce nouvel écran reste un élément de travail et peut aider les agents à comprendre l’historique du projet.
                           </p>
                         </div>
                       </div>
@@ -2037,8 +1666,6 @@ export default function NewProjectPage({
                       >
                         {submitting ? (
                           <Loader2 className="size-4 animate-spin" />
-                        ) : depositMode === "reference" ? (
-                          <FileCheck2 className="size-4" />
                         ) : (
                           <FolderPlus className="size-4" />
                         )}
@@ -2047,9 +1674,7 @@ export default function NewProjectPage({
                           ? mediaFiles.length > 0
                             ? "Création et transcription…"
                             : "Création du dossier…"
-                          : depositMode === "reference"
-                            ? "Créer et enregistrer"
-                            : "Créer le dossier"}
+                          : "Créer le dossier"}
                       </Button>
                     )}
 

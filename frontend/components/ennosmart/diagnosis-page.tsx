@@ -714,6 +714,55 @@ function historicalContinuityLabel(status: string): string {
   return labels[status] || cleanDisplayText(status) || "Continuité N-1"
 }
 
+type HistoricalMemoryCardMetric = {
+  isMemoryCard: boolean
+  percentage: number | null
+}
+
+function getHistoricalMemoryCardMetric(verrou: VerrouRead): HistoricalMemoryCardMetric {
+  const sourceJson = isObjectV107(verrou?.source_json) ? verrou.source_json : {}
+  const full = isObjectV107(sourceJson?.full_persisted_verrou)
+    ? sourceJson.full_persisted_verrou
+    : {}
+  const agentItem = isObjectV107(sourceJson?.full_agent_item)
+    ? sourceJson.full_agent_item
+    : {}
+  const holders = [(verrou as any) || {}, sourceJson, full, agentItem]
+  const isMemoryCard = holders.some((holder: any) => {
+    const origin = String(holder?.candidate_origin || "")
+    return Boolean(
+      holder?.historical_memory_card === true ||
+      holder?.historical_gap_recovered === true ||
+      origin.startsWith("historical_memory_")
+    )
+  })
+
+  if (!isMemoryCard) return { isMemoryCard: false, percentage: null }
+
+  let rawValue: any = null
+  for (const holder of holders) {
+    const history = isObjectV107(holder?.historical_continuity)
+      ? holder.historical_continuity
+      : {}
+    rawValue =
+      holder?.continuity_percentage ??
+      history?.continuity_percentage ??
+      history?.confidence ??
+      rawValue
+    if (rawValue !== null && rawValue !== undefined && rawValue !== "") break
+  }
+
+  const numeric = Number(rawValue)
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return { isMemoryCard: true, percentage: null }
+  }
+  const percentage = numeric <= 1 ? numeric * 100 : numeric
+  return {
+    isMemoryCard: true,
+    percentage: Math.max(0, Math.min(100, Math.round(percentage))),
+  }
+}
+
 function getVerrouExplanationSections(verrou: VerrouRead): VerrouExplanationSections {
   const sourceJson = verrou.source_json || {}
   const sources = getSources(verrou)
@@ -6746,7 +6795,9 @@ export function DiagnosisPage(
                             {verrou.title}
                           </p>
                           <p className="mt-1 text-[10px] text-muted-foreground">
-                            V{index + 1} · Score {formatVerrouScoreV124(verrou.score)}
+                            {getHistoricalMemoryCardMetric(verrou).isMemoryCard
+                              ? `${getHistoricalMemoryCardMetric(verrou).percentage ?? "—"} % continuité`
+                              : `V${index + 1} · Score ${formatVerrouScoreV124(verrou.score)}`}
                           </p>
                         </div>
                       </div>
@@ -7221,6 +7272,7 @@ export function DiagnosisPage(
                       const action = consultantAction(verrou)
                       const consultantCheck = getConsultantCheckText(verrou)
                       const historicalContinuity = getHistoricalLockContinuity(verrou)
+                      const historicalMemoryMetric = getHistoricalMemoryCardMetric(verrou)
                       const groupedSubproblems = Array.from(
                         new Set(
                           [
@@ -7258,7 +7310,11 @@ export function DiagnosisPage(
                                   variant="outline"
                                   className="border-brand/25 bg-brand/[0.06] text-[10px] font-medium text-brand"
                                 >
-                                  {isManual ? "Ajout consultant" : "Signal R&D détecté"}
+                                  {isManual
+                                    ? "Ajout consultant"
+                                    : historicalMemoryMetric.isMemoryCard
+                                      ? "Mémoire CIR confirmée"
+                                      : "Signal R&D détecté"}
                                 </Badge>
                                 <Badge
                                   variant="outline"
@@ -7267,8 +7323,10 @@ export function DiagnosisPage(
                                   {decisionLabel(verrou.consultant_status)}
                                 </Badge>
                                 {!isManual && (
-                                  <Badge variant="outline" className="text-[10px]">
-                                    Score {formatVerrouScoreV124(verrou.score)}
+                                  <Badge variant="outline" className="whitespace-nowrap text-[10px] tabular-nums">
+                                    {historicalMemoryMetric.isMemoryCard
+                                      ? `${historicalMemoryMetric.percentage ?? "—"} % continuité`
+                                      : `Score ${formatVerrouScoreV124(verrou.score)}`}
                                   </Badge>
                                 )}
                               </div>

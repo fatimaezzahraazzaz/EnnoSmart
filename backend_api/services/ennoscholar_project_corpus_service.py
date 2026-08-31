@@ -510,11 +510,19 @@ def get_conversation_kept_articles(
 
     requested_verrous = _as_str_set(active_verrou_ids)
     if requested_verrous:
+        from agents.EnnoScholar.guided_research.application.standalone_scope import (
+            resolve_standalone_verrou_ids,
+        )
+
+        private_verrous = list((run.raw_result_json or {}).get("consultant_verrous") or [])
         rows = [
             row
             for row in rows
             if (
-                article_scope_ids(row) & requested_verrous
+                set(resolve_standalone_verrou_ids(
+                    article_scope_ids(row), private_verrous, legacy_titles=True
+                )) & requested_verrous
+                or article_scope_ids(row) & requested_verrous
                 or article_is_project_global(row)
             )
         ]
@@ -546,6 +554,9 @@ def get_conversation_corpus_cards_payload(
 ) -> dict[str, Any]:
     """Lit les Article Cards du seul corpus autonome de la conversation."""
     from services.article_card_builder import get_article_cards_payload
+    from agents.EnnoScholar.guided_research.application.standalone_scope import (
+        canonicalize_standalone_links,
+    )
 
     scope_id = _clean(corpus_scope_id or session_id, 160)
     run, articles = get_conversation_kept_articles(
@@ -581,7 +592,9 @@ def get_conversation_corpus_cards_payload(
             continue
         if article_id not in wanted_ids:
             continue
-        cards_by_article[article_id] = dict(raw)
+        cards_by_article[article_id] = canonicalize_standalone_links(
+            raw, list((run.raw_result_json or {}).get("consultant_verrous") or [])
+        )
     cards = [
         _relabel_project_corpus_card(cards_by_article[key], f"A{index}")
         for index, key in enumerate(sorted(cards_by_article), start=1)

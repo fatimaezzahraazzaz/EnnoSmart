@@ -992,17 +992,19 @@ def _phase47_verrous(phase47: Dict[str, Any]) -> List[Dict[str, Any]]:
     output: List[Dict[str, Any]] = []
     sections = phase47.get("verrou_sections_for_phase5")
     section_by_id = {
-        clean_text(item.get("verrou_id"), 120): item
+        contract_clean_text(item.get("verrou_id")): item
         for item in sections or []
-        if isinstance(item, dict) and clean_text(item.get("verrou_id"), 120)
+        if isinstance(item, dict) and contract_clean_text(item.get("verrou_id"))
     }
     for item in items:
-        verrou_id = clean_text(item.get("verrou_id") or item.get("id"), 120)
-        title = clean_sentence(
+        # These fields are contract identities, not prose. Formatting punctuation
+        # or truncating a title here creates a false mismatch with the unchanged
+        # selection and Phase 4.6, which approving the plan again cannot resolve.
+        verrou_id = contract_clean_text(item.get("verrou_id") or item.get("id"))
+        title = contract_clean_text(
             item.get("verrou_title")
             or item.get("title")
-            or item.get("visible_title_suggestion"),
-            700,
+            or item.get("visible_title_suggestion")
         )
         if not verrou_id or not title:
             raise ContractError(
@@ -1734,6 +1736,8 @@ def _compact_evidence(
     *,
     max_units: int = 240,
     max_per_citation: int = 14,
+    preferred_citations: Iterable[str] = (),
+    diversify_kinds: bool = False,
 ) -> List[Dict[str, Any]]:
     """Compacte les preuves sans favoriser les premières citations du fichier.
 
@@ -1773,6 +1777,8 @@ def _compact_evidence(
                 local.append(unit)
                 if len(local) >= max_per_citation:
                     break
+                if diversify_kinds:
+                    break
             if len(local) >= max_per_citation:
                 break
         if len(local) < max_per_citation:
@@ -1790,6 +1796,9 @@ def _compact_evidence(
     selected: List[Dict[str, Any]] = []
     round_index = 0
     ordered_citations = citation_sort(selected_by_citation)
+    preferred = set(preferred_citations)
+    if preferred:
+        ordered_citations.sort(key=lambda citation: citation not in preferred)
     while len(selected) < max_units:
         added = False
         for citation in ordered_citations:
@@ -2745,6 +2754,23 @@ def _consultant_directive_for_section(
     }
     section_id = clean_text(section.get("section_id"), 200)
     section_title = _directive_norm(section.get("title"))
+    local_edit = next((
+        dict(row) for row in blueprint.get("consultant_section_writing_edits") or []
+        if isinstance(row, Mapping) and row.get("section_id") == section_id
+    ), {})
+    if local_edit:
+        return {
+            "request": clean_text(local_edit.get("instruction"), 6000),
+            "operation": local_edit.get("operation"),
+            "source_identifiers": list(local_edit.get("source_identifiers") or []),
+            "apply_to_this_section": True,
+            "target_section_ids": [section_id],
+            "rule": (
+                "Modifier uniquement les passages visés de la version existante. "
+                "Conserver les autres développements et leurs citations. "
+                "Ne pas appliquer ici les enrichissements demandés ailleurs."
+            ),
+        }
 
     if target_ids or target_titles:
         applies_here = bool(
@@ -2790,6 +2816,7 @@ def _enrich_targeted_plan_with_consultant_request(
     request: str,
     target_section_ids: Iterable[Any],
     target_section_titles: Iterable[Any],
+    section_writing_edits: Iterable[Mapping[str, Any]] = (),
 ) -> Optional[List[Dict[str, Any]]]:
     if not plan or not clean_text(request, 12000):
         return plan
@@ -2825,9 +2852,13 @@ def _enrich_targeted_plan_with_consultant_request(
                 for value in as_list(section.get("instructions") or [])
                 if clean_text(value, 4000)
             ]
+            local_edit = next((
+                row for row in section_writing_edits
+                if row.get("section_id") == section_id
+            ), {})
             directive = (
                 "Demande ciblée du consultant pour cette section : "
-                + clean_text(request, 12000)
+                + clean_text(local_edit.get("instruction") or request, 12000)
             )
             if directive not in existing:
                 existing.append(directive)
@@ -2845,8 +2876,8 @@ def _prepare_partial_revision_writer(
     La compréhension de la cible appartient au LLM conversationnel. Cette
     fonction applique uniquement son contrat structuré : si l'ancienne version
     et toutes les sections hors cible sont disponibles, elles seront conservées
-    telles quelles. Au moindre doute structurel, elle revient à une génération
-    complète plutôt que de fusionner des sections incompatibles.
+    telles quelles. Une cible ou une version manquante bloque la révision :
+    elle n'autorise jamais une génération complète non demandée.
     """
 
     if clean_text(plan_contract.get("generation_mode"), 80) != "partial_revision":
@@ -2857,7 +2888,7 @@ def _prepare_partial_revision_writer(
         4000,
     )
     if not previous_payload_path:
-        return blueprint, {}, set()
+        raise ContractError("partial_revision_missing_draft", "La version précédente est indisponible ; aucune section ne sera réécrite.", {})
     previous_payload = read_json(previous_payload_path, {}) or {}
     previous_draft = (
         dict(previous_payload.get("draft_json") or {})
@@ -2870,7 +2901,7 @@ def _prepare_partial_revision_writer(
         if isinstance(row, Mapping)
     ]
     if not previous_sections:
-        return blueprint, {}, set()
+        raise ContractError("partial_revision_missing_draft", "Le texte des sections précédentes est indisponible ; le document est conservé.", {})
 
     requested_ids = {
         clean_text(value, 200)
@@ -2901,7 +2932,7 @@ def _prepare_partial_revision_writer(
     }
     target_ids.discard("")
     if not target_ids:
-        return blueprint, {}, set()
+        raise ContractError("partial_revision_missing_targets", "La révision ciblée ne peut pas démarrer sans sections identifiées ; le document est conservé.", {})
 
     previous_ids = {
         clean_text(row.get("section_id"), 200)
@@ -2913,17 +2944,81 @@ def _prepare_partial_revision_writer(
         for row in current_sections
         if clean_text(row.get("section_id"), 200)
     }
-    if not current_ids or not (current_ids - target_ids).issubset(previous_ids):
-        return blueprint, {}, set()
+    current_titles = {_directive_norm(row.get("title")) for row in current_sections}
+    previous_by_id = {clean_text(row.get("section_id"), 200): row for row in previous_sections}
+    if (
+        requested_ids - current_ids or requested_titles - current_titles
+        or current_ids != previous_ids
+        or [row.get("section_id") for row in current_sections]
+        != [row.get("section_id") for row in previous_sections]
+        or any(
+            _directive_norm(row.get("title"))
+            != _directive_norm(previous_by_id[row["section_id"]].get("title"))
+            for row in current_sections
+        )
+    ):
+        raise ContractError("partial_revision_incompatible_sections", "Les sections ciblées ne correspondent pas à la version existante ; aucune réécriture globale n'est lancée.", {})
+
+    # Garder un texte inchangé impose de garder le sens de ses références A...
+    current_references = {
+        row.get("citation_label"): row for row in blueprint.get("references") or []
+        if isinstance(row, Mapping)
+    }
+    if current_references:
+        for reference in previous_payload.get("references") or []:
+            label = reference.get("citation_label")
+            current_reference = current_references.get(label)
+            if not current_reference or _directive_norm(reference.get("title")) != _directive_norm(current_reference.get("title")):
+                raise ContractError("partial_revision_citation_mismatch", "La correspondance des citations du document existant a changé ; la version précédente est conservée.", {"citation": label})
 
     writer_blueprint = dict(blueprint)
     writer_blueprint["_full_plan_sections"] = current_sections
     writer_blueprint["sections"] = [
-        row
+        {**row, "_previous_section": previous_by_id[row["section_id"]]}
         for row in current_sections
         if clean_text(row.get("section_id"), 200) in target_ids
     ]
+    writer_blueprint["_previous_sections_by_id"] = previous_by_id
     return writer_blueprint, previous_draft, target_ids
+
+
+def _apply_section_writing_sources(
+    blueprint: Dict[str, Any],
+    edits: Iterable[Mapping[str, Any]],
+    cards: List[Dict[str, Any]],
+) -> None:
+    """Resolve requested citations against current cards, never against old counts."""
+    for edit in edits:
+        section = next((row for row in blueprint.get("sections") or []
+                        if row.get("section_id") == edit.get("section_id")), None)
+        if section is None:
+            raise ContractError("partial_revision_unknown_section", "Une section ciblée est introuvable ; le document est conservé.", {"section_id": edit.get("section_id")})
+        requested = {
+            clean_text(value, 1000).strip("[]").casefold()
+            for value in edit.get("source_identifiers") or []
+            if clean_text(value, 1000)
+        }
+        matched: Set[str] = set()
+        citations: List[str] = []
+        for card in cards:
+            identities = {
+                clean_text(card.get(key), 1000).casefold()
+                for key in ("citation_label", "article_id", "guided_candidate_id", "doi", "title")
+                if clean_text(card.get(key), 1000)
+            }
+            if requested & identities:
+                matched.update(requested & identities)
+                citations.append(card["citation_label"])
+        if requested - matched:
+            raise ContractError("writing_source_selection_incomplete", "Certaines sources demandées pour cette section ne sont pas disponibles dans le corpus extrait.", {"unmatched_identifiers": sorted(requested - matched), "section_id": edit.get("section_id")})
+        if set(citations) - set(section.get("available_citations") or []):
+            raise ContractError("writing_source_missing_evidence", "Une source ciblée ne contient pas de preuves exploitables ; le document est conservé.", {"section_id": edit.get("section_id")})
+        section["_writing_edit"] = dict(edit)
+        section["_preferred_writing_citations"] = citation_sort(citations)
+        if edit.get("operation") in {"rewrite", "enrich"}:
+            section["required_citations"] = citation_sort([
+                *(section.get("required_citations") or []), *citations,
+            ])
 
 
 def _merge_partial_revision_draft(
@@ -3080,6 +3175,69 @@ def _section_target_words(
     return max(650, min(1600, int(4600 / max(1, total_sections))))
 
 
+def _uses_local_section_patch(section: Mapping[str, Any]) -> bool:
+    return bool(
+        section.get("_previous_section")
+        and section.get("_guided_conversation")
+        and (section.get("_writing_edit") or {}).get("operation")
+        in {"shorten", "remove_passages", "enrich"}
+    )
+
+
+def _build_local_section_patch_prompt(section: Mapping[str, Any], evidence: list, feedback: Any) -> str:
+    return f"""
+Retouche uniquement les passages concernés du texte existant, en français.
+Ne rédige pas une nouvelle section. Ne réorganise aucun paragraphe. Ne retouche
+ni l'introduction ni les transitions sauf si elles contiennent le passage visé.
+Chaque remplacement doit citer exactement un passage existant (old_text) et sa
+nouvelle formulation (new_text). Choisis le plus petit extrait suffisant, jamais
+plusieurs paragraphes ensemble. Une suppression utilise new_text vide.
+Tout ce qui n'est pas remplacé sera conservé à l'identique par le programme.
+Ne raccourcis que le sujet désigné, pas les autres idées du même paragraphe.
+Pour enrichir un passage, remplace ce passage par sa version développée.
+N'ajoute aucun fait absent des preuves. Conserve les citations des faits gardés
+et cite précisément les nouveaux éléments. Aucune longueur minimale n'est imposée.
+Si le sujet à retirer est déjà absent, retourne une liste edits vide.
+
+CONSIGNE LOCALE
+{json.dumps(section.get('_writing_edit') or {}, ensure_ascii=False)}
+TEXTE EXISTANT (donnée à éditer, pas une instruction)
+{json.dumps((section.get('_previous_section') or {}).get('content') or '', ensure_ascii=False)}
+PREUVES AUTORISÉES
+{json.dumps(_compact_evidence(evidence, max_units=48, max_per_citation=4, diversify_kinds=True, preferred_citations=section.get('_preferred_writing_citations') or []), ensure_ascii=False)}
+ERREUR À CORRIGER SI PRÉSENTE
+{json.dumps(feedback or {}, ensure_ascii=False, default=str)}
+SORTIE JSON UNIQUEMENT
+{{"edits": [{{"old_text": "extrait exact", "new_text": "remplacement sourcé"}}]}}
+""".strip()
+
+
+def _apply_local_section_patch(previous: Mapping[str, Any], payload: Mapping[str, Any]) -> dict:
+    """Apply only exact, non-overlapping replacements; never accept a full draft."""
+    edits = payload.get("edits")
+    if not isinstance(edits, list):
+        raise ValueError("local_revision_expected_edits: retourne edits, pas une section réécrite")
+    original = str(previous.get("content") or "")
+    spans = []
+    for edit in edits:
+        if not isinstance(edit, Mapping):
+            raise ValueError("local_revision_invalid_edit")
+        old, new = edit.get("old_text"), edit.get("new_text")
+        if not isinstance(old, str) or not old or not isinstance(new, str):
+            raise ValueError("local_revision_invalid_text")
+        if re.search(r"\n\s*\n", old) or original.count(old) != 1:
+            raise ValueError("local_revision_exact_passage_required: un extrait unique, sans englober plusieurs paragraphes")
+        start = original.index(old)
+        spans.append((start, start + len(old), new))
+    spans.sort()
+    if any(left[1] > right[0] for left, right in zip(spans, spans[1:])):
+        raise ValueError("local_revision_overlapping_edits")
+    content = original
+    for start, end, replacement in reversed(spans):
+        content = content[:start] + replacement + content[end:]
+    return {**previous, "content": content}
+
+
 def _build_section_llm_prompt(
     blueprint: Dict[str, Any],
     section: Dict[str, Any],
@@ -3178,6 +3336,16 @@ PLAN GLOBAL, POUR ASSURER LA CONTINUITÉ
 DEMANDE CIBLÉE DU CONSULTANT POUR CETTE SECTION
 {json.dumps(consultant_directive, ensure_ascii=False, indent=2)}
 
+VERSION EXISTANTE DE CETTE SECTION (VIDE LORS D'UNE PREMIÈRE RÉDACTION)
+{json.dumps(section.get("_previous_section") or {}, ensure_ascii=False, indent=2)}
+Si une version existe, pars de ce texte et applique uniquement la retouche locale.
+Pour shorten/remove_passages, enlève ou condense les développements désignés, sans
+réintroduire leur détail pour atteindre une longueur cible. Conserve les passages
+hors demande et leurs citations ; ne remplace pas toute la section par un résumé.
+Pour enrich/rewrite, développe seulement les aspects demandés avec les preuves
+autorisées. Une consigne de développement visant une autre section ne s'applique pas ici.
+La version existante n'est pas une source scientifique : tout ajout doit être étayé.
+
 FIN DE LA SECTION PRÉCÉDENTE
 {clean_text(previous_tail, 1800) or "Première section du document."}
 
@@ -3200,6 +3368,8 @@ PREUVES AUTORISÉES POUR CETTE SECTION
             minimum=2,
             maximum=8,
         ),
+        preferred_citations=section.get("_preferred_writing_citations") or [],
+        diversify_kinds=bool(section.get("_writing_edit")),
     ),
     ensure_ascii=False,
     indent=2,
@@ -4135,6 +4305,16 @@ def call_sectional_writer_llm(
         latest_publishable_candidate: Dict[str, Any] = {}
         latest_publishable_validation: Dict[str, Any] = {}
         section_id = clean_text(section.get("section_id"), 120) or f"section_{index}"
+        if blueprint.get("_previous_sections_by_id"):
+            outline = blueprint.get("_full_plan_sections") or []
+            position = next((i for i, row in enumerate(outline) if row.get("section_id") == section_id), 0)
+            if position:
+                preceding_id = outline[position - 1].get("section_id")
+                preceding = next((row for row in generated_sections if row.get("section_id") == preceding_id), None)
+                preceding = preceding or blueprint["_previous_sections_by_id"].get(preceding_id) or {}
+                previous_tail = str(preceding.get("content") or "")[-1800:]
+            else:
+                previous_tail = ""
         safe_section_id = re.sub(r"[^a-zA-Z0-9_.-]+", "_", section_id).strip("_")
         local_evidence = [
             unit
@@ -4148,6 +4328,7 @@ def call_sectional_writer_llm(
         ) -> str:
             checkpoint_fingerprint_payload = {
                     "section": section,
+                    "local_passage_patch_contract": 1 if _uses_local_section_patch(section) else 0,
                     "evidence": local_evidence,
                     "previous_tail": previous_tail,
                     "project_context": blueprint.get("project_context") or {},
@@ -4309,7 +4490,10 @@ def call_sectional_writer_llm(
         ):
             if accepted:
                 break
-            if attempt == 1 or not feedback:
+            local_patch = _uses_local_section_patch(section)
+            if local_patch:
+                prompt = _build_local_section_patch_prompt(section, local_evidence, feedback)
+            elif attempt == 1 or not feedback:
                 prompt = _build_section_llm_prompt(
                     blueprint,
                     section,
@@ -4361,9 +4545,12 @@ def call_sectional_writer_llm(
                     request_name=f"ennoscholar:phase5:section:{index}",
                 )
                 parsed = _extract_json_response(raw)
+                if local_patch:
+                    parsed = _apply_local_section_patch(section["_previous_section"], parsed)
                 if (
                     parsed
                     and section.get("_strict_consultant_plan_structure")
+                    and not local_patch
                 ):
                     overflow_content = [
                         clean_text(row.get("content"), 100000)
@@ -6462,6 +6649,10 @@ def run_phase_5_state_of_art_writer(
     consultant_search_queries = list(
         plan_contract.get("consultant_writing_search_queries") or []
     )
+    consultant_section_edits = [
+        dict(row) for row in plan_contract.get("consultant_section_writing_edits") or []
+        if isinstance(row, Mapping)
+    ]
     cards = extract_article_cards(cards_payload)
     guided_payload = read_json(guided_sources_path, {}) or {}
     supplemental_cards = extract_supplemental_source_cards(
@@ -6548,6 +6739,7 @@ def run_phase_5_state_of_art_writer(
                 request=consultant_writing_request,
                 target_section_ids=consultant_target_section_ids,
                 target_section_titles=consultant_target_section_titles,
+                section_writing_edits=consultant_section_edits,
             )
         except ContractError as exc:
             result = {
@@ -6625,6 +6817,8 @@ def run_phase_5_state_of_art_writer(
     blueprint["consultant_writing_search_queries"] = (
         consultant_search_queries
     )
+    blueprint["consultant_section_writing_edits"] = consultant_section_edits
+    blueprint["references"] = build_references_for_citations(blueprint["allowed_citations"], cards)
     strict_consultant_plan_structure = bool(
         guided_conversation and approved_plan
     )
@@ -6697,11 +6891,23 @@ def run_phase_5_state_of_art_writer(
         write_json(cir_evidence_matrix_path, cir_evidence_matrix)
     # END ENNOSCHOLAR_CIR_QUALITY_V3
 
-    (
-        writer_blueprint,
-        previous_draft_for_revision,
-        partial_revision_target_ids,
-    ) = _prepare_partial_revision_writer(blueprint, plan_contract)
+    try:
+        _apply_section_writing_sources(blueprint, consultant_section_edits, cards)
+        (
+            writer_blueprint,
+            previous_draft_for_revision,
+            partial_revision_target_ids,
+        ) = _prepare_partial_revision_writer(blueprint, plan_contract)
+    except ContractError as exc:
+        result = {
+            **exc.as_dict(), "phase": "phase_5_state_of_art_writer",
+            "payload_type": PAYLOAD_TYPE, "input_paths": input_paths,
+            "output_path": str(out_path), "markdown_output_path": "",
+        }
+        if not dry_run:
+            result["rejected_payload_output_path"] = str(rejected_payload_path)
+            write_json(rejected_payload_path, result)
+        return result
     prompt = _build_llm_prompt(writer_blueprint, evidence_units)
     llm_draft, llm_report = call_sectional_writer_llm(
         writer_blueprint,
@@ -6778,7 +6984,7 @@ def run_phase_5_state_of_art_writer(
             else "llm_sectional_long_form"
         )
         guard = llm_guard
-    elif llm_report.get("status") == "disabled":
+    elif llm_report.get("status") == "disabled" and not partial_revision_target_ids:
         draft = build_deterministic_unified_draft(
             blueprint,
             cards,
@@ -7053,6 +7259,7 @@ def run_phase_5_state_of_art_writer(
             "target_section_ids": consultant_target_section_ids,
             "target_section_titles": consultant_target_section_titles,
             "search_queries": consultant_search_queries,
+            "section_writing_edits": consultant_section_edits,
             "propagated_to_writer": bool(consultant_writing_request),
             "generation_mode": (
                 "partial_revision"

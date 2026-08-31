@@ -254,11 +254,15 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
         else []
     )
     if standalone_chat:
-        effective_sources = [
+        from agents.EnnoScholar.guided_research.application.standalone_scope import (
+            canonicalize_standalone_links,
+        )
+
+        effective_sources = canonicalize_standalone_links([
             dict(row)
             for row in (snapshot.get("selected_sources") or [])
             if isinstance(row, Mapping)
-        ]
+        ], snapshot_context.get("consultant_verrous") or [])
     else:
         effective_sources = get_effective_guided_sources(
             db,

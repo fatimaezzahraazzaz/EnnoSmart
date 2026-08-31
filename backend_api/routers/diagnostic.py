@@ -2189,7 +2189,10 @@ def prepare_diagnostic_sources(
     Ne lance pas le LLM.
     """
     project = get_project_for_user(db, project_id, current_user)
-    return prepare_ennodiagnostic_sources(db, project)
+    try:
+        return prepare_ennodiagnostic_sources(db, project)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
 @router.post("/projects/{project_id}/diagnostic/run-agent", response_model=DiagnosticRead)

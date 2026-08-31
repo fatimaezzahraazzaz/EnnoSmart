@@ -1,0 +1,37 @@
+{
+  "name": "EnnoDiagnostic_final_memory_fix_v7_1",
+  "modified_files": [
+    "agents/EnnoDiagnostic/historical_continuity_reconciler.py",
+    "agents/EnnoDiagnostic/diagnostic_static_presenter.py",
+    "agents/EnnoDiagnostic/ennodiagnostic_agent.py"
+  ],
+  "reference_files": [
+    "agents/EnnoDiagnostic/scientific_axis_synthesizer.py"
+  ],
+  "guarantees": {
+    "recovered_memory_lock_uses_memory_title_when_specific": true,
+    "recovered_memory_lock_uses_historical_analysis": true,
+    "current_year_evidence_required_for_visibility": true,
+    "historical_prefix_continuite_a_confirmer_removed": true,
+    "objective_json_alias_normalized": true,
+    "objective_empty_retry": true,
+    "demarche_historical_H_rows_disabled_by_default": true,
+    "results_historical_H_rows_disabled_by_default": true,
+    "parameters_historical_H_rows_disabled_by_default": true,
+    "v6_axis_seeds_exclude_historical_recovered": true,
+    "cir_previous_comparison_excludes_recovered_history": true,
+    "nlp_modified": false,
+    "frascati_modified": false,
+    "chat_rag_modified": false,
+    "project_specific_hardcoding_added": false
+  },
+  "files": {
+    "README.md": "d3276d5c2d2004e44039a2211fa7efaaacf5896337c52fee1882a7a025070027",
+    "agents/EnnoDiagnostic/diagnostic_static_presenter.py": "4d13b420869741dc8bfaed025120d5b850e4ed952d22dcd2c9df17cd45bec333",
+    "agents/EnnoDiagnostic/ennodiagnostic_agent.py": "e3501ef6b0c32a6a4ac6143b6aad3f108d2967646e0d423f675c2391a224b0ad",
+    "agents/EnnoDiagnostic/historical_continuity_reconciler.py": "ef382d1686d2bad2a19a8e84282783a6972e2d7dbde581ed68bbaaba8cd45489",
+    "agents/EnnoDiagnostic/scientific_axis_synthesizer.py": "6459325a910bad17288feb47ce546e49326ff34c191b73b9494181a1aee9377c",
+    "install_final_memory_fix_v7_1.py": "be8c3300af0d4d6fb7c47fa7a0507d15cdb08db44d0f9c48a06fc68dfe59a985",
+    "verify_final_memory_fix_v7_1.py": "2c81a6ca77eff64818d07523e9656e6bcfbb02d6dbd21de4db927d3c553774a4"
+  }
+}

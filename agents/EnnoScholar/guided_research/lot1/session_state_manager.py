@@ -10,6 +10,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
+from .json_safety import sanitize_json_text
 from .domain.enums import (
     ConsultantIntent,
     ConversationRole,
@@ -149,7 +150,7 @@ class GuidedResearchSessionStateManager:
             entry_module=entry_module.value,
             target_mode=target_mode.value,
             state=GuidedResearchState.BRIEF_IN_PROGRESS.value,
-            context_json=dict(initial_context or {}),
+            context_json=sanitize_json_text(dict(initial_context or {})),
             brief_json={},
         )
         db.add(orm)
@@ -228,7 +229,7 @@ class GuidedResearchSessionStateManager:
     ) -> GuidedResearchSessionData:
         orm = self._get_orm(db, session_id)
         self._check_version(orm, expected_version)
-        orm.brief_json = brief.model_dump(mode="json")
+        orm.brief_json = sanitize_json_text(brief.model_dump(mode="json"))
         orm.updated_at = utcnow()
         orm.version += 1
         if GuidedResearchState(orm.state) == GuidedResearchState.BRIEF_IN_PROGRESS:
@@ -248,7 +249,7 @@ class GuidedResearchSessionStateManager:
         self._check_version(orm, expected_version)
         merged = dict(orm.context_json or {})
         merged.update(updates or {})
-        orm.context_json = merged
+        orm.context_json = sanitize_json_text(merged)
         orm.updated_at = utcnow()
         orm.version += 1
         self._commit(db, orm)
@@ -265,7 +266,7 @@ class GuidedResearchSessionStateManager:
         metadata: dict[str, Any] | None = None,
     ) -> ConversationTurn:
         orm = self._get_orm(db, session_id)
-        text = str(content or "").strip()
+        text = sanitize_json_text(str(content or "")).strip()
         if not text:
             raise ValueError("Le contenu du message ne peut pas être vide.")
 
@@ -275,7 +276,7 @@ class GuidedResearchSessionStateManager:
             role=role.value,
             content=text,
             intent=intent.value if intent else None,
-            metadata_json=dict(metadata or {}),
+            metadata_json=sanitize_json_text(dict(metadata or {})),
             created_at=utcnow(),
         )
         db.add(message)

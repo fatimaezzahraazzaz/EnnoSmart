@@ -357,6 +357,7 @@ def _promote_safe_compound_action(
     forbidden = set(classification.forbidden_actions or [])
     safe_pair = (
         bool(_contract_sections(contract))
+        and not classification.needs_clarification
         and ConsultantIntent.ACCEPT_PLAN in actions
         and ConsultantIntent.START_WRITING in actions
         and ConsultantIntent.ACCEPT_PLAN not in forbidden
@@ -1237,6 +1238,7 @@ class EnnoScholarGuidedResearchAgent:
         current = dict(snapshot or self.repository.snapshot(db, session.session_id))
         context = dict(current.get("context") or session.context or {})
         if _clean(context.get("operating_mode"), 80) == "standalone_chat":
+            from .standalone_scope import canonicalize_standalone_links
             from services.guided_research_source_preparation_service import (
                 is_scientific_publication_source,
             )
@@ -1264,7 +1266,9 @@ class EnnoScholarGuidedResearchAgent:
                 ):
                     continue
                 private_sources.append(source)
-            return private_sources
+            return canonicalize_standalone_links(
+                private_sources, context.get("consultant_verrous") or []
+            )
         review_scope = _clean(context.get("review_scope"), 40)
         active_ids = (
             list(context.get("active_verrou_ids") or [])
@@ -1703,6 +1707,12 @@ class EnnoScholarGuidedResearchAgent:
         fallback: Mapping[str, Any] | None = None,
     ) -> ConversationResponse:
         assistant = _clean(interpretation.get("assistant_message"), 6000)
+        if fallback:
+            assistant = (
+                "Un incident technique a empêché le traitement de votre message. "
+                "Aucune modification du document n'a été lancée. "
+                "Vous pouvez renvoyer la même demande, sans la reformuler."
+            )
         if not assistant:
             assistant = (
                 "Je n'ai pas pu déterminer précisément ce que vous attendez. "
@@ -1761,6 +1771,9 @@ class EnnoScholarGuidedResearchAgent:
                 db, project, session
             )
         )
+        conversation_project_context["existing_draft_available"] = bool(
+            (session_snapshot.get("draft") or {}).get("markdown")
+        )
         understanding = self.understanding.understand(
             session=session,
             consultant_message=message,
@@ -1781,6 +1794,7 @@ class EnnoScholarGuidedResearchAgent:
         # l'intention et son payload. Cette étape ne fait que normaliser les champs
         # techniques dérivables ; aucun classifieur lexical ne requalifie le tour.
         classification = _reconcile_contextual_intent(classification)
+        classification = _promote_safe_compound_action(classification, contract)
         original_intent = classification.intent
         intent = _resolve_routed_intent(classification)
         classification.intent = intent
@@ -1886,6 +1900,8 @@ class EnnoScholarGuidedResearchAgent:
             and classification.explicit_research_command
             and interpretation.get("search_requests")
         ):
+            if _clean(session.context.get("operating_mode"), 80) == "standalone_chat":
+                context_updates["last_standalone_research_request"] = message
             writing_directive = _search_writing_directive(
                 message,
                 classification,
@@ -2055,6 +2071,10 @@ class EnnoScholarGuidedResearchAgent:
                 ),
                 requested_source_count=classification.requested_source_count,
                 target_section_ids=classification.target_section_ids,
+                section_writing_edits=[
+                    edit.model_dump(mode="json")
+                    for edit in classification.section_writing_edits
+                ],
                 action_intent=intent,
                 conversation_reply=_clean(
                     interpretation.get("assistant_message"), 6000
@@ -2135,7 +2155,7 @@ class EnnoScholarGuidedResearchAgent:
 
         executed_actions = {intent}
         if (
-            intent == ConsultantIntent.START_WRITING
+            intent in {ConsultantIntent.START_WRITING, ConsultantIntent.REVISE_DRAFT}
             and classification.explicit_plan_approval
             and ConsultantIntent.ACCEPT_PLAN in classification.requested_actions
         ):
@@ -3584,6 +3604,7 @@ class EnnoScholarGuidedResearchAgent:
         writing_source_identifiers: Iterable[str] | None = None,
         requested_source_count: int | None = None,
         target_section_ids: Iterable[str] | None = None,
+        section_writing_edits: Iterable[Mapping[str, Any]] | None = None,
         action_intent: ConsultantIntent = ConsultantIntent.START_WRITING,
         conversation_reply: str = "",
     ) -> ConversationResponse:
@@ -3593,6 +3614,14 @@ class EnnoScholarGuidedResearchAgent:
         # seulement servir au routage. On conserve le texte exact comme contrainte
         # de cette version (ex. « bien défendre les verrous à partir des articles
         # existants »), sans en déduire de faits supplémentaires.
+        existing_snapshot = self.repository.snapshot(db, session.session_id)
+        existing_draft = existing_snapshot.get("draft") or {}
+        has_existing_draft = bool(existing_draft.get("markdown"))
+        current_edits = [dict(row) for row in (section_writing_edits or [])]
+        current_target_ids = _unique([
+            *(target_section_ids or []),
+            *(row.get("section_id") for row in current_edits),
+        ])
         pending_directives = [
             dict(row)
             for row in (
@@ -3600,16 +3629,19 @@ class EnnoScholarGuidedResearchAgent:
             )
             if isinstance(row, Mapping)
         ]
-        for historical_directive in _historical_search_writing_directives(
-            session,
-            contract,
-        ):
+        # Une recherche déjà consommée ne doit pas redevenir une instruction
+        # globale à chaque révision. Le tour courant prime sur les anciennes cibles.
+        historical_directives = (
+            _historical_search_writing_directives(session, contract)
+            if not has_existing_draft and not current_target_ids and not pending_directives
+            else []
+        )
+        for historical_directive in historical_directives:
             pending_directives = _merge_pending_writing_directives(
                 pending_directives,
                 historical_directive,
             )
-        writing_target_section_ids = _unique([
-            *(target_section_ids or []),
+        writing_target_section_ids = current_target_ids or _unique([
             *(
                 value
                 for row in pending_directives
@@ -3617,10 +3649,12 @@ class EnnoScholarGuidedResearchAgent:
             ),
         ])
         writing_target_section_titles = _unique(
-            value
-            for row in pending_directives
+            row.get("title") for row in _contract_sections(contract)
+            if row.get("section_id") in writing_target_section_ids
+        ) or ([] if current_target_ids else _unique(
+            value for row in pending_directives
             for value in (row.get("target_section_titles") or [])
-        )
+        ))
 
         # Une révision locale ne doit pas réinjecter dans son instruction toutes
         # les recherches générales effectuées auparavant dans la conversation.
@@ -3647,16 +3681,42 @@ class EnnoScholarGuidedResearchAgent:
                     scoped_directives.append(row)
             pending_directives = scoped_directives
 
+        # Une retouche bloquée en attente d'approbation doit survivre à « rédige ».
+        # Contrairement à une recherche, elle conserve les opérations par section.
+        edits_by_id = {
+            row["section_id"]: dict(row)
+            for directive in pending_directives
+            for row in directive.get("section_writing_edits") or []
+            if isinstance(row, Mapping) and row.get("section_id") in writing_target_section_ids
+        }
+        edits_by_id.update({row["section_id"]: row for row in current_edits})
+        writing_edits = list(edits_by_id.values())
+        if current_target_ids:
+            pending_directives = _merge_pending_writing_directives(
+                pending_directives,
+                {
+                    "request": str(message).strip(),
+                    "target_section_ids": current_target_ids,
+                    "target_section_titles": writing_target_section_titles,
+                    "section_writing_edits": current_edits,
+                    "search_queries": [],
+                },
+            )
+        self.repository.update(
+            db, session.session_id,
+            context_updates={"pending_writing_directives": pending_directives},
+        )
+
         current_writing_request = _clean(message, 6000)
         writing_request = _clean(
             "\n\n".join(
-                _unique([
+                dict.fromkeys([
                     *(
                         _clean(row.get("request"), 6000)
                         for row in pending_directives
                     ),
                     current_writing_request,
-                ], limit=12)
+                ])
             ),
             12000,
         )
@@ -3666,15 +3726,6 @@ class EnnoScholarGuidedResearchAgent:
             for value in (row.get("search_queries") or [])
         )
 
-        existing_snapshot = self.repository.snapshot(db, session.session_id)
-        existing_draft = (
-            existing_snapshot.get("draft")
-            if isinstance(existing_snapshot.get("draft"), Mapping)
-            else {}
-        )
-        has_existing_draft = bool(
-            _clean(existing_draft.get("markdown"), 100000)
-        )
         targeted_existing_revision = bool(
             has_existing_draft
             and (
@@ -3686,7 +3737,7 @@ class EnnoScholarGuidedResearchAgent:
             action_intent == ConsultantIntent.REVISE_DRAFT
             or targeted_existing_revision
         ):
-            revision_request = current_writing_request or writing_request
+            revision_request = writing_request
         writing_contract_fields = {
             "consultant_writing_request": writing_request,
             "consultant_writing_target_section_ids": (
@@ -3697,6 +3748,7 @@ class EnnoScholarGuidedResearchAgent:
             ),
             "consultant_writing_search_queries": writing_search_queries,
             "consultant_writing_directives": pending_directives,
+            "consultant_section_writing_edits": writing_edits,
         }
         if writing_request:
             if session.brief is not None:
@@ -3829,7 +3881,7 @@ class EnnoScholarGuidedResearchAgent:
                     context_updates={
                         "plan_approved": True,
                         "writing_authorized": True,
-                        "pending_writing_directives": [],
+                        "pending_writing_directives": pending_directives if revision_request else [],
                     },
                 )
 
@@ -4251,7 +4303,7 @@ class EnnoScholarGuidedResearchAgent:
                 "generation_mode": generation_mode,
                 "revision_request": _clean(revision_request, 6000),
                 "writing_source_policy": source_policy,
-                "pending_writing_directives": [],
+                "pending_writing_directives": pending_directives if revision_request else [],
                 "last_writing_request": writing_request,
                 "last_writing_target_section_ids": (
                     writing_target_section_ids
@@ -4830,6 +4882,40 @@ CONSIGNES IMPÉRATIVES
                     snapshot_context.get("standalone_project_brief") or {}
                 ),
             }
+        if _clean((snapshot.get("context") or {}).get("operating_mode"), 80) == "standalone_chat":
+            from .standalone_scope import resolve_standalone_verrou_ids
+
+            private_context = dict(snapshot.get("context") or {})
+            private_verrous = list(private_context.get("consultant_verrous") or [])
+            # Always use the fresh snapshot: the initial request has just created
+            # these locks, whereas the session object can still be one turn old.
+            research_project_context = {
+                **research_project_context,
+                "operating_mode": "standalone_chat",
+                "current_verrous": private_verrous,
+                "active_verrou_ids": list(private_context.get("active_verrou_ids") or []),
+                "standalone_project_brief": dict(private_context.get("standalone_project_brief") or {}),
+                "consultant_request": private_context.get("last_standalone_research_request") or "",
+                "scientific_context": _clean("\n".join(str(value) for value in (
+                    (private_context.get("standalone_project_brief") or {}).get("additional_context"),
+                    private_context.get("last_standalone_research_request"),
+                ) if value), 12000),
+            }
+            scoped_requests = []
+            for raw_request in requests_payload:
+                requested_ids = list(raw_request.get("target_verrous") or [])
+                targets = resolve_standalone_verrou_ids(
+                    requested_ids or research_project_context["active_verrou_ids"]
+                    or [row["id"] for row in private_verrous], private_verrous,
+                )
+                if requested_ids and any(
+                    not resolve_standalone_verrou_ids([value], private_verrous)
+                    for value in requested_ids
+                ):
+                    raise ValueError("La recherche vise un verrou inconnu de cette conversation.")
+                scoped_requests.append({**raw_request, "target_verrous": targets})
+            requests_payload = scoped_requests
+
         result = self.research.search(
             requests_payload,
             excluded_ids=excluded,

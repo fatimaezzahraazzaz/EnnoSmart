@@ -162,6 +162,16 @@ class ConsultantBrief(BaseModel):
         return self
 
 
+class SectionWritingEdit(BaseModel):
+    """Content-only instruction, resolved by the conversational LLM."""
+
+    model_config = ConfigDict(extra="forbid")
+    section_id: str = Field(min_length=1, max_length=200)
+    operation: Literal["rewrite", "enrich", "shorten", "remove_passages"]
+    instruction: str = Field(min_length=1, max_length=6000)
+    source_identifiers: list[str] = Field(default_factory=list)
+
+
 class IntentClassification(BaseModel):
     model_config = ConfigDict(extra="forbid", use_enum_values=False)
 
@@ -211,6 +221,7 @@ class IntentClassification(BaseModel):
         "remove",
     ] = "none"
     target_section_ids: list[str] = Field(default_factory=list)
+    section_writing_edits: list[SectionWritingEdit] = Field(default_factory=list)
     replace_current_plan: bool = False
     use_current_sources_only: bool = False
     writing_source_scope: Literal[
@@ -246,6 +257,7 @@ class IntentClassification(BaseModel):
         "writing_source_identifiers",
         "target_verrou_ids",
         "target_section_ids",
+        "section_writing_edits",
         mode="before",
     )
     @classmethod

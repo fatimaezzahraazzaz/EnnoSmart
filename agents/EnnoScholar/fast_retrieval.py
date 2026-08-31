@@ -776,7 +776,9 @@ def article_has_core_alignment(article: Mapping[str, Any], plan: Mapping[str, An
     text_tokens = set(_tokens(f"{title} {abstract}"))
     if not text_tokens:
         return False
-    objects, axes = _role_terms_for_safety(plan)
+    # The helper now returns domain anchors as well. Keep the existing seed
+    # criterion (object + two axes), without changing relevance thresholds.
+    _domains, objects, axes = _role_terms_for_safety(plan)
 
     def phrase_hit(term: str, threshold: float = 0.5) -> bool:
         tt = set(_tokens(term))

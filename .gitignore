@@ -219,3 +219,5 @@ modules/llm_gateway/
 # Local image/visual patch folders
 /_image_writer_patch/
 /_visual_filter_hotfix/
+.codex_tmp/
+.ennosmart_patch_backups/

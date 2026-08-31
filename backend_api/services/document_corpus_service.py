@@ -15,6 +15,7 @@ from db.models import Document, DocumentCorpusAssignment
 CORPUS_DIAGNOSTIC = "diagnostic"
 CORPUS_IMPROVEMENT = "improvement"
 SUPPORTED_CORPORA = {CORPUS_DIAGNOSTIC, CORPUS_IMPROVEMENT}
+WORK_ITEM_DOCUMENT_TYPE = "Élément de travail"
 
 
 def _legacy_corpora(document: Document) -> set[str]:

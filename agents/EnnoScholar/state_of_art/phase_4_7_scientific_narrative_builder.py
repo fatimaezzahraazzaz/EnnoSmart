@@ -408,7 +408,8 @@ def verrou_id_of(verrou: Dict[str, Any], fallback: int = 1) -> str:
 
 
 def verrou_title_of(verrou: Dict[str, Any]) -> str:
-    title = clean_sentence(
+    # Contract identities must retain punctuation spacing, unlike prose.
+    title = clean_text(
         verrou.get("verrou_title")
         or verrou.get("title")
         or verrou.get("objectif_rd")
@@ -431,7 +432,7 @@ def build_verrou_index(phase45: Dict[str, Any], phase46: Dict[str, Any]) -> List
     arg_by_title: Dict[str, Dict[str, Any]] = {}
     for i, arg in enumerate(arg_items, 1):
         vid = clean_sentence(arg.get("verrou_id") or argumentation_json(arg).get("verrou_id"))
-        vt = clean_sentence(arg.get("verrou_title") or argumentation_json(arg).get("verrou_title"))
+        vt = clean_text(arg.get("verrou_title") or argumentation_json(arg).get("verrou_title"))
         if not vid or not vt:
             raise ContractError(
                 "invalid_phase46_verrou",
@@ -6786,7 +6787,7 @@ def build_scientific_narrative_payload(*args: Any, **kwargs: Any) -> Dict[str, A
         evidence_sufficiency_by_verrou.append(
             {
                 "verrou_id": clean_sentence(section.get("verrou_id")),
-                "verrou_title": clean_sentence(
+                "verrou_title": clean_text(
                     section.get("verrou_title")
                 ),
                 "evidence_status": status,

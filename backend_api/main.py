@@ -110,8 +110,14 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["health"])
     def health_check() -> dict[str, Any]:
+        from modules.NLP.demarche_legibility import VERSION as demarche_version
+        from services.diagnostic_service import DIAGNOSTIC_SERVICE_VERSION
         return {
             "status": "ok",
+            "diagnostic_versions": {
+                "service": DIAGNOSTIC_SERVICE_VERSION,
+                "demarche": demarche_version,
+            },
             "app": settings.APP_NAME,
             "env": settings.ENV,
             "capacity": {

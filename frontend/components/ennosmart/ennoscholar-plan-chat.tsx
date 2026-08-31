@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
+  AlertTriangle,
   BookOpenText,
   Bot,
   Check,
@@ -9,6 +10,7 @@ import {
   ChevronLeft,
   ChevronUp,
   Copy,
+  Download,
   ExternalLink,
   FilePlus2,
   FileText,
@@ -87,6 +89,17 @@ type ResearchCandidate = {
     | "implementation"
   role_reason?: string
   current_research_batch?: boolean
+
+  // Statuts d'accès / extraction renvoyés par les différentes versions du backend.
+  // Ils restent optionnels pour conserver la compatibilité avec les anciennes sessions.
+  access_status?: string | null
+  evidence_status?: string | null
+  evidence_reason_code?: string | null
+  evidence_reason_detail?: string | null
+  evidence_recommended_action?: string | null
+  manual_upload_required?: boolean
+  browser_download_url?: string | null
+  source_json?: Record<string, any>
 }
 
 type Props = {
@@ -295,6 +308,166 @@ function DraftPreview({
   )
 }
 
+function getCandidateAccessInfo(candidate: ResearchCandidate) {
+  const raw: any = candidate || {}
+  const preparation: any = raw.fulltext_preparation || {}
+  const sourceJson: any = raw.source_json || {}
+  const preflight: any = sourceJson.evidence_preflight || {}
+  const accessProbe: any = sourceJson.access_probe_result || {}
+
+  const accessStatus = String(
+    raw.access_status ||
+      preparation.access_status ||
+      preflight.access_status ||
+      sourceJson.access_status ||
+      "",
+  )
+    .trim()
+    .toUpperCase()
+
+  const evidenceStatus = String(
+    raw.evidence_status ||
+      preparation.evidence_status ||
+      preflight.evidence_status ||
+      preparation.status ||
+      "",
+  )
+    .trim()
+    .toUpperCase()
+
+  const reasonCode = String(
+    raw.evidence_reason_code ||
+      preparation.evidence_reason_code ||
+      preparation.reason_code ||
+      preflight.reason_code ||
+      "",
+  )
+    .trim()
+    .toUpperCase()
+
+  const reasonDetail = String(
+    raw.evidence_reason_detail ||
+      preparation.evidence_reason_detail ||
+      preparation.reason_detail ||
+      preparation.reason ||
+      preparation.error ||
+      preflight.reason_detail ||
+      accessProbe.reason_detail ||
+      "",
+  ).trim()
+
+  const recommendedAction = String(
+    raw.evidence_recommended_action ||
+      preparation.evidence_recommended_action ||
+      preparation.recommended_action ||
+      preflight.recommended_action ||
+      "",
+  ).trim()
+
+  // Certaines versions du backend exposent la cause uniquement sous forme de texte.
+  // On agrège donc les champs connus afin de ne pas perdre l'information dans les
+  // conversations créées avant l'ajout des statuts structurés.
+  const signal = [
+    accessStatus,
+    evidenceStatus,
+    reasonCode,
+    reasonDetail,
+    recommendedAction,
+    preparation.status,
+    preparation.access_kind,
+    preflight.access_kind,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toUpperCase()
+
+  const paywalled =
+    accessStatus === "PAYWALLED" ||
+    reasonCode === "PAYWALL_BLOCKED" ||
+    /\bPAYWALL(?:ED)?\b|\bPAID\b|\bPAYANT\b|\bSUBSCRIPTION\b|\bABONNEMENT\b/.test(
+      signal,
+    )
+
+  const automationBlocked =
+    accessStatus === "AUTOMATION_BLOCKED" ||
+    [
+      "PUBLIC_PDF_BROWSER_ONLY",
+      "ANTIBOT_BLOCKED",
+      "AUTOMATED_ACCESS_BLOCKED",
+      "BROWSER_DOWNLOAD_REQUIRED",
+    ].includes(reasonCode) ||
+    [
+      "BROWSER_DOWNLOAD_REQUIRED",
+      "AUTOMATION_BLOCKED",
+      "ANTIBOT_BLOCKED",
+    ].includes(evidenceStatus) ||
+    /ANTI[-_ ]?BOT|AUTOMATION[_ ]BLOCKED|AUTOMATED[_ ]ACCESS[_ ]BLOCKED|PUBLIC[_ ]PDF[_ ]BROWSER[_ ]ONLY|BROWSER[_ ]DOWNLOAD[_ ]REQUIRED|CLOUDFLARE|ROBOTS?\b|HTTP\s*403|STATUS\s*403|\bFORBIDDEN\b/.test(
+      signal,
+    )
+
+  const manualUploadRequired = Boolean(
+    raw.manual_upload_required ||
+      preparation.manual_upload_required ||
+      preflight.manual_upload_required ||
+      paywalled ||
+      automationBlocked ||
+      [
+        "ACCESS_UNAVAILABLE",
+        "BROWSER_DOWNLOAD_REQUIRED",
+        "ABSTRACT_READY",
+        "METADATA_ONLY",
+        "EXTRACTION_FAILED",
+      ].includes(evidenceStatus),
+  )
+
+  const browserDownloadUrl = String(
+    raw.browser_download_url ||
+      preparation.browser_download_url ||
+      preflight.browser_download_url ||
+      accessProbe.browser_download_url ||
+      raw.pdf_url ||
+      raw.url ||
+      "",
+  ).trim()
+
+  const publicationUrl = String(raw.url || raw.pdf_url || "").trim()
+
+  return {
+    accessStatus,
+    evidenceStatus,
+    reasonCode,
+    reasonDetail,
+    recommendedAction,
+    paywalled,
+    automationBlocked,
+    manualUploadRequired,
+    browserDownloadUrl,
+    publicationUrl,
+  }
+}
+
+function getCandidateDisplayState(candidate: ResearchCandidate) {
+  const decided = String(candidate.consultant_decision || "")
+  const documentation = [
+    "official_documentation",
+    "documentation",
+    "software_repository",
+    "research_output",
+  ].includes(String(candidate.candidate_kind))
+  const preparation = candidate.fulltext_preparation || {}
+  const fulltextReady = Boolean(
+    candidate.fulltext_verified ||
+      candidate.scientific_evidence_eligible ||
+      preparation.usable_as_scientific_evidence ||
+      preparation.fulltext_ready ||
+      preparation.ready_for_writing,
+  )
+  const pendingExtraction =
+    decided === "accepted" && !documentation && !fulltextReady
+  const articleId = Number(preparation.article_id || 0)
+  return { decided, documentation, pendingExtraction, articleId }
+}
+
 function CandidateCard({
   candidate,
   busy,
@@ -309,13 +482,8 @@ function CandidateCard({
   ) => void
   onUploadPdf: (candidate: ResearchCandidate, file: File) => void
 }) {
-  const decided = String(candidate.consultant_decision || "")
-  const documentation = [
-    "official_documentation",
-    "documentation",
-    "software_repository",
-    "research_output",
-  ].includes(String(candidate.candidate_kind))
+  const uploadInputRef = useRef<HTMLInputElement | null>(null)
+  const { decided, documentation, pendingExtraction, articleId } = getCandidateDisplayState(candidate)
   const roleLabel =
     {
       direct_evidence: "Preuve directe",
@@ -323,17 +491,14 @@ function CandidateCard({
       official_documentation: "Documentation officielle",
       implementation: "Implémentation",
     }[String(candidate.relevance_role)] || ""
-  const preparation = candidate.fulltext_preparation || {}
-  const fulltextReady = Boolean(
-    candidate.fulltext_verified ||
-      candidate.scientific_evidence_eligible ||
-      preparation.usable_as_scientific_evidence ||
-      preparation.fulltext_ready,
-  )
-  const pendingExtraction =
-    decided === "accepted" && !documentation && !fulltextReady
-  const articleId = Number(preparation.article_id || 0)
-  const consultationUrl = candidate.pdf_url || candidate.url
+  const accessInfo = getCandidateAccessInfo(candidate)
+
+  // Pour une source non encore gardée, on conserve le lien de consultation habituel.
+  // Une fois gardée mais non extraite, le lien privilégié devient celui que le
+  // navigateur peut réellement ouvrir/télécharger (éditeur, PDF public, etc.).
+  const consultationUrl = pendingExtraction
+    ? accessInfo.browserDownloadUrl || accessInfo.publicationUrl
+    : candidate.pdf_url || candidate.url
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
@@ -380,8 +545,96 @@ function CandidateCard({
         </p>
       )}
 
+      {/* A retained source is not a validated full text until extraction succeeds.
+          Display the extraction state without inferring an access restriction. */}
+      {pendingExtraction && (
+        <div
+          className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-800 dark:bg-amber-950/30"
+          aria-busy={busy}
+        >
+          <div className="flex items-start gap-2.5">
+            <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-background text-amber-700 dark:text-amber-300">
+              {busy ? (
+                <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+              ) : (
+                <AlertTriangle className="size-4" aria-hidden="true" />
+              )}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-amber-900 dark:text-amber-200" role="status">
+                {busy ? "Extraction en cours…" : "Extraction interrompue"}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-amber-800 dark:text-amber-200">
+                {busy
+                  ? "Le PDF est en cours de préparation. La carte sera mise à jour à la fin de l’extraction."
+                  : "L’extraction automatique a été interrompue. Cet article est gardé, mais n’est pas encore dans le corpus. Téléchargez le PDF, puis importez-le ici pour terminer l’extraction."}
+              </p>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {consultationUrl ? (
+                  <a
+                    href={consultationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Ouvrir la source dans un nouvel onglet pour télécharger le PDF"
+                    className="inline-flex min-h-10 items-center rounded-lg border border-amber-300 bg-background px-3 text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40"
+                  >
+                    <Download className="mr-1.5 size-3.5" aria-hidden="true" />
+                    Télécharger le PDF
+                  </a>
+                ) : (
+                  <Button type="button" size="sm" variant="outline" className="min-h-10" disabled title="Aucun lien de téléchargement disponible pour cet article">
+                    <Download className="mr-1.5 size-3.5" aria-hidden="true" />
+                    Télécharger le PDF
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="min-h-10 rounded-lg border-amber-300 bg-background text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40"
+                  disabled={busy || articleId <= 0}
+                  onClick={() => uploadInputRef.current?.click()}
+                >
+                  {busy ? (
+                    <Loader2 className="mr-1.5 size-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                  ) : (
+                    <UploadCloud className="mr-1.5 size-3.5" aria-hidden="true" />
+                  )}
+                  {busy ? "Import et extraction…" : "Importer le PDF"}
+                </Button>
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  aria-label={`Importer le PDF de ${candidate.title || "cet article"}`}
+                  className="hidden"
+                  disabled={busy || articleId <= 0}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    event.currentTarget.value = ""
+                    if (file) onUploadPdf(candidate, file)
+                  }}
+                />
+              </div>
+              {articleId <= 0 && (
+                <p className="mt-2 text-xs leading-5 text-amber-800 dark:text-amber-200">
+                  L’import nécessite que la source soit associée à un article.
+                </p>
+              )}
+
+              <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                Après import, EnnoScholar vérifie le PDF, extrait le texte
+                intégral et n’ajoute l’article au corpus qu’après une extraction
+                réussie.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {consultationUrl && (
+        {!pendingExtraction && consultationUrl && (
           <a
             href={consultationUrl}
             target="_blank"
@@ -389,9 +642,10 @@ function CandidateCard({
             className="inline-flex min-h-10 items-center rounded-lg px-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25"
           >
             <ExternalLink className="mr-1 size-3" />
-            {pendingExtraction ? "Télécharger / consulter" : "Consulter"}
+            Consulter
           </a>
         )}
+
         {!["accepted", "rejected"].includes(decided) ? (
           <>
             <Button
@@ -418,50 +672,31 @@ function CandidateCard({
               Écarter
             </Button>
           </>
-        ) : (
-          <>
-            <Badge
-              className={
-                decided === "rejected"
-                  ? "bg-slate-500"
-                  : pendingExtraction
-                    ? "border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-50"
-                    : "bg-emerald-600"
-              }
+        ) : decided === "accepted" && !pendingExtraction ? (
+          <span role="status">
+            <Button
+              type="button"
+              size="sm"
+              disabled
+              className="min-h-10 rounded-lg bg-success text-success-foreground disabled:opacity-100"
             >
-              {decided === "rejected"
-                ? "Écarté"
-                : pendingExtraction
-                  ? "Non extrait — hors corpus"
-                  : documentation
-                    ? "Source validée"
-                    : "Ajouté au corpus"}
-            </Badge>
-            {pendingExtraction && articleId > 0 && (
-              <label
-                className={`inline-flex h-8 cursor-pointer items-center rounded-lg border border-amber-200 bg-white px-2.5 text-xs font-medium text-amber-800 hover:bg-amber-50 ${
-                  busy ? "pointer-events-none opacity-50" : ""
-                }`}
-              >
-                {busy ? (
-                  <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-                ) : (
-                  <UploadCloud className="mr-1.5 size-3.5" />
-                )}
-                Importer le PDF
-                <input
-                  type="file"
-                  accept="application/pdf,.pdf"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0]
-                    event.target.value = ""
-                    if (file) onUploadPdf(candidate, file)
-                  }}
-                />
-              </label>
-            )}
-          </>
+              <Check className="mr-1 size-3.5" aria-hidden="true" />
+              Gardé · validé
+            </Button>
+          </span>
+        ) : (
+          <Badge
+            role="status"
+            className={
+              decided === "rejected"
+                ? "bg-slate-500"
+                : "border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+            }
+          >
+            {decided === "rejected"
+              ? "Écarté"
+              : "Gardé · à compléter"}
+          </Badge>
         )}
       </div>
     </div>
@@ -492,7 +727,10 @@ function withMessageCandidates(
 ) {
   const metadata: any = { ...(message?.metadata || {}) }
 
-  if (metadata?.research && Array.isArray(metadata.research?.candidates)) {
+  // Update the same attachment that getMessageCandidates reads first.
+  if (Array.isArray(metadata.candidates)) {
+    metadata.candidates = candidates
+  } else if (metadata?.research && Array.isArray(metadata.research?.candidates)) {
     metadata.research = {
       ...metadata.research,
       candidates,
@@ -678,7 +916,7 @@ function ResearchAttachment({
       {!expanded ? (
         <div className="divide-y divide-border/60">
           {preview.map((candidate) => {
-            const decision = String(candidate.consultant_decision || "")
+            const { decided: decision, pendingExtraction } = getCandidateDisplayState(candidate)
             return (
               <button
                 key={candidate.candidate_id}
@@ -710,8 +948,10 @@ function ResearchAttachment({
                 </span>
 
                 {decision === "accepted" ? (
-                  <Badge className="shrink-0 bg-success text-[9px]">
-                    Gardée
+                  <Badge className={pendingExtraction
+                    ? "shrink-0 border-amber-200 bg-amber-50 text-[10px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+                    : "shrink-0 bg-success text-[10px] text-success-foreground"}>
+                    {pendingExtraction ? "Gardé · à compléter" : "Gardé · validé"}
                   </Badge>
                 ) : decision === "rejected" ? (
                   <Badge
@@ -770,6 +1010,9 @@ function CorpusPanel({
   open,
   onOpenChange,
   articles,
+  loading,
+  error,
+  onRefresh,
   busyArticleId,
   preparing,
   onRemove,
@@ -781,6 +1024,9 @@ function CorpusPanel({
   open: boolean
   onOpenChange: (open: boolean) => void
   articles: ArticleRead[]
+  loading: boolean
+  error: string | null
+  onRefresh: () => void
   busyArticleId: number | null
   preparing: boolean
   onRemove: (article: ArticleRead) => void
@@ -796,10 +1042,12 @@ function CorpusPanel({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex w-[96vw] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
         <SheetHeader className="border-b px-5 py-4 pr-14 text-left sm:px-6">
-          <SheetTitle className="flex items-center gap-2">
+          <SheetTitle className="flex flex-wrap items-center gap-2">
             <Library className="size-5 text-brand" />
             Corpus de rédaction
-            <Badge variant="outline">{articles.length} article(s)</Badge>
+            <Badge variant="outline" aria-live="polite">
+              {loading ? "Chargement…" : error ? "Indisponible" : `${articles.length} article(s)`}
+            </Badge>
           </SheetTitle>
           <SheetDescription>
             Chaque article présent ici est sélectionné pour la rédaction.
@@ -870,8 +1118,18 @@ function CorpusPanel({
           </p>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-          {articles.length === 0 ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4" aria-busy={loading}>
+          {loading ? (
+            <p role="status" className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              Chargement des articles gardés…
+            </p>
+          ) : error ? (
+            <div role="alert" className="space-y-3 rounded-xl border border-destructive/30 p-4 text-sm">
+              <p className="text-destructive">{error}</p>
+              <Button variant="outline" onClick={onRefresh}>Réessayer le chargement</Button>
+            </div>
+          ) : articles.length === 0 ? (
             <div className="rounded-2xl border border-dashed p-10 text-center">
               <Library className="mx-auto size-7 text-muted-foreground" />
               <p className="mt-3 font-medium">Le corpus est vide</p>
@@ -1012,6 +1270,9 @@ export function EnnoScholarPlanChat({
   const [preparingCorpus, setPreparingCorpus] = useState(false)
   const [busyArticleId, setBusyArticleId] = useState<number | null>(null)
   const [conversationArticles, setConversationArticles] = useState<ArticleRead[]>([])
+  const [corpusLoading, setCorpusLoading] = useState(false)
+  const [corpusError, setCorpusError] = useState<string | null>(null)
+  const corpusRequestRef = useRef(0)
   const [deletingSessionId, setDeletingSessionId] = useState("")
   const [operatingMode, setOperatingMode] = useState("")
   const [sessionDraftMarkdown, setSessionDraftMarkdown] = useState("")
@@ -1059,14 +1320,30 @@ export function EnnoScholarPlanChat({
   }
 
   async function refreshConversationCorpus(targetSessionId = sessionId) {
+    const requestId = ++corpusRequestRef.current
     if (!targetSessionId) {
       setConversationArticles([])
+      setCorpusLoading(false)
       return []
     }
-    const result = await getGuidedResearchCorpus(projectId, targetSessionId)
-    const rows = Array.isArray(result?.articles) ? result.articles : []
-    setConversationArticles(rows)
-    return rows
+    setCorpusLoading(true)
+    setCorpusError(null)
+    try {
+      const result = await getGuidedResearchCorpus(projectId, targetSessionId)
+      if (result?.ok === false || !Array.isArray(result?.articles)) {
+        throw new Error("La réponse du corpus est indisponible. Réessayez le chargement.")
+      }
+      const rows = result.articles
+      if (requestId === corpusRequestRef.current) setConversationArticles(rows)
+      return rows
+    } catch (err: any) {
+      if (requestId === corpusRequestRef.current) {
+        setCorpusError(err?.message || "Impossible de charger les articles gardés.")
+      }
+      throw err
+    } finally {
+      if (requestId === corpusRequestRef.current) setCorpusLoading(false)
+    }
   }
 
   function candidatesFromSession(current: any): ResearchCandidate[] {
@@ -1109,7 +1386,7 @@ export function EnnoScholarPlanChat({
       )
       setOperatingMode(String(current?.session?.context?.operating_mode || ""))
       setSessionDraftMarkdown(String(current?.artifacts?.draft?.markdown || ""))
-      await refreshConversationCorpus(id)
+      await refreshConversationCorpus(id).catch(() => undefined)
       localStorage.setItem(storageKey(projectId), id)
     } catch (err: any) {
       setError(err?.message || "Impossible d’ouvrir cette conversation.")
@@ -1142,6 +1419,9 @@ export function EnnoScholarPlanChat({
       setSessionDraftMarkdown("")
       setConversationArticles([])
       localStorage.setItem(storageKey(projectId), id)
+      // A new document is empty; the diagnostic-backed project corpus is not.
+      // The endpoint preserves the private scope of standalone conversations.
+      await refreshConversationCorpus(id).catch(() => undefined)
       await refreshSessions()
     } catch (err: any) {
       setError(err?.message || "Impossible de créer la conversation.")
@@ -1203,12 +1483,21 @@ export function EnnoScholarPlanChat({
   }
 
   useEffect(() => {
+    corpusRequestRef.current += 1
     setSessionId("")
     setMessages([])
     setConversationArticles([])
+    setCorpusError(null)
     void initialize()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
+
+  useEffect(() => {
+    if (!corpusOpen || !sessionId || initializing) return
+    void refreshConversationCorpus().catch(() => undefined)
+    // Refresh decisions made in the Articles page when opening the corpus.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [corpusOpen, sessionId, projectId, initializing])
 
   async function submitMessageText(text: string) {
     const clean = text.trim()
@@ -1303,6 +1592,7 @@ export function EnnoScholarPlanChat({
         }
       }
       await refreshSessions()
+      await refreshConversationCorpus().catch(() => undefined)
     } catch (err: any) {
       setError(err?.message || "Impossible d’envoyer le message.")
     } finally {
@@ -1357,18 +1647,9 @@ export function EnnoScholarPlanChat({
           projectId,
           sessionId,
         )
-        const refreshedCandidate = candidatesFromSession(refreshedSession).find(
-          (row) => row.candidate_id === candidate.candidate_id,
+        setMessages((current) =>
+          hydrateResearchAttachments(current, refreshedSession, candidatesFromSession(refreshedSession)),
         )
-        if (refreshedCandidate) {
-          setMessages((current) =>
-            updateCandidateInMessages(
-              current,
-              candidate.candidate_id,
-              () => refreshedCandidate,
-            ),
-          )
-        }
         setNotice(
           "Source acceptée : elle est ajoutée au corpus uniquement si son texte a été extrait.",
         )
@@ -1459,18 +1740,9 @@ export function EnnoScholarPlanChat({
         sessionId,
       )
       const refreshedSession = await getGuidedResearchSession(projectId, sessionId)
-      const refreshedCandidate = candidatesFromSession(refreshedSession).find(
-        (row) => row.candidate_id === candidate.candidate_id,
+      setMessages((current) =>
+        hydrateResearchAttachments(current, refreshedSession, candidatesFromSession(refreshedSession)),
       )
-      if (refreshedCandidate) {
-        setMessages((current) =>
-          updateCandidateInMessages(
-            current,
-            candidate.candidate_id,
-            () => refreshedCandidate,
-          ),
-        )
-      }
       await refreshConversationCorpus()
       await onCorpusChanged?.()
       const cardsCount = Number(result?.phase_2?.cards_count || 0)
@@ -1619,7 +1891,9 @@ export function EnnoScholarPlanChat({
               >
                 <Library className="size-4 text-brand" aria-hidden="true" />
                 <span className="hidden md:inline">Corpus</span>
-                <Badge variant="outline">{conversationArticles.length}</Badge>
+                <Badge variant="outline" aria-live="polite">
+                  {initializing || corpusLoading ? "…" : corpusError ? "!" : conversationArticles.length}
+                </Badge>
                 {preparingCorpus && <Loader2 className="size-3.5 animate-spin" />}
               </button>
               <Button
@@ -1871,6 +2145,9 @@ export function EnnoScholarPlanChat({
         open={corpusOpen}
         onOpenChange={setCorpusOpen}
         articles={conversationArticles}
+        loading={initializing || corpusLoading}
+        error={corpusError}
+        onRefresh={() => void refreshConversationCorpus().catch(() => undefined)}
         busyArticleId={busyArticleId}
         preparing={preparingCorpus}
         onRemove={(article) => void removeArticle(article)}
@@ -1914,7 +2191,9 @@ export function EnnoScholarPlanChat({
                 <Library className="size-4 text-brand" />
                 Corpus de rédaction
               </span>
-              <Badge variant="outline">{conversationArticles.length}</Badge>
+              <Badge variant="outline">
+                {initializing || corpusLoading ? "…" : corpusError ? "!" : conversationArticles.length}
+              </Badge>
             </Button>
             {onBackToArticles && !chatOnly && (
               <Button

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-DIAGNOSTIC_SERVICE_VERSION = "v146_memory_safe_prepare_sources"
+DIAGNOSTIC_SERVICE_VERSION = "v148_fresh_assessment_clean_project_runs"
 
 from datetime import date, datetime
 from pathlib import Path
@@ -23,6 +23,7 @@ from services.document_corpus_service import (
     documents_for_corpus,
 )
 from services.file_service import load_json_file, project_output_dir, run_optional_ai_script
+from services.diagnostic_reset_service import exclusive_project_diagnostic
 
 try:
     from db.models import Document
@@ -751,7 +752,11 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
     from modules.RAG.indexer import index_nlp_result
 
     ps = get_project_store(project)
+    from services.diagnostic_reset_service import reset_previous_agent_runs
+    database_reset = reset_previous_agent_runs(db, project, ps, status="Préparation des sources en cours")
     reset_report = _reset_generated_diagnostic_artifacts(ps)
+    reset_report['database_history_deleted'] = True
+    reset_report['agent_runs_reset'] = database_reset
     print(
         "[prepare-sources][reset] Artefacts générés supprimés : "
         f"count={reset_report.get('removed_count')}",
@@ -1145,6 +1150,9 @@ def run_true_ennodiagnostic_agent(project: Project, prior_pipeline: Optional[Dic
     ps = get_project_store(project)
     out_dir = ps.project_dir
 
+    from modules.NLP.assessment_refresh import refresh_prepared_assessment
+    assessment_refresh = refresh_prepared_assessment(ps.nlp_dir / "nlp_result.json")
+    print(f"[EnnoDiagnostic][ASSESSMENT_VERSION] {assessment_refresh}", flush=True)
     ai_detection_runtime = run_ai_detector_if_enabled(project, out_dir)
     use_llm = os.getenv("ENNOSMART_DIAG_USE_LLM", "1").strip() != "0"
 
@@ -1166,6 +1174,7 @@ def run_true_ennodiagnostic_agent(project: Project, prior_pipeline: Optional[Dic
             "nlp_stats": ((prior_pipeline or {}).get("nlp_result") or {}).get("stats"),
         },
         "ai_detection_report_runtime": ai_detection_runtime,
+        "assessment_refresh": assessment_refresh,
     })
 
     save_json(ps.diagnostics_dir / "ennodiagnostic_report.json", report)
@@ -1256,6 +1265,52 @@ def _merge_non_empty_text_dict(target: Dict[str, str], source: Any, normalize_ke
             target[final_key] = value.strip()
 
 
+
+def _recovered_lock_display_score(
+    item: Dict[str, Any],
+    source_json: Optional[Dict[str, Any]] = None,
+) -> Optional[float]:
+    """Score d'affichage sûr pour un verrou récupéré après l'étape Frascati.
+
+    Important :
+    - ne crée aucun verrou ;
+    - ne modifie aucun group_id ;
+    - ne modifie pas le score Frascati amont ;
+    - ne s'applique qu'aux groupes produits par le mécanisme générique
+      ``recovered_constraint_*`` déjà existant ;
+    - utilise la confiance de qualification du groupe déjà calculée par
+      EnnoDiagnostic (``cluster_role_confidence``).
+
+    Ainsi un verrou récupéré ne reste plus visuellement à 0 % uniquement
+    parce qu'il a été découvert après le calcul Frascati.
+    """
+    source_json = source_json if isinstance(source_json, dict) else {}
+    full = source_json.get("full_persisted_verrou")
+    full = full if isinstance(full, dict) else {}
+
+    group_id = str(
+        item.get("group_id")
+        or item.get("cluster_id")
+        or full.get("group_id")
+        or full.get("cluster_id")
+        or ""
+    ).strip()
+
+    # Ciblage strict du mécanisme de récupération déjà existant.
+    if not group_id.startswith("recovered_constraint_"):
+        return None
+
+    for holder in (item, full):
+        try:
+            value = float(holder.get("cluster_role_confidence"))
+        except Exception:
+            continue
+        if 0.0 < value <= 1.0:
+            return round(value, 4)
+
+    return None
+
+
 def _extract_final_verrous_from_report(report: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Extrait uniquement les verrous finaux acceptés par l'agent."""
     if not isinstance(report, dict):
@@ -1339,6 +1394,21 @@ def _extract_final_verrous_from_report(report: Dict[str, Any]) -> List[Dict[str,
                 score = score / 100.0
         except Exception:
             score = None
+
+        # V5.7 SCORE-ONLY:
+        # Un verrou récupéré après Frascati peut avoir score=0 uniquement parce
+        # qu'aucun assessment Frascati n'existait encore pour son nouveau group_id.
+        # On conserve ce 0 dans upstream_frascati_score ; seul le score de carte
+        # utilise la confiance de qualification déjà calculée.
+        if score is None or score <= 0:
+            recovered_score = _recovered_lock_display_score(raw, source_json)
+            if recovered_score is not None:
+                score = recovered_score
+                source_json = {
+                    **source_json,
+                    "display_score_source": "recovered_cluster_role_confidence",
+                    "display_score_semantics": "diagnostic_candidate_confidence",
+                }
 
         source_document = _clean_text(
             raw.get("source_document")
@@ -1719,6 +1789,17 @@ def sync_verrous_from_diagnostic(
         })
 
         score = _to_float(item.get("score"))
+        if score is None or score <= 0:
+            recovered_score = _recovered_lock_display_score(item, source_json)
+            if recovered_score is not None:
+                score = recovered_score
+                source_json = sanitize_json_value({
+                    **source_json,
+                    "display_score_source": "recovered_cluster_role_confidence",
+                    "display_score_semantics": "diagnostic_candidate_confidence",
+                    "upstream_score_preserved": item.get("upstream_frascati_score"),
+                })
+
         status_value = (
             previous_statuses.get(normalized_title)
             or item.get("consultant_status")
@@ -1880,6 +1961,7 @@ def _persist_complete_run(
         raise
 
 
+@exclusive_project_diagnostic
 def prepare_ennodiagnostic_sources(db: Session, project: Project) -> Dict[str, Any]:
     """
     Prepare les sources sans LLM.
@@ -1963,6 +2045,7 @@ def prepare_ennodiagnostic_sources(db: Session, project: Project) -> Dict[str, A
     )
     return result
 
+@exclusive_project_diagnostic
 def run_ennodiagnostic_agent_only(db: Session, project: Project) -> DiagnosticRun:
     """
     Lance l'agent depuis Chroma puis sauvegarde atomiquement :
@@ -1998,6 +2081,8 @@ def run_ennodiagnostic_agent_only(db: Session, project: Project) -> DiagnosticRu
         if isinstance(prepare_report.get("raw_pipeline_result"), dict)
         else None
     )
+    from services.diagnostic_reset_service import reset_previous_agent_runs
+    reset_previous_agent_runs(db, project, ps)
     report = run_true_ennodiagnostic_agent(project, prior_pipeline=prior_pipeline)
     paths = diagnostic_paths(project)
 
@@ -2049,12 +2134,15 @@ def create_diagnostic_run_from_files(db: Session, project: Project) -> Diagnosti
     )
 
 
+@exclusive_project_diagnostic
 def run_ennodiagnostic(db: Session, project: Project) -> DiagnosticRun:
     """Un seul bouton : extraction -> NLP -> RAG -> agent -> DB complète -> verrous DB."""
     output_dir = project_output_dir(project)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if getattr(settings, "ENNODIAGNOSTIC_SCRIPT", None):
+        from services.diagnostic_reset_service import reset_previous_agent_runs
+        reset_previous_agent_runs(db, project, get_project_store(project))
         pipeline_result = run_optional_ai_script(
             script_path=settings.ENNODIAGNOSTIC_SCRIPT,
             args=[

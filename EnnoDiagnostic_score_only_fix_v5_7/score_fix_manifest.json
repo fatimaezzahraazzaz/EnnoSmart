@@ -1,0 +1,25 @@
+{
+  "version": "5.7-score-only",
+  "purpose": "Corriger uniquement le score visible/persisté des verrous recovered_constraint_* dépourvus d'un score Frascati amont.",
+  "changed_files": [
+    "backend_api/services/diagnostic_service.py",
+    "backend_api/services/diagnostic_display_service.py"
+  ],
+  "changed_functions": {
+    "diagnostic_service.py": [
+      "_extract_final_verrous_from_report",
+      "_recovered_lock_display_score",
+      "sync_verrous_from_diagnostic"
+    ],
+    "diagnostic_display_service.py": [
+      "_extract_final_verrous",
+      "_recovered_lock_display_score"
+    ]
+  },
+  "forbidden_payload_files": [
+    "agents/EnnoDiagnostic/ennodiagnostic_agent.py",
+    "agents/EnnoDiagnostic/consultant_verrou_synthesizer.py",
+    "agents/EnnoDiagnostic/scientific_axis_synthesizer.py",
+    "modules/NLP/frascati_assessment.py"
+  ]
+}

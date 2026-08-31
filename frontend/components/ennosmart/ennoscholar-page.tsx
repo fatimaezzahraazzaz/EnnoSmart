@@ -47,6 +47,7 @@ import {
   type ProjectRead,
 } from "@/lib/api"
 import { getCurrentProjectId, setCurrentProjectId } from "@/lib/project-session"
+import { scholarSearchFailureMessage } from "@/lib/scholar-search-status"
 import { EnnoScholarStructuredStateArtPanel } from "./ennoscholar-structured-state-of-art-panel"
 import { EnnoScholarPlanChat } from "./ennoscholar-plan-chat"
 import {
@@ -3884,6 +3885,7 @@ export function EnnoScholarPage({
 
   const scholarPayload = scholarBundle?.bundle?.payload || scholarBundle?.latest_run?.raw_result_json?.payload || {}
   const scholarReport = scholarBundle?.bundle?.report || scholarBundle?.latest_run?.raw_result_json?.report || {}
+  const scholarSearchFailure = scholarSearchFailureMessage(scholarReport)
   const scholarSummary = scholarBundle?.bundle?.summary || scholarBundle?.latest_run?.raw_result_json?.summary || {}
   const scholarGroupingGroups =
     scholarPayload?.grouping_report?.groups ||
@@ -4590,14 +4592,14 @@ export function EnnoScholarPage({
         </div>
       </div>
 
-      {scholarSearchError && (
+      {(scholarSearchError || scholarSearchFailure) && (
         <div
           className="flex items-start gap-2 border-t border-destructive/20 bg-destructive/5 px-4 py-2.5 text-xs text-destructive lg:px-6"
           role="alert"
           aria-live="assertive"
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <span>{scholarSearchError}</span>
+          <span>{scholarSearchError || scholarSearchFailure}</span>
         </div>
       )}
 

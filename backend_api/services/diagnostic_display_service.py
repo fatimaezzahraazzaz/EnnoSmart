@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-DIAGNOSTIC_DISPLAY_VERSION = "v143_complete_sections"
+DIAGNOSTIC_DISPLAY_VERSION = "v144_historical_continuity_metric"
 
 from typing import Any, Dict, List, Optional
 import re
@@ -260,6 +260,21 @@ def _extract_final_verrous(report: Dict[str, Any]) -> List[Dict[str, Any]]:
             else source_json.get("score")
         )
 
+        # V5.7 SCORE-ONLY — correction d'affichage des runs déjà persistés.
+        try:
+            numeric_score = float(score) if score is not None else None
+        except Exception:
+            numeric_score = None
+        if numeric_score is None or numeric_score <= 0:
+            recovered_score = _recovered_lock_display_score(raw, source_json)
+            if recovered_score is not None:
+                score = recovered_score
+                source_json = {
+                    **source_json,
+                    "display_score_source": "recovered_cluster_role_confidence",
+                    "display_score_semantics": "diagnostic_candidate_confidence",
+                }
+
         item = {
             **raw,
             "id": raw.get("id") or raw.get("verrou_id"),
@@ -274,13 +289,21 @@ def _extract_final_verrous(report: Dict[str, Any]) -> List[Dict[str, Any]]:
             "tag_cir": raw.get("tag_cir") or raw.get("decision") or "À valider",
             "source_json": {
                 **source_json,
+                "historical_memory_card": raw.get("historical_memory_card"),
+                "historical_gap_recovered": raw.get("historical_gap_recovered"),
+                "candidate_origin": raw.get("candidate_origin"),
+                "continuity_percentage": raw.get("continuity_percentage"),
+                "display_metric_kind": raw.get("display_metric_kind"),
+                "display_score": raw.get("display_score"),
+                "visible_title_source": raw.get("visible_title_source"),
+                "historical_continuity": raw.get("historical_continuity"),
                 "source_document": source_document or source_json.get("source_document"),
                 "document": source_document or source_json.get("document"),
                 "evidence_summary": raw.get("evidence_summary") or source_json.get("evidence_summary"),
                 "scientific_lock": raw.get("scientific_lock") or source_json.get("scientific_lock"),
                 "why_not_simple_engineering": raw.get("why_not_simple_engineering") or source_json.get("why_not_simple_engineering"),
                 "consultant_explanation": raw.get("consultant_explanation") or source_json.get("consultant_explanation") or justification,
-                "frontend_source": "backend_display_service_v143",
+                "frontend_source": "backend_display_service_v144",
                 "frontend_json_only": not bool(raw.get("id") or raw.get("verrou_id")),
             },
             "can_decide": bool(raw.get("id") or raw.get("verrou_id") or raw.get("can_decide")),
@@ -294,6 +317,41 @@ def _extract_final_verrous(report: Dict[str, Any]) -> List[Dict[str, Any]]:
 # ============================================================
 # Main display builder
 # ============================================================
+
+
+def _recovered_lock_display_score(
+    raw: Dict[str, Any],
+    source_json: Optional[Dict[str, Any]] = None,
+) -> Optional[float]:
+    """Retourne la confiance déjà calculée pour un verrou récupéré.
+
+    Ce helper est purement présentation : il ne touche ni à la détection,
+    ni au regroupement, ni au Frascati, ni aux preuves.
+    """
+    source_json = source_json if isinstance(source_json, dict) else {}
+    full = source_json.get("full_persisted_verrou")
+    full = full if isinstance(full, dict) else {}
+
+    group_id = str(
+        raw.get("group_id")
+        or raw.get("cluster_id")
+        or full.get("group_id")
+        or full.get("cluster_id")
+        or ""
+    ).strip()
+
+    if not group_id.startswith("recovered_constraint_"):
+        return None
+
+    for holder in (raw, full):
+        try:
+            value = float(holder.get("cluster_role_confidence"))
+        except Exception:
+            continue
+        if 0.0 < value <= 1.0:
+            return round(value, 4)
+    return None
+
 
 def build_diagnostic_display(project: Any, bundle: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -534,7 +592,7 @@ def build_diagnostic_display(project: Any, bundle: Dict[str, Any]) -> Dict[str, 
 
     return {
         "source": _source_from_report(report, bundle),
-        "display_version": "v142_complete_sections_display",
+        "display_version": DIAGNOSTIC_DISPLAY_VERSION,
         "domain": getattr(project, "domain_label", None) or report.get("domain") or report.get("domain_label"),
         "status": diagnostic.get("status") or report.get("status"),
         "summary": summary,
@@ -560,7 +618,7 @@ def build_diagnostic_display(project: Any, bundle: Dict[str, Any]) -> Dict[str, 
         "validation_verrous_preview": final_verrous,
         "llm_reformulated_verrous": final_verrous,
         "consultant_verrous_cir": final_verrous,
-        "consultant_validation_source": "backend_display_service_v143",
+        "consultant_validation_source": "backend_display_service_v144",
         "consultant_validation_enabled": any(bool(v.get("can_decide") or v.get("is_db_synced")) for v in final_verrous),
         "verrou_synthesis_report": report.get("verrou_synthesis_report") or {},
         "frascati_summary": frascati_summary,
@@ -779,6 +837,9 @@ def _compact_frascati_summary(value: Any) -> Dict[str, Any]:
 
 def _compact_verrou_source_json(value: Any) -> Dict[str, Any]:
     source = _as_dict(value)
+    full = _as_dict(source.get("full_persisted_verrou"))
+    agent_item = _as_dict(source.get("full_agent_item"))
+    holders = (source, full, agent_item)
     scalar_keys = {
         "origin", "origin_type", "added_via", "manual_verrou",
         "supplementary_verrou", "human_validated", "automatic_verrou_creation",
@@ -788,13 +849,53 @@ def _compact_verrou_source_json(value: Any) -> Dict[str, Any]:
         "text", "source_text", "description", "document", "source_document",
         "filename", "document_name", "db_verrou_id", "is_db_synced", "can_decide",
         "sync_source", "frontend_json_only", "frontend_source",
+        "historical_memory_card", "historical_gap_recovered", "candidate_origin",
+        "continuity_percentage", "display_metric_kind", "display_score",
+        "visible_title_source", "historical_memory_source_exact_title",
+        "historical_memory_llm_title",
     }
     output: Dict[str, Any] = {}
     for key in scalar_keys:
-        item = source.get(key)
+        item = next(
+            (holder.get(key) for holder in holders if holder.get(key) not in (None, "")),
+            None,
+        )
         if item in (None, ""):
             continue
         output[key] = _clean_text(item, 5000) if isinstance(item, str) else item
+
+    history: Dict[str, Any] = {}
+    for holder in holders:
+        candidate = _as_dict(holder.get("historical_continuity"))
+        if candidate:
+            history = candidate
+            break
+    if history:
+        compact_history: Dict[str, Any] = {}
+        for key in (
+            "status", "confidence", "continuity_percentage", "previous_year",
+            "historical_family_title", "historical_excerpt",
+            "historical_source_exact_title", "historical_llm_reformulated_title",
+            "visible_title_source", "history_is_current_proof",
+        ):
+            if history.get(key) not in (None, ""):
+                compact_history[key] = history.get(key)
+        for key in (
+            "previous_years", "historical_family_titles", "matched_current_ids",
+            "historical_lock_context", "historical_method_context",
+            "historical_parameter_context", "historical_result_context",
+        ):
+            rows = _as_list(history.get(key))[:12]
+            if rows:
+                compact_history[key] = rows
+        story = _as_dict(history.get("historical_story"))
+        if story:
+            compact_history["historical_story"] = {
+                role: _as_list(story.get(role))[:8]
+                for role in ("verrou", "methode", "parametre", "resultat", "objectif")
+                if _as_list(story.get(role))
+            }
+        output["historical_continuity"] = compact_history
 
     keywords = [
         _clean_text(item, 100)

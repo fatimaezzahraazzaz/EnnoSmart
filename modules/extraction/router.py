@@ -1007,6 +1007,7 @@ def _run_pdf(
     native = extract_pdf_native(str(path))
     final_chunks = native.text_chunks
     confidence = native.confidence_score
+    ocr_selection = []
 
     if native.ocr_needed_pages:
         # L'import OCR initialise les backends locaux (Surya/Tesseract). Il ne
@@ -1022,6 +1023,7 @@ def _run_pdf(
         final_chunks = merge_native_and_ocr(
             native.text_chunks,
             ocr,
+            selection_report=ocr_selection,
         )
 
         native.extraction_errors.extend(ocr.extraction_errors)
@@ -1095,7 +1097,15 @@ def _run_pdf(
         tags.append(f"VISION_MODE:{_normalize_vision_mode(vision_mode).upper()}")
 
     if native.ocr_needed_pages:
-        tags.append("MIXED_NATIVE_OCR")
+        tags.append("OCR_ATTEMPTED")
+        if any(row['selected'] == 'ocr' for row in ocr_selection):
+            tags.append("MIXED_NATIVE_OCR")
+        if any(row['selected'] == 'native_fallback' for row in ocr_selection):
+            tags.append("OCR_NATIVE_FALLBACK")
+        logger.warning(
+            "PDF_EXTRACTION_SUMMARY | file=%s | ocr_requested=%s | selection=%s",
+            path.name, native.ocr_needed_pages, ocr_selection,
+        )
 
     if orphans or any("[IMAGES]" in c for c in enriched):
         tags.append("HAS_VISUAL_DESCRIPTIONS")
@@ -1108,13 +1118,14 @@ def _run_pdf(
         source_path=str(path.resolve()),
         file_category=(
             FileCategory.PDF_NATIVE
-            if not native.ocr_needed_pages
+            if not any(row['selected'] in {'ocr', 'unreadable'} for row in ocr_selection)
             else FileCategory.PDF_OCR
         ),
         text_chunks=enriched,
         visual_chunks=orphans,
         structured_data={
             "version": "pdf_native_structured_v2",
+            "ocr": {"requested_pages": list(native.ocr_needed_pages), "selection": ocr_selection},
             "pages": [
                 {
                     "page_number": page.page_number,

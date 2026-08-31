@@ -2763,14 +2763,16 @@ class EnnoScholarAgent:
         )
         plan_for_citation_v1676 = intent.get("scientific_query_plan") if isinstance(intent.get("scientific_query_plan"), dict) else {}
         deep_discovery_seeds_v1676 = list(ranked)
-        if adaptive_citation_needed_v1676 and plan_for_citation_v1676:
-            from .fast_retrieval import article_has_core_alignment as _article_has_core_alignment_v1676
-            deep_discovery_seeds_v1676 = [
-                article for article in ranked
-                if isinstance(article, dict) and _article_has_core_alignment_v1676(article, plan_for_citation_v1676)
-            ]
         if self.deep_discovery is not None and self.deep_discovery.enabled and deep_discovery_during_search_v1672:
             try:
+                # Seed selection belongs to optional citation expansion too:
+                # its failure must not discard articles already retrieved.
+                if adaptive_citation_needed_v1676 and plan_for_citation_v1676:
+                    from .fast_retrieval import article_has_core_alignment as _article_has_core_alignment_v1676
+                    deep_discovery_seeds_v1676 = [
+                        article for article in ranked
+                        if isinstance(article, dict) and _article_has_core_alignment_v1676(article, plan_for_citation_v1676)
+                    ]
                 deep_candidates, deep_discovery_report = self.deep_discovery.discover(
                     deep_discovery_seeds_v1676,
                     core_search=(
@@ -3026,10 +3028,15 @@ class EnnoScholarAgent:
                     "articles": [],
                     "technical_sources": [],
                     "technical_artifacts": [],
-                    "decision": "aucun_article_trouve",
+                    "decision": "recherche_interrompue_erreur_technique",
                     "subject_search_failed": True,
+                    "search_incomplete": True,
+                    "consultant_status_label": "Recherche interrompue — erreur technique",
+                    "consultant_action": (
+                        "Relancer la recherche après correction de l'erreur technique. "
+                        "Cet échec ne permet pas de conclure à l'absence d'articles."
+                    ),
                     "search_status": {
-                        "all_sources_failed": True,
                         "execution_error": f"{type(exc).__name__}: {exc}",
                     },
                     "errors": [{

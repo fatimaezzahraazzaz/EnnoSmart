@@ -91,6 +91,14 @@ def attach_uploaded_article_to_session(
         else []
     )
     source_json = dict(article.source_json) if isinstance(article.source_json, dict) else {}
+    if context.get("operating_mode") == "standalone_chat":
+        from agents.EnnoScholar.guided_research.application.standalone_scope import (
+            canonicalize_standalone_links,
+        )
+
+        source_json = canonicalize_standalone_links(
+            source_json, context.get("consultant_verrous") or []
+        )
     corpus_scope_id = str(
         context.get("corpus_scope_id") or session_id
     ).strip()
@@ -331,7 +339,10 @@ def read_guided_research_corpus(
     session_id: str,
 ) -> dict[str, Any]:
     """Expose le corpus durable du projet, filtré par le verrou actif du chat."""
-    from services.ennoscholar_project_corpus_service import get_project_kept_articles
+    from services.ennoscholar_project_corpus_service import (
+        get_conversation_kept_articles,
+        get_project_kept_articles,
+    )
 
     agent = get_guided_research_agent()
     session = agent.state_manager.get_session(db, session_id, include_messages=False)
@@ -344,16 +355,24 @@ def read_guided_research_corpus(
         if str(context.get("review_scope") or "") == "per_verrou"
         else []
     )
-    articles = get_project_kept_articles(
-        db, project, active_verrou_ids=active_ids
-    )
+    standalone = str(context.get("operating_mode") or "").strip().casefold() == "standalone_chat"
+    scope_id = str(context.get("corpus_scope_id") or session_id) if standalone else f"project:{project.id}"
+    if standalone:
+        _, articles = get_conversation_kept_articles(
+            db, project, session_id=session_id, corpus_scope_id=scope_id,
+            active_verrou_ids=active_ids,
+        )
+    else:
+        articles = get_project_kept_articles(
+            db, project, active_verrou_ids=active_ids
+        )
     run_ids = sorted({int(article.scholar_run_id) for article in articles})
     return {
         "ok": True,
         "session_id": session_id,
-        "corpus_scope_id": f"project:{project.id}",
-        "effective_corpus_scope_id": f"project:{project.id}",
-        "project_corpus": True,
+        "corpus_scope_id": scope_id,
+        "effective_corpus_scope_id": scope_id,
+        "project_corpus": not standalone,
         "scholar_run_id": run_ids[0] if len(run_ids) == 1 else None,
         "scholar_run_ids": run_ids,
         "articles": [
@@ -377,6 +396,22 @@ def rebuild_guided_research_corpus_cards(
         db, project, session_id=session_id, create=False
     )
     context = dict(snapshot.get("context") or {})
+    if context.get("operating_mode") == "standalone_chat":
+        from services.ennoscholar_project_corpus_service import get_conversation_corpus_cards_payload
+
+        scope_id = str(context.get("corpus_scope_id") or session_id).strip()
+        if run is not None:
+            build_article_cards_for_selected_articles(
+                db, project, mode="auto", force=force,
+                scholar_run_id=int(run.id), scope_id=scope_id,
+            )
+        return get_conversation_corpus_cards_payload(
+            db, project, session_id=session_id, corpus_scope_id=scope_id,
+            active_verrou_ids=(
+                list(context.get("active_verrou_ids") or [])
+                if context.get("review_scope") == "per_verrou" else []
+            ),
+        )
     active_ids = (
         list(context.get("active_verrou_ids") or [])
         if str(context.get("review_scope") or "") == "per_verrou"
@@ -527,6 +562,7 @@ def record_guided_pipeline_result(
             context_updates={
                 "pipeline_execution_requested": False,
                 "standalone_full_pipeline_completed": True,
+                "pending_writing_directives": [],
                 "state_of_art_versions": version_history,
                 "latest_state_of_art_version": (
                     dict(new_version)
@@ -802,12 +838,13 @@ def decide_guided_research_sources(
             )
         )
     )
+    standalone = (snapshot.get("context") or {}).get("operating_mode") == "standalone_chat"
     preparation["project_corpus_summary"] = {
         "articles_count": len(project_articles),
         "fulltext_ready_count": project_ready_count,
         "non_extracted_articles_counted_in_corpus": 0,
         "accepted_sources_waiting_upload_count": accepted_pending_count,
-        "persistent_across_conversations": True,
+        "persistent_across_conversations": not standalone,
     }
     refreshed_coverage = (
         agent._coverage(project, result.brief)
@@ -880,11 +917,12 @@ def decide_guided_research_sources(
         for report in reports
         if report.get("ready_for_writing") is False
     ]
+    corpus_label = "de cette conversation" if standalone else "persistant du projet"
     response["assistant_message"] = (
         f"{response.get('assistant_message', '').strip()} "
         f"Cette conversation contient {accepted_count} source(s) validée(s), dont "
         f"{fulltext_count} texte(s) intégral(aux) vérifié(s) et {ready_count} "
-        f"Article Card(s) prête(s). Le corpus persistant du projet contient "
+        f"Article Card(s) prête(s). Le corpus {corpus_label} contient "
         f"{len(project_articles)} article(s) extrait(s). "
         f"{accepted_pending_count} source(s) acceptée(s) non extraite(s) restent "
         f"hors corpus jusqu'à l'import de leur PDF. "

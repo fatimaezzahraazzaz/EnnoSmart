@@ -13,9 +13,11 @@ from contextvars import ContextVar
 from typing import Any, Literal, Mapping, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from typing_extensions import Required, TypedDict
 
 from modules.LLM.llm_client import LLMClient
 
+from .json_safety import sanitize_json_text
 from .domain.enums import ConsultantIntent
 from .domain.models import (
     ConversationMemory,
@@ -153,12 +155,37 @@ class _StandaloneProjectBriefPayload(BaseModel):
     objective: str = Field(default="", max_length=5000)
     additional_context: str = Field(default="", max_length=8000)
 
+class _PlanSectionPayload(TypedDict, total=False):
+    """Explicit wire format; the rest of the application still receives dicts."""
+
+    section_id: Required[str]
+    title: Required[str]
+    order: int
+    objective: str
+    parent_id: str | None
+    level: int
+    verrou_ids: list[str]
+    instructions: list[str]
+    target_words: int | None
+    required_dimensions: list[str]
+    visual_requirements: list[str]
+    source_preferences: list[str]
+
+
+class _PlanMaterialization(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    plan: list[_PlanSectionPayload] = Field(min_length=1)
+
+
 class _ActionPayload(BaseModel):
     """Arguments d'action produits seulement après sélection d'une capacité."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="ignore", json_schema_extra={"required": ["plan"]})
 
-    plan: list[dict[str, Any]] = Field(default_factory=list)
+    plan: list[_PlanSectionPayload] = Field(
+        default_factory=list,
+        description="Sections complètes pour une action de plan ; [] uniquement hors action de plan.",
+    )
     topics: list[dict[str, Any]] = Field(default_factory=list)
     constraints: list[str] = Field(default_factory=list)
     verrous: list[_ConsultantVerrouPayload] = Field(default_factory=list)
@@ -188,7 +215,7 @@ class _TurnResolution(BaseModel):
     il renvoie simultanément la décision et ses arguments métier.
     """
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="ignore", json_schema_extra={"required": ["decision", "action"]})
 
     decision: _TurnDecision
     action: _ActionPayload = Field(default_factory=_ActionPayload)
@@ -212,6 +239,15 @@ class _TurnResolution(BaseModel):
             return payload
         decision = dict(raw_decision)
         raw_classification = decision.get("classification")
+        # Preserve a structured plan placed beside the decision by the same LLM.
+        # This does not authorize it: _scope_action_payload still gates execution.
+        action = dict(payload.get("action") or {})
+        if not action.get("plan"):
+            for container in (decision, raw_classification, payload):
+                if isinstance(container, Mapping) and isinstance(container.get("plan"), list) and container["plan"]:
+                    action["plan"] = container["plan"]
+                    break
+        payload["action"] = action
         if isinstance(raw_classification, Mapping):
             classification = dict(raw_classification)
             for field_name in (
@@ -748,12 +784,25 @@ def _plan_snapshot_from_turn(turn: Any) -> dict[str, Any] | None:
 def _recent_history(session: GuidedResearchSessionData) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     snapshot_indexes: list[int] = []
-    for turn in session.messages[-16:]:
+    turns = session.messages[-16:]
+    # A short follow-up can refer to a plan that failed to be persisted. Keep
+    # the latest consultant messages verbatim, including headings and line
+    # breaks; an assistant's summary is not a substitute for that source.
+    detailed_indexes = {
+        index for index, turn in enumerate(turns)
+        if str(turn.role) == "consultant"
+    }
+    detailed_indexes = set(sorted(detailed_indexes)[-2:])
+    for index, turn in enumerate(turns):
+        original = str(turn.content or "").replace("\x00", " ").strip()
+        content = original[:12000] if index in detailed_indexes else _clean(original, 900)
         row: dict[str, Any] = {
             "role": str(turn.role),
-            "content": _clean(turn.content, 900),
+            "content": content,
             "intent": str(turn.intent) if turn.intent else None,
         }
+        if index in detailed_indexes and len(original) > len(content):
+            row["content_truncated"] = True
         snapshot = _plan_snapshot_from_turn(turn)
         if snapshot:
             row["plan_snapshot"] = snapshot
@@ -1041,6 +1090,16 @@ def _honor_llm_action_order(decision: _TurnDecision) -> _TurnDecision:
     if executable_actions:
         classification.intent = executable_actions[0]
         classification.requested_actions = executable_actions
+    if (
+        classification.section_writing_edits
+        and classification.explicit_write_command
+        and classification.explicit_plan_approval
+        and classification.plan_edit_scope == "none"
+        and ConsultantIntent.ACCEPT_PLAN in executable_actions
+        and ConsultantIntent.REVISE_DRAFT in executable_actions
+        and not set(executable_actions) & set(classification.forbidden_actions)
+    ):
+        classification.intent = ConsultantIntent.REVISE_DRAFT
 
     if (
         classification.content_target == "existing_paragraph"
@@ -1063,6 +1122,95 @@ def _honor_llm_action_order(decision: _TurnDecision) -> _TurnDecision:
         classification.replace_current_plan = False
 
     return decision
+
+
+def _resolution_plan_consistency_error(resolution: _TurnResolution) -> str:
+    """Materialize an explicitly declared plan edit before approving/writing.
+
+    This uses the LLM's semantic edit fields, never project-specific keywords
+    or the mere presence of an unsolicited plan payload. Missing arguments are
+    repaired through the existing bounded structured-output retry.
+    """
+    decision = _honor_llm_action_order(resolution.decision)
+    classification = decision.classification
+    if classification.needs_clarification or classification.intent in {
+        ConsultantIntent.CONVERSE, ConsultantIntent.UNKNOWN,
+    }:
+        return ""
+    edits = classification.section_writing_edits
+    if edits:
+        if classification.plan_edit_scope != "none" or classification.intent in _PLAN_PAYLOAD_INTENTS:
+            return (
+                "section_writing_edits modifie le TEXTE, pas le plan. Pour retoucher, "
+                "alléger ou réécrire les passages de sections existantes, utilise "
+                "REVISE_DRAFT avec explicit_write_command=true, plan_edit_scope=none, "
+                "plan_edit_operation=none et action.plan vide. Ne révoque pas "
+                "l'approbation d'un plan dont les titres/ordre restent inchangés."
+            )
+        if classification.intent == ConsultantIntent.ACCEPT_PLAN and classification.explicit_write_command:
+            classification.intent = ConsultantIntent.REVISE_DRAFT
+            classification.requested_actions = [
+                ConsultantIntent.ACCEPT_PLAN, ConsultantIntent.REVISE_DRAFT,
+            ]
+        elif classification.intent == ConsultantIntent.START_WRITING:
+            classification.intent = ConsultantIntent.REVISE_DRAFT
+            classification.requested_actions = [
+                ConsultantIntent.REVISE_DRAFT
+                if action == ConsultantIntent.START_WRITING else action
+                for action in classification.requested_actions
+            ]
+        classification.target_section_ids = list(dict.fromkeys([
+            *classification.target_section_ids,
+            *(edit.section_id for edit in edits),
+        ]))
+    if (
+        classification.intent == ConsultantIntent.REVISE_DRAFT
+        and classification.content_target in {"existing_section", "existing_paragraph"}
+        and not edits
+    ):
+        return (
+            "Une révision ciblée doit fournir section_writing_edits : un objet par "
+            "section à modifier (section_id exact, operation, instruction locale, "
+            "source_identifiers). Résous toutes les cibles depuis le plan indexé. "
+            "Exclus les sections explicitement laissées inchangées. Une suppression "
+            "de développements ne supprime ni section ni titre du plan."
+        )
+    if (
+        classification.intent in {ConsultantIntent.ACCEPT_PLAN, ConsultantIntent.START_WRITING}
+        and classification.content_target == "existing_plan"
+        and classification.plan_edit_scope == "full_plan"
+        and classification.replace_current_plan
+    ):
+        if ConsultantIntent.CHANGE_PLAN in classification.forbidden_actions:
+            return (
+                "Le remplacement du plan est à la fois demandé et interdit. "
+                "Résous cette contradiction depuis le tour actuel, sans inventer d'action."
+            )
+        classification.intent = ConsultantIntent.CHANGE_PLAN
+        classification.requested_actions = [
+            ConsultantIntent.CHANGE_PLAN,
+            *[action for action in classification.requested_actions
+              if action != ConsultantIntent.CHANGE_PLAN],
+        ]
+        classification.classifier += "+plan_before_writing"
+    plan_action = classification.intent in _PLAN_PAYLOAD_INTENTS - {
+        ConsultantIntent.DESCRIBE_REQUIREMENTS,
+    }
+    local_removal = (
+        classification.plan_edit_scope == "local_section"
+        and classification.plan_edit_operation == "remove"
+        and bool(classification.target_section_ids)
+    )
+    if plan_action and not local_removal and not resolution.action.plan:
+        return (
+            "Le plan demandé doit être enregistré avant approbation/rédaction : "
+            "utilise l'action de plan et remplis action.plan avec TOUS les titres, "
+            "dans leur ordre, et leurs consignes. Si le tour renvoie au plan déjà "
+            "fourni, récupère-le dans le dernier message consultant concerné de "
+            "l'historique, sans lui substituer une nouvelle proposition. "
+            "N'invente ni approbation ni ordre de rédaction absent du tour actuel."
+        )
+    return ""
 
 
 def _ground_writing_source_policy(
@@ -1557,15 +1705,36 @@ class ConversationUnderstandingService:
         request_name: str,
         max_output_tokens: int,
         consistency_check: Any = None,
+        plan_repair_context: Mapping[str, Any] | None = None,
     ) -> tuple[StructuredModel, list[dict[str, Any]]]:
         schema = model_type.model_json_schema()
         attempts: list[dict[str, Any]] = []
         previous_output = ""
         previous_error = ""
+        repair_resolution: _TurnResolution | None = None
 
         for attempt in range(2):
             current_prompt = prompt
-            if attempt:
+            plan_only_repair = bool(attempt and repair_resolution is not None)
+            if plan_only_repair:
+                current_prompt = f"""
+Matérialise uniquement le plan manquant. L'intention et les autorisations ont déjà
+été comprises : ne les reclassifie pas, ne lance aucune recherche ni rédaction.
+Si le consultant fournit des titres, reprends-les TOUS dans leur ordre exact,
+même sans numérotation, en lignes simples ou en texte continu. N'ajoute pas de
+section. Sans titres fournis, propose un premier plan avec le seul corpus autorisé.
+Une relance renvoyant au plan précédent reprend les titres du message consultant,
+jamais une réponse assistant. Pour une retouche locale du plan, rends seulement
+les sections demandées en conservant leurs section_id ; pour un plan complet,
+rends toutes les sections. N'invente aucun résultat scientifique.
+
+DÉCISION DÉJÀ COMPRISE
+{repair_resolution.decision.model_dump_json()}
+CONTEXTE UTILE À LA MATÉRIALISATION
+{json.dumps(dict(plan_repair_context or {}), ensure_ascii=False)}
+SORTIE : {{"plan": [{{"section_id": "identifiant", "title": "titre exact", "order": 1, "objective": "consigne", "parent_id": null, "level": 1}}]}}
+""".strip()
+            elif attempt and (previous_output or previous_error):
                 current_prompt = f"""
 Répare la sortie JSON précédente pour qu'elle respecte exactement le schéma fourni
 par l'API. Ne change pas l'objectif du dernier tour et n'invente aucune action.
@@ -1580,21 +1749,30 @@ DEMANDE ORIGINALE
 {prompt}
 """.strip()
 
-            raw = self.llm.generate(
-                current_prompt,
-                temperature=0.05,
-                max_output_tokens=max_output_tokens,
-                json_mode=True,
-                response_schema=schema,
-                request_name=(
-                    request_name
-                    if attempt == 0
-                    else f"{request_name}:schema_repair"
-                ),
-            )
-            meta = self._generation_meta()
-            parsed = _extract_json(raw)
             try:
+                raw = self.llm.generate(
+                    current_prompt,
+                    temperature=0.05,
+                    max_output_tokens=max_output_tokens,
+                    retries=0,
+                    json_mode=True,
+                    response_schema=_PlanMaterialization.model_json_schema() if plan_only_repair else schema,
+                    request_name=(f"{request_name}:plan_payload" if plan_only_repair else request_name if attempt == 0 else f"{request_name}:retry"),
+                )
+            except Exception as exc:
+                # Une coupure de transport n'est ni une ambiguïté du consultant
+                # ni une sortie JSON à réparer. Une seule reprise, même prompt.
+                transient = any(marker in str(exc).casefold() for marker in (
+                    "remotedisconnected", "connection aborted", "connection reset",
+                    "connecttimeout", "readtimeout", "timed out",
+                ))
+                if attempt == 0 and transient:
+                    attempts.append({"attempt": 1, "valid": False, "transport_error": _clean(exc, 2000)})
+                    continue
+                raise
+            meta = self._generation_meta()
+            try:
+                parsed = sanitize_json_text(_extract_json(raw))
                 if not parsed:
                     raise ValueError(
                         "La réponse ne contient pas d'objet JSON exploitable."
@@ -1604,10 +1782,27 @@ DEMANDE ORIGINALE
                 # ne doit toutefois pas annuler une intention valide ni provoquer
                 # un second appel coûteux. Les champs connus restent entièrement
                 # validés (types, littéraux, bornes) ; seuls les extras sont ignorés.
-                result = model_type.model_validate(parsed, extra="ignore")
+                if plan_only_repair:
+                    repaired_plan = _PlanMaterialization.model_validate(parsed)
+                    result = repair_resolution.model_copy(deep=True)
+                    result.action.plan = list(repaired_plan.plan)
+                else:
+                    result = model_type.model_validate(parsed, extra="ignore")
                 if consistency_check is not None:
                     consistency_error = _clean(consistency_check(result), 2000)
                     if consistency_error:
+                        if (
+                            plan_repair_context is not None
+                            and isinstance(result, _TurnResolution)
+                            and result.decision.classification.intent in {
+                                ConsultantIntent.PROPOSE_PLAN, ConsultantIntent.CHANGE_PLAN,
+                                ConsultantIntent.ADD_TOPIC,
+                            }
+                            and not result.action.plan
+                            and not result.decision.classification.section_writing_edits
+                            and not result.decision.classification.needs_clarification
+                        ):
+                            repair_resolution = result
                         raise ValueError(consistency_error)
                 attempts.append({
                     "attempt": attempt + 1,
@@ -1689,7 +1884,9 @@ SÉMANTIQUE DE DÉCISION
 - ADD_TOPIC : ajout explicite d'une ou plusieurs sections/sous-sections sans
   supprimer la structure existante.
 - REMOVE_TOPIC : retrait explicite d'une partie du plan.
-- CHANGE_PLAN : réécriture, réorganisation ou modification d'une partie existante.
+- CHANGE_PLAN : enregistrement d'un plan fourni par le consultant (même si PLAN
+  COURANT est vide), changement de TITRES, d'ordre ou de hiérarchie du plan.
+  Réécrire le CONTENU d'une partie existante n'est PAS CHANGE_PLAN.
 - SEARCH_MORE, SEARCH_ALTERNATIVE, REPLACE_SOURCE : recherche réelle de sources.
   SEARCH_ALTERNATIVE concerne uniquement les sources, jamais un autre plan.
 - ADD_VERROU_AND_SEARCH : le consultant affirme explicitement qu'un verrou
@@ -1715,8 +1912,13 @@ SÉMANTIQUE DE DÉCISION
   catalogue, sur plusieurs d'entre eux ou sur leur totalité réutilise ce catalogue :
   elle ne crée aucun verrou et ne lance aucune recherche si le consultant ne la demande
   pas. Le nombre de verrous mentionné décrit la portée attendue, pas un ajout.
+- Un plan fourni dans le tour actuel est prioritaire sur le PLAN COURANT et sur
+  l'intention générale « je veux rédiger ». « Je veux suivre ce plan » suivi de
+  titres demande d'abord CHANGE_PLAN, full_plan, replace_current_plan=true et
+  action.plan complet, même sans les mots « enregistre » ou « remplace ». Ce n'est
+  jamais ACCEPT_PLAN seul : on ne peut pas approuver une structure non enregistrée.
 - Si le consultant demande de préparer ou rédiger un état de l'art sur les verrous
-  existants alors que PLAN COURANT est vide, sélectionne PROPOSE_PLAN comme première
+  existants alors que PLAN COURANT est vide ET ne fournit aucune structure, sélectionne PROPOSE_PLAN comme première
   action sûre. Ajoute START_WRITING dans requested_actions seulement si la rédaction
   est explicitement demandée ; elle restera différée jusqu'à la validation du plan.
   Si un plan exploitable existe déjà et que la rédaction est demandée, sélectionne
@@ -1739,6 +1941,29 @@ SÉMANTIQUE DE DÉCISION
   ou existing_paragraph et résous ses target_section_ids. L'ajout d'articles déjà
   sélectionnés à cette partie reste une révision locale : ne choisis jamais
   START_WRITING pour refaire tout le document et ne modifie aucune autre section.
+- Une retouche peut viser plusieurs sections avec des opérations différentes :
+  supprimer un développement ici, garder une mention courte là, développer ailleurs.
+  C'est UNE REVISE_DRAFT, explicit_write_command=true, plan_edit_scope=none,
+  plan_edit_operation=none, replace_current_plan=false, action.plan vide. L'approbation
+  existante est conservée. « Supprime les développements dans X » ne supprime PAS X.
+  Résous les titres abrégés/paraphrasés contre le plan indexé, sans inventer de cibles.
+- Pour ces retouches, remplis section_writing_edits avec UN objet par section à modifier :
+  section_id exact, operation (rewrite, enrich, shorten, remove_passages), instruction
+  locale complète (ce qu'il faut enlever, conserver ou développer), source_identifiers
+  des articles demandés pour CETTE section. Résous « nouveaux articles gardés » à
+  partir des cartes validées et de leur provenance guided_research_source ; ne
+  recopie pas une ancienne sélection. target_section_ids est
+  exactement l'union de ces cibles. Les sections à laisser inchangées n'en font pas partie.
+  Ne recopie pas la même consigne d'enrichissement sur les sections à alléger.
+- Dans une demande de retouche, des références telles que [A...] désignent les preuves
+  à intégrer à la section concernée, PAS une restriction du corpus entier. Conserve
+  writing_source_scope=all_validated sauf demande explicite d'utiliser EXCLUSIVEMENT
+  ces sources. Les nouveaux articles gardés s'ajoutent au corpus actuel ; un ancien
+  nombre ou une ancienne sélection en mémoire ne doit pas les exclure.
+- Si un brouillon existe, une simple relance « rédige », « vas-y », « j'approuve et
+  rédige » reprend la dernière révision EN ATTENTE et ses cibles, pas tout le document.
+  Utilise pending_writing_directives pour récupérer les consignes complètes. Ne
+  reprends pas une ancienne recherche déjà consommée comme nouvelle consigne globale.
 - « garde le plan », « on peut garder ce plan », « ce plan me convient », « valide ce
   plan » ou « conserve le même plan » constituent une approbation explicite lorsqu'elles
   sont formulées dans le tour courant. Si la même phrase ordonne aussi de rédiger,
@@ -1757,6 +1982,10 @@ RÈGLES
   parce qu'elle contient des mots sémantiquement proches.
 - Les pronoms « cette partie », « cette section », « celle-ci », « la précédente » se
   résolvent d'abord avec le dernier échange pertinent et les snapshots de plan récents.
+- Une relance comme « je t'ai déjà donné le plan » renvoie au dernier plan fourni
+  dans un message CONSULTANT. Retrouve ses titres et consignes dans l'historique,
+  même si son enregistrement a échoué. Ne demande pas de répéter une structure
+  encore disponible et n'utilise pas une proposition assistant à sa place.
 - Si le consultant corrige explicitement le dernier changement (« non », « pas la 5 mais
   la 3 », « tu as changé la mauvaise section », « je voulais la partie X »), il s'agit
   d'une correction du dernier edit : utilise plan_reference=previous et
@@ -1908,6 +2137,23 @@ RAPPEL — INTERPRÈTE UNIQUEMENT CE TOUR
             project_context=project_context,
             current_plan=current_plan,
         )
+        if project_context.get("operating_mode") == "standalone_chat":
+            decision_prompt += """
+
+RECHERCHE AUTONOME — MATÉRIALISATION DES REQUÊTES
+Uniquement si une recherche est demandée, produis 2 à 5 requêtes anglaises courtes
+et complémentaires, centrées sur le verrou et ses conditions scientifiques.
+Une liste de méthodes/synonymes fournie par le consultant représente des pistes
+alternatives : répartis-les entre les requêtes, ne les concatène pas en une seule
+et ne les mets pas toutes dans required_terms. Ce champ contient seulement les
+ancrages indispensables de CHAQUE requête. target_context_dimensions conserve
+le domaine, les conditions d'évaluation et les limites/exclusions demandées.
+Le nom interne du projet n'est pas un mot-clé bibliographique obligatoire.
+target_verrous recopie les ID exacts de current_verrous, jamais leurs titres ;
+pour un verrou nouveau, laisse ce champ vide, le serveur affectera son ID.
+project_brief reprend le domaine et l'objectif explicitement formulés, sans les
+remplacer par une catégorie générique du projet.
+"""
         return f"""
 {decision_prompt}
 
@@ -1916,6 +2162,12 @@ Tu es l'unique interprète sémantique de ce tour. Retourne dans le même objet 
 - decision : l'intention complète, toutes les actions compatibles demandées et la
   réponse conversationnelle ;
 - action : les arguments métier exacts nécessaires pour exécuter cette décision.
+Les DEUX clés decision et action sont obligatoires. Pour une action de plan,
+action.plan doit contenir chaque section structurée (section_id, title, order,
+objective, parent_id, level) : une intention correcte sans ces sections ne suffit
+pas. Un petit plan sans numéros, fourni en lignes simples ou en texte continu,
+reste un plan à enregistrer. N'écris pas seulement « le plan sera enregistré ».
+Garde rationale et assistant_message concis ; réserve le détail à action.plan.
 
 Il n'existe aucun second classifieur qui complétera ou corrigera ton interprétation.
 Tu dois donc préserver toutes les composantes du tour actuel. Une demande peut, dans
@@ -1938,6 +2190,14 @@ MATÉRIALISATION
 - Si le tour contient une hiérarchie de titres destinée au livrable, transforme-la
   fidèlement en objets section_id, title, objective, parent_id et level. Les titres
   fournis par le consultant font autorité ; n'y substitue pas les axes du plan courant.
+- Conserve le nombre, l'ordre et le libellé exact des titres fournis. Les lignes
+  explicatives et puces sous un titre deviennent ses objectifs/consignes, pas de
+  nouvelles sections, sauf hiérarchie explicitement demandée. Conserve aussi les
+  consignes transversales (narration globale, transitions, corpus autorisé) dans
+  memory.consultant_preferences et la politique writing_source_scope appropriée.
+- Fournir un plan seul ne commande ni recherche ni rédaction. S'il est accompagné
+  d'une adoption explicite et d'un ordre de rédaction, conserve les trois étapes
+  CHANGE_PLAN, ACCEPT_PLAN, START_WRITING ; sinon n'invente pas les étapes absentes.
 - Pour plan_edit_scope=local_section, recopie les section_id exacts du plan indexé et
   ne modifie aucune section extérieure à la cible.
 - Pour PROPOSE_PLAN, crée une structure propre au projet et au corpus, sans gabarit
@@ -2116,6 +2376,13 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
         history = _recent_history(session)
         compact_context = _compact_project_context(project_context)
         compact_plan = _compact_plan(current_plan)
+        compact_context["existing_draft"] = {
+            "available": bool(project_context.get("existing_draft_available")),
+            "state": str(session.state),
+        }
+        compact_context["pending_writing_directives"] = list(
+            session.context.get("pending_writing_directives") or []
+        )[-8:]
 
         try:
             resolution_prompt = self._resolution_prompt(
@@ -2130,6 +2397,76 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
                 == "standalone_chat"
             )
 
+            def resolution_consistency_check(value: _TurnResolution) -> str:
+                classification = _honor_llm_action_order(value.decision).classification
+                if (
+                    not compact_plan
+                    and classification.intent == ConsultantIntent.START_WRITING
+                    and not classification.needs_clarification
+                    and not classification.explicit_research_command
+                    and not compact_context["existing_draft"]["available"]
+                    and ConsultantIntent.PROPOSE_PLAN not in classification.forbidden_actions
+                ):
+                    # A first draft needs a proposed plan, not approval of an
+                    # empty contract. Keep the writing order deferred.
+                    classification.intent = (
+                        ConsultantIntent.CHANGE_PLAN
+                        if classification.replace_current_plan else ConsultantIntent.PROPOSE_PLAN
+                    )
+                    classification.requested_actions = list(dict.fromkeys([
+                        classification.intent, *classification.requested_actions,
+                    ]))
+                    value.decision.plan_generation_mode = "initial"
+                error = _resolution_plan_consistency_error(value)
+                if error:
+                    return error
+                classification = value.decision.classification
+                valid_ids = {str(row.get("section_id")) for row in compact_plan}
+                edit_ids = {edit.section_id for edit in classification.section_writing_edits}
+                if (
+                    compact_context["existing_draft"]["available"]
+                    and classification.intent == ConsultantIntent.CHANGE_PLAN
+                    and classification.content_target in {"existing_section", "existing_paragraph"}
+                    and classification.plan_edit_operation == "modify"
+                ):
+                    current_by_id = {row["section_id"]: row for row in compact_plan}
+                    patch = value.action.plan
+                    if patch and all(
+                        row.get("section_id") in current_by_id
+                        and _clean(row.get("title")) == _clean(current_by_id[row["section_id"]].get("title"))
+                        and (row.get("parent_id") or None) == (current_by_id[row["section_id"]].get("parent_id") or None)
+                        for row in patch
+                    ):
+                        return (
+                            "Un texte rédigé existe et ton patch ne change aucun titre ni "
+                            "hiérarchie. Vérifie l'objet demandé : retoucher le TEXTE exige "
+                            "REVISE_DRAFT et section_writing_edits, sans changer le plan. "
+                            "Si le consultant demande expressément de modifier seulement "
+                            "les objectifs du PLAN pour plus tard, déclare existing_plan."
+                        )
+                if edit_ids and (
+                    edit_ids - valid_ids
+                    or edit_ids != set(classification.target_section_ids)
+                    or len(edit_ids) != len(classification.section_writing_edits)
+                ):
+                    return (
+                        "Les cibles de révision doivent correspondre exactement aux "
+                        "section_id du plan indexé et à section_writing_edits. "
+                        "Aucune cible inconnue ou sans instruction n'est autorisée."
+                    )
+                if (
+                    compact_context["existing_draft"]["available"]
+                    and classification.intent == ConsultantIntent.START_WRITING
+                    and classification.target_section_ids
+                    and not edit_ids
+                ):
+                    return (
+                        "Le document existe et la rédaction vise des sections précises. "
+                        "Utilise REVISE_DRAFT avec section_writing_edits, pas une "
+                        "nouvelle rédaction globale."
+                    )
+                return ""
+
             resolution, resolution_attempts = self._call_structured(
                 prompt=resolution_prompt,
                 model_type=_TurnResolution,
@@ -2137,6 +2474,19 @@ Ne réponds pas à une ancienne demande et n'ajoute aucune action non sélection
                     "ennoscholar:guided_research:conversation_resolution"
                 ),
                 max_output_tokens=7000,
+                consistency_check=resolution_consistency_check,
+                plan_repair_context={
+                    "current_turn": consultant_message,
+                    "recent_consultant_messages": [
+                        row["content"] for row in history if row.get("role") == "consultant"
+                    ][-2:],
+                    "current_plan": compact_plan,
+                    "plan_history": compact_context.get("plan_history") or [],
+                    "current_verrous": compact_context.get("current_verrous") or [],
+                    "active_verrou_ids": compact_context.get("active_verrou_ids") or [],
+                    "validated_article_cards": compact_context.get("validated_article_cards") or [],
+                    "writing_source_policy": compact_context.get("writing_source_policy") or {},
+                },
             )
             decision = _honor_llm_action_order(resolution.decision)
             intent = decision.classification.intent

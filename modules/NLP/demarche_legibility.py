@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# ENNODIAG_FULL_FIX_V5_20260829 — project-evidence-only R&D causal chain
 from __future__ import annotations
 
 """Étude documentaire de la nécessité des démarches techniques.
@@ -10,11 +11,31 @@ activités internes sont ensuite périmétrées séparément.
 """
 
 from typing import Any, Dict, Iterable, List, Mapping, Set
+
+try:
+    from agents.EnnoDiagnostic.project_fact_gate import (
+        gate_project_fact,
+        has_explicit_executed_method,
+        is_external_or_reference as _gate_external_or_reference,
+        is_noise_or_interview as _gate_noise_or_interview,
+    )
+except Exception:
+    def has_explicit_executed_method(source):  # type: ignore
+        return False
+    def _gate_external_or_reference(source):  # type: ignore
+        return False
+    def _gate_noise_or_interview(source):  # type: ignore
+        return False
+    def gate_project_fact(source, section_key):  # type: ignore
+        class _Decision:
+            allowed = True
+            reason = "gate_unavailable"
+        return _Decision()
 import re
 import unicodedata
 
 
-VERSION = "demarche_legibility_v3_strict_direct_rnd_and_activity_perimeter"
+VERSION = "demarche_legibility_v5_8_mixed_role_executed_evidence"
 LLM_POLICY = "reuse_existing_ennodiagnostic_call_only_no_dedicated_call_by_default"
 
 
@@ -115,6 +136,33 @@ PATTERNS = {
 METHOD_ROLES = {"methode", "parametre"}
 RESULT_ROLES = {"resultat", "contribution"}
 UNCERTAINTY_ROLES = {"verrou", "limite"}
+
+_REFERENCE_SECTION_RE = re.compile(
+    r"\b(?:etat de l art|state of the art|related work|revue de la litterature|bibliograph|references?)\b",
+    re.I,
+)
+_REFERENCE_BODY_RE = re.compile(
+    r"\b(?:dans le papier|the paper|les auteurs|the authors|selon (?:les auteurs|l etude|l article)|"
+    r"l etude a (?:inclus|porte|teste|evalue)|une etude empirique|"
+    r"analyse de \d+ (?:papers?|articles?|publications?)|survey|systematic review|"
+    r"certaines etudes (?:montrent|suggerent|indiquent)|des etudes (?:montrent|suggerent|indiquent)|"
+    r"ils ont (?:utilise|cree|entraine|propose|compare|evalue|configure)|"
+    r"une approche .{0,120}(?:a ete|est) proposee|"
+    r"les resultats montrent que .{0,220}(?:couramment|frequemment)|et al\.)\b",
+    re.I,
+)
+
+def _is_reference_like_passage(passage: Mapping[str, Any]) -> bool:
+    if _gate_external_or_reference(passage) or _gate_noise_or_interview(passage):
+        return True
+    if bool(passage.get("reference_like") or passage.get("is_state_of_art") or passage.get("is_external_literature")):
+        return True
+    conflicts = " ".join(str(v) for v in (passage.get("semantic_role_conflicts") or []))
+    if "etat_art" in _norm(conflicts) or "state_of_art" in _norm(conflicts):
+        return True
+    section = _norm(passage.get("section_title"))
+    body = _norm(_context_text(passage))
+    return bool(_REFERENCE_SECTION_RE.search(section) or _REFERENCE_BODY_RE.search(body))
 
 
 def _roles(passage: Mapping[str, Any]) -> Set[str]:
@@ -220,6 +268,7 @@ def _is_activity(record: Mapping[str, Any]) -> bool:
     primary = str(record.get("primary") or "")
     return bool(
         explicit_method
+        or has_explicit_executed_method(record.get("passage") or {})
         or (
             not result_or_uncertainty_only
             and (PATTERNS["method"].search(primary) or PATTERNS["final_solution"].search(primary))
@@ -367,7 +416,7 @@ def assess_group_demarche_legibility(group: Mapping[str, Any]) -> Dict[str, Any]
     passages = [
         passage
         for passage in (group.get("supporting_passages") or [])
-        if isinstance(passage, Mapping)
+        if isinstance(passage, Mapping) and not _is_reference_like_passage(passage)
     ]
     if not passages:
         return _empty_report()
@@ -384,14 +433,32 @@ def assess_group_demarche_legibility(group: Mapping[str, Any]) -> Dict[str, Any]
         record
         for record in records
         if PATTERNS["evaluation"].search(str(record.get("context") or ""))
+        and gate_project_fact(
+            record.get("passage") if isinstance(record.get("passage"), Mapping) else {},
+            "demarche_detectee",
+        ).allowed
     ]
     result_records = [
         record
         for record in records
-        if PATTERNS["learning"].search(str(record.get("context") or ""))
-        or set(record.get("roles") or set()) & RESULT_ROLES
+        if (
+            PATTERNS["learning"].search(str(record.get("context") or ""))
+            or set(record.get("roles") or set()) & RESULT_ROLES
+        )
+        and gate_project_fact(
+            record.get("passage") if isinstance(record.get("passage"), Mapping) else {},
+            "resultats_metriques",
+        ).allowed
     ]
-    activity_records = [record for record in records if _is_activity(record)]
+    activity_records = [
+        record
+        for record in records
+        if _is_activity(record)
+        and gate_project_fact(
+            record.get("passage") if isinstance(record.get("passage"), Mapping) else {},
+            "demarche_detectee",
+        ).allowed
+    ]
     routine_activity_records = [
         record
         for record in activity_records

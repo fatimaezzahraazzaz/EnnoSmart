@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
+# ENNODIAG_ACTIVE_MEMORY_V7_20260830 — current facts guarded; same-project history orients continuity and abstraction
 from __future__ import annotations
+
+# ENNODIAG_FINAL_FIX_V4_20260829 — diagnostic_static_presenter
 
 """EnnoDiagnostic V191 — sections structurées, projet courant et PydanticAI robuste.
 
@@ -45,6 +48,20 @@ except Exception:
         is_project_anchor,
         is_trusted_current_project_evidence,
         provenance_allows_section,
+    )
+
+
+try:
+    from .project_fact_gate import (
+        filter_project_facts,
+        gate_project_fact,
+        explain_rejection as project_fact_rejection_reason,
+    )
+except Exception:
+    from project_fact_gate import (  # type: ignore
+        filter_project_facts,
+        gate_project_fact,
+        explain_rejection as project_fact_rejection_reason,
     )
 
 
@@ -134,12 +151,14 @@ CORE_LLM_KEYS = [
 
 def _current_project_only_mode() -> bool:
     """
-    Mode de sûreté par défaut : aucune donnée textuelle provenant d'un autre
-    projet, de Memory V2, d'exemples de style ou d'un CIR précédent n'est
-    injectée dans les prompts qui décrivent le projet courant.
+    Mode de sûreté par défaut : aucun autre projet, Memory V2 ou exemple de style
+    ne peut fournir un fait du projet courant. Le CIR précédent du MEME projet
+    reste autorisé comme mémoire de continuité/orientation, mais jamais comme
+    preuve factuelle de l'année N ; toute affirmation courante reste ancrée dans
+    les preuves N.
 
     Mettre ENNOSMART_DIAG_CURRENT_PROJECT_ONLY=0 uniquement si l'on souhaite
-    explicitement réactiver l'ancien comportement.
+    explicitement réactiver les anciens contextes inter-projets.
     """
     return str(os.getenv("ENNOSMART_DIAG_CURRENT_PROJECT_ONLY", "1")).strip().lower() not in {
         "0", "false", "no", "off"
@@ -557,6 +576,16 @@ def _technical_evidence_rejection_reason(
     text = _section_evidence_text(source)
     if not text:
         return "empty"
+
+    gate_decision = None
+    if section_key in {
+        "objectif_global", "demarche_detectee", "resultats_metriques",
+        "parametres_contraintes", "synthese_strategique",
+    } and source.get("temporal_scope") != "previous_cir_continuity":
+        gate_decision = gate_project_fact(source, section_key)
+        if not gate_decision.allowed:
+            return f"project_fact_gate:{gate_decision.reason}"
+
     if source.get("temporal_scope") == "previous_cir_continuity":
         if re.search(
             r"\b(?:pr[eé]sent[eé]e? en annexe|voir annexe|fournit un support complet|"
@@ -589,8 +618,20 @@ def _technical_evidence_rejection_reason(
         return "rejected_by_upstream_nlp"
     if bool(source.get("reference_like") or metadata.get("reference_like")):
         return "reference_only"
+    if (
+        section_key == "parametres_contraintes"
+        and bool(source.get("unverified_transcription_numeric") or metadata.get("unverified_transcription_numeric"))
+    ):
+        return "unverified_numeric_value_from_transcription"
     if source_policy in {"context_only", "style_only", "secondary_context"}:
         return "context_only_source"
+
+    # Si le gate V5.4 a autorisé le fait, ne pas le rejeter une seconde fois
+    # avec les heuristiques lexicales legacy. C'est ce double filtrage qui
+    # supprimait le véritable objectif à cause d'un titre de transcription
+    # contenant une question, et la contrainte de ressources à statut inconnu.
+    if gate_decision is not None and gate_decision.allowed:
+        return ""
 
     authoritative_roles = {
         "demarche_detectee": {"methode", "method", "demarche", "démarche"},
@@ -792,9 +833,37 @@ def _source_section_title(source: Dict[str, Any]) -> str:
 
 
 def _source_reference_like(source: Dict[str, Any]) -> bool:
-    """Détecte une citation bibliographique sans jeter un chunk scientifique substantiel."""
+    """Détecte la littérature tierce avant toute rédaction factuelle projet."""
+    metadata = source.get("metadata") if isinstance(source.get("metadata"), dict) else {}
+    if bool(source.get("reference_like") or metadata.get("reference_like")):
+        return True
+    origin = clean_text(source.get("evidence_origin") or metadata.get("evidence_origin"), 80).lower()
+    if origin == "external_literature":
+        return True
+    conflicts = " ".join(str(value) for value in (
+        source.get("semantic_role_conflicts")
+        or metadata.get("semantic_role_conflicts")
+        or []
+    ))
+    if "etat_art" in _grounding_norm(conflicts):
+        return True
+
     text = source_text(source)
     section = _source_section_title(source)
+    joined = f"{section} {text}"
+    normalized = _grounding_norm(joined)
+    if re.search(
+        r"\b(?:les auteurs?|the authors?|dans le papier|the paper|"
+        r"une etude empirique|analyse de \d+ (?:papers?|articles?|publications?)|"
+        r"survey|systematic review|certaines etudes|des etudes|"
+        r"ils ont (?:utilise|cree|entraine|propose|compare|evalue)|"
+        r"une approche .{0,120}(?:a ete|est) proposee|"
+        r"les resultats montrent que .{0,220}(?:couramment|frequemment))\b",
+        normalized,
+        flags=re.I,
+    ) and not _PROJECT_ACTION_RE.search(text):
+        return True
+
     substantive = bool(
         len(text) >= 80
         and (
@@ -806,7 +875,7 @@ def _source_reference_like(source: Dict[str, Any]) -> bool:
     )
     if _SECTION_METADATA_RE.fullmatch(section.strip()) and not substantive:
         return True
-    hits = len(_SECTION_REFERENCE_RE.findall(f"{section} {text}"))
+    hits = len(_SECTION_REFERENCE_RE.findall(joined))
     return hits >= 2 and not _PROJECT_ACTION_RE.search(text)
 
 
@@ -820,7 +889,30 @@ def _section_source_score(source: Dict[str, Any], section_key: str) -> float:
     if _source_reference_like(source):
         score -= 40.0
 
-    if section_key == "objectif_global":
+    if section_key == "synthese_strategique":
+        metadata = meta_of(source)
+        synthesis_kind = clean_text(
+            metadata.get("synthesis_fact_kind")
+            or source.get("synthesis_fact_kind")
+            or ("verrou" if source.get("final_lock_context") else ""),
+            40,
+        ).lower()
+        score += {
+            "objectif": 30.0,
+            "verrou": 28.0,
+            "methode": 24.0,
+            "resultat": 24.0,
+            "parametre": 16.0,
+        }.get(synthesis_kind, 0.0)
+        # La synthèse doit recevoir la conclusion d'un passage, pas plusieurs
+        # lignes d'un tableau aplati. Les tableaux restent disponibles dans les
+        # sections Résultats et Paramètres, où le LLM peut les expliquer.
+        if text.count("|") >= 3:
+            score -= 45.0
+        if _RESULT_RE.search(text) or _METHOD_RE.search(text):
+            score += 5.0
+
+    elif section_key == "objectif_global":
         score += 9.0 * len(_OBJECTIVE_MARKERS_RE.findall(joined))
         if "objectif" in role:
             score += 24.0
@@ -836,6 +928,20 @@ def _section_source_score(source: Dict[str, Any], section_key: str) -> float:
         # Un pur résultat chiffré ne doit pas devenir l'objectif du projet.
         if "resultat" in role and not _OBJECTIVE_MARKERS_RE.search(text):
             score -= 10.0
+        metadata = meta_of(source)
+        if metadata.get("objective_context_companion"):
+            score += 14.0
+        # Un objectif peut être suivi d'un tableau dans le même chunk, mais la
+        # formulation stratégique doit privilégier le passage narratif qui
+        # nomme le projet, l'objet et la finalité.
+        if text.count("|") >= 3:
+            score -= 38.0
+        if re.search(
+            r"\b(?:le projet|dans le cadre du projet)\b.{0,180}\bobjectif\b",
+            _grounding_norm(text),
+            flags=re.I,
+        ):
+            score += 22.0
 
     elif section_key == "parametres_contraintes":
         score += 8.0 * min(len(_PARAMETER_RE.findall(joined)), 5)
@@ -859,8 +965,25 @@ def _section_source_score(source: Dict[str, Any], section_key: str) -> float:
         score += 2.0 * min(len(_QUANT_RE.findall(text)), 6)
         if "resultat" in role:
             score += 24.0
+        if _PROJECT_ACTION_RE.search(joined):
+            score += 18.0
+        metadata = meta_of(source)
+        # Un tableau numérique n'est prioritaire que s'il a été qualifié comme
+        # expérience projet corroborée. Le simple suffixe xlsx/csv ne suffit plus.
+        if metadata.get("project_experiment_table") and metadata.get("project_result_corroborated"):
+            score += 18.0
+            try:
+                score += min(float(metadata.get("result_priority_boost") or 0.0), 18.0)
+            except Exception:
+                pass
+            if metadata.get("metric_context_available"):
+                score += 8.0
+        elif _QUANT_RE.search(text) and not _PROJECT_ACTION_RE.search(joined):
+            score -= 10.0
+        if re.search(r"\bles resultats montrent que\b", _grounding_norm(text)) and not _PROJECT_ACTION_RE.search(text):
+            score -= 35.0
         if _source_reference_like(source):
-            score -= 80.0
+            score -= 100.0
 
     return score
 
@@ -885,27 +1008,57 @@ def select_sources_for_section(
     parcourt les autres preuves du projet au lieu d'afficher « aucune preuve ».
     """
     candidates: List[Dict[str, Any]] = []
-    for key in config.source_keys:
-        values = sections.get(key) if isinstance(sections, dict) else []
-        if isinstance(values, list):
-            candidates.extend(item for item in values if isinstance(item, dict) and source_text(item))
 
+    # V5.6 — la section métier consomme désormais sa source de vérité équilibrée.
+    # Cela évite qu'un rôle transversal (méthode/limite/résultat) soit promu dans
+    # une autre section uniquement parce qu'il figurait dans source_keys.
     if config.key == "objectif_global":
-        # Fallback indispensable : les objectifs sont souvent formulés dans une
-        # contribution, une méthode, un abstract ou une conclusion.
-        if len(candidates) < 3:
-            candidates.extend(_all_section_sources(sections))
-
-    if config.key == "parametres_contraintes" and len(candidates) < 4:
-        candidates.extend(_all_section_sources(sections))
+        base_objectives = [
+            item for item in (sections.get("objectifs") or [])
+            if isinstance(item, dict) and source_text(item)
+        ]
+        companions = [
+            item for item in (sections.get("objectif_context_companions") or [])
+            if isinstance(item, dict) and source_text(item)
+        ]
+        candidates = filter_project_facts(base_objectives, "objectif_global") + companions
+    elif config.key == "demarche_detectee":
+        candidates = filter_project_facts(
+            [item for item in (sections.get("methodes") or []) if isinstance(item, dict) and source_text(item)],
+            "demarche_detectee",
+        )
+    elif config.key == "resultats_metriques":
+        candidates = filter_project_facts(
+            [item for item in (sections.get("resultats") or []) if isinstance(item, dict) and source_text(item)],
+            "resultats_metriques",
+        )
+    elif config.key == "parametres_contraintes":
+        candidates = filter_project_facts(
+            [item for item in (sections.get("parametres") or []) if isinstance(item, dict) and source_text(item)],
+            "parametres_contraintes",
+        )
+    else:
+        for key in config.source_keys:
+            values = sections.get(key) if isinstance(sections, dict) else []
+            if isinstance(values, list):
+                candidates.extend(item for item in values if isinstance(item, dict) and source_text(item))
+        if config.key == "synthese_strategique":
+            candidates = filter_project_facts(candidates, config.key)
 
     seen = set()
     ranked: List[Tuple[float, Dict[str, Any]]] = []
+    narrative_gate_authoritative = config.key in {
+        "objectif_global", "demarche_detectee", "resultats_metriques",
+        "parametres_contraintes", "synthese_strategique",
+    }
     for source in candidates:
-        # ENNODIAG_ROLE_AUTHORITY_V3_1 — rôle NLP autoritaire + garde provenance; aucun recalcul de rôle.
-        # Aucun candidat/verrou n'est supprimé en amont.
-        if not provenance_allows_section(source, config.key):
-            continue
+        # V5.4 : après ``filter_project_facts``, ne pas faire repasser la même
+        # preuve dans un deuxième classifieur de provenance plus ancien.
+        gate_info = source.get("project_fact_gate") if isinstance(source, dict) else {}
+        gate_allowed = bool(isinstance(gate_info, dict) and gate_info.get("allowed"))
+        if not (narrative_gate_authoritative and gate_allowed):
+            if not provenance_allows_section(source, config.key):
+                continue
         if _technical_evidence_rejection_reason(source, config.key):
             continue
         signature = _source_signature(source)
@@ -918,6 +1071,70 @@ def select_sources_for_section(
             continue
         ranked.append((score, source))
     ranked.sort(key=lambda item: item[0], reverse=True)
+    if config.key == "synthese_strategique":
+        def synthesis_kind(source: Dict[str, Any]) -> str:
+            metadata = meta_of(source)
+            explicit = clean_text(
+                metadata.get("synthesis_fact_kind")
+                or source.get("synthesis_fact_kind"),
+                40,
+            ).lower()
+            if explicit:
+                return explicit
+            if bool(source.get("final_lock_context") or metadata.get("final_lock_context")):
+                return "verrou"
+            roles = _source_role(source)
+            for candidate in ("objectif", "verrou", "methode", "resultat", "parametre"):
+                if candidate in roles:
+                    return candidate
+            return "autre"
+
+        # Couverture stratégique : un objectif, un verrou, une démarche, un
+        # résultat et un paramètre avant d'ajouter des détails. Ce round-robin
+        # empêche trois variantes du même tableau de remplir toute la synthèse.
+        selected: List[Dict[str, Any]] = []
+        selected_ids = set()
+        seen_zones = set()
+        ordered_kinds = ("objectif", "verrou", "methode", "resultat", "parametre")
+        for wanted_kind in ordered_kinds:
+            for _score, source in ranked:
+                if synthesis_kind(source) != wanted_kind:
+                    continue
+                identity = id(source)
+                zone = (
+                    source_doc(source).lower(),
+                    _grounding_norm(_source_section_title(source)),
+                    wanted_kind,
+                )
+                if identity in selected_ids or zone in seen_zones:
+                    continue
+                selected.append(source)
+                selected_ids.add(identity)
+                seen_zones.add(zone)
+                break
+        for _score, source in ranked:
+            if len(selected) >= config.top_k_evidence:
+                break
+            identity = id(source)
+            kind = synthesis_kind(source)
+            zone = (
+                source_doc(source).lower(),
+                _grounding_norm(_source_section_title(source)),
+                kind,
+            )
+            if identity in selected_ids or zone in seen_zones:
+                continue
+            # Les détails de tableau ne complètent la synthèse que s'ils sont
+            # nécessaires faute d'une preuve narrative pour cette fonction.
+            if source_text(source).count("|") >= 3 and any(
+                synthesis_kind(item) == kind for item in selected
+            ):
+                continue
+            selected.append(source)
+            selected_ids.add(identity)
+            seen_zones.add(zone)
+        return selected[: config.top_k_evidence]
+
     if config.key not in {
         "demarche_detectee", "resultats_metriques", "parametres_contraintes",
     }:
@@ -972,6 +1189,49 @@ def evidence_from_source(source: Dict[str, Any], evidence_id: str, excerpt_limit
     meta = meta_of(source)
     provenance = classify_evidence_provenance(source)
     execution = classify_evidence_execution(source)
+
+    # V5.5 — le gate projet est l'autorité finale des sections narratives.
+    # S'il a validé un fait après contrôle rôle + provenance + acteur + bruit,
+    # on conserve cette décision dans la preuve structurée afin qu'un second
+    # classifieur legacy ne l'annule pas ensuite.
+    gate_info = source.get("project_fact_gate")
+    if not isinstance(gate_info, dict):
+        gate_info = meta.get("project_fact_gate") if isinstance(meta.get("project_fact_gate"), dict) else {}
+    trusted_project_fact = bool(gate_info.get("allowed"))
+    gate_reason = clean_text(gate_info.get("reason"), 120)
+
+    evidence_origin = provenance.get("evidence_origin")
+    actor_scope = provenance.get("actor_scope")
+    execution_status = execution.get("execution_status")
+    execution_reason = execution.get("execution_reason")
+    if trusted_project_fact:
+        evidence_origin = "project_direct"
+        actor_scope = "project_team"
+        if gate_reason == "executed_project_method":
+            execution_status = "implemented"
+            execution_reason = "project_fact_gate_executed_method"
+        elif gate_reason == "observed_project_result":
+            execution_status = "observed"
+            execution_reason = "project_fact_gate_observed_result"
+        elif gate_reason == "project_parameter_or_constraint":
+            execution_status = "active_constraint"
+            execution_reason = "project_fact_gate_parameter"
+        elif gate_reason in {"project_objective", "project_objective_context"}:
+            execution_reason = "project_fact_gate_objective"
+
+    result_scope = clean_text(meta.get("result_scope") or source.get("result_scope") or "", 80)
+    primary_result_evidence = bool(
+        meta.get("primary_result_evidence") or source.get("primary_result_evidence")
+    )
+    if trusted_project_fact and gate_reason == "observed_project_result":
+        if not result_scope:
+            result_scope = (
+                "observed_metric"
+                if _QUANT_RE.search(source_text(source) or "")
+                else "qualitative_observation"
+            )
+        primary_result_evidence = True
+
     rag_chunk_id = clean_text(
         meta.get("rag_chunk_id") or source.get("id") or meta.get("passage_id") or "",
         240,
@@ -983,12 +1243,18 @@ def evidence_from_source(source: Dict[str, Any], evidence_id: str, excerpt_limit
         "document_id": clean_text(meta.get("document_id") or "", 240),
         "document": source_doc(source),
         "source_path": clean_text(meta.get("source_path") or source.get("source_path") or "", 900),
-        "evidence_origin": provenance.get("evidence_origin"),
-        "actor_scope": provenance.get("actor_scope"),
-        "provenance_reason": provenance.get("provenance_reason"),
-        "provenance_confidence": provenance.get("provenance_confidence"),
-        "execution_status": execution.get("execution_status"),
-        "execution_reason": execution.get("execution_reason"),
+        "evidence_origin": evidence_origin,
+        "actor_scope": actor_scope,
+        "provenance_reason": (
+            f"project_fact_gate:{gate_reason}"
+            if trusted_project_fact else provenance.get("provenance_reason")
+        ),
+        "provenance_confidence": (
+            gate_info.get("confidence")
+            if trusted_project_fact else provenance.get("provenance_confidence")
+        ),
+        "execution_status": execution_status,
+        "execution_reason": execution_reason,
         "execution_confidence": execution.get("execution_confidence"),
         "page_number": _safe_int(meta.get("page_number") or meta.get("page")),
         "paragraph_index": _safe_int(meta.get("paragraph_index")),
@@ -1014,8 +1280,10 @@ def evidence_from_source(source: Dict[str, Any], evidence_id: str, excerpt_limit
         "operation_number": meta.get("operation_number"),
         "operation_group_id": clean_text(meta.get("operation_group_id") or "", 240) or None,
         "operation_function": clean_text(meta.get("operation_function") or "", 80) or None,
-        "result_scope": clean_text(meta.get("result_scope") or "", 80),
-        "primary_result_evidence": bool(meta.get("primary_result_evidence")),
+        "result_scope": result_scope,
+        "primary_result_evidence": primary_result_evidence,
+        "project_fact_gate": dict(gate_info) if gate_info else {},
+        "trusted_project_fact": trusted_project_fact,
         "reference_like": _source_reference_like(source),
         "is_state_of_art": bool(meta.get("is_state_of_art") or source.get("is_state_of_art")),
         "is_external_literature": bool(meta.get("is_external_literature") or source.get("is_external_literature")),
@@ -1027,18 +1295,33 @@ def evidence_from_source(source: Dict[str, Any], evidence_id: str, excerpt_limit
 
 _SECTION_INSTRUCTIONS = {
     "synthese_strategique": (
-        "Rédige deux ou trois paragraphes : contexte et enjeu technique, difficulté R&D, puis portée de l'analyse. "
-        "Ne transforme pas un résultat en verrou et reste prudent."
+        "Rédige exactement deux paragraphes courts et réellement synthétiques. Le premier nomme l'objet étudié, l'objectif "
+        "et le verrou scientifique ou technique. Le second résume la démarche menée, les principaux résultats interprétés "
+        "et ce qu'ils permettent ou non de conclure. Reformule pour un décideur non spécialiste : ne copie jamais une phrase "
+        "source, une succession d'essais, une ligne de tableau ni une liste de valeurs séparées par `|`. Ne répète pas la même "
+        "information dans les deux paragraphes. Conserve au maximum trois valeurs numériques, uniquement si leur sujet, leur "
+        "condition et leur portée sont explicites. Ne transforme pas un résultat en verrou et distingue clairement ce qui est "
+        "démontré de ce qui reste incertain. Si une continuité N-1 validée et plusieurs preuves N montrent une trajectoire plus large, "
+        "présente cette trajectoire comme cadre du projet et traite les essais locaux comme des cas de validation, sans importer de fait historique non confirmé."
     ),
     "objectif_global": (
         "Rédige un seul paragraphe précis présentant l'objet technique du projet, l'action recherchée et la manière dont "
         "le projet prévoit d'évaluer l'atteinte de cet objectif. Ne crée jamais de seuil, cible ou critère de réussite "
         "s'il n'est pas explicitement présent dans les preuves. Si aucun seuil n'est documenté, décris simplement l'objectif "
-        "et l'approche d'évaluation. L'objectif peut être formulé dans un passage objectif, contribution, méthode ou conclusion : "
-        "utilise le contenu réel des preuves et ne réponds jamais qu'aucune preuve n'existe si des preuves numérotées sont fournies."
+        "et l'approche d'évaluation. Préserve les noms concrets présents dans les preuves : objet technique, tâche, environnement, "
+        "familles de méthodes, critères de mesure, langage/framework ou autre contexte explicite. N'écris pas des formulations vagues "
+        "comme « un type de modèle », « le domaine ciblé » ou « la solution » si les preuves permettent de nommer précisément l'objet. "
+        "Les preuves marquées comme contexte d'objectif peuvent préciser le périmètre sans transformer une expérimentation déjà réalisée en objectif. "
+        "L'objectif peut être formulé dans plusieurs passages complémentaires : synthétise-les sans ajouter de fait absent des preuves et ne réponds jamais "
+        "qu'aucune preuve n'existe si des preuves numérotées sont fournies. Si la mémoire de continuité du même projet montre un objectif historique plus global "
+        "et que plusieurs preuves N en confirment la trajectoire, utilise cette mémoire pour choisir le bon niveau d'abstraction : un équipement, une campagne "
+        "ou une configuration locale reste un cas d'étude/validation et ne doit pas remplacer à lui seul l'objectif global du projet."
     ),
     "justification_frascati": (
-        "Rédige un seul paragraphe global, continu et compréhensible par un consultant CIR. Dans ce même paragraphe, "
+        "Rédige trois paragraphes courts et compréhensibles par un consultant CIR : travaux R&D, périmètre et points faibles, puis Frascati. "
+        "Commence par qualifier la nature des travaux : ingénierie classique, noyau R&D partiel ou noyau R&D défendable, à partir de la chaîne verrou -> hypothèse -> expérimentation -> résultat -> apprentissage. "
+        "Présente ensuite DEUX indicateurs distincts : (a) le score de défendabilité R&D, qui peut descendre à 1 % pour une opération d'ingénierie classique bien documentée, "
+        "et (b) la couverture documentaire des cinq critères Frascati. Ne présente jamais la couverture documentaire comme un taux d'éligibilité. "
         "relie le score et les critères Frascati, les verrous ou incertitudes, les hypothèses, les expérimentations, "
         "les résultats et apprentissages, la nature R&D ou classique des démarches et les éléments restant à valider. "
         "Synthétise les différentes opérations sans créer une justification séparée par opération. Utilise le rattachement "
@@ -1054,10 +1337,10 @@ _SECTION_INSTRUCTIONS = {
         "documentaires du projet en plus de F0. Respecte strictement l’ordre : contexte, verrou, hypothèse, méthodes et "
         "outils, étapes expérimentales, résultats interprétés, apprentissage, critères Frascati acquis, critères restant "
         "à consolider, puis conclusion d’éligibilité. Pour chaque critère partiel, indique sa contribution manquante issue "
-        "de F0 et la lacune documentaire concrète du projet qui l’explique. Tout résultat expérimental doit être formulé "
+        "de F0 seulement si utile ; privilégie la lacune concrète du projet et l'action permettant de la consolider. Tout résultat expérimental doit être formulé "
         "avec sa métrique, l’objet mesuré, les conditions comparées et la portée de l’observation ; aucune liste de nombres "
         "isolés. Le champ `claims` découpe ce paragraphe en affirmations consécutives afin de rattacher chaque affirmation "
-        "à ses propres evidence_ids ; la concaténation des claims doit reproduire le paragraphe sans créer plusieurs blocs. "
+        "à ses propres evidence_ids ; regroupe-les dans les trois paragraphes sans répétition. "
         "Chaque nombre et chaque relation causale doivent être présents explicitement dans les preuves citées. "
         "N'utilise jamais dans le texte visible les termes internes rnd_core_partial, evidence_score, semantic_role ou "
         "des identifiants techniques. N'attribue jamais un gain à une méthode si la preuve ne formule pas elle-même "
@@ -1078,11 +1361,16 @@ _SECTION_INSTRUCTIONS = {
         "réconcilier et demande une validation consultant. Une hypothèse peut être reconstruite à partir de plusieurs preuves de la même opération. "
         "Ne considère jamais le nombre d'étapes comme une preuve de R&D et distingue l'expérimentation R&D, le support nécessaire et l'ingénierie classique. "
         "Couvre chaque numéro d'opération présent dans les preuves au moins une fois avant d'ajouter un second détail sur une opération déjà décrite. "
+        "Une méthode décrite à la troisième personne, de façon impersonnelle ou comme « une approche », sans preuve que l'équipe l'a réellement appliquée, n'est pas une démarche projet. "
+        "Quand plusieurs familles techniques distinctes ont réellement été appliquées, conserve-les comme démarches ou sous-démarches distinctes au lieu de les fusionner dans une phrase générique. "
+        "Les preuves peuvent avoir été classées initialement dans d'autres rôles NLP : leur présence ici signifie qu'elles ont été requalifiées parce qu'elles décrivent une action effectivement menée par l'équipe. "
         "Rédige deux à quatre phrases naturelles par démarche. Ne recopie jamais une ligne de planning, une matrice d'audit, une consigne de rédaction "
         "ou un scénario illustratif : si une preuve ne décrit pas une action méthodologique exploitable, ne crée aucun élément à partir d'elle."
     ),
     "resultats_metriques": (
         "Réexplique chaque résultat observé séparément, sous forme d'éléments numérotés compréhensibles par un consultant non spécialiste. "
+        "Ne recopie jamais mot pour mot une transcription, une phrase orale, une ligne de tableau ou un extrait source : transforme-la en 2 à 3 phrases professionnelles, "
+        "en supprimant hésitations, répétitions, formulations comme « et il nous donnait », « en fait », « on a fait », tout en conservant strictement le sens factuel. "
         "Chaque élément précise : l'objet mesuré, la condition ou version concernée, la valeur ou l'observation réellement obtenue, puis "
         "ce que l'on peut conclure et ce qui reste incertain. Rédige des éléments séparant les familles de résultats : comparaison globale, "
         "gain observé, étude d'ablation, "
@@ -1095,11 +1383,17 @@ _SECTION_INSTRUCTIONS = {
         "d'une valeur est ambigu, omets-la plutôt que de l'attribuer à la mauvaise expérience. Chaque valeur doit être associée à son sujet, sa métrique et sa condition. "
         "Une projection KPI, une valeur « à revoir », une planification, une question ou une consigne « décrire... » n'est jamais un résultat acquis. "
         "N'impose pas artificiellement un résultat à chaque opération : signale seulement une lacune si une preuve la formule explicitement. "
+        "Regroupe les passages qui décrivent la même observation et publie au maximum cinq résultats réellement interprétables. "
+        "Une question de réunion, un nom de fichier, une liste de documents, une méthode, une piste ou une ligne de tableau dont la métrique n'est pas identifiable n'est jamais un résultat. "
+        "Pour un tableau comparatif, utilise en priorité les tableaux qualifiés comme expérience projet corroborée et couvrant plusieurs conditions expérimentales. "
+        "Un petit tableau isolé ou préliminaire ne doit pas supplanter une comparaison plus large et corroborée. Si le contexte des colonnes métriques n'est pas explicite, "
+        "tu peux décrire l'existence de la comparaison sans attribuer les valeurs aux mauvaises métriques. "
         "Rédige deux à quatre phrases naturelles par résultat et traduis fidèlement les preuves anglaises. Ne recopie jamais un tableau, une consigne, "
         "un commentaire de relecture ou une ligne de planning."
     ),
     "parametres_contraintes": (
         "Réexplique chaque paramètre ou contrainte séparément, en français clair pour un consultant non spécialiste. Pour chacun, indique : "
+        "si une valeur numérique provient uniquement d'une transcription orale et n'est pas corroborée par une autre preuve projet, ne la publie pas comme paramètre factuel ; conserve-la uniquement dans l'audit pour validation consultant. "
         "son nom exact, ce qu'il règle ou limite concrètement, la valeur/condition documentée lorsqu'elle existe, puis la raison pour laquelle "
         "il doit être contrôlé dans l'expérience. Organise les paramètres et contraintes en éléments numérotés. Indique d'abord sa nature : paramètre du protocole, "
         "paramètre de simulation/modèle, contrainte d'un jeu de données ou benchmark, ou limite documentaire. Ne transforme pas une contrainte "
@@ -1111,6 +1405,8 @@ _SECTION_INSTRUCTIONS = {
         "Lorsqu'une preuve contient un tableau aplati avec plusieurs lignes KPI, rattache une valeur uniquement au nom de paramètre situé dans "
         "la même ligne logique, entre les séparateurs `|`. Ne déplace jamais une valeur de la ligne précédente ou suivante. Préserve exactement "
         "le comparateur écrit (`<`, `>`, inférieur, supérieur) ; en cas d'ambiguïté, cite la séquence comme ambiguë et demande une validation. "
+        "Ne publie que les paramètres/contraintes explicitement qualifiés pour le projet courant. Une explication générale d'une technique, une propriété d'un article, "
+        "un exemple pédagogique ou un paramètre de pré-entraînement d'un travail externe n'est jamais un paramètre du projet. "
         "Répartis les éléments entre les groupes/opérations disponibles afin de ne pas limiter la section aux paramètres du passage le mieux classé. "
         "Rédige deux à quatre phrases naturelles par paramètre. Une ligne de planning, une consigne de rédaction, une matrice d'audit ou un exemple "
         "d'un autre cas d'usage n'est pas un paramètre du projet et doit être ignoré."
@@ -1150,7 +1446,7 @@ def _schema_for(config: SectionContextConfig) -> Dict[str, Any]:
         # qu'un tableau paragraphs contenant lui-même claims. Le parseur reconstruit
         # ensuite le format historique attendu par le frontend.
         return {
-            "text": "Un seul paragraphe global suivant la séquence métier imposée.",
+            "text": "Conclusion lisible : travaux R&D, périmètre à consolider, puis critères Frascati.",
             "evidence_ids": ["F0", "F1", "F2"],
             "claims": [
                 {
@@ -1162,6 +1458,11 @@ def _schema_for(config: SectionContextConfig) -> Dict[str, Any]:
                     "claim_kind": "hypothese_demarche_resultats",
                     "text": "Hypothèse, méthodes, étapes, résultats et apprentissage.",
                     "evidence_ids": ["F2"],
+                },
+                {
+                    "claim_kind": "perimetre_limites",
+                    "text": "Activités classiques identifiées et preuves restant à consolider, sans les confondre.",
+                    "evidence_ids": ["F0", "F2"],
                 },
                 {
                     "claim_kind": "frascati_conclusion",
@@ -1329,7 +1630,7 @@ def _official_frascati_evidence(
     basis = report.get("score_basis_operation") if isinstance(report.get("score_basis_operation"), dict) else {}
     reference = report.get("reference_operation") if isinstance(report.get("reference_operation"), dict) else basis
     narrative_operation = reference or basis
-    criteria = [item for item in (narrative_operation.get("criteria") or []) if isinstance(item, dict)]
+    criteria = [item for item in ((basis or narrative_operation).get("criteria") or []) if isinstance(item, dict)]
     formula_parts = []
     status_labels = {
         "documented": "documenté",
@@ -1393,6 +1694,8 @@ def _official_frascati_evidence(
                     "status": item.get("status"),
                     "contribution_to_index": item.get("contribution_to_index"),
                     "remaining_gap_to_full_coverage": item.get("remaining_gap_to_full_coverage"),
+                    "reason": item.get("reason") or item.get("reason_fr"),
+                    "question": item.get("question"),
                 }
                 for item in criteria
             ],
@@ -1597,16 +1900,38 @@ def _official_frascati_evidence(
     elif purpose == "demarche_detectee":
         source_proofs.extend(method_proofs_round_robin())
     else:
-        # La conclusion d'éligibilité raconte UNE opération de référence. Les
-        # preuves détaillées des autres opérations ne sont pas injectées dans le
-        # même prompt, afin d'éviter les fuites de résultats et les paragraphes
-        # concaténés. Leur statut global reste disponible dans F0.
+        # Une chaîne R&D de référence, puis quelques contre-exemples sourcés pour
+        # expliquer le périmètre. Les identifiants d'opération restent séparés :
+        # un résultat d'une autre opération ne complète jamais la chaîne choisie.
         operation_proofs = operation_proofs_round_robin()
         reference_group_id = clean_text(reference.get("group_id"))
         source_proofs.extend([
             proof for proof in operation_proofs
             if clean_text(proof.get("operation_group_id")) == reference_group_id
         ])
+        for status in ("classical_engineering", "insufficient_evidence", "rnd_core_partial"):
+            example = next((
+                operation for operation in operations
+                if operation.get("operation_status") == status
+                and clean_text(operation.get("group_id")) != reference_group_id
+            ), None)
+            if example:
+                source_proofs.extend([
+                    proof for proof in operation_proofs
+                    if clean_text(proof.get("operation_group_id")) == clean_text(example.get("group_id"))
+                ][:2])
+        # Une activité routinière peut appartenir à une opération globalement R&D.
+        # Conserver son statut d'activité évite d'étendre le verdict à tout le projet.
+        for status in ("classical_engineering", "insufficient_evidence"):
+            activity = next((
+                {**proof, "operation_group_id": operation.get("group_id"),
+                 "operation_function": "perimeter", "activity_status": status}
+                for operation in operations
+                for proof in (operation.get("activities_by_status") or {}).get(status, [])
+                if isinstance(proof, dict) and proof.get("excerpt")
+            ), None)
+            if activity:
+                source_proofs.append(activity)
         source_proofs.extend([
             proof for proof in hypothesis_proofs
             if not reference_group_id
@@ -1687,6 +2012,7 @@ def _official_frascati_evidence(
             "operation_number": proof.get("operation_number"),
             "operation_group_id": clean_text(proof.get("operation_group_id"), 240) or None,
             "operation_function": clean_text(proof.get("operation_function"), 80) or None,
+            "activity_status": proof.get("activity_status"),
             "summary_fr": clean_text(proof.get("summary_fr"), 700),
             "proof_kind": clean_text(proof.get("proof_kind"), 80),
             "result_scope": clean_text(proof.get("result_scope"), 80),
@@ -1795,12 +2121,52 @@ def _compact_frascati_for_prompt(summary: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _history_status_allows_memory(continuity: Dict[str, Any]) -> bool:
+    status = clean_text(continuity.get("status"), 80)
+    try:
+        confidence = float(continuity.get("confidence") or 0.0)
+    except Exception:
+        confidence = 0.0
+    validated = status in {
+        "continued", "refined", "sub_lock", "partially_lifted",
+        "extended_scope", "continued_to_confirm", "mixed_continuity",
+        "mixed_continuity_and_new_subproblems",
+    }
+    return bool(
+        continuity.get("integrated_with_current_lock_card")
+        or (validated and confidence >= 0.60)
+        or (status == "continued_to_confirm" and confidence >= 0.72)
+    )
+
+
+def _history_rows_from_carrier(
+    carrier: Dict[str, Any],
+    history_key: str,
+    role: str,
+) -> List[Dict[str, Any]]:
+    continuity = carrier.get("historical_continuity")
+    continuity = continuity if isinstance(continuity, dict) else {}
+    rows = [row for row in (continuity.get(history_key) or []) if isinstance(row, dict)]
+    if rows:
+        return rows
+    # Les verrous atomiques issus du reconciler portent ``historical_story``
+    # tandis que les axes scientifiques portent déjà historical_*_context.
+    story = continuity.get("historical_story")
+    story = story if isinstance(story, dict) else {}
+    return [row for row in (story.get(role) or []) if isinstance(row, dict)]
+
+
 def _historical_axis_evidence(
     historical_axes: Optional[Sequence[Dict[str, Any]]],
     section_key: str,
     max_items: int,
 ) -> List[Dict[str, Any]]:
-    """Expose N-1 dans les sections métier sans le transformer en preuve N."""
+    """Expose N-1 dans les sections métier sans le transformer en preuve N.
+
+    V7 : accepte à la fois les verrous atomiques réconciliés et les axes
+    scientifiques. L'ancien code n'extrayait le contexte que des axes enrichis,
+    alors que l'agent transmettait surtout les atomiques.
+    """
     mapping = {
         "demarche_detectee": ("historical_method_context", "methode", "historical_method"),
         "parametres_contraintes": ("historical_parameter_context", "parametre", "historical_parameter"),
@@ -1816,20 +2182,19 @@ def _historical_axis_evidence(
             continue
         continuity = axis.get("historical_continuity")
         continuity = continuity if isinstance(continuity, dict) else {}
-        if not continuity.get("integrated_with_current_lock_card"):
+        if not _history_status_allows_memory(continuity):
             continue
-        axis_id = clean_text(axis.get("axis_id") or axis.get("group_id"), 100)
-        axis_title = clean_text(axis.get("title"), 320)
-        for row in continuity.get(history_key) or []:
-            if not isinstance(row, dict):
-                continue
+        axis_id = clean_text(axis.get("axis_id") or axis.get("group_id") or axis.get("continuity_current_id"), 100)
+        axis_title = clean_text(axis.get("title") or axis.get("technical_axis"), 320)
+        for row in _history_rows_from_carrier(axis, history_key, role):
             text_value = clean_text(row.get("text") or row.get("excerpt"), 1100)
             previous_year = clean_text(
                 row.get("previous_year")
+                or continuity.get("previous_year")
                 or (continuity.get("previous_years") or [""])[0],
                 20,
             )
-            signature = (axis_id, previous_year, _grounding_norm(text_value))
+            signature = (axis_id, role, previous_year, _grounding_norm(text_value))
             if not text_value or signature in seen:
                 continue
             seen.add(signature)
@@ -1881,6 +2246,246 @@ def _historical_axis_evidence(
     return output
 
 
+def _carrier_current_sources(carrier: Dict[str, Any]) -> List[Dict[str, Any]]:
+    values: List[Dict[str, Any]] = []
+    for key in ("sources", "source_evidence", "primary_evidence", "supporting_passages"):
+        raw = carrier.get(key)
+        if isinstance(raw, list):
+            values.extend(item for item in raw if isinstance(item, dict))
+        elif isinstance(raw, dict):
+            values.append(raw)
+    if isinstance(carrier.get("source"), dict):
+        values.append(carrier["source"])
+
+    # V7 — le reconciler rattache aussi aux verrous les passages N retrouvés
+    # grâce à la mémoire N-1 (méthode/résultat/paramètre/objectif). Ces passages
+    # sont des preuves COURANTES et peuvent donc enrichir les sections N.
+    continuity = carrier.get("historical_continuity")
+    continuity = continuity if isinstance(continuity, dict) else {}
+    current_support = continuity.get("current_support")
+    current_support = current_support if isinstance(current_support, dict) else {}
+    for rows in current_support.values():
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            raw_source = row.get("raw_source")
+            if isinstance(raw_source, dict) and raw_source:
+                values.append(raw_source)
+            elif clean_text(row.get("text") or row.get("excerpt"), 1600):
+                synthetic = dict(row)
+                synthetic_meta = dict(synthetic.get("metadata") or {})
+                synthetic_meta["role"] = synthetic_meta.get("role") or row.get("role")
+                synthetic_meta["source_type"] = "historical_memory_current_support"
+                synthetic_meta["diagnostic_corpus_selected"] = True
+                synthetic["metadata"] = synthetic_meta
+                synthetic["text"] = row.get("text") or row.get("excerpt")
+                values.append(synthetic)
+    output: List[Dict[str, Any]] = []
+    seen = set()
+    for raw in values:
+        meta = raw.get("metadata") if isinstance(raw.get("metadata"), dict) else {}
+        if (
+            raw.get("temporal_scope") == "previous_cir_continuity"
+            or meta.get("temporal_scope") == "previous_cir_continuity"
+            or raw.get("evidence_origin") == "historical_project"
+            or meta.get("evidence_origin") == "historical_project"
+        ):
+            continue
+        text_value = clean_text(
+            raw.get("excerpt") or raw.get("text") or raw.get("content")
+            or meta.get("excerpt") or meta.get("text"),
+            1600,
+        )
+        document = clean_text(raw.get("document") or meta.get("document"), 500)
+        signature = (document.lower(), _grounding_norm(text_value)[:700])
+        if not text_value or signature in seen:
+            continue
+        seen.add(signature)
+        item = dict(raw)
+        item_meta = dict(meta)
+        item_meta["continuity_orientation_support"] = True
+        item["metadata"] = item_meta
+        item["continuity_orientation_support"] = True
+        output.append(item)
+    return output
+
+
+def _current_memory_support_sources_for_section(
+    historical_axes: Optional[Sequence[Dict[str, Any]]],
+    section_key: str,
+    max_items: int = 10,
+) -> List[Dict[str, Any]]:
+    """Récupère les preuves N retrouvées grâce à la mémoire N-1 pour une section.
+
+    Contrairement aux preuves H, ces lignes viennent bien du dossier courant.
+    Elles servent à éviter qu'une démarche/résultat/paramètre courant soit oublié
+    simplement parce que la première sélection locale ne l'avait pas remonté.
+    """
+    role_map = {
+        "demarche_detectee": {"methode", "contribution"},
+        "resultats_metriques": {"resultat", "contribution"},
+        "parametres_contraintes": {"parametre", "limite"},
+        "objectif_global": {"objectif", "limite", "methode"},
+        "synthese_strategique": {"objectif", "methode", "resultat", "limite", "parametre"},
+    }
+    accepted_roles = role_map.get(section_key)
+    if not accepted_roles:
+        return []
+    output: List[Dict[str, Any]] = []
+    seen = set()
+    for carrier in historical_axes or []:
+        if not isinstance(carrier, dict):
+            continue
+        continuity = carrier.get("historical_continuity")
+        continuity = continuity if isinstance(continuity, dict) else {}
+        if not _history_status_allows_memory(continuity):
+            continue
+        current_support = continuity.get("current_support")
+        current_support = current_support if isinstance(current_support, dict) else {}
+        for role in accepted_roles:
+            for row in current_support.get(role) or []:
+                if not isinstance(row, dict):
+                    continue
+                raw_source = row.get("raw_source")
+                if isinstance(raw_source, dict) and raw_source:
+                    source = dict(raw_source)
+                else:
+                    text_value = clean_text(row.get("text") or row.get("excerpt"), 1600)
+                    if not text_value:
+                        continue
+                    source = dict(row)
+                    source["text"] = text_value
+                    meta = dict(source.get("metadata") or {})
+                    meta["role"] = meta.get("role") or role
+                    meta["source_type"] = "historical_memory_current_support"
+                    meta["diagnostic_corpus_selected"] = True
+                    source["metadata"] = meta
+                meta = source.get("metadata") if isinstance(source.get("metadata"), dict) else {}
+                text_value = clean_text(
+                    source.get("excerpt") or source.get("text") or meta.get("text"),
+                    1600,
+                )
+                document = clean_text(source.get("document") or meta.get("document"), 500)
+                signature = (role, document.lower(), _grounding_norm(text_value)[:700])
+                if not text_value or signature in seen:
+                    continue
+                seen.add(signature)
+                marked = dict(source)
+                marked_meta = dict(meta)
+                marked_meta["historical_memory_current_support"] = True
+                marked_meta["memory_support_role"] = role
+                marked["metadata"] = marked_meta
+                marked["historical_memory_current_support"] = True
+                output.append(marked)
+                if len(output) >= max_items:
+                    return output
+    return output
+
+
+def _current_continuity_support_sources(
+    historical_axes: Optional[Sequence[Dict[str, Any]]],
+    max_items: int = 12,
+) -> List[Dict[str, Any]]:
+    output: List[Dict[str, Any]] = []
+    seen = set()
+    for carrier in historical_axes or []:
+        if not isinstance(carrier, dict):
+            continue
+        continuity = carrier.get("historical_continuity")
+        continuity = continuity if isinstance(continuity, dict) else {}
+        if not _history_status_allows_memory(continuity):
+            continue
+        for source in _carrier_current_sources(carrier):
+            meta = source.get("metadata") if isinstance(source.get("metadata"), dict) else {}
+            signature = (
+                clean_text(source.get("document") or meta.get("document"), 500).lower(),
+                _grounding_norm(source.get("excerpt") or source.get("text") or meta.get("text"))[:650],
+            )
+            if signature in seen:
+                continue
+            seen.add(signature)
+            output.append(source)
+            if len(output) >= max_items:
+                return output
+    return output
+
+
+def _historical_orientation_context(
+    historical_axes: Optional[Sequence[Dict[str, Any]]],
+    section_key: str,
+    max_chars: int = 3200,
+) -> str:
+    """Mémoire N-1 pour choisir le bon niveau d'abstraction, jamais un fait N."""
+    if section_key not in {"objectif_global", "synthese_strategique"}:
+        return "Aucune orientation historique nécessaire pour cette section."
+    rows: List[Dict[str, Any]] = []
+    seen = set()
+    for carrier in historical_axes or []:
+        if not isinstance(carrier, dict):
+            continue
+        continuity = carrier.get("historical_continuity")
+        continuity = continuity if isinstance(continuity, dict) else {}
+        if not _history_status_allows_memory(continuity):
+            continue
+        family_title = clean_text(
+            continuity.get("historical_family_title")
+            or "; ".join(continuity.get("historical_family_titles") or []),
+            500,
+        )
+        previous_year = clean_text(
+            continuity.get("previous_year")
+            or (continuity.get("previous_years") or [""])[0],
+            20,
+        )
+        story = continuity.get("historical_story")
+        story = story if isinstance(story, dict) else {}
+        objective_rows = [
+            row for row in (
+                list(continuity.get("historical_objective_context") or [])
+                + list(story.get("objectif") or [])
+            )
+            if isinstance(row, dict)
+        ]
+        objective_texts = [
+            clean_text(row.get("text") or row.get("excerpt"), 650)
+            for row in objective_rows
+            if clean_text(row.get("text") or row.get("excerpt"), 650)
+        ][:2]
+        current_clues = [
+            clean_text(
+                source.get("excerpt") or source.get("text")
+                or ((source.get("metadata") or {}).get("text") if isinstance(source.get("metadata"), dict) else ""),
+                520,
+            )
+            for source in _carrier_current_sources(carrier)[:2]
+        ]
+        current_clues = [value for value in current_clues if value]
+        signature = (previous_year, _grounding_norm(family_title), tuple(_grounding_norm(v) for v in objective_texts))
+        if signature in seen:
+            continue
+        seen.add(signature)
+        rows.append({
+            "previous_year": previous_year,
+            "historical_family": family_title,
+            "historical_objective_orientation": objective_texts,
+            "current_lock_or_axis": clean_text(carrier.get("title") or carrier.get("technical_axis"), 420),
+            "current_clues": current_clues,
+            "warning": "orientation N-1 uniquement; les faits N doivent être prouvés par les PREUVES courantes",
+        })
+        if len(rows) >= 6:
+            break
+    if not rows:
+        return "Aucune continuité historique validée disponible."
+    return clean_text(
+        "MEMOIRE DE CONTINUITE DU MEME PROJET — ORIENTATION UNIQUEMENT. "
+        "Utilise-la pour éviter de confondre un cas d'étude local avec l'objectif global. "
+        "Ne reprends aucun fait N-1 comme fait N ; la formulation finale doit rester supportée "
+        "par les PREUVES courantes.\n" + json.dumps(rows, ensure_ascii=False, indent=2),
+        max_chars,
+    )
+
 def build_section_context(
     config: SectionContextConfig,
     sections: Dict[str, List[Dict[str, Any]]],
@@ -1890,18 +2495,69 @@ def build_section_context(
     historical_axes: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> Tuple[str, List[Dict[str, Any]]]:
     sources = select_sources_for_section(sections, config)
+    # V7.1 — ne plus modifier Démarche/Résultats/Paramètres avec la mémoire.
+    # Ces sections étaient stables avant V7 et les preuves H ont provoqué des
+    # rejets massifs du guard. La mémoire reste active pour Verrous + cadrage
+    # Objectif/Synthèse ; les sections factuelles gardent leur sélection N native.
+    memory_fact_enrichment = str(
+        os.getenv("ENNOSMART_DIAG_MEMORY_ENRICH_FACT_SECTIONS", "0")
+    ).strip().lower() in {"1", "true", "yes", "oui", "on"}
+    memory_current_sources: List[Dict[str, Any]] = []
+    if config.key in {"objectif_global", "synthese_strategique"} or memory_fact_enrichment:
+        memory_current_sources = _current_memory_support_sources_for_section(
+            historical_axes,
+            config.key,
+            max_items=min(12, max(4, config.top_k_evidence)),
+        )
+        if memory_current_sources:
+            sources = [*sources, *memory_current_sources]
+    if config.key in {"objectif_global", "synthese_strategique"}:
+        # Les autres passages N rattachés à une continuité validée élargissent
+        # aussi le cadrage afin qu'un seul rapport local ne réduise pas l'objectif.
+        sources = [
+            *sources,
+            *_current_continuity_support_sources(
+                historical_axes,
+                max_items=min(12, max(4, config.top_k_evidence)),
+            ),
+        ]
+    # Avec l'override de production à 1 800 tokens, une orientation N-1 de
+    # 3 200 caractères occupait à elle seule la place de la première preuve N.
+    # Le budgeteur refusait alors E1 et produisait littéralement PREUVES: [].
+    # L'objectif conserve un rappel historique compact ; les faits courants
+    # restent prioritaires et ne peuvent plus être évincés par cette mémoire.
+    historical_orientation = _historical_orientation_context(
+        historical_axes,
+        config.key,
+        max_chars=(1200 if config.key == "objectif_global" else 2200),
+    )
+    effective_min_items = (
+        min(config.min_items, max(1, len(sources)))
+        if config.display_mode == "numbered_items"
+        else config.min_items
+    )
+    # V5.4 — la preuve Frascati officielle sert à la JUSTIFICATION Frascati.
+    # Démarche et Résultats doivent partir des faits NLP projet directement
+    # qualifiés. En V5.3, les preuves Frascati (souvent des étapes/intentions)
+    # remplaçaient ces vraies observations et produisaient de faux rejets.
     evidence: List[Dict[str, Any]] = (
         _official_frascati_evidence(
             frascati_summary,
             max_items=config.top_k_evidence,
             purpose=config.key,
         )
-        if config.key in {"justification_frascati", "demarche_detectee", "resultats_metriques"}
+        if config.key == "justification_frascati"
         else []
     )
     evidence = _filter_and_dedupe_section_evidence(evidence, config.key)
     official_current_evidence_count = len(evidence)
-    if config.key in {"demarche_detectee", "resultats_metriques", "parametres_contraintes"}:
+    include_historical_factual_rows = str(
+        os.getenv("ENNOSMART_DIAG_INCLUDE_HISTORICAL_FACT_ROWS", "0")
+    ).strip().lower() in {"1", "true", "yes", "oui", "on"}
+    if (
+        include_historical_factual_rows
+        and config.key in {"demarche_detectee", "resultats_metriques", "parametres_contraintes"}
+    ):
         evidence.extend(_historical_axis_evidence(
             historical_axes,
             config.key,
@@ -1922,17 +2578,18 @@ Tu es EnnoDiagnostic, agent d'analyse CIR. Rédige uniquement la section « {con
 
 Règles absolues :
 - Utilise seulement les preuves numérotées fournies.
-- MODE PROJET COURANT : n'utilise aucun contenu provenant d'un autre projet, d'un exemple de style, de Memory V2 ou d'un CIR précédent pour décrire les faits du projet courant.
+- MODE PROJET COURANT : aucun autre projet, exemple de style ou Memory V2 ne peut fournir un fait. Le CIR précédent du même projet peut seulement orienter la continuité et le niveau d'abstraction ; les faits N restent prouvés par les PREUVES courantes.
 - Les seules informations techniques autorisées sont celles des PREUVES numérotées ci-dessous, issues du projet courant.
 - Si une information n'apparaît pas dans ces PREUVES, ne la complète pas par analogie : indique qu'elle est insuffisamment documentée.
 - N'invente aucun fait, résultat, paramètre ou protocole.
+- Le rôle NLP seul ne prouve jamais que l'équipe projet a réalisé le fait : la provenance, l'acteur et le statut d'exécution doivent être compatibles avec la section.
 - Chaque paragraphe ou élément doit citer au moins un `evidence_id` autorisé.
 - Pour la justification Frascati, une affirmation = une idée vérifiable. Ne répète jamais
   la même comparaison, le même résultat ou la même conclusion dans deux paragraphes.
-- Pour la justification Frascati, retourne exactement un paragraphe et découpe-le en
-  `claims` consécutifs couvrant : contexte, verrou, hypothèse, méthodes/outils, étapes
-  expérimentales, résultats interprétés, apprentissage, critères acquis, critères à
-  consolider et conclusion. Chaque claim porte ses propres `evidence_ids`, et le champ
+- Pour la justification Frascati, organise les `claims` en trois paragraphes : travaux
+  R&D et preuves ; activités classiques / réserves documentaires ; critères Frascati
+  et conclusion. Une preuve manquante n'est pas de l'ingénierie classique.
+  Chaque claim porte ses propres `evidence_ids`, et le champ
   `text` du paragraphe est la concaténation fidèle de ces claims.
 - Tout nombre relatif au projet doit apparaître exactement dans au moins une preuve citée.
   Ne calcule aucun écart, gain, moyenne ou pourcentage à partir de deux autres valeurs.
@@ -1972,7 +2629,7 @@ Règles absolues :
 - Place les références uniquement dans `evidence_ids`.
 - Aucun Markdown, aucun titre et aucun tableau.
 - Retourne uniquement le JSON demandé.
-- Entre {config.min_items} et {config.max_items} éléments.
+- Entre {effective_min_items} et {config.max_items} éléments.
 
 Instruction métier :
 {_SECTION_INSTRUCTIONS[config.key]}
@@ -1985,6 +2642,9 @@ STYLE — FORME UNIQUEMENT :
 
 MEMORY V2 — ANALOGIE UNIQUEMENT :
 {_memory_v2_context(memory_v2_report)}
+
+MEMOIRE CIR PRECEDENT — CONTINUITE / ORIENTATION UNIQUEMENT :
+{historical_orientation}
 
 PREUVES :
 {{evidence_json}}
@@ -2006,9 +2666,9 @@ CONTRAT :
 - Une cible/planification ne doit jamais devenir un résultat acquis. Objectif et synthèse restent soumis à un ancrage projet direct.
 - Respecte `execution_status` mot pour mot : `planned`/`proposed` restent des objectifs ou pistes ; seuls `implemented`/`experimented` décrivent une démarche réalisée ; seuls `observed`/`measured` décrivent un résultat acquis.
 - N'écris jamais « l'équipe a réalisé/obtenu/confirmé » depuis une preuve `planned`, `proposed` ou `unknown`.
-- Les preuves F/E décrivent l'année courante. Les preuves H sont exclusivement des éléments de continuité du CIR précédent du même projet.
-- Une preuve H peut ajouter une démarche, un paramètre ou un résultat historique à la section, mais jamais prouver un fait de l'année courante.
-- Tout élément utilisant une preuve H doit être autonome, commencer par « Historique 20XX — » avec l'année fournie et ne citer aucune preuve F/E dans le même élément.
+- Les preuves F/E décrivent l'année courante. Par défaut aucune preuve historique H n'est injectée dans Démarche, Résultats ou Paramètres : ces sections restent strictement fondées sur les preuves N afin de préserver les sorties stabilisées.
+- Pour Objectif/Synthèse uniquement, la mémoire N-1 peut orienter le niveau d'abstraction et rappeler la trajectoire scientifique du même projet. Elle ne peut ajouter aucun fait non confirmé par une preuve F/E courante.
+- Ne mélange jamais une formulation historique avec une démarche ou un résultat courant.
 - Aucun autre projet, Memory V2 ou exemple de style ne peut fournir un fait.
 - N'invente ni objet, ni méthode, ni paramètre, ni résultat, ni causalité, ni chiffre.
 - Chaque paragraphe/élément doit citer au moins un evidence_id autorisé.
@@ -2018,6 +2678,8 @@ CONTRAT :
 - Réexplique les termes techniques par leur fonction dans le projet, sans les remplacer par un autre concept et sans supposer que le consultant connaît le domaine.
 - Un nombre visible doit exister tel quel dans la preuve citée ; ne calcule aucun écart ou gain.
 - Ne transforme pas un résultat en objectif ni une contrainte de benchmark en paramètre général du projet.
+- Dans Paramètres, ne fusionne jamais une métrique d'évaluation (couverture, compilabilité, précision, score) avec une contrainte de ressources (GPU, mémoire, calcul, contexte) sauf si la même preuve établit explicitement ce lien.
+- Une valeur provenant uniquement d'une transcription orale reste provisoire : écris « mentionnée dans la transcription, à confirmer » sauf corroboration par une autre preuve indépendante.
 - Pour une preuve fragmentée, utilise son texte contextualisé ; le titre de section sert de localisation, pas de preuve sémantique.
 - Ne cite aucun nom de fichier ni identifiant E/F/G dans le texte visible.
 - Retourne uniquement le JSON correspondant au schéma.
@@ -2028,6 +2690,43 @@ Instruction métier :
 Schéma :
 {json.dumps(_schema_for(config), ensure_ascii=False)}
 
+MEMOIRE CIR PRECEDENT — CONTINUITE / ORIENTATION UNIQUEMENT :
+{historical_orientation}
+
+PREUVES :
+{{evidence_json}}
+""".strip()
+
+    # L'objectif utilise en production un budget réduit à 1 800 tokens. Le
+    # contrat commun aux sections numérotées contenait de nombreuses règles sur
+    # les tableaux, métriques et transcriptions qui ne le concernent pas. Elles
+    # faisaient tronquer précisément la fin du prompt où se trouvent les preuves.
+    # Les mêmes gardes factuels Python sont appliqués après génération ; ce
+    # contrat court ne retire donc aucun contrôle de sûreté.
+    if config.key == "objectif_global":
+        base_prompt = f"""
+Tu es EnnoDiagnostic. Rédige uniquement « {config.title} » en français.
+
+CONTRAT OBJECTIF :
+- Utilise exclusivement les PREUVES numérotées du projet courant.
+- Le CIR précédent du même projet sert seulement à comprendre la trajectoire et le bon niveau d'abstraction. Aucun fait N-1 ne devient un fait N sans PREUVE courante.
+- Formule l'objectif global du projet, pas seulement l'objectif local d'un essai, lorsque les PREUVES courantes autorisent ce niveau.
+- Respecte la provenance, l'acteur, le rôle et `execution_status`. Une action `planned` ou `proposed` reste un objectif ; ne la présente jamais comme réalisée.
+- Ne transforme aucun résultat observé en objectif initial, cible ou causalité.
+- N'invente aucun objet, méthode, chiffre, résultat ou conclusion. Tout nombre visible doit exister tel quel dans la preuve citée.
+- Produis exactement un paragraphe clair et autonome, avec au moins un `evidence_id` autorisé.
+- Ne cite ni fichier, ni identifiant E/F/G dans le texte visible. Aucun Markdown.
+- Retourne uniquement le JSON correspondant au schéma.
+
+Instruction métier :
+{_SECTION_INSTRUCTIONS[config.key]}
+
+Schéma :
+{json.dumps(_schema_for(config), ensure_ascii=False)}
+
+MEMOIRE CIR PRECEDENT — ORIENTATION UNIQUEMENT :
+{historical_orientation}
+
 PREUVES :
 {{evidence_json}}
 """.strip()
@@ -2036,7 +2735,7 @@ PREUVES :
     # ont déjà été classées par fonction et rattachées aux opérations. Si elles sont
     # disponibles, ne pas réinjecter ensuite des chunks RAG génériques : c'était la
     # principale source de mélange entre opérations, littérature et résultats locaux.
-    official_only_sections = {"justification_frascati", "demarche_detectee", "resultats_metriques"}
+    official_only_sections = {"justification_frascati"}
     sources_to_append = (
         []
         if config.key in official_only_sections and official_current_evidence_count > 0
@@ -2089,24 +2788,25 @@ PREUVES :
     # d'être retaillées normalement.
     if config.key != "justification_frascati":
         while evidence and estimate_tokens(render_prompt(evidence)) > config.max_input_tokens:
-            removable_current = next(
-                (
-                    index for index in range(len(evidence) - 1, -1, -1)
-                    if evidence[index].get("temporal_scope") != "previous_cir_continuity"
-                ),
-                None,
-            )
-            # Réserve de couverture N-1 : on réduit d'abord les détails courants
-            # redondants. Une continuité validée ne doit plus être supprimée
-            # mécaniquement parce qu'elle se trouve à la fin du prompt.
-            if removable_current is not None and any(
-                item.get("temporal_scope") == "previous_cir_continuity"
-                for item in evidence
-            ):
-                evidence.pop(removable_current)
+            historical_indexes = [
+                index for index, item in enumerate(evidence)
+                if item.get("temporal_scope") == "previous_cir_continuity"
+            ]
+            current_indexes = [
+                index for index, item in enumerate(evidence)
+                if item.get("temporal_scope") != "previous_cir_continuity"
+            ]
+            # Les faits N restent prioritaires. On conserve toutefois au moins
+            # un rappel N-1 lorsqu'une continuité historique est disponible.
+            min_current_keep = min(4, max(2, config.min_items))
+            if historical_indexes and len(current_indexes) <= min_current_keep:
+                evidence.pop(historical_indexes[-1])
+            elif current_indexes:
+                evidence.pop(current_indexes[-1])
             else:
                 evidence.pop()
 
+    required_source_evidence = 1 if sources_to_append else 0
     for index, source in enumerate(sources_to_append, start=1):
         item = evidence_from_source(source, f"E{index}", config.max_chars_per_evidence)
         candidate = _filter_and_dedupe_section_evidence(evidence + [item], config.key)
@@ -2114,8 +2814,21 @@ PREUVES :
             continue
         prompt_candidate = render_prompt(candidate)
         if estimate_tokens(prompt_candidate) > config.max_input_tokens:
-            break
+            # Le socle courant est obligatoire. Auparavant le premier dépassement
+            # provoquait un break et envoyait un objectif avec zéro preuve. Les
+            # détails suivants peuvent être ignorés, mais jamais E1.
+            if len(evidence) < required_source_evidence:
+                evidence = candidate
+            continue
         evidence = candidate
+
+    # Si un budget très serré a permis plusieurs lignes puis devient trop grand
+    # après sérialisation, retirer les détails de fin sans toucher au socle E1.
+    while (
+        len(evidence) > required_source_evidence
+        and estimate_tokens(render_prompt(evidence)) > config.max_input_tokens
+    ):
+        evidence.pop()
 
     prompt = render_prompt(evidence)
     return prompt, evidence
@@ -2314,14 +3027,20 @@ def _current_project_scope_errors(
                 )
     return errors
 
-def _unsupported_domain_terms(body: Any, evidence: Sequence[Dict[str, Any]]) -> List[str]:
+def _unsupported_domain_terms(body: Any, evidence: Sequence[Dict[str, Any]], project_scope_text: str = "") -> List[str]:
     """Détecte un changement de domaine absent des preuves sélectionnées."""
     generated = f" {_grounding_norm(body)} "
-    source = " " + _grounding_norm(" ".join(
-        str(item.get("excerpt") or item.get("text") or "")
-        for item in evidence
-        if isinstance(item, dict)
-    )) + " "
+    # Une reformulation consultant peut employer un terme générique déjà présent
+    # ailleurs dans le même projet (ex. « logiciel ») sans qu'il figure dans les
+    # 2-8 extraits retenus pour cette section. Le contrôle reste strict au niveau
+    # du corpus courant complet ; il n'autorise jamais un domaine externe.
+    source = " " + _grounding_norm(
+        str(project_scope_text or "") + " " + " ".join(
+            str(item.get("excerpt") or item.get("text") or "")
+            for item in evidence
+            if isinstance(item, dict)
+        )
+    ) + " "
     unsupported: List[str] = []
     for term in sorted(DOMAIN_SHIFT_TERMS):
         normalized = _grounding_norm(term)
@@ -2532,11 +3251,24 @@ def _strict_claim_grounding_errors(
             result_scopes = {
                 _grounding_norm(item.get("result_scope") or "") for item in cited
             }
+            execution_statuses = {
+                _grounding_norm(item.get("execution_status") or "") for item in cited
+            }
             acceptable_scopes = {
                 "global comparison", "global metric", "observed gain",
                 "observed metric", "qualitative observation", "historical result",
             }
-            if cited and not (result_scopes & acceptable_scopes):
+            has_observed_execution = bool(
+                execution_statuses & {"observed", "measured"}
+            )
+            has_primary_result = any(
+                bool(item.get("primary_result_evidence")) for item in cited
+            )
+            if cited and not (
+                (result_scopes & acceptable_scopes)
+                or has_observed_execution
+                or has_primary_result
+            ):
                 errors.append(
                     f"affirmation {index}: aucune preuve de résultat observé ; "
                     "seulement une cible, une planification ou un contexte"
@@ -2683,11 +3415,41 @@ def _execution_grounding_errors(
         }
         text = _grounding_norm(unit.get("text") or unit.get("description") or "")
         claims_completed = any(marker in text for marker in completed_markers)
-        claims_result = any(marker in text for marker in result_markers)
-        has_executed = bool(statuses & {"implemented", "experimented", "observed", "measured"})
-        has_result = bool(statuses & {"observed", "measured"})
+        # Un objectif peut légitimement contenir « mesurer », « évaluer »,
+        # « comparer » ou « quantifier » : ce sont des verbes de finalité, pas
+        # la preuve qu'un résultat a déjà été obtenu. Pour Objectif, on ne bloque
+        # que les formulations explicitement accomplies au passé.
+        if section_key == "objectif_global":
+            claims_result = bool(re.search(
+                r"\b(?:a obtenu|ont obtenu|a confirme|ont confirme|a atteint|ont atteint|"
+                r"les resultats? (?:montre|montrent|indique|indiquent)|"
+                r"la performance (?:a|s est) (?:augmente|amelioree)|"
+                r"a permis de confirmer|ont permis de confirmer)\b",
+                text,
+                flags=re.I,
+            ))
+        else:
+            claims_result = any(marker in text for marker in result_markers)
+        trusted_result_gate = any(
+            bool(source.get("primary_result_evidence"))
+            or clean_text(
+                (source.get("project_fact_gate") or {}).get("reason")
+                if isinstance(source.get("project_fact_gate"), dict) else "",
+                80,
+            ) == "observed_project_result"
+            or (
+                bool(source.get("trusted_project_fact"))
+                and clean_text(source.get("execution_reason") or "", 80)
+                == "project_fact_gate_observed_result"
+            )
+            for source in documentary
+        )
+        has_executed = bool(
+            statuses & {"implemented", "experimented", "observed", "measured"}
+        ) or trusted_result_gate
+        has_result = bool(statuses & {"observed", "measured"}) or trusted_result_gate
 
-        if claims_completed and not has_executed:
+        if claims_completed and not has_executed and section_key != "objectif_global":
             errors.append(
                 f"élément {index}: intention ou statut inconnu transformé en travail réalisé"
             )
@@ -2882,6 +3644,28 @@ def _repetition_errors(
     return errors
 
 
+def _strategic_synthesis_readability_errors(
+    paragraphs: Sequence[Dict[str, Any]],
+    section_key: str,
+) -> List[str]:
+    """Empêche la synthèse d'afficher les extraits/tableaux à la place du récit."""
+    if section_key != "synthese_strategique":
+        return []
+    errors: List[str] = []
+    for index, paragraph in enumerate(paragraphs, start=1):
+        text = clean_text(paragraph.get("text"), 5200)
+        if text.count("|") >= 2:
+            errors.append(
+                f"paragraphe {index}: tableau brut recopié dans la synthèse stratégique"
+            )
+        if len(text) < 120:
+            errors.append(
+                f"paragraphe {index}: synthèse trop courte pour expliquer l'enjeu et sa portée"
+            )
+    errors.extend(_repetition_errors(paragraphs, []))
+    return errors
+
+
 def _attach_proof_quotes(
     units: Sequence[Dict[str, Any]],
     evidence: Sequence[Dict[str, Any]],
@@ -2974,7 +3758,14 @@ def _unsupported_target_errors(
         str(item.get("excerpt") or item.get("text") or "")
         for item in evidence if isinstance(item, dict)
     ))
-    target_pattern = r"\b(?:critere de reussite|cible|seuil|minimum|au moins|attendu|exigence)\b"
+    # Ne bloque que l'invention d'une cible/borne réellement contraignante.
+    # Des mots génériques comme "attendu" ou "exigence" apparaissent souvent
+    # dans une reformulation légitime d'objectif et déclenchaient des faux
+    # positifs, alors que les nombres restent contrôlés séparément.
+    target_pattern = (
+        r"\b(?:critere de reussite|cible chiffree|seuil(?: de)?|minimum(?: de)?|"
+        r"au moins \d|au plus \d|maximum(?: de)? \d|exigence quantitative)\b"
+    )
     if re.search(target_pattern, generated) and not re.search(target_pattern, source):
         return ["objectif transformé en cible ou critère absent des preuves"]
     return []
@@ -3000,8 +3791,8 @@ def _eligibility_narrative_errors(
     text = clean_text(body, 5200)
     normalized = _grounding_norm(text)
     errors: List[str] = []
-    if len(paragraphs) != 1:
-        errors.append("la conclusion d’éligibilité doit former un seul paragraphe")
+    if not 1 <= len(paragraphs) <= 3:
+        errors.append("la conclusion d’éligibilité doit rester lisible en trois paragraphes au plus")
     if re.search(r"calcul officiel nlp.?frascati|regle\s*:\s*cinq criteres|documente apporte 0[.,]2", normalized):
         errors.append("la formule interne du calcul ne doit pas remplacer le récit projet")
 
@@ -3217,6 +4008,14 @@ def parse_section_result(
                     *paragraph_evidence_ids,
                     *(evidence_id for claim in claims for evidence_id in claim.get("evidence_ids") or []),
                 ]))
+            # V5.4 — même réparation déterministe que pour les items numérotés.
+            # Le modèle omettait parfois ``evidence_ids`` dans la synthèse alors
+            # que le texte restait lexicalement ancré dans une preuve, ce qui
+            # déclenchait un second appel LLM inutile.
+            if not paragraph_evidence_ids:
+                paragraph_evidence_ids = _infer_evidence_ids_for_text(
+                    text, evidence, max_ids=2
+                )
             paragraphs.append({
                 "text": text,
                 "evidence_ids": paragraph_evidence_ids,
@@ -3234,7 +4033,7 @@ def parse_section_result(
     used_evidence = [item for item in evidence if item["evidence_id"] in used_ids]
     grounding_errors: List[str] = []
     grounding_errors.extend(_current_project_scope_errors(body, evidence, config.key, project_scope_text))
-    unsupported_terms = _unsupported_domain_terms(body, evidence)
+    unsupported_terms = _unsupported_domain_terms(body, evidence, project_scope_text)
     if unsupported_terms:
         grounding_errors.append(
             "termes de domaine absents des preuves : " + ", ".join(unsupported_terms)
@@ -3265,16 +4064,24 @@ def parse_section_result(
         grounding_errors.extend(_flattened_table_value_alignment_errors(items, evidence))
     grounding_errors.extend(_historical_temporal_errors(items, evidence))
     grounding_errors.extend(_consultant_explanation_errors(items, config.key))
+    grounding_errors.extend(
+        _strategic_synthesis_readability_errors(paragraphs, config.key)
+    )
     if config.key == "justification_frascati":
         grounding_errors.extend(_eligibility_narrative_errors(body, paragraphs, evidence))
         grounding_errors.extend(_repetition_errors(paragraph_claims or paragraphs, items))
     _attach_proof_quotes(paragraphs, evidence)
     _attach_proof_quotes(paragraph_claims, evidence)
     _attach_proof_quotes(items, evidence)
-    minimum_reached = (
-        len(items) >= config.min_items
+    effective_min_items = (
+        min(config.min_items, max(1, len(evidence)))
         if config.display_mode == "numbered_items"
-        else len(paragraphs) >= config.min_items
+        else config.min_items
+    )
+    minimum_reached = (
+        len(items) >= effective_min_items
+        if config.display_mode == "numbered_items"
+        else len(paragraphs) >= effective_min_items
     )
     return {
         "body": clean_text(body, 12000),
@@ -3289,6 +4096,64 @@ def parse_section_result(
 
 
 def _fallback_from_evidence(config: SectionContextConfig, evidence: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Fallback consultant-safe.
+
+    V5.3 : pour Objectif/Démarche/Résultats/Paramètres, un échec de rédaction
+    ne doit plus recopier un chunk, un tableau ou une transcription brute.
+    Mieux vaut signaler une information insuffisamment structurée que publier
+    une preuve hors contexte comme fait du projet.
+    """
+    safe_messages = {
+        "synthese_strategique": (
+            "Les preuves du projet sont disponibles, mais leur reformulation stratégique n'a pas satisfait les contrôles "
+            "de lisibilité et d'ancrage factuel. Consultez les sections Objectif, Démarche, Résultats et Paramètres, puis "
+            "relancez la synthèse ; aucun tableau brut n'est publié à sa place."
+        ),
+        "objectif_global": (
+            "L'objectif global n'est pas suffisamment stabilisé dans les preuves "
+            "qualifiées du projet courant ; une validation consultant est requise."
+        ),
+        "demarche_detectee": (
+            "Aucune démarche suffisamment attribuable aux travaux réalisés par "
+            "l'équipe projet n'a pu être reformulée automatiquement."
+        ),
+        "resultats_metriques": (
+            "Aucun résultat suffisamment contextualisé et attribuable au projet "
+            "courant n'a pu être publié automatiquement."
+        ),
+        "parametres_contraintes": (
+            "Aucun paramètre ou contrainte suffisamment corroboré dans les preuves "
+            "du projet courant n'a pu être publié automatiquement."
+        ),
+    }
+    if config.key in safe_messages:
+        body = safe_messages[config.key]
+        if config.display_mode == "numbered_items":
+            label = {
+                "demarche_detectee": "Démarche à confirmer",
+                "resultats_metriques": "Résultat à confirmer",
+                "parametres_contraintes": "Paramètre à confirmer",
+            }.get(config.key, "Élément à confirmer")
+            item = {"label": label, "text": body, "evidence_ids": []}
+            return {
+                "body": f"{label} — {body}",
+                "paragraphs": [],
+                "items": [item],
+                "evidence_ids": [],
+                "evidence": [],
+                "valid": True,
+                "fallback_reason": "no_publishable_project_fact",
+            }
+        return {
+            "body": body,
+            "paragraphs": [{"text": body, "evidence_ids": []}],
+            "items": [],
+            "evidence_ids": [],
+            "evidence": [],
+            "valid": True,
+            "fallback_reason": "no_publishable_project_fact",
+        }
+
     if not evidence:
         body = "Information insuffisante dans les preuves du projet courant ; cette section doit être complétée par le consultant."
         return {"body": body, "paragraphs": [{"text": body, "evidence_ids": []}], "items": [], "evidence_ids": [], "evidence": [], "valid": True}
@@ -3318,7 +4183,6 @@ def _fallback_from_evidence(config: SectionContextConfig, evidence: List[Dict[st
     used = [eid for item in paragraphs for eid in item["evidence_ids"]]
     _attach_proof_quotes(paragraphs, evidence)
     return {"body": body, "paragraphs": paragraphs, "items": [], "evidence_ids": used, "evidence": selected[:len(paragraphs)], "valid": bool(body)}
-
 
 def _salvage_consultant_explanations(
     parsed: Dict[str, Any],
@@ -3519,6 +4383,81 @@ def _section_fallback(
     return _fallback_from_evidence(config, evidence)
 
 
+
+def _normalize_section_json_shape(
+    raw: Any,
+    config: SectionContextConfig,
+    evidence: Sequence[Dict[str, Any]],
+) -> Any:
+    """Tolère les aliases JSON fréquents sans perdre une bonne rédaction.
+
+    Certains modèles répondent par {"Objectif global du projet": "..."} alors
+    que le schéma demandé est {"paragraphs":[...]}. Le texte peut être correct
+    et entièrement fondé ; on normalise donc la forme avant le guard, puis le
+    guard factuel décide toujours si le contenu est acceptable.
+    """
+    if config.display_mode == "numbered_items" or config.key == "justification_frascati":
+        return raw
+    data = extract_json_object(raw)
+    if not isinstance(data, dict):
+        return raw
+    paragraphs = data.get("paragraphs")
+    if isinstance(paragraphs, list) and paragraphs:
+        return raw
+
+    aliases = {
+        "objectif_global": (
+            "Objectif global du projet",
+            "Objectif global",
+            "objectif_global",
+            "objectif",
+            config.title,
+        ),
+        "synthese_strategique": (
+            "Synthèse stratégique",
+            "Synthèse stratégique du projet",
+            "synthese_strategique",
+            "synthese",
+            config.title,
+        ),
+    }.get(config.key, (config.title,))
+
+    texts: List[str] = []
+    for alias in aliases:
+        value = data.get(alias)
+        if isinstance(value, str) and clean_text(value, 6000):
+            texts.append(clean_text(value, 6000))
+        elif isinstance(value, list):
+            texts.extend(clean_text(v, 4000) for v in value if isinstance(v, str) and clean_text(v, 4000))
+
+    # Dernier recours : un unique champ texte avec un nom inattendu.
+    if not texts and len(data) == 1:
+        only = next(iter(data.values()))
+        if isinstance(only, str) and clean_text(only, 6000):
+            texts = [clean_text(only, 6000)]
+
+    if not texts:
+        return raw
+
+    current_ids = [
+        str(ev.get("evidence_id"))
+        for ev in evidence
+        if ev.get("evidence_id")
+        and ev.get("temporal_scope") != "previous_cir_continuity"
+    ]
+    current_ids = list(dict.fromkeys(current_ids))[:6]
+    if not current_ids:
+        return raw
+
+    normalized = {
+        "paragraphs": [
+            {"text": text, "evidence_ids": current_ids}
+            for text in texts[: max(1, config.max_items)]
+        ]
+    }
+    return json.dumps(normalized, ensure_ascii=False)
+
+
 def generate_one_section(
     llm: Any,
     config: SectionContextConfig,
@@ -3609,7 +4548,15 @@ def generate_one_section(
             json_mode=True,
             request_name=f"ennodiagnostic:{config.key}",
         )
-        parsed = parse_section_result(raw, config, evidence, project_scope_text=project_scope_text)
+        normalized_raw = _normalize_section_json_shape(raw, config, evidence)
+        parsed = parse_section_result(
+            normalized_raw,
+            config,
+            evidence,
+            project_scope_text=project_scope_text,
+        )
+        if normalized_raw != raw:
+            telemetry["json_shape_normalized"] = True
         llm_meta = {}
         try:
             llm_meta = llm.get_last_generation_meta()
@@ -3648,7 +4595,15 @@ def generate_one_section(
                 json_mode=True,
                 request_name=f"ennodiagnostic:{config.key}:grounding_retry",
             )
-            retry_parsed = parse_section_result(raw_retry, config, evidence, project_scope_text=project_scope_text)
+            normalized_retry_raw = _normalize_section_json_shape(raw_retry, config, evidence)
+            retry_parsed = parse_section_result(
+                normalized_retry_raw,
+                config,
+                evidence,
+                project_scope_text=project_scope_text,
+            )
+            if normalized_retry_raw != raw_retry:
+                telemetry["retry_json_shape_normalized"] = True
             telemetry["grounding_retry"] = True
             telemetry["first_validation_errors"] = validation_errors
             retry_validation_errors = retry_parsed.get("validation_errors") or []
@@ -3719,6 +4674,7 @@ def generate_one_section(
                     "preuves N et N-1 fusionnées",
                     "continuité N-1 non signalée comme historique",
                     "tableau brut recopié",
+                    "répétitives",
                 )
             )
             if hard_grounding_error:
@@ -3761,6 +4717,48 @@ def generate_one_section(
             )
             return parsed, prompt
 
+        if (
+            config.key == "objectif_global"
+            and not clean_text(parsed.get("body"), 5200)
+            and evidence
+        ):
+            objective_retry_prompt = (
+                prompt
+                + "\n\nOBJECTIF GLOBAL — FORMAT OBLIGATOIRE : "
+                  "les PREUVES courantes sont présentes. Retourne exactement "
+                  '{"paragraphs":[{"text":"un paragraphe global, non local, fondé uniquement sur N",'
+                  '"evidence_ids":["E1"]}]}. '
+                  "Ne renvoie jamais un tableau vide. Un équipement ou une campagne locale "
+                  "est un cas d'étude si plusieurs preuves décrivent une trajectoire plus large."
+            )
+            raw_objective_retry = llm.generate(
+                objective_retry_prompt,
+                temperature=0.0,
+                max_input_tokens=config.max_input_tokens,
+                max_output_tokens=config.max_output_tokens,
+                retries=0,
+                json_mode=True,
+                request_name="ennodiagnostic:objectif_global:shape_retry",
+            )
+            normalized_objective_retry = _normalize_section_json_shape(
+                raw_objective_retry,
+                config,
+                evidence,
+            )
+            objective_retry = parse_section_result(
+                normalized_objective_retry,
+                config,
+                evidence,
+                project_scope_text=project_scope_text,
+            )
+            telemetry["objective_shape_retry"] = True
+            if objective_retry.get("valid"):
+                objective_retry.update({
+                    "status": "llm_section_json_after_objective_shape_retry",
+                    "telemetry": telemetry,
+                })
+                return objective_retry, objective_retry_prompt
+
         if not clean_text(parsed.get("body"), 5200):
             raw_preview = clean_text(raw, 900).replace("\n", " ")
             parsed_keys = list(extract_json_object(raw).keys())[:20]
@@ -3782,7 +4780,7 @@ def generate_one_section(
         return fallback, prompt
 
 
-_SECTION_CACHE_VERSION = "ennodiagnostic_section_cache_v324_provenance_locks_rnd_score"
+_SECTION_CACHE_VERSION = "ennodiagnostic_section_cache_v333_llm_eligibility_perimeter"
 
 
 def _section_cache_identity(key: str, prompt: str, llm: Any) -> str:
@@ -3792,7 +4790,8 @@ def _section_cache_identity(key: str, prompt: str, llm: Any) -> str:
         or getattr(llm, "default_model", None)
         or "default"
     )
-    raw = "|".join([_SECTION_CACHE_VERSION, key, model, prompt])
+    narrative_mode = os.getenv("ENNOSMART_DIAG_FRASCATI_USE_LLM", "1") if key == "justification_frascati" else ""
+    raw = "|".join([_SECTION_CACHE_VERSION, key, model, narrative_mode, prompt])
     return hashlib.sha256(raw.encode("utf-8", errors="ignore")).hexdigest()
 
 
@@ -3865,15 +4864,96 @@ def generate_structured_diagnostic_core(
 ) -> Dict[str, Any]:
     del ai_detection_report
     configs = all_section_configs()
+
+    # V5.4 — la synthèse stratégique n'est plus alimentée par le ``global`` RAG
+    # brut ni par toutes les limites. Elle reçoit uniquement les preuves déjà
+    # publiables dans Objectif/Démarche/Résultats/Paramètres et les sources des
+    # verrous finaux transmis par l'agent.
+    synthesis_fact_sources: List[Dict[str, Any]] = []
+    def mark_synthesis_kind(
+        values: Sequence[Dict[str, Any]],
+        kind: str,
+    ) -> List[Dict[str, Any]]:
+        marked: List[Dict[str, Any]] = []
+        for source in values:
+            if not isinstance(source, dict):
+                continue
+            item = dict(source)
+            metadata = dict(meta_of(item))
+            metadata["synthesis_fact_kind"] = kind
+            item["metadata"] = metadata
+            item["synthesis_fact_kind"] = kind
+            marked.append(item)
+        return marked
+
+    synthesis_objective_sources = mark_synthesis_kind(
+        select_sources_for_section(sections, configs["objectif_global"]),
+        "objectif",
+    )
+    for factual_key in (
+        "demarche_detectee", "resultats_metriques", "parametres_contraintes",
+    ):
+        synthesis_fact_sources.extend(mark_synthesis_kind(
+            select_sources_for_section(sections, configs[factual_key]),
+            {
+                "demarche_detectee": "methode",
+                "resultats_metriques": "resultat",
+                "parametres_contraintes": "parametre",
+            }[factual_key],
+        ))
+    synthesis_fact_sources = [
+        *synthesis_objective_sources,
+        *synthesis_fact_sources,
+    ]
+
+    synthesis_lock_sources: List[Dict[str, Any]] = []
+    for lock in historical_axes or []:
+        if not isinstance(lock, dict):
+            continue
+        nested: List[Dict[str, Any]] = []
+        for key in ("sources", "source_evidence", "primary_evidence", "supporting_passages"):
+            value = lock.get(key)
+            if isinstance(value, list):
+                nested.extend(item for item in value if isinstance(item, dict))
+            elif isinstance(value, dict):
+                nested.append(value)
+        if isinstance(lock.get("source"), dict):
+            nested.append(lock["source"])
+        for item in nested[:4]:
+            lock_source = dict(item)
+            lock_meta = dict(lock_source.get("metadata") or {})
+            lock_source["final_lock_context"] = True
+            lock_source["role"] = lock_source.get("role") or "verrou"
+            lock_source["evidence_origin"] = (
+                lock_source.get("evidence_origin") or "project_direct"
+            )
+            lock_meta["final_lock_context"] = True
+            lock_meta["role"] = lock_meta.get("role") or "verrou"
+            lock_meta["evidence_origin"] = (
+                lock_meta.get("evidence_origin") or "project_direct"
+            )
+            lock_meta["synthesis_fact_kind"] = "verrou"
+            lock_source["synthesis_fact_kind"] = "verrou"
+            lock_source["metadata"] = lock_meta
+            synthesis_lock_sources.append(lock_source)
+
     section_payloads: Dict[str, Dict[str, Any]] = {}
     prompts: Dict[str, str] = {}
     values: Dict[str, str] = {}
     errors: Dict[str, str] = {}
 
     for key in CORE_LLM_KEYS:
+        sections_for_key = sections
+        if key == "synthese_strategique":
+            sections_for_key = dict(sections)
+            sections_for_key["global"] = list(synthesis_fact_sources)
+            sections_for_key["objectifs"] = list(synthesis_objective_sources)
+            sections_for_key["verrous"] = list(synthesis_lock_sources)
+            sections_for_key["limites"] = []
+
         preview_prompt, _preview_evidence = build_section_context(
             configs[key],
-            sections,
+            sections_for_key,
             frascati_summary,
             style_memory_report=style_memory_report,
             memory_v2_report=memory_v2_report,
@@ -3887,7 +4967,7 @@ def generate_structured_diagnostic_core(
             payload, prompt = generate_one_section(
                 llm,
                 configs[key],
-                sections,
+                sections_for_key,
                 frascati_summary,
                 style_memory_report=style_memory_report,
                 memory_v2_report=memory_v2_report,
@@ -3937,7 +5017,7 @@ def generate_structured_diagnostic_core(
         "section_payloads_by_key": section_payloads,
         "token_usage_by_section": token_usage,
         "section_statuses": statuses,
-        "context_engineering_version": "v324_provenance_locks_rnd_score",
+        "context_engineering_version": "v328_guard_result_objective_v55",
     }
 
 

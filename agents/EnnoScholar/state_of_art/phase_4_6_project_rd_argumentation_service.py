@@ -1148,12 +1148,15 @@ def run_phase_4_6_project_rd_argumentation(
     for reasoning_item in reasoning_items:
         verrou_id = clean_text(reasoning_item.get("verrou_id") or reasoning_item.get("id"))
         project_context = extract_project_context(selection_payload, reasoning_item)
-        verrou_title = clean_sentence(
+        # A confirmed title is a contract identity, not prose to reformat.
+        # Removing the space before ':' makes Phase 4.7 reject the same lock.
+        verrou_title = clean_text(
             reasoning_item.get("verrou_title")
             or reasoning_item.get("title")
             or reasoning_item.get("verrou")
             or project_context.get("verrou_title")
         )
+        project_context["verrou_title"] = verrou_title
         if not verrou_id or not verrou_title:
             return {
                 "ok": False,

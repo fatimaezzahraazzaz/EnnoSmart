@@ -1663,10 +1663,12 @@ def extract_pdf_ocr(
             page_result.char_count == 0
             or page_result.quality_score < MIN_OCR_QUALITY
         ):
-            logger.error(
-                "OCR_ARTICLE_FAILED | file=%s | title=%s | page=%d | "
+            log_quality = logger.error if page_result.char_count == 0 else logger.warning
+            log_quality(
+                "%s | file=%s | title=%s | page=%d | "
                 "engine=%s | confidence=%.3f | quality=%.3f | chars=%d | "
                 "selection=%s",
+                "OCR_ARTICLE_FAILED" if page_result.char_count == 0 else "OCR_ARTICLE_LOW_QUALITY",
                 path.name,
                 pdf_title or "[titre PDF absent]",
                 page_result.page_number,
@@ -1699,6 +1701,7 @@ def extract_pdf_ocr(
 def merge_native_and_ocr(
     native_chunks: list[str],
     ocr_result: OCRResult,
+    selection_report: Optional[list[dict]] = None,
 ) -> list[str]:
     """
     Remplace les chunks natifs faibles par leurs versions OCR.
@@ -1707,11 +1710,11 @@ def merge_native_and_ocr(
     """
     ocr_index: dict[int, tuple[str, OCRPageResult]] = {}
 
-    for page_result, chunk in zip(
-        ocr_result.pages,
-        ocr_result.text_chunks,
-    ):
-        ocr_index[page_result.page_number] = (chunk, page_result)
+    # text_chunks may also contain errors for pages absent from pages. Zipping
+    # the lists after such an error assigned the next page's OCR to the wrong
+    # chunk. Build each chunk from its own numbered result instead.
+    for page_result in ocr_result.pages:
+        ocr_index[page_result.page_number] = (_build_page_chunk(page_result), page_result)
 
     merged: list[str] = []
 
@@ -1721,11 +1724,13 @@ def merge_native_and_ocr(
         if page_number in ocr_index:
             ocr_chunk, page_result = ocr_index[page_number]
             native_quality = _text_quality_score(chunk, 0.65) if chunk.strip() else 0.0
+            selected = "ocr"
             if (
                 page_result.quality_score < MIN_OCR_QUALITY
                 and native_quality > page_result.quality_score + 0.03
             ):
                 merged.append(chunk)
+                selected = "native_fallback"
                 logger.warning(
                     "Page %d : OCR rejeté au profit du natif | "
                     "ocr_quality=%.3f | native_quality=%.3f",
@@ -1739,6 +1744,15 @@ def merge_native_and_ocr(
                     "Page %d remplacée par le chunk OCR",
                     page_number,
                 )
+                if "[OCR_REJECTED_LOW_QUALITY]" in ocr_chunk or not page_result.raw_text.strip():
+                    selected = "unreadable"
+            if selection_report is not None:
+                selection_report.append({
+                    "page": page_number, "selected": selected,
+                    "engine": page_result.engine_used.value,
+                    "ocr_quality": page_result.quality_score,
+                    "native_quality": round(native_quality, 3),
+                })
         else:
             merged.append(chunk)
 

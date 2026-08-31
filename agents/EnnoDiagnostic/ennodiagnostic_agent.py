@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
+# ENNODIAG_ACTIVE_MEMORY_V7_20260830 — strict current authority + active same-project CIR continuity memory
 from __future__ import annotations
+
+# ENNODIAG_FINAL_FIX_V4_20260829 — ennodiagnostic_agent
 
 """
 EnnoDiagnostic Agent - V189 groupes NLP transmis sans regroupement aval
@@ -13,8 +16,10 @@ Architecture respectée :
 - Cet agent ne recalcule jamais le score Frascati.
 - Le LLM sert uniquement à reformuler le diagnostic et à justifier le score à partir des preuves du projet.
 - La mémoire de style et les projets similaires ne servent jamais de preuve factuelle.
-- La comparaison CIR précédent est injectée uniquement dans une section dédiée,
-  sous forme structurée. Elle ne peut jamais créer un fait ou un verrou courant.
+- Le CIR précédent du même projet agit comme mémoire scientifique longitudinale :
+  il peut orienter une recherche ciblée et le niveau d'abstraction, mais ne devient
+  jamais une preuve factuelle de l'année courante. Un verrou oublié ne réapparaît
+  que si des indices N franchissent le contrôle de continuité.
 """
 
 import hashlib
@@ -181,8 +186,22 @@ def safe_read_json(path: Path) -> Dict[str, Any]:
     return {}
 
 
-def clean_text(text: Any) -> str:
-    return str(text or "").strip()
+def clean_text(text: Any, max_chars: int | None = None) -> str:
+    """Normalise un texte et le tronque optionnellement.
+
+    La signature accepte ``max_chars`` car plusieurs chemins EnnoDiagnostic
+    utilisent cette fonction comme helper de compaction. L'argument reste
+    facultatif afin de préserver tous les appels historiques à un seul argument.
+    """
+    value = str(text or "").strip()
+    if max_chars is not None:
+        try:
+            limit = int(max_chars)
+        except Exception:
+            limit = 0
+        if limit > 0 and len(value) > limit:
+            value = value[:limit].rstrip() + "…"
+    return value
 
 
 def repair_mojibake(text: Any) -> str:
@@ -1939,6 +1958,275 @@ def _criterion_breakdown_from_assessment(raw: Dict[str, Any]) -> List[Dict[str, 
     return output
 
 
+
+def _build_eligibility_evidence_report_fast(
+    assessment: Dict[str, Any],
+    technical_groups: List[Dict[str, Any]],
+    additional_passages: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Construit le rapport d'éligibilité sans reranking sémantique coûteux.
+
+    ``Préparer les sources`` a déjà produit :
+    - les groupes techniques ;
+    - les statuts de démarche ;
+    - les identifiants des preuves de la chaîne causale ;
+    - les cinq critères Frascati.
+
+    Le diagnostic n'a donc pas besoin de rescanner/reranker tout le catalogue
+    NLP (souvent > 1 000 passages) plusieurs dizaines de fois. Cette version
+    résout simplement les ``evidence_ids`` déjà décidés en amont et conserve
+    strictement les statuts officiels. Elle ne crée, ne fusionne et ne supprime
+    aucun verrou.
+    """
+    raw_assessments = [
+        item for item in (assessment.get("group_assessments") or [])
+        if isinstance(item, dict)
+    ]
+    groups_by_id: Dict[str, Dict[str, Any]] = {}
+    for group in technical_groups or []:
+        if not isinstance(group, dict):
+            continue
+        gid = clean_text(group.get("lock_group_id") or group.get("passage_id"))
+        if gid:
+            groups_by_id[gid] = group
+
+    # Résolution O(n) des preuves déjà sélectionnées par le NLP. On indexe le
+    # catalogue une seule fois au lieu de reranker tous les passages pour chaque
+    # critère, maillon et opération.
+    proof_by_id: Dict[str, Dict[str, Any]] = {}
+    group_proof_ids: Dict[str, List[str]] = {}
+
+    def register(passage: Any, group_id: str = "") -> None:
+        if not isinstance(passage, dict):
+            return
+        pid = _passage_evidence_id(passage)
+        if not pid:
+            return
+        if pid not in proof_by_id:
+            proof = _nlp_passage_proof(passage)
+            if proof.get("excerpt"):
+                proof_by_id[pid] = proof
+        if group_id:
+            ids = group_proof_ids.setdefault(group_id, [])
+            if pid not in ids:
+                ids.append(pid)
+
+    for gid, group in groups_by_id.items():
+        for passage in group.get("supporting_passages") or []:
+            register(passage, gid)
+        register(group, gid)
+
+    for passage in additional_passages or []:
+        register(passage)
+
+    def resolve(ids: Any, *, max_items: int = 4, fallback_group_id: str = "") -> List[Dict[str, Any]]:
+        output: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        for raw_id in ids or []:
+            pid = clean_text(raw_id)
+            proof = proof_by_id.get(pid)
+            if not pid or not isinstance(proof, dict) or pid in seen:
+                continue
+            seen.add(pid)
+            output.append(dict(proof))
+            if len(output) >= max_items:
+                return output
+        # Fallback documentaire minimal : seulement une preuve directement
+        # attachée au même groupe, jamais un voisin sémantique reconstruit.
+        if not output and fallback_group_id:
+            for pid in group_proof_ids.get(fallback_group_id) or []:
+                proof = proof_by_id.get(pid)
+                if isinstance(proof, dict) and pid not in seen:
+                    output.append(dict(proof))
+                    seen.add(pid)
+                    if len(output) >= max_items:
+                        break
+        return output
+
+    basis_group_id = clean_text(assessment.get("score_basis_group_id"))
+    if not basis_group_id and raw_assessments:
+        basis_group_id = clean_text(raw_assessments[0].get("group_id"))
+
+    operation_reports: List[Dict[str, Any]] = []
+    for raw in raw_assessments:
+        gid = clean_text(raw.get("group_id"))
+        if not gid:
+            continue
+        group = groups_by_id.get(gid, {})
+        demarche = raw.get("demarche_legibility")
+        demarche = demarche if isinstance(demarche, dict) else {}
+        causal = demarche.get("causal_chain")
+        causal = causal if isinstance(causal, dict) else {}
+
+        chain = {
+            "uncertainty_evidence_ids": resolve(
+                causal.get("uncertainty_evidence_ids"), max_items=3, fallback_group_id=gid,
+            ),
+            "hypothesis_or_rationale_evidence_ids": resolve(
+                causal.get("hypothesis_or_rationale_evidence_ids"), max_items=3,
+            ),
+            "experiment_evidence_ids": resolve(
+                causal.get("experiment_evidence_ids"), max_items=3,
+            ),
+            "result_or_learning_evidence_ids": resolve(
+                causal.get("result_or_learning_evidence_ids"), max_items=4,
+            ),
+        }
+        functional = {
+            "uncertainty": list(chain["uncertainty_evidence_ids"]),
+            "hypothesis": list(chain["hypothesis_or_rationale_evidence_ids"]),
+            "experiment": list(chain["experiment_evidence_ids"]),
+            "result": list(chain["result_or_learning_evidence_ids"]),
+            "learning": [],
+        }
+        stages_present = {
+            "uncertainty": bool(functional["uncertainty"]),
+            "hypothesis": bool(functional["hypothesis"]),
+            "experiment": bool(functional["experiment"]),
+            "result_or_learning": bool(functional["result"]),
+        }
+        stage_count = sum(1 for value in stages_present.values() if value)
+        causal_coherence = {
+            "score": round(stage_count / 4.0, 4),
+            "stages_present": stages_present,
+            "linked_pairs": [],
+            "chain_complete": stage_count == 4,
+            "mode": "upstream_evidence_ids_no_reranking",
+        }
+
+        criteria: List[Dict[str, Any]] = []
+        for criterion in _criterion_breakdown_from_assessment(raw):
+            explicit_ids = criterion.get("evidence_ids") or []
+            proofs = resolve(explicit_ids, max_items=3)
+            criteria.append({
+                **criterion,
+                "reason_fr": clean_text(criterion.get("reason")) or None,
+                "evidence": proofs,
+            })
+
+        activities_by_status: Dict[str, List[Dict[str, Any]]] = {
+            "direct_rnd": [],
+            "necessary_rnd_support": [],
+            "classical_engineering": [],
+            "insufficient_evidence": [],
+        }
+        for activity in demarche.get("activities") or []:
+            if not isinstance(activity, dict):
+                continue
+            status = clean_text(activity.get("activity_status"))
+            if status not in activities_by_status or len(activities_by_status[status]) >= 4:
+                continue
+            pid = clean_text(activity.get("evidence_id"))
+            proof = proof_by_id.get(pid)
+            if not isinstance(proof, dict):
+                proof = {
+                    "evidence_id": pid,
+                    "document": clean_text(activity.get("document")),
+                    "section_title": clean_text(activity.get("section_title")),
+                    "excerpt": truncate(activity.get("text_excerpt"), 700),
+                    "role": "methode",
+                }
+            activities_by_status[status].append(dict(proof))
+
+        operation_status = clean_text(demarche.get("operation_status")) or "insufficient_evidence"
+        title = clean_text(
+            group.get("text") or group.get("analysis_text") or group.get("section_title")
+        )
+        anchor = resolve([], max_items=1, fallback_group_id=gid)
+        operation_report = {
+            "group_id": gid,
+            "title": truncate(title, 320) or f"Opération {len(operation_reports) + 1}",
+            "technical_scope": clean_text(group.get("technical_scope")),
+            "anchor_evidence": anchor[0] if anchor else {},
+            "operation_status": operation_status,
+            "nlp_operation_status": operation_status,
+            "status_review_reason_fr": "Statut repris de l'évaluation NLP/Frascati amont sans reranking dans EnnoDiagnostic.",
+            "documentary_coverage": raw.get("documentary_coverage") or raw.get("eligibility_score") or 0.0,
+            "rnd_defensibility_index": raw.get("rnd_defensibility_index") or raw.get("eligibility_assessment_score") or 0.0,
+            "eligibility_recommendation": raw.get("eligibility_recommendation"),
+            "risk_level": clean_text(raw.get("risk_level")),
+            "evidence_risk_level": clean_text(raw.get("risk_level")) or "medium",
+            "consultant_validation_required": bool(
+                operation_status in {"rnd_core_partial", "insufficient_evidence"}
+                or not causal_coherence["chain_complete"]
+            ),
+            "evidence_quality_score": causal_coherence["score"],
+            "semantic_link_quality_score": None,
+            "criteria": criteria,
+            "causal_chain_complete": causal_coherence["chain_complete"],
+            "causal_coherence": causal_coherence,
+            "causal_chain_evidence": chain,
+            "functional_evidence": functional,
+            "hypothesis_reconstruction_evidence": functional["hypothesis"],
+            "prioritized_result_evidence": functional["result"],
+            "activities_by_status": activities_by_status,
+        }
+        operation_report["justification_fr"] = _operation_justification_fr(operation_report)
+        operation_reports.append(operation_report)
+
+    basis = next(
+        (item for item in operation_reports if clean_text(item.get("group_id")) == basis_group_id),
+        operation_reports[0] if operation_reports else {},
+    )
+    status_priority = {
+        "rnd_core_defendable": 4,
+        "rnd_core_partial": 3,
+        "insufficient_evidence": 2,
+        "classical_engineering": 1,
+    }
+    reference_operation = max(
+        operation_reports,
+        key=lambda item: (
+            status_priority.get(clean_text(item.get("operation_status")), 0),
+            _selection_number(item.get("documentary_coverage")),
+        ),
+        default=basis,
+    )
+    reference_group_id = clean_text(reference_operation.get("group_id"))
+
+    try:
+        score = round(float(
+            assessment.get("rnd_defensibility_index")
+            or assessment.get("eligibility_assessment_score")
+            or 0.0
+        ), 4)
+    except Exception:
+        score = 0.0
+    try:
+        documentary_coverage = round(float(assessment.get("documentary_coverage") or 0.0), 4)
+    except Exception:
+        documentary_coverage = 0.0
+
+    hypothesis = list(reference_operation.get("hypothesis_reconstruction_evidence") or [])
+    results = list(reference_operation.get("prioritized_result_evidence") or [])
+    return {
+        "version": "eligibility_evidence_report_v6_fast_upstream_ids",
+        "score": score,
+        "documentary_coverage": documentary_coverage,
+        "documented_share": documentary_coverage,
+        "remaining_documentary_gap": round(max(0.0, 1.0 - documentary_coverage), 4),
+        "score_formula": assessment.get("score_formula") or "five_equal_weight_frascati_criteria_20_percent_each",
+        "score_basis_group_id": basis_group_id or None,
+        "score_basis_operation": basis,
+        "reference_operation_group_id": reference_group_id or None,
+        "reference_operation": reference_operation,
+        "reference_operation_selection_order": [
+            "rnd_core_defendable", "rnd_core_partial",
+            "insufficient_evidence", "classical_engineering",
+        ],
+        "operations": operation_reports,
+        "hypothesis_reconstruction_evidence": hypothesis,
+        "prioritized_result_evidence": results,
+        "attachment_policy": {
+            "mode": "upstream_evidence_ids_only",
+            "semantic_reranking": False,
+            "same_document_neighbor_attachment": False,
+            "source": "nlp_frascati_precomputed_chain",
+        },
+        "proof_policy": "reuse_upstream_evidence_ids_no_derived_metric_or_cause",
+    }
+
+
 def _build_eligibility_evidence_report(
     assessment: Dict[str, Any],
     technical_groups: List[Dict[str, Any]],
@@ -2594,31 +2882,81 @@ def _diag_rank_sources(sources: List[Dict[str, Any]], scorer, max_items: int = 2
 
 
 def _diag_enrich_sections_for_real_agent(agent: "EnnoDiagnosticAgent", sections: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, Any]]]:
-    """Ajoute des contextes objectifs/verrous sélectionnés par l'agent avant les appels LLM.
+    """Construit du contexte d'explication sans réinjecter Chroma dans l'objectif.
 
-    Correction de fond : beaucoup de dossiers stockent l'objectif réel dans méthode/résultat/conclusion,
-    pas seulement dans le rôle objectif. Cette fonction récupère ces passages de manière générique.
+    V5.3 : la liste des verrous et son contexte restent STRICTEMENT inchangés.
+    La correction porte uniquement sur les sections factuelles. En mode projet
+    courant, ``sections["objectifs"]`` a déjà été nettoyé par le pack NLP :
+    une recherche Chroma large ne doit plus l'écraser avec des méthodes,
+    résultats ou contenus de littérature.
+
+    La recherche large des verrous est conservée telle quelle et ne devient
+    jamais une source primaire de verrou.
     """
     if not isinstance(sections, dict):
         return sections
 
-    objective_broad = agent.search_chroma(
-        role=None,
-        query="but objectif évaluer qualifier valider démontrer comparer capacité besoin finalité technique résultats attendus",
-        top_k=22,
-    )
-    lock_broad = agent.search_chroma(
-        role=None,
-        query="incertitude technique limite difficulté non démontré à vérifier représentativité transposabilité généralisation robustesse influence paramètres conditions réelles",
-        top_k=22,
-    )
+    current_project_only = str(
+        os.getenv("ENNOSMART_DIAG_CURRENT_PROJECT_ONLY", "1")
+    ).strip().lower() not in {"0", "false", "no", "off"}
 
-    objective_pool: List[Dict[str, Any]] = []
-    for key in ["objectifs", "global", "methodes", "resultats", "limites", "contributions", "axe_preuves_resultats"]:
-        value = sections.get(key)
-        if isinstance(value, list):
-            objective_pool.extend(value)
-    objective_pool.extend(objective_broad)
+    # V5.6 — équilibrage narratif local, sans Chroma et sans aucune mutation
+    # de la liste des verrous. Il récupère les faits cross-role réellement
+    # attribuables au projet et diversifie les familles de démarche/résultat.
+    if current_project_only:
+        try:
+            try:
+                from agents.EnnoDiagnostic.narrative_evidence_balancer import balance_narrative_sections
+            except Exception:
+                from narrative_evidence_balancer import balance_narrative_sections
+            sections = balance_narrative_sections(agent, sections)
+            report = sections.get("_narrative_balance_report") or {}
+            print(
+                "[EnnoDiagnostic][NARRATIVE_BALANCE_V56] "
+                f"objective_context={report.get('objective_context_companions', 0)} "
+                f"methodes={report.get('method_facts_balanced', 0)} "
+                f"resultats={report.get('result_facts_balanced', 0)} "
+                f"parametres={report.get('parameter_facts_balanced', 0)} "
+                "chroma=0 locks_unchanged=true",
+                flush=True,
+            )
+        except Exception as balance_exc:
+            print(
+                f"[EnnoDiagnostic][NARRATIVE_BALANCE_V56][WARN] fallback=v55 error={balance_exc}",
+                flush=True,
+            )
+
+    # OBJECTIF : en mode sûr, ne jamais refaire une recherche large Chroma.
+    # L'objectif officiel reste le pack NLP courant déjà filtré. Le contexte
+    # additionnel n'est qu'une vue auxiliaire et ne remplace jamais la section.
+    if current_project_only:
+        objective_broad: List[Dict[str, Any]] = []
+        objective_pool = list(sections.get("objectifs") or [])
+    else:
+        objective_broad = agent.search_chroma(
+            role=None,
+            query="but objectif évaluer qualifier valider démontrer comparer capacité besoin finalité technique résultats attendus",
+            top_k=22,
+        )
+        objective_pool = []
+        for key in ["objectifs", "global", "methodes", "resultats", "limites", "contributions", "axe_preuves_resultats"]:
+            value = sections.get(key)
+            if isinstance(value, list):
+                objective_pool.extend(value)
+        objective_pool.extend(objective_broad)
+
+    # VERROUS : en mode projet courant, la liste primaire a déjà été construite
+    # depuis les groupes NLP + récupération stricte. Une recherche Chroma large
+    # ici n'ajoute aucun verrou officiel et coûtait plusieurs secondes/minutes.
+    # Elle reste disponible uniquement hors mode sûr.
+    if current_project_only:
+        lock_broad: List[Dict[str, Any]] = []
+    else:
+        lock_broad = agent.search_chroma(
+            role=None,
+            query="incertitude technique limite difficulté non démontré à vérifier représentativité transposabilité généralisation robustesse influence paramètres conditions réelles",
+            top_k=22,
+        )
 
     lock_pool: List[Dict[str, Any]] = []
     for key in ["verrous", "limites", "methodes", "resultats", "parametres", "axe_problemes_transverses", "axe_contraintes_transverses"]:
@@ -2631,21 +2969,17 @@ def _diag_enrich_sections_for_real_agent(agent: "EnnoDiagnosticAgent", sections:
     lock_context = _diag_rank_sources(lock_pool, _diag_lock_score, max_items=14)
 
     sections["objectif_agent_context"] = objective_context
-    sections["verrou_agent_context"] = lock_context
-
-    # L'objectif peut être enrichi car il ne décide pas de la liste des verrous.
-    sections["objectifs"] = _diag_dedupe_sources(objective_context, max_items=10)
-
-    # Ne jamais remplacer les candidats NLP stricts par cette recherche large.
-    # Les méthodes, résultats et paramètres restent un contexte d'explication ;
-    # ils ne deviennent pas de nouveaux candidats de verrou.
     sections["verrou_agent_context"] = _diag_dedupe_sources(lock_context, max_items=14)
 
+    if not current_project_only:
+        sections["objectifs"] = _diag_dedupe_sources(objective_context, max_items=10)
+
     sections["_agent_selection_report"] = {
-        "version": "v131_real_agent_source_selection_ranked_context",
+        "version": "v156_narrative_balance_lock_path_unchanged",
         "principle": (
-            "Les candidats de verrou viennent du rôle NLP strict. La recherche large "
-            "sert uniquement de contexte d'explication."
+            "L'objectif courant reste l'autorité NLP filtrée. La recherche large "
+            "ne remplace plus l'objectif. Les candidats de verrou restent issus "
+            "du chemin V5.2 strict, inchangé par ce correctif."
         ),
         "objective_broad_count": len(objective_broad),
         "lock_broad_count": len(lock_broad),
@@ -2764,6 +3098,127 @@ def build_llm(model=None):
         return LLMClient()
     except Exception as e:
         raise RuntimeError(f"Impossible de charger modules.LLM.llm_client.LLMClient : {e}")
+
+
+
+_GENERIC_VISIBLE_LOCK_TITLE_RE = re.compile(
+    r"^(?:incertitude technique a preciser avant validation cir|"
+    r"signal technique a reformuler(?: avant validation cir)?|"
+    r"verrou technique a preciser|verrou a preciser)$",
+    re.I,
+)
+
+
+def _polish_visible_lock_titles_without_regrouping(
+    items: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Améliore uniquement le titre visible, sans toucher aux groupes/sources.
+
+    Invariants :
+    - même nombre d'items ;
+    - mêmes group_id / member_group_ids / original_nlp_group_ids ;
+    - aucune fusion, suppression ou création de verrou.
+    """
+    output: List[Dict[str, Any]] = []
+    for raw in items or []:
+        if not isinstance(raw, dict):
+            continue
+        item = dict(raw)
+        title = clean_text(item.get("title"), 260)
+        title_norm = _diag_norm(title)
+
+        # Répare seulement quelques défauts de surface, sans changer le sens.
+        title = re.sub(
+            r"^Incertitude sur incertaines?\s+",
+            "Incertitude sur les ",
+            title,
+            flags=re.I,
+        )
+        title = re.sub(
+            r"^Incertitude sur les les\s+",
+            "Incertitude sur les ",
+            title,
+            flags=re.I,
+        )
+
+        if not title or _GENERIC_VISIBLE_LOCK_TITLE_RE.match(title_norm):
+            candidate = ""
+            sources = item.get("sources") or []
+            if isinstance(sources, dict):
+                sources = [sources]
+            for source in sources if isinstance(sources, list) else []:
+                if not isinstance(source, dict):
+                    continue
+                text = clean_text(
+                    source.get("text")
+                    or source.get("excerpt")
+                    or source.get("analysis_text"),
+                    700,
+                )
+                text = re.sub(
+                    r"^\s*\[?(?:SECTION\s*:\s*)?Verrous?\s+scientifiques?\s+ou\s+techniques?\]?\s*",
+                    "",
+                    text,
+                    flags=re.I,
+                )
+                text = re.sub(
+                    r"^\s*Verrous?\s+scientifiques?\s+ou\s+techniques?\]?\s*",
+                    "",
+                    text,
+                    flags=re.I,
+                )
+                first = clean_text(
+                    re.split(r"(?<=[.!?;])\s+|\n+", text, maxsplit=1)[0],
+                    220,
+                ).strip(" :-–—|[]")
+                if len(first) >= 24:
+                    candidate = first
+                    break
+            if candidate:
+                title = candidate
+
+        if title:
+            item["title"] = clean_text(title, 220)
+        output.append(item)
+    return output
+
+
+# =========================================================
+# Préflight local N-1 rapide
+# =========================================================
+
+def _local_previous_year_directories(year_root: Path, current_year: Any) -> List[str]:
+    """Retourne les années locales antérieures du même projet en quelques ms.
+
+    ``year_root`` pointe vers ``.../years/<N>``. Si aucun autre dossier d'année
+    antérieure n'existe sous ``years/``, il est inutile d'appeler les lecteurs
+    CIR_MEMORY beaucoup plus coûteux pour conclure qu'il n'y a pas de N-1.
+    """
+    try:
+        current = int(str(current_year).strip())
+    except Exception:
+        return []
+    try:
+        resolved_year_root = Path(year_root).resolve()
+        years_root = resolved_year_root.parent
+        # Hors de la structure canonique ``.../years/<N>``, le préflight local
+        # n'est pas une preuve d'absence. On renvoie un marqueur non vide afin
+        # de conserver le chemin CIR_MEMORY complet.
+        if years_root.name.lower() != "years":
+            return ["unknown"]
+        candidates: List[int] = []
+        for child in years_root.iterdir():
+            if not child.is_dir():
+                continue
+            try:
+                value = int(child.name)
+            except Exception:
+                continue
+            if value < current:
+                candidates.append(value)
+        return [str(value) for value in sorted(set(candidates), reverse=True)]
+    except Exception:
+        return []
 
 
 # =========================================================
@@ -2914,6 +3369,16 @@ class EnnoDiagnosticAgent:
             "verrou_source": group.get("verrou_source") or "nlp_group_direct",
             "technical_scope": scope or "project_structuring_lock",
             "display_as_main_lock": True if explicit_display is None else bool(explicit_display),
+            "explicit_lock_section": bool(
+                re.search(
+                    r"\b(?:verrous? scientifiques?|verrous? techniques?|"
+                    r"incertitudes? scientifiques?|incertitudes? techniques?)\b",
+                    _diag_norm(" ".join(
+                        str(item.get("section_title") or "") for item in ([group] + supports[:8])
+                    )),
+                    flags=re.I,
+                )
+            ),
         }
         return {
             "text": text,
@@ -3028,6 +3493,8 @@ class EnnoDiagnosticAgent:
             "source_path": clean_text(item.get("source_path")),
             "source_type": "nlp_result_current_project",
             "content_origin": clean_text(item.get("content_origin")) or "project_core",
+            "document_type": clean_text(item.get("document_type")),
+            "document_category": clean_text(item.get("document_category")),
             "pack_key": pack_key,
             "role": clean_text(item.get("role")) or role,
             "section_title": clean_text(item.get("section_title")),
@@ -3041,6 +3508,18 @@ class EnnoDiagnosticAgent:
             "context_after": after,
             "source_text_original": raw,
             "current_project_only": True,
+            "diagnostic_corpus_selected": bool(item.get("diagnostic_corpus_selected", True)),
+            "declared_corpus": clean_text(item.get("declared_corpus")) or "diagnostic_current",
+            "semantic_role": clean_text(item.get("semantic_role") or item.get("role") or role),
+            "original_model_role": clean_text(item.get("original_model_role") or item.get("role") or role),
+            "semantic_role_conflicts": item.get("semantic_role_conflicts") or [],
+            "reference_like": bool(item.get("reference_like")),
+            "evidence_origin": clean_text(item.get("evidence_origin")),
+            "transcription_like": bool(item.get("transcription_like")),
+            "unverified_transcription_numeric": bool(item.get("unverified_transcription_numeric")),
+            "numeric_corroborated": bool(item.get("numeric_corroborated") or item.get("corroborated_numeric")),
+            "execution_status": clean_text(item.get("execution_status")),
+            "actor_scope": clean_text(item.get("actor_scope")),
         }
         return {
             "text": contextual,
@@ -3053,10 +3532,13 @@ class EnnoDiagnosticAgent:
         }
 
     def _load_current_nlp_evidence_sections(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Charge directement le pack de preuves du ``nlp_result.json`` courant.
+        """Charge le pack NLP courant avec résolution de provenance inter-rôles.
 
-        Cette lecture évite qu'un rôle Chroma manquant fasse disparaître un objectif,
-        un résultat ou un paramètre pourtant déjà extrait par le NLP.
+        Le même corpus peut contenir travaux projet + état de l'art. Le rôle NLP
+        décrit la fonction sémantique, pas l'acteur. Avant toute restitution, on
+        marque comme ``reference_like`` les passages explicitement bibliographiques
+        ou fortement recouvrants avec ``etat_art_local``. Ils ne peuvent ensuite
+        plus devenir objectif, démarche, résultat ou paramètre du projet courant.
         """
         path = self._find_current_nlp_result_path()
         empty = {key: [] for key in ("objectifs", "methodes", "resultats", "parametres", "limites", "contributions")}
@@ -3071,6 +3553,172 @@ class EnnoDiagnosticAgent:
         if not isinstance(pack, dict):
             return empty
 
+        def ntext(value: Any) -> str:
+            return _diag_norm(value)
+
+        def item_blob(item: Dict[str, Any]) -> str:
+            return clean_text(" ".join(
+                str(item.get(key) or "")
+                for key in ("section_title", "context_before", "text", "analysis_text", "context_after")
+            ), 12000)
+
+        external_phrase_re = re.compile(
+            r"\b(?:dans (?:le|l['’]?) papier|the paper|les auteurs?|the authors?|"
+            r"selon (?:les auteurs?|l['’]?etude|l['’]?article)|"
+            r"l['’]?etude a (?:inclus|porte|teste|evalue)|une etude empirique|"
+            r"analyse de \d+ (?:papers?|articles?|publications?)|"
+            r"revue (?:de la litterature|bibliographique)|survey|systematic review|"
+            r"certaines etudes (?:montrent|suggerent|indiquent)|"
+            r"des etudes (?:montrent|suggerent|indiquent)|"
+            r"ils ont (?:utilise|cree|entraine|propose|compare|evalue|configure)|"
+            r"une approche .{0,120}(?:a ete|est) proposee|"
+            r"les resultats montrent que .{0,220}\b(?:couramment|frequemment)\b|"
+            r"travaux anterieurs|et al\.)\b",
+            re.I,
+        )
+        state_art_section_re = re.compile(
+            r"\b(?:etat de l art|state of the art|related work|revue de la litterature|"
+            r"bibliograph|references?|l etude a inclus \d+ articles?|"
+            r"analyse de \d+ (?:papers?|articles?|publications?)|survey)\b",
+            re.I,
+        )
+        project_anchor_re = re.compile(
+            r"\b(?:dans ce projet|dans le cadre du projet|notre (?:projet|demarche|prototype|benchmark)|"
+            r"nous avons|nous on a|on a (?:teste|evalue|mesure|genere|developpe|compare|utilise|fait)|"
+            r"l equipe a (?:teste|evalue|mesure|genere|developpe|compare|utilise|realise))\b",
+            re.I,
+        )
+
+        def sentence_token_sets(value: Any) -> List[set[str]]:
+            raw = ntext(value)
+            rows: List[set[str]] = []
+            for sentence in re.split(r"(?<=[.!?;])\s+|[\r\n]+", raw):
+                tokens = {
+                    tok for tok in sentence.split()
+                    if len(tok) >= 4 and not tok.isdigit()
+                }
+                if len(tokens) >= 9:
+                    rows.append(tokens)
+            return rows
+
+        # ``etat_art_local`` peut lui-même contenir quelques passages de réunion.
+        # On ne construit donc des empreintes externes qu'avec les lignes qui
+        # portent un signal bibliographique/tiers explicite.
+        state_art_sentences: List[set[str]] = []
+        for ref in pack.get("etat_art_local") or []:
+            if not isinstance(ref, dict):
+                continue
+            ref_blob = item_blob(ref)
+            ref_norm = ntext(ref_blob)
+            ref_section = ntext(ref.get("section_title"))
+            if not (
+                state_art_section_re.search(ref_section)
+                or external_phrase_re.search(ref_norm)
+            ):
+                continue
+            state_art_sentences.extend(sentence_token_sets(ref_blob))
+
+        def repeated_state_art_sentence(blob_raw: str) -> float:
+            best = 0.0
+            for tokens in sentence_token_sets(blob_raw):
+                for ref_tokens in state_art_sentences:
+                    shared = len(tokens & ref_tokens)
+                    if shared < 8:
+                        continue
+                    containment = shared / max(1, min(len(tokens), len(ref_tokens)))
+                    best = max(best, containment)
+                    if best >= 0.82:
+                        return best
+            return best
+
+        def is_reference_like(item: Dict[str, Any]) -> Tuple[bool, List[str]]:
+            blob_raw = item_blob(item)
+            blob = ntext(blob_raw)
+            section = ntext(item.get("section_title"))
+            reasons: List[str] = []
+            strong_project_anchor = bool(project_anchor_re.search(blob))
+
+            if state_art_section_re.search(section):
+                reasons.append("state_of_art_section")
+            if external_phrase_re.search(blob):
+                reasons.append("external_attribution_or_survey_language")
+
+            repeated = repeated_state_art_sentence(blob_raw)
+            if repeated >= 0.82 and not strong_project_anchor:
+                reasons.append(f"repeated_state_of_art_sentence:{repeated:.2f}")
+
+            # Une généralisation de revue (« les résultats montrent que les X
+            # sont couramment utilisés... ») n'est jamais un résultat du projet
+            # si aucune action de l'équipe n'est formulée dans le même passage.
+            if (
+                re.search(r"\bles resultats montrent que\b", blob, flags=re.I)
+                and re.search(r"\b(?:couramment|frequemment|dans les etudes)\b", blob, flags=re.I)
+                and not strong_project_anchor
+            ):
+                reasons.append("generic_literature_result_without_project_actor")
+
+            # Les supporting_passages d'un groupe peuvent révéler que la phrase
+            # a été propagée depuis une section bibliographique même si le titre
+            # du passage principal a été perdu lors du regroupement.
+            external_supports = 0
+            support_total = 0
+            for support in item.get("supporting_passages") or []:
+                if not isinstance(support, dict):
+                    continue
+                support_total += 1
+                support_blob = ntext(" ".join([
+                    str(support.get("section_title") or ""),
+                    str(support.get("text") or support.get("excerpt") or ""),
+                ]))
+                if state_art_section_re.search(ntext(support.get("section_title"))) or external_phrase_re.search(support_blob):
+                    external_supports += 1
+            if support_total >= 2 and external_supports >= max(1, support_total // 2) and not strong_project_anchor:
+                reasons.append("majority_supporting_passages_external")
+
+            return bool(reasons), reasons
+
+        # Les nombres prononcés dans une transcription sont conservés comme
+        # preuve brute, mais ils ne sont pas publiés comme paramètres techniques
+        # tant qu'une deuxième source non-transcrite du projet ne les corrobore.
+        # Cela évite de transformer une erreur de transcription en valeur projet.
+        number_re = re.compile(r"(?<![A-Za-z0-9])\d+(?:[.,]\d+)?")
+        corroborating_numeric_blobs: List[str] = []
+        for pack_key in ("parametres_locaux", "methodes_locales", "resultats_locaux", "limites_locales", "contributions_locales"):
+            for row in pack.get(pack_key) or []:
+                if not isinstance(row, dict):
+                    continue
+                document_name = clean_text(row.get("document")).lower()
+                if "transcription" in document_name or "enregistrement" in document_name:
+                    continue
+                row_blob = item_blob(row)
+                row_norm = ntext(row_blob)
+                if is_reference_like(row)[0]:
+                    continue
+                if project_anchor_re.search(row_norm) or re.search(
+                    r"\b(?:travaux realises|resultats des experimentations|description des experimentations|"
+                    r"configuration du projet|protocole experimental)\b",
+                    row_norm,
+                    flags=re.I,
+                ):
+                    corroborating_numeric_blobs.append(row_norm)
+
+        def numeric_transcription_is_corroborated(item: Dict[str, Any]) -> bool:
+            document_name = clean_text(item.get("document")).lower()
+            if "transcription" not in document_name and "enregistrement" not in document_name:
+                return True
+            blob = ntext(item_blob(item))
+            values = {
+                token.replace(",", ".")
+                for token in number_re.findall(blob)
+            }
+            if not values:
+                return True
+            for value in values:
+                pattern = rf"(?<![a-z0-9]){re.escape(value)}(?![a-z0-9])"
+                if any(re.search(pattern, candidate) for candidate in corroborating_numeric_blobs):
+                    return True
+            return False
+
         mapping = {
             "objectifs": ("objectifs_locaux", "objectif"),
             "methodes": ("methodes_locales", "methode"),
@@ -3080,26 +3728,549 @@ class EnnoDiagnosticAgent:
             "contributions": ("contributions_locales", "contribution"),
         }
         output: Dict[str, List[Dict[str, Any]]] = {}
+        externalized = 0
         for section_key, (pack_key, role) in mapping.items():
             converted: List[Dict[str, Any]] = []
-            for item in pack.get(pack_key) or []:
+            candidates = pack.get(pack_key) or []
+            if section_key == "methodes":
+                from agents.EnnoDiagnostic.project_fact_gate import method_evidence_candidates
+                candidates = method_evidence_candidates(pack)
+            for raw_item in candidates:
+                if not isinstance(raw_item, dict):
+                    continue
+                item = dict(raw_item)
+                reference_like, reasons = is_reference_like(item)
+                if reference_like:
+                    item["reference_like"] = True
+                    item["evidence_origin"] = "external_literature"
+                    item["semantic_role_conflicts"] = list(dict.fromkeys([
+                        *(item.get("semantic_role_conflicts") or []), "etat_art"
+                    ]))
+                    item["provenance_resolution_reasons"] = reasons
+                    externalized += 1
+                    # Les rôles factuels du projet ne doivent jamais être alimentés
+                    # par un passage résolu comme état de l'art.
+                    if section_key in {"objectifs", "methodes", "resultats", "parametres", "contributions"}:
+                        continue
+                document_name = clean_text(item.get("document")).lower()
+                item["transcription_like"] = "transcription" in document_name or "enregistrement" in document_name
+                if (
+                    section_key == "parametres"
+                    and item["transcription_like"]
+                    and not numeric_transcription_is_corroborated(item)
+                ):
+                    item["unverified_transcription_numeric"] = True
+                    continue
                 source = self._nlp_pack_item_to_source(item, pack_key=pack_key, role=role)
                 if source is not None:
                     converted.append(source)
-            # Le ranking est générique et dédupliqué ; on garde assez de contexte
-            # pour laisser le presenter faire sa sélection propre à chaque section.
-            output[section_key] = merge_ranked_sources(converted, max_items=30)
 
+            # V5.4 — filtrer AVANT la troncature. En V5.3, les vraies méthodes
+            # et vrais résultats du projet pouvaient se trouver après le top-30
+            # brut et disparaissaient avant même que le gate de provenance ne les
+            # voie. Le gate ne détecte ni ne regroupe les verrous : il ne concerne
+            # que les sections narratives factuelles.
+            gate_section = {
+                "objectifs": "objectif_global",
+                "methodes": "demarche_detectee",
+                "resultats": "resultats_metriques",
+                "parametres": "parametres_contraintes",
+            }.get(section_key)
+            if gate_section:
+                try:
+                    try:
+                        from agents.EnnoDiagnostic.project_fact_gate import filter_project_facts
+                    except Exception:
+                        from project_fact_gate import filter_project_facts
+                    converted = filter_project_facts(converted, gate_section)
+                except Exception as gate_exc:
+                    print(
+                        f"[EnnoDiagnostic][PROJECT_FACT_GATE][WARN] section={section_key} "
+                        f"fallback=provenance_only error={gate_exc}",
+                        flush=True,
+                    )
+
+            # Après filtrage, conserver l'ensemble des faits qualifiés (dans une
+            # limite large de sécurité) : ils sont déjà peu nombreux et cette
+            # étape ne doit plus évincer les vrais éléments situés tard dans le pack.
+            output[section_key] = merge_ranked_sources(converted, max_items=60)
+
+        self._current_nlp_payload_for_diagnostic = payload
         print(
             "[EnnoDiagnostic][CURRENT_NLP_PACK] "
             + " ".join(f"{key}={len(value)}" for key, value in output.items())
-            + f" source={path}"
+            + f" externalized={externalized} source={path}"
         )
         return output
+
+    def _load_recovered_missing_lock_candidates(
+        self,
+        *,
+        existing_lock_sources: Sequence[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Récupère prudemment une incertitude oubliée par les groupes NLP.
+
+        Ce chemin reste aval et ne modifie ni le classifieur ni le regroupement
+        principal. Il accepte deux formes génériques : une contrainte forte
+        explicite, ou un résultat expérimental qui combine échec/non-résolution,
+        investigation et compromis persistant. Une preuve proche d'un verrou NLP
+        existant est reconnue comme doublon ; seule une incertitude conceptuellement
+        nouvelle devient un candidat distinct, toujours soumis à validation humaine.
+        """
+        payload = getattr(self, "_current_nlp_payload_for_diagnostic", None)
+        if not isinstance(payload, dict):
+            try:
+                path = self._find_current_nlp_result_path()
+                payload = json.loads(path.read_text(encoding="utf-8-sig")) if path and path.exists() else {}
+            except Exception:
+                payload = {}
+        pack = payload.get("multi_document_evidence_pack_for_ennodiagnostic") or {}
+        catalog = pack.get("evidence_catalog") or []
+        if not isinstance(catalog, list):
+            return []
+
+        explicit_constraint_re = re.compile(
+            r"\b(?:forte contrainte|contrainte (?:forte|majeure|non negociable)|"
+            r"exigence non negociable|obligation technique|restriction forte)\b",
+            re.I,
+        )
+        unresolved_re = re.compile(
+            r"\b(?:n est pas possible|ne (?:peut|peuvent|permet|permettent) pas|"
+            r"n (?:a|ont) pas (?:permis|pu|ete (?:trouve|trouvee|trouves|trouvees|"
+            r"valide|validee|valides|validees|correle|correlee|correles|correlees))|"
+            r"impossible|non (?:resolu|resolue|maitrise|maitrisee|explique|expliquee|"
+            r"valide|validee)|reste(?:nt)? a (?:comprendre|demontrer|expliquer|valider|"
+            r"determiner|identifier|explorer)|incertitude|resultats? (?:ne sont|n est) pas "
+            r"(?:bon|bons|bonne|bonnes|satisfaisant|satisfaisants|satisfaisante|satisfaisantes)|"
+            r"(?:seul|seuls|seule|seules) .{0,70}(?:correspond|converge|satisfait|valide)|"
+            r"pas (?:tous|toutes) .{0,70}(?:correle|correlee|correles|correlees|"
+            r"trouve|trouvee|trouves|trouvees|valide|validee|valides|validees))\b",
+            re.I,
+        )
+        investigation_re = re.compile(
+            r"\b(?:essais?|tests?|simulations?|mesures?|comparaisons?|variations?|"
+            r"configurations?|scenarios?|hypotheses?|modelis(?:er|ation|e|ee|es)|"
+            r"analys(?:e|er|es)|recal(?:age|er|e|ee)|faire varier|ont ete testes?|"
+            r"a ete teste|ont ete comparees?|a ete comparee?)\b",
+            re.I,
+        )
+        discriminating_re = re.compile(
+            r"\b(?:bien que|malgre|cependant|toutefois|alors que|tandis que|"
+            r"plusieurs (?:essais?|tests?|simulations?|configurations?)|"
+            r"d autres pistes|d autres conditions|"
+            r"(?:augmente|amelior\w*|reduit|diminue) .{0,140}\bmais\b|"
+            r"\bmais\b .{0,140}(?:augmente|degrade|diminue|reste|n est pas|ne peut pas))\b",
+            re.I,
+        )
+        project_anchor_re = re.compile(
+            r"\b(?:nous|notre|nos|l equipe|dans ce projet|dans le cadre du projet|on)\b",
+            re.I,
+        )
+        external_re = re.compile(
+            r"\b(?:etat de l art|dans le papier|the paper|les auteurs|the authors|selon l etude|"
+            r"selon l article|survey|revue de la litterature|analyse de \d+ (?:papers?|articles?))\b",
+            re.I,
+        )
+        noise_re = re.compile(
+            r"\b(?:table des matieres|diffusion|masque des diapositives|code couleur|"
+            r"titre du verrou|est ce qu on peut commencer)\b",
+            re.I,
+        )
+
+        concept_stopwords = {
+            "alors", "apres", "aussi", "autres", "avoir", "avec", "bien", "cela",
+            "cette", "comme", "concernant", "dans", "depuis", "donc", "entre", "essai",
+            "essais", "etre", "etude", "faire", "fait", "fois", "lorsque", "mais",
+            "meme", "moins", "plus", "plusieurs", "pour", "premier", "realise",
+            "realisee", "realises", "resultat", "resultats", "selon", "seule", "seuls",
+            "sont", "sous", "suite", "toutes", "toute", "tous", "tres", "ainsi",
+        }
+
+        def concept_tokens(value: Any) -> set[str]:
+            return {
+                token
+                for token in re.findall(r"[a-z0-9]+", _diag_norm(value))
+                if len(token) >= 4 and not token.isdigit() and token not in concept_stopwords
+            }
+
+        def is_current_project_evidence(raw: Dict[str, Any]) -> bool:
+            declared_corpus = _diag_norm(raw.get("declared_corpus"))
+            origin = _diag_norm(raw.get("content_origin") or raw.get("source_type"))
+            return bool(
+                raw.get("current_project_evidence")
+                or raw.get("declared_raw_document")
+                or raw.get("diagnostic_corpus_selected")
+                or "diagnostic" in declared_corpus
+                or origin in {"raw client document", "project core", "ambiguous current dossier"}
+            )
+
+        def signal_report(raw: Dict[str, Any], normalized: str) -> Dict[str, Any]:
+            features = raw.get("lock_candidate_features") or {}
+            if not isinstance(features, dict):
+                features = {}
+            role = _diag_norm(raw.get("semantic_role") or raw.get("role"))
+            explicit = bool(explicit_constraint_re.search(normalized))
+            unresolved = bool(unresolved_re.search(normalized))
+            investigation = bool(investigation_re.search(normalized))
+            discriminating = bool(discriminating_re.search(normalized))
+            technical = bool(
+                features.get("technical")
+                or role in {"verrou", "limite", "resultat", "methode", "parametre", "contribution"}
+            )
+            implicit = bool(unresolved and investigation and discriminating and technical)
+            score = (
+                (5 if explicit else 0)
+                + (3 if unresolved else 0)
+                + (2 if investigation else 0)
+                + (2 if discriminating else 0)
+                + (1 if technical else 0)
+            )
+            return {
+                "explicit_constraint": explicit,
+                "unresolved_outcome": unresolved,
+                "investigation": investigation,
+                "discriminating_or_persistent": discriminating,
+                "technical": technical,
+                "implicit_experimental_uncertainty": implicit,
+                "score": score,
+            }
+
+        existing_profiles: List[Tuple[Dict[str, Any], set[str], set[str]]] = []
+        existing_passage_ids: set[str] = set()
+        for source in existing_lock_sources:
+            if not isinstance(source, dict):
+                continue
+            meta = meta_of(source)
+            supports = [
+                row for row in (meta.get("supporting_passages") or [])
+                if isinstance(row, dict)
+            ]
+            profile_text = " ".join([
+                source_text(source),
+                clean_text(meta.get("candidate_group_label")),
+                *[
+                    clean_text(row.get("analysis_text") or row.get("text"), 2200)
+                    for row in supports[:40]
+                ],
+            ])
+            support_ids = {
+                clean_text(row.get("passage_id") or row.get("id"))
+                for row in supports
+                if clean_text(row.get("passage_id") or row.get("id"))
+            }
+            direct_id = clean_text(meta.get("passage_id"))
+            if direct_id:
+                support_ids.add(direct_id)
+            existing_passage_ids.update(support_ids)
+            existing_profiles.append((source, concept_tokens(profile_text), support_ids))
+
+        by_section: Dict[str, List[Dict[str, Any]]] = {}
+        for raw in catalog:
+            if not isinstance(raw, dict):
+                continue
+            blob = clean_text(" ".join(str(raw.get(k) or "") for k in (
+                "context_before", "text", "analysis_text", "context_after"
+            )), 7000)
+            normalized = _diag_norm(blob)
+            signals = signal_report(raw, normalized)
+            current_project = is_current_project_evidence(raw)
+            explicit_allowed = bool(
+                signals["explicit_constraint"]
+                and (project_anchor_re.search(normalized) or current_project)
+            )
+            implicit_allowed = bool(
+                signals["implicit_experimental_uncertainty"] and current_project
+            )
+            if not (explicit_allowed or implicit_allowed):
+                continue
+            if (
+                raw.get("reference_like")
+                or external_re.search(normalized)
+                or noise_re.search(normalized)
+            ):
+                continue
+            # Un tableau numérique brut n'est pas un verrou. Une conclusion
+            # narrative portant les trois signaux ci-dessus reste admissible,
+            # même si elle provient d'une section intitulée « Tableau ».
+            if blob.count("|") >= 10 and not signals["implicit_experimental_uncertainty"]:
+                continue
+            section = clean_text(raw.get("section_title"), 500)
+            document = clean_text(raw.get("document"), 500)
+            signature = f"{document.lower()}|{_diag_norm(section)}"
+            qualified = dict(raw)
+            qualified["_missing_lock_recovery_signals"] = signals
+            by_section.setdefault(signature, []).append(qualified)
+
+        recovered: List[Dict[str, Any]] = []
+        duplicate_existing_count = 0
+        duplicate_existing_passage_ids: List[str] = []
+        ranked_sections = sorted(
+            by_section.items(),
+            key=lambda item: max(
+                int((row.get("_missing_lock_recovery_signals") or {}).get("score") or 0)
+                for row in item[1]
+            ),
+            reverse=True,
+        )
+        try:
+            max_new_candidates = max(
+                0,
+                min(5, int(os.getenv("ENNOSMART_DIAG_MAX_IMPLICIT_LOCK_RECOVERY", "3"))),
+            )
+        except Exception:
+            max_new_candidates = 3
+
+        recovered_profiles: List[set[str]] = []
+        for signature, rows in ranked_sections:
+            # Conserver au plus les trois passages les plus informatifs de la section.
+            rows = sorted(
+                rows,
+                key=lambda row: (
+                    int((row.get("_missing_lock_recovery_signals") or {}).get("score") or 0),
+                    len(clean_text(row.get("analysis_text") or row.get("text"))),
+                ),
+                reverse=True,
+            )[:3]
+            rows = [
+                row for row in rows
+                if clean_text(row.get("passage_id") or row.get("id")) not in existing_passage_ids
+            ]
+            if not rows:
+                continue
+            combined = clean_text(" ".join(clean_text(row.get("analysis_text") or row.get("text"), 1800) for row in rows), 4200)
+            tokens = concept_tokens(combined)
+            if len(tokens) < 5:
+                continue
+
+            # Une similarité conceptuelle forte indique que l'incertitude est déjà
+            # couverte. On ne modifie pas le groupe NLP : cette passe améliore le
+            # rappel sans réécrire sa composition ni sa décision Frascati.
+            best_similarity = 0.0
+            best_shared = 0
+            for _source, profile, _support_ids in existing_profiles:
+                shared = len(tokens & profile)
+                if shared < 4:
+                    continue
+                containment = shared / max(1, min(len(tokens), len(profile)))
+                similarity = containment + min(0.18, shared * 0.015)
+                if similarity > best_similarity:
+                    best_similarity = similarity
+                    best_shared = shared
+            if best_shared >= 4 and best_similarity >= 0.38:
+                for row in rows:
+                    passage_id = clean_text(row.get("passage_id") or row.get("id"))
+                    if passage_id:
+                        duplicate_existing_passage_ids.append(passage_id)
+                duplicate_existing_count += len(rows)
+                continue
+
+            # Eviter plusieurs nouveaux candidats qui décrivent le même problème
+            # avec des formulations différentes dans des documents voisins.
+            if any(
+                len(tokens & profile) >= 4
+                and len(tokens & profile) / max(1, min(len(tokens), len(profile))) >= 0.45
+                for profile in recovered_profiles
+            ):
+                continue
+            if len(recovered) >= max_new_candidates:
+                continue
+
+            primary = rows[0]
+            primary_signals = primary.get("_missing_lock_recovery_signals") or {}
+            recovery_kind = (
+                "explicit_constraint"
+                if primary_signals.get("explicit_constraint")
+                else "implicit_experimental_uncertainty"
+            )
+            sentence = next((
+                clean_text(part, 500)
+                for part in re.split(r"(?<=[.!?])\s+|[\r\n]+", combined)
+                if (
+                    explicit_constraint_re.search(_diag_norm(part))
+                    or unresolved_re.search(_diag_norm(part))
+                )
+            ), clean_text(primary.get("section_title"), 500) or "Incertitude expérimentale à qualifier")
+            group_id = "recovered_uncertainty_" + hashlib.sha1(signature.encode("utf-8", errors="ignore")).hexdigest()[:14]
+            recovery_score = int(primary_signals.get("score") or 0)
+            recovery_confidence = min(0.86, 0.68 + max(0, recovery_score - 7) * 0.03)
+            clean_supports: List[Dict[str, Any]] = []
+            for row in rows:
+                clean_row = dict(row)
+                clean_row.pop("_missing_lock_recovery_signals", None)
+                clean_supports.append(clean_row)
+            meta = {
+                "role": "verrou",
+                "semantic_role": "verrou",
+                "source_type": "recovered_missing_lock_candidate",
+                "lock_group_id": group_id,
+                "candidate_group_label": sentence,
+                "document": primary.get("document"),
+                "document_id": primary.get("document_id"),
+                "source_path": primary.get("source_path"),
+                "section_title": primary.get("section_title"),
+                "passage_id": primary.get("passage_id"),
+                "content_origin": primary.get("content_origin") or "raw_client_document",
+                "diagnostic_corpus_selected": True,
+                "declared_corpus": "diagnostic_current",
+                "recovered_missing_lock_candidate": True,
+                "recovery_kind": recovery_kind,
+                "recovery_signals": {
+                    key: value for key, value in primary_signals.items()
+                    if key != "score"
+                },
+                "recovery_score": recovery_score,
+                "recovery_confidence": recovery_confidence,
+                "display_as_main_lock": True,
+                "technical_scope": "project_structuring_lock",
+                "needs_human_validation": True,
+                "supporting_passages": clean_supports,
+            }
+            recovered.append({
+                "text": combined,
+                "source_text": combined,
+                "document": meta["document"],
+                "source_path": meta["source_path"],
+                "metadata": meta,
+                "recovered_missing_lock_candidate": True,
+            })
+            recovered_profiles.append(tokens)
+
+        self._last_missing_lock_recovery_report = {
+            "qualified_sections": len(by_section),
+            "duplicate_passages_already_covered_by_existing_locks": duplicate_existing_count,
+            "duplicate_existing_passage_ids": list(dict.fromkeys(duplicate_existing_passage_ids)),
+            "new_candidates_for_human_validation": len(recovered),
+            "max_new_candidates": max_new_candidates,
+            "primary_lock_logic_changed": False,
+        }
+        if recovered or duplicate_existing_count:
+            print(
+                "[EnnoDiagnostic][MISSING_LOCK_RECOVERY] "
+                f"doublons_existants={duplicate_existing_count} candidats_nouveaux={len(recovered)}",
+                flush=True,
+            )
+        return recovered
 
     def retrieve_all_sections(self) -> Dict[str, List[Dict[str, Any]]]:
         sections: Dict[str, List[Dict[str, Any]]] = {}
 
+        # V5.4 — FAST NLP AUTHORITY.
+        # ``Préparer les sources`` a déjà extrait/classé les preuves et construit
+        # les groupes de verrous. Refaire 8 à 10 recherches vectorielles (dont
+        # top_k=250 pour les verrous, avec oversampling) était redondant et
+        # expliquait une grande partie du temps de Diagnostic.
+        current_project_only = str(
+            os.getenv("ENNOSMART_DIAG_CURRENT_PROJECT_ONLY", "1")
+        ).strip().lower() not in {"0", "false", "no", "off"}
+        fast_nlp_authority = str(
+            os.getenv("ENNOSMART_DIAG_FAST_NLP_AUTHORITY", "1")
+        ).strip().lower() not in {"0", "false", "no", "off"}
+
+        if current_project_only and fast_nlp_authority:
+            t_fast = time.time()
+            current_nlp_sections = self._load_current_nlp_evidence_sections()
+            direct_nlp_groups = self._load_nlp_lock_group_sources()
+            initial_direct_lock_count = len(direct_nlp_groups)
+
+            # Le mode rapide n'est activé que si le NLP courant est réellement
+            # disponible. Sinon on retombe intégralement sur l'ancien RAG.
+            has_current_nlp = bool(
+                direct_nlp_groups
+                or any(current_nlp_sections.get(key) for key in (
+                    "objectifs", "methodes", "resultats",
+                    "parametres", "limites", "contributions",
+                ))
+            )
+            if has_current_nlp:
+                recovered_missing_locks = self._load_recovered_missing_lock_candidates(
+                    existing_lock_sources=direct_nlp_groups,
+                )
+                direct_nlp_groups = merge_ranked_sources(
+                    direct_nlp_groups,
+                    recovered_missing_locks,
+                    max_items=max(1, len(direct_nlp_groups) + len(recovered_missing_locks)),
+                )
+
+                # Important : aucune nouvelle logique de regroupement principal.
+                # Les preuves implicites proches sont reconnues comme déjà couvertes ;
+                # une preuve réellement nouvelle reste un candidat humain séparé.
+                sections["verrous"] = dedupe_sources(
+                    direct_nlp_groups,
+                    max_items=max(1, len(direct_nlp_groups)),
+                )
+                sections["_nlp_verrou_candidates"] = list(sections["verrous"])
+                sections["_frascati_verrous"] = list(sections["verrous"])
+
+                for key in (
+                    "objectifs", "methodes", "resultats",
+                    "parametres", "limites", "contributions",
+                ):
+                    sections[key] = list(current_nlp_sections.get(key) or [])
+
+                # Le contexte global est construit à partir des preuves NLP
+                # courantes déjà qualifiées, sans recherche Chroma supplémentaire.
+                direct_global: List[Dict[str, Any]] = []
+                for key in (
+                    "objectifs", "contributions", "limites",
+                    "methodes", "resultats", "parametres",
+                ):
+                    direct_global.extend((sections.get(key) or [])[:10])
+                sections["global"] = merge_ranked_sources(
+                    direct_global,
+                    max_items=min(40, max(1, len(direct_global))),
+                ) if direct_global else []
+
+                # Les axes transverses restent du CONTEXTE, jamais une source de
+                # création de verrou. En mode rapide ils sont dérivés localement.
+                sections["axe_problemes_transverses"] = list(
+                    (sections.get("limites") or [])[:12]
+                )
+                sections["axe_contraintes_transverses"] = merge_ranked_sources(
+                    sections.get("parametres") or [],
+                    sections.get("limites") or [],
+                    max_items=12,
+                )
+                sections["axe_preuves_resultats"] = list(
+                    (sections.get("resultats") or [])[:12]
+                )
+                sections["verrou_support_context"] = merge_ranked_sources(
+                    sections.get("limites") or [],
+                    sections.get("axe_problemes_transverses") or [],
+                    sections.get("axe_contraintes_transverses") or [],
+                    max_items=30,
+                )
+
+                sections = _diag_enrich_sections_for_real_agent(self, sections)
+                sections["_retrieval_report"] = {
+                    "mode": "fast_nlp_authority_v54",
+                    "chroma_queries": 0,
+                    "elapsed_seconds": round(time.time() - t_fast, 3),
+                    "direct_lock_groups": initial_direct_lock_count,
+                    "recovered_lock_candidates": len(recovered_missing_locks),
+                    "implicit_recovery": dict(
+                        getattr(self, "_last_missing_lock_recovery_report", {}) or {}
+                    ),
+                    "final_lock_sources_before_consultant_synthesis": len(sections.get("verrous") or []),
+                    "objective_facts": len(sections.get("objectifs") or []),
+                    "method_facts": len(sections.get("methodes") or []),
+                    "result_facts": len(sections.get("resultats") or []),
+                    "parameter_facts": len(sections.get("parametres") or []),
+                    "lock_policy": "unchanged_nlp_groups_plus_strict_generic_implicit_recovery",
+                }
+                print(
+                    "[EnnoDiagnostic][FAST_NLP_AUTHORITY] "
+                    f"chroma=0 verrous_sources={len(sections.get('verrous') or [])} "
+                    f"objectifs={len(sections.get('objectifs') or [])} "
+                    f"methodes={len(sections.get('methodes') or [])} "
+                    f"resultats={len(sections.get('resultats') or [])} "
+                    f"parametres={len(sections.get('parametres') or [])} "
+                    f"elapsed={round(time.time() - t_fast, 2)}s",
+                    flush=True,
+                )
+                return sections
+
+        # Fallback historique : utilisé si le NLP courant n'existe pas ou si
+        # ENNOSMART_DIAG_FAST_NLP_AUTHORITY=0.
         sections["global"] = self.search_chroma(
             role=None,
             query="résumé global contexte technique objectif difficultés travaux résultats limites innovation",
@@ -3125,6 +4296,13 @@ class EnnoDiagnosticAgent:
             and not bool(meta_of(source).get("rejected_as_verrou"))
         ]
         direct_nlp_groups = self._load_nlp_lock_group_sources()
+        recovered_missing_locks = self._load_recovered_missing_lock_candidates(
+            existing_lock_sources=direct_nlp_groups,
+        )
+        direct_nlp_groups = merge_ranked_sources(
+            direct_nlp_groups, recovered_missing_locks,
+            max_items=len(direct_nlp_groups) + len(recovered_missing_locks),
+        )
         # Aucun quota métier : Chroma et le JSON NLP sont deux chemins d'accès
         # aux mêmes groupes qualifiés. Leur fusion est dédupliquée par source.
         combined_verrou_candidates = merge_ranked_sources(
@@ -3172,10 +4350,21 @@ class EnnoDiagnosticAgent:
             "objectifs": 24, "methodes": 30, "resultats": 30,
             "parametres": 24, "limites": 24, "contributions": 24,
         }
+        strict_current_fact_sections = {
+            "objectifs", "methodes", "resultats", "parametres", "contributions",
+        }
+        current_project_only = str(
+            os.getenv("ENNOSMART_DIAG_CURRENT_PROJECT_ONLY", "1")
+        ).strip().lower() not in {"0", "false", "no", "off"}
         for section_key, limit in merge_limits.items():
             direct = current_nlp_sections.get(section_key) or []
             existing = sections.get(section_key) or []
-            if direct:
+            if current_project_only and section_key in strict_current_fact_sections:
+                # Le pack NLP courant est l'autorité factuelle. Des chunks Chroma
+                # plus anciens ou sans résolution de provenance ne doivent jamais
+                # réintroduire une publication externe déjà exclue ci-dessus.
+                sections[section_key] = list(direct[:limit])
+            elif direct:
                 sections[section_key] = merge_ranked_sources(direct, existing, max_items=limit)
 
         # Le contexte global reçoit lui aussi les preuves du projet courant afin
@@ -3356,7 +4545,15 @@ class EnnoDiagnosticAgent:
         demarche_legibility = compact_demarche_audit(
             assessment.get("demarche_legibility")
         )
-        eligibility_evidence_report = _build_eligibility_evidence_report(
+        fast_frascati_evidence = str(
+            os.getenv("ENNOSMART_DIAG_FAST_FRASCATI_EVIDENCE", "1")
+        ).strip().lower() not in {"0", "false", "no", "off"}
+        report_builder = (
+            _build_eligibility_evidence_report_fast
+            if fast_frascati_evidence
+            else _build_eligibility_evidence_report
+        )
+        eligibility_evidence_report = report_builder(
             assessment,
             [group for group in technical_groups if isinstance(group, dict)],
             additional_passages=additional_passages,
@@ -4284,6 +5481,7 @@ class EnnoDiagnosticAgent:
                 style_block=style_block,
                 memory_v2_report=None,
                 previous_cir_context=None,
+                cache_path=self.diagnostic_dir / "cache" / "verrou_reformulation_v191.json",
             )
             self._last_verrou_synthesis_report = synthesis
             items = synthesis.get("llm_reformulated_verrous") if isinstance(synthesis, dict) else []
@@ -4402,6 +5600,7 @@ class EnnoDiagnosticAgent:
     def load_cir_memory_report(
         self,
         current_verrous: Optional[List[Dict[str, Any]]] = None,
+        previous_memory=None,
     ) -> Dict[str, Any]:
         """Compare les verrous regroupés EnnoDiagnostic au CIR précédent.
 
@@ -4413,9 +5612,38 @@ class EnnoDiagnosticAgent:
         Memory V2 sert ici à retrouver le CIR du même organisme/projet en N-1,
         puis N-2/N-3. La mémoire de style est exclue des preuves.
         """
+        trust_local_preflight = str(
+            os.getenv("ENNOSMART_DIAG_TRUST_LOCAL_YEAR_PREFLIGHT", "0")
+        ).strip().lower() not in {"0", "false", "no", "off"}
+        local_previous_years = _local_previous_year_directories(self.out_dir, self.year)
+        if trust_local_preflight and not local_previous_years:
+            print(
+                "⏩ Comparaison CIR précédent ignorée immédiatement : "
+                "aucun dossier d'année antérieure pour ce projet.",
+                flush=True,
+            )
+            return {
+                "ok": True,
+                "has_previous_cir": False,
+                "previous_cir_available": False,
+                "previous_cir_years_used": [],
+                "previous_years": [],
+                "comparisons": [],
+                "verrou_comparisons": [],
+                "previous_cir_source": None,
+                "preflight_no_previous": True,
+                "preflight_mode": "local_year_directory",
+                "managed_by_ennodiagnostic": True,
+                "in_prompt": False,
+                "current_verrous_count": len([
+                    item for item in (current_verrous or []) if isinstance(item, dict)
+                ]),
+            }
+
         try:
             from modules.CIR_MEMORY.cir_memory import (
                 load_or_create_cir_memory_comparison,
+                load_previous_cir_memory_items,
                 memory_v2_fingerprint,
             )
 
@@ -4538,6 +5766,45 @@ class EnnoDiagnosticAgent:
                 int(os.getenv("ENNOSMART_CIR_MEMORY_MAX_PREVIOUS_YEARS", "3")),
             )
 
+            # Préflight léger : ne pas lancer le matching N/N-1 coûteux lorsque
+            # la mémoire officielle confirme qu'aucune année antérieure n'existe.
+            # En cas d'erreur du préflight, on conserve l'ancien chemin complet.
+            try:
+                previous_years_probe, _previous_items_probe = previous_memory if previous_memory is not None else load_previous_cir_memory_items(
+                    organisme=self.organisme,
+                    project=self.project,
+                    current_year=self.year,
+                    subproject=self.subproject,
+                    max_previous_years=max_previous_years,
+                )
+                previous_memory = (previous_years_probe, _previous_items_probe)
+                if not previous_years_probe:
+                    report = {
+                        "ok": True,
+                        "has_previous_cir": False,
+                        "previous_cir_available": False,
+                        "previous_cir_years_used": [],
+                        "previous_years": [],
+                        "comparisons": [],
+                        "verrou_comparisons": [],
+                        "previous_cir_source": None,
+                        "preflight_no_previous": True,
+                        "managed_by_ennodiagnostic": True,
+                        "in_prompt": False,
+                        "current_verrous_count": len(normalized_current_verrous),
+                        "current_verrous_hash": current_verrous_hash,
+                    }
+                    print(
+                        "⏩ Comparaison CIR précédent ignorée : aucune année antérieure disponible (préflight).",
+                        flush=True,
+                    )
+                    return report
+            except Exception as preflight_exc:
+                print(
+                    f"[EnnoDiagnostic][CIR_PREVIOUS_PREFLIGHT][WARN] {preflight_exc}",
+                    flush=True,
+                )
+
             report = load_or_create_cir_memory_comparison(
                 organisme=self.organisme,
                 project=self.project,
@@ -4547,6 +5814,7 @@ class EnnoDiagnosticAgent:
                 max_previous_years=max_previous_years,
                 current_verrous=normalized_current_verrous,
                 shortlist_size=shortlist_size,
+                previous_memory=previous_memory,
             )
             if not isinstance(report, dict):
                 report = {
@@ -5543,25 +6811,33 @@ Contraintes :
         return self.fallback_without_llm(sections, frascati_summary, cir_memory_report), prompt
 
     def generate_diagnostic(self, save: bool = True) -> Dict[str, Any]:
-        """Exécute RAG -> sections LLM -> verrous RAG -> comparaison N-1.
+        """Exécute RAG -> diagnostic N -> mémoire de continuité N-1 -> sections finales.
 
-        Les preuves du projet courant restent séparées des exemples de style,
-        de Memory V2 et du CIR précédent.
+        Les faits restent prouvés par le projet courant. Le CIR précédent du même
+        projet peut orienter les recherches de continuité et le niveau d'abstraction,
+        mais il ne devient jamais une preuve factuelle de N.
         """
         started_at = time.time()
+        stage_timings: Dict[str, float] = {}
         self.diagnostic_dir.mkdir(parents=True, exist_ok=True)
 
+        _stage_t0 = time.time()
         sections = self.retrieve_all_sections()
+        stage_timings["retrieve_sections"] = round(time.time() - _stage_t0, 3)
         frascati_sources = sections.get("_frascati_verrous") or sections.get("verrous") or []
+        _stage_t0 = time.time()
         frascati_summary = self.frascati_summary_from_chroma(frascati_sources)
+        stage_timings["frascati_summary"] = round(time.time() - _stage_t0, 3)
+        _stage_t0 = time.time()
         ai_detection_report = self.load_ai_detection_report()
+        stage_timings["ai_detection_report"] = round(time.time() - _stage_t0, 3)
         current_project_only = str(os.getenv("ENNOSMART_DIAG_CURRENT_PROJECT_ONLY", "1")).strip().lower() not in {
             "0", "false", "no", "off"
         }
         if current_project_only:
             # Ne charge pas de texte d'autres projets dans la génération du diagnostic courant.
-            # Les comparaisons historiques éventuelles restent des vues séparées et ne servent
-            # jamais à produire Objectif / Synthèse / Verrous / Démarche / Résultats / Paramètres.
+            # Le legacy previous_verrou_context reste désactivé ici ; la mémoire N-1 du MEME
+            # projet est traitée plus bas par historical_continuity_reconciler avec preuves N.
             style_memory_report = {
                 "ok": False, "available": False, "disabled_for_current_project_only": True,
                 "principle": "current_project_only",
@@ -5576,7 +6852,8 @@ Contraintes :
             }
             print(
                 "[EnnoDiagnostic][CURRENT_PROJECT_ONLY] "
-                "style_memory=disabled memory_v2=disabled previous_lock_context=disabled",
+                "style_memory=disabled memory_v2=disabled legacy_previous_lock_context=disabled "
+                "active_same_project_history=enabled_later",
                 flush=True,
             )
         else:
@@ -5611,6 +6888,7 @@ Contraintes :
             print(f"[EnnoDiagnostic][V182_PRESENTER][WARN] {exc}")
 
         # La composition des verrous vient du NLP. Le LLM ne fait que reformuler.
+        _stage_t0 = time.time()
         llm_reformulated_verrous = self.build_llm_reformulated_verrous(
             content="",
             sections=sections,
@@ -5620,6 +6898,19 @@ Contraintes :
             llm_reformulated_verrous,
             frascati_summary,
         )
+        llm_reformulated_verrous = _polish_visible_lock_titles_without_regrouping(
+            llm_reformulated_verrous
+        )
+        # V7.1 — snapshot des verrous NATIFS N avant la mémoire. Il sert uniquement
+        # aux axes transversaux et à la section de comparaison, afin qu'un verrou
+        # récupéré depuis N-1 ne génère pas de nouveaux parents artificiels et ne
+        # soit pas comparé une seconde fois à sa propre source historique.
+        native_current_verrous_for_axis_and_comparison = [
+            dict(item)
+            for item in llm_reformulated_verrous
+            if isinstance(item, dict)
+        ]
+        stage_timings["verrou_reformulation"] = round(time.time() - _stage_t0, 3)
 
         # La réconciliation N/N-1 reste une passe de continuité séparée. Elle ne
         # recalcule jamais le score Frascati et ne transforme jamais l'historique
@@ -5631,95 +6922,287 @@ Contraintes :
             "policy": "fail-open: keep current NLP candidates",
             "reconciled_verrous": llm_reformulated_verrous,
         }
-        try:
-            try:
-                from agents.EnnoDiagnostic.historical_continuity_reconciler import (
-                    reconcile_historical_continuity,
+        _stage_t0 = time.time()
+        skip_historical_reconciliation = False
+        previous_memory_snapshot = None
+        historical_preflight_enabled = str(
+            os.getenv("ENNOSMART_DIAG_HISTORICAL_PREFLIGHT", "1")
+        ).strip().lower() not in {"0", "false", "no", "off"}
+
+        if historical_preflight_enabled:
+            local_years_probe = _local_previous_year_directories(self.out_dir, self.year)
+            trust_local_preflight = str(
+                os.getenv("ENNOSMART_DIAG_TRUST_LOCAL_YEAR_PREFLIGHT", "0")
+            ).strip().lower() not in {"0", "false", "no", "off"}
+            if trust_local_preflight and not local_years_probe:
+                skip_historical_reconciliation = True
+                historical_continuity_report = {
+                    **historical_continuity_report,
+                    "ok": True,
+                    "has_previous_cir": False,
+                    "preflight_no_previous": True,
+                    "preflight_mode": "local_year_directory",
+                    "policy": "no_previous_local_year_skip_reconciliation",
+                    "reconciled_verrous": llm_reformulated_verrous,
+                }
+                print(
+                    "⏩ Réconciliation historique ignorée immédiatement : "
+                    "aucun dossier d'année antérieure pour ce projet.",
+                    flush=True,
                 )
-            except Exception:
-                from historical_continuity_reconciler import reconcile_historical_continuity
+            else:
+                try:
+                    from modules.CIR_MEMORY.cir_memory import load_previous_cir_memory_items
+                    previous_years_probe, _previous_items_probe = load_previous_cir_memory_items(
+                        organisme=self.organisme,
+                        project=self.project,
+                        current_year=self.year,
+                        subproject=self.subproject,
+                        max_previous_years=max(
+                            1, int(os.getenv("ENNOSMART_CIR_MEMORY_MAX_PREVIOUS_YEARS", "3"))
+                        ),
+                    )
+                    previous_memory_snapshot = (previous_years_probe, _previous_items_probe)
+                    if not previous_years_probe:
+                        skip_historical_reconciliation = True
+                        historical_continuity_report = {
+                            **historical_continuity_report,
+                            "ok": True,
+                            "has_previous_cir": False,
+                            "preflight_no_previous": True,
+                            "preflight_mode": "cir_memory",
+                            "policy": "no_previous_cir_skip_reconciliation",
+                            "reconciled_verrous": llm_reformulated_verrous,
+                        }
+                        print(
+                            "⏩ Réconciliation historique ignorée : aucune année CIR antérieure disponible.",
+                            flush=True,
+                        )
+                except Exception as preflight_exc:
+                    print(
+                        f"[EnnoDiagnostic][HISTORICAL_PREFLIGHT][WARN] {preflight_exc}",
+                        flush=True,
+                    )
 
-            historical_continuity_report = reconcile_historical_continuity(
-                organisme=self.organisme,
-                project=self.project,
-                subproject=self.subproject,
-                year=self.year,
-                current_verrous=llm_reformulated_verrous,
-                current_sections=sections,
-                search_current=self.search_chroma,
-                llm=self.llm,
-                output_dir=self.diagnostic_dir,
-            )
-            reconciled = historical_continuity_report.get("reconciled_verrous")
-            if isinstance(reconciled, list):
-                llm_reformulated_verrous = [
-                    item for item in reconciled if isinstance(item, dict)
-                ]
-            llm_reformulated_verrous = self._enrich_verrous_with_frascati(
-                llm_reformulated_verrous,
-                frascati_summary,
-            )
-        except Exception as exc:
-            historical_continuity_report = {
-                **historical_continuity_report,
-                "ok": False,
-                "error": str(exc),
-                "reconciled_verrous": llm_reformulated_verrous,
-            }
-            print(f"[EnnoDiagnostic][HISTORICAL_CONTINUITY][WARN] {exc}", flush=True)
+        if not skip_historical_reconciliation:
+            try:
+                try:
+                    from agents.EnnoDiagnostic.historical_continuity_reconciler import (
+                        reconcile_historical_continuity,
+                    )
+                except Exception:
+                    from historical_continuity_reconciler import reconcile_historical_continuity
 
-        # La vue consultant est construite après les groupes NLP officiels :
-        # un axe parent peut ainsi regrouper plusieurs sous-verrous sans modifier
-        # leurs scores Frascati ni supprimer les candidats atomiques d'audit.
+                historical_continuity_report = reconcile_historical_continuity(
+                    organisme=self.organisme,
+                    project=self.project,
+                    subproject=self.subproject,
+                    year=self.year,
+                    current_verrous=llm_reformulated_verrous,
+                    current_sections=sections,
+                    search_current=self.search_chroma,
+                    llm=self.llm,
+                    output_dir=self.diagnostic_dir,
+                    previous_memory=previous_memory_snapshot,
+                )
+                reconciled = historical_continuity_report.get("reconciled_verrous")
+                if isinstance(reconciled, list):
+                    llm_reformulated_verrous = [
+                        item for item in reconciled if isinstance(item, dict)
+                    ]
+                llm_reformulated_verrous = self._enrich_verrous_with_frascati(
+                    llm_reformulated_verrous,
+                    frascati_summary,
+                )
+                llm_reformulated_verrous = _polish_visible_lock_titles_without_regrouping(
+                    llm_reformulated_verrous
+                )
+            except Exception as exc:
+                historical_continuity_report = {
+                    **historical_continuity_report,
+                    "ok": False,
+                    "error": str(exc),
+                    "reconciled_verrous": llm_reformulated_verrous,
+                }
+                print(f"[EnnoDiagnostic][HISTORICAL_CONTINUITY][WARN] {exc}", flush=True)
+
+        stage_timings["historical_continuity"] = round(time.time() - _stage_t0, 3)
+
+        # V6 : les verrous atomiques validés restent l'autorité et ne sont JAMAIS
+        # supprimés, fusionnés ou remplacés. Une couche optionnelle et conservative
+        # peut seulement AJOUTER un axe parent transversal lorsqu'au moins deux
+        # verrous courants, chacun sourcé, partagent un mécanisme scientifique
+        # explicitement démontré. Aucun nombre cible de verrous n'est imposé.
+        #
+        # Les autres sections (objectif, démarche, résultats, paramètres, Frascati)
+        # continuent d'être générées depuis ``atomic_verrous`` afin qu'une vue
+        # d'abstraction supplémentaire ne modifie pas les sorties déjà stabilisées.
+        _axis_t0 = time.time()
         atomic_verrous = list(llm_reformulated_verrous)
+        # Les parents V6 sont construits seulement depuis les verrous réellement
+        # détectés dans N. Les cartes N-1 récupérées restent visibles à côté, mais
+        # ne servent jamais à fabriquer de nouveaux parents transversaux.
+        axis_seed_verrous = [
+            item for item in atomic_verrous
+            if not bool(item.get("historical_gap_recovered"))
+            and not bool(item.get("historical_memory_card"))
+        ]
+        if not axis_seed_verrous:
+            axis_seed_verrous = list(native_current_verrous_for_axis_and_comparison)
+        display_verrous = list(atomic_verrous)
+        transversal_parent_verrous: List[Dict[str, Any]] = []
+        transversal_selection_audit: List[Dict[str, Any]] = []
+
         scientific_axis_report: Dict[str, Any] = {
             "ok": False,
-            "policy": "fail-open: keep NLP atomic candidates",
+            "disabled": True,
+            "policy": "atomic_authority_additive_transversal_parent_only",
             "atomic_verrous": atomic_verrous,
             "scientific_axes": [],
+            "axis_count": 0,
+            "transversal_additions_count": 0,
+            "transversal_additions": [],
+            "transversal_selection_audit": [],
         }
-        try:
-            try:
-                from agents.EnnoDiagnostic.scientific_axis_synthesizer import (
-                    synthesize_scientific_axes,
-                )
-            except Exception:
-                from scientific_axis_synthesizer import synthesize_scientific_axes
 
-            scientific_axis_report = synthesize_scientific_axes(
-                current_verrous=atomic_verrous,
-                historical_continuity_report=historical_continuity_report,
-                current_sections=sections,
-                current_year=self.year,
-                llm=self.llm,
-                output_dir=self.diagnostic_dir,
-            )
-            consolidated_axes = scientific_axis_report.get("scientific_axes")
-            if scientific_axis_report.get("ok") and isinstance(consolidated_axes, list):
-                llm_reformulated_verrous = [
-                    item for item in consolidated_axes if isinstance(item, dict)
+        use_axis = (
+            len(axis_seed_verrous) >= 2
+            and str(
+                os.getenv(
+                    "ENNOSMART_DIAG_USE_SCIENTIFIC_AXIS_CONSOLIDATION",
+                    "1",
+                )
+            ).strip().lower()
+            in {"1", "true", "yes", "oui", "on"}
+        )
+
+        if use_axis:
+            try:
+                try:
+                    from agents.EnnoDiagnostic.scientific_axis_synthesizer import (
+                        select_transversal_axis_additions,
+                        synthesize_scientific_axes,
+                    )
+                except Exception:
+                    from scientific_axis_synthesizer import (
+                        select_transversal_axis_additions,
+                        synthesize_scientific_axes,
+                    )
+
+                scientific_axis_report = synthesize_scientific_axes(
+                    current_verrous=axis_seed_verrous,
+                    historical_continuity_report=historical_continuity_report,
+                    current_sections=sections,
+                    current_year=self.year,
+                    llm=self.llm,
+                    output_dir=self.diagnostic_dir,
+                )
+
+                (
+                    transversal_parent_verrous,
+                    transversal_selection_audit,
+                ) = select_transversal_axis_additions(
+                    atomic_verrous=axis_seed_verrous,
+                    scientific_axis_report=scientific_axis_report,
+                )
+
+                # ADDITIF UNIQUEMENT : les cartes atomiques restent dans le même
+                # ordre et inchangées ; les éventuels parents sont ajoutés après.
+                display_verrous = [
+                    *atomic_verrous,
+                    *transversal_parent_verrous,
                 ]
-        except Exception as exc:
-            scientific_axis_report = {
-                **scientific_axis_report,
-                "ok": False,
-                "error": str(exc),
-            }
-            print(f"[EnnoDiagnostic][SCIENTIFIC_AXIS][WARN] {exc}", flush=True)
+
+                scientific_axis_report["disabled"] = False
+                scientific_axis_report["audit_only"] = False
+                scientific_axis_report["augmentation_only"] = True
+                scientific_axis_report["atomic_authority_preserved"] = True
+                scientific_axis_report["transversal_additions_count"] = len(
+                    transversal_parent_verrous
+                )
+                scientific_axis_report["transversal_additions"] = (
+                    transversal_parent_verrous
+                )
+                scientific_axis_report["transversal_selection_audit"] = (
+                    transversal_selection_audit
+                )
+                scientific_axis_report["display_verrous_count"] = len(display_verrous)
+
+            except Exception as exc:
+                # Fail-open absolu : une erreur d'abstraction ne peut jamais faire
+                # perdre un verrou existant ni modifier les autres sections.
+                display_verrous = list(atomic_verrous)
+                transversal_parent_verrous = []
+                scientific_axis_report = {
+                    **scientific_axis_report,
+                    "ok": False,
+                    "disabled": False,
+                    "augmentation_only": True,
+                    "atomic_authority_preserved": True,
+                    "transversal_additions_count": 0,
+                    "transversal_additions": [],
+                    "error": str(exc),
+                    "fallback_policy": "keep_all_atomic_verrous_unchanged",
+                }
+                print(
+                    f"[EnnoDiagnostic][SCIENTIFIC_AXIS_AUGMENTATION][WARN] {exc}",
+                    flush=True,
+                )
+
+        # La liste affichée gagne éventuellement des parents transversaux, mais
+        # ``atomic_verrous`` reste utilisée pour toutes les autres analyses.
+        llm_reformulated_verrous = display_verrous
+        stage_timings["scientific_axis_augmentation"] = round(
+            time.time() - _axis_t0,
+            3,
+        )
 
         synthesis_report = dict(getattr(self, "_last_verrou_synthesis_report", {}) or {})
         synthesis_report["atomic_verrous"] = atomic_verrous
+        synthesis_report["transversal_parent_verrous"] = transversal_parent_verrous
+        synthesis_report["transversal_parent_count"] = len(transversal_parent_verrous)
         synthesis_report["scientific_axis_report"] = scientific_axis_report
         synthesis_report["llm_reformulated_verrous"] = llm_reformulated_verrous
         synthesis_report["final_items"] = llm_reformulated_verrous
         synthesis_report["final_count"] = len(llm_reformulated_verrous)
+        synthesis_report["atomic_candidates_preserved"] = True
         synthesis_report["scientific_axis_consolidation_applied"] = bool(
-            scientific_axis_report.get("ok")
+            transversal_parent_verrous
         )
+        synthesis_report["active_historical_memory_enabled"] = True
+        synthesis_report["historical_memory_exact_lock_display_v71"] = True
+        synthesis_report["axis_seed_excludes_historical_recovered"] = True
+        synthesis_report["axis_seed_excludes_historical_memory_cards"] = True
         self._last_verrou_synthesis_report = synthesis_report
 
-        # Les sections sont rédigées après la structure verrou/sous-verrou. Le
-        # LLM reçoit donc le même graphe consultant que celui qui sera affiché.
+        # V7 — mémoire active du même projet. Les faits restent ceux de N, mais le
+        # presenter reçoit les atomiques réconciliés ET les axes scientifiques
+        # pour récupérer le contexte N-1 (méthode/résultat/paramètre) et orienter
+        # Objectif/Synthèse vers la trajectoire scientifique globale. Cette liste
+        # n'est jamais utilisée pour recalculer Frascati ni supprimer un verrou.
+        historical_memory_context_items: List[Dict[str, Any]] = list(atomic_verrous)
+        _memory_seen = {
+            str(item.get("group_id") or item.get("axis_id") or item.get("title") or id(item))
+            for item in historical_memory_context_items
+            if isinstance(item, dict)
+        }
+        for _axis in scientific_axis_report.get("scientific_axes") or []:
+            if not isinstance(_axis, dict):
+                continue
+            _key = str(
+                _axis.get("group_id")
+                or _axis.get("axis_id")
+                or _axis.get("title")
+                or id(_axis)
+            )
+            if _key in _memory_seen:
+                continue
+            _memory_seen.add(_key)
+            historical_memory_context_items.append(_axis)
+
+        # Les sections restent ancrées dans les preuves N. La mémoire N-1 sert
+        # seulement de continuité/orientation, selon les garde-fous du presenter.
+        _stage_t0 = time.time()
         if presenter_generate_core is not None:
             try:
                 core_result = presenter_generate_core(
@@ -5729,17 +7212,21 @@ Contraintes :
                     style_memory_report=None if current_project_only else style_memory_report,
                     ai_detection_report=ai_detection_report,
                     memory_v2_report=None if current_project_only else memory_v2_report,
-                    historical_axes=llm_reformulated_verrous,
+                    historical_axes=historical_memory_context_items,
                     cache_dir=self.diagnostic_dir / "cache",
                 )
             except Exception as exc:
                 presenter_error = str(exc)
                 print(f"[EnnoDiagnostic][V323_PRESENTER][WARN] {exc}")
+        stage_timings["section_generation"] = round(time.time() - _stage_t0, 3)
 
+        _stage_t0 = time.time()
         cir_memory_report = self.load_cir_memory_report(
-            current_verrous=llm_reformulated_verrous,
+            current_verrous=native_current_verrous_for_axis_and_comparison,
+            previous_memory=previous_memory_snapshot,
         )
         self._last_cir_memory_report = cir_memory_report
+        stage_timings["cir_previous_comparison"] = round(time.time() - _stage_t0, 3)
         memory_v2_usage_report = self.build_memory_v2_usage_report(
             memory_v2_report=memory_v2_report,
             style_memory_report=style_memory_report,
@@ -5756,8 +7243,9 @@ Contraintes :
                     frascati_summary=frascati_summary,
                     frascati_justification_result=(core_result.get("section_payloads_by_key") or {}).get("justification_frascati"),
                     memory_v2_usage_report=memory_v2_usage_report,
-                    llm_reformulated_verrous=llm_reformulated_verrous,
+                    llm_reformulated_verrous=atomic_verrous,
                 )
+                static_diagnostic["transversal_parent_verrous"] = transversal_parent_verrous
                 static_diagnostic["historical_continuity_report"] = historical_continuity_report
                 static_diagnostic["scientific_axis_report"] = scientific_axis_report
                 values = static_diagnostic.get("sections_by_key") or {}
@@ -5847,10 +7335,16 @@ Contraintes :
         }
 
         elapsed = round(time.time() - started_at, 2)
+        print(
+            "[EnnoDiagnostic][PERF] "
+            + " ".join(f"{name}={value}s" for name, value in stage_timings.items())
+            + f" total={elapsed}s",
+            flush=True,
+        )
         report: Dict[str, Any] = {
             "ok": True,
             "status": "completed",
-            "version": "ennodiagnostic_v323_nlp_authority_grouped_sections",
+            "version": "ennodiagnostic_v329_additive_transversal_lock_augmentation",
             "mode": core_result.get("status") or "fast_prompt_fallback",
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "organisme": self.organisme,
@@ -5890,6 +7384,8 @@ Contraintes :
             },
             "telemetry": {
                 "elapsed_seconds": elapsed,
+                "stage_timings_seconds": stage_timings,
+                "retrieval_report": sections.get("_retrieval_report") or {},
                 "presenter_error": presenter_error,
                 "structured_presenter_loaded": presenter_generate_core is not None,
                 "prompt_chars": len(prompt),
@@ -5897,6 +7393,7 @@ Contraintes :
                 "main_verrous_before_historical_reconciliation": pre_reconciliation_verrous_count,
                 "atomic_verrous_count": len(atomic_verrous),
                 "scientific_axis_count": int(scientific_axis_report.get("axis_count") or 0),
+                "transversal_parent_verrous_count": len(transversal_parent_verrous),
                 "historical_reconciliation_merged_groups": int(historical_continuity_report.get("merged_groups_count") or 0),
                 "historical_reconciliation_gap_recovered": int(historical_continuity_report.get("recovered_gap_candidates_count") or 0),
                 "previous_verrou_examples_count": int(previous_verrou_context.get("examples_count") or 0),
@@ -5905,7 +7402,7 @@ Contraintes :
                 "demarche_llm_review_recommended": bool(
                     (frascati_summary.get("demarche_legibility") or {}).get("llm_review_recommended")
                 ),
-                "demarche_llm_review_policy": "section_generation_after_nlp_axis_consolidation",
+                "demarche_llm_review_policy": "section_generation_from_atomic_locks_transversal_display_augmentation_only",
             },
             "output_path": str(self.report_path),
         }

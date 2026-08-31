@@ -731,6 +731,12 @@ def _phase5_consultant_failure(
             "les sources actuellement validées."
         )
         next_action = "resolve_source_selection"
+    elif status.startswith("partial_revision_"):
+        message = str(payload.get("message") or (
+            "La révision ciblée ne peut pas être appliquée à la version existante. "
+            "Aucune rédaction globale n'a été lancée."
+        ))
+        next_action = "resolve_revision_target"
     elif status == "cost_budget_reached":
         message = (
             "J'ai arrêté la génération avant un nouvel appel payant "
@@ -750,22 +756,28 @@ def _phase5_consultant_failure(
         next_action = "prepare_missing_sources"
     elif status in {
         "consultant_plan_required",
+        "consultant_plan_not_approved",
+        "consultant_plan_hash_mismatch",
         "plan_not_approved",
         "writing_not_authorized",
     }:
         message = (
-            "Le plan de référence doit être validé ou resynchronisé avec les "
-            "verrous actuels avant la rédaction. Confirmez le plan dans le chat, "
+            "Le plan de référence n'a pas d'approbation et d'autorisation de "
+            "rédaction valides. Confirmez le plan actuel dans le chat, "
             "puis relancez sans recommencer la recherche."
         )
         next_action = "validate_plan"
     elif "verrou" in status or "contract" in status:
+        # A contract mismatch does not establish that the consultant changed
+        # their plan, and this branch does not resynchronize anything. Repeating
+        # plan approval cannot repair inconsistent prepared lock identities.
         message = (
-            "Les verrous ou le plan ont changé depuis la dernière préparation. "
-            "Je conserve le corpus ; validez le plan resynchronisé avant de "
-            "relancer la rédaction."
+            "La rédaction est bloquée par une incohérence entre les données "
+            "préparées et les verrous de référence. Votre plan et votre corpus "
+            "sont conservés. Cette incohérence doit être corrigée ; revalider "
+            "le même plan ne la résout pas."
         )
-        next_action = "resynchronize_plan"
+        next_action = "resolve_contract_inconsistency"
     else:
         message = (
             "Je n'ai pas publié cette tentative, car certaines parties doivent "

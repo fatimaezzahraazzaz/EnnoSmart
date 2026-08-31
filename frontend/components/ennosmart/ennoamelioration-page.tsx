@@ -175,6 +175,338 @@ function sourcesForComparisonChange(
 }
 
 
+type TextComparisonChange = {
+  originalIndex: number
+  id: string
+  operation: "Ajout" | "Suppression" | "Modification"
+  label: string
+  before: string
+  after: string
+  reason: string
+}
+
+function cleanComparisonText(value: unknown) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
+function compactComparisonText(value: unknown, max = 120) {
+  const normalized = cleanComparisonText(value).replace(/\s+/g, " ")
+  return normalized.length <= max ? normalized : `${normalized.slice(0, max - 1)}…`
+}
+
+function comparisonOperationLabel(operation: unknown, before: string, after: string) {
+  const normalized = String(operation || "").trim().toLowerCase()
+  if (!before && after) return "Ajout" as const
+  if (before && !after) return "Suppression" as const
+  if (["insert", "add", "added", "addition"].includes(normalized)) return "Ajout" as const
+  if (["delete", "remove", "removed", "deletion"].includes(normalized)) return "Suppression" as const
+  return "Modification" as const
+}
+
+function normalizeTextComparisonChanges(
+  changes: Array<Record<string, any>>,
+): TextComparisonChange[] {
+  return (changes || [])
+    .map((change, index) => {
+      const before = cleanComparisonText(change?.before)
+      const after = cleanComparisonText(change?.after)
+      const section = cleanComparisonText(
+        [change?.section_ref, change?.section_title]
+          .filter(Boolean)
+          .join(" · "),
+      )
+      const operation = comparisonOperationLabel(change?.operation, before, after)
+      return {
+        originalIndex: index,
+        id: String(change?.change_id || `${index}-${operation}`),
+        operation,
+        label: section || cleanComparisonText(change?.label) || `${operation} ${index + 1}`,
+        before,
+        after,
+        reason: cleanComparisonText(change?.reason),
+      }
+    })
+    .filter((change) => {
+      if (!change.before && !change.after) return false
+      return change.before !== change.after
+    })
+}
+
+function textComparisonTone(operation: TextComparisonChange["operation"]) {
+  if (operation === "Ajout") return "border-emerald-200 bg-emerald-50 text-emerald-700"
+  if (operation === "Suppression") return "border-rose-200 bg-rose-50 text-rose-700"
+  return "border-violet-200 bg-violet-50 text-violet-700"
+}
+
+function HighlightedComparisonText({
+  text,
+  highlight,
+  accent,
+}: {
+  text: string
+  highlight: string
+  accent: "red" | "green" | "neutral"
+}) {
+  const content = String(text || "")
+  const needle = String(highlight || "")
+  const position = needle ? content.indexOf(needle) : -1
+
+  if (!content.trim()) {
+    return (
+      <p className="text-sm italic text-muted-foreground">
+        Aucun contenu disponible pour cette version.
+      </p>
+    )
+  }
+
+  if (!needle || position < 0) {
+    return <>{content}</>
+  }
+
+  return (
+    <>
+      {content.slice(0, position)}
+      <mark
+        className={cn(
+          "rounded px-0.5 py-0.5 text-inherit",
+          accent === "red"
+            ? "bg-rose-100 ring-1 ring-rose-200"
+            : accent === "green"
+              ? "bg-emerald-100 ring-1 ring-emerald-200"
+              : "bg-muted",
+        )}
+      >
+        {content.slice(position, position + needle.length)}
+      </mark>
+      {content.slice(position + needle.length)}
+    </>
+  )
+}
+
+function ImprovementTextComparator({
+  originalVersion,
+  proposedVersion,
+  changes,
+  sourceLabel,
+}: {
+  originalVersion: ImprovementVersion | null
+  proposedVersion: ImprovementVersion | null
+  changes: Array<Record<string, any>>
+  sourceLabel: string
+}) {
+  const rows = useMemo(() => normalizeTextComparisonChanges(changes), [changes])
+  const [selectedPosition, setSelectedPosition] = useState(0)
+  const selected = rows[selectedPosition] || rows[0] || null
+  const hasPendingProposal = Boolean(proposedVersion)
+
+  useEffect(() => {
+    if (selectedPosition >= rows.length) setSelectedPosition(0)
+  }, [rows.length, selectedPosition])
+
+  const originalText = String(originalVersion?.content || "")
+  const proposedText = String(proposedVersion?.content || "")
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="shrink-0 border-b bg-card px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {hasPendingProposal ? (
+            <>
+              <Badge variant="outline" className="border-rose-200 bg-rose-50 text-[10px] text-rose-700">
+                Rouge = texte original remplacé ou supprimé
+              </Badge>
+              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700">
+                Vert = texte proposé
+              </Badge>
+            </>
+          ) : (
+            <Badge variant="outline" className="border-slate-200 bg-slate-50 text-[10px] text-slate-700">
+              Version active conservée · aucune proposition en attente
+            </Badge>
+          )}
+          <span className="ml-auto text-[10px] text-muted-foreground">
+            Comparaison texte de la section
+          </span>
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <aside className="hidden w-[230px] shrink-0 overflow-y-auto border-r bg-muted/15 p-2.5 md:block 2xl:w-[250px]">
+          <div className="mb-2 flex items-center justify-between gap-2 px-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Modifications
+            </p>
+            <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+              {rows.length}
+            </Badge>
+          </div>
+
+          <div className="space-y-1.5 pb-3">
+            {!hasPendingProposal ? (
+              <div className="rounded-xl border border-dashed bg-background/60 px-3 py-4 text-center">
+                <p className="text-[11px] font-semibold text-foreground">
+                  Aucune modification en attente
+                </p>
+                <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
+                  La prochaine amélioration apparaîtra ici.
+                </p>
+              </div>
+            ) : rows.length === 0 ? (
+              <div className="rounded-xl border border-dashed bg-background/60 px-3 py-4 text-center">
+                <p className="text-[11px] font-semibold text-foreground">
+                  Comparaison du texte complet
+                </p>
+                <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
+                  La proposition existe, mais aucun changement structuré n&apos;a été fourni.
+                </p>
+              </div>
+            ) : rows.map((change, position) => (
+              <button
+                key={change.id}
+                type="button"
+                onClick={() => setSelectedPosition(position)}
+                className={cn(
+                  "w-full rounded-xl border px-3 py-2.5 text-left transition",
+                  position === selectedPosition
+                    ? "border-brand/40 bg-brand/5 shadow-sm"
+                    : "border-border bg-card hover:bg-muted/40",
+                )}
+              >
+                <div className="flex items-start gap-2">
+                  <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border bg-background text-[9px] font-semibold">
+                    {position + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <Badge
+                      variant="outline"
+                      className={cn("h-5 px-1.5 text-[9px]", textComparisonTone(change.operation))}
+                    >
+                      {change.operation}
+                    </Badge>
+                    <p className="mt-1.5 line-clamp-2 text-[11px] font-semibold leading-4 text-foreground">
+                      {change.label}
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-muted-foreground">
+                      {compactComparisonText(change.after || change.before, 100)}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {hasPendingProposal && selected && (
+            <div className="shrink-0 border-b bg-background px-3 py-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className={cn("shrink-0 text-[10px]", textComparisonTone(selected.operation))}
+                >
+                  {selected.operation}
+                </Badge>
+                <p className="min-w-0 flex-1 truncate text-xs font-semibold">
+                  {selected.label}
+                </p>
+                {selected.reason && (
+                  <p className="hidden max-w-[45%] truncate text-[10px] text-muted-foreground xl:block" title={selected.reason}>
+                    {selected.reason}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-2">
+            <section className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b bg-white lg:border-b-0 lg:border-r">
+              <div className="flex min-h-12 shrink-0 items-center gap-3 border-b bg-rose-50/70 px-3 py-2">
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-rose-200 bg-white text-rose-600">
+                  <FileText className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-700">
+                    {hasPendingProposal ? "Version précédente" : "Version active"}
+                  </p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {sourceLabel}
+                  </p>
+                </div>
+                {originalVersion && (
+                  <Badge variant="outline" className="shrink-0 bg-white text-[10px]">
+                    V{originalVersion.version_number}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto bg-background p-5">
+                <div className="whitespace-pre-wrap break-words text-sm leading-7 text-foreground">
+                  <HighlightedComparisonText
+                    text={originalText}
+                    highlight={hasPendingProposal ? selected?.before || "" : ""}
+                    accent={hasPendingProposal ? "red" : "neutral"}
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-white">
+              <div className="flex min-h-12 shrink-0 items-center gap-3 border-b bg-emerald-50/70 px-3 py-2">
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-emerald-200 bg-white text-emerald-600">
+                  <Sparkles className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                    Nouvelle version
+                  </p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {hasPendingProposal ? sourceLabel : "Aucune amélioration en attente"}
+                  </p>
+                </div>
+                {proposedVersion && (
+                  <Badge variant="outline" className="shrink-0 bg-white text-[10px]">
+                    V{proposedVersion.version_number}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto bg-background p-5">
+                {hasPendingProposal ? (
+                  <div className="whitespace-pre-wrap break-words text-sm leading-7 text-foreground">
+                    <HighlightedComparisonText
+                      text={proposedText}
+                      highlight={selected?.after || ""}
+                      accent="green"
+                    />
+                  </div>
+                ) : (
+                  <div className="grid h-full min-h-[240px] place-items-center p-6 text-center">
+                    <div className="max-w-sm">
+                      <Sparkles className="mx-auto size-8 text-muted-foreground/35" />
+                      <p className="mt-3 text-sm font-semibold text-foreground">
+                        En attente d&apos;une nouvelle amélioration
+                      </p>
+                      <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+                        La version active reste conservée à gauche. La prochaine proposition apparaîtra ici.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+  )
+}
+
+
 type Props = {
   onImmersiveModeChange?: (immersive: boolean) => void
   onCreateProject?: () => void
@@ -2136,14 +2468,27 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
               </div>
             </TabsContent>
             <TabsContent value="diff" className="min-h-0 overflow-hidden p-0">
-              <ImprovementPdfComparator
-                projectId={projectId}
-                sessionId={current.session_id}
-                versionId={candidate?.version_id || ""}
-                activeVersionId={activeVersion?.version_id || ""}
-                changes={comparisonChanges}
-                sourceFilename={sourceDocument?.filename || "Document source"}
-              />
+              {current.source_document_id ? (
+                <ImprovementPdfComparator
+                  projectId={projectId}
+                  sessionId={current.session_id}
+                  versionId={candidate?.version_id || ""}
+                  activeVersionId={activeVersion?.version_id || ""}
+                  changes={comparisonChanges}
+                  sourceFilename={sourceDocument?.filename || "Document source"}
+                />
+              ) : (
+                <ImprovementTextComparator
+                  originalVersion={comparisonOriginal || activeVersion}
+                  proposedVersion={candidate}
+                  changes={comparisonChanges}
+                  sourceLabel={
+                    sections.find((row) => row.section_id === selectedSectionId)?.title
+                    || current.title
+                    || "Section"
+                  }
+                />
+              )}
             </TabsContent>
             <TabsContent value="audit" className="min-h-0 overflow-hidden p-0">
               <ScrollArea className="h-full">

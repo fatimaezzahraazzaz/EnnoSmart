@@ -1,0 +1,8 @@
+PATCH V5.5
+- agents/EnnoDiagnostic/ennodiagnostic_agent.py
+- agents/EnnoDiagnostic/diagnostic_static_presenter.py
+- agents/EnnoDiagnostic/project_fact_gate.py
+
+NOT MODIFIED / NOT SHIPPED
+- agents/EnnoDiagnostic/consultant_verrou_synthesizer.py
+- agents/EnnoDiagnostic/scientific_axis_synthesizer.py

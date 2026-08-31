@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..lot1.domain.enums import GuidedResearchState
 from ..lot1.domain.models import GuidedResearchSessionORM
+from ..lot1.json_safety import sanitize_json_text
 
 
 class GuidedResearchSessionRepository:
@@ -83,11 +84,11 @@ class GuidedResearchSessionRepository:
         }
         for attr, value in values.items():
             if value is not None:
-                setattr(row, attr, value)
+                setattr(row, attr, sanitize_json_text(value))
         if context_updates:
             context = dict(row.context_json or {})
             context.update(context_updates)
-            row.context_json = context
+            row.context_json = sanitize_json_text(context)
         if state is not None:
             row.state = state.value if isinstance(state, GuidedResearchState) else str(state)
         if ready_to_write is not None:

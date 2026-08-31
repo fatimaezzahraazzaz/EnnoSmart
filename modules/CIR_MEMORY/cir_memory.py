@@ -22,6 +22,7 @@ import time
 from pathlib import Path
 from datetime import datetime
 from difflib import SequenceMatcher
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -164,7 +165,11 @@ def truncate(x: Any, max_chars: int = 700) -> str:
 
 
 def norm(x: Any) -> str:
-    x = clean_text(x).lower()
+    return _normalized_text_cached(clean_text(x).lower())
+
+
+@lru_cache(maxsize=8192)
+def _normalized_text_cached(x: str) -> str:
     tr = str.maketrans("àâäéèêëîïôöùûüç’", "aaaeeeeiioouuuc'")
     x = x.translate(tr)
     x = re.sub(r"[^\w%/.,\-]+", " ", x)
@@ -749,12 +754,18 @@ def numbers(text: str) -> List[str]:
 
 
 def themes(text: str) -> List[str]:
+    # Return a fresh list: callers cannot mutate the cached features.
+    return list(_themes_cached(text))
+
+
+@lru_cache(maxsize=4096)
+def _themes_cached(text: str) -> Tuple[str, ...]:
     low = norm(text)
     found = []
     for th, kws in TECH_THEMES.items():
         if any(norm(k) in low for k in kws):
             found.append(th)
-    return found
+    return tuple(found)
 
 
 def expanded_current_text(item: Dict[str, Any]) -> str:
@@ -2734,6 +2745,7 @@ def compare_current_raw_with_cir_memory(
     current_verrous: Optional[List[Dict[str, Any]]] = None,
     shortlist_size: Optional[int] = None,
     subproject: str = "",
+    previous_memory: Optional[Tuple[List[str], List[Dict[str, Any]]]] = None,
 ) -> Dict[str, Any]:
     if nlp_result_path:
         nlp_path = Path(nlp_result_path).expanduser().resolve()
@@ -2817,7 +2829,7 @@ def compare_current_raw_with_cir_memory(
             flush=True,
         )
 
-    previous_years, previous_items = load_previous_cir_memory_items(
+    previous_years, previous_items = previous_memory if previous_memory is not None else load_previous_cir_memory_items(
         organisme=organisme,
         project=project,
         current_year=year,

@@ -1096,8 +1096,9 @@ def consolidate_selected_verrous_for_scholar(selected_verrous: _V117Any, *args: 
 # <<< V117_GENERIC_SCHOLAR_GROUPING_END
 
 def build_scholar_payload_from_selected_verrous(db: Session, project: Project, max_verrous: int = 8) -> Dict[str, Any]:
+    # max_verrous is kept for API compatibility, not as a silent selection cap.
+    # Each consultant-retained lock must receive its own search and result.
     selected = get_selected_verrous_for_scholar(db, project)
-    selected = selected[:max_verrous]
 
     nlp_path = current_nlp_result_path(project)
     nlp = read_json(nlp_path, {}) if nlp_path else {}
@@ -1115,27 +1116,29 @@ def build_scholar_payload_from_selected_verrous(db: Session, project: Project, m
         for v in selected
     ]
 
-    # V111 : étape 2 — regrouper automatiquement les signaux proches avant EnnoScholar.
-    consolidated = consolidate_selected_verrous_for_scholar(enriched_verrous, max_verrous=max_verrous)
-    scholar_verrous = consolidated.get("verrous") or []
-
     return sanitize_json_value({
         "organisme": project.organisme,
         "project": project.project_name,
         "year": str(project.year),
-        "source": "consultant_selected_verrous_from_ennodiagnostic_grouped_v111",
-        "selection_rule": "Only verrous with consultant_status='garde' are selected, then similar signals are grouped before EnnoScholar.",
+        "source": "consultant_selected_verrous_from_ennodiagnostic",
+        "selection_rule": "Every verrou with consultant_status='garde' is searched independently, without truncation or merging.",
         "selected_verrous_count": len(selected),
         "selected_signals_count": len(selected),
-        "grouped_verrous_count": len(scholar_verrous),
-        "grouping_applied": True,
+        "grouped_verrous_count": len(enriched_verrous),
+        "grouping_applied": False,
         "input_nlp_result": str(nlp_path) if nlp_path else "",
         "diagnostic_context": diagnostic_context,
         "domain_detection": domain_detection,
-        "grouping_summary": consolidated.get("grouping_summary") or {},
-        "grouping_report": consolidated.get("grouping_report") or {},
+        "grouping_summary": {
+            "active": False,
+            "input_signals_count": len(selected),
+            "grouped_verrous_count": len(enriched_verrous),
+            "duplicates_removed": 0,
+            "message": "Chaque verrou gardé est recherché séparément, sans fusion automatique.",
+        },
+        "grouping_report": {"ok": True, "groups": []},
         "verrous_before_grouping": enriched_verrous,
-        "verrous": scholar_verrous,
+        "verrous": enriched_verrous,
     })
 
 
@@ -1173,6 +1176,7 @@ def build_scholar_summary(report: Dict[str, Any]) -> Dict[str, Any]:
     confirm = decisions.get("verrou_a_confirmer_par_etat_art", 0)
     weak = decisions.get("support_scientifique_faible", 0)
     none = decisions.get("aucun_article_trouve", 0)
+    failed = [r for r in results if r.get("subject_search_failed")]
 
     return sanitize_json_value({
         "ok": True,
@@ -1182,6 +1186,9 @@ def build_scholar_summary(report: Dict[str, Any]) -> Dict[str, Any]:
         "verrous_a_confirmer": confirm,
         "support_scientifique_faible": weak,
         "aucun_article_trouve": none,
+        "searches_failed": len(failed),
+        "failed_verrou_ids": [r.get("verrou_id") for r in failed],
+        "search_complete": not any(r.get("search_incomplete") or r.get("subject_search_failed") for r in results),
         "articles_total": sum(len(r.get("articles") or []) for r in results),
         "interpretation": (
             "EnnoScholar valide scientifiquement les verrous sélectionnés par le consultant. "
@@ -1249,8 +1256,8 @@ def run_ennoscholar_from_selected_verrous(
         "summary": str(paths["summary"]),
     }
     report["selection"] = {
-        "selected_verrou_ids": [v.id for v in selected_verrous[:max_verrous]],
-        "selected_verrous_count": len(selected_verrous[:max_verrous]),
+        "selected_verrou_ids": [v.get("db_verrou_id") for v in payload["verrous"]],
+        "selected_verrous_count": len(payload["verrous"]),
         "rule": "consultant_status == garde",
         "grouped_verrous_count": payload.get("grouped_verrous_count"),
         "grouping_applied": payload.get("grouping_applied"),

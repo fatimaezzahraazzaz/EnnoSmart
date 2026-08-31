@@ -25,6 +25,7 @@ from schemas.document import (
 from services.document_corpus_service import (
     CORPUS_DIAGNOSTIC,
     CORPUS_IMPROVEMENT,
+    WORK_ITEM_DOCUMENT_TYPE,
     diagnostic_document_review,
     ensure_document_corpus,
     set_diagnostic_decision,
@@ -466,6 +467,8 @@ async def upload_document(
     Upload dans un corpus explicite : Diagnostic par défaut, ou Amélioration.
 
     Nouvelle logique :
+    - tout fichier envoyé au corpus Diagnostic est un élément de travail,
+      y compris un pré-CIR ou un CIR précédent ;
     - le fichier complet est stocké dans PostgreSQL : documents.file_data
     - aucun fichier permanent n'est écrit dans storage/uploads
     - file_path devient seulement un identifiant logique db://...
@@ -519,7 +522,11 @@ async def upload_document(
 
         content_type=content_type,
         file_size=len(file_bytes),
-        document_type=document_type or _guess_document_type(Path(original_filename)),
+        document_type=(
+            WORK_ITEM_DOCUMENT_TYPE
+            if corpus_scope == CORPUS_DIAGNOSTIC
+            else document_type or _guess_document_type(Path(original_filename))
+        ),
         upload_status="importé_en_base",
 
         file_data=file_bytes,
