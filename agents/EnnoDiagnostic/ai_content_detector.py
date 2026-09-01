@@ -10,6 +10,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from modules.common.runtime_paths import data_root, organism_memory_root
+
 from dotenv import load_dotenv
 
 
@@ -520,13 +522,8 @@ class EnnoExtractedContentLoader:
             else ""
         )
 
-        self.base_dir = base_dir or Path(
-            _str_env(
-                "ENNOSMART_BASE_DIR",
-                str(Path(__file__).resolve().parents[2]),
-            )
-        )
-        self.storage_root = self.base_dir / "storage" / "organismes"
+        self.base_dir = Path(base_dir) if base_dir else data_root()
+        self.storage_root = organism_memory_root()
 
         if allow_rag_fallback is None:
             allow_rag_fallback = (
@@ -2185,15 +2182,7 @@ class EnnoAIDetectionService:
         self.organisme = safe_name(organisme)
         self.project = safe_name(project)
 
-        self.base_dir = Path(
-            _str_env(
-                "ENNOSMART_BASE_DIR",
-                str(
-                    Path(__file__).resolve()
-                    .parents[2]
-                ),
-            )
-        )
+        self.base_dir = data_root()
 
         self.loader = EnnoExtractedContentLoader(
             organisme=organisme,

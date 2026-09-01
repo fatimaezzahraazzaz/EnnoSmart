@@ -1,0 +1,15 @@
+# Surcharge locale pour Docker Desktop sous Windows.
+# PostgreSQL et Redis utilisent des volumes Docker nommés : cela évite les
+# problèmes de permissions et de performances des bind mounts Windows.
+services:
+  postgres:
+    volumes:
+      - ennosmart_postgres_windows:/var/lib/postgresql/data
+
+  redis:
+    volumes:
+      - ennosmart_redis_windows:/data
+
+volumes:
+  ennosmart_postgres_windows:
+  ennosmart_redis_windows:

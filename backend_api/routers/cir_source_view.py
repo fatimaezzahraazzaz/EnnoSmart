@@ -39,6 +39,8 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
+from modules.common.runtime_paths import outputs_root, resolve_persisted_path, storage_root
+
 try:
     import fitz  # PyMuPDF
     PYMUPDF_OK = True
@@ -55,10 +57,9 @@ except Exception:
 
 router = APIRouter(prefix="/projects/{project_id}/cir-source-view", tags=["CIR source view"])
 
-ROOT = Path(os.getenv("ENNOSMART_ROOT") or Path(__file__).resolve().parents[2]).resolve()
-STORAGE = ROOT / "storage"
-OUTPUTS = ROOT / "outputs"
-PREVIEW_DIR = ROOT / "storage" / "source_previews"
+STORAGE = storage_root().resolve()
+OUTPUTS = outputs_root().resolve()
+PREVIEW_DIR = STORAGE / "source_previews"
 ALLOWED_SUFFIXES = {".pdf", ".docx", ".doc", ".txt", ".md", ".html", ".htm"}
 MAX_SEARCH_FILES = 2500
 
@@ -264,17 +265,8 @@ def _iter_documents(project_id: int, data: Dict[str, Any]) -> Iterable[Path]:
 
 
 def _resolve_path(source_path: str) -> Optional[Path]:
-    if not source_path:
-        return None
-    p = Path(source_path)
-    if p.exists() and p.is_file():
-        return p
-
-    # Sécurité : si chemin relatif, le chercher sous ROOT.
-    rel = ROOT / source_path
-    if rel.exists() and rel.is_file():
-        return rel
-    return None
+    resolved = resolve_persisted_path(source_path)
+    return resolved if resolved and resolved.is_file() else None
 
 
 def _read_docx_text(path: Path) -> str:

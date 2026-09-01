@@ -19,6 +19,7 @@ from core.deps import get_current_user, get_db
 from db.models import Document, User
 from services.experience_memory_v2_service import build_uploaded_cir
 from services.project_service import get_project_for_user
+from modules.common.runtime_paths import storage_root
 
 router = APIRouter(prefix="/projects", tags=["CIR final consultant"])
 
@@ -26,10 +27,6 @@ router = APIRouter(prefix="/projects", tags=["CIR final consultant"])
 # =============================================================================
 # Chemins / JSON
 # =============================================================================
-
-def root() -> Path:
-    return Path(__file__).resolve().parents[2]
-
 
 def safe_name(x: str, default: str = "unknown") -> str:
     x = str(x or default).strip()
@@ -537,8 +534,7 @@ def canonical_year_dir(organisme: str, project: str, year: str, subproject: str 
     C'est CE chemin que doivent utiliser EnnoDiagnostic, comparaison N-1 et mémoire CIR.
     """
     base = (
-        root()
-        / "storage"
+        storage_root()
         / "organismes"
         / safe_name(organisme, "organisme_unknown").lower()
         / "projects"
@@ -569,7 +565,7 @@ def legacy_project_current_dir(project_id: int) -> Path:
     Ancien chemin. On le garde seulement comme copie de compatibilité frontend.
     Le chemin source de vérité reste canonical_year_dir().
     """
-    return root() / "storage" / "projects" / str(project_id) / "cir_final_consultant" / "current"
+    return storage_root() / "projects" / str(project_id) / "cir_final_consultant" / "current"
 
 
 def sections_to_items(
@@ -674,7 +670,7 @@ def append_style_memory(
     sections: dict,
     subproject: str = "",
 ) -> dict:
-    path = root() / "storage" / "organismes" / safe_name(organisme, "organisme_unknown") / "cir_style_memory" / "style_memory.json"
+    path = storage_root() / "organismes" / safe_name(organisme, "organisme_unknown") / "cir_style_memory" / "style_memory.json"
     memory = read_json(path, {"version": "v60_style_memory", "examples": []})
 
     if not isinstance(memory, dict):
@@ -975,7 +971,7 @@ def latest_cir_final_consultant(
     if canonical_report.exists():
         return read_json(canonical_report, {"status": "error"})
 
-    base = root() / "storage" / "projects" / str(project_id) / "cir_final_consultant"
+    base = storage_root() / "projects" / str(project_id) / "cir_final_consultant"
     current_report = base / "current" / "cir_final_consultant_report.json"
     if current_report.exists():
         return read_json(current_report, {"status": "error"})

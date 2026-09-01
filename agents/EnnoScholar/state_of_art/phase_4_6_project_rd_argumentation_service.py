@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..contracts import ContractError, assert_same_verrous, build_confirmed_contract
+from modules.common.runtime_paths import storage_root
 
 ROOT_DIR = Path(os.getenv("ENNOSMART_ROOT_DIR") or os.getenv("ENNOSMART_ROOT") or Path(__file__).resolve().parents[3])
 OUTPUT_PAYLOAD_TYPE = "project_rd_argumentation_payload_v1_5_project_first_phase45_v23_no_repetition"
@@ -181,14 +182,14 @@ def write_text(path: str | Path, text: str) -> None:
 # ---------------------------------------------------------------------------
 
 def year_dir(organisme: str, project: str, year: str) -> Path:
-    storage_root = Path(os.getenv("ENNOSMART_STORAGE_ROOT", str(ROOT_DIR / "storage")))
+    persistent_storage = storage_root()
     org_raw = clean_text(organisme)
     project_raw = clean_text(project)
     candidates = [
-        storage_root / "organismes" / org_raw / "projects" / project_raw / "years" / str(year),
-        storage_root / "organismes" / fs_slug(org_raw) / "projects" / fs_slug(project_raw) / "years" / str(year),
-        storage_root / "organismes" / org_raw / "projects" / project_raw.replace("-", "_") / "years" / str(year),
-        storage_root / "organismes" / fs_slug(org_raw) / "projects" / project_raw.replace("-", "_").lower() / "years" / str(year),
+        persistent_storage / "organismes" / org_raw / "projects" / project_raw / "years" / str(year),
+        persistent_storage / "organismes" / fs_slug(org_raw) / "projects" / fs_slug(project_raw) / "years" / str(year),
+        persistent_storage / "organismes" / org_raw / "projects" / project_raw.replace("-", "_") / "years" / str(year),
+        persistent_storage / "organismes" / fs_slug(org_raw) / "projects" / project_raw.replace("-", "_").lower() / "years" / str(year),
     ]
     for p in candidates:
         if p.exists():

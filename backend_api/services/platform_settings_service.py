@@ -4,9 +4,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from modules.common.runtime_paths import data_root
 
-ROOT_DIR = Path(__file__).resolve().parents[2]
-RUNTIME_SETTINGS_PATH = ROOT_DIR / "config" / "runtime_ai_settings.json"
+
+RUNTIME_SETTINGS_PATH = data_root() / "config" / "runtime_ai_settings.json"
 
 
 DEFAULT_AI_SETTINGS: dict[str, Any] = {

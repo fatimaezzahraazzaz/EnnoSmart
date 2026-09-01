@@ -23,6 +23,8 @@ import re
 import time
 import unicodedata
 from pathlib import Path
+
+from modules.common.runtime_paths import cache_root, outputs_root, storage_root
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
@@ -75,7 +77,7 @@ def _cache_root() -> Path:
     root = os.getenv("ENNOSCHOLAR_CACHE_DIR")
     if root:
         return Path(root)
-    return Path.cwd() / "storage" / "ennoscholar_cache"
+    return cache_root() / "ennoscholar"
 
 
 def _memory_index_path() -> Path:
@@ -97,10 +99,9 @@ def _root_candidates() -> List[Path]:
         if value:
             raw_roots.extend([x.strip() for x in value.split(";") if x.strip()])
 
-    repo_root = Path(__file__).resolve().parents[2]
-    storage_root = Path(os.getenv("ENNOSMART_STORAGE_ROOT") or repo_root / "storage")
-    outputs_root = Path(os.getenv("ENNOSMART_OUTPUT_ROOT") or repo_root / "outputs")
-    raw_roots.extend([str(storage_root / "organismes"), str(outputs_root)])
+    persistent_storage = storage_root()
+    persistent_outputs = outputs_root()
+    raw_roots.extend([str(persistent_storage / "organismes"), str(persistent_outputs)])
 
     roots: List[Path] = []
     seen = set()

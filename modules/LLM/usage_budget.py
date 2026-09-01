@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
+from modules.common.runtime_paths import data_root
+
 # USD par million de tokens, tarifs OpenAI vérifiés le 31/07/2026.
 PRICES = {
     "gpt-4.1": {"input": 2.00, "cached": 0.50, "output": 8.00},
@@ -56,11 +58,7 @@ def _enabled() -> bool:
 
 
 def _root() -> Path:
-    return Path(
-        os.getenv("ENNOSMART_ROOT")
-        or os.getenv("ENNOSMART_BASE_DIR")
-        or Path(__file__).resolve().parents[2]
-    )
+    return data_root()
 
 
 def _safe_int(value: Any) -> int:

@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional, Iterable, Tuple
 
 from db.models import Project
 from services.diagnostic_service import get_project_store, sanitize_json_value
+from modules.common.runtime_paths import organism_memory_root
 
 
 # ---------------------------------------------------------------------------
@@ -112,12 +113,7 @@ def slugify(value: Any, default: str = "unknown") -> str:
 # ---------------------------------------------------------------------------
 
 def _fallback_organism_dir(project: Project) -> Path:
-    root = Path(
-        os.getenv("ENNOSMART_BASE_DIR")
-        or os.getenv("ENNOSMART_ROOT")
-        or Path(__file__).resolve().parents[2]
-    )
-    return root / "storage" / "organismes" / slugify(project.organisme)
+    return organism_memory_root() / slugify(project.organisme)
 
 
 def find_organism_dir(project_dir: Path, project: Project) -> Path:

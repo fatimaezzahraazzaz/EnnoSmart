@@ -24,6 +24,7 @@ from services.document_corpus_service import (
 )
 from services.file_service import load_json_file, project_output_dir, run_optional_ai_script
 from services.diagnostic_reset_service import exclusive_project_diagnostic
+from modules.common.runtime_paths import code_root, data_root
 
 try:
     from db.models import Document
@@ -66,15 +67,11 @@ def save_json(path: Path, data: Any) -> None:
 # ============================================================
 
 def ennosmart_base_dir() -> Path:
-    return Path(
-        os.getenv("ENNOSMART_BASE_DIR")
-        or os.getenv("ENNOSMART_ROOT")
-        or Path(__file__).resolve().parents[2]
-    )
+    return data_root()
 
 
 def ensure_ennosmart_imports() -> Path:
-    base_dir = ennosmart_base_dir()
+    base_dir = code_root()
     for candidate in [base_dir, base_dir / "backend_api"]:
         if candidate.exists() and str(candidate) not in sys.path:
             sys.path.insert(0, str(candidate))

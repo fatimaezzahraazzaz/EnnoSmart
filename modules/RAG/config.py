@@ -4,13 +4,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from modules.common.runtime_paths import data_root, organism_memory_root
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-BASE_DIR = Path(
-    os.getenv("ENNOSMART_BASE_DIR")
-    or os.getenv("ENNOSMART_ROOT")
-    or PROJECT_ROOT
-)
-ORGANISMES_DIR = BASE_DIR / "storage" / "organismes"
+BASE_DIR = data_root()
+ORGANISMES_DIR = organism_memory_root()
 
 # Modèle sémantique déjà utilisé par le RAG. Il reste configurable sans changer
 # le code, par exemple ENNOSMART_EMBEDDING_MODEL=BAAI/bge-m3.

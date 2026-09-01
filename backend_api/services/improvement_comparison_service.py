@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, undefer
 
 from db.models import Document, ImprovementSession, ImprovementVersion
+from modules.common.runtime_paths import storage_root
 
 try:
     from routers.source_highlight import (
@@ -43,9 +44,7 @@ except Exception as exc:  # pragma: no cover
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = BACKEND_ROOT.parent
-STORAGE_ROOT = Path(
-    os.getenv("ENNOSMART_STORAGE_ROOT") or PROJECT_ROOT / "storage"
-).resolve()
+STORAGE_ROOT = storage_root().resolve()
 COMPARE_ROOT = STORAGE_ROOT / "previews" / "improvement_comparison"
 CANONICAL_SOURCE_ROOT = COMPARE_ROOT / "canonical_source"
 CANONICAL_PDF_ROOT = COMPARE_ROOT / "canonical_pdf"

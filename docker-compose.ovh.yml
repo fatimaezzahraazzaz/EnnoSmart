@@ -1,0 +1,139 @@
+services:
+  postgres:
+    # La base locale et le dump de migration sont en PostgreSQL 17.
+    # Garder la même version majeure évite les restaurations incompatibles.
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    volumes:
+      - ${ENNOSMART_POSTGRES_DATA_DIR:-/mnt/ennosmart-data/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - ${ENNOSMART_REDIS_DATA_DIR:-/mnt/ennosmart-data/redis}:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  grobid:
+    image: ${GROBID_IMAGE:-grobid/grobid:0.9.0-crf}
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/ovh/Dockerfile.backend
+    restart: unless-stopped
+    env_file: .env
+    environment: &backend_environment
+      ENNOSMART_ROOT: /opt/ennosmart
+      ENNOSMART_BASE_DIR: /opt/ennosmart
+      ENNOSMART_DATA_ROOT: /var/lib/ennosmart
+      ENNOSMART_STORAGE_ROOT: /var/lib/ennosmart/storage
+      UPLOAD_ROOT: /var/lib/ennosmart/storage/uploads
+      AI_OUTPUT_ROOT: /var/lib/ennosmart/outputs/safe_rag_upload
+      ENNOSMART_EXPERIENCE_MEMORY_V2_DIR: /var/lib/ennosmart/storage/experience_memory_v2
+      ENNOSMART_MEMORY_V2_ROOT: /var/lib/ennosmart/storage/organismes
+      ENNOSMART_LOG_ROOT: /var/lib/ennosmart/logs
+      ENNOSMART_CACHE_ROOT: /var/lib/ennosmart/cache
+      HF_HOME: /var/lib/ennosmart/cache/huggingface
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      SESSION_LOCK_REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      ENNOSMART_CELERY_BROKER_URL: redis://redis:6379/1
+      ENNOSMART_CELERY_RESULT_BACKEND: redis://redis:6379/2
+      ENNOSMART_CIR_BROKER_URL: redis://redis:6379/1
+      ENNOSMART_CIR_RESULT_BACKEND: redis://redis:6379/2
+      ENNOSMART_CIR_LANGGRAPH_REDIS_URL: redis://redis:6379/0
+      ENNOSMART_CIR_STATUS_REDIS_URL: redis://redis:6379/3
+      ENNOSMART_CIR_REDIS_URL: redis://redis:6379/3
+      ENNOSMART_LANGGRAPH_REDIS_URL: redis://redis:6379/0
+      ENNOSMART_LLM_REDIS_URL: redis://redis:6379/0
+      GROBID_URL: http://grobid:8070
+      ENNOSCHOLAR_LEGAL_MCP_HOST: 0.0.0.0
+      ENNOSCHOLAR_LEGAL_MCP_PORT: 8010
+      ENNOSCHOLAR_LEGAL_MCP_URL: http://legal-mcp:8010/mcp
+      ENNOSCHOLAR_LEGAL_MCP_REST_URL: http://legal-mcp:8010/api/resolve
+    volumes: &backend_volumes
+      - ${ENNOSMART_HOST_DATA_DIR:-/mnt/ennosmart-data}:/var/lib/ennosmart
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      grobid:
+        condition: service_started
+
+  scholar-worker:
+    build:
+      context: .
+      dockerfile: deploy/ovh/Dockerfile.backend
+    restart: unless-stopped
+    env_file: .env
+    environment: *backend_environment
+    volumes: *backend_volumes
+    working_dir: /opt/ennosmart/backend_api
+    command: ["celery", "-A", "worker.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=2", "-Q", "celery"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  cir-worker:
+    build:
+      context: .
+      dockerfile: deploy/ovh/Dockerfile.backend
+    restart: unless-stopped
+    env_file: .env
+    environment: *backend_environment
+    volumes: *backend_volumes
+    working_dir: /opt/ennosmart
+    command: ["python", "-m", "celery", "-A", "backend_api.workers.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=4", "-Q", "ennosmart.cir"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  legal-mcp:
+    build:
+      context: .
+      dockerfile: deploy/ovh/Dockerfile.backend
+    restart: unless-stopped
+    env_file: .env
+    environment: *backend_environment
+    volumes: *backend_volumes
+    working_dir: /opt/ennosmart
+    command: ["python", "-m", "mcp_servers.legal_fulltext_mcp.server"]
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: deploy/ovh/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL must be set}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - api

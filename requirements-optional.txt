@@ -12,9 +12,6 @@ pix2tex==0.1.4
 # Diarisation avancée ; nécessite HF_TOKEN et l'accès aux modèles pyannote
 whisperx>=3.3,<4
 
-# Sorties structurées Pydantic AI (un fallback JSON existe sans ce paquet)
-pydantic-ai>=0.0.24,<2
-
 # Backend vision Qwen local
 torchvision>=0.17,<1
 qwen-vl-utils>=0.0.14,<1

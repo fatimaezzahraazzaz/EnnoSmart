@@ -19,6 +19,8 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+from modules.common.runtime_paths import cache_root
 from typing import Any, Dict, List, Optional, Tuple
 
 from .external_source_base import merge_fresh_with_cache, fallback_from_cache
@@ -38,7 +40,7 @@ def _cache_root() -> Path:
     root = os.getenv("ENNOSCHOLAR_CACHE_DIR")
     if root:
         return Path(root)
-    return Path.cwd() / "storage" / "ennoscholar_cache"
+    return cache_root() / "ennoscholar"
 
 
 def _cache_key(source: str, query: str, limit: int) -> Path:

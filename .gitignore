@@ -156,6 +156,9 @@ ennoscholar_*_v*/
 agents/EnnoScholar.backup*/
 agents/EnnoScholar_backup*/
 *.zip
+*.dump
+*.tar.gz
+*.tgz
 *.bak
 *.bak_*
 *.backup

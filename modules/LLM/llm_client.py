@@ -27,6 +27,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 import requests
 
 from modules.LLM.llm_concurrency import llm_capacity_slot
+from modules.common.runtime_paths import data_root
 
 try:
     from dotenv import dotenv_values
@@ -76,7 +77,7 @@ def _load_config() -> Dict[str, str]:
     # Les réglages non secrets publiés depuis l'interface superadmin prennent
     # effet sans modifier le .env. Les variables du processus gardent la
     # priorité finale afin de respecter les contraintes de déploiement.
-    runtime_settings = root / "config" / "runtime_ai_settings.json"
+    runtime_settings = data_root() / "config" / "runtime_ai_settings.json"
     try:
         if runtime_settings.exists():
             payload = json.loads(runtime_settings.read_text(encoding="utf-8"))

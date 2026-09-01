@@ -26,6 +26,8 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
+
+from modules.common.runtime_paths import code_root
 from typing import Any
 
 from ..domain.models import ImprovementRequest, TargetScope
@@ -199,8 +201,7 @@ def _virtual_documents(request: ImprovementRequest, scope_key: str) -> tuple[lis
 
 
 def _ensure_imports() -> None:
-    default_root = Path(__file__).resolve().parents[3]
-    root = Path(os.getenv("ENNOSMART_BASE_DIR") or os.getenv("ENNOSMART_ROOT") or default_root)
+    root = code_root()
     import sys
 
     for path in (root, root / "backend_api"):

@@ -10,6 +10,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+from modules.common.runtime_paths import cache_root
 from typing import Any, Dict, List, Optional, Tuple
 
 CLIENT_VERSION = "v147"  # preserve existing V5 query-cache keys; semantics are fresh-first
@@ -38,7 +40,7 @@ def cache_root() -> Path:
     custom = os.getenv("ENNOSCHOLAR_CACHE_DIR")
     if custom:
         return Path(custom)
-    return Path.cwd() / "storage" / "ennoscholar_cache"
+    return cache_root() / "ennoscholar"
 
 
 def cache_path(source: str, query: str, limit: int) -> Path:

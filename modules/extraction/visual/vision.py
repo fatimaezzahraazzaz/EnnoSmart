@@ -24,6 +24,7 @@ from typing import Optional
 
 from PIL import Image
 from modules.extraction.visual.image import ProcessedImage, VisualType
+from modules.common.runtime_paths import cache_root
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ FIXED_SIZE    = 448
 VISION_TIMEOUT_SECONDS = 60
 MAX_IMAGES_PER_BATCH = 3
 
-CACHE_DIR = Path("data/vision_cache")
+CACHE_DIR = cache_root() / "vision"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Singletons — chargés une seule fois, jamais rechargés

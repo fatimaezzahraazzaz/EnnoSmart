@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import sys
 import uuid
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
@@ -22,10 +22,25 @@ def clean_path_segment(value: str) -> str:
 
 def project_output_dir(project: Project) -> Path:
     if project.ai_folder:
-        candidate = Path(project.ai_folder)
-        if candidate.is_absolute():
-            return candidate
-        return settings.ai_output_root_path / candidate
+        raw = str(project.ai_folder).strip()
+        candidate = Path(raw)
+        windows_candidate = PureWindowsPath(raw)
+
+        # Les anciennes bases peuvent contenir un chemin absolu Windows. Un tel
+        # chemin ne doit jamais contourner AI_OUTPUT_ROOT sur Linux/OVH, ni
+        # continuer a ecrire dans une ancienne copie du depot sous Windows.
+        if candidate.is_absolute() or windows_candidate.is_absolute():
+            parts = list(windows_candidate.parts)
+            lowered = [part.lower() for part in parts]
+            if "safe_rag_upload" in lowered:
+                marker = lowered.index("safe_rag_upload")
+                relative_parts = parts[marker + 1 :]
+                if relative_parts:
+                    return settings.ai_output_root_path.joinpath(*relative_parts)
+            candidate = Path()
+
+        if candidate.parts:
+            return settings.ai_output_root_path / candidate
 
     return (
         settings.ai_output_root_path

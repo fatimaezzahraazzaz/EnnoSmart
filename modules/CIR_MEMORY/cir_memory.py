@@ -25,14 +25,17 @@ from difflib import SequenceMatcher
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
-
-BASE_DIR = Path(
-    os.getenv("ENNOSMART_BASE_DIR")
-    or os.getenv("ENNOSMART_ROOT")
-    or Path(__file__).resolve().parents[2]
+from modules.common.runtime_paths import (
+    data_root,
+    experience_memory_root,
+    organism_memory_root,
+    outputs_root,
 )
-STORAGE_DIR = BASE_DIR / "storage" / "organismes"
-OUTPUTS_DIR = BASE_DIR / "outputs" / "safe_rag_upload"
+
+
+BASE_DIR = data_root()
+STORAGE_DIR = organism_memory_root()
+OUTPUTS_DIR = outputs_root()
 
 
 def _configured_experience_memory_v2_dir() -> Path:
@@ -56,7 +59,7 @@ def _configured_experience_memory_v2_dir() -> Path:
         except Exception:
             continue
 
-    return BASE_DIR / "storage" / "experience_memory_v2"
+    return experience_memory_root()
 
 
 EXPERIENCE_MEMORY_V2_DIR = Path(

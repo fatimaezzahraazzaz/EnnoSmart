@@ -20,12 +20,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from modules.common.runtime_paths import organism_memory_root
 
-ROOT_DIR = Path(
-    os.getenv("ENNOSMART_BASE_DIR")
-    or os.getenv("ENNOSMART_ROOT")
-    or Path(__file__).resolve().parents[3]
-)
+
+ROOT_DIR = organism_memory_root()
 
 
 # ============================================================
@@ -132,8 +130,6 @@ def _write_json(path: str | Path, data: Any) -> None:
 def style_memory_output_path(organisme: str, project: str, year: str) -> Path:
     return (
         ROOT_DIR
-        / "storage"
-        / "organismes"
         / fs_slug(organisme)
         / "projects"
         / fs_slug(project)

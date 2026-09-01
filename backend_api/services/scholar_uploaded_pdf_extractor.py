@@ -7,6 +7,8 @@ import re
 import unicodedata
 from datetime import datetime
 from pathlib import Path
+
+from modules.common.runtime_paths import storage_root
 from typing import Any, Dict, List, Optional
 
 from fastapi import UploadFile
@@ -53,8 +55,7 @@ def _json_dump(path: Path, data: Dict[str, Any]) -> None:
 
 
 def _project_ennoscholar_dir(project: Project) -> Path:
-    default_storage = Path(__file__).resolve().parents[2] / "storage"
-    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT") or default_storage)
+    root = storage_root()
     organisme = _slugify(getattr(project, "organisme", "") or "organisme")
     project_name = _slugify(getattr(project, "project_name", "") or "project")
     year = _slugify(getattr(project, "year", "") or "year")

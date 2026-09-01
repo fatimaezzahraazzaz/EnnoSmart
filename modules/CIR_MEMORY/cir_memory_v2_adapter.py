@@ -8,11 +8,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-ROOT_DIR = Path(
-    os.getenv("ENNOSMART_BASE_DIR")
-    or os.getenv("ENNOSMART_ROOT")
-    or Path(__file__).resolve().parents[2]
-)
+from modules.common.runtime_paths import code_root, organism_memory_root, outputs_root
+
+ROOT_DIR = code_root()
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -49,11 +47,11 @@ def write_json(path: Path, data: Any) -> None:
 
 
 def _current_nlp_path(organisme: str, project: str, year: str) -> Path:
-    return ROOT_DIR / "outputs" / "safe_rag_upload" / organisme / project / str(year) / "nlp_result.json"
+    return outputs_root() / organisme / project / str(year) / "nlp_result.json"
 
 
 def _comparison_path(organisme: str, project: str, year: str) -> Path:
-    return ROOT_DIR / "storage" / "organismes" / slug(organisme) / "projects" / slug(project) / "years" / str(year) / "cir_memory" / "memory_v2_continuity_report.json"
+    return organism_memory_root() / slug(organisme) / "projects" / slug(project) / "years" / str(year) / "cir_memory" / "memory_v2_continuity_report.json"
 
 
 def _safe_pack(pack: Any) -> Dict[str, List[Dict[str, Any]]]:

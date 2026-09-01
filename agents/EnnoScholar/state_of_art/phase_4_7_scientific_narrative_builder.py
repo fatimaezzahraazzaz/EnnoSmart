@@ -58,6 +58,7 @@ from ..contracts import (
     load_confirmed_contract,
     resolve_approved_plan,
 )
+from modules.common.runtime_paths import storage_root
 from ..storage_paths import (
     confirmed_verrous_path as default_confirmed_verrous_contract_path,
     consultant_plan_path as default_consultant_plan_contract_path,
@@ -249,14 +250,14 @@ def safe_ratio(num: int, den: int) -> float:
 # ============================================================
 
 def year_dir(organisme: str, project: str, year: str) -> Path:
-    storage_root = Path(os.getenv("ENNOSMART_STORAGE_ROOT", str(ROOT_DIR / "storage")))
+    persistent_storage = storage_root()
     org_raw = clean_text(organisme)
     project_raw = clean_text(project)
     candidates = [
-        storage_root / "organismes" / org_raw / "projects" / project_raw / "years" / str(year),
-        storage_root / "organismes" / fs_slug(org_raw) / "projects" / fs_slug(project_raw) / "years" / str(year),
-        storage_root / "organismes" / org_raw / "projects" / project_raw.replace("-", "_") / "years" / str(year),
-        storage_root / "organismes" / org_raw / "projects" / project_raw.replace("_", "-") / "years" / str(year),
+        persistent_storage / "organismes" / org_raw / "projects" / project_raw / "years" / str(year),
+        persistent_storage / "organismes" / fs_slug(org_raw) / "projects" / fs_slug(project_raw) / "years" / str(year),
+        persistent_storage / "organismes" / org_raw / "projects" / project_raw.replace("-", "_") / "years" / str(year),
+        persistent_storage / "organismes" / org_raw / "projects" / project_raw.replace("_", "-") / "years" / str(year),
     ]
     for p in candidates:
         if p.exists():

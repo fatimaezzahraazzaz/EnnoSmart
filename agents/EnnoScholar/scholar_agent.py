@@ -45,6 +45,8 @@ except Exception:
 
 from datetime import datetime
 from pathlib import Path
+
+from modules.common.runtime_paths import cache_root
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .arxiv_client import ArxivClient
@@ -353,7 +355,7 @@ def _cache_root_for_scholar() -> Path:
     root = os.getenv("ENNOSCHOLAR_CACHE_DIR")
     if root:
         return Path(root)
-    return Path.cwd() / "storage" / "ennoscholar_cache"
+    return cache_root() / "ennoscholar"
 
 
 def _stable_json_for_cache(obj: Any) -> str:

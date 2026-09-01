@@ -69,6 +69,7 @@ from core.deps import get_current_user, get_db
 from db.models import User
 from services.diagnostic_service import get_project_store
 from services.project_service import get_project_for_user
+from modules.common.runtime_paths import code_root, resolve_persisted_path, storage_root
 
 try:
     from db.models import Document  # type: ignore
@@ -83,12 +84,8 @@ except Exception:  # pragma: no cover
 
 router = APIRouter(tags=["source-preview"])
 
-PROJECT_ROOT = Path(
-    os.getenv("ENNOSMART_ROOT") or Path(__file__).resolve().parents[2]
-).resolve()
-STORAGE_ROOT = Path(
-    os.getenv("ENNOSMART_STORAGE_ROOT") or PROJECT_ROOT / "storage"
-).resolve()
+PROJECT_ROOT = code_root().resolve()
+STORAGE_ROOT = storage_root().resolve()
 PREVIEW_ROOT = STORAGE_ROOT / "previews" / "source_highlight"
 OFFICE_PDF_CACHE = PREVIEW_ROOT / "office_pdf"
 
@@ -351,11 +348,13 @@ def _safe_project_path(
 
     path = Path(value)
     project_store = get_project_store(project)
+    migrated = resolve_persisted_path(value)
 
     candidates = (
-        [path]
+        [candidate for candidate in (migrated, path) if candidate is not None]
         if path.is_absolute()
         else [
+            *([migrated] if migrated is not None else []),
             Path(project_store.project_dir) / path,
             Path(project_store.documents_raw_dir) / path,
             PROJECT_ROOT / path,

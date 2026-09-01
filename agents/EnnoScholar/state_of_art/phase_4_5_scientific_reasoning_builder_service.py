@@ -48,6 +48,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from modules.common.runtime_paths import organism_memory_root
+
 
 ROOT_DIR = Path(os.getenv("ENNOSMART_ROOT_DIR") or os.getenv("ENNOSMART_ROOT") or Path(__file__).resolve().parents[3])
 
@@ -713,9 +715,7 @@ def tokenize_for_overlap(text: Any) -> set:
 
 def state_of_art_payload_dir(organisme: str, project: str, year: str) -> Path:
     return (
-        ROOT_DIR
-        / "storage"
-        / "organismes"
+        organism_memory_root()
         / fs_slug(organisme)
         / "projects"
         / fs_slug(project)

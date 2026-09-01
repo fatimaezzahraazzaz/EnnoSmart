@@ -23,9 +23,10 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 from core.config import settings
+from modules.common.runtime_paths import code_root
 
 
-ROOT_DIR = Path(os.getenv("ENNOSMART_BASE_DIR", str(Path(__file__).resolve().parents[2])))
+ROOT_DIR = code_root()
 V2_ROOT = Path(
     settings.ENNOSMART_EXPERIENCE_MEMORY_V2_DIR
 )

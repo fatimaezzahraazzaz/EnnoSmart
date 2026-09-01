@@ -14,11 +14,9 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-ROOT_DIR = Path(
-    os.getenv("ENNOSMART_BASE_DIR")
-    or os.getenv("ENNOSMART_ROOT")
-    or Path(__file__).resolve().parents[2]
-)
+from modules.common.runtime_paths import code_root, experience_memory_root
+
+ROOT_DIR = code_root()
 try:
     from dotenv import load_dotenv
 
@@ -29,7 +27,7 @@ except Exception:
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-V2_ROOT = Path(os.getenv("ENNOSMART_EXPERIENCE_MEMORY_V2_DIR", str(ROOT_DIR / "storage" / "experience_memory_v2")))
+V2_ROOT = experience_memory_root()
 V2_CHROMA_DIR = V2_ROOT / "chroma"
 
 

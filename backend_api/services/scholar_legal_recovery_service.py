@@ -23,6 +23,8 @@ import time
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
+
+from modules.common.runtime_paths import storage_root
 from typing import Any, Dict, Iterable, List, Optional
 
 from sqlalchemy.orm import Session
@@ -70,8 +72,7 @@ def _slug(value: Any, max_len: int = 80) -> str:
 
 
 def _project_ennoscholar_dir(project: Project) -> Path:
-    default_storage = Path(__file__).resolve().parents[2] / "storage"
-    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT") or default_storage)
+    root = storage_root()
     return (
         root
         / "organismes" / _slug(getattr(project, "organisme", ""))

@@ -29,6 +29,8 @@ import re
 import unicodedata
 from datetime import date, datetime
 from pathlib import Path
+
+from modules.common.runtime_paths import storage_root
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
@@ -207,8 +209,7 @@ def _project_ennoscholar_dir(project: Project) -> Path:
 
     Par défaut, le stockage est résolu depuis la racine du dépôt.
     """
-    default_storage = Path(__file__).resolve().parents[2] / "storage"
-    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT") or default_storage)
+    root = storage_root()
 
     organisme = _slugify_path_segment(getattr(project, "organisme", None), "organisme")
     project_name = _slugify_path_segment(getattr(project, "project_name", None), "project")
@@ -596,8 +597,7 @@ def _candidate_ennodiagnostic_report_paths(project: Project) -> List[Path]:
     if explicit:
         paths.append(Path(explicit))
 
-    default_storage = Path(__file__).resolve().parents[2] / "storage"
-    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT") or default_storage)
+    root = storage_root()
 
     organismes = _path_variants(getattr(project, "organisme", None))
     projects = _path_variants(getattr(project, "project_name", None))
@@ -2392,7 +2392,7 @@ def build_state_of_art_selection_payload(
 
         # Sauvegarde Phase 1
     output_dir = (
-        Path(os.getenv("ENNOSMART_STORAGE_ROOT") or Path(__file__).resolve().parents[2] / "storage")
+        storage_root()
         / "organismes"
         / _slugify_path(project.organisme)
         / "projects"

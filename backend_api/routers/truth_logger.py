@@ -19,9 +19,9 @@ from typing import Any, Dict
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from modules.common.runtime_paths import logs_root
 
-ROOT = Path(os.environ.get("ENNOSMART_ROOT") or Path(__file__).resolve().parents[2])
-LOG_DIR = ROOT / "logs"
+LOG_DIR = logs_root()
 LOG_FILE = LOG_DIR / "truth_actions.log"
 
 router = APIRouter(prefix="/debug", tags=["debug-truth-log"])

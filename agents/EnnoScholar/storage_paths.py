@@ -8,6 +8,8 @@ import re
 import unicodedata
 from pathlib import Path
 
+from modules.common.runtime_paths import code_root, storage_root as runtime_storage_root
+
 
 def slug(value: object) -> str:
     text = unicodedata.normalize("NFKD", str(value or ""))
@@ -17,13 +19,12 @@ def slug(value: object) -> str:
 
 
 def root_dir() -> Path:
-    configured = os.getenv("ENNOSMART_ROOT_DIR") or os.getenv("ENNOSMART_ROOT")
-    return Path(configured or Path(__file__).resolve().parents[2])
+    configured = os.getenv("ENNOSMART_ROOT_DIR")
+    return Path(configured) if configured else code_root()
 
 
 def storage_root() -> Path:
-    configured = os.getenv("ENNOSMART_STORAGE_ROOT")
-    return Path(configured) if configured else root_dir() / "storage"
+    return runtime_storage_root()
 
 
 def project_root(organisme: str, project: str, year: str) -> Path:

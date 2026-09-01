@@ -34,10 +34,11 @@ from uuid import uuid4
 import zipfile
 
 from core.config import settings
+from modules.common.runtime_paths import audit_root, code_root
 
 
-ROOT_DIR = Path(__file__).resolve().parents[2]
-DEFAULT_AUDIT_ROOT = ROOT_DIR / "storage" / "power_automate_import"
+ROOT_DIR = code_root()
+DEFAULT_AUDIT_ROOT = audit_root()
 DEFAULT_FAKE_ROOT = ROOT_DIR / "tests" / "fixtures" / "fake_power_automate_inbox"
 DIRECT_EXTRACT_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 SUPPORTED_EXTENSIONS = DIRECT_EXTRACT_EXTENSIONS | {".doc"}

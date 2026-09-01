@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..contracts import ContractError, build_confirmed_contract
+from modules.common.runtime_paths import organism_memory_root
 
 ROOT_DIR = Path(os.getenv("ENNOSMART_ROOT_DIR") or os.getenv("ENNOSMART_ROOT") or Path(__file__).resolve().parents[3])
 
@@ -492,9 +493,7 @@ def build_evidence_extracts_for_next_phases(card: Dict[str, Any]) -> Dict[str, A
 
 def state_of_art_payload_dir(organisme: str, project: str, year: str) -> Path:
     return (
-        ROOT_DIR
-        / "storage"
-        / "organismes"
+        organism_memory_root()
         / fs_slug(organisme)
         / "projects"
         / fs_slug(project)

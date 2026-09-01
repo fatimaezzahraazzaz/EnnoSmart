@@ -32,6 +32,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from modules.common.runtime_paths import organism_memory_root
+
 
 # =========================================================
 # Constantes vocabulaire métier
@@ -77,11 +79,7 @@ def _resolve_ennosmart_year_root(
     n'existe encore, elle construit un chemin canonique à partir des valeurs
     reçues, sans règle propre à un organisme ou à un projet.
     """
-    root = Path(
-        os.getenv("ENNOSMART_ROOT")
-        or Path(__file__).resolve().parents[2]
-    )
-    storage = root / "storage" / "organismes"
+    storage = organism_memory_root()
     year_value = str(year)
 
     exact_project = (
@@ -5684,19 +5682,16 @@ class EnnoDiagnosticAgent:
                 current_year=self.year,
             )
 
-            root = Path(
-                os.getenv("ENNOSMART_ROOT")
-                or Path(__file__).resolve().parents[2]
-            )
+            storage_root = organism_memory_root()
             org_slug = str(self.organisme).strip().lower()
             project_slug = str(self.project).strip().lower()
             possible_local_memory_paths = [
                 self.out_dir / "cir_previous" / "cir_final_memory.json",
                 self.out_dir / "cir_final_consultant" / "current" / "cir_final_memory.json",
                 self.out_dir / "cir_memory" / "cir_final_memory.json",
-                root / "storage" / "organismes" / org_slug / "projects" / project_slug / "years" / self.year / "cir_previous" / "cir_final_memory.json",
-                root / "storage" / "organismes" / org_slug / "projects" / project_slug / "years" / self.year / "cir_final_consultant" / "current" / "cir_final_memory.json",
-                root / "storage" / "organismes" / org_slug / "projects" / project_slug / "years" / self.year / "cir_memory" / "cir_final_memory.json",
+                storage_root / org_slug / "projects" / project_slug / "years" / self.year / "cir_previous" / "cir_final_memory.json",
+                storage_root / org_slug / "projects" / project_slug / "years" / self.year / "cir_final_consultant" / "current" / "cir_final_memory.json",
+                storage_root / org_slug / "projects" / project_slug / "years" / self.year / "cir_memory" / "cir_final_memory.json",
             ]
 
             local_hash_parts: List[str] = []

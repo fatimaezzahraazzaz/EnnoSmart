@@ -48,6 +48,8 @@ import unicodedata
 from functools import lru_cache
 from datetime import datetime
 from pathlib import Path
+
+from modules.common.runtime_paths import storage_root
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
@@ -768,8 +770,7 @@ def enrich_card_with_scientific_entities(
     return card
 
 def _project_ennoscholar_dir(project: Project) -> Path:
-    default_storage = Path(__file__).resolve().parents[2] / "storage"
-    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT") or default_storage)
+    root = storage_root()
 
     organisme = _slugify(getattr(project, "organisme", "") or "organisme")
     project_name = _slugify(getattr(project, "project_name", "") or "project")

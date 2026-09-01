@@ -4,6 +4,17 @@ from typing import List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from modules.common.runtime_paths import (
+    audit_root,
+    code_root,
+    data_root,
+    experience_memory_root,
+    organism_memory_root,
+    outputs_root,
+    storage_root,
+    uploads_root,
+)
+
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = BACKEND_DIR.parent
@@ -39,8 +50,11 @@ class Settings(BaseSettings):
     SESSION_LOCK_TTL_SECONDS: int = 3900
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
-    UPLOAD_ROOT: str = str(PROJECT_ROOT / "storage" / "uploads")
-    AI_OUTPUT_ROOT: str = str(PROJECT_ROOT / "outputs" / "safe_rag_upload")
+    ENNOSMART_ROOT: str = str(code_root())
+    ENNOSMART_DATA_ROOT: str = str(data_root())
+    ENNOSMART_STORAGE_ROOT: str = str(storage_root())
+    UPLOAD_ROOT: str = str(uploads_root())
+    AI_OUTPUT_ROOT: str = str(outputs_root())
 
     MAX_UPLOAD_SIZE_MB: int = 50
     ALLOWED_EXTENSIONS: str = ".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.txt,.png,.jpg,.jpeg,.msg"
@@ -52,13 +66,9 @@ class Settings(BaseSettings):
     # Bibliothèque professionnelle synchronisée, parcourue strictement en lecture seule.
     POWER_AUTOMATE_IMPORT_ROOT: str = ""
     POWER_AUTOMATE_FAKE_ROOT: str = ""
-    POWER_AUTOMATE_AUDIT_ROOT: str = str(
-        PROJECT_ROOT / "storage" / "power_automate_import"
-    )
-    ENNOSMART_EXPERIENCE_MEMORY_V2_DIR: str = str(
-        PROJECT_ROOT / "storage" / "experience_memory_v2"
-    )
-    ENNOSMART_MEMORY_V2_ROOT: str = str(PROJECT_ROOT / "storage" / "organismes")
+    POWER_AUTOMATE_AUDIT_ROOT: str = str(audit_root())
+    ENNOSMART_EXPERIENCE_MEMORY_V2_DIR: str = str(experience_memory_root())
+    ENNOSMART_MEMORY_V2_ROOT: str = str(organism_memory_root())
     POWER_AUTOMATE_MAX_FILE_MB: int = 100
     # Optionnel : requis uniquement pour convertir les anciens Word .doc.
     # La conversion est exécutée sur une copie locale placée dans l'audit root.

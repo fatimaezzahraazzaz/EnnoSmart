@@ -33,6 +33,8 @@ import time
 import unicodedata
 from datetime import datetime
 from pathlib import Path
+
+from modules.common.runtime_paths import storage_root
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 from services.http_client import GLOBAL_FETCHER
@@ -111,8 +113,7 @@ def _json_read(path: Path) -> Optional[Dict[str, Any]]:
 
 
 def _project_ennoscholar_dir(project: Project) -> Path:
-    default_storage = Path(__file__).resolve().parents[2] / "storage"
-    root = Path(os.getenv("ENNOSMART_STORAGE_ROOT") or default_storage)
+    root = storage_root()
 
     organisme = _slugify(getattr(project, "organisme", "") or "organisme")
     project_name = _slugify(getattr(project, "project_name", "") or "project")
