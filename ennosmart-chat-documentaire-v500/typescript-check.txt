@@ -1,9 +1,0 @@
-../../mnt/data/ennosmart-chat-documentaire-v500/frontend/components/ennosmart/diagnostic-rag-chat.tsx(9,8): error TS2307: Cannot find module 'react' or its corresponding type declarations.
-../../mnt/data/ennosmart-chat-documentaire-v500/frontend/components/ennosmart/diagnostic-rag-chat.tsx(34,8): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
-../../mnt/data/ennosmart-chat-documentaire-v500/frontend/components/ennosmart/diagnostic-rag-chat.tsx(36,23): error TS2307: Cannot find module '@/components/ui/badge' or its corresponding type declarations.
-../../mnt/data/ennosmart-chat-documentaire-v500/frontend/components/ennosmart/diagnostic-rag-chat.tsx(37,24): error TS2307: Cannot find module '@/components/ui/button' or its corresponding type declarations.
-../../mnt/data/ennosmart-chat-documentaire-v500/frontend/components/ennosmart/diagnostic-rag-chat.tsx(38,26): error TS2307: Cannot find module '@/components/ui/textarea' or its corresponding type declarations.
-../../mnt/data/ennosmart-chat-documentaire-v500/frontend/components/ennosmart/diagnostic-rag-chat.tsx(39,32): error TS2307: Cannot find module '@/lib/api' or its corresponding type declarations.
-../../mnt/data/ennosmart-chat-documentaire-v500/frontend/components/ennosmart/diagnostic-rag-chat.tsx(43,8): error TS2307: Cannot find module '@/components/ennosmart/source-documents-dialog' or its corresponding type declarations.
-../../mnt/data/ennosmart-chat-documentaire-v500/frontend/components/ennosmart/diagnostic-rag-chat.tsx(46,3): error TS2580: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.
-../../mnt/data/ennosmart-chat-documentaire-v500/frontend/components/ennosmart/diagnostic-rag-chat.tsx(777,5): error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.

@@ -215,6 +215,8 @@ modules/llm_gateway/
 
 # Local EnnoScholar patches / installers / backups
 /EnnoScholar_V*/
+/ennoscholar_quality_restored_v1/
+/ennoscholar_strict_section_claim_mapping_v2/
 /backup_*/
 /_patch_backups/
 /.ennoscholar_*_backup.txt

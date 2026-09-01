@@ -72,6 +72,8 @@ models/fastjudge/*
 
 EnnoDiagnostic_*_fix_*/
 EnnoScholar_V*/
+ennoscholar_quality_restored_v1/
+ennoscholar_strict_section_claim_mapping_v2/
 EnnoAmelioration_*/
 ennosmart-*-v*/
 _patch*/
