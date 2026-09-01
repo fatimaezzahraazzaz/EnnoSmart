@@ -44,6 +44,7 @@ import {
   createGuidedResearchSession,
   deleteGuidedResearchSession,
   decideGuidedResearchSources,
+  exportStateOfArtDocx,
   getGuidedResearchCorpus,
   getGuidedResearchSession,
   getStateOfArtVisualBlob,
@@ -1276,6 +1277,7 @@ export function EnnoScholarPlanChat({
   const [deletingSessionId, setDeletingSessionId] = useState("")
   const [operatingMode, setOperatingMode] = useState("")
   const [sessionDraftMarkdown, setSessionDraftMarkdown] = useState("")
+  const [exportingDocx, setExportingDocx] = useState(false)
   const previousHasDraft = useRef(false)
   const messagesViewportRef = useRef<HTMLDivElement | null>(null)
 
@@ -1290,6 +1292,40 @@ export function EnnoScholarPlanChat({
     () => (effectiveDraftMarkdown.match(/\b[\p{L}\p{N}'’-]+\b/gu) || []).length,
     [effectiveDraftMarkdown],
   )
+
+  async function downloadDraftDocx() {
+    if (!effectiveDraftMarkdown.trim() || exportingDocx) return
+    setExportingDocx(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const title = `État de l’art — ${projectLabel}`
+      const blob = await exportStateOfArtDocx(
+        projectId,
+        effectiveDraftMarkdown,
+        title,
+      )
+      const objectUrl = URL.createObjectURL(blob)
+      const safeProject = projectLabel
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^A-Za-z0-9_-]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 80) || "projet"
+      const anchor = document.createElement("a")
+      anchor.href = objectUrl
+      anchor.download = `etat_de_l_art_${safeProject}.docx`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000)
+      setNotice("Document Word téléchargé avec les figures de l’aperçu.")
+    } catch (err: any) {
+      setError(err?.message || "Impossible de générer le document Word.")
+    } finally {
+      setExportingDocx(false)
+    }
+  }
 
   useEffect(() => {
     if (
@@ -2099,6 +2135,25 @@ export function EnnoScholarPlanChat({
                 </p>
               </div>
               <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="min-h-10 rounded-lg px-3"
+                  disabled={!hasDraft || exportingDocx}
+                  onClick={() => void downloadDraftDocx()}
+                  aria-label="Télécharger l’état de l’art au format Word"
+                  aria-busy={exportingDocx}
+                  title="Télécharger en Word (.docx)"
+                >
+                  {exportingDocx ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Download className="size-4" aria-hidden="true" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {exportingDocx ? "Préparation…" : "Word"}
+                  </span>
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"

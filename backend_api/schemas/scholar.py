@@ -21,6 +21,11 @@ class ArticleDecisionRequest(BaseModel):
     )
 
 
+class StateOfArtDocxExportRequest(BaseModel):
+    markdown: str = Field(min_length=1, max_length=2_000_000)
+    title: str | None = Field(default=None, max_length=240)
+
+
 class ArticleRead(BaseModel):
     id: int
     scholar_run_id: int

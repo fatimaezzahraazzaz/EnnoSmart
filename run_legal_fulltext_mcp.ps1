@@ -10,7 +10,8 @@ $ServerRoot = Join-Path $EnnoSmartRoot "mcp_servers\legal_fulltext_mcp"
 $PythonCandidates = @(
     (Join-Path $EnnoSmartRoot ".venv-mcp\Scripts\python.exe"),
     (Join-Path $ServerRoot ".venv_mcp\Scripts\python.exe"),
-    (Join-Path $EnnoSmartRoot ".venv_py314\Scripts\python.exe")
+    (Join-Path $EnnoSmartRoot ".venv_py314\Scripts\python.exe"),
+    (Join-Path $EnnoSmartRoot ".venv\Scripts\python.exe")
 )
 $Python = $PythonCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 

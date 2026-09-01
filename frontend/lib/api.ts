@@ -434,22 +434,26 @@ async function apiRequest<T>(
   return data as T
 }
 
-async function apiBlobRequest(path: string): Promise<Blob> {
-  const headers = new Headers()
+async function apiBlobRequest(
+  path: string,
+  init: RequestInit = {},
+  fallbackMessage = "Impossible de télécharger le fichier.",
+): Promise<Blob> {
+  const headers = new Headers(init.headers)
   const token = getAccessToken()
   if (!token) throw new Error("Utilisateur non authentifié.")
   headers.set("Authorization", `Bearer ${token}`)
 
-  let response = await fetch(`${API_BASE_URL}${path}`, { headers })
+  let response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers })
   if (response.status === 401) {
     const renewedAccessToken = await renewAccessToken()
     if (renewedAccessToken) {
       headers.set("Authorization", `Bearer ${renewedAccessToken}`)
-      response = await fetch(`${API_BASE_URL}${path}`, { headers })
+      response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers })
     }
   }
   if (!response.ok) {
-    let detail = "Impossible d’ouvrir le PDF importé."
+    let detail = fallbackMessage
     try {
       const payload = await response.json()
       if (typeof payload?.detail === "string") detail = payload.detail
@@ -1064,6 +1068,22 @@ export async function getStateOfArtVisualBlob(
 ) {
   return apiBlobRequest(
     `/projects/${projectId}/scholar/state-of-art/visuals/${encodeURIComponent(visualId)}`,
+  )
+}
+
+export async function exportStateOfArtDocx(
+  projectId: number,
+  markdown: string,
+  title?: string,
+) {
+  return apiBlobRequest(
+    `/projects/${projectId}/scholar/state-of-art/export-docx`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markdown, title }),
+    },
+    "Impossible de générer le document Word.",
   )
 }
 

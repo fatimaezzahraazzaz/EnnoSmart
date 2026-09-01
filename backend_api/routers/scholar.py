@@ -4,6 +4,7 @@ from __future__ import annotations
 # ENNOSCHOLAR_V169_1_PROJECT_PERSISTENT_CORPUS
 
 import importlib.util
+import io
 import os
 import re
 import sys
@@ -11,13 +12,18 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 
 from core.deps import get_current_user, get_db, require_agent_enabled
 from db.models import Article, DiagnosticRun, ScholarRun, User, Verrou
-from schemas.scholar import ArticleDecisionRequest, ArticleRead, ScholarRead
+from schemas.scholar import (
+    ArticleDecisionRequest,
+    ArticleRead,
+    ScholarRead,
+    StateOfArtDocxExportRequest,
+)
 from services.project_service import get_project_for_user
 from services.consultant_verrou_service import (
     get_latest_diagnostic_verrous as get_current_and_manual_verrous,
@@ -1438,6 +1444,60 @@ def get_state_of_art_visual(
         media_type=media_types.get(path.suffix.casefold(), "application/octet-stream"),
         filename=path.name,
         content_disposition_type="inline",
+    )
+
+
+@router.post("/projects/{project_id}/scholar/state-of-art/export-docx")
+def export_state_of_art_docx(
+    project_id: int,
+    payload: StateOfArtDocxExportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Exporte l’aperçu courant en DOCX sans écrire de sortie dans le projet."""
+
+    project = get_project_for_user(db, project_id, current_user)
+    from services.scholar_visual_evidence_service import resolve_visual_asset
+    from services.state_of_art_docx_export_service import (
+        DOCX_MEDIA_TYPE,
+        StateOfArtDocxExportError,
+        build_state_of_art_docx,
+    )
+
+    title = str(payload.title or "").strip() or (
+        f"État de l’art — {project.project_name} — {project.year}"
+    )
+    try:
+        content, _stats = build_state_of_art_docx(
+            markdown=payload.markdown,
+            title=title,
+            resolve_visual=lambda visual_id: resolve_visual_asset(
+                project, visual_id
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except StateOfArtDocxExportError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    safe_project = re.sub(
+        r"[^A-Za-z0-9_-]+", "_", str(project.project_name or "projet")
+    ).strip("_")[:80] or "projet"
+    safe_year = re.sub(
+        r"[^A-Za-z0-9_-]+", "_", str(project.year or "")
+    ).strip("_")[:20]
+    filename = "_".join(
+        part for part in ("etat_de_l_art", safe_project, safe_year) if part
+    ) + ".docx"
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=DOCX_MEDIA_TYPE,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-EnnoSmart-Embedded-Visuals": str(_stats["embedded_visuals"]),
+        },
     )
 
 @router.get("/projects/{project_id}/scholar/fulltext/status")
