@@ -20,6 +20,55 @@ Le vrai fichier `.env` ne doit jamais être ajouté à Git. Le déployeur copie
 `.env.example` vers `.env`, puis renseigne les secrets reçus séparément
 (gestionnaire de mots de passe, téléphone ou message chiffré).
 
+## Prérequis et dépendances
+
+### Installation recommandée : Docker
+
+Sur OVH, il suffit d'installer sur l'hôte :
+
+- Git ;
+- Docker Engine ;
+- le plugin Docker Compose.
+
+Il ne faut pas installer Python, Node.js, PostgreSQL, Redis, GROBID, Tesseract
+ou LibreOffice manuellement sur l'hôte. La construction Docker s'en charge :
+
+- `requirements.txt` contient les dépendances Python de production de l'API,
+  des agents, des workers, du serveur MCP, de Chroma et des traitements NLP ;
+- `deploy/ovh/Dockerfile.backend` utilise Python 3.12 et installe aussi les
+  paquets système nécessaires : Java, FFmpeg, LibreOffice, Poppler, Tesseract
+  français/anglais, PostgreSQL client, Cairo, polices et bibliothèques images ;
+- `frontend/package-lock.json` verrouille les dépendances du frontend ;
+  `deploy/ovh/Dockerfile.frontend` utilise Node.js 22 et exécute `npm ci` ;
+- `docker-compose.ovh.yml` démarre PostgreSQL 17, Redis 7 et GROBID, puis l'API,
+  les deux workers, le serveur MCP et le frontend.
+
+`requirements-optional.txt` contient uniquement les fonctions lourdes non
+nécessaires au fonctionnement normal : OCR Surya, OCR de formules Pix2Tex,
+diarisation WhisperX, vision Qwen et outils historiques. Ne pas l'installer sur
+le serveur sauf si l'une de ces fonctions est explicitement activée et que les
+ressources CPU/GPU correspondantes sont disponibles.
+
+### Installation manuelle sur Windows
+
+Docker Desktop reste la méthode la plus fiable. Pour une installation Python
+manuelle, utiliser impérativement Python 3.12 et recréer l'environnement :
+
+```powershell
+cd C:\EnnoSmart
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -r requirements.txt
+
+cd frontend
+npm ci
+```
+
+Cette variante exige aussi Node.js 22, PostgreSQL 17, Redis 7, Tesseract avec
+les langues française et anglaise, Poppler, LibreOffice, FFmpeg et Java. Pour
+éviter ces installations séparées, utiliser les fichiers Docker fournis.
+
 ## Installation OVH en bref
 
 Sur le serveur Linux, après installation de Git et Docker :
