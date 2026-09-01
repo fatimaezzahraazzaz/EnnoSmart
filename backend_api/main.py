@@ -3,6 +3,19 @@ from __future__ import annotations
 
 # Chargement explicite des DLL FFmpeg sous Windows avant TorchCodec.
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+_BACKEND_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _BACKEND_DIR.parent
+
+# Plusieurs modules historiques lisent encore directement ``os.getenv`` au
+# moment de leur import. Charger le .env ici garantit que LibreOffice et les
+# délais de conversion sont disponibles avant l'import des routeurs.
+load_dotenv(_PROJECT_ROOT / ".env", override=False)
+load_dotenv(_BACKEND_DIR / ".env", override=False)
 
 _FFMPEG_DLL_DIR_HANDLE = None
 

@@ -72,6 +72,37 @@ cd frontend
 npm ci
 ```
 
+Installer LibreOffice dans son emplacement Windows standard, puis copier le
+modèle local et renseigner les clés nécessaires :
+
+```powershell
+cd C:\EnnoSmart
+Copy-Item .env.windows.example .env
+notepad .env
+```
+
+Le modèle contient déjà :
+
+```dotenv
+LIBREOFFICE_BIN=C:/Program Files/LibreOffice/program/soffice.com
+ENNOSMART_OFFICE_CONVERT_TIMEOUT=420
+ENNOSMART_WORD_CONVERT_TIMEOUT=240
+```
+
+Le backend charge automatiquement le `.env`. Pour le démarrer sur le port
+local 8002, une seule commande suffit :
+
+```powershell
+cd C:\EnnoSmart
+.\run_backend.ps1 -Port 8002
+```
+
+La commande équivalente sans le script est :
+
+```powershell
+python -m uvicorn main:app --app-dir C:\EnnoSmart\backend_api --host 127.0.0.1 --port 8002
+```
+
 Cette variante exige aussi Node.js 22, PostgreSQL 17, Redis 7, Tesseract avec
 les langues française et anglaise, Poppler, LibreOffice, FFmpeg et Java. Pour
 éviter ces installations séparées, utiliser les fichiers Docker fournis.
