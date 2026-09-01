@@ -1,12 +1,15 @@
 $ErrorActionPreference = "Stop"
-Set-Location C:\EnnoSmart
+$projectRoot = $PSScriptRoot
+Set-Location $projectRoot
 
 docker compose `
-  -f .\docker-compose.cir-workers.yml `
+  -f .\docker-compose.ovh.yml `
+  -f .\docker-compose.windows.yml `
   up -d redis
 
 docker compose `
-  -f .\docker-compose.cir-workers.yml `
+  -f .\docker-compose.ovh.yml `
+  -f .\docker-compose.windows.yml `
   ps
 
 Write-Host ""

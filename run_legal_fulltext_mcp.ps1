@@ -1,8 +1,11 @@
 param(
-    [string]$EnnoSmartRoot = "C:\EnnoSmart"
+    [string]$EnnoSmartRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
+if (-not $EnnoSmartRoot) {
+    $EnnoSmartRoot = $PSScriptRoot
+}
 $ServerRoot = Join-Path $EnnoSmartRoot "mcp_servers\legal_fulltext_mcp"
 $PythonCandidates = @(
     (Join-Path $EnnoSmartRoot ".venv-mcp\Scripts\python.exe"),

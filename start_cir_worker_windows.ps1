@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
+$projectRoot = $PSScriptRoot
 
-$env:PYTHONPATH = "C:\EnnoSmart;C:\EnnoSmart\backend_api"
+$env:PYTHONPATH = "$projectRoot;$projectRoot\backend_api"
 
 # Le .env principal conserve le broker historique d'EnnoScholar sur Redis /0.
 # Ce processus est dédié au CIR : on verrouille donc explicitement son broker
@@ -19,9 +20,13 @@ $workerConcurrency = if ($env:ENNOSMART_CIR_WORKER_CONCURRENCY) {
 Write-Host "[EnnoSmart] Celery worker CIR - Windows DEV / pool=threads / concurrency=$workerConcurrency"
 Write-Host "[EnnoSmart] Queue = ennosmart.cir"
 
-$pythonExe = "C:\EnnoSmart\.venv_py314\Scripts\python.exe"
-if (-not (Test-Path -LiteralPath $pythonExe)) {
-    throw "Interpréteur Python du projet introuvable : $pythonExe"
+$pythonCandidates = @(
+    (Join-Path $projectRoot ".venv_py314\Scripts\python.exe"),
+    (Join-Path $projectRoot ".venv\Scripts\python.exe")
+)
+$pythonExe = $pythonCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (-not $pythonExe) {
+    throw "Interpréteur Python du projet introuvable. Chemins verifies : $($pythonCandidates -join ', ')"
 }
 
 & $pythonExe -m celery `

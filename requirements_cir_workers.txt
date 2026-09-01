@@ -1,2 +1,0 @@
-# Source canonique unique pour le clone de production.
--r requirements.txt
