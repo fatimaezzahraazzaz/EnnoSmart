@@ -12,13 +12,20 @@ un canal séparé :
 1. le lien de ce dépôt GitHub privé ;
 2. un lien privé OneDrive ou OVH Object Storage vers un dossier contenant :
    - `ennosmart.dump` : base PostgreSQL propre de déploiement ;
-   - `ennosmart-data.tgz` : données d'exécution actives, notamment les sources,
-     JSON NLP, chunks, mémoires et répertoires Chroma complets ;
+   - `ennosmart-data.tgz` : mémoire CIR globale uniquement, avec sa collection
+     Chroma et les index JSON indispensables à la recherche des CIR précédents ;
    - `SHA256SUMS.txt` : empreintes des deux fichiers.
 
 Le vrai fichier `.env` ne doit jamais être ajouté à Git. Le déployeur copie
 `.env.example` vers `.env`, puis renseigne les secrets reçus séparément
 (gestionnaire de mots de passe, téléphone ou message chiffré).
+
+Le paquet de déploiement propre ne contient aucun projet, document importé,
+résultat NLP, extraction ou sortie d'agent provenant du développement. La base
+applicative démarre vide, avec uniquement les deux utilisateurs initiaux. Les
+fichiers `chunks`, `cards`, `runs`, `relations` et `catalog_v2.json` présents
+dans l'archive sont des index internes de la mémoire CIR globale ; ils ne créent
+pas de projets dans l'interface.
 
 ## Prérequis et dépendances
 
@@ -110,10 +117,10 @@ Changer immédiatement les mots de passe initiaux des comptes administrateurs.
 
 ## Installation sur un autre PC Windows
 
-Le clone Git seul lance une application vide. Pour retrouver le corpus et
-Chroma, il faut aussi extraire `ennosmart-data.tgz` dans
-`C:\EnnoSmartData`, puis restaurer `ennosmart.dump` comme expliqué dans le
-guide complet.
+Le clone Git seul lance une application vide sans mémoire CIR. Pour conserver
+uniquement cette mémoire globale, il faut aussi extraire
+`ennosmart-data.tgz` dans `C:\EnnoSmartData`, puis restaurer
+`ennosmart.dump` comme expliqué dans le guide complet.
 
 La procédure détaillée, les prérequis, les permissions du volume persistant,
 la sauvegarde et la restauration sont dans
