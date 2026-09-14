@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-import chromadb
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -12,6 +11,7 @@ from starlette.concurrency import run_in_threadpool
 from core.deps import get_current_user, get_db
 from db.models import DiagnosticRun, User
 from modules.RAG.diagnostic_chat_service import DiagnosticRAGChatService
+from modules.RAG.chroma_client import chroma_connection_info, create_chroma_client
 from modules.RAG.project_store import ProjectStore
 from services.project_service import get_project_for_user
 
@@ -69,7 +69,7 @@ def _project_collection_status(project: Any) -> Dict[str, Any]:
     collection_name = store.collection_name
 
     try:
-        client = chromadb.PersistentClient(path=str(store.chroma_dir))
+        client = create_chroma_client(store.chroma_dir)
         collection = client.get_collection(collection_name)
         chunks_count = int(collection.count())
     except Exception:
@@ -78,6 +78,7 @@ def _project_collection_status(project: Any) -> Dict[str, Any]:
     return {
         "collection_name": collection_name,
         "chroma_dir": str(store.chroma_dir),
+        "chroma_connection": chroma_connection_info(store.chroma_dir),
         "chunks_count": chunks_count,
     }
 
@@ -169,17 +170,27 @@ async def diagnostic_chat_message(
     )
 
     try:
-        result = await run_in_threadpool(
-            service.answer,
-            question=request.message,
-            history=[item.model_dump() for item in request.history],
-            diagnostic_payload=diagnostic_payload,
-            document_scope=(
-                request.document_scope.model_dump()
-                if request.document_scope is not None
-                else None
-            ),
-        )
+        from services.project_artifact_service import materialized_json_artifact
+
+        with materialized_json_artifact(
+            db,
+            project.id,
+            "nlp/nlp_result.json",
+            service.store.nlp_dir / "nlp_result.json",
+            artifact_kind="nlp_result",
+            required=False,
+        ):
+            result = await run_in_threadpool(
+                service.answer,
+                question=request.message,
+                history=[item.model_dump() for item in request.history],
+                diagnostic_payload=diagnostic_payload,
+                document_scope=(
+                    request.document_scope.model_dump()
+                    if request.document_scope is not None
+                    else None
+                ),
+            )
         return result
 
     except ValueError as exc:

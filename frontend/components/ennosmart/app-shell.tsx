@@ -52,10 +52,13 @@ import CirMemoryPage from "@/components/ennosmart/cir-memory-page"
 import type { UserRead } from "@/lib/api"
 
 import {
+  AGENT_AVAILABILITY_CHANGE_EVENT,
+  getAgentAvailability,
   getProjectAccessNotifications,
   getProjects,
   markProjectAccessSeen,
   respondToProjectAccess,
+  type AgentAvailability,
   type ProjectAccessNotifications,
   type ProjectRead,
 } from "@/lib/api"
@@ -182,8 +185,30 @@ const baseNavItems = [
 ]
 
 
-function navigationForRole(role: string) {
-  const items = [...baseNavItems]
+export const DEFAULT_AGENT_AVAILABILITY: AgentAvailability = {
+  diagnostic: true,
+  scholar: true,
+  improvement: true,
+  cir_memory: true,
+}
+
+
+const agentKeyForPage: Partial<Record<AppPage, keyof AgentAvailability>> = {
+  diagnosis: "diagnostic",
+  scholar: "scholar",
+  improvement: "improvement",
+  "cir-memory": "cir_memory",
+}
+
+
+function isAgentPageEnabled(page: AppPage, enabledAgents: AgentAvailability) {
+  const key = agentKeyForPage[page]
+  return !key || enabledAgents[key] !== false
+}
+
+
+function navigationForRole(role: string, enabledAgents: AgentAvailability) {
+  const items = baseNavItems.filter((item) => isAgentPageEnabled(item.id, enabledAgents))
 
   if (
     role === "admin" ||
@@ -196,13 +221,15 @@ function navigationForRole(role: string) {
     })
   }
 
-  if (role === "superadmin") {
+  if (role === "superadmin" && enabledAgents.cir_memory !== false) {
     items.push({
       id: "cir-memory" as AppPage,
       label: "CIR Memory",
       icon: Database,
     })
+  }
 
+  if (role === "superadmin") {
     items.push({
       id: "system-settings" as AppPage,
       label: "Modèles & système",
@@ -315,6 +342,12 @@ export default function AppShell({
 
 
   const [
+    enabledAgents,
+    setEnabledAgents,
+  ] = useState<AgentAvailability>(DEFAULT_AGENT_AVAILABILITY)
+
+
+  const [
     sidebarOpen,
     setSidebarOpen,
   ] =
@@ -395,9 +428,45 @@ export default function AppShell({
   const navItems =
     useMemo(
       () =>
-        navigationForRole(user.role),
-      [user.role],
+        navigationForRole(user.role, enabledAgents),
+      [enabledAgents, user.role],
     )
+
+
+  useEffect(() => {
+    let active = true
+
+    const applyAvailability = (value: Partial<AgentAvailability> | null | undefined) => {
+      if (!active) return
+      setEnabledAgents({ ...DEFAULT_AGENT_AVAILABILITY, ...(value || {}) })
+    }
+
+    void getAgentAvailability()
+      .then(applyAvailability)
+      .catch(() => {
+        // Le backend protège aussi chaque route ; une panne de lecture ne bloque pas le shell.
+      })
+
+    const handleAvailabilityChange = (event: Event) => {
+      const detail = (event as CustomEvent<Partial<AgentAvailability>>).detail
+      applyAvailability(detail)
+    }
+
+    window.addEventListener(AGENT_AVAILABILITY_CHANGE_EVENT, handleAvailabilityChange)
+
+    return () => {
+      active = false
+      window.removeEventListener(AGENT_AVAILABILITY_CHANGE_EVENT, handleAvailabilityChange)
+    }
+  }, [])
+
+
+  useEffect(() => {
+    if (!isAgentPageEnabled(activePage, enabledAgents)) {
+      setActivePage("dashboard")
+      setScholarImmersive(false)
+    }
+  }, [activePage, enabledAgents])
 
 
   const refreshAccessNotifications = useCallback(async () => {
@@ -671,6 +740,13 @@ export default function AppShell({
       options?: NavigateOptions,
     ) => {
 
+      if (!isAgentPageEnabled(page, enabledAgents)) {
+        setActivePage("dashboard")
+        setScholarImmersive(false)
+        setSidebarOpen(false)
+        return
+      }
+
       if (
         page === "new-project"
       ) {
@@ -732,6 +808,7 @@ export default function AppShell({
         return (
           <ProjectDetailPage
             navigateTo={navigateTo}
+            enabledAgents={enabledAgents}
           />
         )
 
@@ -741,6 +818,7 @@ export default function AppShell({
         return (
           <NewProjectPage
             navigateTo={navigateTo}
+            enabledAgents={enabledAgents}
             preset={
               newProjectPreset
             }
@@ -756,35 +834,36 @@ export default function AppShell({
         return (
           <UploadPage
             navigateTo={navigateTo}
+            enabledAgents={enabledAgents}
           />
         )
 
 
       case "diagnosis":
 
-        return (
+        return enabledAgents.diagnostic !== false ? (
           <DiagnosisPage
             onOpenScholar={() =>
               navigateTo("scholar")
             }
           />
-        )
+        ) : null
 
 
       case "scholar":
 
-        return (
+        return enabledAgents.scholar !== false ? (
           <EnnoScholarPage
             onImmersiveModeChange={
               handleScholarImmersiveMode
             }
           />
-        )
+        ) : null
 
 
       case "improvement":
 
-        return (
+        return enabledAgents.improvement !== false ? (
           <EnnoAmeliorationPage
             onImmersiveModeChange={
               handleScholarImmersiveMode
@@ -799,7 +878,7 @@ export default function AppShell({
               )
             }
           />
-        )
+        ) : null
 
 
       case "profile":
@@ -838,7 +917,7 @@ export default function AppShell({
       case "cir-memory":
 
         return (
-          user.role === "superadmin"
+          user.role === "superadmin" && enabledAgents.cir_memory !== false
         )
           ? (
             <CirMemoryPage />

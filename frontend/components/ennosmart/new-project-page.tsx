@@ -46,6 +46,7 @@ import {
   getProjectCatalog,
   requestProjectAccess,
   uploadDocument,
+  type AgentAvailability,
   type ProjectCatalog,
   type ProjectSelectionStatus,
 } from "@/lib/api"
@@ -53,6 +54,7 @@ import { setCurrentProjectId } from "@/lib/project-session"
 
 interface NewProjectPageProps {
   navigateTo: (page: AppPage, options?: NavigateOptions) => void
+  enabledAgents?: AgentAvailability
   preset?: NewProjectPreset | null
   returnTo?: AppPage | null
 }
@@ -261,6 +263,12 @@ async function transcribeMediaToPdf(projectId: number, file: File) {
 
 export default function NewProjectPage({
   navigateTo,
+  enabledAgents = {
+    diagnostic: true,
+    scholar: true,
+    improvement: true,
+    cir_memory: true,
+  },
   preset = null,
   returnTo = null,
 }: NewProjectPageProps) {
@@ -298,6 +306,24 @@ export default function NewProjectPage({
 
   const rawFileInputRef = useRef<HTMLInputElement>(null)
   const pdfUrlsRef = useRef<string[]>([])
+
+  const requestedReturnIsEnabled =
+    (returnTo === "diagnosis" && enabledAgents.diagnostic !== false) ||
+    (returnTo === "scholar" && enabledAgents.scholar !== false) ||
+    (returnTo === "improvement" && enabledAgents.improvement !== false) ||
+    (returnTo !== "diagnosis" && returnTo !== "scholar" && returnTo !== "improvement")
+  const postCreationDestination: AppPage =
+    returnTo && requestedReturnIsEnabled
+      ? returnTo
+      : enabledAgents.diagnostic !== false
+        ? "diagnosis"
+        : "project-detail"
+  const postCreationLabel =
+    postCreationDestination === "improvement"
+      ? "Ouvrir EnnoAmelioration"
+      : postCreationDestination === "diagnosis"
+        ? "Ouvrir EnnoDiagnostic"
+        : "Ouvrir le dossier"
 
   useEffect(() => {
     setOrganismeChoice(presetOrganisme || "")
@@ -528,7 +554,7 @@ export default function NewProjectPage({
   const openExistingProject = () => {
     if (!selectionStatus?.project_id) return
     setCurrentProjectId(selectionStatus.project_id)
-    navigateTo(returnTo || "diagnosis")
+    navigateTo(postCreationDestination)
   }
 
   const handleRequestAccess = async () => {
@@ -774,7 +800,7 @@ export default function NewProjectPage({
         }
 
         // Aucun média : comportement historique, redirection directe.
-        navigateTo(returnTo || "diagnosis")
+        navigateTo(postCreationDestination)
         return
       }
 
@@ -792,7 +818,7 @@ export default function NewProjectPage({
       }
 
       setSuccess(
-        `Dossier créé. ${details.join(", ")}. Téléchargez les PDF ci-dessous avant d’ouvrir EnnoDiagnostic.`
+        `Dossier créé. ${details.join(", ")}. Téléchargez les PDF ci-dessous avant de poursuivre.`
       )
     } catch (err) {
       setError(
@@ -1251,7 +1277,7 @@ export default function NewProjectPage({
                       Éléments de travail à analyser
                     </CardTitle>
                     <CardDescription className="mt-1 text-xs">
-                      Tout fichier ajouté ici, y compris un pré-CIR ou un CIR précédent, alimente EnnoDiagnostic comme élément de travail.
+                      Tout fichier ajouté ici, y compris un pré-CIR ou un CIR précédent, alimente le dossier comme élément de travail.
                     </CardDescription>
                   </CardHeader>
 
@@ -1565,12 +1591,10 @@ export default function NewProjectPage({
                   <Button
                     type="button"
                     className="rounded-xl bg-brand hover:bg-brand/90"
-                    onClick={() => navigateTo(returnTo || "diagnosis")}
+                    onClick={() => navigateTo(postCreationDestination)}
                     disabled={submitting}
                   >
-                    {returnTo === "improvement"
-                      ? "Ouvrir EnnoAmelioration"
-                      : "Ouvrir EnnoDiagnostic"}
+                    {postCreationLabel}
                   </Button>
                 ) : (
                   <Button
@@ -1588,7 +1612,9 @@ export default function NewProjectPage({
                       ? mediaFiles.length > 0
                         ? "Création et transcription…"
                         : "Création du dossier…"
-                      : "Créer et ouvrir EnnoDiagnostic"}
+                      : enabledAgents.diagnostic !== false
+                        ? "Créer et ouvrir EnnoDiagnostic"
+                        : "Créer et ouvrir le dossier"}
                   </Button>
                 )}
               </div>
@@ -1651,12 +1677,10 @@ export default function NewProjectPage({
                       <Button
                         type="button"
                         className="h-11 w-full rounded-xl bg-brand hover:bg-brand/90"
-                        onClick={() => navigateTo(returnTo || "diagnosis")}
+                        onClick={() => navigateTo(postCreationDestination)}
                         disabled={submitting}
                       >
-                        {returnTo === "improvement"
-                          ? "Ouvrir EnnoAmelioration"
-                          : "Ouvrir EnnoDiagnostic"}
+                        {postCreationLabel}
                       </Button>
                     ) : (
                       <Button

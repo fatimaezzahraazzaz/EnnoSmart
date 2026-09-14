@@ -426,11 +426,20 @@ def build_diagnostic_display(project: Any, bundle: Dict[str, Any]) -> Dict[str, 
     )
     markdown_sections = _extract_markdown_sections(report_markdown)
 
-    chroma_sections = _as_dict(report.get("chroma_sections"))
-    frascati_summary = _as_dict(report.get("frascati_summary"))
-    inputs_status = _as_dict(report.get("inputs_status"))
+    chroma_sections = _as_dict(
+        report.get("chroma_sections") or snapshot.get("chroma_sections")
+    )
+    frascati_summary = _as_dict(
+        report.get("frascati_summary") or snapshot.get("frascati_summary")
+    )
+    inputs_status = _as_dict(
+        report.get("inputs_status") or snapshot.get("inputs_status")
+    )
 
-    pipeline = _as_dict(report.get("pipeline_before_agent"))
+    pipeline = _as_dict(
+        report.get("pipeline_before_agent")
+        or snapshot.get("pipeline_before_agent")
+    )
     index_report = _as_dict(pipeline.get("index_report"))
     nlp_stats = _as_dict(pipeline.get("nlp_stats")) or _as_dict(nlp_result.get("stats"))
 
@@ -465,6 +474,14 @@ def build_diagnostic_display(project: Any, bundle: Dict[str, Any]) -> Dict[str, 
         ["objectif_global"],
         ["Objectif global", "Objectif global reformulé"],
         ["objectif_global_reformule", "objectif"],
+    )
+    eligibility_study = _pick_section(
+        sections_by_key,
+        sections_by_title,
+        markdown_sections,
+        ["etude_d_eligibilite", "etude_eligibilite"],
+        ["Étude d'éligibilité", "Étude d’éligibilité", "Analyse Frascati"],
+        ["etude_d_eligibilite", "etude_eligibilite", "analyse_frascati"],
     )
     verrous_text = _pick_section(
         sections_by_key,
@@ -565,6 +582,7 @@ def build_diagnostic_display(project: Any, bundle: Dict[str, Any]) -> Dict[str, 
         "justification_frascati": frascati_justification_text,
         "synthese": summary,
         "objectif": objective,
+        "etude_eligibilite": eligibility_study,
         "verrous": verrous_text,
         "signaux_de_verrous": verrous_text,
         "demarche": methodes_section,
@@ -577,8 +595,18 @@ def build_diagnostic_display(project: Any, bundle: Dict[str, Any]) -> Dict[str, 
         if isinstance(section_text, str) and section_text.strip():
             report_sections.setdefault(section_key, section_text.strip())
 
-    ai_summary = _normalize_ai_summary(report)
-    ai_report = _as_dict(report.get("ai_detection_report_runtime") or report.get("ai_detection_report") or {})
+    report_for_ai = dict(report)
+    report_for_ai.setdefault(
+        "ai_detection_report",
+        snapshot.get("ai_detection_report") or {},
+    )
+    ai_summary = _normalize_ai_summary(report_for_ai)
+    ai_report = _as_dict(
+        report.get("ai_detection_report_runtime")
+        or report.get("ai_detection_report")
+        or snapshot.get("ai_detection_report")
+        or {}
+    )
     top_passages = []
     ai_detection_nested = _as_dict(ai_report.get("ai_detection"))
     for candidate in [
@@ -620,7 +648,11 @@ def build_diagnostic_display(project: Any, bundle: Dict[str, Any]) -> Dict[str, 
         "consultant_verrous_cir": final_verrous,
         "consultant_validation_source": "backend_display_service_v144",
         "consultant_validation_enabled": any(bool(v.get("can_decide") or v.get("is_db_synced")) for v in final_verrous),
-        "verrou_synthesis_report": report.get("verrou_synthesis_report") or {},
+        "verrou_synthesis_report": (
+            report.get("verrou_synthesis_report")
+            or snapshot.get("verrou_synthesis_report")
+            or {}
+        ),
         "frascati_summary": frascati_summary,
         "ai_summary": ai_summary,
         "ai_detection": ai_report,

@@ -5,7 +5,7 @@ from threading import Lock
 import shutil
 
 from sqlalchemy import MetaData, Table, delete, inspect, or_, select
-from db.models import Article, DiagnosticRun, ScholarRun, Verrou
+from db.models import Article, DiagnosticRun, ProjectArtifact, ScholarRun, Verrou
 
 _project_locks = {}
 _locks_guard = Lock()
@@ -53,6 +53,17 @@ def delete_previous_agent_runs(db, project_id: int) -> dict:
         (DiagnosticRun, DiagnosticRun.project_id == project_id),
     ):
         counts[model.__tablename__] = db.execute(delete(model).where(condition).execution_options(synchronize_session=False)).rowcount
+    if "project_artifacts" in available:
+        counts[ProjectArtifact.__tablename__] = db.execute(
+            delete(ProjectArtifact).where(
+                ProjectArtifact.project_id == project_id,
+                or_(
+                    ProjectArtifact.artifact_key.like("ennoscholar/%"),
+                    ProjectArtifact.artifact_key
+                    == "diagnostics/latest_full_report.json",
+                ),
+            )
+        ).rowcount
     db.flush()
     return {'project_id': project_id, 'deleted': counts, 'manual_locks_preserved': False,
             'documents_deleted': False, 'chroma_deleted': False}

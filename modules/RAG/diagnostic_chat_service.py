@@ -889,7 +889,11 @@ class DiagnosticRAGChatService:
             subproject=subproject,
             year=year,
         )
-        self.vector_store = RAGVectorStore(self.store.chroma_dir)
+        self.vector_store = RAGVectorStore(
+            self.store.chroma_dir,
+            scope_metadata=self.store.chroma_scope_metadata,
+            collection_namespace=self.base_collection_name,
+        )
         self.llm = LLMClient()
 
     # ------------------------------------------------------------------

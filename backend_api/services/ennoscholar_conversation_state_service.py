@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -82,6 +83,18 @@ def assert_conversation_result_is_isolated(
         raise RuntimeError(
             "conversation_scope_violation: chemin du document final absent."
         )
+
+    if markdown_path.startswith("db+gzip://project-artifacts/"):
+        expected_prefix = (
+            f"db+gzip://project-artifacts/{int(project.id)}/"
+            f"ennoscholar/conversations/{expected_session_id}/versions/"
+        )
+        if not markdown_path.startswith(expected_prefix):
+            raise RuntimeError(
+                "conversation_scope_violation: l'artefact DB appartient à "
+                "un autre projet ou à une autre conversation."
+            )
+        return
 
     expected_root = conversation_root(project, expected_session_id).resolve()
     actual_path = Path(markdown_path).resolve()
@@ -344,6 +357,23 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
         / "phase_5_state_of_art_writer"
         / "state_of_art_draft_payload.json"
     )
+    if generation_mode == "partial_revision" and not previous_phase5_payload_path.is_file():
+        latest_version = snapshot_context.get("latest_state_of_art_version")
+        latest_version = latest_version if isinstance(latest_version, Mapping) else {}
+        latest_version_id = str(latest_version.get("version_id") or "").strip()
+        if latest_version_id:
+            try:
+                previous = get_conversation_version(
+                    db,
+                    project,
+                    session_id,
+                    latest_version_id,
+                )
+                previous_payload = previous.get("payload")
+                if isinstance(previous_payload, Mapping) and previous_payload:
+                    _write_json(previous_phase5_payload_path, dict(previous_payload))
+            except FileNotFoundError:
+                pass
     if writing_request:
         materialized_contract["consultant_writing_request"] = writing_request
     materialized_contract["consultant_writing_target_section_ids"] = (
@@ -1078,6 +1108,7 @@ def _version_id() -> str:
 
 def archive_conversation_state_of_art(
     *,
+    db: Any,
     project: Any,
     session_id: str,
     markdown: str,
@@ -1086,61 +1117,65 @@ def archive_conversation_state_of_art(
     scope_manifest: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     session_id = safe_session_id(session_id)
-    versions_root = conversation_versions_root(project, session_id)
-    versions_root.mkdir(parents=True, exist_ok=True)
-
     version_id = _version_id()
-    version_root = versions_root / version_id
-    version_root.mkdir(parents=True, exist_ok=False)
+    artifact_key = (
+        f"ennoscholar/conversations/{session_id}/versions/{version_id}.json"
+    )
+    sha = hashlib.sha256(str(markdown or "").encode("utf-8")).hexdigest()
+    from services.project_artifact_service import artifact_uri, save_json_artifact
 
-    md_path = version_root / "state_of_art.md"
-    payload_path = version_root / "state_of_art_payload.json"
-    report_path = version_root / "editorial_report.json"
-    scope_path = version_root / "scope_manifest.json"
-
-    md_path.write_text(str(markdown or ""), encoding="utf-8")
-    _write_json(payload_path, dict(payload))
-    _write_json(report_path, dict(editorial_report or {}))
-    _write_json(scope_path, dict(scope_manifest or {}))
-
-    sha = hashlib.sha256(md_path.read_bytes()).hexdigest()
+    uri = artifact_uri(int(project.id), artifact_key)
     metadata = {
         "version_id": version_id,
         "session_id": session_id,
         "project_id": int(project.id),
         "created_at": _now(),
-        "markdown_path": str(md_path),
-        "payload_path": str(payload_path),
-        "editorial_report_path": str(report_path),
-        "scope_manifest_path": str(scope_path),
+        "artifact_uri": uri,
+        "markdown_path": uri,
+        "payload_path": uri,
+        "editorial_report_path": uri,
+        "scope_manifest_path": uri,
         "markdown_sha256": sha,
         "word_count": len(re.findall(r"\b[\wÀ-ÿ'-]+\b", markdown or "")),
         "status": payload.get("status"),
         "ok": bool(payload.get("ok")),
+        "storage_policy": "postgresql_gzip_artifact",
     }
-
-    index_path = conversation_root(project, session_id) / "versions_index.json"
-    index = _read_json(index_path, {"versions": []})
-    versions = [
-        dict(row)
-        for row in (index.get("versions") or [])
-        if isinstance(row, Mapping)
-    ]
-    versions.append(metadata)
-    _write_json(
-        index_path,
+    save_json_artifact(
+        db,
+        int(project.id),
+        artifact_key,
         {
-            "session_id": session_id,
-            "project_id": int(project.id),
-            "updated_at": _now(),
-            "versions": versions,
+            "version_id": version_id,
+            "markdown": str(markdown or ""),
+            "payload": dict(payload),
+            "editorial_report": dict(editorial_report or {}),
+            "scope_manifest": dict(scope_manifest or {}),
+            "metadata": metadata,
         },
+        artifact_kind="scholar_state_of_art_version",
+        metadata=metadata,
     )
-    _write_json(conversation_root(project, session_id) / "latest_version.json", metadata)
     return metadata
 
 
-def list_conversation_versions(project: Any, session_id: str) -> list[dict[str, Any]]:
+def list_conversation_versions(
+    db: Any,
+    project: Any,
+    session_id: str,
+) -> list[dict[str, Any]]:
+    session_id = safe_session_id(session_id)
+    from services.project_artifact_service import list_json_artifacts
+
+    stored = list_json_artifacts(
+        db,
+        int(project.id),
+        key_prefix=f"ennoscholar/conversations/{session_id}/versions/",
+        artifact_kind="scholar_state_of_art_version",
+    )
+    if stored:
+        return [dict(row.get("metadata") or {}) for row in stored]
+
     index_path = conversation_root(project, session_id) / "versions_index.json"
     index = _read_json(index_path, {"versions": []})
     return [
@@ -1151,11 +1186,29 @@ def list_conversation_versions(project: Any, session_id: str) -> list[dict[str, 
 
 
 def get_conversation_version(
+    db: Any,
     project: Any,
     session_id: str,
     version_id: str,
 ) -> dict[str, Any]:
-    version_id = _slug(version_id, 160)
+    version_id = str(version_id or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{8,160}", version_id):
+        raise FileNotFoundError(version_id)
+    session_id = safe_session_id(session_id)
+    artifact_key = (
+        f"ennoscholar/conversations/{session_id}/versions/{version_id}.json"
+    )
+    from services.project_artifact_service import get_json_artifact
+
+    stored = get_json_artifact(
+        db,
+        int(project.id),
+        artifact_key,
+        default=None,
+    )
+    if isinstance(stored, Mapping):
+        return dict(stored)
+
     root = conversation_versions_root(project, session_id) / version_id
     if not root.is_dir():
         raise FileNotFoundError(version_id)
@@ -1171,6 +1224,20 @@ def get_conversation_version(
         "editorial_report": _read_json(root / "editorial_report.json", {}),
         "scope_manifest": _read_json(root / "scope_manifest.json", {}),
     }
+
+
+def cleanup_conversation_work(project: Any, session_id: str) -> list[str]:
+    """Supprime le runtime Agent 2 après archivage DB vérifié."""
+
+    root = conversation_root(project, safe_session_id(session_id)).resolve()
+    work = conversation_work_root(project, session_id).resolve()
+    if work == root or not work.is_relative_to(root):
+        raise RuntimeError(f"Dossier work hors conversation : {work}")
+    if not work.exists():
+        return []
+    removed = [str(path) for path in work.rglob("*") if path.is_file()]
+    shutil.rmtree(work)
+    return removed
 
 
 def filter_article_orm_rows_for_session(

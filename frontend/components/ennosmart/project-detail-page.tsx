@@ -23,7 +23,7 @@ import {
   Upload,
 } from "lucide-react"
 
-import { AppPage } from "@/components/ennosmart/app-shell"
+import type { AppPage } from "@/components/ennosmart/app-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -43,6 +43,7 @@ import {
   importExistingScholar,
   importExistingDocuments,
   type DocumentRead,
+  type AgentAvailability,
   type ProjectOverview,
   type ProjectRead,
 } from "@/lib/api"
@@ -54,6 +55,14 @@ import {
 
 interface ProjectDetailPageProps {
   navigateTo: (page: AppPage) => void
+  enabledAgents?: AgentAvailability
+}
+
+const defaultAgentAvailability: AgentAvailability = {
+  diagnostic: true,
+  scholar: true,
+  improvement: true,
+  cir_memory: true,
 }
 
 type StatusState = "ok" | "warning" | "empty"
@@ -203,6 +212,7 @@ function pageNumbers(current: number, total: number) {
 
 export default function ProjectDetailPage({
   navigateTo,
+  enabledAgents = defaultAgentAvailability,
 }: ProjectDetailPageProps) {
   const [project, setProject] = useState<ProjectRead | null>(null)
   const [projects, setProjects] = useState<ProjectRead[]>([])
@@ -608,7 +618,7 @@ export default function ProjectDetailPage({
       current: documents.length === 0,
       onClick: openUpload,
     },
-    {
+    ...(enabledAgents.diagnostic !== false ? [{
       number: 2,
       label: "Diagnostic",
       detail: "Verrous",
@@ -617,8 +627,8 @@ export default function ProjectDetailPage({
         diagnosticState !== "ok" &&
         documents.length > 0,
       onClick: openDiagnosis,
-    },
-    {
+    }] : []),
+    ...(enabledAgents.scholar !== false ? [{
       number: 3,
       label: "Recherche",
       detail: "Preuves",
@@ -627,16 +637,29 @@ export default function ProjectDetailPage({
         scholarState !== "ok" &&
         diagnosticState === "ok",
       onClick: openScholar,
-    },
-    {
+    }] : []),
+    ...(enabledAgents.improvement !== false ? [{
       number: 4,
       label: "Amélioration",
       detail: "Livrable",
       complete: false,
       current: scholarState === "ok",
       onClick: openImprovement,
-    },
+    }] : []),
   ]
+
+  const enabledAgentCount = [
+    enabledAgents.diagnostic,
+    enabledAgents.scholar,
+    enabledAgents.improvement,
+  ].filter((enabled) => enabled !== false).length
+
+  const agentGridClass =
+    enabledAgentCount >= 3
+      ? "lg:grid-cols-3"
+      : enabledAgentCount === 2
+        ? "lg:grid-cols-2"
+        : "lg:grid-cols-1"
 
   return (
     <div className="workspace-page-wide pb-10">
@@ -853,10 +876,11 @@ export default function ProjectDetailPage({
         {/* Agents                                                           */}
         {/* ================================================================= */}
 
-        <section className="grid gap-4 lg:grid-cols-3">
+        <section className={`grid gap-4 ${agentGridClass}`}>
 
           {/* EnnoDiagnostic */}
 
+          {enabledAgents.diagnostic !== false && (
           <Card className={`overflow-hidden rounded-2xl shadow-sm ${statusCardClass(diagnosticState)}`}>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
@@ -921,9 +945,11 @@ export default function ProjectDetailPage({
               </div>
             </CardContent>
           </Card>
+          )}
 
           {/* EnnoScholar */}
 
+          {enabledAgents.scholar !== false && (
           <Card className={`overflow-hidden rounded-2xl shadow-sm ${statusCardClass(scholarState)}`}>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
@@ -987,9 +1013,11 @@ export default function ProjectDetailPage({
               </div>
             </CardContent>
           </Card>
+          )}
 
           {/* EnnoAmelioration */}
 
+          {enabledAgents.improvement !== false && (
           <Card className="overflow-hidden rounded-2xl border-brand/15 bg-[linear-gradient(135deg,rgba(109,70,178,0.035),rgba(255,255,255,0.96))] shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
@@ -1024,6 +1052,7 @@ export default function ProjectDetailPage({
               </Button>
             </CardContent>
           </Card>
+          )}
         </section>
 
         {/* ================================================================= */}

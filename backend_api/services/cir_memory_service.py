@@ -2160,20 +2160,23 @@ def memory_embed_texts(texts: List[str]) -> Tuple[List[List[float]], str]:
 
 
 def _memory_chroma_paths(project: Project) -> Dict[str, Any]:
+    from modules.RAG.chroma_client import chroma_http_enabled
+
     paths = ensure_memory_dirs(project)
     chroma_dir = paths["organism_dir"] / "memory" / "chroma"
-    chroma_dir.mkdir(parents=True, exist_ok=True)
+    if not chroma_http_enabled():
+        chroma_dir.mkdir(parents=True, exist_ok=True)
     collection_name = f"ennosmart_memory_{slugify(project.organisme)[:45]}"
     return {"chroma_dir": chroma_dir, "collection_name": collection_name}
 
 
 def _get_memory_chroma_collection(project: Project):
     try:
-        import chromadb  # type: ignore
+        from modules.RAG.chroma_client import create_chroma_client
     except Exception as exc:
         raise RuntimeError("ChromaDB non installé. Lance : pip install chromadb") from exc
     cp = _memory_chroma_paths(project)
-    client = chromadb.PersistentClient(path=str(cp["chroma_dir"]))
+    client = create_chroma_client(cp["chroma_dir"])
     collection = client.get_or_create_collection(
         name=cp["collection_name"],
         metadata={"organisme": str(project.organisme or ""), "type": "ennosmart_cir_memory"},

@@ -136,6 +136,15 @@ class MemoryV2Retriever:
                same_organisme_only: bool = True, exclude_current_year: bool = True) -> List[Dict[str, Any]]:
         if not self.available or self.vector_store is None:
             return []
+        try:
+            from modules.RAG.chroma_client import chroma_scope_enforced
+
+            if chroma_scope_enforced():
+                if not self.organisme:
+                    return []
+                same_organisme_only = True
+        except Exception:
+            pass
         collection = self.global_collection
         try:
             results = self.vector_store.search(

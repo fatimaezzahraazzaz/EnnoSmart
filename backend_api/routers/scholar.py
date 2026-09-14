@@ -2314,6 +2314,25 @@ def _run_state_of_art_full_pipeline(
                 session_id=guided_session_id,
                 result=result,
             )
+            if result.get("ok"):
+                from services.ennoscholar_conversation_state_service import (
+                    cleanup_conversation_work,
+                )
+
+                try:
+                    removed = cleanup_conversation_work(project, guided_session_id)
+                    print(
+                        "[EnnoScholar][DB_ARTIFACT_CLEANUP] "
+                        f"session_id={guided_session_id} removed_files={len(removed)}",
+                        flush=True,
+                    )
+                except Exception as cleanup_exc:
+                    # La version et l'état de conversation sont déjà en base.
+                    print(
+                        "[EnnoScholar][DB_ARTIFACT_CLEANUP][WARN] "
+                        f"session_id={guided_session_id} error={cleanup_exc}",
+                        flush=True,
+                    )
         return result
     except RuntimeError as exc:
         # La commande consultant est valide : une indisponibilité LLM ou une
@@ -2537,7 +2556,7 @@ def list_scholar_conversation_state_of_art_versions(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Conversation introuvable pour ce projet.",
         )
-    versions = list_conversation_versions(project, session_id)
+    versions = list_conversation_versions(db, project, session_id)
     return {
         "ok": True,
         "project_id": int(project.id),
@@ -2568,7 +2587,7 @@ def get_scholar_conversation_state_of_art_version(
             detail="Conversation introuvable pour ce projet.",
         )
     try:
-        result = get_conversation_version(project, session_id, version_id)
+        result = get_conversation_version(db, project, session_id, version_id)
     except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

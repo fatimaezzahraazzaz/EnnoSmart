@@ -144,6 +144,31 @@ export type AIModelSettings = {
   applied?: boolean
 }
 
+export type AgentAvailability = {
+  diagnostic: boolean
+  scholar: boolean
+  improvement: boolean
+  cir_memory: boolean
+}
+
+export const AGENT_AVAILABILITY_CHANGE_EVENT = "ennosmart:agent-availability-changed"
+
+export type EffectiveAgentModels = {
+  provider: string
+  primary_model: string
+  writer_model: string
+  fallback_models: string[]
+  resolution: string
+  agents: Record<string, {
+    label: string
+    primary_model: string
+    models: Array<{
+      role: string
+      model: string
+    }>
+  }>
+}
+
 export type ProjectRead = {
   id: number
   consultant_id: number
@@ -573,6 +598,12 @@ export async function updateAdminUser(
   })
 }
 
+export async function deleteAdminUser(userId: number) {
+  return apiRequest<{ status: "deleted"; message: string }>(`/admin/users/${userId}`, {
+    method: "DELETE",
+  })
+}
+
 export async function getAdminProjects() {
   return apiRequest<AdminProject[]>("/admin/projects")
 }
@@ -602,6 +633,14 @@ export async function updateAdminProjectWorkflow(
 
 export async function getAISettings() {
   return apiRequest<AIModelSettings>("/admin/ai-settings")
+}
+
+export async function getEffectiveAgentModels() {
+  return apiRequest<EffectiveAgentModels>("/admin/effective-agent-models")
+}
+
+export async function getAgentAvailability() {
+  return apiRequest<AgentAvailability>("/admin/agent-availability")
 }
 
 export async function updateAISettings(payload: AIModelSettings) {

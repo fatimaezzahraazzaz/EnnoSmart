@@ -1237,6 +1237,31 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
     display = dict(display or {})
     report, content = _extract_latest_run_report(latest_run)
 
+    raw = _as_dict(getattr(latest_run, "raw_result_json", None)) if latest_run else {}
+    snapshot = _as_dict(raw.get("diagnostic_snapshot"))
+    if report and snapshot:
+        report = dict(report)
+        if not _clean(report.get("report_markdown")):
+            report["report_markdown"] = snapshot.get("report_markdown") or ""
+        for report_key, snapshot_key in (
+            ("diagnostic_sections_by_key", "sections_by_key"),
+            ("diagnostic_sections", "sections_by_title"),
+            ("frascati_summary", "frascati_summary"),
+            ("ai_detection_report", "ai_detection_report"),
+            ("cir_memory_report", "cir_memory_report"),
+            ("inputs_status", "inputs_status"),
+            ("pipeline_before_agent", "pipeline_before_agent"),
+            ("verrou_synthesis_report", "verrou_synthesis_report"),
+        ):
+            if not _as_dict(report.get(report_key)):
+                report[report_key] = snapshot.get(snapshot_key) or {}
+        for report_key, snapshot_key in (
+            ("diagnostic_cards", "diagnostic_cards"),
+            ("llm_reformulated_verrous", "final_verrous"),
+        ):
+            if not report.get(report_key):
+                report[report_key] = snapshot.get(snapshot_key) or []
+
     if not report and not content:
         return display
 
@@ -1266,6 +1291,12 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
     memoire_v2 = pick("memoire_v2", "Mémoire V2", "memoire_v2")
     synthese = pick("synthese_strategique", "Synthèse stratégique", "synthese_strategique_du_projet")
     objectif = pick("objectif_global", "Objectif global", "objectif_global_reformule", "objectif_global_du_projet")
+    etude_eligibilite = pick(
+        "etude_d_eligibilite",
+        "Étude d'éligibilité",
+        "etude_eligibilite",
+        "analyse_frascati",
+    )
     verrous_section = pick(
         "verrous_rnd",
         "Verrous CIR consolidés",
@@ -1322,6 +1353,7 @@ def _force_display_from_latest_run(display: Dict[str, Any], latest_run: Diagnost
         "memoire_v2": memoire_v2,
         "synthese": synthese,
         "objectif": objectif,
+        "etude_eligibilite": etude_eligibilite,
         "verrous": verrous_section,
         "signaux_de_verrous": verrous_section,
         "demarche": demarche,
@@ -1502,7 +1534,19 @@ def get_latest_diagnostic(
     latest_run = _latest_run_for_project(db, project.id)
 
     base_bundle = read_diagnostic_bundle(project, compact=compact)
-    if compact and _as_dict(base_bundle.get("report")):
+    base_report = _as_dict(base_bundle.get("report"))
+    runtime_ai_report = _as_dict(base_report.get("ai_detection_report_runtime"))
+    has_filesystem_report = bool(base_bundle.get("report_path_used"))
+
+    # Un recalcul IA peut encore exister sur disque sans rapport diagnostic.
+    # Dans ce cas _report_with_latest_ai_detection() renvoie un dictionnaire
+    # non vide contenant uniquement ai_detection_report_runtime. Il ne faut pas
+    # le confondre avec le rapport officiel ni écraser le DiagnosticRun DB.
+    if compact and runtime_ai_report and not has_filesystem_report:
+        base_bundle = dict(base_bundle)
+        base_bundle["report"] = {}
+
+    if compact and _as_dict(base_bundle.get("report")) and has_filesystem_report:
         # La page n'a besoin que du rapport fichier officiel et des verrous DB.
         # Lire/materialiser le JSONB complet pendant un GET pouvait dépasser
         # 30 secondes et rendait l'écran inutilisable.
@@ -1523,9 +1567,22 @@ def get_latest_diagnostic(
             latest_run,
             include_run_raw=not compact,
         )
+
+    if runtime_ai_report:
+        selected_report = _as_dict(bundle.get("report"))
+        selected_report["ai_detection_report_runtime"] = runtime_ai_report
+        bundle["report"] = selected_report
     official_source = bundle.get("official_report_source")
 
     display = build_diagnostic_display(project, bundle)
+    if official_source == "db_latest_run":
+        # Après migration, les gros JSON n'existent plus durablement sur
+        # disque. Reconstruire explicitement toutes les sections depuis le
+        # snapshot du dernier run évite qu'une vue compacte ou un bundle
+        # partiel affiche les textes « non disponible » alors que PostgreSQL
+        # contient bien synthèse, objectif, éligibilité, démarche, résultats,
+        # paramètres et verrous.
+        display = _force_display_from_latest_run(display, latest_run, project)
 
     latest_verrous: list[Verrou] = []
     auto_materialized = False
@@ -2044,28 +2101,29 @@ def compare_with_previous_cir(
     project = get_project_for_user(db, project_id, current_user)
 
     try:
-        from services.diagnostic_service import get_project_store
+        from services.diagnostic_service import materialized_diagnostic_inputs
         from modules.CIR_MEMORY.cir_memory import compare_current_raw_with_cir_memory
 
-        ps = get_project_store(project)
-        nlp_path = ps.nlp_dir / "nlp_result.json"
-
-        if not nlp_path.exists():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="nlp_result.json introuvable. Lance d'abord prepare-sources.",
+        with materialized_diagnostic_inputs(
+            db,
+            project,
+            include_rag_chunks=False,
+        ) as inputs:
+            report = compare_current_raw_with_cir_memory(
+                organisme=project.organisme,
+                project=project.project_name,
+                year=str(project.year),
+                nlp_result_path=inputs["nlp_result"],
+                subproject=str(getattr(project, "subproject_name", "") or "").strip(),
             )
-
-        report = compare_current_raw_with_cir_memory(
-            organisme=project.organisme,
-            project=project.project_name,
-            year=str(project.year),
-            nlp_result_path=nlp_path,
-            subproject=str(getattr(project, "subproject_name", "") or "").strip(),
-        )
 
         return sanitize_json_value(report)
 
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Sources NLP introuvables. Lancez d'abord Préparer les sources.",
+        ) from exc
     except HTTPException:
         raise
     except Exception as exc:
@@ -2093,28 +2151,29 @@ def compare_current_with_previous_cir_independent(
     project = get_project_for_user(db, project_id, current_user)
 
     try:
-        from services.diagnostic_service import get_project_store
+        from services.diagnostic_service import materialized_diagnostic_inputs
         from modules.CIR_MEMORY.cir_memory import compare_current_raw_with_cir_memory
 
-        ps = get_project_store(project)
-        nlp_path = ps.nlp_dir / "nlp_result.json"
-
-        if not nlp_path.exists():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="nlp_result.json introuvable. Lance d'abord Préparer les sources.",
+        with materialized_diagnostic_inputs(
+            db,
+            project,
+            include_rag_chunks=False,
+        ) as inputs:
+            report = compare_current_raw_with_cir_memory(
+                organisme=project.organisme,
+                project=project.project_name,
+                year=str(project.year),
+                nlp_result_path=inputs["nlp_result"],
+                subproject=str(getattr(project, "subproject_name", "") or "").strip(),
             )
-
-        report = compare_current_raw_with_cir_memory(
-            organisme=project.organisme,
-            project=project.project_name,
-            year=str(project.year),
-            nlp_result_path=nlp_path,
-            subproject=str(getattr(project, "subproject_name", "") or "").strip(),
-        )
 
         return sanitize_json_value(report)
 
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Sources NLP introuvables. Lancez d'abord Préparer les sources.",
+        ) from exc
     except HTTPException:
         raise
     except Exception as exc:

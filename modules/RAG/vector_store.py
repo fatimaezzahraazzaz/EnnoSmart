@@ -6,10 +6,14 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-import chromadb
 from sentence_transformers import SentenceTransformer
 
 from .config import EMBEDDING_MODEL_NAME, EMBEDDING_OFFLINE
+from .chroma_client import (
+    chroma_connection_info,
+    chroma_scope_enforced,
+    create_chroma_client,
+)
 
 
 _MODEL_CACHE: Optional[SentenceTransformer] = None
@@ -70,14 +74,49 @@ def _combine_where_filters(*filters: Optional[Dict[str, Any]]) -> Optional[Dict[
 
 
 class RAGVectorStore:
-    def __init__(self, persist_dir: str | Path):
+    def __init__(
+        self,
+        persist_dir: str | Path,
+        *,
+        scope_metadata: Optional[Dict[str, Any]] = None,
+        collection_namespace: Optional[str] = None,
+    ):
         self.persist_dir = Path(persist_dir)
-        self.persist_dir.mkdir(parents=True, exist_ok=True)
-        self.client = chromadb.PersistentClient(path=str(self.persist_dir))
+        self.scope_metadata = self._clean_metadata(scope_metadata or {})
+        self.collection_namespace = str(collection_namespace or "").strip()
+        self.enforce_scope = bool(self.scope_metadata) and chroma_scope_enforced()
+        self.client = create_chroma_client(self.persist_dir)
+        self.connection = chroma_connection_info(self.persist_dir)
         self.model = get_embedding_model()
 
     def collection(self, collection_name: str):
-        return self.client.get_or_create_collection(name=collection_name)
+        self._validate_collection_name(collection_name)
+        collection = self.client.get_or_create_collection(
+            name=collection_name,
+            metadata=self.scope_metadata or None,
+        )
+        if self.enforce_scope:
+            existing = dict(getattr(collection, "metadata", None) or {})
+            mismatches = {
+                key: (existing.get(key), expected)
+                for key, expected in self.scope_metadata.items()
+                if existing.get(key) not in (None, expected)
+            }
+            if mismatches:
+                raise RuntimeError(
+                    f"Collection Chroma hors périmètre ({collection_name}) : {mismatches}"
+                )
+        return collection
+
+    def _validate_collection_name(self, collection_name: str) -> None:
+        name = str(collection_name or "").strip()
+        if not name:
+            raise ValueError("Nom de collection Chroma vide.")
+        namespace = self.collection_namespace
+        if namespace and name != namespace and not name.startswith(namespace + "_"):
+            raise PermissionError(
+                f"Collection Chroma refusée hors du projet : {name}"
+            )
 
     def reset_collection(self, collection_name: str):
         try:
@@ -102,6 +141,21 @@ class RAGVectorStore:
             return {"added": 0, "deduplicated": 0}
 
         safe_chunks = self._dedupe_chunk_ids(chunks)
+        if self.scope_metadata:
+            scoped_chunks: List[Dict[str, Any]] = []
+            for chunk in safe_chunks:
+                item = dict(chunk)
+                metadata = dict(item.get("metadata") or {})
+                for key, expected in self.scope_metadata.items():
+                    current = metadata.get(key)
+                    if self.enforce_scope and current not in (None, expected):
+                        raise PermissionError(
+                            f"Chunk Chroma hors périmètre : {key}={current!r}"
+                        )
+                    metadata[key] = expected
+                item["metadata"] = metadata
+                scoped_chunks.append(item)
+            safe_chunks = scoped_chunks
         ids = [str(chunk["id"]) for chunk in safe_chunks]
 
         # Le document stocké reste la preuve lisible exacte. Le texte utilisé
@@ -211,7 +265,11 @@ class RAGVectorStore:
                 else:
                     role_where = {"role": {"$in": roles}}
 
-        where = _combine_where_filters(base_where, role_where)
+        where = _combine_where_filters(
+            self.scope_metadata if self.enforce_scope else None,
+            base_where,
+            role_where,
+        )
 
         # Pool réellement demandé à Chroma.
         n_results = min(

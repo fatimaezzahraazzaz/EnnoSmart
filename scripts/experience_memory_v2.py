@@ -442,7 +442,19 @@ def build_v2(reset_chroma: bool = False, organism_filter: str = "") -> Dict[str,
     return catalog
 
 
-def search_v2(query: str, collection: str = "ennosmart_memory_v2_global", top_k: int = 8, role: str = "") -> Dict[str, Any]:
+def search_v2(
+    query: str,
+    collection: str = "ennosmart_memory_v2_global",
+    top_k: int = 8,
+    role: str = "",
+    organisme: str = "",
+) -> Dict[str, Any]:
+    from modules.RAG.chroma_client import chroma_scope_enforced
+
+    if chroma_scope_enforced() and not str(organisme or "").strip():
+        raise ValueError(
+            "--organisme est obligatoire : une recherche Chroma ne peut pas traverser les organismes."
+        )
     mod, _, err = import_any(["modules.RAG.vector_store"])
     if mod is None:
         raise RuntimeError(f"modules.RAG.vector_store introuvable : {err}")
@@ -450,7 +462,20 @@ def search_v2(query: str, collection: str = "ennosmart_memory_v2_global", top_k:
     if RAGVectorStore is None:
         raise RuntimeError("RAGVectorStore introuvable")
     vs = RAGVectorStore(V2_CHROMA_DIR)
-    res = vs.search(collection_name=collection, query=query, top_k=top_k, role_filter=role or None, oversample=6)
+    res = vs.search(
+        collection_name=collection,
+        query=query,
+        top_k=top_k,
+        role_filter=role or None,
+        metadata_filter={"organisme": organisme} if organisme else None,
+        oversample=6,
+    )
+    if organisme:
+        wanted = slug(organisme)
+        res = [
+            item for item in res
+            if slug((item.get("metadata") or {}).get("organisme")) == wanted
+        ][:top_k]
     return {"ok": True, "query": query, "collection": collection, "matches_count": len(res), "matches": res}
 
 
@@ -468,7 +493,13 @@ def main() -> int:
         print(json.dumps(build_v2(reset_chroma=args.reset_chroma, organism_filter=args.organisme), ensure_ascii=False, indent=2))
         return 0
     if args.search:
-        print(json.dumps(search_v2(args.search, collection=args.collection, top_k=args.top_k, role=args.role), ensure_ascii=False, indent=2))
+        print(json.dumps(search_v2(
+            args.search,
+            collection=args.collection,
+            top_k=args.top_k,
+            role=args.role,
+            organisme=args.organisme,
+        ), ensure_ascii=False, indent=2))
         return 0
     print("Utilise --build ou --search")
     return 1

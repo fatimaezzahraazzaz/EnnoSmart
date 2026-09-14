@@ -29,6 +29,7 @@ import {
   getProjects,
   importExistingDocuments,
   uploadDocument,
+  type AgentAvailability,
   type DocumentRead,
   type ProjectRead,
 } from "@/lib/api"
@@ -36,6 +37,7 @@ import { getCurrentProjectId, setCurrentProjectId } from "@/lib/project-session"
 
 interface UploadPageProps {
   navigateTo: (page: AppPage) => void
+  enabledAgents?: AgentAvailability
 }
 
 type UploadStatus = "pending" | "uploading" | "done" | "error"
@@ -117,7 +119,15 @@ function buildPdfDownloadName(originalName: string) {
   return `transcription_${stem || "media"}.pdf`
 }
 
-export default function UploadPage({ navigateTo }: UploadPageProps) {
+export default function UploadPage({
+  navigateTo,
+  enabledAgents = {
+    diagnostic: true,
+    scholar: true,
+    improvement: true,
+    cir_memory: true,
+  },
+}: UploadPageProps) {
   const [project, setProject] = useState<ProjectRead | null>(null)
   const [documents, setDocuments] = useState<DocumentRead[]>([])
   const [localFiles, setLocalFiles] = useState<LocalFileItem[]>([])
@@ -139,6 +149,10 @@ export default function UploadPage({ navigateTo }: UploadPageProps) {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mediaFileInputRef = useRef<HTMLInputElement>(null)
+  const postUploadDestination: AppPage =
+    enabledAgents.diagnostic !== false ? "diagnosis" : "project-detail"
+  const postUploadLabel =
+    enabledAgents.diagnostic !== false ? "EnnoDiagnostic" : "le dossier"
 
   const loadData = async () => {
     setLoading(true)
@@ -270,8 +284,8 @@ export default function UploadPage({ navigateTo }: UploadPageProps) {
     setUploading(false)
 
     if (uploadedCount > 0) {
-      setSuccess(`${uploadedCount} document(s) importé(s). Redirection vers EnnoDiagnostic...`)
-      setTimeout(() => navigateTo("diagnosis"), 700)
+      setSuccess(`${uploadedCount} document(s) importé(s). Redirection vers ${postUploadLabel}...`)
+      setTimeout(() => navigateTo(postUploadDestination), 700)
     }
   }
 
@@ -286,8 +300,8 @@ export default function UploadPage({ navigateTo }: UploadPageProps) {
       const imported = await importExistingDocuments(project.id)
       const docs = await getDocuments(project.id)
       setDocuments(docs)
-      setSuccess(`${imported.length} document(s) lié(s). Redirection vers EnnoDiagnostic...`)
-      setTimeout(() => navigateTo("diagnosis"), 700)
+      setSuccess(`${imported.length} document(s) lié(s). Redirection vers ${postUploadLabel}...`)
+      setTimeout(() => navigateTo(postUploadDestination), 700)
     } catch (err) {
       setError(
         err instanceof Error
@@ -551,7 +565,9 @@ export default function UploadPage({ navigateTo }: UploadPageProps) {
               Import de fichiers
             </CardTitle>
             <CardDescription className="text-xs">
-              Après upload, le consultant est redirigé vers EnnoDiagnostic pour lancer l’analyse.
+              {enabledAgents.diagnostic !== false
+                ? "Après upload, le consultant est redirigé vers EnnoDiagnostic pour lancer l’analyse."
+                : "Après upload, le consultant revient au dossier."}
             </CardDescription>
           </CardHeader>
 
@@ -652,7 +668,9 @@ export default function UploadPage({ navigateTo }: UploadPageProps) {
                 ) : (
                   <Upload className="size-4 mr-2" />
                 )}
-                Envoyer et ouvrir EnnoDiagnostic
+                {enabledAgents.diagnostic !== false
+                  ? "Envoyer et ouvrir EnnoDiagnostic"
+                  : "Envoyer et ouvrir le dossier"}
               </Button>
 
               <Button
@@ -665,7 +683,9 @@ export default function UploadPage({ navigateTo }: UploadPageProps) {
                 ) : (
                   <Database className="size-4 mr-2" />
                 )}
-                Importer existants et ouvrir EnnoDiagnostic
+                {enabledAgents.diagnostic !== false
+                  ? "Importer existants et ouvrir EnnoDiagnostic"
+                  : "Importer existants et ouvrir le dossier"}
               </Button>
             </div>
 

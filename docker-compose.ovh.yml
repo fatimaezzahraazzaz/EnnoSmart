@@ -28,6 +28,25 @@ services:
       timeout: 3s
       retries: 20
 
+  chroma:
+    # Même version que le client Python (requirements.txt). Le service reste
+    # uniquement sur le réseau Docker : aucun port Chroma n'est publié sur OVH.
+    image: ${CHROMA_IMAGE:-chromadb/chroma:1.5.9}
+    restart: unless-stopped
+    environment:
+      CHROMA_PERSIST_PATH: /data
+      CHROMA_ALLOW_RESET: "false"
+    volumes:
+      - ${ENNOSMART_CHROMA_DATA_DIR:-/mnt/ennosmart-data/chroma}:/data
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
   grobid:
     image: ${GROBID_IMAGE:-grobid/grobid:0.9.0-crf}
     restart: unless-stopped
@@ -50,6 +69,11 @@ services:
       ENNOSMART_LOG_ROOT: /var/lib/ennosmart/logs
       ENNOSMART_CACHE_ROOT: /var/lib/ennosmart/cache
       HF_HOME: /var/lib/ennosmart/cache/huggingface
+      ENNOSMART_CHROMA_MODE: http
+      ENNOSMART_CHROMA_HOST: chroma
+      ENNOSMART_CHROMA_PORT: 8000
+      ENNOSMART_CHROMA_SSL: "false"
+      ENNOSMART_CHROMA_ENFORCE_SCOPE: "true"
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       SESSION_LOCK_REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -79,6 +103,8 @@ services:
         condition: service_healthy
       grobid:
         condition: service_started
+      chroma:
+        condition: service_healthy
 
   scholar-worker:
     build:
@@ -95,6 +121,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      chroma:
+        condition: service_healthy
 
   cir-worker:
     build:
@@ -110,6 +138,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      chroma:
         condition: service_healthy
 
   legal-mcp:

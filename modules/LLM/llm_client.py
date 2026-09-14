@@ -377,6 +377,14 @@ class LLMClient:
     def model_name(self) -> str:
         return self._default_model_for_request(None)
 
+    def model_for_request(self, request_name: Optional[str] = None) -> str:
+        """Expose le modèle réellement résolu pour un type d'appel donné."""
+        return self._default_model_for_request(request_name)
+
+    def fallback_models_for_request(self, request_name: Optional[str] = None) -> List[str]:
+        """Expose les fallbacks réellement résolus pour un type d'appel donné."""
+        return self._models_for_provider(self.provider, request_name)[1:]
+
     def get_last_generation_meta(self) -> Dict[str, Any]:
         return dict(self._last_generation_meta)
 

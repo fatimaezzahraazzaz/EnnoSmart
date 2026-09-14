@@ -710,7 +710,11 @@ def register_final_cir_nlp_result_in_chroma(
         if chroma_dir is None:
             chroma_dir = year_dir(organisme, project, year) / "rag" / "chroma"
 
-        vs = RAGVectorStore(chroma_dir)
+        vs = RAGVectorStore(
+            chroma_dir,
+            scope_metadata=getattr(ps, "chroma_scope_metadata", None),
+            collection_namespace=getattr(ps, "collection_name", None),
+        )
         try:
             vs.add_chunks(collection_name=collection_name, chunks=chunks)
         except TypeError:

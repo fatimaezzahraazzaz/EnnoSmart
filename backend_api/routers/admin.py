@@ -6,14 +6,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from core.deps import get_db, require_admin, require_superadmin
+from core.deps import get_current_user, get_db, require_admin, require_superadmin
 from core.security import hash_password
 from db.models import (
     AdminAuditLog,
     DiagnosticRun,
     Document,
+    ImprovementSession,
+    PasswordResetToken,
     PlatformSetting,
     Project,
+    ProjectAccessRequest,
     ProjectWorkflow,
     ScholarRun,
     User,
@@ -27,7 +30,11 @@ from schemas.admin import (
     ProjectAssignmentUpdate,
     ProjectWorkflowUpdate,
 )
-from services.platform_settings_service import merge_ai_settings, write_runtime_ai_settings
+from services.platform_settings_service import (
+    effective_agent_models,
+    merge_ai_settings,
+    write_runtime_ai_settings,
+)
 
 
 router = APIRouter(prefix="/admin", tags=["administration"])
@@ -223,6 +230,82 @@ def update_user(
     return _user_payload(db, target)
 
 
+@router.delete("/users/{user_id}")
+def delete_consultant(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable.")
+    if target.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Vous ne pouvez pas supprimer votre propre compte.")
+    if target.role != "consultant":
+        raise HTTPException(
+            status_code=400,
+            detail="Seuls les comptes consultant peuvent être supprimés depuis cette page.",
+        )
+
+    project_count = (
+        db.query(func.count(Project.id))
+        .filter(Project.consultant_id == target.id)
+        .scalar()
+        or 0
+    )
+    if project_count:
+        suffix = "s" if project_count > 1 else ""
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Ce consultant possède encore {project_count} projet{suffix}. "
+                "Réaffectez-les avant de supprimer le compte, ou désactivez-le."
+            ),
+        )
+
+    deleted_identity = {
+        "role": target.role,
+        "project_count": 0,
+    }
+
+    # Les données métier sont conservées : seules les références facultatives
+    # à l'ancien compte sont détachées. Les demandes d'accès et jetons propres
+    # au compte n'ont plus de raison d'être et sont supprimés avec lui.
+    db.query(ProjectWorkflow).filter(
+        ProjectWorkflow.updated_by_user_id == target.id
+    ).update({ProjectWorkflow.updated_by_user_id: None}, synchronize_session=False)
+    db.query(PlatformSetting).filter(
+        PlatformSetting.updated_by_user_id == target.id
+    ).update({PlatformSetting.updated_by_user_id: None}, synchronize_session=False)
+    db.query(AdminAuditLog).filter(
+        AdminAuditLog.actor_user_id == target.id
+    ).update({AdminAuditLog.actor_user_id: None}, synchronize_session=False)
+    db.query(ImprovementSession).filter(
+        ImprovementSession.created_by_user_id == target.id
+    ).update({ImprovementSession.created_by_user_id: None}, synchronize_session=False)
+    db.query(ProjectAccessRequest).filter(
+        or_(
+            ProjectAccessRequest.requester_id == target.id,
+            ProjectAccessRequest.owner_id == target.id,
+        )
+    ).delete(synchronize_session=False)
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == target.id
+    ).delete(synchronize_session=False)
+
+    _audit(
+        db,
+        current_user,
+        "user.deleted",
+        "user",
+        target.id,
+        deleted_identity,
+    )
+    db.delete(target)
+    db.commit()
+    return {"status": "deleted", "message": "Le compte consultant a été supprimé."}
+
+
 @router.get("/projects")
 def list_all_projects(
     search: str | None = Query(default=None, max_length=100),
@@ -294,6 +377,22 @@ def get_ai_settings(
 ):
     setting = db.query(PlatformSetting).filter(PlatformSetting.key == "ai_models").first()
     return merge_ai_settings(setting.value_json if setting else None)
+
+
+@router.get("/effective-agent-models")
+def get_effective_agent_models(
+    _: User = Depends(require_superadmin),
+):
+    return effective_agent_models()
+
+
+@router.get("/agent-availability")
+def get_agent_availability(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    setting = db.query(PlatformSetting).filter(PlatformSetting.key == "ai_models").first()
+    return merge_ai_settings(setting.value_json if setting else None)["enabled_agents"]
 
 
 @router.put("/ai-settings")

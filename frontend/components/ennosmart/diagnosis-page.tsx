@@ -1132,19 +1132,38 @@ function getBackendDiagnosticSectionsV93(payload: any, display: any): Record<str
 
   const candidates = [
     report?.diagnostic_sections,
+    report?.diagnostic_sections_by_key,
     report?.report_sections,
     report?.diagnostic?.sections,
+    report?.display?.diagnostic_sections,
+    report?.display?.diagnostic_sections_by_key,
     report?.display?.report_sections,
+    display?.diagnostic_sections,
+    display?.diagnostic_sections_by_key,
     display?.report_sections,
   ]
 
+  // Les sorties compactes répartissent volontairement les sections entre
+  // report_sections (alias métier) et diagnostic_sections_by_key (sections
+  // agent complètes). Retourner le premier objet, parfois vide ou partiel,
+  // faisait disparaître objectif, démarche, résultats et paramètres alors
+  // qu'ils étaient bien présents dans PostgreSQL.
+  const merged: Record<string, string> = {}
   for (const candidate of candidates) {
     if (candidate && typeof candidate === "object") {
-      return candidate as Record<string, string>
+      for (const [key, value] of Object.entries(candidate)) {
+        if (
+          typeof value === "string" &&
+          value.trim() &&
+          !(typeof merged[key] === "string" && merged[key].trim())
+        ) {
+          merged[key] = value
+        }
+      }
     }
   }
 
-  return {}
+  return merged
 }
 
 function getBackendDiagnosticMarkdownV93(payload: any, display: any): string {

@@ -96,3 +96,84 @@ def write_runtime_ai_settings(settings: dict[str, Any]) -> Path:
     except Exception:
         pass
     return target
+
+
+def effective_agent_models() -> dict[str, Any]:
+    """Décrit les modèles réellement résolus par le code des trois agents.
+
+    Cette lecture suit exactement la même fusion que ``LLMClient`` : .env,
+    réglages runtime publiés par l'administration, puis variables du processus.
+    Elle n'effectue aucun appel réseau au fournisseur.
+    """
+    from modules.LLM.llm_client import LLMClient, reload_config
+
+    runtime = reload_config()
+    client = LLMClient()
+
+    def configured(*keys: str, default: str) -> str:
+        for key in keys:
+            value = str(runtime.get(key) or "").strip()
+            if value:
+                return value
+        return default
+
+    primary = client.model_for_request()
+    writer = client.model_for_request("writer")
+    diagnostic_structured = configured(
+        "ENNOSMART_PYDANTIC_MODEL",
+        default="openai-chat:gpt-4.1-mini",
+    )
+    scholar_draft = configured(
+        "ENNOSCHOLAR_PHASE5_DRAFT_MODEL",
+        default="gpt-4.1-mini",
+    )
+    scholar_verifier = configured(
+        "ENNOSCHOLAR_PHASE5_VERIFIER_MODEL",
+        default="gpt-4.1-mini",
+    )
+    scholar_writer = configured(
+        "ENNOSCHOLAR_PHASE5_WRITER_MODEL",
+        "ENNOSMART_PHASE5_WRITER_MODEL",
+        default=writer,
+    )
+    scholar_escalation = configured(
+        "ENNOSCHOLAR_PHASE5_ESCALATION_MODEL",
+        default=scholar_writer or "gpt-4.1",
+    )
+
+    return {
+        "provider": client.provider,
+        "primary_model": primary,
+        "writer_model": writer,
+        "fallback_models": client.fallback_models_for_request(),
+        "resolution": "Client LLM central (.env + configuration runtime + environnement)",
+        "agents": {
+            "diagnostic": {
+                "label": "EnnoDiagnostic",
+                "primary_model": primary,
+                "models": [
+                    {"role": "Analyse et synthèse", "model": primary},
+                    {"role": "Conclusion Frascati structurée", "model": diagnostic_structured},
+                ],
+            },
+            "scholar": {
+                "label": "EnnoScholar",
+                "primary_model": primary,
+                "models": [
+                    {"role": "Conversation et recherche", "model": primary},
+                    {"role": "Premier brouillon", "model": scholar_draft},
+                    {"role": "Rédaction de l'état de l'art", "model": scholar_writer},
+                    {"role": "Vérification", "model": scholar_verifier},
+                    {"role": "Escalade si nécessaire", "model": scholar_escalation},
+                ],
+            },
+            "improvement": {
+                "label": "EnnoAmelioration",
+                "primary_model": writer,
+                "models": [
+                    {"role": "Compréhension et routage", "model": primary},
+                    {"role": "Réécriture contrôlée", "model": writer},
+                ],
+            },
+        },
+    }

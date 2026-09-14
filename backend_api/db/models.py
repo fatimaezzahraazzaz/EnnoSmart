@@ -131,6 +131,11 @@ class Project(Base):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+    artifacts = relationship(
+        "ProjectArtifact",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
     workflow = relationship(
         "ProjectWorkflow",
         back_populates="project",
@@ -262,6 +267,51 @@ class DocumentCorpusAssignment(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     document = relationship("Document", back_populates="corpus_assignments")
+
+
+class ProjectArtifact(Base):
+    """Gros artefact JSON compressé dont PostgreSQL est la source officielle.
+
+    Les champs métier qui doivent être filtrés ou triés restent dans leurs
+    tables JSON/JSONB habituelles. Cette table est réservée aux résultats
+    internes volumineux (NLP, chunks, rapports complets et versions rédigées)
+    que l'application relit toujours comme un document entier.
+    """
+
+    __tablename__ = "project_artifacts"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "artifact_key",
+            name="uq_project_artifact_project_key",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(
+        Integer,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    artifact_key = Column(String(700), nullable=False)
+    artifact_kind = Column(String(100), nullable=False, index=True)
+    encoding = Column(String(40), nullable=False, default="json-gzip-v1")
+    content_sha256 = Column(String(64), nullable=False, index=True)
+    original_size = Column(Integer, nullable=False, default=0)
+    stored_size = Column(Integer, nullable=False, default=0)
+    metadata_json = Column(JSON, nullable=True)
+    # Ne jamais charger les dizaines de Mo compressés pendant une simple liste.
+    payload_data = deferred(Column(LargeBinary, nullable=False))
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    project = relationship("Project", back_populates="artifacts")
 
 
 class DiagnosticRun(Base):

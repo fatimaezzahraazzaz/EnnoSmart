@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from .config import ORGANISMES_DIR
+from .chroma_client import chroma_http_enabled
 
 
 def slugify(value: str, default: str = "unknown") -> str:
@@ -93,15 +95,40 @@ class ProjectStore:
         identity.append(self.year_id)
         return "_".join(identity)
 
+    @property
+    def chroma_scope_metadata(self) -> Dict[str, str]:
+        """Identité obligatoire de chaque vecteur RAG du projet."""
+
+        raw_scope = "|".join(
+            [
+                self.organisme_id,
+                self.project_id,
+                self.subproject_id or "-",
+                self.year_id,
+            ]
+        )
+        return {
+            "ennosmart_scope_type": "project",
+            "ennosmart_scope_id": hashlib.sha256(raw_scope.encode("utf-8")).hexdigest()[:24],
+            "ennosmart_organisme_id": self.organisme_id,
+            "ennosmart_project_id": self.project_id,
+            "ennosmart_subproject_id": self.subproject_id or "-",
+            "ennosmart_year_id": self.year_id,
+        }
+
     def ensure(self) -> "ProjectStore":
-        for p in [
+        directories = [
             self.documents_raw_dir,
             self.documents_processed_dir,
             self.nlp_dir,
             self.rag_dir,
-            self.chroma_dir,
             self.diagnostics_dir,
-        ]:
+        ]
+        # En production le serveur Chroma possède son propre volume. Ne jamais
+        # recréer un faux dossier rag/chroma dans chaque projet.
+        if not chroma_http_enabled():
+            directories.append(self.chroma_dir)
+        for p in directories:
             p.mkdir(parents=True, exist_ok=True)
 
         if not self.metadata_path.exists():
@@ -121,6 +148,8 @@ class ProjectStore:
             "year": self.year,
             "annee": self.year,
             "year_id": self.year_id,
+            "chroma_collection": self.collection_name,
+            "chroma_storage_mode": "http_service" if chroma_http_enabled() else "persistent_local",
             "project_root_dir": str(self.project_root_dir),
             "project_year_dir": str(self.project_dir),
             "created_or_updated_at": datetime.now().isoformat(timespec="seconds"),

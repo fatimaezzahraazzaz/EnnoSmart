@@ -3,6 +3,7 @@ from __future__ import annotations
 DIAGNOSTIC_SERVICE_VERSION = "v148_fresh_assessment_clean_project_runs"
 
 from datetime import date, datetime
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
@@ -24,6 +25,13 @@ from services.document_corpus_service import (
 )
 from services.file_service import load_json_file, project_output_dir, run_optional_ai_script
 from services.diagnostic_reset_service import exclusive_project_diagnostic
+from services.project_artifact_service import (
+    artifact_uri,
+    get_json_artifact,
+    json_artifact_exists,
+    materialized_json_artifact,
+    save_json_artifact,
+)
 from modules.common.runtime_paths import code_root, data_root
 
 try:
@@ -108,6 +116,72 @@ def get_project_store(project: Project):
         subproject=getattr(project, "subproject_name", None),
         year=_year(project),
     ).ensure()
+
+
+NLP_ARTIFACT_KEY = "nlp/nlp_result.json"
+RAG_CHUNKS_ARTIFACT_KEY = "rag/chunks.json"
+PREPARE_REPORT_ARTIFACT_KEY = "diagnostics/prepare_sources_report.json"
+
+
+def _same_project_family(left: Project, right: Project) -> bool:
+    return (
+        str(left.organisme or "").strip().casefold()
+        == str(right.organisme or "").strip().casefold()
+        and str(left.project_name or "").strip().casefold()
+        == str(right.project_name or "").strip().casefold()
+        and str(getattr(left, "subproject_name", None) or "").strip().casefold()
+        == str(getattr(right, "subproject_name", None) or "").strip().casefold()
+    )
+
+
+@contextmanager
+def materialized_diagnostic_inputs(
+    db: Session,
+    project: Project,
+    *,
+    include_rag_chunks: bool = True,
+):
+    """Matérialise le NLP courant et N-1 uniquement pendant un traitement legacy."""
+
+    family = [
+        row
+        for row in db.query(Project).filter(
+            Project.organisme == project.organisme,
+            Project.project_name == project.project_name,
+        ).all()
+        if _same_project_family(row, project)
+    ]
+    if not any(int(row.id) == int(project.id) for row in family):
+        family.append(project)
+
+    with ExitStack() as stack:
+        current_nlp = get_project_store(project).nlp_dir / "nlp_result.json"
+        current_chunks = get_project_store(project).rag_dir / "chunks.json"
+        for row in family:
+            store = get_project_store(row)
+            stack.enter_context(
+                materialized_json_artifact(
+                    db,
+                    row.id,
+                    NLP_ARTIFACT_KEY,
+                    store.nlp_dir / "nlp_result.json",
+                    artifact_kind="nlp_result",
+                    write_back=int(row.id) == int(project.id),
+                    required=int(row.id) == int(project.id),
+                )
+            )
+        if include_rag_chunks:
+            stack.enter_context(
+                materialized_json_artifact(
+                    db,
+                    project.id,
+                    RAG_CHUNKS_ARTIFACT_KEY,
+                    current_chunks,
+                    artifact_kind="rag_chunks",
+                    required=True,
+                )
+            )
+        yield {"nlp_result": current_nlp, "rag_chunks": current_chunks}
 
 
 # ============================================================
@@ -908,15 +982,31 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
         else {}
     )
 
-    # Garantie explicite pour le bouton Agent-only.
+    # La base conserve une seule copie gzip. Les anciens modules qui exigent un
+    # chemin la matérialisent uniquement pendant leur exécution.
     nlp_path = ps.nlp_dir / "nlp_result.json"
     print(
-        f"[prepare-sources][4/6] Sauvegarde NLP : {nlp_path}",
+        "[prepare-sources][4/6] Sauvegarde NLP compressée en base",
         flush=True,
     )
-    save_json(nlp_path, nlp_result)
 
     print("[prepare-sources][5/6] Indexation RAG / Chroma", flush=True)
+    def persist_index_artifact(relative_path: str, payload: Any) -> None:
+        kind = "nlp_result" if relative_path == NLP_ARTIFACT_KEY else "rag_chunks"
+        save_json_artifact(
+            db,
+            project.id,
+            relative_path,
+            payload,
+            artifact_kind=kind,
+            metadata={
+                "organisme": project.organisme,
+                "project": project.project_name,
+                "subproject": getattr(project, "subproject_name", None),
+                "year": _year(project),
+            },
+        )
+
     index_report_raw = index_nlp_result(
         organisme=project.organisme,
         project=project.project_name,
@@ -924,10 +1014,12 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
         nlp_result=nlp_result,
         reset=True,
         year=_year(project),
+        persist_json_files=False,
+        artifact_sink=persist_index_artifact,
     )
     index_report = sanitize_json_value(index_report_raw or {})
 
-    # Le gros resultat NLP reste sur disque. On ne le renvoie pas a FastAPI.
+    # Le gros résultat NLP reste dans l'artefact DB, jamais dans la réponse HTTP.
     del nlp_result
     gc.collect()
 
@@ -954,7 +1046,7 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
         # Compatibilite avec le reste du backend, sans contenu NLP massif.
         "nlp_result": {"stats": stats},
         "nlp_stats": stats,
-        "nlp_result_path": str(nlp_path),
+        "nlp_result_path": artifact_uri(project.id, NLP_ARTIFACT_KEY),
         "index_report": index_report,
     }
 
@@ -1162,7 +1254,10 @@ def run_true_ennodiagnostic_agent(project: Project, prior_pipeline: Optional[Dic
         use_llm=use_llm,
     )
 
-    report = sanitize_json_value(agent.generate_diagnostic(save=True))
+    # Le rapport complet est retourné en mémoire puis archivé une seule fois en
+    # base par ``_persist_complete_run``. Les sous-étapes peuvent encore écrire
+    # des caches de travail, supprimés seulement après le commit réussi.
+    report = sanitize_json_value(agent.generate_diagnostic(save=False))
     report = sanitize_json_value({
         **report,
         "pipeline_before_agent": {
@@ -1174,14 +1269,13 @@ def run_true_ennodiagnostic_agent(project: Project, prior_pipeline: Optional[Dic
         "assessment_refresh": assessment_refresh,
     })
 
-    save_json(ps.diagnostics_dir / "ennodiagnostic_report.json", report)
-    save_json(ps.diagnostics_dir / "diagnostic_ennodiagnostic.json", report)
     return report
 
 
 def run_full_ennodiagnostic_pipeline(db: Session, project: Project) -> Dict[str, Any]:
     nlp_rag = run_nlp_and_rag(db, project)
-    report = run_true_ennodiagnostic_agent(project, prior_pipeline=nlp_rag)
+    with materialized_diagnostic_inputs(db, project):
+        report = run_true_ennodiagnostic_agent(project, prior_pipeline=nlp_rag)
     return sanitize_json_value({
         "nlp_rag": {
             "documents_loaded_count": nlp_rag.get("documents_loaded_count"),
@@ -1203,12 +1297,31 @@ def _prepare_report_path(project: Project) -> Path:
     return ps.diagnostics_dir / "prepare_sources_report.json"
 
 
-def _load_prepare_report(project: Project) -> Dict[str, Any]:
+def _load_prepare_report(db: Session, project: Project) -> Dict[str, Any]:
+    stored = get_json_artifact(
+        db,
+        project.id,
+        PREPARE_REPORT_ARTIFACT_KEY,
+        default=None,
+    )
+    if isinstance(stored, dict):
+        return stored
     path = _prepare_report_path(project)
     if path.exists():
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-            return data if isinstance(data, dict) else {}
+            if isinstance(data, dict):
+                save_json_artifact(
+                    db,
+                    project.id,
+                    PREPARE_REPORT_ARTIFACT_KEY,
+                    data,
+                    artifact_kind="diagnostic_prepare_report",
+                    metadata={"migrated_from": str(path)},
+                )
+                path.unlink(missing_ok=True)
+                return data
+            return {}
         except Exception:
             return {}
     return {}
@@ -1416,6 +1529,35 @@ def _extract_final_verrous_from_report(report: Dict[str, Any]) -> List[Dict[str,
             1200,
         )
 
+        compact_agent_item = {
+            key: raw.get(key)
+            for key in (
+                "title",
+                "titre",
+                "verrou",
+                "tag_cir",
+                "decision",
+                "score",
+                "frascati_score",
+                "consultant_status",
+                "status",
+                "consultant_explanation",
+                "why_agent_found_verrou",
+                "why_not_simple_engineering",
+                "scientific_lock",
+                "evidence_summary",
+                "source_document",
+                "document",
+                "group_id",
+                "cluster_id",
+                "candidate_origin",
+                "historical_memory_card",
+                "historical_gap_recovered",
+                "historical_continuity",
+                "continuity_percentage",
+            )
+            if raw.get(key) not in (None, "", [], {})
+        }
         out.append(sanitize_json_value({
             **raw,
             "title": title,
@@ -1430,7 +1572,9 @@ def _extract_final_verrous_from_report(report: Dict[str, Any]) -> List[Dict[str,
             "needs_human_validation": True,
             "source_json": {
                 **source_json,
-                "full_agent_item": sanitize_json_value(raw),
+                # Compatibilité frontend sans recopier récursivement le verrou
+                # complet et toutes ses preuves dans son propre source_json.
+                "full_agent_item": compact_agent_item,
                 "source_document": source_document or source_json.get("source_document"),
                 "consultant_explanation": raw.get("consultant_explanation") or source_json.get("consultant_explanation") or justification,
                 "scientific_lock": raw.get("scientific_lock") or source_json.get("scientific_lock"),
@@ -1515,8 +1659,63 @@ def extract_complete_diagnostic_snapshot(report: Dict[str, Any]) -> Dict[str, An
 
     final_verrous = _extract_final_verrous_from_report(report)
 
+    frascati = report.get("frascati_summary")
+    frascati = frascati if isinstance(frascati, dict) else {}
+    compact_frascati = {
+        key: value
+        for key, value in frascati.items()
+        if key not in {"eligibility_evidence_report", "group_assessments"}
+    }
+
+    ai_report = report.get("ai_detection_report_runtime") or report.get("ai_detection_report") or {}
+    ai_report = ai_report if isinstance(ai_report, dict) else {}
+    ai_detection = ai_report.get("ai_detection")
+    ai_detection = ai_detection if isinstance(ai_detection, dict) else {}
+    compact_ai_report = {
+        "ok": ai_report.get("ok"),
+        "summary": ai_report.get("summary") or {},
+        "top_passages": (
+            ai_report.get("top_passages")
+            or ai_detection.get("suspected_passages")
+            or ai_detection.get("passages")
+            or []
+        )[:10],
+        "ai_detection": {
+            key: value
+            for key, value in ai_detection.items()
+            if key not in {"passages", "suspected_passages", "all_passages"}
+        },
+    }
+    cir_memory = report.get("cir_memory_report")
+    cir_memory = cir_memory if isinstance(cir_memory, dict) else {}
+    compact_cir_memory = {
+        key: cir_memory.get(key)
+        for key in (
+            "ok",
+            "available",
+            "has_previous_cir",
+            "previous_cir_years_used",
+            "previous_years",
+            "summary",
+            "new_or_not_found",
+            "evolution_or_partial_continuity",
+            "continuity_strong",
+            "verrou_comparisons",
+            "strict_axis_continuity",
+            "historical_family_coverage",
+        )
+        if cir_memory.get(key) not in (None, "", [], {})
+    }
+    synthesis = report.get("verrou_synthesis_report")
+    synthesis = synthesis if isinstance(synthesis, dict) else {}
+    compact_synthesis = {
+        key: synthesis.get(key)
+        for key in ("ok", "version", "status", "summary", "counts", "telemetry")
+        if synthesis.get(key) not in (None, "", [], {})
+    }
+
     return sanitize_json_value({
-        "snapshot_version": "v143_complete_db_persistence",
+        "snapshot_version": "v149_compact_db_plus_gzip_artifact",
         "generated_at": report.get("generated_at") or datetime.utcnow().isoformat(),
         "mode": report.get("mode"),
         "status": report.get("status") or diagnostic.get("status"),
@@ -1530,18 +1729,49 @@ def extract_complete_diagnostic_snapshot(report: Dict[str, Any]) -> Dict[str, An
         "diagnostic_cards_count": len(cards),
         "final_verrous": final_verrous,
         "final_verrous_count": len(final_verrous),
-        "frascati_summary": report.get("frascati_summary") or {},
+        "frascati_summary": compact_frascati,
         "frascati_justification": report.get("frascati_justification") or {},
-        "ai_detection_report": report.get("ai_detection_report_runtime") or report.get("ai_detection_report") or {},
+        "ai_detection_report": compact_ai_report,
         "style_memory_report": report.get("style_memory_report") or {},
-        "cir_memory_report": report.get("cir_memory_report") or {},
+        "cir_memory_report": compact_cir_memory,
         "inputs_status": report.get("inputs_status") or {},
         "pipeline_before_agent": report.get("pipeline_before_agent") or {},
-        "verrou_synthesis_report": report.get("verrou_synthesis_report") or {},
-        "chroma_sections": report.get("chroma_sections") or {},
+        "verrou_synthesis_report": compact_synthesis,
+        "chroma_sections": {},
         "source_paths": {
             "output_path": report.get("output_path"),
         },
+    })
+
+
+def _compact_report_for_database(
+    report: Dict[str, Any],
+    snapshot: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Vue métier lisible sans dupliquer les énormes preuves internes."""
+
+    return sanitize_json_value({
+        "ok": report.get("ok"),
+        "status": report.get("status"),
+        "version": report.get("version"),
+        "mode": report.get("mode"),
+        "generated_at": report.get("generated_at"),
+        "organisme": report.get("organisme"),
+        "project": report.get("project"),
+        "year": report.get("year"),
+        "diagnostic": {
+            "status": report.get("status") or "completed",
+            "content": snapshot.get("report_markdown") or "",
+        },
+        "report_markdown": snapshot.get("report_markdown") or "",
+        "diagnostic_sections_by_key": snapshot.get("sections_by_key") or {},
+        "diagnostic_sections": snapshot.get("sections_by_title") or {},
+        "report_sections": snapshot.get("canonical_sections") or {},
+        # Les autres données métier sont dans ``diagnostic_snapshot`` au même
+        # niveau de l'enveloppe ; ne pas les recopier une seconde fois ici.
+        "inputs_status": report.get("inputs_status") or {},
+        "telemetry": report.get("telemetry") or {},
+        "storage_policy": "compact_business_view_full_report_in_gzip_artifact",
     })
 
 
@@ -1584,8 +1814,14 @@ def _build_complete_run_payload(
     bundle_metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     snapshot = extract_complete_diagnostic_snapshot(report)
+    compact_report = _compact_report_for_database(report, snapshot)
+    compact_pipeline_metadata = {
+        key: value
+        for key, value in (pipeline_result or {}).items()
+        if key not in {"report", "bundle", "script_or_pipeline_result"}
+    }
     return sanitize_json_value({
-        "persistence_version": "v143_complete_db_persistence",
+        "persistence_version": "v149_compact_db_plus_gzip_artifact",
         "saved_at": datetime.utcnow().isoformat(),
         "button": button,
         "pipeline": pipeline_name,
@@ -1596,22 +1832,50 @@ def _build_complete_run_payload(
             "subproject_name": getattr(project, "subproject_name", None),
             "year": _year(project),
         },
-        # Source officielle complète : aucune section n'est reconstruite depuis Chroma.
-        "report": report,
+        # Vue métier requêtable. Le rapport brut complet est ajouté comme
+        # artefact gzip après l'obtention de l'identifiant du run.
+        "report": compact_report,
         "script_or_pipeline_result": {
-            "report": report,
-            "pipeline_metadata": pipeline_result or {},
+            "pipeline_metadata": compact_pipeline_metadata,
         },
         "diagnostic_snapshot": snapshot,
-        "report_markdown": snapshot.get("report_markdown"),
-        "report_sections": snapshot.get("canonical_sections") or {},
-        "diagnostic_sections_by_key": snapshot.get("sections_by_key") or {},
-        "diagnostic_sections": snapshot.get("sections_by_title") or {},
-        "diagnostic_cards": snapshot.get("diagnostic_cards") or [],
-        "final_verrous_snapshot": snapshot.get("final_verrous") or [],
         "prepare_sources_report": prepare_report or {},
         "bundle_metadata": bundle_metadata or {},
     })
+
+
+def _cleanup_diagnostic_json_workfiles(project: Project) -> list[str]:
+    """Supprime seulement les JSON reconstructibles après le commit DB."""
+
+    store = get_project_store(project)
+    root = store.project_dir.resolve()
+    removed: list[str] = []
+    for directory in (
+        store.project_dir / "ennodiagnostic",
+        store.diagnostics_dir,
+    ):
+        resolved = directory.resolve()
+        if resolved == root or not resolved.is_relative_to(root):
+            raise RuntimeError(f"Dossier de travail diagnostic hors projet : {directory}")
+        if not directory.exists():
+            continue
+        for path in directory.rglob("*.json"):
+            file_resolved = path.resolve()
+            if not file_resolved.is_relative_to(root):
+                raise RuntimeError(f"Artefact diagnostic hors projet : {path}")
+            path.unlink(missing_ok=True)
+            removed.append(str(path))
+        for child in sorted(directory.rglob("*"), reverse=True):
+            if child.is_dir():
+                try:
+                    child.rmdir()
+                except OSError:
+                    pass
+        try:
+            directory.rmdir()
+        except OSError:
+            pass
+    return removed
 
 
 def _previous_consultant_statuses(db: Session, project_id: int, current_run_id: Optional[int]) -> Dict[str, str]:
@@ -1778,7 +2042,31 @@ def sync_verrous_from_diagnostic(
         )
         source_json = sanitize_json_value({
             **source_json,
-            "full_persisted_verrou": item,
+            "full_persisted_verrou": {
+                key: item.get(key)
+                for key in (
+                    "title",
+                    "tag_cir",
+                    "score",
+                    "consultant_status",
+                    "justification",
+                    "description",
+                    "consultant_explanation",
+                    "why_agent_found_verrou",
+                    "why_not_simple_engineering",
+                    "scientific_lock",
+                    "evidence_summary",
+                    "source_document",
+                    "group_id",
+                    "cluster_id",
+                    "candidate_origin",
+                    "historical_memory_card",
+                    "historical_gap_recovered",
+                    "historical_continuity",
+                    "continuity_percentage",
+                )
+                if item.get(key) not in (None, "", [], {})
+            },
             "diagnostic_run_id": run.id,
             "project_id": run.project_id,
             "persistence_version": "v145_latest_only_without_history_delete",
@@ -1943,6 +2231,25 @@ def _persist_complete_run(
     try:
         db.add(run)
         db.flush()  # obtient run.id avant la création des Verrou
+        full_report_artifact = save_json_artifact(
+            db,
+            project.id,
+            "diagnostics/latest_full_report.json",
+            report,
+            artifact_kind="diagnostic_full_report",
+            metadata={
+                "diagnostic_run_id": int(run.id),
+                "status": status_value,
+                "generated_at": report.get("generated_at"),
+            },
+        )
+        payload = dict(payload)
+        payload["full_report_artifact"] = full_report_artifact
+        compact_report = dict(payload.get("report") or {})
+        compact_report["full_report_artifact_uri"] = full_report_artifact["uri"]
+        payload["report"] = compact_report
+        run.report_path = full_report_artifact["uri"]
+        run.raw_result_json = payload
         synced = sync_verrous_from_diagnostic(db, run, commit=False)
         if not synced:
             raise RuntimeError(
@@ -1952,6 +2259,21 @@ def _persist_complete_run(
         project.status = "Diagnostic terminé"
         db.commit()
         db.refresh(run)
+        try:
+            removed = _cleanup_diagnostic_json_workfiles(project)
+            if removed:
+                print(
+                    "[EnnoDiagnostic][DB_ARTIFACT_CLEANUP] "
+                    f"removed_json={len(removed)}",
+                    flush=True,
+                )
+        except Exception as cleanup_exc:
+            # La donnée officielle est déjà commitée. Un échec de ménage ne doit
+            # jamais invalider le diagnostic ; il sera repris au prochain reset.
+            print(
+                f"[EnnoDiagnostic][DB_ARTIFACT_CLEANUP][WARN] {cleanup_exc}",
+                flush=True,
+            )
         return run
     except Exception:
         db.rollback()
@@ -1978,8 +2300,8 @@ def prepare_ennodiagnostic_sources(db: Session, project: Project) -> Dict[str, A
     )
     index_report = sanitize_json_value(nlp_rag.get("index_report") or {})
 
-    # Structure minimale attendue par run_ennodiagnostic_agent_only() et
-    # run_true_ennodiagnostic_agent(). Le gros nlp_result.json reste sur disque.
+    # Structure minimale attendue par l'agent. Le gros NLP reste compressé en
+    # base et sera matérialisé uniquement pendant l'exécution suivante.
     compact_pipeline = {
         "documents_used_count": nlp_rag.get("documents_used_count"),
         "documents_loaded_count": nlp_rag.get("documents_loaded_count"),
@@ -2017,21 +2339,30 @@ def prepare_ennodiagnostic_sources(db: Session, project: Project) -> Dict[str, A
         "paths": {
             "project_dir": str(ps.project_dir),
             "raw_dir": str(ps.documents_raw_dir),
-            "nlp_result": str(ps.nlp_dir / "nlp_result.json"),
-            "rag_chunks": str(ps.rag_dir / "chunks.json"),
+            "nlp_result": artifact_uri(project.id, NLP_ARTIFACT_KEY),
+            "rag_chunks": artifact_uri(project.id, RAG_CHUNKS_ARTIFACT_KEY),
             "visual_assets_manifest": str(
                 ps.documents_processed_dir
                 / "visual_assets_v1"
                 / "manifest.json"
             ),
-            "prepare_report": str(_prepare_report_path(project)),
+            "prepare_report": artifact_uri(
+                project.id,
+                PREPARE_REPORT_ARTIFACT_KEY,
+            ),
         },
         "raw_pipeline_result": compact_pipeline,
         "generated_at": datetime.utcnow().isoformat(),
     }
 
-    # Sauvegarde compacte : pas de deuxieme copie de tous les passages NLP.
-    save_json(_prepare_report_path(project), result)
+    # Sauvegarde compacte en base : aucune copie JSON permanente sur le VPS.
+    save_json_artifact(
+        db,
+        project.id,
+        PREPARE_REPORT_ARTIFACT_KEY,
+        result,
+        artifact_kind="diagnostic_prepare_report",
+    )
 
     project.status = "Sources preparees"
     db.commit()
@@ -2052,13 +2383,18 @@ def run_ennodiagnostic_agent_only(db: Session, project: Project) -> DiagnosticRu
     rag_chunks = ps.rag_dir / "chunks.json"
     nlp_result = ps.nlp_dir / "nlp_result.json"
 
-    if not rag_chunks.exists() or not nlp_result.exists():
+    nlp_ready = json_artifact_exists(db, project.id, NLP_ARTIFACT_KEY) or nlp_result.exists()
+    chunks_ready = (
+        json_artifact_exists(db, project.id, RAG_CHUNKS_ARTIFACT_KEY)
+        or rag_chunks.exists()
+    )
+    if not chunks_ready or not nlp_ready:
         raise RuntimeError(
             "Sources non préparées. Lance d'abord /diagnostic/prepare-sources "
             "ou utilise /diagnostic/run."
         )
 
-    prepare_report = _load_prepare_report(project)
+    prepare_report = _load_prepare_report(db, project)
     prepared_manifest = (
         prepare_report.get("corpus_manifest")
         if isinstance(prepare_report.get("corpus_manifest"), dict)
@@ -2080,7 +2416,8 @@ def run_ennodiagnostic_agent_only(db: Session, project: Project) -> DiagnosticRu
     )
     from services.diagnostic_reset_service import reset_previous_agent_runs
     reset_previous_agent_runs(db, project, ps)
-    report = run_true_ennodiagnostic_agent(project, prior_pipeline=prior_pipeline)
+    with materialized_diagnostic_inputs(db, project):
+        report = run_true_ennodiagnostic_agent(project, prior_pipeline=prior_pipeline)
     paths = diagnostic_paths(project)
 
     return _persist_complete_run(
@@ -2091,14 +2428,14 @@ def run_ennodiagnostic_agent_only(db: Session, project: Project) -> DiagnosticRu
         pipeline_name="chroma_score_ia_style_memory_llm_ennodiagnostic_complete_db",
         button="ennodiagnostic_agent_only",
         report_path=str(paths["report"]) if paths["report"].exists() else str(ps.project_dir / "ennodiagnostic" / "ennodiagnostic_report.json"),
-        nlp_result_path=str(nlp_result),
+        nlp_result_path=artifact_uri(project.id, NLP_ARTIFACT_KEY),
         selected_verrous_path=str(paths["selected_verrous"]) if paths["selected_verrous"].exists() else None,
         prepare_report=prepare_report,
         pipeline_result={"agent_only": True},
         bundle_metadata={
             "report_path_used": str(paths["report"]),
-            "nlp_path_used": str(nlp_result),
-            "rag_chunks_path": str(rag_chunks),
+            "nlp_path_used": artifact_uri(project.id, NLP_ARTIFACT_KEY),
+            "rag_chunks_path": artifact_uri(project.id, RAG_CHUNKS_ARTIFACT_KEY),
         },
     )
 
@@ -2119,7 +2456,10 @@ def create_diagnostic_run_from_files(db: Session, project: Project) -> Diagnosti
         status_value="completed_from_existing_files_v142",
         pipeline_name="import_existing_complete_db",
         button="import_existing",
-        report_path=str(paths["report"]) if paths["report"].exists() else None,
+        report_path=artifact_uri(
+            project.id,
+            "diagnostics/latest_full_report.json",
+        ),
         nlp_result_path=str(paths["nlp_result"]) if paths["nlp_result"].exists() else None,
         selected_verrous_path=str(paths["selected_verrous"]) if paths["selected_verrous"].exists() else None,
         pipeline_result={"import_existing": True},
@@ -2161,7 +2501,7 @@ def run_ennodiagnostic(db: Session, project: Project) -> DiagnosticRun:
         report = _report_from_pipeline_result(pipeline_result)
 
     paths = diagnostic_paths(project)
-    prepare_report = _load_prepare_report(project)
+    prepare_report = _load_prepare_report(db, project)
 
     return _persist_complete_run(
         db,
@@ -2170,14 +2510,20 @@ def run_ennodiagnostic(db: Session, project: Project) -> DiagnosticRun:
         status_value="completed_full_v142",
         pipeline_name="extraction_nlp_frascati_rag_chroma_llm_complete_db",
         button="single_ennodiagnostic_button",
-        report_path=str(paths["report"]) if paths["report"].exists() else None,
-        nlp_result_path=str(paths["nlp_result"]) if paths["nlp_result"].exists() else None,
+        report_path=artifact_uri(
+            project.id,
+            "diagnostics/latest_full_report.json",
+        ),
+        nlp_result_path=artifact_uri(project.id, NLP_ARTIFACT_KEY),
         selected_verrous_path=str(paths["selected_verrous"]) if paths["selected_verrous"].exists() else None,
         prepare_report=prepare_report,
         pipeline_result=pipeline_result,
         bundle_metadata={
-            "report_path_used": str(paths["report"]),
-            "nlp_path_used": str(paths["nlp_result"]),
-            "rag_chunks_path": str(paths["rag_chunks"]),
+            "report_path_used": artifact_uri(
+                project.id,
+                "diagnostics/latest_full_report.json",
+            ),
+            "nlp_path_used": artifact_uri(project.id, NLP_ARTIFACT_KEY),
+            "rag_chunks_path": artifact_uri(project.id, RAG_CHUNKS_ARTIFACT_KEY),
         },
     )

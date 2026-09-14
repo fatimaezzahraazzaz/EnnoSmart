@@ -1594,6 +1594,12 @@ def search_v2(
     role: str = "",
     organisme: str = "",
 ) -> Dict[str, Any]:
+    from modules.RAG.chroma_client import chroma_scope_enforced
+
+    if chroma_scope_enforced() and not clean_text(organisme):
+        raise ValueError(
+            "organisme est obligatoire : une recherche Memory V2 ne peut pas traverser les organismes."
+        )
     mod, _, err = import_any(["modules.RAG.vector_store"])
     if mod is None:
         raise RuntimeError(f"modules.RAG.vector_store introuvable : {err}")

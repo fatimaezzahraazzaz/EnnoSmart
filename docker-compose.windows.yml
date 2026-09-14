@@ -10,6 +10,11 @@ services:
     volumes:
       - ennosmart_redis_windows:/data
 
+  chroma:
+    volumes:
+      - ennosmart_chroma_windows:/data
+
 volumes:
   ennosmart_postgres_windows:
   ennosmart_redis_windows:
+  ennosmart_chroma_windows:

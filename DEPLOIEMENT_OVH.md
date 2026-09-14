@@ -1,7 +1,10 @@
 # Déploiement OVH d’EnnoSmart
 
-Ce guide déploie le code dans des images Docker et conserve PostgreSQL, Chroma,
-les sources, les JSON NLP et les sorties validées hors du dépôt Git.
+Ce guide déploie le code dans des images Docker et conserve PostgreSQL, Chroma
+et les sources hors du dépôt Git. Les nouveaux gros résultats JSON (NLP,
+chunks, diagnostic complet et versions Agent 2) sont stockés une seule fois
+dans PostgreSQL sous forme gzip vérifiée ; le disque applicatif ne contient que
+leurs copies de travail temporaires.
 
 ## 1. Ce qui doit être poussé dans Git
 
@@ -283,7 +286,7 @@ openssl rand -hex 48
 
 Compléter ensuite les fournisseurs réellement utilisés dans `.env.example`.
 
-## 6. Transférer et restaurer Chroma et les JSON NLP
+## 6. Transférer et restaurer Chroma et les anciens JSON
 
 Depuis Windows :
 
@@ -321,6 +324,28 @@ docker compose -f docker-compose.ovh.yml exec postgres sh -c \
   'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-acl /tmp/ennosmart.dump'
 ```
 
+Après une sauvegarde complète du volume et de PostgreSQL, inventorier les
+anciens JSON sans rien modifier :
+
+```bash
+docker compose -f docker-compose.ovh.yml run --rm api \
+  python /opt/ennosmart/backend_api/scripts/migrate_generated_json_to_db.py
+```
+
+Puis migrer, vérifier chaque SHA-256 après commit et supprimer seulement les
+copies reconnues :
+
+```bash
+docker compose -f docker-compose.ovh.yml run --rm api \
+  python /opt/ennosmart/backend_api/scripts/migrate_generated_json_to_db.py \
+  --apply --delete-after-verify
+```
+
+Le script ne touche ni aux documents clients, ni à Chroma, ni aux exports. Les
+résultats métier restent dans `diagnostic_runs`, `verrous`, `scholar_runs`,
+`articles` et les tables Agent 3 ; seuls les gros documents JSON entiers vont
+dans `project_artifacts`.
+
 Contrôler les données :
 
 ```bash
@@ -353,8 +378,10 @@ docker compose -f docker-compose.ovh.yml run --rm api \
 ```
 
 Le résultat doit finir par `RUNTIME_STORAGE_OK`. Le script vérifie que les
-sorties sont hors du code, que le volume est inscriptible, compte les JSON NLP
-et exécute `PRAGMA quick_check` en lecture seule sur chaque `chroma.sqlite3`.
+sorties sont hors du code, que le volume est inscriptible et exécute
+`PRAGMA quick_check` en lecture seule sur chaque `chroma.sqlite3`. Après
+migration, un `nlp_result.json` ne doit apparaître que brièvement pendant un
+traitement legacy.
 
 ## 9. Démarrer EnnoSmart
 

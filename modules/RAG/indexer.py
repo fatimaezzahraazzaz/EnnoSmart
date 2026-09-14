@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from .json_to_chunks import nlp_json_to_chunks
 from .project_store import ProjectStore
@@ -27,6 +27,8 @@ def index_nlp_result(
     year: Optional[str | int] = None,
     annee: Optional[str | int] = None,
     subproject: Optional[str] = None,
+    persist_json_files: bool = True,
+    artifact_sink: Optional[Callable[[str, Any], None]] = None,
 ) -> Dict[str, Any]:
     """Indexe fidelement les groupes deja finalises par le NLP.
 
@@ -40,7 +42,10 @@ def index_nlp_result(
         year=year,
         annee=annee,
     ).ensure()
-    project_store.save_json("nlp/nlp_result.json", nlp_result)
+    if artifact_sink is not None:
+        artifact_sink("nlp/nlp_result.json", nlp_result)
+    if persist_json_files:
+        project_store.save_json("nlp/nlp_result.json", nlp_result)
 
     chunks = nlp_json_to_chunks(
         project_store.project_id,
@@ -58,14 +63,21 @@ def index_nlp_result(
         and str((chunk.get("metadata") or {}).get("lock_group_id") or "").strip()
     }
 
+    if artifact_sink is not None:
+        artifact_sink("rag/chunks.json", chunks)
     chunks_path = project_store.rag_dir / "chunks.json"
-    chunks_path.write_text(
-        json.dumps(chunks, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    if persist_json_files:
+        chunks_path.write_text(
+            json.dumps(chunks, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
     collection_name = project_store.collection_name
-    report = RAGVectorStore(project_store.chroma_dir).add_chunks(
+    report = RAGVectorStore(
+        project_store.chroma_dir,
+        scope_metadata=project_store.chroma_scope_metadata,
+        collection_namespace=collection_name,
+    ).add_chunks(
         collection_name=collection_name,
         chunks=chunks,
         reset=reset,
@@ -108,7 +120,7 @@ def index_nlp_result(
         "chunks_deduplicated": report.get("deduplicated", 0),
         "embedding_model": report.get("embedding_model"),
         "project_dir": str(project_store.project_dir),
-        "chunks_path": str(chunks_path),
+        "chunks_path": str(chunks_path) if persist_json_files else None,
         "lock_grouping_owner": "nlp_before_frascati",
         "downstream_lock_regrouping_enabled": False,
         "nlp_lock_groups_count": len(nlp_lock_group_ids),

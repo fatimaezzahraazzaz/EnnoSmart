@@ -452,7 +452,11 @@ class EnnoRetriever:
             annee=annee,
         ).ensure()
         self.collection_name = self.store.collection_name
-        self.vector_store = RAGVectorStore(self.store.chroma_dir)
+        self.vector_store = RAGVectorStore(
+            self.store.chroma_dir,
+            scope_metadata=self.store.chroma_scope_metadata,
+            collection_namespace=self.collection_name,
+        )
 
     def search(
         self,

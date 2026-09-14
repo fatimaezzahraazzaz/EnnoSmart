@@ -1101,7 +1101,24 @@ def build_scholar_payload_from_selected_verrous(db: Session, project: Project, m
     selected = get_selected_verrous_for_scholar(db, project)
 
     nlp_path = current_nlp_result_path(project)
-    nlp = read_json(nlp_path, {}) if nlp_path else {}
+    if nlp_path:
+        nlp = read_json(nlp_path, {})
+        nlp_source = str(nlp_path)
+    else:
+        from services.project_artifact_service import (
+            artifact_uri,
+            get_json_artifact,
+        )
+
+        nlp = get_json_artifact(
+            db,
+            project.id,
+            "nlp/nlp_result.json",
+            default={},
+        )
+        nlp_source = (
+            artifact_uri(project.id, "nlp/nlp_result.json") if nlp else ""
+        )
     domain_detection = _extract_domain_detection(nlp)
 
     diagnostic_context = extract_diagnostic_context_from_report(project)
@@ -1126,7 +1143,7 @@ def build_scholar_payload_from_selected_verrous(db: Session, project: Project, m
         "selected_signals_count": len(selected),
         "grouped_verrous_count": len(enriched_verrous),
         "grouping_applied": False,
-        "input_nlp_result": str(nlp_path) if nlp_path else "",
+        "input_nlp_result": nlp_source,
         "diagnostic_context": diagnostic_context,
         "domain_detection": domain_detection,
         "grouping_summary": {

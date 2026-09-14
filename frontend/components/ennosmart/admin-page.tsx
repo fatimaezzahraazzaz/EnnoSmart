@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  Trash2,
   UserCheck,
   UserRound,
   Users,
@@ -41,6 +42,15 @@ import {
 } from "@/components/ui/card"
 
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+
+import {
   Input,
 } from "@/components/ui/input"
 
@@ -51,6 +61,7 @@ import {
 import {
   assignAdminProject,
   createAdminUser,
+  deleteAdminUser,
   getAdminOverview,
   getAdminProjects,
   getAdminUsers,
@@ -1264,6 +1275,14 @@ export default function AdminPage({
     useState(false)
 
   const [
+    deleteTarget,
+    setDeleteTarget,
+  ] =
+    useState<AdminUser | null>(
+      null,
+    )
+
+  const [
     createForm,
     setCreateForm,
   ] =
@@ -1660,6 +1679,49 @@ export default function AdminPage({
           err instanceof Error
             ? err.message
             : "Action impossible.",
+        )
+      } finally {
+        setBusy(null)
+      }
+    }
+
+
+  const confirmDeleteUser =
+    async () => {
+      if (
+        !deleteTarget ||
+        deleteTarget.project_count > 0
+      ) {
+        return
+      }
+
+      setBusy(
+        `delete-user-${deleteTarget.id}`,
+      )
+
+      setError("")
+      setMessage("")
+
+      try {
+        const deletedName =
+          deleteTarget.full_name
+
+        await deleteAdminUser(
+          deleteTarget.id,
+        )
+
+        setDeleteTarget(null)
+        setMessage(
+          `Le compte consultant de ${deletedName} a été supprimé.`,
+        )
+
+        await load()
+      } catch (err) {
+        setDeleteTarget(null)
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Suppression impossible.",
         )
       } finally {
         setBusy(null)
@@ -2437,7 +2499,7 @@ export default function AdminPage({
                       </th>
 
                       <th className="px-5 py-3 text-right">
-                        Action
+                        Actions
                       </th>
                     </tr>
                   </thead>
@@ -2513,31 +2575,68 @@ export default function AdminPage({
 
 
                           <td className="px-5 py-4 text-right">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={
-                                busy ===
-                                  `user-${item.id}` ||
-                                item.id ===
-                                  user.id ||
-                                (
-                                  item.role ===
-                                    "superadmin" &&
-                                  user.role !==
-                                    "superadmin"
-                                )
-                              }
-                              onClick={() =>
-                                toggleUser(
-                                  item,
-                                )
-                              }
-                            >
-                              {item.is_active
-                                ? "Désactiver"
-                                : "Activer"}
-                            </Button>
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                aria-busy={
+                                  busy ===
+                                  `user-${item.id}`
+                                }
+                                disabled={
+                                  busy ===
+                                    `user-${item.id}` ||
+                                  item.id ===
+                                    user.id ||
+                                  (
+                                    item.role ===
+                                      "superadmin" &&
+                                    user.role !==
+                                      "superadmin"
+                                  )
+                                }
+                                onClick={() =>
+                                  toggleUser(
+                                    item,
+                                  )
+                                }
+                              >
+                                {busy ===
+                                  `user-${item.id}` && (
+                                  <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                                )}
+
+                                {item.is_active
+                                  ? "Désactiver"
+                                  : "Activer"}
+                              </Button>
+
+                              {item.role ===
+                                "consultant" &&
+                                item.id !==
+                                  user.id && (
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  aria-busy={
+                                    busy ===
+                                    `delete-user-${item.id}`
+                                  }
+                                  disabled={
+                                    busy ===
+                                    `delete-user-${item.id}`
+                                  }
+                                  onClick={() =>
+                                    setDeleteTarget(
+                                      item,
+                                    )
+                                  }
+                                >
+                                  <Trash2 className="size-3.5" aria-hidden="true" />
+                                  Supprimer
+                                </Button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ),
@@ -2632,6 +2731,93 @@ export default function AdminPage({
           )}
         </CardContent>
       </Card>
+
+
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (
+            !open &&
+            !busy?.startsWith(
+              "delete-user-",
+            )
+          ) {
+            setDeleteTarget(null)
+          }
+        }}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <div className="flex items-start gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                <Trash2 className="size-5" aria-hidden="true" />
+              </span>
+
+              <div className="min-w-0 space-y-1.5">
+                <DialogTitle>
+                  {deleteTarget?.project_count
+                    ? "Suppression impossible"
+                    : "Supprimer ce consultant ?"}
+                </DialogTitle>
+
+                <DialogDescription className="leading-6">
+                  {deleteTarget?.project_count
+                    ? `${deleteTarget.full_name} possède encore ${deleteTarget.project_count} projet${deleteTarget.project_count > 1 ? "s" : ""}. Réaffectez-les avant de supprimer le compte, ou désactivez-le pour conserver l’historique.`
+                    : `Le compte de ${deleteTarget?.full_name || "ce consultant"} sera définitivement supprimé. Cette action est irréversible.`}
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                setDeleteTarget(null)
+              }
+              disabled={
+                Boolean(
+                  busy?.startsWith(
+                    "delete-user-",
+                  ),
+                )
+              }
+            >
+              {deleteTarget?.project_count
+                ? "Fermer"
+                : "Annuler"}
+            </Button>
+
+            {!deleteTarget?.project_count && (
+              <Button
+                type="button"
+                variant="destructive"
+                aria-busy={
+                  busy ===
+                  `delete-user-${deleteTarget?.id}`
+                }
+                onClick={
+                  confirmDeleteUser
+                }
+                disabled={
+                  busy ===
+                  `delete-user-${deleteTarget?.id}`
+                }
+              >
+                {busy ===
+                  `delete-user-${deleteTarget?.id}` ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Trash2 className="size-4" aria-hidden="true" />
+                )}
+
+                Supprimer définitivement
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
 
       {/* ================================================================== */}

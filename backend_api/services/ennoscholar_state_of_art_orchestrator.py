@@ -1467,6 +1467,7 @@ def generate_state_of_art_after_consultant_selection(
         ) or {}
 
         state_of_art_version = archive_conversation_state_of_art(
+            db=db,
             project=project,
             session_id=guided_session_id,
             markdown=markdown,
@@ -1556,8 +1557,16 @@ def generate_state_of_art_after_consultant_selection(
             "phase45_scientific_reasoning_payload": str(paths["phase45_scientific_reasoning_payload"]),
             "phase46_project_argumentation_payload": str(paths["phase46_project_argumentation_payload"]),
             "phase47_scientific_narrative_payload": str(paths["phase47_scientific_narrative_payload"]),
-            "state_of_art_markdown": str(paths["phase5_markdown"]),
-            "state_of_art_payload": str(paths["phase5_payload"]),
+            "state_of_art_markdown": (
+                state_of_art_version.get("markdown_path")
+                if isinstance(state_of_art_version, dict)
+                else str(paths["phase5_markdown"])
+            ),
+            "state_of_art_payload": (
+                state_of_art_version.get("payload_path")
+                if isinstance(state_of_art_version, dict)
+                else str(paths["phase5_payload"])
+            ),
             "sentence_evidence_map": str(paths["phase5_dir"] / "sentence_evidence_map.json"),
             "quality_report_v11": str(paths["phase5_dir"] / "quality_report_v11.json"),
         },
