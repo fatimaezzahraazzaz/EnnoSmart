@@ -145,7 +145,7 @@ def _copy_collection(
         mismatches = {
             key: (existing.get(key), expected)
             for key, expected in scope.items()
-            if existing.get(key) not in (None, expected)
+            if existing.get(key) != expected
         }
         if mismatches:
             raise RuntimeError(
@@ -214,6 +214,11 @@ def _validated_legacy_dir(database: Path, root: Path) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument(
+        "--projects-only",
+        action="store_true",
+        help="Ne traite que les Chroma RAG de projets; ignore Memory V2 et les bases legacy non scopees.",
+    )
     parser.add_argument("--delete-legacy-after-verify", action="store_true")
     parser.add_argument("--batch-size", type=int, default=250)
     args = parser.parse_args()
@@ -222,6 +227,12 @@ def main() -> int:
 
     root = storage_root().resolve()
     databases = _legacy_databases(root)
+    if args.projects_only:
+        databases = [
+            database
+            for database in databases
+            if _scope_from_path(database.parent, root).get("ennosmart_scope_type") == "project"
+        ]
     inventory = [
         {
             "database": str(database),
@@ -258,6 +269,11 @@ def main() -> int:
     for database in databases:
         directory = database.parent
         scope = _scope_from_path(directory, root)
+        if not scope:
+            raise RuntimeError(
+                f"Migration refusée pour une base sans portée prouvable: {directory}. "
+                "Utilise le script Memory V2 dédié si nécessaire."
+            )
         source_client = chromadb.PersistentClient(path=str(directory))
         collections = source_client.list_collections()
         copied = [

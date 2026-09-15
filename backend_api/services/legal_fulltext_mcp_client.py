@@ -26,11 +26,30 @@ REST_URL = os.getenv(
 MCP_ENABLED = os.getenv("ENNOSCHOLAR_LEGAL_MCP_ENABLED", "1").lower() in {
     "1", "true", "yes", "on"
 }
-TARGETED_TIMEOUT_SECONDS = float(
-    os.getenv("ENNOSCHOLAR_LEGAL_MCP_TARGETED_TIMEOUT_SECONDS", "40")
+
+
+def _timeout_from_env(name: str, default: float) -> float:
+    try:
+        return max(1.0, float(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
+# ``CLIENT_TIMEOUT_SECONDS`` est l'ancien réglage documenté et encore présent
+# dans les environnements Windows. Il représente le délai minimal accordé au
+# serveur MCP. Les délais ciblé/large peuvent l'augmenter, mais ne doivent pas
+# le réduire : le résolveur peut terminer correctement juste après le timeout
+# HTTP et laisser à tort l'article dans l'état « MCP indisponible ».
+CLIENT_TIMEOUT_SECONDS = _timeout_from_env(
+    "ENNOSCHOLAR_LEGAL_MCP_CLIENT_TIMEOUT_SECONDS", 300.0
 )
-BROAD_TIMEOUT_SECONDS = float(
-    os.getenv("ENNOSCHOLAR_LEGAL_MCP_BROAD_TIMEOUT_SECONDS", "75")
+TARGETED_TIMEOUT_SECONDS = max(
+    CLIENT_TIMEOUT_SECONDS,
+    _timeout_from_env("ENNOSCHOLAR_LEGAL_MCP_TARGETED_TIMEOUT_SECONDS", 40.0),
+)
+BROAD_TIMEOUT_SECONDS = max(
+    CLIENT_TIMEOUT_SECONDS,
+    _timeout_from_env("ENNOSCHOLAR_LEGAL_MCP_BROAD_TIMEOUT_SECONDS", 75.0),
 )
 MAX_RETRIES = max(
     1,
@@ -47,6 +66,7 @@ _SESSION.mount("https://", _ADAPTER)
 def _fallback(status: str, reason: str | None = None) -> dict[str, Any]:
     transient = status in {
         "mcp_unavailable",
+        "mcp_timeout",
         "mcp_client_error",
         "mcp_client_empty_result",
         "provider_temporarily_unavailable",
@@ -121,6 +141,12 @@ def resolve_article_fulltext(
             if isinstance(data, dict):
                 return data
             return _fallback("invalid_mcp_response", "Réponse JSON non objet.")
+        except requests.Timeout as exc:
+            last_error = str(exc)
+            if attempt + 1 < MAX_RETRIES:
+                time.sleep(min(3.0, 0.5 * (2**attempt)))
+                continue
+            return _fallback("mcp_timeout", last_error)
         except Exception as exc:
             last_error = str(exc)
             if attempt + 1 < MAX_RETRIES:

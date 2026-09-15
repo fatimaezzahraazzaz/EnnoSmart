@@ -1,0 +1,21 @@
+services:
+  chroma:
+    image: chromadb/chroma:1.5.9
+    restart: unless-stopped
+    environment:
+      CHROMA_PERSIST_PATH: /data
+      CHROMA_ALLOW_RESET: "false"
+      ANONYMIZED_TELEMETRY: "FALSE"
+    volumes:
+      - ennosmart_chroma_local_data:/data
+    ports:
+      - "127.0.0.1:8005:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+volumes:
+  ennosmart_chroma_local_data:

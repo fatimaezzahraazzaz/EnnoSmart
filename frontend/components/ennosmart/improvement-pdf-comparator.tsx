@@ -346,7 +346,9 @@ export function ImprovementPdfComparator({
     }
 
     const token = getAccessToken()
-    const headers = token ? { Authorization: `Bearer ${token}` } : {}
+    const headers: Record<string, string> = token
+      ? { Authorization: `Bearer ${token}` }
+      : {}
     setActivePreview({ ...EMPTY_PREVIEW, loading: true })
 
     void (async () => {
@@ -416,7 +418,9 @@ export function ImprovementPdfComparator({
     }
 
     const token = getAccessToken()
-    const headers = token ? { Authorization: `Bearer ${token}` } : {}
+    const headers: Record<string, string> = token
+      ? { Authorization: `Bearer ${token}` }
+      : {}
 
     const loadSide = async (
       side: "original" | "proposed",

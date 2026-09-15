@@ -23,6 +23,7 @@ from typing import Any, Iterable
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, undefer
+from services.document_storage_service import read_document_bytes
 
 from db.models import Document, ImprovementSession, ImprovementVersion
 from modules.common.runtime_paths import storage_root
@@ -194,23 +195,16 @@ def _read_exact_document_bytes(document: Document) -> bytes:
     Pour les nouveaux uploads, file_data/PostgreSQL est prioritaire.
     file_path n'est qu'un fallback legacy.
     """
-    raw = bytes(getattr(document, "file_data", None) or b"")
-    if raw:
-        return raw
-
-    file_path = str(getattr(document, "file_path", "") or "").strip()
-    if file_path and not file_path.startswith("db://"):
-        candidate = Path(file_path)
-        if candidate.exists() and candidate.is_file():
-            return candidate.read_bytes()
-
-    raise HTTPException(
-        status_code=404,
-        detail=(
-            "Le CIR est bien rattaché à la conversation, mais son contenu "
-            "binaire n'est plus disponible."
-        ),
-    )
+    try:
+        return read_document_bytes(document)
+    except (FileNotFoundError, IOError) as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Le CIR est bien rattaché à la conversation, mais son contenu "
+                f"binaire n'est plus disponible : {exc}"
+            ),
+        ) from exc
 
 
 def _materialize_document(document: Document, project_id: int) -> Path:

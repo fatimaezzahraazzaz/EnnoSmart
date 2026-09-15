@@ -113,17 +113,17 @@ redémarrages ; ne pas lancer `docker compose down -v`.
 
 ## 2. Données à transférer séparément de Git
 
-Trois éléments doivent être sauvegardés et envoyés au serveur par SCP, SFTP,
-rsync ou OVH Object Storage :
+Deux éléments doivent être sauvegardés et envoyés au serveur par SCP, SFTP ou
+rsync :
 
 1. un dump PostgreSQL au format custom ;
-2. `C:\EnnoSmartData\storage` en entier, qui contient notamment Chroma,
-   `nlp_result.json`, `chunks.json`, les sources et les mémoires ;
-3. `C:\EnnoSmartData\outputs` si des sorties historiques y sont encore utiles.
+2. `C:\EnnoSmartData\object_storage_v2` en entier, qui contient les objets
+   permanents et le runtime encore nécessaire à l'application.
 
-Ne jamais transférer uniquement `chroma.sqlite3`. Un répertoire Chroma comprend
-aussi des sous-répertoires UUID indispensables. Il faut copier l’arborescence
-Chroma complète, services arrêtés.
+Chroma central possède son propre volume persistant. S'il doit être transféré,
+copier son volume complet services arrêtés ; ne jamais copier seulement
+`chroma.sqlite3`. OneDrive ne fait pas partie de la migration et ne doit pas
+être copié, monté ou modifié.
 
 ## 3. Sauvegarde sur la machine Windows actuelle
 
@@ -252,13 +252,19 @@ ENV=production
 ENNOSMART_ROOT=/opt/ennosmart
 ENNOSMART_BASE_DIR=/opt/ennosmart
 ENNOSMART_DATA_ROOT=/var/lib/ennosmart
-ENNOSMART_STORAGE_ROOT=/var/lib/ennosmart/storage
-UPLOAD_ROOT=/var/lib/ennosmart/storage/uploads
-AI_OUTPUT_ROOT=/var/lib/ennosmart/outputs/safe_rag_upload
-ENNOSMART_EXPERIENCE_MEMORY_V2_DIR=/var/lib/ennosmart/storage/experience_memory_v2
-ENNOSMART_MEMORY_V2_ROOT=/var/lib/ennosmart/storage/organismes
-ENNOSMART_LOG_ROOT=/var/lib/ennosmart/logs
-ENNOSMART_CACHE_ROOT=/var/lib/ennosmart/cache
+ENNOSMART_STORAGE_ROOT=/var/lib/ennosmart/object_storage_v2/runtime
+UPLOAD_ROOT=/var/lib/ennosmart/object_storage_v2/runtime/uploads
+AI_OUTPUT_ROOT=/var/lib/ennosmart/object_storage_v2/runtime/outputs/safe_rag_upload
+ENNOSMART_EXPERIENCE_MEMORY_V2_DIR=/var/lib/ennosmart/object_storage_v2/runtime/experience_memory_v2
+ENNOSMART_MEMORY_V2_ROOT=/var/lib/ennosmart/object_storage_v2/runtime/organismes
+POWER_AUTOMATE_AUDIT_ROOT=/var/lib/ennosmart/object_storage_v2/runtime/power_automate_import
+ENNOSCHOLAR_LEGAL_MCP_CACHE_DB=/var/lib/ennosmart/object_storage_v2/runtime/mcp/legal_fulltext_cache.sqlite3
+ENNOSMART_LOG_ROOT=/var/lib/ennosmart/object_storage_v2/runtime/logs
+ENNOSMART_CACHE_ROOT=/var/lib/ennosmart/object_storage_v2/runtime/cache
+HF_HOME=/var/lib/ennosmart/object_storage_v2/runtime/cache/huggingface
+ENNOSMART_STORAGE_V2_ENABLED=true
+ENNOSMART_OBJECT_STORAGE_PROVIDER=local
+ENNOSMART_STORAGE_V2_LOCAL_ROOT=/var/lib/ennosmart/object_storage_v2
 ENNOSMART_HOST_DATA_DIR=/mnt/ennosmart-data
 ENNOSMART_POSTGRES_DATA_DIR=/mnt/ennosmart-data/postgres
 ENNOSMART_REDIS_DATA_DIR=/mnt/ennosmart-data/redis

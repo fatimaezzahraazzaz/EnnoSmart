@@ -53,18 +53,30 @@ def encode_texts(texts: Sequence[str]) -> List[List[float]]:
     ).tolist()
 
 
+def _normalize_where_filter(value: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Normalise un filtre pour la grammaire Chroma 1.x.
+
+    Chroma exige exactement une expression au niveau racine d'un ``where``.
+    Un dictionnaire tel que ``{"a": 1, "b": 2}`` est donc converti en
+    ``{"$and": [{"a": 1}, {"b": 2}]}``.
+    """
+    if not value:
+        return None
+
+    raw = dict(value)
+    if len(raw) == 1:
+        return raw
+
+    return {"$and": [{key: item} for key, item in raw.items()]}
+
+
 def _combine_where_filters(*filters: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """
-    Combine plusieurs filtres Chroma sans écraser un filtre existant.
-
-    Exemples :
-        metadata_filter={"document": "x.pdf"}
-        role_filter="methode"
-
-    devient :
-        {"$and": [{"document": "x.pdf"}, {"role": "methode"}]}
-    """
-    active = [dict(f) for f in filters if f]
+    """Combine des filtres Chroma valides sans perdre le scope de sécurité."""
+    active = []
+    for item in filters:
+        normalized = _normalize_where_filter(item)
+        if normalized:
+            active.append(normalized)
 
     if not active:
         return None
@@ -84,9 +96,15 @@ class RAGVectorStore:
         self.persist_dir = Path(persist_dir)
         self.scope_metadata = self._clean_metadata(scope_metadata or {})
         self.collection_namespace = str(collection_namespace or "").strip()
+        self.connection = chroma_connection_info(self.persist_dir)
+        scope_required = self.connection.get("mode") == "http" and chroma_scope_enforced()
+        if scope_required and (not self.scope_metadata or not self.collection_namespace):
+            raise RuntimeError(
+                "Chroma HTTP centralisé exige scope_metadata et collection_namespace; "
+                "un accès non scoped pourrait traverser les organismes."
+            )
         self.enforce_scope = bool(self.scope_metadata) and chroma_scope_enforced()
         self.client = create_chroma_client(self.persist_dir)
-        self.connection = chroma_connection_info(self.persist_dir)
         self.model = get_embedding_model()
 
     def collection(self, collection_name: str):
@@ -100,7 +118,7 @@ class RAGVectorStore:
             mismatches = {
                 key: (existing.get(key), expected)
                 for key, expected in self.scope_metadata.items()
-                if existing.get(key) not in (None, expected)
+                if existing.get(key) != expected
             }
             if mismatches:
                 raise RuntimeError(
@@ -119,6 +137,7 @@ class RAGVectorStore:
             )
 
     def reset_collection(self, collection_name: str):
+        self._validate_collection_name(collection_name)
         try:
             self.client.delete_collection(collection_name)
         except Exception:

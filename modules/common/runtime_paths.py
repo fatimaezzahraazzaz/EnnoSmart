@@ -71,7 +71,11 @@ def data_root() -> Path:
 
 def storage_root() -> Path:
     configured = _configured("ENNOSMART_STORAGE_ROOT")
-    return Path(configured).expanduser() if configured else data_root() / "storage"
+    return (
+        Path(configured).expanduser()
+        if configured
+        else data_root() / "object_storage_v2" / "runtime"
+    )
 
 
 def outputs_root() -> Path:
@@ -79,7 +83,7 @@ def outputs_root() -> Path:
     return (
         Path(configured).expanduser()
         if configured
-        else data_root() / "outputs" / "safe_rag_upload"
+        else storage_root() / "outputs" / "safe_rag_upload"
     )
 
 
@@ -117,12 +121,12 @@ def audit_root() -> Path:
 
 def logs_root() -> Path:
     configured = _configured("ENNOSMART_LOG_ROOT")
-    return Path(configured).expanduser() if configured else data_root() / "logs"
+    return Path(configured).expanduser() if configured else storage_root() / "logs"
 
 
 def cache_root() -> Path:
     configured = _configured("ENNOSMART_CACHE_ROOT")
-    return Path(configured).expanduser() if configured else data_root() / "cache"
+    return Path(configured).expanduser() if configured else storage_root() / "cache"
 
 
 def resolve_persisted_path(value: object) -> Path | None:

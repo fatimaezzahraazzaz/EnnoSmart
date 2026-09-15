@@ -56,6 +56,17 @@ class Settings(BaseSettings):
     UPLOAD_ROOT: str = str(uploads_root())
     AI_OUTPUT_ROOT: str = str(outputs_root())
 
+    # Storage V2 — S3 générique (OVH est configuré uniquement par endpoint).
+    ENNOSMART_STORAGE_V2_ENABLED: bool = False
+    ENNOSMART_OBJECT_STORAGE_PROVIDER: str = "local"
+    ENNOSMART_STORAGE_V2_LOCAL_ROOT: str = str(storage_root() / "object_storage_v2")
+    ENNOSMART_S3_ENDPOINT: str = ""
+    ENNOSMART_S3_REGION: str = ""
+    ENNOSMART_S3_BUCKET: str = ""
+    ENNOSMART_S3_ACCESS_KEY: str = ""
+    ENNOSMART_S3_SECRET_KEY: str = ""
+    ENNOSMART_S3_SECURE: bool = True
+
     MAX_UPLOAD_SIZE_MB: int = 50
     ALLOWED_EXTENSIONS: str = ".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.txt,.png,.jpg,.jpeg,.msg"
 
@@ -109,6 +120,10 @@ class Settings(BaseSettings):
     @property
     def ai_output_root_path(self) -> Path:
         return Path(self.AI_OUTPUT_ROOT)
+
+    @property
+    def storage_v2_local_root_path(self) -> Path:
+        return Path(self.ENNOSMART_STORAGE_V2_LOCAL_ROOT)
 
 
 @lru_cache

@@ -1030,35 +1030,34 @@ def chroma_store(chunks: List[Dict[str, Any]], collection_name: str, reset: bool
     mod, _, err = import_any(["modules.RAG.vector_store"])
     if mod is None:
         raise RuntimeError(f"modules.RAG.vector_store introuvable : {err}")
-
     RAGVectorStore = getattr(mod, "RAGVectorStore", None)
     if RAGVectorStore is None:
         raise RuntimeError("RAGVectorStore introuvable")
-
-    vs = RAGVectorStore(V2_CHROMA_DIR)
+    from modules.RAG.scope import organism_memory_collection, organism_memory_scope
+    organismes = sorted({
+        str((chunk.get("metadata") or {}).get("organisme") or "").strip()
+        for chunk in (chunks or [])
+        if isinstance(chunk, dict) and str((chunk.get("metadata") or {}).get("organisme") or "").strip()
+    })
+    if len(organismes) != 1:
+        raise ValueError(f"Memory V2 exige exactement un organisme par écriture, reçu: {organismes}")
+    organisme = organismes[0]
+    expected = organism_memory_collection(organisme)
+    if collection_name != expected:
+        raise PermissionError(f"Collection Memory V2 hors organisme: {collection_name} != {expected}")
+    vs = RAGVectorStore(
+        V2_CHROMA_DIR,
+        scope_metadata=organism_memory_scope(organisme),
+        collection_namespace=expected,
+    )
     if reset:
-        vs.reset_collection(collection_name)
-
-    return vs.add_chunks(collection_name=collection_name, chunks=chunks, reset=False)
+        vs.reset_collection(expected)
+    return vs.add_chunks(collection_name=expected, chunks=chunks, reset=False)
 
 
 def prune_legacy_chroma_collections() -> List[str]:
-    """Conserve uniquement la collection globale de Memory V2."""
-    mod, _, err = import_any(["modules.RAG.vector_store"])
-    if mod is None:
-        raise RuntimeError(f"modules.RAG.vector_store introuvable : {err}")
-    RAGVectorStore = getattr(mod, "RAGVectorStore", None)
-    if RAGVectorStore is None:
-        raise RuntimeError("RAGVectorStore introuvable")
-
-    vector_store = RAGVectorStore(V2_CHROMA_DIR)
-    removed: List[str] = []
-    for raw_collection in vector_store.client.list_collections():
-        name = clean_text(getattr(raw_collection, "name", raw_collection))
-        if name.startswith("ennosmart_memory_v2_") and name != "ennosmart_memory_v2_global":
-            vector_store.client.delete_collection(name)
-            removed.append(name)
-    return sorted(removed)
+    # Nettoyage global uniquement via le script de migration vérifié.
+    return []
 
 
 def load_all_v2_chunks() -> List[Dict[str, Any]]:
@@ -1089,9 +1088,16 @@ def rebuild_global_graph_and_catalog(reset_chroma: bool = False) -> Dict[str, An
 
     chroma_reports = {}
     if chunks:
-        chroma_reports["global"] = chroma_store(chunks, "ennosmart_memory_v2_global", reset=reset_chroma)
-    elif reset_chroma:
-        chroma_reports["global"] = chroma_store([], "ennosmart_memory_v2_global", reset=True)
+        from modules.RAG.scope import organism_memory_collection
+        by_org = defaultdict(list)
+        for chunk in chunks:
+            organisme = clean_text((chunk.get("metadata") or {}).get("organisme"))
+            if not organisme:
+                raise ValueError("Chunk Memory V2 sans organisme : indexation refusée.")
+            by_org[organisme].append(chunk)
+        for organisme, org_chunks in sorted(by_org.items()):
+            name = organism_memory_collection(organisme)
+            chroma_reports[organisme] = chroma_store(org_chunks, name, reset=reset_chroma)
     chroma_reports["removed_legacy_collections"] = prune_legacy_chroma_collections()
 
     catalog = {
@@ -1108,7 +1114,7 @@ def rebuild_global_graph_and_catalog(reset_chroma: bool = False) -> Dict[str, An
             for c in cards
         })),
         "subprojects": sorted(list({c.get("subproject") for c in cards if c.get("subproject")})),
-        "chroma_mode": "single_global_collection",
+        "chroma_mode": "per_organism_collections",
         "role_counts": dict(Counter(c.get("card_type") for c in cards)),
         "domain_counts": dict(Counter(c.get("main_domain") for c in cards if c.get("main_domain"))),
         "outputs": {
@@ -1589,50 +1595,29 @@ def scan_library() -> List[Dict[str, Any]]:
 
 def search_v2(
     query: str,
-    collection: str = "ennosmart_memory_v2_global",
+    collection: str = "",
     top_k: int = 8,
     role: str = "",
     organisme: str = "",
 ) -> Dict[str, Any]:
-    from modules.RAG.chroma_client import chroma_scope_enforced
-
-    if chroma_scope_enforced() and not clean_text(organisme):
-        raise ValueError(
-            "organisme est obligatoire : une recherche Memory V2 ne peut pas traverser les organismes."
-        )
+    organisme = clean_text(organisme)
+    if not organisme:
+        raise ValueError("organisme est obligatoire : aucune recherche Memory V2 multi-organismes.")
+    from modules.RAG.scope import organism_memory_collection, organism_memory_scope
+    expected = organism_memory_collection(organisme)
+    if collection and collection != expected:
+        raise PermissionError(f"Collection Memory V2 refusée: {collection}")
     mod, _, err = import_any(["modules.RAG.vector_store"])
     if mod is None:
         raise RuntimeError(f"modules.RAG.vector_store introuvable : {err}")
-
     RAGVectorStore = getattr(mod, "RAGVectorStore", None)
     if RAGVectorStore is None:
         raise RuntimeError("RAGVectorStore introuvable")
-
-    vs = RAGVectorStore(V2_CHROMA_DIR)
-    res = vs.search(
-        collection_name=collection,
-        query=query,
-        top_k=top_k,
-        role_filter=role or None,
-        metadata_filter={"organisme": organisme} if organisme else None,
-        oversample=6,
-    )
-
-    if organisme:
-        wanted = norm(organisme)
-        res = [
-            item for item in res
-            if norm((item.get("metadata") or {}).get("organisme")) == wanted
-        ][:top_k]
-
-    return {
-        "ok": True,
-        "query": query,
-        "collection": collection,
-        "organisme_filter": organisme,
-        "matches_count": len(res),
-        "matches": res,
-    }
+    vs = RAGVectorStore(V2_CHROMA_DIR, scope_metadata=organism_memory_scope(organisme), collection_namespace=expected)
+    res = vs.search(collection_name=expected, query=query, top_k=top_k, role_filter=role or None, metadata_filter={"organisme": organisme}, oversample=6)
+    wanted = norm(organisme)
+    res = [x for x in res if norm((x.get("metadata") or {}).get("organisme")) == wanted][:top_k]
+    return {"ok": True, "query": query, "collection": expected, "organisme_filter": organisme, "matches_count": len(res), "matches": res}
 
 
 def reset_all_v2(delete_organismes: bool = False) -> Dict[str, Any]:
@@ -1661,7 +1646,7 @@ def main() -> int:
     parser.add_argument("--defer-rebuild", action="store_true")
 
     parser.add_argument("--search", default="")
-    parser.add_argument("--collection", default="ennosmart_memory_v2_global")
+    parser.add_argument("--collection", default="")
     parser.add_argument("--role", default="")
     parser.add_argument("--top-k", type=int, default=8)
 

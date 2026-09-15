@@ -103,11 +103,11 @@ class Settings(BaseSettings):
     core_detail_limit: int = Field(3, alias="ENNOSCHOLAR_CORE_DETAIL_LIMIT")
 
     provider_order_raw: str = Field(
-        "unpaywall,openalex,crossref,core,hal,arxiv,europe_pmc,zenodo",
+        "unpaywall,openalex,crossref,core,doaj,hal,arxiv,europe_pmc,zenodo",
         alias="ENNOSCHOLAR_LEGAL_MCP_PROVIDER_ORDER",
     )
     deep_provider_order_raw: str = Field(
-        "hal,arxiv,europe_pmc,zenodo",
+        "doaj,hal,arxiv,europe_pmc,zenodo",
         alias="ENNOSCHOLAR_LEGAL_MCP_DEEP_PROVIDER_ORDER",
     )
 
@@ -129,6 +129,7 @@ class Settings(BaseSettings):
             "openalex",
             "crossref",
             "core",
+            "doaj",
             "hal",
             "arxiv",
             "europe_pmc",
@@ -148,7 +149,7 @@ class Settings(BaseSettings):
             for x in self.deep_provider_order_raw.split(",")
             if x.strip()
         ]
-        return values or ["hal", "arxiv", "europe_pmc", "zenodo"]
+        return values or ["doaj", "hal", "arxiv", "europe_pmc", "zenodo"]
 
     @property
     def effective_crossref_mailto(self) -> str:

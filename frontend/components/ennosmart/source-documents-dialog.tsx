@@ -35,6 +35,7 @@ export type DbSourceDocument = {
   id: number
   project_id: number
   filename: string
+  source_path?: string | null
   stored_filename?: string | null
   content_type?: string | null
   file_size?: number | null
@@ -174,6 +175,23 @@ function evidenceText(evidence?: SourceEvidence | null): string {
       evidence.content ||
       "",
   ).trim()
+}
+
+function evidenceSourcePath(evidence?: SourceEvidence | null): string {
+  if (!evidence) return ""
+
+  const metadata =
+    evidence.metadata && typeof evidence.metadata === "object"
+      ? evidence.metadata
+      : {}
+  const metadataSourcePath =
+    typeof metadata.source_path === "string"
+      ? metadata.source_path
+      : typeof metadata.path === "string"
+        ? metadata.path
+        : ""
+
+  return String(evidence.source_path || metadataSourcePath).trim()
 }
 
 function evidenceDocumentName(evidence?: SourceEvidence | null): string {
@@ -352,13 +370,7 @@ function inferVirtualContentType(value: string): string {
 function virtualDocumentFromEvidence(
   evidence: SourceEvidence,
 ): DbSourceDocument | null {
-  const sourcePath = String(
-    evidence.source_path ||
-      (evidence.metadata && typeof evidence.metadata === "object"
-        ? evidence.metadata.source_path || evidence.metadata.path
-        : "") ||
-      "",
-  ).trim()
+  const sourcePath = evidenceSourcePath(evidence)
 
   const rawName = evidenceDocumentName(evidence) || sourcePath
   const filename = cleanDisplayDocumentName(rawName)
@@ -385,6 +397,7 @@ function virtualDocumentFromEvidence(
     id: stableNegativeId(identity),
     project_id: 0,
     filename: filename || "Document source",
+    source_path: sourcePath || null,
     stored_filename: filename || null,
     content_type: inferVirtualContentType(sourcePath || filename),
     document_type: "source_documentaire",
@@ -883,6 +896,8 @@ export function SourceDocumentDialog({
     ? evidenceIdentity(selectedEvidence, selectedEvidenceIndex)
     : ""
   const kind = document ? contentKind(document) : "other"
+  const selectedSourcePath =
+    evidenceSourcePath(selectedEvidence) || document?.source_path || ""
 
   // Une seule clé primitive stabilise la taille du tableau de dépendances,
   // y compris pendant le Fast Refresh de Next.js/Turbopack.
@@ -892,6 +907,7 @@ export function SourceDocumentDialog({
     String(document?.id ?? ""),
     kind,
     selectedEvidenceKey,
+    selectedSourcePath,
   ].join("|")
 
   useEffect(() => {
@@ -912,7 +928,7 @@ export function SourceDocumentDialog({
     const loadOriginalDocument = async (token: string | null) => {
       if (Number(document.id) <= 0) {
         throw new Error(
-          "Le fichier historique ne peut être ouvert que par sa source_path avec un extrait à surligner.",
+          "Le chemin du document historique n'a pas pu être résolu.",
         )
       }
 
@@ -936,10 +952,18 @@ export function SourceDocumentDialog({
       try {
         const token = getAccessTokenForSourceDocument()
         const excerpt = evidenceText(selectedEvidence)
+        const sourcePath =
+          evidenceSourcePath(selectedEvidence) || document.source_path || ""
+        const isHistoricalDocument = Number(document.id) <= 0
         let response: Response
         let highlighted = false
 
-        if (selectedEvidence && excerpt) {
+        // Les anciens CIR peuvent ne contenir qu'un source_path (sans extrait).
+        // Le résolveur backend sait ouvrir ce fichier et produire un aperçu brut.
+        if (
+          selectedEvidence &&
+          (excerpt || sourcePath || isHistoricalDocument)
+        ) {
           response = await fetch(sourceHighlightUrl(projectId), {
             method: "POST",
             headers: {
@@ -948,11 +972,11 @@ export function SourceDocumentDialog({
             },
             body: JSON.stringify({
               document_id:
-                Number(document.id) > 0
+                !isHistoricalDocument
                   ? document.id
                   : evidenceDocumentId(selectedEvidence),
               excerpt,
-              source_path: selectedEvidence.source_path || null,
+              source_path: sourcePath || null,
               source_name:
                 evidenceDocumentName(selectedEvidence) ||
                 document.filename ||
@@ -997,6 +1021,9 @@ export function SourceDocumentDialog({
                 : `Prévisualisation surlignée indisponible (HTTP ${response.status}).`
 
             console.warn("[SourceDocumentDialog]", highlightErrorText)
+            if (isHistoricalDocument) {
+              throw new Error(highlightErrorText)
+            }
             response = await loadOriginalDocument(token)
           }
         } else {

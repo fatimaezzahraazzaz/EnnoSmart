@@ -330,8 +330,12 @@ def _mcp_candidates(result: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def _transient_mcp_failure(result: Dict[str, Any]) -> bool:
-    if result.get("retry_recommended") is True:
-        return True
+    # Les réponses du résolveur et du client déclarent explicitement si la
+    # résolution globale doit être relancée. Une tentative fournisseur
+    # transitoire ne doit pas écraser un résultat final obtenu auprès des
+    # autres fournisseurs.
+    if "retry_recommended" in result:
+        return result.get("retry_recommended") is True
     failure_code = _safe_text(result.get("failure_code") or result.get("status"), 200).lower()
     if failure_code in _TRANSIENT_FAILURE_CODES:
         return True

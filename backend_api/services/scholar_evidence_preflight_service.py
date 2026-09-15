@@ -936,15 +936,44 @@ def _process_mcp_access_probe(project_id: int, article_id: int) -> Dict[str, Any
                 "access_kind": "legal_mcp_fulltext_url",
             })
         else:
-            transient = bool(mcp_result.get("retry_recommended")) or str(
-                mcp_result.get("status") or ""
-            ) in {"mcp_unavailable", "mcp_client_error", "provider_temporarily_unavailable"}
-            previous_reason = str(previous_evidence.get("reason_detail") or "").strip()
+            mcp_status = str(mcp_result.get("status") or "").strip().lower()
+            mcp_timed_out = mcp_status == "mcp_timeout"
+            transient = bool(mcp_result.get("retry_recommended")) or mcp_status in {
+                "mcp_unavailable",
+                "mcp_timeout",
+                "mcp_client_error",
+                "provider_temporarily_unavailable",
+            }
+            previous_reason_code = str(
+                previous_evidence.get("reason_code") or ""
+            ).strip().upper()
+            previous_access_check_status = str(
+                previous_evidence.get("access_check_status") or ""
+            ).strip().lower()
+            previous_was_mcp_result = bool(
+                previous_reason_code in {
+                    "MCP_TEMPORARILY_UNAVAILABLE",
+                    "MCP_RESPONSE_TIMEOUT",
+                }
+                or previous_reason_code.startswith("MCP_")
+                or str(previous_evidence.get("evidence_ui_status") or "").strip().lower()
+                in {"mcp_unavailable", "mcp_timeout"}
+                or previous_access_check_status.startswith(("mcp_", "legal_"))
+            )
+            previous_reason = (
+                ""
+                if previous_was_mcp_result
+                else str(previous_evidence.get("reason_detail") or "").strip()
+            )
             if transient:
                 evidence = {
                     "evidence_status": "ACCESS_UNCONFIRMED",
-                    "evidence_ui_status": "mcp_unavailable",
-                    "evidence_label": "Le MCP n'a pas pu terminer la vérification",
+                    "evidence_ui_status": "mcp_timeout" if mcp_timed_out else "mcp_unavailable",
+                    "evidence_label": (
+                        "Délai de vérification MCP dépassé"
+                        if mcp_timed_out
+                        else "Le MCP n'a pas pu terminer la vérification"
+                    ),
                     "evidence_usable": False,
                     "candidate_only": True,
                     "fulltext_ready": False,
@@ -952,8 +981,16 @@ def _process_mcp_access_probe(project_id: int, article_id: int) -> Dict[str, Any
                     "access_check_status": mcp_result.get("status"),
                     "needs_legal_recovery": True,
                     "likely_restricted_access": False,
-                    "reason_code": "MCP_TEMPORARILY_UNAVAILABLE",
-                    "reason_detail": "La disponibilité du texte ne peut pas encore être confirmée car le MCP est indisponible.",
+                    "reason_code": (
+                        "MCP_RESPONSE_TIMEOUT"
+                        if mcp_timed_out
+                        else "MCP_TEMPORARILY_UNAVAILABLE"
+                    ),
+                    "reason_detail": (
+                        "Le serveur MCP a été joint, mais sa recherche n'a pas répondu dans le délai accordé."
+                        if mcp_timed_out
+                        else "La disponibilité du texte ne peut pas encore être confirmée car le MCP est indisponible."
+                    ),
                     "recommended_action": "Relancer la vérification MCP avant de conclure ou d'importer un PDF.",
                     "access_kind": "technical_error",
                     "needs_consultant_upload": False,
@@ -978,17 +1015,28 @@ def _process_mcp_access_probe(project_id: int, article_id: int) -> Dict[str, Any
                     "abstract_ready": bool(_abstract(article)),
                     "access_check_status": mcp_result.get("status"),
                     "needs_legal_recovery": False,
-                    "likely_restricted_access": bool(previous_evidence.get("likely_restricted_access")),
-                    "reason_code": previous_evidence.get("reason_code") or "MCP_NO_LEGAL_COPY_FOUND",
+                    "likely_restricted_access": bool(
+                        previous_evidence.get("likely_restricted_access")
+                        and not previous_was_mcp_result
+                    ),
+                    "reason_code": (
+                        previous_reason_code
+                        if previous_reason_code and not previous_was_mcp_result
+                        else "MCP_NO_LEGAL_COPY_FOUND"
+                    ),
                     "reason_detail": (
                         f"{previous_reason} " if previous_reason else ""
-                    ) + "Le MCP a ensuite recherche les endpoints editeur et les autres copies legales, sans autre candidat automatiquement exploitable.",
+                    ) + "Les fournisseurs MCP ont terminé la recherche sans trouver de copie légale automatiquement exploitable.",
                     "recommended_action": (
                         "Telecharger le PDF public dans le navigateur, puis l'importer ici."
                         if browser_only
                         else "Importer une copie PDF autorisee pour activer Garder et Rejeter."
                     ),
-                    "access_kind": previous_evidence.get("access_kind") or "not_found",
+                    "access_kind": (
+                        previous_evidence.get("access_kind")
+                        if not previous_was_mcp_result
+                        else "not_found"
+                    ) or "not_found",
                     "browser_download_url": previous_evidence.get("browser_download_url"),
                     "needs_consultant_upload": True,
                 }

@@ -43,22 +43,40 @@ Base = declarative_base()
 
 
 def ensure_runtime_schema() -> None:
-    """Ajoute les colonnes compatibles aux bases existantes sans Alembic.
-
-    ``create_all`` crée les nouvelles tables, mais ne modifie pas la table
-    ``projects`` déjà présente en production.
-    """
+    """Applique les ajouts de colonnes rétrocompatibles aux bases existantes."""
 
     inspector = inspect(engine)
     if "projects" not in inspector.get_table_names():
         return
-    project_columns = {column["name"] for column in inspector.get_columns("projects")}
-    if "subproject_name" in project_columns:
-        return
     with engine.begin() as connection:
-        connection.execute(
-            text("ALTER TABLE projects ADD COLUMN subproject_name VARCHAR(255)")
-        )
+        project_columns = {column["name"] for column in inspector.get_columns("projects")}
+        if "subproject_name" not in project_columns:
+            connection.execute(text("ALTER TABLE projects ADD COLUMN subproject_name VARCHAR(255)"))
+
+        if "documents" not in inspector.get_table_names():
+            return
+        document_columns = {column["name"] for column in inspector.get_columns("documents")}
+        storage_v2_columns = {
+            "organisme_id": "VARCHAR(255)",
+            "subproject": "VARCHAR(255)",
+            "year": "VARCHAR(20)",
+            "original_filename": "VARCHAR(500)",
+            "mime_type": "VARCHAR(255)",
+            "size_bytes": "BIGINT",
+            "sha256": "VARCHAR(64)",
+            "storage_provider": "VARCHAR(30)",
+            "storage_key": "TEXT",
+            "source_kind": "VARCHAR(100)",
+            "updated_at": "TIMESTAMP",
+        }
+        for name, sql_type in storage_v2_columns.items():
+            if name not in document_columns:
+                connection.execute(text(f"ALTER TABLE documents ADD COLUMN {name} {sql_type}"))
+
+        for name in ("organisme_id", "year", "sha256", "storage_provider", "source_kind"):
+            connection.execute(
+                text(f"CREATE INDEX IF NOT EXISTS ix_documents_{name} ON documents ({name})")
+            )
 
 
 def database_pool_status() -> dict[str, int | str]:

@@ -27,6 +27,7 @@ from ..providers import (
     ArxivProvider,
     CoreProvider,
     CrossrefProvider,
+    DoajProvider,
     EuropePmcProvider,
     HalProvider,
     OpenAlexProvider,
@@ -68,6 +69,7 @@ class LegalFulltextResolver:
             "unpaywall": UnpaywallProvider(self.settings.unpaywall_email),
             "crossref": CrossrefProvider(self.settings.effective_crossref_mailto),
             "core": CoreProvider(self.settings.core_api_key, detail_limit=self.settings.core_detail_limit),
+            "doaj": DoajProvider(),
             "openalex": OpenAlexProvider(self.settings.openalex_api_key),
             "hal": HalProvider(),
             "arxiv": ArxivProvider(),
@@ -431,11 +433,17 @@ class LegalFulltextResolver:
         return True
 
     @staticmethod
-    def _failure(all_candidates: list[FulltextCandidate], attempts: list[ProviderAttempt]) -> tuple[str, str]:
-        if any(attempt.transient for attempt in attempts) or any(
-            candidate.probe_failure_kind in {"rate_limited", "temporarily_unavailable"}
-            for candidate in all_candidates
-        ):
+    def _failure(
+        all_candidates: list[FulltextCandidate],
+        attempts: list[ProviderAttempt],
+        *,
+        transient_failure: bool,
+    ) -> tuple[str, str]:
+        # Un fournisseur en 429/timeout ne rend pas le serveur MCP indisponible
+        # si au moins un autre fournisseur a terminé sa recherche. Le statut
+        # transitoire global est calculé dans ``resolve`` à partir de l'ensemble
+        # des tentatives ; il est la seule source de vérité ici.
+        if transient_failure:
             return (
                 "provider_temporarily_unavailable",
                 "Au moins une source était temporairement indisponible ou limitée ; relancer avec force_refresh=true.",
@@ -805,7 +813,15 @@ class LegalFulltextResolver:
         transient_failure = bool(
             best is None and transient_signal and not successful_provider_search
         )
-        failure_code, reason = (None, None) if best else self._failure(all_candidates, attempts)
+        failure_code, reason = (
+            (None, None)
+            if best
+            else self._failure(
+                all_candidates,
+                attempts,
+                transient_failure=transient_failure,
+            )
+        )
         provenance = self._provenance(best)
 
         result = LegalFulltextResult(

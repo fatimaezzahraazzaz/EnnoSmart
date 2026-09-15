@@ -8,12 +8,16 @@ from urllib.parse import quote
 import re
 import unicodedata
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import text
+from sqlalchemy.orm import Session, undefer
 
-from db.database import SessionLocal
+from core.deps import get_current_user, get_db
+from db.models import Document, User
+from services.project_service import get_project_for_user
+from services.document_storage_service import document_storage_source, read_document_bytes
 
 router = APIRouter(prefix="/projects", tags=["documents-db-sources"])
 
@@ -54,6 +58,8 @@ def _doc_to_dict(row: Any) -> dict[str, Any]:
         "upload_status": row["upload_status"],
         "storage_mode": row["storage_mode"],
         "has_file_data": bool(row["has_file_data"]),
+        "storage_provider": row.get("storage_provider"),
+        "storage_key": row.get("storage_key"),
         "open_url": f"/projects/{row['project_id']}/source-documents/{row['id']}/open",
     }
 
@@ -73,7 +79,9 @@ def _load_project_documents(db, project_id: int) -> list[Any]:
                     document_type,
                     upload_status,
                     COALESCE(storage_mode, 'disk') AS storage_mode,
-                    CASE WHEN file_data IS NULL THEN false ELSE true END AS has_file_data
+                    storage_provider,
+                    storage_key,
+                    CASE WHEN file_data IS NULL AND storage_key IS NULL THEN false ELSE true END AS has_file_data
                 FROM documents
                 WHERE project_id = :project_id
                 ORDER BY id ASC
@@ -142,23 +150,29 @@ def _extract_candidate_names(text_value: str) -> list[str]:
 
 
 @router.get("/{project_id}/source-documents")
-def list_source_documents(project_id: int):
+def list_source_documents(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """List all real source documents for a project from PostgreSQL metadata."""
-    db = SessionLocal()
-    try:
-        rows = _load_project_documents(db, project_id)
-        return {"project_id": project_id, "documents": [_doc_to_dict(r) for r in rows]}
-    finally:
-        db.close()
+    get_project_for_user(db, project_id, current_user)
+    rows = _load_project_documents(db, project_id)
+    return {"project_id": project_id, "documents": [_doc_to_dict(r) for r in rows]}
 
 
 @router.post("/{project_id}/source-documents/resolve")
-def resolve_source_documents(project_id: int, payload: ResolveSourcesPayload):
+def resolve_source_documents(
+    project_id: int,
+    payload: ResolveSourcesPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     Resolve document names mentioned in a signal/verrou text to documents.id.
     This uses PostgreSQL documents table, not Chroma.
     """
-    db = SessionLocal()
+    get_project_for_user(db, project_id, current_user)
     try:
         rows = _load_project_documents(db, project_id)
         doc_items: list[tuple[Any, list[str]]] = []
@@ -206,59 +220,51 @@ def resolve_source_documents(project_id: int, payload: ResolveSourcesPayload):
             "input_names": names,
             "matches": matches,
         }
-    finally:
-        db.close()
+    except HTTPException:
+        raise
 
 
 @router.get("/{project_id}/source-documents/{document_id}/open")
-def open_source_document_from_database(project_id: int, document_id: int):
+def open_source_document_from_database(
+    project_id: int,
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
-    Open the real original document from PostgreSQL BYTEA.
-    No Chroma. No excerpt. The complete file is streamed from documents.file_data.
+    Ouvre l'original via Storage V2, puis PostgreSQL/disque legacy.
     """
-    db = SessionLocal()
+    get_project_for_user(db, project_id, current_user)
     try:
-        row = db.execute(
-            text(
-                """
-                SELECT
-                    id,
-                    project_id,
-                    filename,
-                    stored_filename,
-                    content_type,
-                    file_data,
-                    storage_mode
-                FROM documents
-                WHERE id = :document_id
-                  AND project_id = :project_id
-                LIMIT 1
-                """
-            ),
-            {"document_id": document_id, "project_id": project_id},
-        ).mappings().first()
+        row = (
+            db.query(Document)
+            .options(undefer(Document.file_data))
+            .filter(Document.id == document_id, Document.project_id == project_id)
+            .first()
+        )
 
         if not row:
             raise HTTPException(status_code=404, detail="Document introuvable en base.")
 
-        file_data = row.get("file_data")
-        if not file_data:
+        try:
+            file_data = read_document_bytes(row)
+        except (FileNotFoundError, IOError) as exc:
             raise HTTPException(
                 status_code=404,
-                detail="Le document existe, mais son contenu binaire file_data est vide. Migre d'abord ce fichier en base.",
-            )
+                detail=f"Le document existe, mais son contenu permanent est indisponible : {exc}",
+            ) from exc
 
-        filename = row.get("filename") or row.get("stored_filename") or f"document_{document_id}"
-        content_type = row.get("content_type") or "application/octet-stream"
+        filename = row.filename or row.stored_filename or f"document_{document_id}"
+        content_type = row.mime_type or row.content_type or "application/octet-stream"
 
         return StreamingResponse(
             BytesIO(bytes(file_data)),
             media_type=content_type,
             headers={
                 "Content-Disposition": _inline_filename(filename),
-                "X-Document-Storage": row.get("storage_mode") or "database",
+                "X-Document-Storage": document_storage_source(row),
                 "X-Document-Id": str(document_id),
             },
         )
-    finally:
-        db.close()
+    except HTTPException:
+        raise

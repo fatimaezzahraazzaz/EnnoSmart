@@ -180,7 +180,7 @@ def _load_opus_model(model_name: str, device: str):
     except Exception as exc:
         raise RuntimeError(
             "Dépendances manquantes pour OPUS-MT. Lance : "
-            "pip install transformers sentencepiece accelerate torch sacremoses"
+            "pip install transformers sentencepiece torch sacremoses"
         ) from exc
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)

@@ -6,7 +6,7 @@ Compatibility adapter:
 CIR_STYLE_MEMORY lit maintenant les exemples de style depuis Memory V2.
 
 Source unique :
-<racine-projet>/storage/experience_memory_v2
+<racine-donnees>/object_storage_v2/runtime/experience_memory_v2
 
 Important :
 - pas de base style séparée ;

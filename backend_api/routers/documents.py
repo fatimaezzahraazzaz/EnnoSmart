@@ -31,7 +31,9 @@ from services.document_corpus_service import (
     set_diagnostic_decision,
 )
 from services.file_service import project_output_dir, validate_upload_file
+from services.document_storage_service import apply_storage_metadata, store_document_bytes
 from services.project_service import get_project_for_user
+from modules.common.storage_v2 import get_storage_service, storage_v2_enabled
 
 
 logger = logging.getLogger(__name__)
@@ -414,6 +416,19 @@ def delete_document(
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable dans ce projet.")
 
+    provider = str(document.storage_provider or "").strip().lower()
+    storage_key = str(document.storage_key or "").strip()
+    shared_references = 0
+    if provider and storage_key:
+        shared_references = (
+            db.query(Document)
+            .filter(
+                Document.id != document.id,
+                Document.storage_provider == provider,
+                Document.storage_key == storage_key,
+            )
+            .count()
+        )
     try:
         # Preserve conversation text and versions; only the deleted binary
         # stops being available as their source/preview.
@@ -428,7 +443,21 @@ def delete_document(
     except Exception:
         db.rollback()
         raise
-    return {"ok": True, "document_id": document_id}
+    object_deleted = False
+    object_cleanup_error = None
+    if provider and storage_key and shared_references == 0:
+        try:
+            object_deleted = get_storage_service(provider).delete_file(storage_key)
+        except Exception as exc:
+            logger.exception("Objet Storage V2 orphelin après suppression document_id=%s", document_id)
+            object_cleanup_error = str(exc)
+    return {
+        "ok": True,
+        "document_id": document_id,
+        "storage_object_deleted": object_deleted,
+        "storage_object_shared_references": shared_references,
+        "storage_object_cleanup_error": object_cleanup_error,
+    }
 
 
 @router.get("/diagnostic-review", response_model=DiagnosticCorpusReview)
@@ -501,9 +530,9 @@ async def upload_document(
     Nouvelle logique :
     - tout fichier envoyé au corpus Diagnostic est un élément de travail,
       y compris un pré-CIR ou un CIR précédent ;
-    - le fichier complet est stocké dans PostgreSQL : documents.file_data
-    - aucun fichier permanent n'est écrit dans storage/uploads
-    - file_path devient seulement un identifiant logique db://...
+    - Storage V2/Object Storage est utilisé lorsque le feature flag est actif ;
+    - PostgreSQL conserve les métadonnées, le SHA-256 et la storage_key ;
+    - BYTEA PostgreSQL reste un fallback de déploiement progressif si V2 est désactivé.
     """
     project = get_project_for_user(db, project_id, current_user)
 
@@ -544,13 +573,34 @@ async def upload_document(
         or "application/octet-stream"
     )
 
+    use_storage_v2 = storage_v2_enabled()
+    stored_object = None
+    if use_storage_v2:
+        try:
+            stored_object = await run_in_threadpool(
+                store_document_bytes,
+                project,
+                file_bytes,
+                filename=original_filename,
+                content_type=content_type,
+                source_kind="project_document",
+            )
+        except Exception as exc:
+            logger.exception("Écriture Storage V2 refusée project_id=%s", project.id)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Stockage permanent Storage V2 indisponible : {exc}",
+            ) from exc
+
     document = Document(
         project_id=project.id,
         filename=original_filename,
         stored_filename=stored_filename,
-
-        # Pas de chemin disque réel pour les nouveaux uploads.
-        file_path=f"db://documents/{sha256}",
+        file_path=(
+            f"storage://{stored_object.provider}/{stored_object.storage_key}"
+            if stored_object
+            else f"db://documents/{sha256}"
+        ),
 
         content_type=content_type,
         file_size=len(file_bytes),
@@ -559,12 +609,29 @@ async def upload_document(
             if corpus_scope == CORPUS_DIAGNOSTIC
             else document_type or _guess_document_type(Path(original_filename))
         ),
-        upload_status="importé_en_base",
-
-        file_data=file_bytes,
+        upload_status="stocké_storage_v2" if stored_object else "importé_en_base_legacy",
+        file_data=None if stored_object else file_bytes,
         file_sha256=sha256,
-        storage_mode="database",
+        storage_mode="storage_v2" if stored_object else "database",
+        organisme_id=str(project.organisme),
+        subproject=str(project.subproject_name or "") or None,
+        year=str(project.year),
+        original_filename=original_filename,
+        mime_type=content_type,
+        size_bytes=len(file_bytes),
+        sha256=sha256,
+        storage_provider=stored_object.provider if stored_object else None,
+        storage_key=stored_object.storage_key if stored_object else None,
+        source_kind="project_document",
     )
+    if stored_object:
+        apply_storage_metadata(
+            document,
+            project,
+            stored_object,
+            filename=original_filename,
+            source_kind="project_document",
+        )
 
     db.add(document)
     db.flush()
@@ -735,11 +802,8 @@ def import_existing_documents(
     Ancien comportement :
     - lier le chemin disque dans documents.file_path.
 
-    Nouveau comportement :
-    - lire le fichier disque,
-    - stocker son contenu dans documents.file_data,
-    - mettre storage_mode='database',
-    - utiliser file_path='db://documents/<sha256>'.
+    Nouveau comportement : copier vers Storage V2 s'il est activé. Le fallback
+    PostgreSQL historique reste disponible pendant le déploiement progressif.
 
     Cette route ne supprime pas les fichiers disque automatiquement.
     La suppression doit être faite après vérification avec un script dédié.
@@ -780,19 +844,62 @@ def import_existing_documents(
 
         stored_filename = _make_stored_filename(path.name, sha256)
 
+        stored_object = None
+        if storage_v2_enabled():
+            try:
+                stored_object = store_document_bytes(
+                    project,
+                    file_bytes,
+                    filename=path.name,
+                    content_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+                    source_kind="project_document",
+                )
+            except Exception as exc:
+                logger.exception("Import Storage V2 refusé project_id=%s path=%s", project.id, path)
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Stockage permanent Storage V2 indisponible : {exc}",
+                ) from exc
+
         document = Document(
             project_id=project.id,
             filename=path.name,
             stored_filename=stored_filename,
-            file_path=logical_path,
+            file_path=(
+                f"storage://{stored_object.provider}/{stored_object.storage_key}"
+                if stored_object
+                else logical_path
+            ),
             content_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
             file_size=len(file_bytes),
             document_type=_guess_document_type(path),
-            upload_status="importé_en_base_depuis_outputs",
-            file_data=file_bytes,
+            upload_status=(
+                "stocké_storage_v2_depuis_outputs"
+                if stored_object
+                else "importé_en_base_depuis_outputs_legacy"
+            ),
+            file_data=None if stored_object else file_bytes,
             file_sha256=sha256,
-            storage_mode="database",
+            storage_mode="storage_v2" if stored_object else "database",
+            organisme_id=str(project.organisme),
+            subproject=str(project.subproject_name or "") or None,
+            year=str(project.year),
+            original_filename=path.name,
+            mime_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+            size_bytes=len(file_bytes),
+            sha256=sha256,
+            storage_provider=stored_object.provider if stored_object else None,
+            storage_key=stored_object.storage_key if stored_object else None,
+            source_kind="project_document",
         )
+        if stored_object:
+            apply_storage_metadata(
+                document,
+                project,
+                stored_object,
+                filename=path.name,
+                source_kind="project_document",
+            )
 
         db.add(document)
         db.flush()

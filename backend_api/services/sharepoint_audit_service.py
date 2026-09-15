@@ -1250,6 +1250,27 @@ def run_sharepoint_audit(
             run["errors"].append(str(exc))
         finally:
             _json_write(run_path, run)
+
+    # ENNOSMART_STORAGE_CLEANUP_HOTFIX2: nettoyage optionnel après audit réussi.
+    # Désactivé par défaut. Aucun coût de hash supplémentaire tant que les flags
+    # ENNOSMART_STORAGE_CLEANUP_ENABLED et ENNOSMART_CLEANUP_STAGING_AFTER_AUDIT
+    # ne sont pas explicitement activés.
+    cleanup_enabled = str(os.getenv("ENNOSMART_STORAGE_CLEANUP_ENABLED", "false")).strip().lower() in {"1", "true", "yes", "on", "oui"}
+    cleanup_after_audit = str(os.getenv("ENNOSMART_CLEANUP_STAGING_AFTER_AUDIT", "false")).strip().lower() in {"1", "true", "yes", "on", "oui"}
+    if bool(run.get("ok")) and cleanup_enabled and cleanup_after_audit:
+        try:
+            from services.storage_cleanup_service import cleanup_completed_audit_staging_from_metadata
+            run["storage_cleanup_after_audit"] = cleanup_completed_audit_staging_from_metadata(
+                root=root,
+                run=run,
+            )
+        except Exception as cleanup_exc:
+            run["storage_cleanup_after_audit"] = {
+                "ok": False,
+                "non_blocking": True,
+                "error": str(cleanup_exc),
+            }
+        _json_write(run_path, run)
     return run
 
 
@@ -1327,6 +1348,24 @@ def mark_audit_item_indexed(
         raise FileNotFoundError("Document d'audit introuvable.")
     run["memory_index_operations"] = int(run.get("memory_index_operations") or 0) + 1
     _json_write(root / "runs" / f"{scan_id}.json", run)
+
+    # ENNOSMART_STORAGE_CLEANUP_PATCH_V1: non-blocking post-index cleanup hook.
+    # Dry-run by default; actual deletion requires explicit environment flags.
+    try:
+        from services.storage_cleanup_service import cleanup_indexed_power_automate_item_from_metadata
+        updated["storage_cleanup"] = cleanup_indexed_power_automate_item_from_metadata(
+            root=root,
+            run=run,
+            item=updated,
+        )
+        _json_write(root / "items" / scan_id / f"{_safe_name(item_id, 'item')}.json", updated)
+        _json_write(root / "runs" / f"{scan_id}.json", run)
+    except Exception as cleanup_exc:
+        updated["storage_cleanup"] = {
+            "ok": False,
+            "non_blocking": True,
+            "error": str(cleanup_exc),
+        }
     return updated
 
 
@@ -1389,6 +1428,83 @@ def mark_matching_items_memory_removed(
     }
 
 
+# ENNOSMART_STORAGE_CLEANUP_PATCH_V1: lazy rehydration of cleaned staging files.
+def _rehydrate_staged_path(item: dict[str, Any], *, root: Path) -> Path:
+    """Reconstruit une copie staging depuis la source Power Automate/OneDrive.
+
+    Utilisé uniquement si un ancien fichier staging a été nettoyé après une
+    indexation réussie. La source est relue en lecture seule et son SHA-256 est
+    revérifié avant toute utilisation.
+    """
+    scan_id = str(item.get("scan_id") or "").strip()
+    if not scan_id:
+        raise FileNotFoundError("Scan d'origine absent; réhydratation impossible.")
+    run = get_sharepoint_audit(scan_id, audit_root=root)
+    provider = _provider_from_environment(
+        str(run.get("provider") or "inbox"),
+        str(run.get("source_scope") or ""),
+    )
+    wanted_id = str(item.get("external_id") or "")
+    wanted_source_path = str(item.get("source_path") or "").replace("\\", "/")
+    source_item = None
+    for candidate in provider.list_items():
+        if wanted_id and str(candidate.external_id) == wanted_id:
+            source_item = candidate
+            break
+        if wanted_source_path and str(candidate.source_path).replace("\\", "/") == wanted_source_path:
+            source_item = candidate
+            break
+    if source_item is None:
+        raise FileNotFoundError("Source Power Automate/OneDrive introuvable; réhydratation refusée.")
+
+    content = provider.read_content(source_item)
+    expected_source_hash = str(item.get("sha256") or "").strip()
+    if expected_source_hash and _sha256_bytes(content) != expected_source_hash:
+        raise ValueError("La source Power Automate a changé; réhydratation refusée.")
+
+    staging_root = (root / "staging").resolve()
+    raw_staged = str(item.get("staged_path") or "").strip()
+    if not raw_staged:
+        raise FileNotFoundError("Chemin staging absent.")
+    staged_path = Path(raw_staged).resolve()
+    try:
+        staged_path.relative_to(staging_root)
+    except ValueError as exc:
+        raise ValueError("Chemin staging hors zone autorisée.") from exc
+    staged_path.parent.mkdir(parents=True, exist_ok=True)
+    staged_path.write_bytes(content)
+    if expected_source_hash and _sha256_file(staged_path) != expected_source_hash:
+        staged_path.unlink(missing_ok=True)
+        raise ValueError("Réhydratation locale incohérente; fichier supprimé.")
+
+    raw_index = str(item.get("index_staged_path") or "").strip()
+    if not raw_index:
+        return staged_path
+    index_path = Path(raw_index).resolve()
+    try:
+        index_path.relative_to(staging_root)
+    except ValueError as exc:
+        raise ValueError("Chemin d'index hors zone staging autorisée.") from exc
+
+    if index_path == staged_path:
+        return staged_path
+
+    # Ancien .doc: recrée le .docx local de conversion si nécessaire.
+    if staged_path.suffix.lower() == ".doc":
+        converted = _convert_legacy_doc_copy(staged_path).resolve()
+        expected_index_hash = str(item.get("index_sha256") or "").strip()
+        if expected_index_hash and _sha256_file(converted) != expected_index_hash:
+            raise ValueError("Conversion .doc réhydratée différente de la version indexée.")
+        if converted != index_path:
+            index_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(converted, index_path)
+        return index_path
+
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(staged_path, index_path)
+    return index_path
+
+
 def validate_staged_path(item: dict[str, Any], *, audit_root: Path | None = None) -> Path:
     root = (audit_root or Path(settings.POWER_AUTOMATE_AUDIT_ROOT or str(DEFAULT_AUDIT_ROOT))).resolve()
     staged_root = (root / "staging").resolve()
@@ -1398,7 +1514,7 @@ def validate_staged_path(item: dict[str, Any], *, audit_root: Path | None = None
     except ValueError as exc:
         raise ValueError("Copie locale hors de la zone d'audit autorisée.") from exc
     if not path.is_file():
-        raise FileNotFoundError("Copie locale d'audit introuvable.")
+        path = _rehydrate_staged_path(item, root=root)
     expected_hash = str(item.get("index_sha256") or item.get("sha256") or "")
     if expected_hash and _sha256_file(path) != expected_hash:
         raise ValueError("La copie locale a changé depuis le scan ; indexation refusée.")

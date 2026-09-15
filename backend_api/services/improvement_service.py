@@ -79,6 +79,7 @@ from db.models import (
     ImprovementVersion,
     Project,
 )
+from services.document_storage_service import read_document_bytes
 
 
 _AGENT: EnnoAmeliorationAgent | None = None
@@ -121,7 +122,10 @@ def _extract_document_payload(
         raise LookupError("Document introuvable dans ce projet.")
 
     suffix = Path(document.filename or document.stored_filename or "document.txt").suffix.lower()
-    file_bytes = bytes(document.file_data or b"")
+    try:
+        file_bytes = read_document_bytes(document)
+    except (FileNotFoundError, IOError):
+        file_bytes = b""
     if suffix in {".txt", ".md"} and file_bytes:
         return document, file_bytes.decode("utf-8", errors="ignore"), {
             "version": "ennoamelioration_document_structure_v1",
@@ -135,10 +139,6 @@ def _extract_document_payload(
             },
         }
 
-    if not file_bytes and document.file_path and not str(document.file_path).startswith("db://"):
-        path = Path(document.file_path)
-        if path.exists():
-            file_bytes = path.read_bytes()
     if not file_bytes:
         raise ValueError("Le document ne contient aucune donnée extractible.")
 

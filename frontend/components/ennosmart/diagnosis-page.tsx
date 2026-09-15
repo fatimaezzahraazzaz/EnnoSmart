@@ -4073,7 +4073,7 @@ function InlineComparisonDocumentViewerV203({
       })
 
       const token = getAccessToken()
-      const authHeaders = token
+      const authHeaders: Record<string, string> = token
         ? { Authorization: `Bearer ${token}` }
         : {}
 

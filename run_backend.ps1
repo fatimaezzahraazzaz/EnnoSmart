@@ -7,29 +7,14 @@ param(
 $ErrorActionPreference = "Stop"
 $ProjectRoot = $PSScriptRoot
 
-$PythonCandidates = @()
-if ($env:VIRTUAL_ENV) {
-    $PythonCandidates += Join-Path $env:VIRTUAL_ENV "Scripts\python.exe"
-}
-$PythonCandidates += @(
-    (Join-Path $ProjectRoot ".venv\Scripts\python.exe"),
-    (Join-Path $ProjectRoot ".venv_py314\Scripts\python.exe")
-)
+$Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 
-$Python = $null
-foreach ($Candidate in ($PythonCandidates | Select-Object -Unique)) {
-    if (-not (Test-Path -LiteralPath $Candidate -PathType Leaf)) {
-        continue
-    }
-    & $Candidate -c "import uvicorn" *> $null
-    if ($LASTEXITCODE -eq 0) {
-        $Python = $Candidate
-        break
-    }
-}
-
-if (-not $Python) {
+if (-not (Test-Path -LiteralPath $Python -PathType Leaf)) {
     throw "Environnement Python EnnoSmart introuvable ou incomplet. Exécutez d'abord : py -3.12 -m venv .venv puis python -m pip install -r requirements.txt"
+}
+& $Python -c "import uvicorn" *> $null
+if ($LASTEXITCODE -ne 0) {
+    throw "L'environnement .venv existe mais Uvicorn n'est pas installé. Exécutez : .venv\Scripts\python.exe -m pip install -r requirements.txt"
 }
 
 Set-Location $ProjectRoot

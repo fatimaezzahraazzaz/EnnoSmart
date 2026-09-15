@@ -1,14 +1,10 @@
 $ErrorActionPreference = "Stop"
 $projectRoot = $PSScriptRoot
 $backendRoot = Join-Path $projectRoot "backend_api"
-$pythonCandidates = @(
-    (Join-Path $projectRoot ".venv_py314\Scripts\python.exe"),
-    (Join-Path $projectRoot ".venv\Scripts\python.exe")
-)
-$pythonExe = $pythonCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+$pythonExe = Join-Path $projectRoot ".venv\Scripts\python.exe"
 
-if (-not $pythonExe) {
-    throw "Environnement Python introuvable. Chemins verifies : $($pythonCandidates -join ', ')"
+if (-not (Test-Path -LiteralPath $pythonExe -PathType Leaf)) {
+    throw "Environnement Python introuvable : $pythonExe"
 }
 
 Set-Location $backendRoot

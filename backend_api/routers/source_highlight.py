@@ -62,6 +62,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
+from services.document_storage_service import read_document_bytes
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -69,7 +70,12 @@ from core.deps import get_current_user, get_db
 from db.models import User
 from services.diagnostic_service import get_project_store
 from services.project_service import get_project_for_user
-from modules.common.runtime_paths import code_root, resolve_persisted_path, storage_root
+from modules.common.runtime_paths import (
+    code_root,
+    experience_memory_root,
+    resolve_persisted_path,
+    storage_root,
+)
 
 try:
     from db.models import Document  # type: ignore
@@ -423,15 +429,9 @@ def _materialize_db_document(
     if suffix not in ALLOWED_EXTENSIONS:
         return None
 
-    file_path = getattr(document, "file_path", None)
-
-    if file_path and not str(file_path).startswith("db://"):
-        path = Path(str(file_path))
-        if path.exists() and path.is_file():
-            return path.resolve()
-
-    file_data = getattr(document, "file_data", None)
-    if not file_data:
+    try:
+        raw = read_document_bytes(document)
+    except (FileNotFoundError, IOError):
         return None
 
     _ensure_preview_root()
@@ -446,8 +446,6 @@ def _materialize_db_document(
     target_dir.mkdir(parents=True, exist_ok=True)
 
     target = target_dir / filename
-    raw = bytes(file_data)
-
     if not target.exists() or target.stat().st_size != len(raw):
         target.write_bytes(raw)
 
@@ -668,6 +666,138 @@ def resolve_document_path(
             f"{year_hint}. Noms recherchés : {requested}."
         ),
     )
+
+
+def _identity_key(value: Any) -> str:
+    return re.sub(
+        r"[^a-z0-9]+",
+        "",
+        _strip_accents(str(value or "")).lower(),
+    )
+
+
+def render_historical_extraction_preview(
+    project: Any,
+    payload: SourceHighlightRequest,
+) -> Optional[HTMLResponse]:
+    """Affiche la copie textuelle Memory V2 si le fichier CIR legacy a disparu."""
+
+    wanted_names = {
+        normalize_filename(value)
+        for value in (
+            payload.source_name,
+            payload.document_name,
+            Path(str(payload.source_path or "").replace("\\", "/")).name,
+        )
+        if str(value or "").strip()
+    }
+    wanted_names.discard("")
+
+    expected_organism = _identity_key(getattr(project, "organisme", ""))
+    expected_project = _identity_key(getattr(project, "project_name", ""))
+    expected_year = str(payload.year or "").strip()
+
+    if not expected_organism or not expected_project or not wanted_names:
+        return None
+
+    try:
+        from services.experience_memory_v2_service import get_memory_v2_catalog
+
+        catalog = get_memory_v2_catalog()
+    except Exception:
+        return None
+
+    rows = catalog.get("projects") if isinstance(catalog, dict) else []
+    if not isinstance(rows, list):
+        return None
+
+    extraction_root = (experience_memory_root() / "extraction").resolve()
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if _identity_key(row.get("organisme")) != expected_organism:
+            continue
+        if _identity_key(row.get("project") or row.get("project_name")) != expected_project:
+            continue
+        if expected_year and str(row.get("year") or "").strip() != expected_year:
+            continue
+
+        row_names = {
+            normalize_filename(value)
+            for value in (
+                row.get("indexed_file_name"),
+                row.get("indexed_file_path"),
+            )
+            if str(value or "").strip()
+        }
+        for source in row.get("source_files") or []:
+            if not isinstance(source, dict):
+                continue
+            for key in ("file_name", "file_path"):
+                value = source.get(key)
+                if str(value or "").strip():
+                    row_names.add(normalize_filename(value))
+
+        if wanted_names.isdisjoint(row_names):
+            continue
+
+        source_id = str(row.get("source_id") or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", source_id):
+            continue
+
+        extraction_path = (extraction_root / f"{source_id}.extraction.json").resolve()
+        if not is_inside(extraction_path, extraction_root) or not extraction_path.is_file():
+            continue
+
+        try:
+            extraction = json.loads(
+                extraction_path.read_text(encoding="utf-8")
+            )
+        except Exception:
+            continue
+
+        chunks = extraction.get("text_chunks") if isinstance(extraction, dict) else []
+        full_text = "\n\n".join(
+            str(chunk).strip()
+            for chunk in (chunks if isinstance(chunks, list) else [])
+            if str(chunk or "").strip()
+        )
+        if not full_text and isinstance(extraction, dict):
+            full_text = str(extraction.get("full_text") or "").strip()
+        if not full_text:
+            continue
+
+        body, exact = highlight_html_text(full_text, payload.excerpt)
+        filename = str(
+            row.get("indexed_file_name")
+            or payload.source_name
+            or payload.document_name
+            or "CIR historique"
+        )
+        notice = (
+            "<div style='margin-bottom:14px;padding:12px;"
+            "border:1px solid #bfdbfe;background:#eff6ff;"
+            "border-radius:10px;color:#1e40af;font-size:13px'>"
+            "Le fichier original a été déplacé. Cette prévisualisation utilise "
+            "sa copie textuelle archivée dans Memory V2."
+            "</div>"
+        )
+        return HTMLResponse(
+            html_document(
+                payload.title or filename,
+                notice + body,
+                f"Archive Memory V2 · {filename}",
+                exact=exact,
+            ),
+            headers={
+                "Cache-Control": "private, max-age=300",
+                "X-EnnoSmart-Preview-Mode": "memory-v2-extraction",
+                "X-EnnoSmart-Source-File": filename,
+            },
+        )
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -2303,6 +2433,38 @@ def build_preview_url(
     )
 
 
+def resolve_source_preview_response(
+    *,
+    db: Session,
+    project: Any,
+    payload: SourceHighlightRequest,
+    project_id: int,
+):
+    try:
+        path = resolve_document_path(
+            db=db,
+            project=project,
+            payload=payload,
+        )
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+
+        historical_preview = render_historical_extraction_preview(
+            project,
+            payload,
+        )
+        if historical_preview is not None:
+            return historical_preview
+        raise
+
+    return render_document_preview(
+        path,
+        payload,
+        project_id,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -2334,16 +2496,11 @@ def source_highlight_preview_post(
             }
         )
 
-    path = resolve_document_path(
+    return resolve_source_preview_response(
         db=db,
         project=project,
         payload=payload,
-    )
-
-    return render_document_preview(
-        path,
-        payload,
-        project_id,
+        project_id=project_id,
     )
 
 
@@ -2394,16 +2551,11 @@ def source_highlight_preview_get(
         year=year,
     )
 
-    path = resolve_document_path(
+    return resolve_source_preview_response(
         db=db,
         project=project,
         payload=payload,
-    )
-
-    return render_document_preview(
-        path,
-        payload,
-        project_id,
+        project_id=project_id,
     )
 
 

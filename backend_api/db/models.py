@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    BigInteger,
     Column,
     DateTime,
     Float,
@@ -238,11 +239,87 @@ class Document(Base):
     file_sha256 = Column(String(64), nullable=True, index=True)
     storage_mode = Column(String(30), default="database", nullable=False)
 
+    # Storage V2. Les champs historiques ci-dessus restent en place pour le
+    # fallback progressif (BYTEA PostgreSQL puis ancien chemin local).
+    organisme_id = Column(String(255), nullable=True, index=True)
+    subproject = Column(String(255), nullable=True)
+    year = Column(String(20), nullable=True, index=True)
+    original_filename = Column(String(500), nullable=True)
+    mime_type = Column(String(255), nullable=True)
+    size_bytes = Column(BigInteger, nullable=True)
+    sha256 = Column(String(64), nullable=True, index=True)
+    storage_provider = Column(String(30), nullable=True, index=True)
+    storage_key = Column(Text, nullable=True)
+    source_kind = Column(String(100), nullable=True, index=True)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=True,
+    )
+
     project = relationship("Project", back_populates="documents")
     corpus_assignments = relationship(
         "DocumentCorpusAssignment",
         back_populates="document",
         cascade="all, delete-orphan",
+    )
+
+
+class StorageMigrationEvent(Base):
+    """Historique append-only des copies et vérifications Storage V2."""
+
+    __tablename__ = "storage_migration_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(
+        Integer,
+        ForeignKey("documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    event_type = Column(String(50), nullable=False, index=True)
+    status = Column(String(30), nullable=False, index=True)
+    storage_provider = Column(String(30), nullable=True)
+    storage_key = Column(Text, nullable=True)
+    sha256 = Column(String(64), nullable=True, index=True)
+    details_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class MemoryV2Document(Base):
+    """Métadonnées PostgreSQL des documents CIR historiques de Memory V2."""
+
+    __tablename__ = "memory_v2_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    memory_id = Column(String(700), nullable=False, unique=True, index=True)
+    project_id = Column(
+        Integer,
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    organisme_id = Column(String(255), nullable=False, index=True)
+    project_name = Column(String(255), nullable=False, index=True)
+    subproject = Column(String(255), nullable=True)
+    year = Column(String(20), nullable=True, index=True)
+    filename = Column(String(500), nullable=False)
+    original_filename = Column(String(500), nullable=False)
+    mime_type = Column(String(255), nullable=True)
+    size_bytes = Column(BigInteger, nullable=False)
+    sha256 = Column(String(64), nullable=False, index=True)
+    storage_provider = Column(String(30), nullable=False, index=True)
+    storage_key = Column(Text, nullable=False)
+    source_kind = Column(String(100), nullable=False, default="memory_v2_document")
+    legacy_path = Column(Text, nullable=True)
+    migration_status = Column(String(50), nullable=False, default="verified")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
     )
 
 

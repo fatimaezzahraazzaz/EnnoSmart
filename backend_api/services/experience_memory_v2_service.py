@@ -207,28 +207,26 @@ def _run_rows() -> List[Dict[str, Any]]:
 
 
 def _chroma_collections() -> List[Dict[str, Any]]:
-    database = V2_CHROMA_DIR / "chroma.sqlite3"
-    if not database.is_file():
-        return []
-    connection: sqlite3.Connection | None = None
+    """Liste les collections via la fabrique Chroma centrale (HTTP ou local)."""
     try:
-        connection = sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True, timeout=2)
-        rows = connection.execute(
-            """
-            SELECT c.name, COUNT(e.id)
-            FROM collections c
-            JOIN segments s ON s.collection = c.id AND s.scope = 'METADATA'
-            LEFT JOIN embeddings e ON e.segment_id = s.id
-            GROUP BY c.id, c.name
-            ORDER BY c.name
-            """
-        ).fetchall()
-        return [{"name": str(name), "items_count": int(count or 0)} for name, count in rows]
+        from modules.RAG.chroma_client import create_chroma_client
+
+        client = create_chroma_client(V2_CHROMA_DIR)
+        rows: List[Dict[str, Any]] = []
+        for raw in client.list_collections():
+            name = _clean(getattr(raw, "name", raw))
+            if not name:
+                continue
+            try:
+                collection = client.get_collection(name=name)
+                count = int(collection.count())
+            except Exception:
+                count = 0
+            rows.append({"name": name, "items_count": count})
+        rows.sort(key=lambda item: item["name"])
+        return rows
     except Exception:
         return []
-    finally:
-        if connection is not None:
-            connection.close()
 
 
 def _runtime_dependencies() -> Dict[str, bool]:
@@ -325,8 +323,16 @@ def get_memory_v2_catalog() -> Dict[str, Any]:
     ))
 
     collections = _chroma_collections()
-    global_collection = next((item for item in collections if item["name"] == "ennosmart_memory_v2_global"), None)
+    memory_collections = [
+        item for item in collections
+        if str(item.get("name") or "").startswith("ennosmart_memory_v2_org_")
+    ]
     dependencies = _runtime_dependencies()
+    try:
+        from modules.RAG.chroma_client import chroma_connection_info
+        connection_info = chroma_connection_info(V2_CHROMA_DIR)
+    except Exception:
+        connection_info = {"mode": "unknown"}
     organisms = sorted(
         {str(row["organisme"]) for row in projects if row.get("organisme")}
         | {str(value) for value in catalog.get("organisms") or [] if value}
@@ -352,17 +358,19 @@ def get_memory_v2_catalog() -> Dict[str, Any]:
             "chunks_count": int(catalog.get("chunks_count") or 0),
             "cards_count": int(catalog.get("cards_count") or 0),
             "relations_count": int(catalog.get("relations_count") or 0),
-            "vector_items_count": int((global_collection or {}).get("items_count") or 0),
+            "vector_items_count": sum(int(item.get("items_count") or 0) for item in memory_collections),
         },
         "organisms": organisms,
         "projects": projects,
         "role_counts": catalog.get("role_counts") or {},
         "domain_counts": catalog.get("domain_counts") or {},
         "vector_db": {
-            "exists": (V2_CHROMA_DIR / "chroma.sqlite3").is_file(),
-            "collection": "ennosmart_memory_v2_global",
-            "collections": collections,
-            "mode": "single_global_collection",
+            "exists": bool(memory_collections) or connection_info.get("mode") == "http",
+            "collection": None,
+            "collection_pattern": "ennosmart_memory_v2_org_<organisme>_<hash>",
+            "collections": memory_collections,
+            "mode": "per_organism_collections",
+            "connection": connection_info,
             "source_file_copy_policy": "disabled",
             "runtime_dependencies": dependencies,
             "runtime_ready": all(dependencies.values()),
@@ -717,7 +725,7 @@ def search_memory_v2(
     top_k = max(1, min(int(top_k), 30))
     role_value = _clean(role, 50)
     engine = _load_engine()
-    collection = "ennosmart_memory_v2_global"
+    collection = ""  # collection dérivée obligatoirement de organisme
     result = engine.search_v2(
         question,
         collection=collection,

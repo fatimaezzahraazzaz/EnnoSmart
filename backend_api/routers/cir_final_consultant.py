@@ -18,8 +18,11 @@ from sqlalchemy.orm import Session
 from core.deps import get_current_user, get_db
 from db.models import Document, User
 from services.experience_memory_v2_service import build_uploaded_cir
+from services.document_storage_service import apply_storage_metadata, store_document_bytes
 from services.project_service import get_project_for_user
+from modules.common.storage_v2 import get_storage_service, storage_v2_enabled
 from modules.common.runtime_paths import storage_root
+from modules.RAG.scope import organism_memory_collection
 
 router = APIRouter(prefix="/projects", tags=["CIR final consultant"])
 
@@ -775,21 +778,23 @@ async def upload_cir_final_consultant(
     if ext not in [".docx", ".pdf", ".txt", ".md"]:
         raise HTTPException(status_code=400, detail="Format accepté : .docx, .pdf, .txt, .md")
 
-    # V61 : chemin source de vérité = organisme / projet / année.
-    # L'ancien storage/projects/{id} reste uniquement une copie de compatibilité.
+    # Les JSON historiques restent lisibles à leur emplacement canonique pendant
+    # la transition. Le document binaire passe par un staging distinct avant
+    # Object Storage et ne remplace jamais destructivement le dossier courant.
     run_id = "current"
 
     canonical_dir = canonical_cir_current_dir(
         organisme_name, project_name, year_value, subproject_name
     )
-    if canonical_dir.exists():
-        shutil.rmtree(canonical_dir)
     canonical_dir.mkdir(parents=True, exist_ok=True)
 
     file_bytes = await file.read()
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Le fichier CIR final est vide.")
-    saved = canonical_dir / filename
+    digest = hashlib.sha256(file_bytes).hexdigest()
+    staging_dir = storage_root() / "staging" / "cir_final" / str(project_id) / digest
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    saved = staging_dir / filename
     saved.write_bytes(file_bytes)
 
     try:
@@ -842,7 +847,24 @@ async def upload_cir_final_consultant(
     )
     write_json(canonical_extracted_path, cir_memory)
 
-    digest = hashlib.sha256(file_bytes).hexdigest()
+    content_type = file.content_type or "application/octet-stream"
+    stored_object = None
+    if storage_v2_enabled():
+        try:
+            stored_object = store_document_bytes(
+                project_row,
+                file_bytes,
+                filename=filename,
+                content_type=content_type,
+                source_kind="cir_historical_document",
+            )
+        except Exception as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail=f"Stockage permanent Storage V2 impossible ; staging conservé : {exc}",
+            ) from exc
+
     document = (
         db.query(Document)
         .filter(
@@ -857,17 +879,41 @@ async def upload_cir_final_consultant(
             project_id=project_id,
             filename=filename,
             stored_filename=filename,
-            file_path=f"db://documents/{digest}",
-            content_type=file.content_type or "application/octet-stream",
+            file_path=(
+                f"storage://{stored_object.provider}/{stored_object.storage_key}"
+                if stored_object
+                else f"db://documents/{digest}"
+            ),
+            content_type=content_type,
             file_size=len(file_bytes),
             document_type="CIR final consultant",
             upload_status="indexé Chroma",
-            file_data=file_bytes,
+            file_data=None if stored_object else file_bytes,
             file_sha256=digest,
-            storage_mode="database",
+            storage_mode="storage_v2" if stored_object else "database",
+            organisme_id=organisme_name,
+            subproject=subproject_name or None,
+            year=year_value,
+            original_filename=filename,
+            mime_type=content_type,
+            size_bytes=len(file_bytes),
+            sha256=digest,
+            storage_provider=stored_object.provider if stored_object else None,
+            storage_key=stored_object.storage_key if stored_object else None,
+            source_kind="cir_historical_document",
         )
         db.add(document)
         db.flush()
+    if stored_object:
+        apply_storage_metadata(
+            document,
+            project_row,
+            stored_object,
+            filename=filename,
+            source_kind="cir_historical_document",
+        )
+        document.file_path = f"storage://{stored_object.provider}/{stored_object.storage_key}"
+        document.file_data = None
 
     try:
         chroma_result = build_uploaded_cir(
@@ -926,7 +972,7 @@ async def upload_cir_final_consultant(
             "chroma_indexed": bool(chroma_result.get("ok", True)),
             "chroma_collection": (
                 (chroma_result.get("catalog") or {}).get("vector_db") or {}
-            ).get("collection", "ennosmart_memory_v2_global"),
+            ).get("collection") or organism_memory_collection(organisme_name),
         },
         "postgres": {
             "document_id": document.id,
@@ -934,10 +980,14 @@ async def upload_cir_final_consultant(
             "sha256": digest,
         },
         "storage": {
-            "mode": "canonical_organisme_project_year",
+            "mode": "storage_v2" if stored_object else "database_legacy_fallback",
+            "provider": stored_object.provider if stored_object else None,
+            "storage_key": stored_object.storage_key if stored_object else None,
+            "sha256_verified": bool(stored_object and stored_object.sha256 == digest),
+            "staging_path": str(saved),
             "canonical_directory": str(canonical_dir),
             "legacy_directory": None,
-            "note": "Le chemin canonique inclut organisme, projet, sous-projet éventuel et année. Aucun dossier storage/projects/{id} n’est recréé."
+            "note": "Le staging est conservé jusqu'à validation DB + Chroma + Object Storage ; la source Power Automate éventuelle reste en lecture seule."
         },
         "warnings": warnings,
         "usage_warning": "Ne pas mélanger ce CIR final avec les documents bruts du diagnostic.",
@@ -945,9 +995,51 @@ async def upload_cir_final_consultant(
         "created_at": datetime.now().isoformat(timespec="seconds"),
     }
 
+    db.commit()
+    db.refresh(document)
+
+    staging_cleanup = {
+        "status": "kept",
+        "reason": "Storage V2 désactivé ; le fallback PostgreSQL reste la source permanente.",
+    }
+    if stored_object:
+        try:
+            permanent = get_storage_service(stored_object.provider)
+            destination_ok = permanent.exists(stored_object.storage_key)
+            sha_ok = destination_ok and permanent.verify_sha256(stored_object.storage_key, digest)
+            metadata_ok = bool(
+                document.storage_key == stored_object.storage_key
+                and document.sha256 == digest
+                and document.storage_provider == stored_object.provider
+            )
+            chroma_ok = bool(chroma_result.get("ok", True))
+            if destination_ok and sha_ok and metadata_ok and chroma_ok:
+                saved.unlink(missing_ok=True)
+                for directory in (staging_dir, staging_dir.parent):
+                    try:
+                        directory.rmdir()
+                    except OSError:
+                        pass
+                staging_cleanup = {
+                    "status": "deleted_after_full_verification",
+                    "destination_exists": destination_ok,
+                    "sha256_equal": sha_ok,
+                    "postgresql_metadata": metadata_ok,
+                    "memory_v2_indexed": chroma_ok,
+                }
+            else:
+                staging_cleanup = {
+                    "status": "kept_needs_review",
+                    "destination_exists": destination_ok,
+                    "sha256_equal": sha_ok,
+                    "postgresql_metadata": metadata_ok,
+                    "memory_v2_indexed": chroma_ok,
+                }
+        except Exception as exc:
+            staging_cleanup = {"status": "kept_needs_review", "error": str(exc)}
+    report["storage"]["staging_cleanup"] = staging_cleanup
     canonical_report_path = canonical_dir / "cir_final_consultant_report.json"
     write_json(canonical_report_path, report)
-    db.commit()
     # V62 : aucune copie legacy dans storage/projects/{id}.
     # La source officielle est le chemin canonique organisme/projet/année.
 

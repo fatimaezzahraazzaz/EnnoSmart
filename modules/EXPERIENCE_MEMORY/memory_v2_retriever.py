@@ -85,24 +85,31 @@ class MemoryV2Retriever:
         self.year = str(year or "")
         self.chroma_dir = Path(chroma_dir or V2_CHROMA_DIR)
         try:
+            from modules.RAG.scope import organism_memory_collection, organism_memory_scope
             from modules.RAG.vector_store import RAGVectorStore
-            self.vector_store = RAGVectorStore(self.chroma_dir)
+            self._organism_collection = organism_memory_collection(self.organisme)
+            self._organism_scope = organism_memory_scope(self.organisme)
+            self.vector_store = RAGVectorStore(
+                self.chroma_dir,
+                scope_metadata=self._organism_scope,
+                collection_namespace=self._organism_collection,
+            )
             self.available = True
             self.error = ""
         except Exception as exc:
+            self._organism_collection = ""
+            self._organism_scope = {}
             self.vector_store = None
             self.available = False
             self.error = str(exc)
 
     @property
     def global_collection(self) -> str:
-        return "ennosmart_memory_v2_global"
+        return self._organism_collection
 
     @property
     def organism_collection(self) -> str:
-        # Compatibilité d'API : Memory V2 ne conserve plus de collection par
-        # organisme. Le filtrage est appliqué aux métadonnées du résultat.
-        return self.global_collection
+        return self._organism_collection
 
     def _identity_affinity(self, metadata: Dict[str, Any]) -> int:
         """Priorise le même projet/sous-projet sans exclure les projets proches."""
@@ -145,7 +152,7 @@ class MemoryV2Retriever:
                 same_organisme_only = True
         except Exception:
             pass
-        collection = self.global_collection
+        collection = self.organism_collection
         try:
             results = self.vector_store.search(
                 collection_name=collection,

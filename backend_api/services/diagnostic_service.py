@@ -23,6 +23,7 @@ from services.document_corpus_service import (
     diagnostic_corpus_manifest,
     documents_for_corpus,
 )
+from services.document_storage_service import read_document_bytes
 from services.file_service import load_json_file, project_output_dir, run_optional_ai_script
 from services.diagnostic_reset_service import exclusive_project_diagnostic
 from services.project_artifact_service import (
@@ -266,20 +267,11 @@ def copy_uploaded_docs_to_project_store(
         safe_name = re.sub(r'[\\/:*?"<>|]+', "_", str(stored_name)).strip() or f"document_{doc.id}"
         dst = ps.documents_raw_dir / safe_name
 
-        file_data = getattr(doc, "file_data", None)
-
-        if file_data:
-            dst.write_bytes(bytes(file_data))
+        try:
+            dst.write_bytes(read_document_bytes(doc))
             copied.append(str(dst))
-            continue
-
-        file_path = getattr(doc, "file_path", None)
-        if file_path and not str(file_path).startswith("db://"):
-            src_path = Path(str(file_path))
-            if src_path.exists() and src_path.is_file():
-                if src_path.resolve() != dst.resolve():
-                    shutil.copy2(src_path, dst)
-                copied.append(str(dst))
+        except (FileNotFoundError, IOError) as exc:
+            print(f"[prepare-sources] Document indisponible id={doc.id}: {exc}")
 
     print(f"✅ Documents reconstruits depuis PostgreSQL vers raw : {len(copied)}")
     for path in copied[:20]:
@@ -1053,10 +1045,10 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
 def _legacy_agent_project_root(project: Project) -> Path:
     r"""
     Racine attendue par l'ancien ai_content_detector.py de l'agent :
-    <racine-projet>/storage/organismes/{org}/projects/{project}
+    <racine-donnees>/object_storage_v2/runtime/organismes/{org}/projects/{project}
 
     Le backend récent travaille avec :
-    <racine-projet>/storage/organismes/{org}/projects/{project}/years/{year}
+    <racine-donnees>/object_storage_v2/runtime/organismes/{org}/projects/{project}/years/{year}
 
     On adapte le backend pour fournir au détecteur IA de l'agent ses fichiers
     au format qu'il attend, sans modifier l'agent.

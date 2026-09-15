@@ -1,3 +1,0 @@
-requests>=2.31
-tqdm>=4.66
-PyMuPDF>=1.24

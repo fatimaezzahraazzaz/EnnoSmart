@@ -12,6 +12,8 @@ Version corrigée :
 """
 
 from pathlib import Path
+import hashlib
+import mimetypes
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile, status
@@ -20,7 +22,10 @@ from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.deps import get_current_user, get_db, require_agent_enabled, require_superadmin
-from db.models import Article, Project, ScholarRun, User
+from db.models import Article, Document, Project, ScholarRun, User
+from modules.common.runtime_paths import storage_root
+from modules.common.storage_v2 import get_storage_service, storage_v2_enabled
+from services.document_storage_service import apply_storage_metadata, store_document_bytes
 from services.project_service import get_project_for_user
 from services.cir_memory_service import (
     build_all_memory_for_project,
@@ -384,8 +389,6 @@ async def upload_final_cir_and_build_memory(
     Formats V1 : .docx, .pdf, .txt, .md
     """
     project = get_project_for_user(db, project_id, current_user)
-    paths = cir_memory_paths(project)
-
     filename = clean_text(file.filename or "cir_final.docx", 240)
     suffix = Path(filename).suffix.lower()
 
@@ -395,15 +398,83 @@ async def upload_final_cir_and_build_memory(
             detail="Format non supporté en V1. Utilise .docx, .pdf, .txt ou .md.",
         )
 
-    safe_name = slugify(Path(filename).stem, default="cir_final") + suffix
-    target = paths["cir_final_dir"] / safe_name
-    target.parent.mkdir(parents=True, exist_ok=True)
-
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Fichier vide.")
 
+    digest = hashlib.sha256(content).hexdigest()
+    safe_name = slugify(Path(filename).stem, default="cir_final") + suffix
+    staging_dir = storage_root() / "staging" / "cir_memory" / str(project.id) / digest
+    target = staging_dir / safe_name
+    target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(content)
+
+    content_type = file.content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    stored_object = None
+    if storage_v2_enabled():
+        try:
+            stored_object = store_document_bytes(
+                project,
+                content,
+                filename=filename,
+                content_type=content_type,
+                source_kind="cir_historical_document",
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Stockage permanent Storage V2 impossible ; staging conservé : {exc}",
+            ) from exc
+
+    document = (
+        db.query(Document)
+        .filter(
+            Document.project_id == project.id,
+            Document.file_sha256 == digest,
+            Document.document_type == "CIR final consultant",
+        )
+        .first()
+    )
+    if document is None:
+        document = Document(
+            project_id=project.id,
+            filename=filename,
+            stored_filename=safe_name,
+            file_path=(
+                f"storage://{stored_object.provider}/{stored_object.storage_key}"
+                if stored_object
+                else f"db://documents/{digest}"
+            ),
+            content_type=content_type,
+            file_size=len(content),
+            document_type="CIR final consultant",
+            upload_status="storage_v2_pending_memory_index" if stored_object else "database_legacy_pending_memory_index",
+            file_data=None if stored_object else content,
+            file_sha256=digest,
+            storage_mode="storage_v2" if stored_object else "database",
+            organisme_id=str(project.organisme),
+            subproject=str(project.subproject_name or "") or None,
+            year=str(project.year),
+            original_filename=filename,
+            mime_type=content_type,
+            size_bytes=len(content),
+            sha256=digest,
+            storage_provider=stored_object.provider if stored_object else None,
+            storage_key=stored_object.storage_key if stored_object else None,
+            source_kind="cir_historical_document",
+        )
+        db.add(document)
+        db.flush()
+    elif stored_object:
+        apply_storage_metadata(
+            document,
+            project,
+            stored_object,
+            filename=filename,
+            source_kind="cir_historical_document",
+        )
+        document.file_path = f"storage://{stored_object.provider}/{stored_object.storage_key}"
+        document.file_data = None
 
     result = build_validated_memory_from_cir_final(
         project=project,
@@ -412,7 +483,41 @@ async def upload_final_cir_and_build_memory(
     )
 
     if not result.get("ok"):
+        db.rollback()
         raise HTTPException(status_code=400, detail=result)
+
+    document.upload_status = "indexé_memory_v2"
+    db.commit()
+    db.refresh(document)
+
+    permanent_ok = bool(document.file_sha256 == digest)
+    if stored_object:
+        try:
+            service = get_storage_service(stored_object.provider)
+            permanent_ok = bool(
+                service.exists(stored_object.storage_key)
+                and service.verify_sha256(stored_object.storage_key, digest)
+                and document.storage_key == stored_object.storage_key
+                and document.sha256 == digest
+            )
+        except Exception:
+            permanent_ok = False
+    if permanent_ok:
+        target.unlink(missing_ok=True)
+        for directory in (staging_dir, staging_dir.parent):
+            try:
+                directory.rmdir()
+            except OSError:
+                pass
+    result["storage_v2"] = {
+        "document_id": document.id,
+        "provider": stored_object.provider if stored_object else "database_legacy",
+        "storage_key": stored_object.storage_key if stored_object else None,
+        "sha256": digest,
+        "permanent_verified": permanent_ok,
+        "staging_deleted": permanent_ok and not target.exists(),
+        "staging_path": str(target) if target.exists() else None,
+    }
 
     return result
 
