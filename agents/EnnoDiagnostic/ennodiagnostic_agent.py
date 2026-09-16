@@ -6988,18 +6988,94 @@ Contraintes :
                 except Exception:
                     from historical_continuity_reconciler import reconcile_historical_continuity
 
-                historical_continuity_report = reconcile_historical_continuity(
-                    organisme=self.organisme,
-                    project=self.project,
-                    subproject=self.subproject,
-                    year=self.year,
+                # ENNOSMART_HISTORY_CACHE_SAFE_V1_20260916
+                # Cache exact de performance autour du reconciler ORIGINAL.
+                # Aucun prompt, seuil, preuve, score ou algorithme n'est modifié.
+                try:
+                    from agents.EnnoDiagnostic.historical_continuity_cache import (
+                        build_historical_cache_key,
+                        load_historical_continuity_cache,
+                        save_historical_continuity_cache,
+                    )
+                except Exception:
+                    from historical_continuity_cache import (
+                        build_historical_cache_key,
+                        load_historical_continuity_cache,
+                        save_historical_continuity_cache,
+                    )
+
+                _history_cache_root = (
+                    Path(self.out_dir)
+                    / "_performance_cache"
+                    / "historical_continuity"
+                )
+                _history_reconciler_file = (
+                    Path(__file__).resolve().parent
+                    / "historical_continuity_reconciler.py"
+                )
+                _history_cache_key = build_historical_cache_key(
                     current_verrous=llm_reformulated_verrous,
                     current_sections=sections,
-                    search_current=self.search_chroma,
-                    llm=self.llm,
-                    output_dir=self.diagnostic_dir,
                     previous_memory=previous_memory_snapshot,
+                    reconciler_file=_history_reconciler_file,
+                    llm=self.llm,
+                    project_identity={
+                        "organisme": self.organisme,
+                        "project": self.project,
+                        "subproject": self.subproject,
+                        "year": self.year,
+                    },
                 )
+                _history_cached = load_historical_continuity_cache(
+                    cache_root=_history_cache_root,
+                    expected_key=_history_cache_key,
+                )
+
+                if _history_cached.get("hit"):
+                    historical_continuity_report = _history_cached.get("report") or {}
+                    historical_continuity_report = {
+                        **historical_continuity_report,
+                        "performance_cache": {
+                            "hit": True,
+                            "version": "historical_performance_cache_safe_v1_20260916",
+                            "path": _history_cached.get("path"),
+                        },
+                    }
+                    print(
+                        "[EnnoDiagnostic][HISTORY_CACHE] HIT exact_match "
+                        f"path={_history_cached.get('path')}",
+                        flush=True,
+                    )
+                else:
+                    print(
+                        "[EnnoDiagnostic][HISTORY_CACHE] MISS "
+                        f"reason={_history_cached.get('reason')}",
+                        flush=True,
+                    )
+                    historical_continuity_report = reconcile_historical_continuity(
+                        organisme=self.organisme,
+                        project=self.project,
+                        subproject=self.subproject,
+                        year=self.year,
+                        current_verrous=llm_reformulated_verrous,
+                        current_sections=sections,
+                        search_current=self.search_chroma,
+                        llm=self.llm,
+                        output_dir=self.diagnostic_dir,
+                        previous_memory=previous_memory_snapshot,
+                    )
+                    _history_cache_saved = save_historical_continuity_cache(
+                        cache_root=_history_cache_root,
+                        key_material=_history_cache_key,
+                        report=historical_continuity_report,
+                    )
+                    print(
+                        "[EnnoDiagnostic][HISTORY_CACHE] SAVE "
+                        f"saved={_history_cache_saved.get('saved')} "
+                        f"size={_history_cache_saved.get('size_bytes')} "
+                        f"path={_history_cache_saved.get('path')}",
+                        flush=True,
+                    )
                 reconciled = historical_continuity_report.get("reconciled_verrous")
                 if isinstance(reconciled, list):
                     llm_reformulated_verrous = [
@@ -7011,6 +7087,21 @@ Contraintes :
                 )
                 llm_reformulated_verrous = _polish_visible_lock_titles_without_regrouping(
                     llm_reformulated_verrous
+                )
+                # ENNOSMART_VISIBLE_LOCK_TITLE_GUARD_SAFE_V1_1_20260916
+                # Répare uniquement les titres visibles suspects APRÈS la mémoire
+                # historique. Score, preuves, matching et groupes restent inchangés.
+                try:
+                    from agents.EnnoDiagnostic.visible_lock_title_guard import (
+                        repair_suspicious_visible_titles,
+                    )
+                except Exception:
+                    from visible_lock_title_guard import repair_suspicious_visible_titles
+
+                llm_reformulated_verrous = repair_suspicious_visible_titles(
+                    llm_reformulated_verrous,
+                    llm=self.llm,
+                    current_year=self.year,
                 )
             except Exception as exc:
                 historical_continuity_report = {
@@ -7033,124 +7124,43 @@ Contraintes :
         # continuent d'être générées depuis ``atomic_verrous`` afin qu'une vue
         # d'abstraction supplémentaire ne modifie pas les sorties déjà stabilisées.
         _axis_t0 = time.time()
-        atomic_verrous = list(llm_reformulated_verrous)
-        # Les parents V6 sont construits seulement depuis les verrous réellement
-        # détectés dans N. Les cartes N-1 récupérées restent visibles à côté, mais
-        # ne servent jamais à fabriquer de nouveaux parents transversaux.
-        axis_seed_verrous = [
-            item for item in atomic_verrous
-            if not bool(item.get("historical_gap_recovered"))
-            and not bool(item.get("historical_memory_card"))
-        ]
-        if not axis_seed_verrous:
-            axis_seed_verrous = list(native_current_verrous_for_axis_and_comparison)
-        display_verrous = list(atomic_verrous)
-        transversal_parent_verrous: List[Dict[str, Any]] = []
-        transversal_selection_audit: List[Dict[str, Any]] = []
+        # ENNOSMART_SINGLE_FINAL_CONSOLIDATION_V1_20260916
+        # UNIQUE grouping: exact same llm_parent_lock_consolidator as terminal test.
+        # Frascati was already calculated upstream and is never recomputed here.
+        from agents.EnnoDiagnostic.final_parent_consolidation import (
+            consolidate_final_parent_view,
+        )
 
-        scientific_axis_report: Dict[str, Any] = {
-            "ok": False,
+        atomic_verrous = list(llm_reformulated_verrous)
+        final_parent_result = consolidate_final_parent_view(atomic_verrous)
+
+        llm_reformulated_verrous = list(
+            final_parent_result.get("display_verrous") or []
+        )
+        display_verrous = list(llm_reformulated_verrous)
+        transversal_parent_verrous = list(
+            final_parent_result.get("parent_verrous") or []
+        )
+        axis_seed_verrous = list(
+            final_parent_result.get("current_atomic_verrous") or []
+        )
+        transversal_selection_audit = []
+
+        scientific_axis_report = {
+            "ok": bool(final_parent_result.get("valid")),
             "disabled": True,
-            "policy": "atomic_authority_additive_transversal_parent_only",
-            "atomic_verrous": atomic_verrous,
-            "scientific_axes": [],
-            "axis_count": 0,
-            "transversal_additions_count": 0,
-            "transversal_additions": [],
-            "transversal_selection_audit": [],
+            "legacy_scientific_axis_consolidation_executed": False,
+            "replaced_by": "modules.NLP.llm_parent_lock_consolidator",
+            "single_final_consolidation": True,
+            "scientific_axes": list(transversal_parent_verrous),
+            "axis_count": len(transversal_parent_verrous),
+            "display_verrous_count": len(llm_reformulated_verrous),
+            "final_parent_audit": final_parent_result.get("audit") or {},
         }
 
-        use_axis = (
-            len(axis_seed_verrous) >= 2
-            and str(
-                os.getenv(
-                    "ENNOSMART_DIAG_USE_SCIENTIFIC_AXIS_CONSOLIDATION",
-                    "1",
-                )
-            ).strip().lower()
-            in {"1", "true", "yes", "oui", "on"}
-        )
-
-        if use_axis:
-            try:
-                try:
-                    from agents.EnnoDiagnostic.scientific_axis_synthesizer import (
-                        select_transversal_axis_additions,
-                        synthesize_scientific_axes,
-                    )
-                except Exception:
-                    from scientific_axis_synthesizer import (
-                        select_transversal_axis_additions,
-                        synthesize_scientific_axes,
-                    )
-
-                scientific_axis_report = synthesize_scientific_axes(
-                    current_verrous=axis_seed_verrous,
-                    historical_continuity_report=historical_continuity_report,
-                    current_sections=sections,
-                    current_year=self.year,
-                    llm=self.llm,
-                    output_dir=self.diagnostic_dir,
-                )
-
-                (
-                    transversal_parent_verrous,
-                    transversal_selection_audit,
-                ) = select_transversal_axis_additions(
-                    atomic_verrous=axis_seed_verrous,
-                    scientific_axis_report=scientific_axis_report,
-                )
-
-                # ADDITIF UNIQUEMENT : les cartes atomiques restent dans le même
-                # ordre et inchangées ; les éventuels parents sont ajoutés après.
-                display_verrous = [
-                    *atomic_verrous,
-                    *transversal_parent_verrous,
-                ]
-
-                scientific_axis_report["disabled"] = False
-                scientific_axis_report["audit_only"] = False
-                scientific_axis_report["augmentation_only"] = True
-                scientific_axis_report["atomic_authority_preserved"] = True
-                scientific_axis_report["transversal_additions_count"] = len(
-                    transversal_parent_verrous
-                )
-                scientific_axis_report["transversal_additions"] = (
-                    transversal_parent_verrous
-                )
-                scientific_axis_report["transversal_selection_audit"] = (
-                    transversal_selection_audit
-                )
-                scientific_axis_report["display_verrous_count"] = len(display_verrous)
-
-            except Exception as exc:
-                # Fail-open absolu : une erreur d'abstraction ne peut jamais faire
-                # perdre un verrou existant ni modifier les autres sections.
-                display_verrous = list(atomic_verrous)
-                transversal_parent_verrous = []
-                scientific_axis_report = {
-                    **scientific_axis_report,
-                    "ok": False,
-                    "disabled": False,
-                    "augmentation_only": True,
-                    "atomic_authority_preserved": True,
-                    "transversal_additions_count": 0,
-                    "transversal_additions": [],
-                    "error": str(exc),
-                    "fallback_policy": "keep_all_atomic_verrous_unchanged",
-                }
-                print(
-                    f"[EnnoDiagnostic][SCIENTIFIC_AXIS_AUGMENTATION][WARN] {exc}",
-                    flush=True,
-                )
-
-        # La liste affichée gagne éventuellement des parents transversaux, mais
-        # ``atomic_verrous`` reste utilisée pour toutes les autres analyses.
-        llm_reformulated_verrous = display_verrous
-        stage_timings["scientific_axis_augmentation"] = round(
-            time.time() - _axis_t0,
-            3,
-        )
+        _final_parent_elapsed = round(time.time() - _axis_t0, 3)
+        stage_timings["final_parent_consolidation"] = _final_parent_elapsed
+        stage_timings["scientific_axis_augmentation"] = 0.0
 
         synthesis_report = dict(getattr(self, "_last_verrou_synthesis_report", {}) or {})
         synthesis_report["atomic_verrous"] = atomic_verrous
@@ -7161,11 +7171,13 @@ Contraintes :
         synthesis_report["final_items"] = llm_reformulated_verrous
         synthesis_report["final_count"] = len(llm_reformulated_verrous)
         synthesis_report["atomic_candidates_preserved"] = True
-        synthesis_report["scientific_axis_consolidation_applied"] = bool(
+        synthesis_report["atomic_candidates_preserved_for_audit_only"] = True
+        synthesis_report["scientific_axis_consolidation_applied"] = False
+        synthesis_report["final_parent_consolidation_applied"] = bool(
             transversal_parent_verrous
         )
         synthesis_report["active_historical_memory_enabled"] = True
-        synthesis_report["historical_memory_exact_lock_display_v71"] = True
+        synthesis_report["historical_memory_exact_lock_display_v71"] = False
         synthesis_report["axis_seed_excludes_historical_recovered"] = True
         synthesis_report["axis_seed_excludes_historical_memory_cards"] = True
         self._last_verrou_synthesis_report = synthesis_report

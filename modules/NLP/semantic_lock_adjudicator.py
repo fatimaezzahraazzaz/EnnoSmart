@@ -408,7 +408,7 @@ class SemanticLockAdjudicator:
                 .parents[2]
             )
 
-            cache_dir = str(
+            cache_dir = os.getenv("ENNOSMART_NLI_CACHE_DIR") or str(
                 repo_root
                 / "models"
                 / "huggingface"

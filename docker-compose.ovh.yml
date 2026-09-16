@@ -1,3 +1,9 @@
+x-backend: &backend_image
+  image: ennosmart-backend:${ENNOSMART_IMAGE_TAG:-local}
+  build:
+    context: .
+    dockerfile: deploy/ovh/Dockerfile.backend
+
 services:
   postgres:
     # La base locale et le dump de migration sont en PostgreSQL 17.
@@ -42,7 +48,7 @@ services:
     expose:
       - "8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      test: ["CMD", "bash", "-c", 'exec 3<>/dev/tcp/127.0.0.1/8000 && printf "GET /api/v2/heartbeat HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3 && head -n 1 <&3 | grep -q "200 OK"']
       interval: 10s
       timeout: 5s
       retries: 20
@@ -53,9 +59,7 @@ services:
     restart: unless-stopped
 
   api:
-    build:
-      context: .
-      dockerfile: deploy/ovh/Dockerfile.backend
+    <<: *backend_image
     restart: unless-stopped
     env_file: .env
     environment: &backend_environment
@@ -72,6 +76,12 @@ services:
       ENNOSMART_LOG_ROOT: /var/lib/ennosmart/object_storage_v2/runtime/logs
       ENNOSMART_CACHE_ROOT: /var/lib/ennosmart/object_storage_v2/runtime/cache
       HF_HOME: /var/lib/ennosmart/object_storage_v2/runtime/cache/huggingface
+      HF_HUB_CACHE: /var/lib/ennosmart/object_storage_v2/runtime/cache/huggingface/hub
+      ENNOSMART_NLI_CACHE_DIR: /var/lib/ennosmart/object_storage_v2/runtime/cache/huggingface/hub
+      ENNOSMART_EMBEDDING_OFFLINE: "1"
+      ENNOSMART_NLI_ALLOW_DOWNLOAD: "0"
+      LIBREOFFICE_BIN: /usr/bin/libreoffice
+      TESSERACT_CMD: /usr/bin/tesseract
       ENNOSMART_STORAGE_V2_ENABLED: "true"
       ENNOSMART_OBJECT_STORAGE_PROVIDER: ${ENNOSMART_OBJECT_STORAGE_PROVIDER:-local}
       ENNOSMART_STORAGE_V2_LOCAL_ROOT: /var/lib/ennosmart/object_storage_v2
@@ -103,6 +113,8 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
+      models-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -112,10 +124,19 @@ services:
       chroma:
         condition: service_healthy
 
+  # Téléchargement une fois dans le cache partagé ; aucun appel aux agents.
+  # Même image et mêmes variables que le code réellement exécuté par l'API.
+  models-init:
+    <<: *backend_image
+    restart: "no"
+    env_file: .env
+    environment: *backend_environment
+    volumes: *backend_volumes
+    working_dir: /opt/ennosmart
+    command: ["python", "scripts/deployment/prefetch_models.py"]
+
   scholar-worker:
-    build:
-      context: .
-      dockerfile: deploy/ovh/Dockerfile.backend
+    <<: *backend_image
     restart: unless-stopped
     env_file: .env
     environment: *backend_environment
@@ -123,6 +144,8 @@ services:
     working_dir: /opt/ennosmart/backend_api
     command: ["celery", "-A", "worker.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=2", "-Q", "celery"]
     depends_on:
+      models-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -131,9 +154,7 @@ services:
         condition: service_healthy
 
   cir-worker:
-    build:
-      context: .
-      dockerfile: deploy/ovh/Dockerfile.backend
+    <<: *backend_image
     restart: unless-stopped
     env_file: .env
     environment: *backend_environment
@@ -141,6 +162,8 @@ services:
     working_dir: /opt/ennosmart
     command: ["python", "-m", "celery", "-A", "backend_api.workers.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=4", "-Q", "ennosmart.cir"]
     depends_on:
+      models-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -149,9 +172,7 @@ services:
         condition: service_healthy
 
   legal-mcp:
-    build:
-      context: .
-      dockerfile: deploy/ovh/Dockerfile.backend
+    <<: *backend_image
     restart: unless-stopped
     env_file: .env
     environment: *backend_environment

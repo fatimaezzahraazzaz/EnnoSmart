@@ -6,12 +6,58 @@ chunks, diagnostic complet et versions Agent 2) sont stockés une seule fois
 dans PostgreSQL sous forme gzip vérifiée ; le disque applicatif ne contient que
 leurs copies de travail temporaires.
 
+## Mise à jour du 16 septembre 2026 : code actuel
+
+L'image embarque les modifications locales qui seront committées, notamment
+`final_parent_consolidation.py`, `llm_parent_lock_consolidator.py`,
+`history_parent_support.py`, `historical_continuity_cache.py` et
+`visible_lock_title_guard.py`. La consolidation finale actuelle utilise le SDK
+OpenAI après Frascati. Le déploiement ne remplace aucun algorithme métier.
+La préparation actuelle dans `frascati_guard.py` appelle encore
+`semantic_lock_finalizer` : le modèle NLI reste donc nécessaire en amont, ainsi
+qu'au validateur éditorial EnnoScholar. Il ne remplace pas le regroupement LLM final.
+
+Les dépendances Python sont résolues pour **Linux x86_64 / Python 3.12 / CPU**
+dans `deploy/ovh/requirements.lock`, avec versions et empreintes SHA-256.
+Docker installe ce verrouillage, vérifie les dépendances avec `pip check`,
+puis importe les nouveaux modules et charge FastJudge pendant le build.
+Le frontend continue d'utiliser son `package-lock.json` avec `npm ci`.
+La version scikit-learn est fixée à 1.9.0, celle enregistrée dans le modèle
+FastJudge versionné ; l'ancien fichier de dépendances demandait 1.8.0.
+
+Le service `models-init` télécharge les modèles dans
+`object_storage_v2/runtime/cache/huggingface` sur le volume persistant.
+L'API et les workers attendent sa réussite. Cela prépare les embeddings, le NLI
+encore utilisé, le reranker, le détecteur IA, la traduction et, si activée,
+la transcription. Il n'exécute aucun diagnostic et n'appelle pas OpenAI.
+Le manifeste `ennosmart-preloaded-models.json` dans ce cache indique les snapshots
+chargés. `ENNOSMART_PRELOAD_NLI=0` n'est approprié que si le code exécuté n'utilise
+plus le NLI ; ce n'est pas le cas du code vérifié lors de cette mise à jour.
+
+Pour reconstruire après votre push, sur le clone OVH déjà configuré :
+
+```bash
+cd /opt/ennosmart
+git switch Ennosmart_vf
+git pull --ff-only origin Ennosmart_vf
+docker compose -f docker-compose.ovh.yml config --quiet
+docker compose -f docker-compose.ovh.yml build --pull
+docker compose -f docker-compose.ovh.yml up -d
+docker compose -f docker-compose.ovh.yml logs --tail=100 models-init
+docker compose -f docker-compose.ovh.yml ps -a
+```
+
+`models-init` doit afficher `MODEL_PRELOAD_OK` et terminer avec le code 0.
+Les autres services continuent ensuite leur démarrage. La procédure ci-dessous
+couvre le premier clone, le volume et la restauration éventuelle des données.
+
 ## 1. Ce qui doit être poussé dans Git
 
 À pousser :
 
 - `agents/`, `backend_api/`, `modules/`, `mcp_servers/` et `frontend/` ;
 - `requirements.txt`, `requirements-optional.txt` et `pyproject.toml` ;
+- `deploy/ovh/requirements.lock` et tous les scripts de `scripts/deployment/` ;
 - `frontend/package.json` et `frontend/package-lock.json` ;
 - `models/fastjudge/fastjudge_linearsvc_C025.joblib` ;
 - `.env.example`, `.env.windows.example`, `.dockerignore`, `.gitignore` ;
@@ -44,7 +90,7 @@ dump. Si le contrôle est propre :
 
 ```powershell
 git commit -m "Prepare EnnoSmart OVH persistent deployment"
-git push origin NOM_DE_LA_BRANCHE
+git push origin Ennosmart_vf
 ```
 
 `git add -A` inclut également les suppressions de l’ancien nettoyage. Vérifier
@@ -60,7 +106,7 @@ projets existants, transmettre séparément `ennosmart.dump` et
 Installer Git et Docker Desktop avec le moteur WSL 2, puis dans PowerShell :
 
 ```powershell
-git clone URL_DU_DEPOT C:\EnnoSmart
+git clone --branch Ennosmart_vf --single-branch URL_DU_DEPOT C:\EnnoSmart
 cd C:\EnnoSmart
 Copy-Item .env.windows.example .env
 notepad .env
@@ -82,7 +128,7 @@ Construire les images et démarrer uniquement les services techniques :
 ```powershell
 docker compose -f docker-compose.ovh.yml -f docker-compose.windows.yml build
 docker compose -f docker-compose.ovh.yml -f docker-compose.windows.yml `
-  up -d postgres redis grobid
+  up -d postgres redis grobid chroma
 ```
 
 Restaurer la base avant le premier démarrage de l’API :
@@ -151,7 +197,7 @@ Archiver le stockage externe déjà préparé :
 
 ```powershell
 tar.exe -czf C:\EnnoSmartMigration\ennosmart-data.tgz `
-  -C C:\EnnoSmartData storage outputs
+  -C C:\EnnoSmartData object_storage_v2
 ```
 
 Si Windows Defender bloque un ancien cache HTML, exclure uniquement les caches
@@ -219,9 +265,9 @@ sudo blkid /dev/NOUVEAU_VOLUME
 Ajouter son UUID dans `/etc/fstab`, puis créer l’arborescence :
 
 ```bash
-sudo mkdir -p /mnt/ennosmart-data/{storage,outputs,cache,logs,postgres,redis}
-sudo chown -R 10001:10001 /mnt/ennosmart-data/{storage,outputs,cache,logs}
-sudo chmod -R 750 /mnt/ennosmart-data/{storage,outputs,cache,logs}
+sudo mkdir -p /mnt/ennosmart-data/{object_storage_v2/runtime,postgres,redis,chroma}
+sudo chown -R 10001:10001 /mnt/ennosmart-data/object_storage_v2
+sudo chmod -R 750 /mnt/ennosmart-data/object_storage_v2
 sudo chown 70:70 /mnt/ennosmart-data/postgres
 sudo chmod 700 /mnt/ennosmart-data/postgres
 sudo chown 999:999 /mnt/ennosmart-data/redis
@@ -238,7 +284,7 @@ PostgreSQL et Redis utilisées par ce compose. Ne pas appliquer un `chown -R
 ```bash
 sudo mkdir -p /opt/ennosmart
 sudo chown "$USER":"$USER" /opt/ennosmart
-git clone URL_DU_DEPOT /opt/ennosmart
+git clone --branch Ennosmart_vf --single-branch URL_DU_DEPOT /opt/ennosmart
 cd /opt/ennosmart
 cp .env.example .env
 chmod 600 .env
@@ -306,8 +352,8 @@ Sur OVH, vérifier les SHA-256 puis extraire :
 ```bash
 sha256sum /tmp/ennosmart.dump /tmp/ennosmart-data.tgz
 sudo tar -xzf /tmp/ennosmart-data.tgz -C /mnt/ennosmart-data
-sudo chown -R 10001:10001 /mnt/ennosmart-data/{storage,outputs,cache,logs}
-sudo chmod -R u+rwX,g+rX,o-rwx /mnt/ennosmart-data/{storage,outputs,cache,logs}
+sudo chown -R 10001:10001 /mnt/ennosmart-data/object_storage_v2
+sudo chmod -R u+rwX,g+rX,o-rwx /mnt/ennosmart-data/object_storage_v2
 ```
 
 Ne pas démarrer les workers avant le contrôle Chroma.
@@ -316,8 +362,8 @@ Ne pas démarrer les workers avant le contrôle Chroma.
 
 ```bash
 cd /opt/ennosmart
-docker compose -f docker-compose.ovh.yml build
-docker compose -f docker-compose.ovh.yml up -d postgres redis grobid
+docker compose -f docker-compose.ovh.yml build --pull
+docker compose -f docker-compose.ovh.yml up -d postgres redis grobid chroma
 docker compose -f docker-compose.ovh.yml ps
 ```
 
@@ -384,8 +430,9 @@ docker compose -f docker-compose.ovh.yml run --rm api \
 ```
 
 Le résultat doit finir par `RUNTIME_STORAGE_OK`. Le script vérifie que les
-sorties sont hors du code, que le volume est inscriptible et exécute
-`PRAGMA quick_check` en lecture seule sur chaque `chroma.sqlite3`. Après
+sorties sont hors du code, que le volume est inscriptible et contrôle le heartbeat
+du service Chroma HTTP. En mode Chroma local, il exécute `PRAGMA quick_check`
+en lecture seule sur chaque `chroma.sqlite3`. Après
 migration, un `nlp_result.json` ne doit apparaître que brièvement pendant un
 traitement legacy.
 
@@ -399,9 +446,11 @@ curl http://127.0.0.1:8000/health
 curl -I http://127.0.0.1:3000
 ```
 
-Le premier traitement peut télécharger les modèles Hugging Face dans
-`/var/lib/ennosmart/cache/huggingface`. Ce cache reste sur le volume et ne sera
-pas retéléchargé après chaque déploiement.
+`models-init` précharge les modèles avant les traitements dans
+`/var/lib/ennosmart/object_storage_v2/runtime/cache/huggingface`. Ce cache reste
+sur le volume et les fichiers déjà présents sont réutilisés au redéploiement.
+En cas d'échec, lire `docker compose -f docker-compose.ovh.yml logs models-init`,
+corriger l'accès au volume ou au Hub, puis relancer `up -d`.
 
 ## 10. Nginx et HTTPS
 
@@ -450,12 +499,13 @@ l’API et le frontend restent sur le réseau Docker ou `127.0.0.1`.
 
 Le déploiement Docker installe automatiquement :
 
-- Python 3.12 et toutes les dépendances de `requirements.txt` ;
+- Python 3.12 et les versions verrouillées de `deploy/ovh/requirements.lock`,
+  résolues à partir de `requirements.txt` ;
 - FastAPI/Uvicorn, SQLAlchemy, psycopg/psycopg2, Celery et Redis ;
 - LangGraph et ses checkpoints PostgreSQL/Redis ;
 - Chroma, sentence-transformers, PyTorch, Transformers et FastJudge ;
 - Pydantic AI Slim avec le fournisseur OpenAI, utilisé par la conclusion
-  structurée EnnoDiagnostic ;
+  structurée EnnoDiagnostic, et le SDK OpenAI utilisé par le regroupement final ;
 - PyMuPDF, pypdf, pdfplumber, Pillow, CairoSVG et les lecteurs Office ;
 - Tesseract français/anglais, Poppler, LibreOffice, FFmpeg, Java et les polices ;
 - le serveur MCP légal et ses clients HTTP ;
@@ -464,7 +514,7 @@ Le déploiement Docker installe automatiquement :
 - PostgreSQL 17, Redis 7 et GROBID via leurs images séparées.
 
 `requirements-optional.txt` n’est pas installé par défaut. Il contient Surya,
-Pix2Tex, WhisperX, Qwen Vision, GLiNER et les outils d’entraînement. Ne
+Pix2Tex, WhisperX et Qwen Vision. Ne
 l’installer que si ces fonctions lourdes sont réellement activées et si le
 serveur possède le GPU/la mémoire nécessaires :
 
@@ -476,6 +526,23 @@ docker compose -f docker-compose.ovh.yml run --rm api \
 Cette installation faite dans un conteneur temporaire ne persiste pas. Pour une
 production utilisant ces options, créer une image dédiée qui installe le fichier
 optionnel pendant le build.
+
+Pour mettre à jour les dépendances Python volontairement, modifier
+`requirements.txt` puis régénérer le verrouillage avec uv 0.12.15 :
+
+```bash
+uv pip compile requirements.txt --python-version 3.12 \
+  --python-platform x86_64-manylinux_2_36 --torch-backend cpu \
+  --generate-hashes --emit-index-url -o deploy/ovh/requirements.lock
+```
+
+Committer les deux fichiers ensemble. Le Dockerfile fournit également l'index
+CPU officiel PyTorch à pip pour installer les versions `+cpu` du verrouillage.
+Ne pas copier un `pip freeze` Windows dans ce fichier Linux.
+
+Références : [installation CPU PyTorch](https://pytorch.org/get-started/locally/),
+[cache Hugging Face](https://huggingface.co/docs/huggingface_hub/guides/download),
+[ordre de démarrage Compose](https://docs.docker.com/compose/how-tos/startup-order/).
 
 ## 12. Sauvegardes et mises à jour
 

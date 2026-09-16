@@ -10,6 +10,8 @@ typing-extensions>=4.12,<5
 pydantic>=2.10,<3
 pydantic-settings>=2.7,<3
 pydantic-ai-slim[openai]>=1,<2
+# Import direct du regroupement final EnnoDiagnostic (ne pas dépendre d'un extra transitif).
+openai>=2,<4
 python-dotenv>=1.0,<2
 python-multipart>=0.0.20,<1
 email-validator>=2.2,<3
@@ -55,7 +57,8 @@ pandas>=2.2,<3
 # NLP, embeddings, Chroma et modèles
 numpy>=2,<3
 joblib>=1.4,<2
-scikit-learn==1.8.0
+# Version enregistrée dans le modèle FastJudge livré avec le dépôt.
+scikit-learn==1.9.0
 chromadb==1.5.9
 boto3>=1.35,<2
 sentence-transformers>=5.4.1,<6

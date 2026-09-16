@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Frascati V2 après regroupement technique unique.
+"""Frascati V2 apr├¿s regroupement technique unique.
 
 - Le regroupement canonique reste dans ``evidence_graph``.
 - Frascati n'invente ni ne supprime aucun verrou.
 - Frascati fournit maintenant une recommandation binaire 1/0 au consultant.
-- La décision administrative finale reste humaine.
+- La d├®cision administrative finale reste humaine.
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def _unique_support_ids(groups: Iterable[Mapping[str, Any]]) -> set[str]:
 
 
 def assess_groups(groups: Iterable[Mapping[str, Any]]) -> Dict[str, Any]:
-    """Ajoute la grille Frascati V2 aux groupes déjà construits."""
+    """Ajoute la grille Frascati V2 aux groupes d├®j├á construits."""
     groups_list = [dict(group) for group in groups if isinstance(group, Mapping)]
     report = assess_project_frascati(groups_list)
     by_id = {
@@ -61,7 +61,7 @@ def assess_groups(groups: Iterable[Mapping[str, Any]]) -> Dict[str, Any]:
         item["frascati_recommendation_label"] = group_assessment.get("recommendation_label")
         item["frascati_risk_level"] = group_assessment.get("risk_level")
 
-        # Frascati évalue l'éligibilité mais ne supprime jamais le verrou détecté.
+        # Frascati ├®value l'├®ligibilit├® mais ne supprime jamais le verrou d├®tect├®.
         item["rejected_as_verrou"] = False
         item["needs_human_validation"] = True
 
@@ -104,8 +104,8 @@ def apply_frascati_guard(
     normalized = normalize_pack(source)
     candidates = normalized.get(LOCK_CANDIDATE_KEY, [])
 
-    # Les candidats FastJudge créent les groupes ; le catalogue complet fournit
-    # objectifs, méthodes, paramètres, résultats, limites et contributions.
+    # Les candidats FastJudge cr├®ent les groupes ; le catalogue complet fournit
+    # objectifs, m├®thodes, param├¿tres, r├®sultats, limites et contributions.
     grouping_input = normalized.get(EVIDENCE_CATALOG_KEY, []) or candidates
     grouping = build_technical_lock_groups(
         grouping_input,
@@ -210,6 +210,7 @@ def apply_frascati_guard(
     main_groups = assessed["verrous_rnd_locaux"]
     secondary_groups = assessed["secondary_technical_groups"]
 
+
     final_pack: Dict[str, Any] = dict(normalized)
     classified_passages = list(grouping.get("candidate_passages") or [])
     final_pack[LOCK_CANDIDATE_KEY] = [
@@ -307,8 +308,8 @@ def apply_frascati_guard(
         "frascati_assessment": assessment,
         "demarche_legibility": assessment.get("demarche_legibility", {}),
         "risk_report": {
-            # Ancien champ conservé pour compatibilité. Il représente désormais
-            # la couverture documentaire, pas une probabilité d'éligibilité.
+            # Ancien champ conserv├® pour compatibilit├®. Il repr├®sente d├®sormais
+            # la couverture documentaire, pas une probabilit├® d'├®ligibilit├®.
             "global_frascati_score": documentary_coverage,
             "global_frascati_score_semantics": "documentary_coverage_not_probability_not_official_score",
             "documentary_coverage": documentary_coverage,
@@ -345,7 +346,7 @@ def apply_frascati_guard(
                 else "non_eligible_potentiel_a_revoir_humainement"
             ),
         },
-        # Champs historiques conservés pour ne pas casser les consommateurs.
+        # Champs historiques conserv├®s pour ne pas casser les consommateurs.
         "verrous_probables": [],
         "verrous_a_verifier": [],
         "groupes_rejetes": [],

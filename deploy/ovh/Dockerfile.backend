@@ -34,10 +34,18 @@ RUN apt-get update \
 WORKDIR /opt/ennosmart
 
 COPY requirements.txt ./requirements.txt
+COPY deploy/ovh/requirements.lock ./requirements-ovh.lock
 RUN python -m pip install --upgrade pip setuptools wheel \
-    && python -m pip install -r requirements.txt
+    && python -m pip install --require-hashes \
+        --extra-index-url https://download.pytorch.org/whl/cpu \
+        -r requirements-ovh.lock \
+    && python -m pip check
 
 COPY . .
+
+# Échoue au build si un nouveau module, le SDK OpenAI ou FastJudge manque.
+# Aucun modèle n'est téléchargé ici ; models-init utilise le volume persistant.
+RUN python scripts/deployment/check_image.py
 
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin ennosmart \
     && chown -R ennosmart:ennosmart /opt/ennosmart

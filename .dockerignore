@@ -82,4 +82,9 @@ _rerun_*.py
 patch_*.py
 rollback_*.ps1
 .ennosmart_patch_backups/
+.patch_backups/
+.codex_tmp/
+.ennosmart_global_llm_grouping_patch.json
+storage_v2_reports/
+poppler-*/
 archiv/

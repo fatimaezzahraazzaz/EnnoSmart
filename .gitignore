@@ -227,5 +227,12 @@ modules/llm_gateway/
 .codex_tmp/
 .ennosmart_patch_backups/
 
+# Sauvegardes des patches locaux, jamais nécessaires au déploiement.
+/.patch_backups/
+/.ennosmart_global_llm_grouping_patch.json
+# Ce contrôle fait partie du déploiement, malgré la règle générale verify_*.py.
+!/scripts/deployment/verify_runtime_paths.py
+!/scripts/deployment/test_bootstrap.py
+
 .codex_tmp/
 .ennosmart_patch_backups/

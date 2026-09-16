@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
-from modules.common.runtime_paths import data_root
+from modules.common.runtime_paths import code_root, organism_memory_root, storage_root
 
 # USD par million de tokens, tarifs OpenAI vérifiés le 31/07/2026.
 PRICES = {
@@ -58,7 +58,7 @@ def _enabled() -> bool:
 
 
 def _root() -> Path:
-    return data_root()
+    return code_root()
 
 
 def _safe_int(value: Any) -> int:
@@ -393,7 +393,7 @@ def _dev_wallet_float(name: str, default: float) -> float:
 
 
 def _dev_wallet_root() -> Path:
-    root = _root() / "storage" / "budget_control"
+    root = storage_root() / "budget_control"
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -679,7 +679,7 @@ class BudgetRun:
 
     def __post_init__(self) -> None:
         self.output_dir = (
-            _root() / "storage" / "organismes" / _slug(self.organisme)
+            organism_memory_root() / _slug(self.organisme)
             / "projects" / _slug(self.project_name) / "years" / str(self.year)
             / "ennoscholar" / "budget_logs"
         )
