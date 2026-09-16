@@ -35,11 +35,13 @@ WORKDIR /opt/ennosmart
 
 COPY requirements.txt ./requirements.txt
 COPY deploy/ovh/requirements.lock ./requirements-ovh.lock
-RUN python -m pip install --upgrade pip setuptools wheel \
-    && python -m pip install --require-hashes \
-        --extra-index-url https://download.pytorch.org/whl/cpu \
+RUN python -m pip install --no-cache-dir uv==0.12.15 \
+    && uv pip install \
+        --system \
+        --require-hashes \
+        --torch-backend cpu \
         -r requirements-ovh.lock \
-    && python -m pip check
+    && uv pip check --system
 
 COPY . .
 
