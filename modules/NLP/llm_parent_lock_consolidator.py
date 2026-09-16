@@ -23,7 +23,7 @@ import os
 import re
 
 
-VERSION = "single_final_parent_lock_consolidation_v1_1_20260916"
+VERSION = "post_frascati_parent_lock_consolidation_v1_20260916"
 LOG_PREFIX = "[EnnoDiagnostic][PARENT_LOCK_CONSOLIDATION]"
 
 
@@ -36,30 +36,6 @@ def _safe_text(value: Any, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[:limit].rsplit(" ", 1)[0]
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    """Convert compact metadata safely; never let display labels crash grouping."""
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, (int, float)):
-        try:
-            return int(value)
-        except Exception:
-            return default
-    raw = str(value).strip().lower()
-    if not raw:
-        return default
-    if raw in {"true", "yes", "oui", "eligible", "eligible_potentiel", "1"}:
-        return 1
-    if raw in {"false", "no", "non", "0", "verrou_a_verifier", "a_verifier", "à_verifier"}:
-        return 0
-    try:
-        return int(float(raw.replace(",", ".")))
-    except Exception:
-        return default
 
 
 def _compact_group(group: Mapping[str, Any]) -> Dict[str, Any]:
@@ -79,12 +55,12 @@ def _compact_group(group: Mapping[str, Any]) -> Dict[str, Any]:
         "analysis": _safe_text(group.get("analysis_text"), 1800),
         "documents": documents[:12],
         "semantic_roles": list(group.get("source_semantic_roles") or [])[:12],
-        "evidence_count": _safe_int(group.get("evidence_count"), 0),
-        "frascati_recommendation": _safe_int(
+        "evidence_count": int(group.get("evidence_count") or 0),
+        "frascati_recommendation": int(
             group.get("frascati_recommendation")
             or group.get("frascati_decision")
-            or assessment.get("eligibility_recommendation"),
-            0,
+            or assessment.get("eligibility_recommendation")
+            or 0
         ),
         "risk_level": group.get("frascati_risk_level") or assessment.get("risk_level"),
     }
@@ -251,7 +227,7 @@ def _merge_parent(
         for doc in group.get("supporting_documents") or []:
             if isinstance(doc, Mapping):
                 name = str(doc.get("document") or "").strip()
-                count = max(1, _safe_int(doc.get("passage_count"), 1))
+                count = int(doc.get("passage_count") or 1)
             else:
                 name = str(doc or "").strip()
                 count = 1
@@ -310,8 +286,8 @@ def consolidate_parent_locks(groups: Sequence[Mapping[str, Any]]) -> Dict[str, A
             },
         }
 
+    payload = [_compact_group(g) for g in original]
     try:
-        payload = [_compact_group(g) for g in original]
         specs = _validate_plan(_openai_json(payload), input_ids)
         by_id = {_group_id(g): g for g in original}
         merged = [_merge_parent(spec, by_id, i + 1) for i, spec in enumerate(specs)]

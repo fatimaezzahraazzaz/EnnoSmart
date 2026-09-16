@@ -23,6 +23,7 @@ from .evidence_contract import (
 )
 from .evidence_graph import build_technical_lock_groups
 from .semantic_lock_finalizer import finalize_lock_groups
+from .llm_parent_lock_consolidator import consolidate_parent_locks
 from .frascati_assessment import assess_project_frascati
 
 
@@ -210,6 +211,16 @@ def apply_frascati_guard(
     main_groups = assessed["verrous_rnd_locaux"]
     secondary_groups = assessed["secondary_technical_groups"]
 
+    # ENNOSMART_PARENT_GROUPING_SAFE_V1
+    # Post-Frascati only: the project assessment above is already frozen.
+    # The LLM receives only clean, already assessed main groups.
+    parent_consolidation = consolidate_parent_locks(main_groups)
+    display_main_groups = (
+        list(parent_consolidation.get("groups") or [])
+        if parent_consolidation.get("valid")
+        else list(main_groups)
+    )
+
 
     final_pack: Dict[str, Any] = dict(normalized)
     classified_passages = list(grouping.get("candidate_passages") or [])
@@ -223,7 +234,11 @@ def apply_frascati_guard(
     ]
 
     # Tous les groupes structurants restent disponibles au RAG ; Frascati ne filtre pas.
-    final_pack[QUALIFIED_LOCK_KEY] = main_groups
+    final_pack[QUALIFIED_LOCK_KEY] = display_main_groups
+    final_pack["pre_parent_consolidation_main_groups"] = list(main_groups)
+    final_pack["parent_lock_consolidation"] = (
+        parent_consolidation.get("audit") or {}
+    )
     final_pack[REJECTED_LOCK_KEY] = []
     final_pack[TECHNICAL_GROUPS_KEY] = all_groups
     final_pack[SECONDARY_TECHNICAL_GROUPS_KEY] = secondary_groups
