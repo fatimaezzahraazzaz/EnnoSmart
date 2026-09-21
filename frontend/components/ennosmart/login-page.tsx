@@ -360,22 +360,13 @@ function AuthPanel({
 
   return (
     <section className="ennoma-auth-card">
-      {(mode === "login" || mode === "register") && (
+      {mode === "login" && (
         <div className="ennoma-auth-tabs">
           <button
             type="button"
-            className={mode === "login" ? "on" : ""}
-            onClick={() => switchMode("login")}
+            className="on"
           >
             Connexion
-          </button>
-
-          <button
-            type="button"
-            className={mode === "register" ? "on" : ""}
-            onClick={() => switchMode("register")}
-          >
-            Inscription
           </button>
         </div>
       )}

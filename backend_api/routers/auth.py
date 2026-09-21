@@ -109,38 +109,12 @@ def _send_reset_email(email: str, reset_url: str) -> bool:
         return False
 
 
-@router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def register(payload: RegisterRequest, db: Session = Depends(get_db)):
-    email = payload.email.lower().strip()
-
-    existing = db.query(User).filter(User.email == email).first()
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cet email est déjà utilisé.",
-        )
-
-    user = User(
-        full_name=payload.full_name.strip(),
-        email=email,
-        hashed_password=hash_password(payload.password),
-        role="consultant",
-        is_active=True,
+@router.post("/register", status_code=status.HTTP_403_FORBIDDEN)
+def register():
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="L'inscription publique est désactivée. Contactez le superadministrateur.",
     )
-
-    db.add(user)
-    db.flush()
-    db.add(
-        UserProfile(
-            user_id=user.id,
-            company=_clean_optional(payload.company),
-            job_title=_clean_optional(payload.job_title),
-        )
-    )
-    db.add(UserPreference(user_id=user.id))
-    db.commit()
-    db.refresh(user)
-    return user
 
 
 @router.post("/login", response_model=TokenResponse)

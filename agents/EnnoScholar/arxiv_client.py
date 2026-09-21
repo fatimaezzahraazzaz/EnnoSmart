@@ -119,7 +119,14 @@ class ArxivClient:
         last_code = 0
         for attempt in range(self.max_retries + 1):
             try:
-                req = urllib.request.Request(url, headers={"User-Agent": "EnnoSmart-EnnoScholar/3.2"})
+                req = urllib.request.Request(
+                    url,
+                    headers={
+                        "User-Agent": "Mozilla/5.0 EnnoSmart/3.2",
+                        "Accept": "application/atom+xml, application/xml;q=0.9, */*;q=0.8",
+                        "Accept-Language": "en-US,en;q=0.9",
+                    },
+                )
                 with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                     raw = resp.read().decode("utf-8", errors="replace")
                 time.sleep(self.sleep_seconds)

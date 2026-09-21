@@ -1304,6 +1304,7 @@ def build_unified_blueprint(
             {"unknown_verrou_ids": unknown_ids},
         )
     sections = _assign_to_sections(base_sections, axes, verrous)
+    sections = _assign_hierarchical_section_numbers(sections)
     allowed = {card["citation_label"] for card in article_cards}
     available = {unit["citation_label"] for unit in evidence_units}
     by_citation = _units_by_citation(evidence_units)
@@ -1827,6 +1828,10 @@ def _compact_evidence(
                 unit.get("documentation_scope_only")
             ),
             "citation_ownership": unit.get("citation_ownership"),
+            "hard_ownership_role": unit.get("_hard_ownership_role"),
+            "primary_owner_section_id": unit.get(
+                "_primary_owner_section_id"
+            ),
         }
         for unit in selected
     ]
@@ -3164,15 +3169,50 @@ def _section_target_words(
     section: Mapping[str, Any],
     total_sections: int,
 ) -> int:
+    novelty_contract = (
+        section.get("_novelty_contract")
+        if isinstance(
+            section.get("_novelty_contract"),
+            Mapping,
+        )
+        else {}
+    )
+
+    # Une section parente sert uniquement de cadrage.
+    # Elle ne doit pas pré-rédiger toutes ses sous-sections.
+    if novelty_contract.get("mode") == "parent_overview":
+        return 140
+
+    hard_scope = (
+        section.get("_hard_evidence_scope")
+        if isinstance(
+            section.get("_hard_evidence_scope"),
+            Mapping,
+        )
+        else {}
+    )
+
+    if (
+        hard_scope.get("status")
+        == "insufficient_primary_evidence"
+    ):
+        return 160
+
     try:
         explicit = int(section.get("target_words") or 0)
     except Exception:
         explicit = 0
+
     if explicit > 0:
         return max(350, min(3500, explicit))
-    # Environ dix pages pour un plan court, sans gonfler artificiellement les
-    # plans très longs. Chaque phrase reste conditionnée par une preuve.
-    return max(650, min(1600, int(4600 / max(1, total_sections))))
+
+    return max(
+        650,
+        min(
+            1600,
+            int(4600 / max(1, total_sections)),
+        ),
+    )
 
 
 def _uses_local_section_patch(section: Mapping[str, Any]) -> bool:
@@ -3236,6 +3276,1362 @@ def _apply_local_section_patch(previous: Mapping[str, Any], payload: Mapping[str
     for start, end, replacement in reversed(spans):
         content = content[:start] + replacement + content[end:]
     return {**previous, "content": content}
+
+
+def _claim_overlap_score(left: Any, right: Any) -> float:
+    """Similarité lexicale prudente entre deux claims scientifiques."""
+    a = set(_tokens(left))
+    b = set(_tokens(right))
+
+    if not a or not b:
+        return 0.0
+
+    inter = len(a & b)
+    union = len(a | b)
+    smallest = min(len(a), len(b))
+
+    jaccard = inter / max(1, union)
+    containment = inter / max(1, smallest)
+
+    return max(jaccard, containment * 0.90)
+
+
+def _build_cross_section_writing_memory(
+    generated_sections: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    cross_section_novelty_audit_v2
+
+    Mémoire scientifique cumulative :
+    - claims déjà développés ;
+    - citations utilisées pour chaque claim ;
+    - usage déjà fait de chaque source.
+
+    Aucun appel LLM supplémentaire.
+    """
+    section_rows: List[Dict[str, Any]] = []
+    global_claims: List[Dict[str, Any]] = []
+    source_usage: Dict[str, List[str]] = {}
+    all_citations: List[str] = []
+
+    for raw_section in generated_sections:
+        if not isinstance(raw_section, Mapping):
+            continue
+
+        section_id = clean_text(
+            raw_section.get("section_id"),
+            120,
+        )
+        title = clean_sentence(
+            raw_section.get("title"),
+            500,
+        )
+
+        bodies = [
+            clean_text(raw_section.get("content"), 120000)
+        ]
+
+        bodies.extend(
+            clean_text(row.get("content"), 80000)
+            for row in raw_section.get("subsections") or []
+            if isinstance(row, Mapping)
+        )
+
+        full_text = "\n".join(
+            body for body in bodies if body
+        )
+
+        citations = citations_from_text(full_text)
+        all_citations.extend(citations)
+
+        local_claims: List[Dict[str, Any]] = []
+
+        for sentence in _claim_sentences(full_text):
+            claim_text = clean_sentence(
+                _strip_citation_groups(sentence),
+                360,
+            )
+
+            if len(_tokens(claim_text)) < 5:
+                continue
+
+            claim_citations = citations_from_text(sentence)
+
+            row = {
+                "section_id": section_id,
+                "text": claim_text,
+                "citations": claim_citations,
+            }
+
+            # Évite de mémoriser plusieurs reformulations très proches
+            # dans la même section.
+            if any(
+                _claim_overlap_score(
+                    claim_text,
+                    existing.get("text"),
+                ) >= 0.86
+                for existing in local_claims
+            ):
+                continue
+
+            local_claims.append(row)
+            global_claims.append(row)
+
+            for citation in claim_citations:
+                source_usage.setdefault(citation, [])
+
+                if not any(
+                    _claim_overlap_score(claim_text, old) >= 0.86
+                    for old in source_usage[citation]
+                ):
+                    source_usage[citation].append(claim_text)
+
+                    source_usage[citation] = (
+                        source_usage[citation][-8:]
+                    )
+
+            if len(local_claims) >= 5:
+                break
+
+        section_rows.append(
+            {
+                "section_id": section_id,
+                "title": title,
+                "claims_already_explained": local_claims,
+                "citations_already_used": citations,
+            }
+        )
+
+    # Mémoire bornée : suffisamment longue pour le document,
+    # mais sans réinjecter l'intégralité des anciennes sections.
+    global_claims = global_claims[-48:]
+
+    return {
+        "memory_type": "cross_section_scientific_memory_v2",
+        "sections_already_written": section_rows[-14:],
+        "claims_already_explained": global_claims,
+        "source_usage_memory": {
+            citation: {
+                "claims_already_used": claims,
+            }
+            for citation, claims in source_usage.items()
+        },
+        "citations_already_used": citation_sort(all_citations),
+        "rules": [
+            (
+                "Une idée déjà développée est acquise et ne doit "
+                "pas être réexpliquée."
+            ),
+            (
+                "Une source peut revenir uniquement pour une dimension "
+                "scientifique nouvelle."
+            ),
+            (
+                "Une comparaison entre travaux constitue un nouvel apport "
+                "si elle confronte explicitement leurs méthodes, résultats "
+                "ou limites."
+            ),
+            (
+                "Chaque section doit faire progresser le raisonnement."
+            ),
+        ],
+    }
+
+
+def _build_section_novelty_contract(
+    blueprint: Mapping[str, Any],
+    section: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Détermine le rôle structurel de la section dans le plan consultant."""
+    outline = [
+        row
+        for row in (
+            blueprint.get("_full_plan_sections")
+            or blueprint.get("sections")
+            or []
+        )
+        if isinstance(row, Mapping)
+    ]
+
+    section_id = clean_text(section.get("section_id"), 120)
+    parent_id = clean_text(section.get("parent_id"), 120)
+
+    children = [
+        {
+            "section_id": clean_text(row.get("section_id"), 120),
+            "title": clean_sentence(row.get("title"), 500),
+        }
+        for row in outline
+        if clean_text(row.get("parent_id"), 120) == section_id
+    ]
+
+    parent = next(
+        (
+            {
+                "section_id": clean_text(row.get("section_id"), 120),
+                "title": clean_sentence(row.get("title"), 500),
+            }
+            for row in outline
+            if parent_id
+            and clean_text(row.get("section_id"), 120) == parent_id
+        ),
+        None,
+    )
+
+    if children:
+        mode = "parent_overview"
+        instruction = (
+            "Cette section introduit le thème sans développer en détail "
+            "les éléments réservés aux sous-sections. Elle doit cadrer "
+            "et annoncer la progression."
+        )
+    elif parent:
+        mode = "child_deepening"
+        instruction = (
+            "Cette sous-section doit approfondir son sujet précis. "
+            "Ne pas redéfinir ni répéter le cadrage déjà donné "
+            "dans la section parente."
+        )
+    else:
+        mode = "standalone_progression"
+        instruction = (
+            "Cette section doit apporter une étape scientifique nouvelle "
+            "par rapport aux sections précédentes."
+        )
+
+    return {
+        "contract_type": "section_novelty_contract_v1",
+        "mode": mode,
+        "parent": parent,
+        "children": children,
+        "instruction": instruction,
+    }
+
+
+def _cross_section_novelty_audit(
+    generated: Mapping[str, Any],
+    section: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """
+    Contrôle déterministe des répétitions entre sections.
+
+    Il ne bloque pas un simple rappel ou une comparaison.
+    Il bloque uniquement une proportion importante de claims
+    déjà développés dans les sections précédentes.
+    """
+    memory = (
+        section.get("_cross_section_memory")
+        if isinstance(
+            section.get("_cross_section_memory"),
+            Mapping,
+        )
+        else {}
+    )
+
+    previous_claims = [
+        row
+        for row in memory.get("claims_already_explained") or []
+        if isinstance(row, Mapping)
+        and clean_sentence(row.get("text"), 1000)
+    ]
+
+    if not previous_claims:
+        return {
+            "ok": True,
+            "candidate_claims": 0,
+            "repeated_claims_count": 0,
+            "repeated_ratio": 0.0,
+            "repeated_claims": [],
+            "reason": "no_previous_claims",
+        }
+
+    body = (
+        clean_text(generated.get("content"), 200000)
+        + " "
+        + " ".join(
+            clean_text(row.get("content"), 100000)
+            for row in generated.get("subsections") or []
+            if isinstance(row, Mapping)
+        )
+    )
+
+    current_claims: List[Dict[str, Any]] = []
+
+    for sentence in _claim_sentences(body):
+        claim_text = clean_sentence(
+            _strip_citation_groups(sentence),
+            1000,
+        )
+
+        if len(_tokens(claim_text)) < 6:
+            continue
+
+        current_claims.append(
+            {
+                "text": claim_text,
+                "citations": citations_from_text(sentence),
+            }
+        )
+
+    repeated: List[Dict[str, Any]] = []
+
+    comparison_markers = (
+        " contrairement ",
+        " tandis que ",
+        " alors que ",
+        " en revanche ",
+        " par rapport ",
+        " compar",
+    )
+
+    for current in current_claims:
+        current_text = f" {current['text'].casefold()} "
+        current_citations = set(current.get("citations") or [])
+
+        best = None
+        best_score = 0.0
+
+        for previous in previous_claims:
+            previous_text = clean_sentence(
+                previous.get("text"),
+                1000,
+            )
+
+            score = _claim_overlap_score(
+                current["text"],
+                previous_text,
+            )
+
+            if score > best_score:
+                best_score = score
+                best = previous
+
+        if not best:
+            continue
+
+        previous_citations = set(
+            best.get("citations") or []
+        )
+        shared_citation = bool(
+            current_citations & previous_citations
+        )
+
+        is_comparison = any(
+            marker in current_text
+            for marker in comparison_markers
+        )
+
+        threshold = 0.58 if shared_citation else 0.72
+
+        # Une vraie phrase comparative est autorisée à reprendre
+        # brièvement un acquis pour construire une différence.
+        if is_comparison:
+            threshold += 0.10
+
+        if best_score >= threshold:
+            repeated.append(
+                {
+                    "current_claim": current["text"][:500],
+                    "previous_claim": clean_sentence(
+                        best.get("text"),
+                        500,
+                    ),
+                    "previous_section_id": best.get(
+                        "section_id"
+                    ),
+                    "shared_citations": citation_sort(
+                        current_citations
+                        & previous_citations
+                    ),
+                    "similarity": round(best_score, 3),
+                }
+            )
+
+    count = len(current_claims)
+    repeated_ratio = (
+        len(repeated) / count
+        if count
+        else 0.0
+    )
+
+    blocking = bool(
+        count >= 3
+        and len(repeated) >= 2
+        and repeated_ratio >= 0.34
+    )
+
+    return {
+        "ok": not blocking,
+        "candidate_claims": count,
+        "repeated_claims_count": len(repeated),
+        "repeated_ratio": round(repeated_ratio, 4),
+        "repeated_claims": repeated[:12],
+        "blocking_threshold": 0.34,
+    }
+
+
+
+def _assign_hierarchical_section_numbers(
+    sections: Sequence[Mapping[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Ajoute une numérotation d'affichage sans modifier les titres
+    canoniques validés par le consultant.
+
+    Exemples :
+      1
+      2
+      3
+      3.1
+      3.2
+      4
+      4.1
+    """
+    output: List[Dict[str, Any]] = []
+    number_by_id: Dict[str, str] = {}
+    child_counters: Dict[str, int] = {}
+    top_counter = 0
+
+    for raw in sections:
+        if not isinstance(raw, Mapping):
+            continue
+
+        section = dict(raw)
+
+        section_id = clean_text(
+            section.get("section_id"),
+            120,
+        )
+        parent_id = clean_text(
+            section.get("parent_id"),
+            120,
+        )
+
+        if parent_id and parent_id in number_by_id:
+            child_counters[parent_id] = (
+                child_counters.get(parent_id, 0) + 1
+            )
+
+            display_number = (
+                f"{number_by_id[parent_id]}."
+                f"{child_counters[parent_id]}"
+            )
+        else:
+            top_counter += 1
+            display_number = str(top_counter)
+
+        if section_id:
+            number_by_id[section_id] = display_number
+
+        section["display_number"] = display_number
+        section["display_title"] = (
+            f"{display_number}. "
+            f"{clean_sentence(section.get('title'), 700)}"
+        )
+
+        output.append(section)
+
+    return output
+
+
+def _hard_owner_unit_text(
+    unit: Mapping[str, Any],
+) -> str:
+    return " ".join(
+        value
+        for value in [
+            clean_text(unit.get("text"), 1800),
+            clean_text(unit.get("kind"), 120),
+            clean_text(unit.get("article_title"), 600),
+            clean_text(unit.get("article_method_name"), 300),
+        ]
+        if value
+    )
+
+
+def _hard_owner_section_text(
+    section: Mapping[str, Any],
+    sections_by_id: Mapping[str, Mapping[str, Any]],
+) -> str:
+    parent_id = clean_text(
+        section.get("parent_id"),
+        120,
+    )
+    parent = sections_by_id.get(parent_id) or {}
+
+    return " ".join(
+        value
+        for value in [
+            clean_text(parent.get("title"), 700),
+            clean_text(section.get("title"), 700),
+            clean_text(section.get("objective"), 1800),
+            clean_text(
+                section.get("instructions") or [],
+                1800,
+            ),
+            clean_text(
+                section.get("required_dimensions") or [],
+                1200,
+            ),
+        ]
+        if value
+    )
+
+
+def _hard_owner_cosine(
+    left: Any,
+    right: Any,
+) -> float:
+    try:
+        a = [float(x) for x in left]
+        b = [float(x) for x in right]
+    except Exception:
+        return 0.0
+
+    if not a or not b or len(a) != len(b):
+        return 0.0
+
+    dot = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(y * y for y in b) ** 0.5
+
+    if not na or not nb:
+        return 0.0
+
+    return dot / (na * nb)
+
+
+def _build_claim_ownership_map(
+    blueprint: Mapping[str, Any],
+    evidence_units: Sequence[Mapping[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    """
+    hard_claim_ownership_v1
+
+    Une idée scientifique possède UNE section principale.
+
+    Les duplications de la même idée provenant de plusieurs couches
+    d'extraction sont regroupées AVANT l'attribution.
+
+    Matching :
+      1. embeddings BGE déjà disponibles dans EnnoSmart ;
+      2. fallback lexical déterministe si embeddings indisponibles.
+
+    Les sections parentes ne deviennent jamais propriétaires de détails :
+    elles restent des sections de cadrage.
+    """
+    sections = [
+        row
+        for row in (
+            blueprint.get("_full_plan_sections")
+            or blueprint.get("sections")
+            or []
+        )
+        if isinstance(row, Mapping)
+    ]
+
+    sections_by_id = {
+        clean_text(row.get("section_id"), 120): row
+        for row in sections
+        if clean_text(row.get("section_id"), 120)
+    }
+
+    parent_ids = {
+        clean_text(row.get("parent_id"), 120)
+        for row in sections
+        if clean_text(row.get("parent_id"), 120)
+    }
+
+    output: Dict[str, Dict[str, Any]] = {}
+
+    for section in sections:
+        section_id = clean_text(
+            section.get("section_id"),
+            120,
+        )
+        if not section_id:
+            continue
+
+        output[section_id] = {
+            "ownership_type": "hard_claim_ownership_v1",
+            "section_id": section_id,
+            "primary_claims": [],
+            "primary_citations": [],
+        }
+
+    units = [
+        dict(unit)
+        for unit in evidence_units
+        if isinstance(unit, Mapping)
+        and clean_text(unit.get("evidence_id"), 120)
+        and clean_text(unit.get("text"), 1800)
+    ]
+
+    if not units or not sections:
+        output["__meta__"] = {
+            "semantic_mode": "empty",
+            "owner_by_evidence_id": {},
+            "scores_by_evidence_id": {},
+            "unowned_evidence_ids": [],
+        }
+        return output
+
+    unit_texts = [
+        _hard_owner_unit_text(unit)
+        for unit in units
+    ]
+
+    section_texts = [
+        _hard_owner_section_text(
+            section,
+            sections_by_id,
+        )
+        for section in sections
+    ]
+
+    vectors = []
+    semantic_mode = "lexical_fallback"
+
+    try:
+        from modules.RAG.vector_store import encode_texts
+
+        vectors = encode_texts(
+            unit_texts + section_texts
+        )
+
+        if len(vectors) == len(
+            unit_texts + section_texts
+        ):
+            semantic_mode = "bge_embeddings"
+        else:
+            vectors = []
+    except Exception:
+        vectors = []
+
+    unit_count = len(units)
+
+    def unit_section_score(
+        unit_index: int,
+        section_index: int,
+    ) -> float:
+        if vectors:
+            return max(
+                0.0,
+                _hard_owner_cosine(
+                    vectors[unit_index],
+                    vectors[
+                        unit_count
+                        + section_index
+                    ],
+                ),
+            )
+
+        return _similarity(
+            unit_texts[unit_index],
+            section_texts[section_index],
+        )
+
+    def unit_unit_score(
+        left_index: int,
+        right_index: int,
+    ) -> float:
+        if vectors:
+            return max(
+                0.0,
+                _hard_owner_cosine(
+                    vectors[left_index],
+                    vectors[right_index],
+                ),
+            )
+
+        return _claim_overlap_score(
+            unit_texts[left_index],
+            unit_texts[right_index],
+        )
+
+    # --------------------------------------------------------
+    # Regrouper les paraphrases du même claim POUR UNE SOURCE.
+    # Un même claim A4 extrait 4 fois ne pourra donc plus
+    # être envoyé à 4 sections différentes.
+    # --------------------------------------------------------
+
+    by_citation: Dict[str, List[int]] = {}
+
+    for index, unit in enumerate(units):
+        citation = normalize_citation_label(
+            unit.get("citation_label")
+        )
+        if citation:
+            by_citation.setdefault(
+                citation,
+                [],
+            ).append(index)
+
+    clusters: List[List[int]] = []
+
+    cluster_threshold = (
+        0.82
+        if vectors
+        else 0.76
+    )
+
+    for citation in citation_sort(by_citation):
+        local_clusters: List[List[int]] = []
+
+        for unit_index in by_citation[citation]:
+            placed = False
+
+            for cluster in local_clusters:
+                representative = cluster[0]
+
+                if (
+                    unit_unit_score(
+                        unit_index,
+                        representative,
+                    )
+                    >= cluster_threshold
+                ):
+                    cluster.append(unit_index)
+                    placed = True
+                    break
+
+            if not placed:
+                local_clusters.append(
+                    [unit_index]
+                )
+
+        clusters.extend(local_clusters)
+
+    section_index_by_id = {
+        clean_text(section.get("section_id"), 120):
+        index
+        for index, section in enumerate(sections)
+        if clean_text(section.get("section_id"), 120)
+    }
+
+    eligible_owner_ids = [
+        section_id
+        for section_id in section_index_by_id
+        if section_id not in parent_ids
+    ]
+
+    owner_by_evidence_id: Dict[str, str] = {}
+    scores_by_evidence_id: Dict[
+        str,
+        Dict[str, float],
+    ] = {}
+    unowned: List[str] = []
+
+    try:
+        semantic_min_score = float(
+            __import__("os").getenv(
+                "ENNOSCHOLAR_PHASE5_OWNER_MIN_SCORE",
+                "0.30" if vectors else "0.035",
+            )
+        )
+    except Exception:
+        semantic_min_score = (
+            0.30 if vectors else 0.035
+        )
+
+    for cluster in clusters:
+        if not cluster:
+            continue
+
+        cluster_citation = normalize_citation_label(
+            units[cluster[0]].get(
+                "citation_label"
+            )
+        )
+
+        best_section_id = ""
+        best_score = -1.0
+
+        cluster_section_scores: Dict[
+            str,
+            float,
+        ] = {}
+
+        for section_id in eligible_owner_ids:
+            section_index = (
+                section_index_by_id[
+                    section_id
+                ]
+            )
+            section = sections[section_index]
+
+            scores = [
+                unit_section_score(
+                    unit_index,
+                    section_index,
+                )
+                for unit_index in cluster
+            ]
+
+            score = (
+                sum(scores)
+                / max(1, len(scores))
+            )
+
+            # Légère préférence aux sous-sections :
+            # elles sont plus spécifiques que les grands titres.
+            if clean_text(
+                section.get("parent_id"),
+                120,
+            ):
+                score += 0.018
+
+            # Citation demandée = simple tie-breaker.
+            # Plus de bonus massif : le contenu scientifique
+            # reste prioritaire.
+            if cluster_citation in set(
+                section.get(
+                    "required_citations"
+                )
+                or []
+            ):
+                score += 0.010
+
+            cluster_section_scores[
+                section_id
+            ] = score
+
+            if score > best_score:
+                best_score = score
+                best_section_id = section_id
+
+        owner_section_id = (
+            best_section_id
+            if best_score >= semantic_min_score
+            else ""
+        )
+
+        for unit_index in cluster:
+            evidence_id = clean_text(
+                units[unit_index].get(
+                    "evidence_id"
+                ),
+                120,
+            )
+
+            # Mémoriser également la pertinence de cette
+            # preuve pour TOUTES les sections. Cela sert
+            # plus tard aux rappels comparatifs/limites.
+            scores_by_evidence_id[
+                evidence_id
+            ] = {
+                section_id: round(
+                    unit_section_score(
+                        unit_index,
+                        section_index_by_id[
+                            section_id
+                        ],
+                    ),
+                    5,
+                )
+                for section_id
+                in section_index_by_id
+            }
+
+            if owner_section_id:
+                owner_by_evidence_id[
+                    evidence_id
+                ] = owner_section_id
+            else:
+                unowned.append(evidence_id)
+
+        if not owner_section_id:
+            continue
+
+        representative = units[
+            cluster[0]
+        ]
+
+        owner = output[
+            owner_section_id
+        ]
+
+        owner["primary_claims"].append(
+            {
+                "claim_id": clean_text(
+                    representative.get(
+                        "evidence_id"
+                    ),
+                    120,
+                ),
+                "citation": cluster_citation,
+                "claim": clean_sentence(
+                    representative.get("text"),
+                    700,
+                ),
+                "evidence_ids": [
+                    clean_text(
+                        units[index].get(
+                            "evidence_id"
+                        ),
+                        120,
+                    )
+                    for index in cluster
+                ],
+                "ownership_score": round(
+                    best_score,
+                    4,
+                ),
+            }
+        )
+
+        if cluster_citation:
+            owner[
+                "primary_citations"
+            ].append(cluster_citation)
+
+    for section_id, row in output.items():
+        if section_id == "__meta__":
+            continue
+
+        row["primary_citations"] = (
+            citation_sort(
+                row.get(
+                    "primary_citations"
+                )
+                or []
+            )
+        )
+
+    output["__meta__"] = {
+        "semantic_mode": semantic_mode,
+        "owner_min_score": semantic_min_score,
+        "owner_by_evidence_id": (
+            owner_by_evidence_id
+        ),
+        "scores_by_evidence_id": (
+            scores_by_evidence_id
+        ),
+        "unowned_evidence_ids": unowned,
+        "clusters_count": len(clusters),
+    }
+
+    return output
+
+
+def _hard_reference_reuse_mode(
+    section: Mapping[str, Any],
+) -> bool:
+    """
+    Certaines sections ont naturellement besoin de rappeler des
+    résultats déjà développés : introduction, comparaison,
+    évaluation, synthèse, limites et conclusion.
+    """
+    text = (
+        " "
+        + clean_text(
+            [
+                section.get("title"),
+                section.get("objective"),
+            ],
+            2000,
+        ).casefold()
+        + " "
+    )
+
+    markers = (
+        " introduction ",
+        " cadre ",
+        " problématique ",
+        " evaluation ",
+        " évaluation ",
+        " comparaison ",
+        " synthèse ",
+        " synthese ",
+        " limite ",
+        " limites ",
+        " gap ",
+        " conclusion ",
+        " positionnement ",
+        " discussion ",
+    )
+
+    return any(
+        marker in text
+        for marker in markers
+    )
+
+
+def _hard_local_evidence_for_section(
+    blueprint: Mapping[str, Any],
+    section: Dict[str, Any],
+    evidence_units: Sequence[Mapping[str, Any]],
+    ownership_map: Mapping[str, Any],
+) -> List[Dict[str, Any]]:
+    """
+    Applique réellement le claim ownership.
+
+    Une section normale reçoit :
+      - uniquement ses claims primaires.
+
+    Une section de synthèse/évaluation/limites peut aussi recevoir
+    quelques preuves étrangères, mais marquées reference_only.
+
+    Une section parente reçoit seulement des rappels très courts
+    provenant de ses enfants.
+    """
+    section_id = clean_text(
+        section.get("section_id"),
+        120,
+    )
+
+    meta = (
+        ownership_map.get("__meta__")
+        if isinstance(
+            ownership_map.get("__meta__"),
+            Mapping,
+        )
+        else {}
+    )
+
+    owner_by_id = (
+        meta.get("owner_by_evidence_id")
+        or {}
+    )
+    scores_by_id = (
+        meta.get("scores_by_evidence_id")
+        or {}
+    )
+
+    primary: List[Dict[str, Any]] = []
+
+    for raw in evidence_units:
+        if not isinstance(raw, Mapping):
+            continue
+
+        evidence_id = clean_text(
+            raw.get("evidence_id"),
+            120,
+        )
+
+        if (
+            owner_by_id.get(evidence_id)
+            != section_id
+        ):
+            continue
+
+        row = dict(raw)
+        row[
+            "_hard_ownership_role"
+        ] = "primary"
+        row[
+            "_primary_owner_section_id"
+        ] = section_id
+        primary.append(row)
+
+    novelty = (
+        section.get("_novelty_contract")
+        if isinstance(
+            section.get(
+                "_novelty_contract"
+            ),
+            Mapping,
+        )
+        else {}
+    )
+
+    novelty_mode = clean_text(
+        novelty.get("mode"),
+        80,
+    )
+
+    reference_rows: List[
+        Dict[str, Any]
+    ] = []
+
+    # --------------------------------------------------------
+    # Parents : seulement 1 preuve représentative
+    # par sous-section pour cadrer.
+    # --------------------------------------------------------
+    if novelty_mode == "parent_overview":
+        child_ids = {
+            clean_text(
+                child.get("section_id"),
+                120,
+            )
+            for child in (
+                novelty.get("children")
+                or []
+            )
+            if isinstance(child, Mapping)
+            and clean_text(
+                child.get("section_id"),
+                120,
+            )
+        }
+
+        for child_id in child_ids:
+            candidates = []
+
+            for raw in evidence_units:
+                if not isinstance(raw, Mapping):
+                    continue
+
+                evidence_id = clean_text(
+                    raw.get("evidence_id"),
+                    120,
+                )
+
+                if (
+                    owner_by_id.get(
+                        evidence_id
+                    )
+                    != child_id
+                ):
+                    continue
+
+                score = float(
+                    (
+                        scores_by_id.get(
+                            evidence_id
+                        )
+                        or {}
+                    ).get(
+                        section_id,
+                        0.0,
+                    )
+                    or 0.0
+                )
+
+                candidates.append(
+                    (score, raw)
+                )
+
+            if candidates:
+                candidates.sort(
+                    key=lambda item: item[0],
+                    reverse=True,
+                )
+
+                row = dict(
+                    candidates[0][1]
+                )
+                row[
+                    "_hard_ownership_role"
+                ] = "reference_only"
+                row[
+                    "_primary_owner_section_id"
+                ] = child_id
+
+                reference_rows.append(
+                    row
+                )
+
+    # --------------------------------------------------------
+    # Sections de synthèse / évaluation / limites :
+    # rappel autorisé, mais seulement 1 claim par citation.
+    # --------------------------------------------------------
+    elif _hard_reference_reuse_mode(
+        section
+    ):
+        best_by_citation: Dict[
+            str,
+            tuple,
+        ] = {}
+
+        for raw in evidence_units:
+            if not isinstance(raw, Mapping):
+                continue
+
+            evidence_id = clean_text(
+                raw.get("evidence_id"),
+                120,
+            )
+
+            owner = clean_text(
+                owner_by_id.get(
+                    evidence_id
+                ),
+                120,
+            )
+
+            if not owner or owner == section_id:
+                continue
+
+            citation = normalize_citation_label(
+                raw.get(
+                    "citation_label"
+                )
+            )
+
+            if not citation:
+                continue
+
+            score = float(
+                (
+                    scores_by_id.get(
+                        evidence_id
+                    )
+                    or {}
+                ).get(
+                    section_id,
+                    0.0,
+                )
+                or 0.0
+            )
+
+            current = best_by_citation.get(
+                citation
+            )
+
+            if (
+                current is None
+                or score > current[0]
+            ):
+                best_by_citation[
+                    citation
+                ] = (
+                    score,
+                    raw,
+                    owner,
+                )
+
+        ordered = sorted(
+            best_by_citation.values(),
+            key=lambda item: item[0],
+            reverse=True,
+        )
+
+        for score, raw, owner in ordered[:6]:
+            # Éviter les rappels sans pertinence.
+            semantic_mode = clean_text(
+                meta.get("semantic_mode"),
+                80,
+            )
+
+            min_reference_score = (
+                0.25
+                if semantic_mode
+                == "bge_embeddings"
+                else 0.025
+            )
+
+            if score < min_reference_score:
+                continue
+
+            row = dict(raw)
+            row[
+                "_hard_ownership_role"
+            ] = "reference_only"
+            row[
+                "_primary_owner_section_id"
+            ] = owner
+
+            reference_rows.append(row)
+
+    local = [
+        *primary,
+        *reference_rows,
+    ]
+
+    local_citations = citation_sort(
+        row.get("citation_label")
+        for row in local
+    )
+
+    original_required = citation_sort(
+        section.get(
+            "required_citations"
+        )
+        or []
+    )
+
+    section.setdefault(
+        "_required_citations_before_hard_ownership",
+        original_required,
+    )
+    section.setdefault(
+        "_available_citations_before_hard_ownership",
+        list(
+            section.get(
+                "available_citations"
+            )
+            or []
+        ),
+    )
+
+    # IMPORTANT :
+    # le LLM n'a désormais le droit de citer QUE
+    # les sources effectivement présentes dans local.
+    section["available_citations"] = (
+        local_citations
+    )
+
+    section["required_citations"] = (
+        citation_sort(
+            set(original_required)
+            & set(local_citations)
+        )
+    )
+
+    section["suggested_citations"] = (
+        citation_sort(
+            set(
+                section.get(
+                    "suggested_citations"
+                )
+                or []
+            )
+            & set(local_citations)
+        )
+    )
+
+    dropped_required = citation_sort(
+        set(original_required)
+        - set(local_citations)
+    )
+
+    if novelty_mode == "parent_overview":
+        status = "overview_reference_only"
+
+    elif primary:
+        status = "primary_evidence_available"
+
+    elif (
+        reference_rows
+        and _hard_reference_reuse_mode(
+            section
+        )
+    ):
+        status = "reference_only_synthesis"
+
+    else:
+        status = (
+            "insufficient_primary_evidence"
+        )
+
+    section["_hard_evidence_scope"] = {
+        "scope_type": (
+            "hard_claim_ownership_scope_v1"
+        ),
+        "status": status,
+        "semantic_mode": meta.get(
+            "semantic_mode"
+        ),
+        "primary_evidence_count": len(
+            primary
+        ),
+        "reference_only_count": len(
+            reference_rows
+        ),
+        "available_citations": (
+            local_citations
+        ),
+        "dropped_required_citations": (
+            dropped_required
+        ),
+        "rule": (
+            "primary = développement autorisé ; "
+            "reference_only = rappel/comparaison/limite uniquement"
+        ),
+    }
+
+    return local
 
 
 def _build_section_llm_prompt(
@@ -3348,6 +4744,83 @@ La version existante n'est pas une source scientifique : tout ajout doit être �
 
 FIN DE LA SECTION PRÉCÉDENTE
 {clean_text(previous_tail, 1800) or "Première section du document."}
+
+MÉMOIRE SCIENTIFIQUE GLOBALE DES SECTIONS DÉJÀ RÉDIGÉES
+{json.dumps(
+    section.get("_cross_section_memory") or {},
+    ensure_ascii=False,
+    indent=2,
+)}
+
+CONTRAT DE NOUVEAUTÉ DE CETTE SECTION
+{json.dumps(
+    section.get("_novelty_contract") or {},
+    ensure_ascii=False,
+    indent=2,
+)}
+
+CLAIMS PRINCIPALEMENT ATTRIBUÉS À CETTE SECTION
+{json.dumps(
+    section.get("_claim_ownership") or {},
+    ensure_ascii=False,
+    indent=2,
+)}
+
+PORTÉE DE PREUVE HARD OWNERSHIP
+{json.dumps(
+    section.get("_hard_evidence_scope") or {},
+    ensure_ascii=False,
+    indent=2,
+)}
+
+Les claims listés dans primary_claims sont ceux que cette section doit
+principalement développer.
+
+Dans PREUVES AUTORISÉES :
+- hard_ownership_role=primary :
+  développement détaillé autorisé dans cette section.
+- hard_ownership_role=reference_only :
+  la preuve peut uniquement soutenir un rappel bref, une comparaison,
+  une conséquence ou une limite. Ne réexplique jamais entièrement ce claim.
+
+Si status=insufficient_primary_evidence :
+- n'extrapole pas à partir de sources seulement connexes ;
+- n'invente pas une synthèse générale ;
+- rédige un cadrage bref indiquant que le corpus sélectionné ne fournit
+  pas de preuve scientifique directe suffisante pour développer ce point ;
+- ne transforme jamais une source voisine en preuve directe.
+
+Les autres preuves restent disponibles uniquement pour :
+- une transition courte ;
+- une comparaison nécessaire ;
+- un rappel indispensable ;
+- une citation obligatoire.
+
+Ne redéveloppe pas dans cette section un claim dont le développement
+principal appartient à une autre section.
+
+Cette mémoire est un garde anti-répétition.
+Les affirmations déjà développées sont considérées comme acquises.
+Ne les reformule pas simplement avec d'autres mots.
+
+Consulte aussi source_usage_memory :
+si une source a déjà servi à expliquer une idée, ne réutilise pas cette
+même idée. Réutilise la source uniquement pour une autre dimension
+scientifique présente dans les preuves.
+
+Si le contrat indique parent_overview :
+- rédige uniquement un cadrage de 80 à 180 mots ;
+- présente le changement de perspective ou le problème général ;
+- annonce ce que les sous-sections vont approfondir ;
+- ne développe aucun exemple détaillé ;
+- ne développe aucun benchmark ;
+- ne détaille pas compilation, validation, réparation ou métriques si ces
+  éléments possèdent leurs propres sous-sections ;
+- ne répète pas les résultats scientifiques qui seront développés ensuite.
+
+Si le contrat indique child_deepening, commence directement par
+l'approfondissement spécifique de cette sous-section sans réexpliquer
+le contenu de la section parente.
 
 CONTEXTE PROJET
 {json.dumps(blueprint.get("project_context") or {}, ensure_ascii=False)}
@@ -3504,6 +4977,21 @@ CONTRAT DE RÉDACTION
 - Reformule les preuves : ne recopie jamais un en-tête ou pied de page, un
   compteur de pages, une légende de figure/tableau ou un fragment OCR brut.
 - Évite les formulations « l'article A1 présente ». Fais une synthèse transversale.
+- Ne répète pas une idée scientifique déjà développée dans une section précédente,
+  même sous une formulation différente. Considère-la comme acquise.
+- Une citation déjà utilisée peut être reprise seulement si elle apporte ici
+  une dimension nouvelle : méthode, protocole, résultat, comparaison, limite
+  ou conséquence scientifique.
+- Lorsqu'au moins deux sources documentent des approches comparables, privilégie
+  une comparaison explicite : ce que chacune fait, ce qu'elle ajoute, ce qu'elle
+  valide et ce qu'elle laisse non résolu.
+- Ne transforme pas plusieurs sources en résumés successifs. Construis une
+  progression : problème -> approche -> apport -> différence -> limite ->
+  incertitude résiduelle.
+- N'épuise pas dans une section une notion dont le plan prévoit le développement
+  détaillé dans une section ultérieure. Introduis-la seulement au niveau nécessaire.
+- Une nouvelle section doit apporter une information, une comparaison, une
+  limite ou une conclusion nouvelle par rapport à la mémoire rédactionnelle.
 - Le titre, l'identifiant, l'ordre et les sous-sections sont immuables.
 
 {((
@@ -3584,6 +5072,20 @@ def _compact_section_validation_feedback(
         "word_count": validation.get("word_count"),
         "minimum_words": validation.get("minimum_words"),
         "maximum_words": validation.get("maximum_words"),
+        "cross_section_novelty_audit": {
+            "repeated_ratio": (
+                validation.get(
+                    "cross_section_novelty_audit"
+                )
+                or {}
+            ).get("repeated_ratio"),
+            "repeated_claims": (
+                validation.get(
+                    "cross_section_novelty_audit"
+                )
+                or {}
+            ).get("repeated_claims") or [],
+        },
         "semantic_issues": compact_issues(semantic.get("issues")),
         "verifier_issues": compact_issues(
             verifier.get("blocking_issues") or verifier.get("issues")
@@ -3665,6 +5167,37 @@ NOUVELLE RÉDACTION À CORRIGER
 PROBLÈMES PRÉCIS À RÉPARER
 {json.dumps(feedback, ensure_ascii=False, indent=2)}
 
+MÉMOIRE DES IDÉES DÉJÀ TRAITÉES
+{json.dumps(
+    section.get("_cross_section_memory") or {},
+    ensure_ascii=False,
+    indent=2,
+)}
+
+CONTRAT DE NOUVEAUTÉ
+{json.dumps(
+    section.get("_novelty_contract") or {},
+    ensure_ascii=False,
+    indent=2,
+)}
+
+PORTÉE HARD CLAIM OWNERSHIP
+{json.dumps(
+    section.get("_hard_evidence_scope") or {},
+    ensure_ascii=False,
+    indent=2,
+)}
+
+Si status=insufficient_primary_evidence, ne tente pas de remplir artificiellement
+la section. Réduis-la à un cadrage prudent indiquant précisément l'insuffisance
+du corpus sélectionné.
+
+Si cross_section_claim_repetition est signalé, supprime ou condense les
+claims répétés identifiés dans repeated_claims. Ne les remplace pas par une
+simple paraphrase. Utilise l'espace libéré pour développer uniquement une
+information nouvelle soutenue par les preuves, une comparaison entre travaux,
+une limite ou une conséquence scientifique propre à cette section.
+
 PREUVES STRICTEMENT UTILES À LA RÉPARATION
 {json.dumps(
     _compact_evidence(
@@ -3741,6 +5274,7 @@ _SECTION_PUBLICATION_BLOCKERS = {
     # BEGIN ENNOSCHOLAR_CIR_QUALITY_V3
     "cir_related_evidence_overclaim",
     "cir_missing_insufficiency_disclosure",
+    "insufficient_primary_evidence_overclaim",
     # END ENNOSCHOLAR_CIR_QUALITY_V3
 }
 
@@ -3750,6 +5284,7 @@ _SECTION_ESCALATION_BLOCKERS = {
     "missing_verrou_subsection_citations",
     "unsupported_or_misattributed_claims",
     "independent_semantic_verifier_rejected",
+    "cross_section_claim_repetition",
 }
 
 
@@ -3758,11 +5293,26 @@ def _section_publication_blockers(
     section: Optional[Mapping[str, Any]] = None,
 ) -> List[str]:
     if section and bool(section.get("_guided_conversation")):
-        return (
-            []
-            if int(validation.get("word_count") or 0) > 0
-            else ["empty_generated_section"]
-        )
+        blockers: List[str] = []
+
+        if int(validation.get("word_count") or 0) <= 0:
+            blockers.append("empty_generated_section")
+
+        if "cross_section_claim_repetition" in set(
+            validation.get("errors") or []
+        ):
+            blockers.append(
+                "cross_section_claim_repetition"
+            )
+
+        if "insufficient_primary_evidence_overclaim" in set(
+            validation.get("errors") or []
+        ):
+            blockers.append(
+                "insufficient_primary_evidence_overclaim"
+            )
+
+        return blockers
     return sorted(
         set(validation.get("errors") or []) & _SECTION_PUBLICATION_BLOCKERS
     )
@@ -3780,11 +5330,26 @@ def _section_escalation_blockers(
     """
 
     if section and bool(section.get("_guided_conversation")):
-        return (
-            []
-            if int(validation.get("word_count") or 0) > 0
-            else ["empty_generated_section"]
-        )
+        blockers: List[str] = []
+
+        if int(validation.get("word_count") or 0) <= 0:
+            blockers.append("empty_generated_section")
+
+        if "cross_section_claim_repetition" in set(
+            validation.get("errors") or []
+        ):
+            blockers.append(
+                "cross_section_claim_repetition"
+            )
+
+        if "insufficient_primary_evidence_overclaim" in set(
+            validation.get("errors") or []
+        ):
+            blockers.append(
+                "insufficient_primary_evidence_overclaim"
+            )
+
+        return blockers
 
     return sorted(
         set(validation.get("errors") or [])
@@ -3832,6 +5397,15 @@ def _validate_generated_section(
         for row in generated.get("subsections") or []
         if isinstance(row, dict)
     )
+    cross_section_novelty_audit = (
+        _cross_section_novelty_audit(
+            generated,
+            section,
+        )
+    )
+    if not cross_section_novelty_audit.get("ok"):
+        errors.append("cross_section_claim_repetition")
+
     raw_extraction_fragments = _raw_extraction_fragments(body)
     if raw_extraction_fragments:
         errors.append("raw_extraction_fragment")
@@ -3883,15 +5457,57 @@ def _validate_generated_section(
         errors.append("missing_verrou_subsection_citations")
     word_count = len(re.findall(r"\b[\wÀ-ÿ'-]+\b", body))
     target_words = _section_target_words(section, total_sections)
-    minimum_words = max(
-        250,
-        int(target_words * 0.65),
+    novelty_contract = (
+        section.get("_novelty_contract")
+        if isinstance(
+            section.get("_novelty_contract"),
+            Mapping,
+        )
+        else {}
     )
-    maximum_words = max(minimum_words + 150, int(target_words * 1.45))
+
+    hard_scope = (
+        section.get("_hard_evidence_scope")
+        if isinstance(
+            section.get("_hard_evidence_scope"),
+            Mapping,
+        )
+        else {}
+    )
+
+    if novelty_contract.get("mode") == "parent_overview":
+        minimum_words = 60
+        maximum_words = 240
+
+    elif (
+        hard_scope.get("status")
+        == "insufficient_primary_evidence"
+    ):
+        minimum_words = 40
+        maximum_words = 260
+
+    else:
+        minimum_words = max(
+            250,
+            int(target_words * 0.65),
+        )
+        maximum_words = max(
+            minimum_words + 150,
+            int(target_words * 1.45),
+        )
     if word_count < minimum_words:
         errors.append("section_too_short")
     if word_count > maximum_words:
         errors.append("section_too_long")
+
+    if (
+        hard_scope.get("status")
+        == "insufficient_primary_evidence"
+        and word_count > 260
+    ):
+        errors.append(
+            "insufficient_primary_evidence_overclaim"
+        )
     semantic_claim_audit = (
         _semantic_claim_audit(
             generated,
@@ -3939,6 +5555,9 @@ def _validate_generated_section(
         "minimum_words": minimum_words,
         "maximum_words": maximum_words,
         "target_words": target_words,
+        "cross_section_novelty_audit": (
+            cross_section_novelty_audit
+        ),
         "raw_extraction_fragments": raw_extraction_fragments,
         "non_french_raw_fragments": non_french_raw_fragments,
         "semantic_claim_audit": semantic_claim_audit,
@@ -4292,6 +5911,12 @@ def call_sectional_writer_llm(
     premium_escalations_count = 0
     previous_tail = ""
     total_sections = len(blueprint.get("sections") or [])
+
+    claim_ownership_map = _build_claim_ownership_map(
+        blueprint,
+        evidence_units,
+    )
+
     for index, section in enumerate(blueprint.get("sections") or [], 1):
         guided_iterative_publication = bool(
             section.get("_guided_conversation")
@@ -4315,13 +5940,41 @@ def call_sectional_writer_llm(
                 previous_tail = str(preceding.get("content") or "")[-1800:]
             else:
                 previous_tail = ""
+        # Mémoire scientifique cumulative : toutes les sections déjà
+        # acceptées deviennent le contexte anti-répétition de la suivante.
+        section["_cross_section_memory"] = (
+            _build_cross_section_writing_memory(
+                generated_sections
+            )
+        )
+        section["_novelty_contract"] = (
+            _build_section_novelty_contract(
+                blueprint,
+                section,
+            )
+        )
+
+        section["_claim_ownership"] = (
+            claim_ownership_map.get(
+                section_id,
+                {
+                    "ownership_type": "claim_ownership_v1",
+                    "section_id": section_id,
+                    "primary_claims": [],
+                    "primary_citations": [],
+                },
+            )
+        )
+
         safe_section_id = re.sub(r"[^a-zA-Z0-9_.-]+", "_", section_id).strip("_")
-        local_evidence = [
-            unit
-            for unit in evidence_units
-            if unit.get("citation_label")
-            in set(section.get("available_citations") or [])
-        ]
+        local_evidence = (
+            _hard_local_evidence_for_section(
+                blueprint,
+                section,
+                evidence_units,
+                claim_ownership_map,
+            )
+        )
         # BEGIN ENNOSCHOLAR_CROSS_MODEL_CHECKPOINT_RESUME_V3_1
         def _section_checkpoint_fingerprint_for_model(
             fingerprint_model: Any,
@@ -4497,7 +6150,7 @@ def call_sectional_writer_llm(
                 prompt = _build_section_llm_prompt(
                     blueprint,
                     section,
-                    evidence_units,
+                    local_evidence,
                     previous_tail=previous_tail,
                 )
             else:
@@ -5068,6 +6721,97 @@ def call_sectional_writer_llm(
                     validation,
                     section,
                 )
+
+                # BEGIN ENNOSCHOLAR_SECTION_SCOPE_REPAIR_GATE_V1
+                #
+                # Une section possédant une contrainte sémantique explicite
+                # dans son titre ("avant X") ne doit pas être publiée en mode
+                # Guided lorsqu'un problème d'attribution scientifique a déjà
+                # été détecté.
+                #
+                # Exemple générique :
+                #   "Approches classiques ... avant les LLM"
+                #
+                # Le concept exclu peut être mentionné comme frontière
+                # temporelle, mais les méthodes reposant sur ce concept ne
+                # doivent pas constituer le contenu scientifique de la section.
+                #
+                # Au lieu d'accepter le draft comme simple advisory, on force
+                # le cycle normal de repair avec une consigne explicite.
+
+                section_title_for_scope = clean_text(
+                    section.get("title"),
+                    500,
+                )
+
+                scope_match = re.search(
+                    r"\\bavant\\s+"
+                    r"(?:(?:les?|la|des?)\\s+|l['’]\\s*)?"
+                    r"(.+?)\\s*$",
+                    section_title_for_scope,
+                    flags=re.I,
+                )
+
+                excluded_scope_concept = (
+                    clean_text(scope_match.group(1), 160)
+                    if scope_match
+                    else ""
+                )
+
+                validation_error_set = {
+                    str(item).strip()
+                    for item in (validation.get("errors") or [])
+                    if str(item).strip()
+                }
+
+                section_scope_conflict = bool(
+                    guided_iterative_publication
+                    and excluded_scope_concept
+                    and (
+                        "unsupported_or_misattributed_claims"
+                        in validation_error_set
+                    )
+                )
+
+                if section_scope_conflict:
+                    validation["section_scope_guard"] = {
+                        "ok": False,
+                        "mode": "temporal_exclusion_before",
+                        "section_title": section_title_for_scope,
+                        "excluded_concept": excluded_scope_concept,
+                        "instruction": (
+                            "Respecter strictement la portée temporelle du "
+                            "titre. Le concept exclu peut être mentionné "
+                            "uniquement comme frontière ou élément de "
+                            "comparaison. Ne pas développer dans cette section "
+                            "des méthodes, mécanismes ou preuves reposant sur "
+                            f"{excluded_scope_concept}. Réattribuer ces éléments "
+                            "aux sections qui leur sont consacrées et conserver "
+                            "ici uniquement les preuves compatibles avec la "
+                            "période ou l'approche annoncée par le titre."
+                        ),
+                    }
+
+                    validation["errors"] = list(
+                        dict.fromkeys(
+                            [
+                                *(validation.get("errors") or []),
+                                "section_scope_semantic_conflict",
+                            ]
+                        )
+                    )
+                    validation["ok"] = False
+
+                    escalation_blockers = list(
+                        dict.fromkeys(
+                            [
+                                *escalation_blockers,
+                                "section_scope_semantic_conflict",
+                            ]
+                        )
+                    )
+                # END ENNOSCHOLAR_SECTION_SCOPE_REPAIR_GATE_V1
+
                 if parsed:
                     latest_llm_candidate = parsed
                     latest_llm_validation = validation
@@ -5296,6 +7040,19 @@ def call_sectional_writer_llm(
                     premium_escalations_count
                 ),
             }
+        accepted = dict(accepted)
+
+        accepted["display_number"] = clean_text(
+            section.get("display_number"),
+            40,
+        )
+
+        accepted["display_title"] = clean_sentence(
+            section.get("display_title")
+            or section.get("title"),
+            760,
+        )
+
         generated_sections.append(accepted)
         if progress_path:
             progress_draft = {
@@ -6337,7 +8094,7 @@ def draft_to_markdown(
 
         lines.extend(
             [
-                f"## {clean_sentence(section.get('title'), 700)}",
+                f"## {clean_sentence(section.get('display_title') or section.get('title'), 760)}",
                 "",
             ]
         )

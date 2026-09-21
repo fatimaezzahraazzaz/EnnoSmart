@@ -3140,7 +3140,10 @@ function computeScholarSearchCounts(bundle: any, fallbackArticles: ArticleRead[]
       }
     }
 
-    if (out.total <= 0) out.total = tagTotal
+    // Le compteur "Candidats" doit refléter les articles réellement
+    // présents après la déduplication multi-verrou, pas la somme
+    // historique de articles_found avant déduplication.
+    out.total = tagTotal > 0 ? tagTotal : out.total
     return out
   }
 

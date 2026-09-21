@@ -228,7 +228,7 @@ def query_is_useful(query: str, plan: Mapping[str, Any]) -> bool:
     domain_hit = any(hit(domain, 0.67) for domain in domains)
     object_hit = any(hit(obj, 0.6) for obj in objects)
     axis_hits = sum(1 for axis in axes if hit(axis, 0.5))
-    return bool(domain_hit and object_hit and axis_hits >= 1)
+    return bool((domain_hit and object_hit) or (object_hit and axis_hits >= 1))
 
 
 def _safe_query(query: str, plan: Mapping[str, Any]) -> bool:
@@ -350,31 +350,31 @@ def build_query_portfolio(
         })
 
     # Strict A: direct relation between object, main input/cause and response.
-    add(anchored([[broad_obj], primary_i, primary_r], max_words=14), "strict_core_a")
+    add(anchored([[broad_obj], primary_r or primary_i], max_words=14), "strict_core_a")
 
     # Strict B: alternate scientific formulation. Prefer a validated phenomenon,
     # then operating conditions, then method/validation vocabulary. This is an
     # alternate expression of the same problem, not a broader domain query.
     if phen:
-        strict_b = anchored([[objects[1] if len(objects) > 1 else broad_obj], phen[:1], primary_i, operating[:1]], max_words=14)
+        strict_b = anchored([[objects[1] if len(objects) > 1 else broad_obj], phen[:1]], max_words=14)
     elif operating:
-        strict_b = anchored([[broad_obj], primary_i, primary_r, operating[:1]], max_words=14)
+        strict_b = anchored([[broad_obj], operating[:1], primary_r], max_words=14)
     elif methods:
-        strict_b = anchored([[broad_obj], primary_i, primary_r, methods[:1]], max_words=14)
+        strict_b = anchored([[broad_obj], methods[:1], primary_r], max_words=14)
     else:
-        strict_b = anchored([[broad_obj], primary_i, primary_r, validation[:1]], max_words=14)
+        strict_b = anchored([[broad_obj], validation[:1], primary_r], max_words=14)
     add(strict_b, "strict_core_b")
 
     # Connexe A: same object, secondary causal/input axis while retaining the
     # main response. Useful for transferable operating/physics literature.
     if secondary_i:
-        connexe_a = anchored([[broad_obj], secondary_i, primary_r], max_words=14)
+        connexe_a = anchored([[broad_obj], secondary_i], max_words=14)
     elif secondary_r:
-        connexe_a = anchored([[broad_obj], primary_i, secondary_r], max_words=14)
+        connexe_a = anchored([[broad_obj], secondary_r], max_words=14)
     elif methods:
-        connexe_a = anchored([[broad_obj], primary_i, methods[:1]], max_words=14)
+        connexe_a = anchored([[broad_obj], methods[:1]], max_words=14)
     else:
-        connexe_a = anchored([[broad_obj], phen[:1], primary_r], max_words=14)
+        connexe_a = anchored([[broad_obj], phen[:1]], max_words=14)
     add(connexe_a, "connexe_a")
 
     # Connexe B: deliberately use a different validated axis than Connexe A.

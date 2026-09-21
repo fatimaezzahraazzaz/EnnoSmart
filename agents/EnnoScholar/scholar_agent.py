@@ -51,11 +51,16 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .arxiv_client import ArxivClient
 from .openalex_client import OpenAlexClient
-from .paper_ranker import rank_papers_for_intent, dedupe_papers
+from .paper_ranker import dedupe_papers
 try:
     from .paper_reranker_model import rerank_papers_with_bge
 except Exception:
     rerank_papers_with_bge = None
+
+try:
+    from .article_llm_tagger import tag_articles_with_llm
+except Exception:
+    tag_articles_with_llm = None
 try:
     from .article_summarizer import summarize_candidate_articles
 except Exception:
@@ -1338,6 +1343,79 @@ def _load_ennosmart_llm_client():
     )
 
 
+def _apply_article_tagger_mode(
+    ranked: List[Dict[str, Any]],
+    intent: Dict[str, Any],
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any], bool]:
+    """
+    Mode réversible EnnoScholar :
+    - OFF : conserve entièrement l'ancien système.
+    - ON  : BGE conserve l'ordre ; le LLM attribue uniquement les tags.
+            Les Hors sujet sont retirés avant affichage.
+    """
+    enabled = _env_bool_value("ENNOSCHOLAR_USE_LLM_TAGGER", False)
+
+    report = {
+        "enabled": enabled,
+        "used": False,
+        "input_count": len(ranked or []),
+        "output_count": len(ranked or []),
+        "excluded_hors_sujet": 0,
+    }
+
+    if not enabled:
+        return ranked, report, False
+
+    if tag_articles_with_llm is None:
+        report["error"] = "article_llm_tagger indisponible"
+        return ranked, report, False
+
+    def _tagger_llm_call(messages):
+        return call_openrouter_chat(
+            messages,
+            model=_env("ENNOSCHOLAR_LLM_TAGGER_MODEL", "gpt-4.1-mini"),
+            temperature=0.0,
+        )
+
+    tagged, tagger_report = tag_articles_with_llm(
+        ranked,
+        intent,
+        _tagger_llm_call,
+    )
+
+    report.update(tagger_report or {})
+
+    # Si le LLM n'a réussi à classer aucun article,
+    # on revient entièrement à l'ancien système.
+    if int(report.get("tagged_count") or 0) <= 0:
+        report["used"] = False
+        report["error"] = report.get("error") or "aucun article classé par le LLM"
+        return ranked, report, False
+
+    kept = [
+        article
+        for article in tagged
+        if article.get("tag") != "Hors sujet"
+    ]
+
+    # En mode LLM, le ranking dépend uniquement du reranker BGE.
+    def _bge_score(article):
+        try:
+            return float(article.get("bge_reranker_score"))
+        except (TypeError, ValueError):
+            return -1.0
+
+    kept.sort(key=_bge_score, reverse=True)
+
+    report["enabled"] = True
+    report["used"] = True
+    report["input_count"] = len(tagged)
+    report["output_count"] = len(kept)
+    report["excluded_hors_sujet"] = len(tagged) - len(kept)
+
+    return kept, report, True
+
+
 def _messages_to_single_prompt(messages: List[Dict[str, str]]) -> str:
     """
     Convertit le format chat en prompt unique, car le LLMClient central expose
@@ -2110,9 +2188,13 @@ class EnnoScholarAgent:
         )
         self.offline_dry_run = offline_dry_run
         self.fast_mode = _env_bool_value("ENNOSCHOLAR_FAST_MODE", True)
-        self.max_articles_per_verrou = max(
-            1,
-            min(int(max_articles_per_verrou or MAX_ARTICLES_PER_VERROU), 200),
+        # None = aucune limite pour le workflow EnnoScholar normal.
+        # Une valeur explicite (ex. 40 pour Guided Research) est appliquée
+        # uniquement APRES le BGE et AVANT le LLM.
+        self.max_articles_per_verrou = (
+            max(1, int(max_articles_per_verrou))
+            if max_articles_per_verrou is not None
+            else None
         )
 
         configured_max_queries = max(1, min(MAX_QUERIES_PER_VERROU, 6))
@@ -2154,7 +2236,7 @@ class EnnoScholarAgent:
         )
         self.arxiv_client = ArxivClient(
             timeout=api_timeout,
-            sleep_seconds=api_sleep,
+            sleep_seconds=float(os.getenv("ENNOSCHOLAR_ARXIV_SLEEP", "3.5") or 3.5),
             max_retries=api_retries,
         )
         self.crossref_client = CrossrefClient(timeout=api_timeout, max_retries=api_retries)
@@ -2198,7 +2280,8 @@ class EnnoScholarAgent:
         with self._source_locks_guard:
             lock = self._source_locks.get(source_name)
             if lock is None:
-                lock = threading.BoundedSemaphore(self.source_concurrency_per_api)
+                concurrency = 1 if source_name == "arxiv" else self.source_concurrency_per_api
+                lock = threading.BoundedSemaphore(concurrency)
                 self._source_locks[source_name] = lock
             return lock
 
@@ -2709,46 +2792,349 @@ class EnnoScholarAgent:
         }
 
         ranking_started_v1672 = time.perf_counter()
-        # 1) Ranker déterministe : tags Direct / Connexe / Fondamental + score explicable.
-        deterministic_ranked = rank_papers_for_intent(
-            all_papers,
-            intent,
-            top_n=self.max_articles_per_verrou,
-        )
 
-        # 2) Reranker local BGE : réordonne les meilleurs articles selon
-        #    verrou + contexte diagnostic VS titre + abstract.
+        # Exclure des candidats scientifiques les ressources qui ne sont
+        # pas destinées à constituer une bibliographie d'état de l'art.
+        # Les documentations et artefacts techniques restent gérés
+        # séparément via technical_sources / technical_artifacts.
+        excluded_resource_types = {
+            "software",
+            "dataset",
+            "model",
+            "model_or_dataset",
+            "repository",
+            "software_repository",
+            "github_repository",
+            "poster",
+            "presentation",
+            "image",
+            "video",
+            "supplementary-material",
+            "supplementary_material",
+        }
+
+        def _normalized_publication_title(value: Any) -> str:
+            import re
+            import unicodedata
+
+            text = unicodedata.normalize(
+                "NFKD",
+                str(value or ""),
+            )
+            text = "".join(
+                c for c in text
+                if not unicodedata.combining(c)
+            )
+            text = text.lower()
+            text = re.sub(r"[^a-z0-9]+", " ", text)
+            return re.sub(r"\s+", " ", text).strip()
+
+        def _recover_embedded_scientific_publication(
+            article: Dict[str, Any],
+        ) -> Dict[str, Any] | None:
+            """
+            Une archive dataset/software peut contenir le PDF d'une vraie
+            publication scientifique.
+
+            Pipeline :
+            PDF public -> GROBID -> vrai titre -> Crossref -> publication.
+
+            Aucune promotion n'est faite sans correspondance bibliographique
+            forte afin de ne pas transformer arbitrairement des datasets ou
+            logiciels en articles.
+            """
+            from difflib import SequenceMatcher
+
+            pdf_url = str(
+                article.get("primary_pdf_url")
+                or article.get("pdf_url")
+                or ""
+            ).strip()
+
+            if not pdf_url.startswith(("http://", "https://")):
+                return None
+
+            try:
+                from services.http_client import GLOBAL_FETCHER
+                from services.grobid_client import GROBID
+                from services.scholar_fulltext_fetcher import (
+                    HEADERS,
+                    MAX_PDF_BYTES,
+                )
+
+                headers = dict(HEADERS)
+                headers["Accept"] = (
+                    "application/pdf,"
+                    "application/octet-stream,"
+                    "*/*;q=0.5"
+                )
+
+                ok, _, content = GLOBAL_FETCHER.fetch_bytes(
+                    url=pdf_url,
+                    headers=headers,
+                    max_bytes=MAX_PDF_BYTES,
+                )
+
+                if (
+                    not ok
+                    or not content
+                    or not content.startswith(b"%PDF-")
+                ):
+                    return None
+
+                grobid = GROBID.process_pdf(content)
+
+                if not grobid.get("ok"):
+                    return None
+
+                extracted_title = str(
+                    grobid.get("title_extracted") or ""
+                ).strip()
+
+                if len(extracted_title.split()) < 4:
+                    return None
+
+                crossref_results = self.crossref_client.search_works(
+                    extracted_title,
+                    limit=5,
+                )
+
+                target = _normalized_publication_title(
+                    extracted_title
+                )
+
+                best = None
+                best_similarity = 0.0
+
+                for candidate in crossref_results or []:
+                    if not isinstance(candidate, dict):
+                        continue
+
+                    candidate_title = _normalized_publication_title(
+                        candidate.get("title")
+                    )
+
+                    if not candidate_title:
+                        continue
+
+                    similarity = SequenceMatcher(
+                        None,
+                        target,
+                        candidate_title,
+                    ).ratio()
+
+                    if similarity > best_similarity:
+                        best_similarity = similarity
+                        best = candidate
+
+                # Seuil volontairement strict :
+                # on ne promeut que si Crossref confirme pratiquement
+                # la même publication.
+                if (
+                    not best
+                    or best_similarity < 0.90
+                    or not str(best.get("doi") or "").strip()
+                ):
+                    return None
+
+                promoted = dict(article)
+
+                original_types = list(
+                    article.get("publication_types") or []
+                )
+
+                promoted.update({
+                    "title": (
+                        best.get("title")
+                        or extracted_title
+                    ),
+                    "abstract": (
+                        best.get("abstract")
+                        or grobid.get("abstract_extracted")
+                        or article.get("abstract")
+                        or ""
+                    ),
+                    "doi": best.get("doi"),
+                    "year": (
+                        best.get("year")
+                        or article.get("year")
+                    ),
+                    "venue": (
+                        best.get("venue")
+                        or article.get("venue")
+                    ),
+                    "authors": (
+                        best.get("authors")
+                        or article.get("authors")
+                        or []
+                    ),
+                    "citation_count": (
+                        best.get("citation_count")
+                        or article.get("citation_count")
+                        or 0
+                    ),
+                    "publication_types": (
+                        best.get("publication_types")
+                        or ["scientific-article"]
+                    ),
+                    "source_type": "scientific_article",
+                    "pdf_url": pdf_url,
+                    "primary_pdf_url": pdf_url,
+                    "url": pdf_url,
+                    "is_open_access": True,
+                    "open_access": True,
+                    "free_fulltext_available": True,
+                    "fulltext_access_status": "open_access_pdf",
+                    "embedded_publication_recovered": True,
+                    "embedded_publication_similarity": round(
+                        best_similarity,
+                        4,
+                    ),
+                    "embedded_publication_title_extracted": (
+                        extracted_title
+                    ),
+                    "original_resource_types": original_types,
+                    "metadata_resolved_via": "grobid_crossref",
+                })
+
+                return promoted
+
+            except Exception:
+                # Fail-safe : une erreur de récupération ne transforme
+                # jamais artificiellement la ressource en article.
+                return None
+
+        scholarly_candidates = []
+        excluded_non_scholarly = []
+        recovered_embedded_publications = []
+
+        for article in all_papers:
+            if not isinstance(article, dict):
+                continue
+
+            publication_types = {
+                str(value or "").strip().lower()
+                for value in (article.get("publication_types") or [])
+                if str(value or "").strip()
+            }
+
+            source_type = str(
+                article.get("source_type") or ""
+            ).strip().lower()
+
+            is_excluded = bool(
+                publication_types & excluded_resource_types
+                or source_type in excluded_resource_types
+            )
+
+            if not is_excluded:
+                scholarly_candidates.append(article)
+                continue
+
+            recoverable_embedded_types = {
+                "dataset",
+                "software",
+            }
+
+            can_attempt_recovery = bool(
+                publication_types & recoverable_embedded_types
+            )
+
+            recovered = (
+                _recover_embedded_scientific_publication(article)
+                if can_attempt_recovery
+                else None
+            )
+
+            if recovered is not None:
+                scholarly_candidates.append(recovered)
+                recovered_embedded_publications.append({
+                    "original_title": article.get("title"),
+                    "recovered_title": recovered.get("title"),
+                    "doi": recovered.get("doi"),
+                    "source": article.get("source"),
+                    "original_resource_types": article.get(
+                        "publication_types"
+                    ),
+                    "similarity": recovered.get(
+                        "embedded_publication_similarity"
+                    ),
+                })
+            else:
+                excluded_non_scholarly.append(article)
+
+        all_papers = scholarly_candidates
+
+        search_status["excluded_non_scholarly_count"] = len(
+            excluded_non_scholarly
+        )
+        search_status["excluded_non_scholarly_examples"] = [
+            {
+                "title": item.get("title"),
+                "source": item.get("source"),
+                "publication_types": item.get("publication_types"),
+                "source_type": item.get("source_type"),
+            }
+            for item in excluded_non_scholarly[:10]
+        ]
+
+        search_status[
+            "recovered_embedded_publications_count"
+        ] = len(recovered_embedded_publications)
+
+        search_status[
+            "recovered_embedded_publications_examples"
+        ] = recovered_embedded_publications[:10]
+
+        # Pipeline final EnnoScholar :
+        # déduplication -> BGE pur.
+        # Aucun tag scientifique n'est décidé avant le LLM.
+        bge_candidates = dedupe_papers(list(all_papers))
+
         reranker_report = {
             "enabled": False,
             "used": False,
             "error": "paper_reranker_model indisponible",
+            "policy": "bge_pure_semantic_ranking_v1",
         }
-        ranked = deterministic_ranked
+
+        ranked = bge_candidates
+
         if rerank_papers_with_bge is not None:
             ranked, reranker_report = rerank_papers_with_bge(
-                deterministic_ranked,
+                bge_candidates,
                 intent,
-                top_n=self.max_articles_per_verrou,
+
             )
 
-        # V146 : Memory V2 n'est conservée que si le ranker ET le BGE ont validé
-        # un concept coeur et un rôle méthodologique/phénoménologique.
-        ranked, memory_post_report = _filter_memory_v2_after_rerank(ranked, memory_v2_report)
-        memory_v2_report.update(memory_post_report)
-        memory_v2_report["accepted_count"] = int(memory_post_report.get("post_rerank_accepted_count") or 0)
+        # V170 - conserver le premier passage BGE.
+        # Après Deep Discovery, les articles déjà scorés ne doivent
+        # surtout pas repasser une deuxième fois dans le CrossEncoder.
+        initial_bge_ranked = [
+            dict(article)
+            for article in ranked
+            if isinstance(article, dict)
+        ]
+        initial_bge_report = dict(reranker_report)
 
-        ranked, relevance_output_report = _select_relevant_articles_for_output(
-            ranked,
-            self.max_articles_per_verrou,
+        # Memory V2 n'est plus filtrée par les anciennes heuristiques.
+        # Ses articles passent par le même BGE et le même LLM que tous les autres.
+        memory_candidates_count = sum(
+            1
+            for article in ranked
+            if isinstance(article, dict)
+            and article.get("memory_v2_prior")
         )
 
-        precision_counts = {
-            "Direct": sum(1 for a in ranked if a.get("tag") == "Direct"),
-            "Connexe": sum(1 for a in ranked if a.get("tag") == "Connexe"),
-            "Fondamental": sum(1 for a in ranked if a.get("tag") == "Fondamental"),
-            "Technique": sum(1 for a in ranked if a.get("tag") == "Technique"),
-            "Hors sujet": sum(1 for a in ranked if a.get("tag") == "Hors sujet"),
+        memory_post_report = {
+            "post_rerank_policy": "memory_ranked_like_all_candidates",
+            "post_rerank_accepted_count": memory_candidates_count,
+            "post_rerank_rejected_count": 0,
+            "post_rerank_rejected_examples": [],
         }
+
+        memory_v2_report.update(memory_post_report)
+        memory_v2_report["accepted_count"] = memory_candidates_count
 
         # >>> ENNOSMART_RESEARCH_UPGRADE_V1_DEEP_DISCOVERY
         deep_discovery_report = {"enabled": False, "reason": "service_unavailable"}
@@ -2786,30 +3172,295 @@ class EnnoScholarAgent:
                     crossref_search=self.crossref_client.search_works,
                 )
                 if deep_candidates:
-                    all_papers = dedupe_papers(list(all_papers) + list(deep_candidates))
-                    deterministic_ranked = rank_papers_for_intent(
-                        all_papers, intent, top_n=self.max_articles_per_verrou
+                    all_papers = dedupe_papers(
+                        list(all_papers) + list(deep_candidates)
                     )
-                    ranked = deterministic_ranked
-                    if rerank_papers_with_bge is not None:
-                        ranked, reranker_report = rerank_papers_with_bge(
-                            deterministic_ranked,
-                            intent,
-                            top_n=self.max_articles_per_verrou,
+
+                    filtered_after_deep = []
+
+                    for article in all_papers:
+                        if not isinstance(article, dict):
+                            continue
+
+                        publication_types = {
+                            str(value or "").strip().lower()
+                            for value in (article.get("publication_types") or [])
+                            if str(value or "").strip()
+                        }
+
+                        source_type = str(
+                            article.get("source_type") or ""
+                        ).strip().lower()
+
+                        is_excluded = bool(
+                            publication_types & excluded_resource_types
+                            or source_type in excluded_resource_types
                         )
-                    ranked, memory_post_report = _filter_memory_v2_after_rerank(
-                        ranked, memory_v2_report
+
+                        if not is_excluded:
+                            filtered_after_deep.append(article)
+                            continue
+
+                        can_attempt_recovery = bool(
+                            publication_types
+                            & {"dataset", "software"}
+                        )
+
+                        recovered = (
+                            _recover_embedded_scientific_publication(
+                                article
+                            )
+                            if can_attempt_recovery
+                            else None
+                        )
+
+                        if recovered is not None:
+                            filtered_after_deep.append(recovered)
+
+                    all_papers = filtered_after_deep
+                    bge_candidates = list(all_papers)
+                    ranked = bge_candidates
+
+                    if rerank_papers_with_bge is not None:
+
+                        def _incremental_bge_key(article):
+                            if not isinstance(article, dict):
+                                return ""
+
+                            doi = clean_text(
+                                article.get("doi"),
+                                300,
+                            ).casefold()
+
+                            doi = re.sub(
+                                r"^(?:https?://(?:dx\\.)?doi\\.org/|doi:\\s*)",
+                                "",
+                                doi,
+                            ).strip()
+
+                            if doi:
+                                return "doi:" + doi
+
+                            for field in (
+                                "paper_id",
+                                "paperId",
+                                "semantic_scholar_id",
+                                "openalex_id",
+                            ):
+                                value = clean_text(
+                                    article.get(field),
+                                    500,
+                                ).casefold()
+
+                                if value:
+                                    return f"{field}:{value}"
+
+                            title = clean_text(
+                                article.get("title"),
+                                500,
+                            ).casefold()
+
+                            year = clean_text(
+                                article.get("year"),
+                                20,
+                            ).casefold()
+
+                            if title:
+                                return f"title:{title}|year:{year}"
+
+                            url = clean_text(
+                                article.get("url")
+                                or article.get("primary_pdf_url")
+                                or article.get("pdf_url"),
+                                1000,
+                            ).casefold()
+
+                            if url:
+                                return "url:" + url
+
+                            return ""
+
+                        # Index des scores calculés lors du premier BGE.
+                        previous_scores = {}
+
+                        for article in initial_bge_ranked:
+                            key = _incremental_bge_key(article)
+
+                            if key:
+                                previous_scores[key] = article
+
+                        reused_articles = []
+                        new_articles = []
+
+                        for article in bge_candidates:
+                            key = _incremental_bge_key(article)
+                            previous = (
+                                previous_scores.get(key)
+                                if key
+                                else None
+                            )
+
+                            if (
+                                isinstance(previous, dict)
+                                and previous.get(
+                                    "bge_reranker_score"
+                                ) is not None
+                            ):
+                                # On garde les métadonnées éventuellement
+                                # enrichies par Deep Discovery, mais on
+                                # réutilise le score BGE déjà calculé.
+                                merged = dict(article)
+
+                                for field in (
+                                    "bge_reranker_score",
+                                    "bge_reranker_raw_score",
+                                    "relevance_score",
+                                ):
+                                    if field in previous:
+                                        merged[field] = previous[field]
+
+                                if isinstance(
+                                    previous.get("score_details"),
+                                    dict,
+                                ):
+                                    merged["score_details"] = dict(
+                                        previous["score_details"]
+                                    )
+
+                                reused_articles.append(merged)
+
+                            else:
+                                new_articles.append(article)
+
+                        incremental_ranked = []
+
+                        incremental_report = {
+                            "enabled": True,
+                            "used": False,
+                            "input_count": 0,
+                            "reranked_count": 0,
+                            "elapsed_seconds": 0.0,
+                            "error": "",
+                        }
+
+                        # Le CrossEncoder ne voit QUE les nouveaux articles.
+                        if new_articles:
+                            (
+                                incremental_ranked,
+                                incremental_report,
+                            ) = rerank_papers_with_bge(
+                                new_articles,
+                                intent,
+                            )
+
+                        ranked = (
+                            reused_articles
+                            + incremental_ranked
+                        )
+
+                        def _safe_int_bge(value):
+                            try:
+                                return int(value or 0)
+                            except Exception:
+                                return 0
+
+                        ranked.sort(
+                            key=lambda article: (
+                                float(
+                                    article.get(
+                                        "bge_reranker_score"
+                                    )
+                                    or -1.0
+                                ),
+                                _safe_int_bge(
+                                    article.get(
+                                        "citation_count"
+                                    )
+                                    or article.get(
+                                        "citationCount"
+                                    )
+                                ),
+                            ),
+                            reverse=True,
+                        )
+
+                        initial_elapsed = float(
+                            initial_bge_report.get(
+                                "elapsed_seconds"
+                            )
+                            or 0.0
+                        )
+
+                        incremental_elapsed = float(
+                            incremental_report.get(
+                                "elapsed_seconds"
+                            )
+                            or 0.0
+                        )
+
+                        reranker_report = {
+                            "enabled": True,
+                            "used": bool(
+                                initial_bge_report.get("used")
+                                or incremental_report.get("used")
+                            ),
+                            "model": initial_bge_report.get(
+                                "model"
+                            )
+                            or incremental_report.get("model"),
+                            "input_count": len(bge_candidates),
+                            "reranked_count": len(ranked),
+                            "top_k_input": len(bge_candidates),
+                            "elapsed_seconds": round(
+                                initial_elapsed
+                                + incremental_elapsed,
+                                3,
+                            ),
+                            "error": (
+                                incremental_report.get("error")
+                                or initial_bge_report.get("error")
+                                or ""
+                            ),
+                            "policy": (
+                                "bge_pure_semantic_ranking_"
+                                "incremental_v1"
+                            ),
+                            "initial_pass_count": len(
+                                initial_bge_ranked
+                            ),
+                            "reused_score_count": len(
+                                reused_articles
+                            ),
+                            "incremental_scored_count": len(
+                                new_articles
+                            ),
+                            "initial_elapsed_seconds": round(
+                                initial_elapsed,
+                                3,
+                            ),
+                            "incremental_elapsed_seconds": round(
+                                incremental_elapsed,
+                                3,
+                            ),
+                        }
+
+                    memory_candidates_count = sum(
+                        1
+                        for article in ranked
+                        if isinstance(article, dict)
+                        and article.get("memory_v2_prior")
                     )
-                    ranked, relevance_output_report = _select_relevant_articles_for_output(
-                        ranked, self.max_articles_per_verrou
-                    )
-                    precision_counts = {
-                        "Direct": sum(1 for a in ranked if a.get("tag") == "Direct"),
-                        "Connexe": sum(1 for a in ranked if a.get("tag") == "Connexe"),
-                        "Fondamental": sum(1 for a in ranked if a.get("tag") == "Fondamental"),
-                        "Technique": sum(1 for a in ranked if a.get("tag") == "Technique"),
-                        "Hors sujet": sum(1 for a in ranked if a.get("tag") == "Hors sujet"),
+
+                    memory_post_report = {
+                        "post_rerank_policy": "memory_ranked_like_all_candidates",
+                        "post_rerank_accepted_count": memory_candidates_count,
+                        "post_rerank_rejected_count": 0,
+                        "post_rerank_rejected_examples": [],
                     }
+
+                    memory_v2_report.update(memory_post_report)
+                    memory_v2_report["accepted_count"] = memory_candidates_count
+
             except Exception as exc:
                 deep_discovery_report = {
                     "enabled": True,
@@ -2828,6 +3479,69 @@ class EnnoScholarAgent:
         search_status["raw_papers_after_deep_discovery"] = len(all_papers)
         search_status["adaptive_citation_needed"] = adaptive_citation_needed_v1676
         search_status["citation_seed_count"] = len(deep_discovery_seeds_v1676)
+
+        # Limite optionnelle uniquement pour les workflows qui la demandent
+        # explicitement (ex. Guided Research = 40).
+        # Le BGE a déjà analysé et classé TOUS les candidats uniques.
+        post_bge_total_count = len(ranked)
+
+        if self.max_articles_per_verrou is not None:
+            ranked = ranked[:self.max_articles_per_verrou]
+
+        search_status["post_bge_total_count"] = post_bge_total_count
+        search_status["post_bge_llm_input_count"] = len(ranked)
+        search_status["post_bge_limit"] = self.max_articles_per_verrou
+
+        # Classification finale UNE SEULE FOIS :
+        # BGE = ordre ; LLM = catégorie scientifique.
+        ranked, llm_tagger_report, llm_tagger_used = _apply_article_tagger_mode(
+            ranked,
+            intent,
+        )
+
+        if llm_tagger_used:
+            relevance_output_report = {
+                "enabled": False,
+                "bypassed": True,
+                "reason": "bge_ranking_plus_llm_tagging",
+                "input_count": int(
+                    llm_tagger_report.get("input_count") or 0
+                ),
+                "output_count": len(ranked),
+            }
+        else:
+            # Pas de retour vers les anciennes heuristiques :
+            # les articles restent disponibles si le LLM échoue.
+            relevance_output_report = {
+                "enabled": False,
+                "bypassed": True,
+                "reason": "llm_tagger_unavailable_articles_preserved",
+                "input_count": len(ranked),
+                "output_count": len(ranked),
+            }
+
+        precision_counts = {
+            "Direct": sum(
+                1 for a in ranked
+                if a.get("tag") == "Direct"
+            ),
+            "Connexe": sum(
+                1 for a in ranked
+                if a.get("tag") == "Connexe"
+            ),
+            "Fondamental": sum(
+                1 for a in ranked
+                if a.get("tag") == "Fondamental"
+            ),
+            "Technique": sum(
+                1 for a in ranked
+                if a.get("tag") == "Technique"
+            ),
+            "Hors sujet": sum(
+                1 for a in ranked
+                if a.get("tag") == "Hors sujet"
+            ),
+        }
 
         # 3) Résumé court des Top N articles pour aider le consultant à sélectionner.
         #    Le module utilise un cache et fallback sans LLM si Gemini/OpenRouter est indisponible.
@@ -2852,6 +3566,7 @@ class EnnoScholarAgent:
             }
 
         search_status["reranker"] = reranker_report
+        search_status["llm_article_tagger"] = llm_tagger_report
         search_status["relevance_output_filter"] = relevance_output_report
         search_status["precision_tag_counts"] = precision_counts
         search_status["article_summaries"] = summary_report

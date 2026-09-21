@@ -192,6 +192,35 @@ def _term_hit(text_norm: str, term: str) -> bool:
     available = _role_tokens(text_norm)
     if not wanted or not available:
         return False
+
+    # Une expression scientifique multi-mots ne doit jamais être réduite
+    # artificiellement à un seul mot générique après suppression des stopwords.
+    # Exemple : "language model type" -> ["language"] provoquait des faux positifs.
+    raw_term_tokens = [norm(t) for t in tokenize(term) if norm(t)]
+    if len(raw_term_tokens) >= 2 and len(wanted) == 1:
+        # Si les stopwords réduisent une expression scientifique multi-mots
+        # à un seul token, on revient aux tokens bruts et on exige plusieurs
+        # correspondances. Cela évite "language authentication" -> LLM,
+        # tout en conservant "large language models" -> "language model type".
+        raw_available = [norm(t) for t in tokenize(text_norm) if norm(t)]
+        matched_raw = 0
+        used_raw: Set[int] = set()
+
+        for token in raw_term_tokens:
+            for idx, candidate in enumerate(raw_available):
+                if idx in used_raw:
+                    continue
+                if _token_match(token, candidate):
+                    used_raw.add(idx)
+                    matched_raw += 1
+                    break
+
+        if len(raw_term_tokens) <= 3:
+            raw_needed = 2
+        else:
+            raw_needed = max(2, math.ceil(len(raw_term_tokens) * 0.60))
+
+        return matched_raw >= raw_needed
     matched = 0
     used: Set[int] = set()
     for token in wanted:
@@ -382,8 +411,29 @@ def score_paper(article: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str, An
         or (structured and object_hit and support_role_count == 0)
     )
 
+    title_object_hit = bool(role_hits["object"]["title_hits"])
+    title_relation_hit = any(
+        role_hits[name]["title_hits"]
+        for name in (
+            "independent",
+            "response",
+            "operating",
+            "phenomena",
+            "methods",
+            "validation",
+        )
+    )
+    title_support = bool(title_object_hit or title_relation_hit)
+
     if structured:
-        direct_eligible = bool(object_hit and relation_evidence and support_role_count >= 2)
+        # Direct : objet + relation centrale + plusieurs rôles scientifiques
+        # avec une preuve visible dès le titre.
+        direct_eligible = bool(
+            object_hit
+            and relation_evidence
+            and support_role_count >= 2
+            and title_support
+        )
     else:
         # Legacy intents have no typed variable roles. Two independently matched
         # primary concepts + an explicit phenomenon/validation/method relation are
@@ -395,10 +445,18 @@ def score_paper(article: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str, An
             and (phenomena_hit or len(legacy_method_hits) >= 2 or len(legacy["secondary"]) >= 1)
         )
 
-    connexe_eligible = bool(
-        (object_hit and support_role_count >= 1)
-        or (not structured and object_hit and len(legacy["primary"]) >= 1)
-    )
+    if structured:
+        # Connexe : même objet et axe scientifique réel.
+        # Un simple mot-clé retrouvé uniquement dans l'abstract ne suffit plus.
+        connexe_eligible = bool(
+            object_hit
+            and support_role_count >= 1
+            and (relation_evidence or title_relation_hit)
+        )
+    else:
+        connexe_eligible = bool(
+            object_hit and len(legacy["primary"]) >= 1
+        )
 
     # Generic lexical relevance is a tie-breaker only, never enough for Direct.
     intent_text = " ".join(sum((terms for terms in roles.values()), []))
@@ -433,15 +491,21 @@ def score_paper(article: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str, An
     # Classification precedence: explicit technical implementations are useful
     # technical evidence, not inflated Direct papers. Then strict Direct,
     # Connexe, Fundamental and finally internal Hors sujet.
-    if technical_eligible:
+    if explicit_technical_source:
         tag = TECHNIQUE_TAG
         reason = "Source Technique : implémentation, outil, simulateur ou infrastructure aligné avec l'objet scientifique."
     elif direct_eligible:
         tag = DIRECT_TAG
         reason = "Article Direct : même objet scientifique et relation centrale du verrou soutenue par plusieurs rôles indépendants."
+    elif fundamental_eligible and fundamental_cues:
+        tag = FONDAMENTAL_TAG
+        reason = "Article Fondamental : théorie, revue ou principes généraux scientifiquement ancrés au verrou."
+    elif technical_eligible:
+        tag = TECHNIQUE_TAG
+        reason = "Source Technique : implémentation, outil, simulateur ou infrastructure aligné avec l'objet scientifique."
     elif connexe_eligible:
         tag = CONNEXE_TAG
-        reason = "Article Connexe : même objet scientifique avec au moins un axe utile, mais la relation centrale du verrou n'est pas entièrement établie."
+        reason = "Article Connexe : même objet scientifique avec un axe utile confirmé dans le titre ou par la relation centrale."
     elif fundamental_eligible:
         tag = FONDAMENTAL_TAG
         reason = "Article Fondamental : théorie, revue ou principes généraux scientifiquement ancrés au verrou."

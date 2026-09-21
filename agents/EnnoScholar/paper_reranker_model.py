@@ -117,59 +117,326 @@ class _CrossEncoderReranker:
     _device: Any = None
     _load_error: str = ""
 
+    # ONNX Runtime INT8
+    _ort_session: Any = None
+    _ort_model_path: str | None = None
+    _ort_error: str = ""
+
+    # Traçabilité du moteur réellement utilisé.
+    last_engine: str = ""
+    last_engine_error: str = ""
+
+    @classmethod
+    def _onnx_enabled(cls) -> bool:
+        value = str(
+            os.getenv(
+                "ENNOSCHOLAR_RERANKER_USE_ONNX_INT8",
+                "true",
+            )
+            or "true"
+        ).strip().lower()
+
+        return value in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
+    @classmethod
+    def load_onnx(cls) -> Tuple[bool, str]:
+        if not cls._onnx_enabled():
+            return False, "ONNX INT8 désactivé"
+
+        model_name = os.getenv(
+            "ENNOSCHOLAR_RERANKER_MODEL",
+            "BAAI/bge-reranker-v2-m3",
+        )
+
+        model_path = os.getenv(
+            "ENNOSCHOLAR_RERANKER_ONNX_PATH",
+            "/var/lib/ennosmart/models/"
+            "bge-reranker-v2-m3-onnx/model.int8.onnx",
+        )
+
+        if (
+            cls._ort_session is not None
+            and cls._ort_model_path == model_path
+            and cls._model_name == model_name
+            and cls._tokenizer is not None
+        ):
+            return True, ""
+
+        try:
+            import os as _os
+            import onnxruntime as ort
+            from transformers import AutoTokenizer
+
+            if not _os.path.isfile(model_path):
+                raise FileNotFoundError(
+                    f"Modèle ONNX introuvable: {model_path}"
+                )
+
+            threads = max(
+                1,
+                int(
+                    os.getenv(
+                        "ENNOSCHOLAR_RERANKER_ONNX_THREADS",
+                        "8",
+                    )
+                    or 8
+                ),
+            )
+
+            opts = ort.SessionOptions()
+            opts.intra_op_num_threads = threads
+            opts.inter_op_num_threads = 1
+            opts.graph_optimization_level = (
+                ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            )
+
+            cls._tokenizer = AutoTokenizer.from_pretrained(
+                model_name,
+                trust_remote_code=_env_bool(
+                    "ENNOSCHOLAR_RERANKER_TRUST_REMOTE_CODE",
+                    False,
+                ),
+            )
+
+            cls._ort_session = ort.InferenceSession(
+                model_path,
+                sess_options=opts,
+                providers=["CPUExecutionProvider"],
+            )
+
+            cls._ort_model_path = model_path
+            cls._model_name = model_name
+            cls._ort_error = ""
+
+            return True, ""
+
+        except Exception as exc:
+            cls._ort_session = None
+            cls._ort_model_path = model_path
+            cls._ort_error = repr(exc)
+
+            return False, cls._ort_error
+
     @classmethod
     def load(cls) -> Tuple[bool, str]:
-        model_name = os.getenv("ENNOSCHOLAR_RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
-        if cls._model is not None and cls._model_name == model_name:
+        """
+        Fallback PyTorch FP32.
+        Utilisé uniquement si ONNX Runtime INT8 n'est pas disponible.
+        """
+        model_name = os.getenv(
+            "ENNOSCHOLAR_RERANKER_MODEL",
+            "BAAI/bge-reranker-v2-m3",
+        )
+
+        if (
+            cls._model is not None
+            and cls._model_name == model_name
+        ):
             return True, ""
+
         try:
             import torch
-            from transformers import AutoModelForSequenceClassification, AutoTokenizer
+            from transformers import (
+                AutoModelForSequenceClassification,
+                AutoTokenizer,
+            )
 
-            device_pref = str(os.getenv("ENNOSCHOLAR_RERANKER_DEVICE", "auto") or "auto").lower()
+            device_pref = str(
+                os.getenv(
+                    "ENNOSCHOLAR_RERANKER_DEVICE",
+                    "auto",
+                )
+                or "auto"
+            ).lower()
+
             if device_pref == "auto":
-                device = "cuda" if torch.cuda.is_available() else "cpu"
+                device = (
+                    "cuda"
+                    if torch.cuda.is_available()
+                    else "cpu"
+                )
             else:
                 device = device_pref
 
-            trust_remote_code = _env_bool("ENNOSCHOLAR_RERANKER_TRUST_REMOTE_CODE", False)
+            trust_remote_code = _env_bool(
+                "ENNOSCHOLAR_RERANKER_TRUST_REMOTE_CODE",
+                False,
+            )
+
             cls._tokenizer = AutoTokenizer.from_pretrained(
                 model_name,
                 trust_remote_code=trust_remote_code,
             )
-            cls._model = AutoModelForSequenceClassification.from_pretrained(
-                model_name,
-                trust_remote_code=trust_remote_code,
+
+            cls._model = (
+                AutoModelForSequenceClassification
+                .from_pretrained(
+                    model_name,
+                    trust_remote_code=trust_remote_code,
+                )
             )
+
             cls._model.to(device)
             cls._model.eval()
+
             cls._device = device
             cls._model_name = model_name
             cls._load_error = ""
+
             return True, ""
+
         except Exception as exc:
             cls._model = None
-            cls._tokenizer = None
             cls._device = None
-            cls._model_name = model_name
             cls._load_error = repr(exc)
+
             return False, cls._load_error
 
     @classmethod
-    def predict(cls, query: str, docs: List[str]) -> List[float]:
+    def predict(
+        cls,
+        query: str,
+        docs: List[str],
+    ) -> List[float]:
+
+        batch_size = max(
+            1,
+            min(
+                _env_int(
+                    "ENNOSCHOLAR_RERANKER_BATCH_SIZE",
+                    8,
+                ),
+                32,
+            ),
+        )
+
+        max_length = max(
+            128,
+            min(
+                _env_int(
+                    "ENNOSCHOLAR_RERANKER_MAX_LENGTH",
+                    512,
+                ),
+                4096,
+            ),
+        )
+
+        cls.last_engine = ""
+        cls.last_engine_error = ""
+
+        # =====================================================
+        # 1. ONNX Runtime INT8
+        # =====================================================
+
+        ok_onnx, onnx_error = cls.load_onnx()
+
+        if ok_onnx:
+            try:
+                import numpy as np
+
+                scores: List[float] = []
+
+                input_names = {
+                    item.name
+                    for item in cls._ort_session.get_inputs()
+                }
+
+                for start in range(
+                    0,
+                    len(docs),
+                    batch_size,
+                ):
+                    batch_docs = docs[
+                        start:start + batch_size
+                    ]
+
+                    inputs = cls._tokenizer(
+                        [query] * len(batch_docs),
+                        batch_docs,
+                        padding=True,
+                        truncation=True,
+                        max_length=max_length,
+                        return_tensors="np",
+                    )
+
+                    ort_inputs = {
+                        name: inputs[name]
+                        for name in input_names
+                        if name in inputs
+                    }
+
+                    outputs = cls._ort_session.run(
+                        None,
+                        ort_inputs,
+                    )
+
+                    logits = np.asarray(outputs[0])
+
+                    if (
+                        logits.ndim == 2
+                        and logits.shape[-1] == 1
+                    ):
+                        raw = logits[:, 0]
+
+                    elif logits.ndim == 2:
+                        raw = logits[:, -1]
+
+                    else:
+                        raw = logits.reshape(-1)
+
+                    scores.extend(
+                        float(value)
+                        for value in raw.tolist()
+                    )
+
+                cls.last_engine = "onnxruntime_int8"
+
+                return scores
+
+            except Exception as exc:
+                # Ne jamais casser la recherche :
+                # passage automatique vers PyTorch.
+                cls.last_engine_error = (
+                    "ONNX inference failed: "
+                    + repr(exc)
+                )
+
+        else:
+            cls.last_engine_error = onnx_error
+
+        # =====================================================
+        # 2. FALLBACK PYTORCH FP32
+        # =====================================================
+
         ok, err = cls.load()
+
         if not ok:
-            raise RuntimeError(err)
+            raise RuntimeError(
+                "ONNX indisponible: "
+                + str(cls.last_engine_error)
+                + " | PyTorch indisponible: "
+                + str(err)
+            )
 
         import torch
 
-        batch_size = max(1, min(_env_int("ENNOSCHOLAR_RERANKER_BATCH_SIZE", 8), 32))
-        max_length = max(128, min(_env_int("ENNOSCHOLAR_RERANKER_MAX_LENGTH", 512), 4096))
         scores: List[float] = []
 
         with torch.no_grad():
-            for start in range(0, len(docs), batch_size):
-                batch_docs = docs[start:start + batch_size]
+            for start in range(
+                0,
+                len(docs),
+                batch_size,
+            ):
+                batch_docs = docs[
+                    start:start + batch_size
+                ]
+
                 inputs = cls._tokenizer(
                     [query] * len(batch_docs),
                     batch_docs,
@@ -178,19 +445,35 @@ class _CrossEncoderReranker:
                     max_length=max_length,
                     return_tensors="pt",
                 )
-                inputs = {k: v.to(cls._device) for k, v in inputs.items()}
+
+                inputs = {
+                    key: value.to(cls._device)
+                    for key, value in inputs.items()
+                }
+
                 outputs = cls._model(**inputs)
                 logits = outputs.logits
-                if logits.ndim == 2 and logits.shape[-1] == 1:
+
+                if (
+                    logits.ndim == 2
+                    and logits.shape[-1] == 1
+                ):
                     raw = logits[:, 0]
+
                 elif logits.ndim == 2:
-                    # Pour les modèles 2 classes, on prend la classe pertinente.
                     raw = logits[:, -1]
+
                 else:
                     raw = logits.reshape(-1)
-                scores.extend([float(x) for x in raw.detach().cpu().tolist()])
-        return scores
 
+                scores.extend(
+                    float(value)
+                    for value in raw.detach().cpu().tolist()
+                )
+
+        cls.last_engine = "pytorch_fp32"
+
+        return scores
 
 
 def _normalize_scores(raw_scores: List[float]) -> List[float]:
@@ -372,83 +655,145 @@ def rerank_papers_with_bge(
     intent: Dict[str, Any],
     top_n: int | None = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    """V168: BGE orders relevance inside deterministic categories only.
+    """
+    BGE pur : calcule uniquement la pertinence sémantique
+    entre le verrou et chaque article, puis trie par score décroissant.
 
-    The scientific category is decided by paper_ranker V168. Semantic similarity
-    cannot promote an article from Fundamental/Hors sujet to Direct/Connexe and
-    cannot turn a technical implementation into scientific evidence.
+    Aucun tag scientifique n'est décidé ici.
     """
     started = time.perf_counter()
-    articles = [a for a in (articles or []) if isinstance(a, dict)]
-    top_n = int(top_n or len(articles) or 0)
+
+    articles = [
+        dict(article)
+        for article in (articles or [])
+        if isinstance(article, dict)
+    ]
+
+    # Le paramètre top_n est conservé uniquement pour compatibilité.
+    # Le pipeline final classe désormais TOUS les candidats uniques.
+    requested_top_n = len(articles)
+
     report: Dict[str, Any] = {
-        "enabled": is_bge_reranker_enabled(), "used": False,
-        "model": os.getenv("ENNOSCHOLAR_RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"),
-        "input_count": len(articles), "reranked_count": 0, "requalified_count": 0,
-        "top_k_input": 0, "elapsed_seconds": 0.0, "error": "",
-        "policy": "v168_bge_order_only_category_locked",
+        "enabled": is_bge_reranker_enabled(),
+        "used": False,
+        "model": os.getenv(
+            "ENNOSCHOLAR_RERANKER_MODEL",
+            "BAAI/bge-reranker-v2-m3",
+        ),
+        "input_count": len(articles),
+        "reranked_count": 0,
+        "top_k_input": 0,
+        "elapsed_seconds": 0.0,
+        "error": "",
+        "policy": "bge_pure_semantic_ranking_v1",
     }
-    if not articles or not report["enabled"]:
-        report["elapsed_seconds"] = round(time.perf_counter() - started, 3)
-        return articles[:top_n], report
 
-    top_k_input = max(1, min(_env_int("ENNOSCHOLAR_RERANKER_TOP_K_INPUT", 80), len(articles)))
+    if not articles:
+        report["elapsed_seconds"] = round(
+            time.perf_counter() - started, 3
+        )
+        return [], report
+
+    if not report["enabled"]:
+        report["elapsed_seconds"] = round(
+            time.perf_counter() - started, 3
+        )
+        return articles, report
+
+    # BGE analyse tous les candidats uniques.
+    # Aucun plafond avant le reranking.
+    top_k_input = len(articles)
+
     report["top_k_input"] = top_k_input
-    head, tail = [dict(a) for a in articles[:top_k_input]], [dict(a) for a in articles[top_k_input:]]
+
+    head = [
+        dict(article)
+        for article in articles
+    ]
+
+    tail = []
+
     try:
-        raw_scores = _CrossEncoderReranker.predict(_intent_query_text(intent), [_paper_text(a) for a in head])
+        query = _intent_query_text(intent)
+
+        raw_scores = _CrossEncoderReranker.predict(
+            query,
+            [_paper_text(article) for article in head],
+        )
+
         scores = _normalize_scores(raw_scores)
-        weight = max(0.0, min(_env_float("ENNOSCHOLAR_RERANKER_WEIGHT", 0.30), 0.45))
-        memory_threshold = _env_float("ENNOSCHOLAR_MEMORY_V2_BGE_MIN_SCORE", 0.30)
 
-        for article, raw, bge in zip(head, raw_scores, scores):
-            old_tag = str(article.get("tag") or "Hors sujet")
-            details = dict(article.get("score_details") or {})
-            previous = float(article.get("relevance_score") or 0.0)
+        report["engine"] = getattr(
+            _CrossEncoderReranker,
+            "last_engine",
+            "unknown",
+        )
+        report["engine_error"] = getattr(
+            _CrossEncoderReranker,
+            "last_engine_error",
+            "",
+        )
 
-            # Memory V2 remains conservative, but BGE does not modify the tag.
-            if article.get("memory_v2_prior"):
-                object_hit = bool(details.get("object_role_hit") or int(details.get("primary_core_hit_count") or 0) >= 1)
-                relation = bool(details.get("relation_evidence") or details.get("problem_evidence"))
-                accepted = bool(
-                    old_tag in {"Direct", "Connexe"}
-                    and object_hit
-                    and (relation or int(details.get("support_role_count") or 0) >= 1)
-                    and float(bge) >= memory_threshold
-                )
-                article["memory_v2_accepted_after_bge"] = accepted
-                article["memory_v2_rejection_reason"] = "" if accepted else "memory_requires_role_support_and_bge_threshold"
+        for article, raw, bge in zip(
+            head,
+            raw_scores,
+            scores,
+        ):
+            article["bge_reranker_score"] = round(
+                float(bge), 6
+            )
 
-            combined = weight * float(bge) + (1.0 - weight) * previous
-            article["relevance_score_before_rerank"] = round(previous, 4)
-            article["bge_reranker_score"] = round(float(bge), 6)
-            article["bge_reranker_raw_score"] = round(float(raw), 4)
-            article["relevance_score"] = round(max(0.0, min(combined, 1.0)), 4)
-            details.update({
+            article["bge_reranker_raw_score"] = round(
+                float(raw), 4
+            )
+
+            # Compatibilité UI/API :
+            # relevance_score devient simplement le score BGE.
+            article["relevance_score"] = article[
+                "bge_reranker_score"
+            ]
+
+            article["score_details"] = {
                 "bge_reranker_used": True,
-                "bge_reranker_policy": "order_only_category_locked",
-                "bge_reranker_score_absolute": article["bge_reranker_score"],
-                "bge_reranker_raw_score": article["bge_reranker_raw_score"],
-                "tag_before_bge": old_tag,
-                "tag_after_bge": old_tag,
-                "memory_v2_accepted_after_bge": article.get("memory_v2_accepted_after_bge"),
-            })
-            article["score_details"] = details
+                "bge_reranker_policy": "pure_semantic_ranking",
+                "bge_reranker_score_absolute": article[
+                    "bge_reranker_score"
+                ],
+                "bge_reranker_raw_score": article[
+                    "bge_reranker_raw_score"
+                ],
+            }
 
-        order = {"Direct": 4, "Connexe": 3, "Fondamental": 2, "Technique": 1, "Hors sujet": 0}
-        head.sort(key=lambda x: (
-            order.get(str(x.get("tag") or ""), 0),
-            float(x.get("relevance_score") or 0.0),
-            float(x.get("bge_reranker_score") or 0.0),
-            int(x.get("citation_count") or 0),
-        ), reverse=True)
+        head.sort(
+            key=lambda article: (
+                float(
+                    article.get("bge_reranker_score")
+                    or -1.0
+                ),
+                int(article.get("citation_count") or 0),
+            ),
+            reverse=True,
+        )
+
+        ranked = head + tail
+
         report.update({
             "used": True,
             "reranked_count": len(head),
-            "requalified_count": 0,
-            "elapsed_seconds": round(time.perf_counter() - started, 3),
+            "elapsed_seconds": round(
+                time.perf_counter() - started, 3
+            ),
         })
-        return (head + tail)[:top_n], report
+
+        return ranked, report
+
     except Exception as exc:
-        report.update({"used": False, "error": repr(exc), "elapsed_seconds": round(time.perf_counter() - started, 3)})
-        return articles[:top_n], report
+        report.update({
+            "used": False,
+            "error": repr(exc),
+            "elapsed_seconds": round(
+                time.perf_counter() - started, 3
+            ),
+        })
+
+        return articles, report

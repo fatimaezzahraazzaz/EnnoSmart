@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from email.message import EmailMessage
+import hashlib
+import secrets
+import smtplib
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from core.deps import get_current_user, get_db, require_admin, require_superadmin
 from core.security import hash_password
 from db.models import (
@@ -38,6 +44,49 @@ from services.platform_settings_service import (
 
 
 router = APIRouter(prefix="/admin", tags=["administration"])
+
+
+def _send_user_invitation_email(
+    email: str,
+    temporary_password: str,
+    reset_url: str,
+) -> bool:
+    if not settings.SMTP_HOST:
+        return False
+
+    message = EmailMessage()
+    message["Subject"] = "Bienvenue sur EnnoSmart - votre compte"
+    message["From"] = settings.SMTP_FROM
+    message["To"] = email
+
+    message.set_content(
+        "Bienvenue sur EnnoSmart.\n\n"
+        "Votre compte a été créé.\n\n"
+        f"Adresse e-mail : {email}\n"
+        f"Mot de passe temporaire : {temporary_password}\n\n"
+        f"Connexion : {settings.FRONTEND_URL.rstrip('/')}\n\n"
+        "Pour modifier votre mot de passe :\n"
+        f"{reset_url}\n\n"
+        f"Ce lien est valable {settings.PASSWORD_RESET_EXPIRE_MINUTES} minutes.\n"
+    )
+
+    try:
+        with smtplib.SMTP(
+            settings.SMTP_HOST,
+            settings.SMTP_PORT,
+            timeout=15,
+        ) as client:
+            if settings.SMTP_USE_TLS:
+                client.starttls()
+            if settings.SMTP_USER:
+                client.login(
+                    settings.SMTP_USER,
+                    settings.SMTP_PASSWORD or "",
+                )
+            client.send_message(message)
+        return True
+    except Exception:
+        return False
 
 
 def _audit(
@@ -176,13 +225,13 @@ def list_users(
 def create_user(
     payload: AdminUserCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_superadmin),
 ):
-    if payload.role == "superadmin" and current_user.role != "superadmin":
-        raise HTTPException(status_code=403, detail="Seul un superadmin peut créer ce rôle.")
     email = str(payload.email).lower().strip()
+
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(status_code=409, detail="Cet email est déjà utilisé.")
+
     user = User(
         full_name=payload.full_name.strip(),
         email=email,
@@ -190,14 +239,62 @@ def create_user(
         role=payload.role,
         is_active=True,
     )
+
     db.add(user)
     db.flush()
-    db.add(UserProfile(user_id=user.id, company=payload.company, job_title=payload.job_title))
+
+    db.add(
+        UserProfile(
+            user_id=user.id,
+            company=payload.company,
+            job_title=payload.job_title,
+        )
+    )
     db.add(UserPreference(user_id=user.id))
-    _audit(db, current_user, "user.created", "user", user.id, {"role": user.role})
+
+    # Lien sécurisé permettant au nouvel utilisateur
+    # de définir/modifier son mot de passe.
+    now = datetime.utcnow()
+    raw_token = secrets.token_urlsafe(48)
+
+    db.add(
+        PasswordResetToken(
+            id=str(uuid.uuid4()),
+            user_id=user.id,
+            token_hash=hashlib.sha256(
+                raw_token.encode("utf-8")
+            ).hexdigest(),
+            expires_at=now + timedelta(
+                minutes=settings.PASSWORD_RESET_EXPIRE_MINUTES
+            ),
+        )
+    )
+
+    reset_url = (
+        f"{settings.FRONTEND_URL.rstrip('/')}?reset_token={raw_token}"
+    )
+
+    _audit(
+        db,
+        current_user,
+        "user.created",
+        "user",
+        user.id,
+        {"role": user.role},
+    )
+
     db.commit()
     db.refresh(user)
-    return _user_payload(db, user)
+
+    email_sent = _send_user_invitation_email(
+        email=email,
+        temporary_password=payload.password,
+        reset_url=reset_url,
+    )
+
+    result = _user_payload(db, user)
+    result["invitation_email_sent"] = email_sent
+    return result
 
 
 @router.patch("/users/{user_id}")
