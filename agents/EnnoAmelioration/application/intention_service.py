@@ -538,12 +538,8 @@ def understand_instruction(instruction: str, default_scope: TargetScope) -> Rout
         }
     )
 
-    # Une demande d'argumentation R&D doit être ancrée dans les preuves du
-    # projet. Il ne s'agit pas d'un cas propre à une section ou à un client.
-    needs_diagnostic = any(
-        intent in intents
-        for intent in (ImprovementIntent.ARGUMENTATION, ImprovementIntent.CIR_ELIGIBILITY)
-    )
+    # Invariant EnnoAmel : EnnoDiagnostic n'est jamais utilisé.
+    needs_diagnostic = False
     needs_scholar = any(
         intent in intents
         for intent in (ImprovementIntent.SCIENTIFIC_ENRICHMENT, ImprovementIntent.RESEARCH)
@@ -558,7 +554,7 @@ def understand_instruction(instruction: str, default_scope: TargetScope) -> Rout
             "Mode éditorial strict : réécriture à partir du texte cible, sans EnnoDiagnostic ni EnnoScholar."
         )
     if candidate_revision and revision_requests_project_evidence:
-        needs_diagnostic = True
+        needs_diagnostic = False
     if candidate_revision and not revision_allows_evidence_enrichment and not asks_new_research:
         needs_diagnostic = False
         needs_scholar = False

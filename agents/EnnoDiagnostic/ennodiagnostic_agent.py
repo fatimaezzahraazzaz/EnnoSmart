@@ -3369,8 +3369,8 @@ class EnnoDiagnosticAgent:
             "display_as_main_lock": True if explicit_display is None else bool(explicit_display),
             "explicit_lock_section": bool(
                 re.search(
-                    r"\b(?:verrous? scientifiques?|verrous? techniques?|"
-                    r"incertitudes? scientifiques?|incertitudes? techniques?)\b",
+                    r"\b(?:verrous? scientifiques?|verrous? techniques?|verrous? technologiques?|"
+                    r"incertitudes? scientifiques?|incertitudes? techniques?|incertitudes? technologiques?)\b",
                     _diag_norm(" ".join(
                         str(item.get("section_title") or "") for item in ([group] + supports[:8])
                     )),

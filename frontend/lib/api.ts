@@ -676,6 +676,17 @@ export async function getProject(projectId: number) {
   return apiRequest<ProjectRead>(`/projects/${projectId}`)
 }
 
+export async function deleteProject(projectId: number) {
+  const result = await apiRequest<{
+    status: string
+    project_id: number
+  }>(`/projects/${projectId}`, {
+    method: "DELETE",
+  })
+  clearReadCache("project")
+  return result
+}
+
 export async function createProject(payload: {
   organisme: string
   project_name: string
@@ -1839,6 +1850,21 @@ export async function decideImprovementSources(
       method: "POST",
       body: JSON.stringify({ candidate_ids: candidateIds, decision, reason, guided_session_id: guidedSessionId }),
     },
+  )
+}
+
+
+export async function finishImprovementSourceSelection(
+  projectId: number,
+  sessionId: string,
+) {
+  return apiRequest<{
+    ok: boolean
+    session: ImprovementSession
+    candidate_version_id?: string | null
+  }>(
+    `/api/projects/${projectId}/improvements/sessions/${encodeURIComponent(sessionId)}/sources/finish`,
+    { method: "POST" },
   )
 }
 

@@ -488,11 +488,8 @@ def _nlp_group_report_from_sections(
             meta.get("recovered_missing_lock_candidate")
             or source.get("recovered_missing_lock_candidate")
         )
-        if meta.get("display_as_main_lock") is False:
-            continue
+        # TEST TEMPORAIRE : aucun filtre après regroupement NLP.
         scope = _norm(meta.get("technical_scope") or meta.get("lock_scope"))
-        if scope in {"local_technical_subproblem", "secondary", "supporting_measurement"}:
-            continue
         group_id = _clean(
             meta.get("lock_group_id")
             or source.get("lock_group_id")
@@ -525,7 +522,7 @@ def _nlp_group_report_from_sections(
         if recovered:
             return ""
         explicit_lock_section = bool(re.search(
-            r"\b(?:verrous? scientifiques?|verrous? techniques?|incertitudes? scientifiques?|incertitudes? techniques?)\b",
+            r"\b(?:verrous? scientifiques?|verrous? techniques?|verrous? technologiques?|incertitudes? scientifiques?|incertitudes? techniques?|incertitudes? technologiques?)\b",
             sections,
             flags=re.I,
         ))
@@ -573,10 +570,8 @@ def _nlp_group_report_from_sections(
     projected: List[Dict[str, Any]] = []
     rejected_groups: List[Dict[str, Any]] = []
     for group_id, sources in groups.items():
-        rejection = group_rejection_reason(sources)
-        if rejection:
-            rejected_groups.append({"group_id": group_id, "reason": rejection})
-            continue
+        # TEST TEMPORAIRE : groupe NLP transmis directement au LLM.
+        rejection = ""
         passages: List[Dict[str, Any]] = []
         labels: List[str] = []
         semantic_parts: List[str] = []
@@ -598,8 +593,8 @@ def _nlp_group_report_from_sections(
         explicit_lock_section = any(
             bool(_metadata(source).get("explicit_lock_section"))
             or bool(re.search(
-                r"\b(?:verrous? scientifiques?|verrous? techniques?|"
-                r"incertitudes? scientifiques?|incertitudes? techniques?)\b",
+                r"\b(?:verrous? scientifiques?|verrous? techniques?|verrous? technologiques?|"
+                r"incertitudes? scientifiques?|incertitudes? techniques?|incertitudes? technologiques?)\b",
                 _norm(_metadata(source).get("section_title") or source.get("section_title")),
                 flags=re.I,
             ))
@@ -1838,11 +1833,8 @@ def synthesize_consultant_verrous(
         lock_clusters_path=lock_clusters_path,
     )
     clusters = [cluster for cluster in (report.get("clusters") or []) if isinstance(cluster, dict)]
-    display_clusters = [
-        cluster for cluster in clusters
-        if _safe_bool(cluster.get("display_as_lock"), True)
-        and _clean(cluster.get("cluster_role") or "verrou_a_verifier") in LOCK_ROLES
-    ]
+    # TEST TEMPORAIRE : aucun filtre entre les groupes NLP et le LLM.
+    display_clusters = list(clusters)
     context_clusters = [
         cluster for cluster in clusters
         if _clean(cluster.get("cluster_role")) in CONTEXT_ROLES

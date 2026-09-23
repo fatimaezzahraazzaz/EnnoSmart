@@ -2235,6 +2235,71 @@ def get_latest_previous_cir_comparison(
             detail=f"Lecture comparaison CIR précédent impossible : {exc}",
         )
 
+@router.get("/projects/{project_id}/diagnostic/preparation-status")
+def get_diagnostic_preparation_status(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_project_for_user(db, project_id, current_user)
+
+    ps = diagnostic_service_module.get_project_store(project)
+    rag_chunks = ps.rag_dir / "chunks.json"
+    nlp_result = ps.nlp_dir / "nlp_result.json"
+
+    nlp_ready = (
+        diagnostic_service_module.json_artifact_exists(
+            db,
+            project.id,
+            diagnostic_service_module.NLP_ARTIFACT_KEY,
+        )
+        or nlp_result.exists()
+    )
+
+    chunks_ready = (
+        diagnostic_service_module.json_artifact_exists(
+            db,
+            project.id,
+            diagnostic_service_module.RAG_CHUNKS_ARTIFACT_KEY,
+        )
+        or rag_chunks.exists()
+    )
+
+    prepare_report = diagnostic_service_module._load_prepare_report(db, project)
+
+    prepared_manifest = (
+        prepare_report.get("corpus_manifest")
+        if isinstance(prepare_report.get("corpus_manifest"), dict)
+        else {}
+    )
+
+    current_manifest = diagnostic_service_module.diagnostic_corpus_manifest(
+        db,
+        project.id,
+    )
+
+    fingerprint_matches = bool(
+        prepared_manifest.get("fingerprint")
+        and prepared_manifest.get("fingerprint")
+        == current_manifest.get("fingerprint")
+    )
+
+    sources_prepared = bool(
+        nlp_ready
+        and chunks_ready
+        and fingerprint_matches
+    )
+
+    return {
+        "sources_prepared": sources_prepared,
+        "nlp_ready": bool(nlp_ready),
+        "chunks_ready": bool(chunks_ready),
+        "corpus_up_to_date": fingerprint_matches,
+        "current_fingerprint": current_manifest.get("fingerprint"),
+        "prepared_fingerprint": prepared_manifest.get("fingerprint"),
+    }
+
+
 @router.post("/projects/{project_id}/diagnostic/prepare-sources")
 def prepare_diagnostic_sources(
     project_id: int,

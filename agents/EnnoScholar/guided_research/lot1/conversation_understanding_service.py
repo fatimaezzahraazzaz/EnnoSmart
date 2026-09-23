@@ -2140,9 +2140,40 @@ RAPPEL — INTERPRÈTE UNIQUEMENT CE TOUR
         if project_context.get("operating_mode") == "standalone_chat":
             decision_prompt += """
 
-RECHERCHE AUTONOME — MATÉRIALISATION DES REQUÊTES
-Uniquement si une recherche est demandée, produis 2 à 5 requêtes anglaises courtes
-et complémentaires, centrées sur le verrou et ses conditions scientifiques.
+MODE AUTONOME ENNOSCHOLAR — PRIORITÉ AU CONTEXTE SCIENTIFIQUE
+Une description d'un domaine scientifique, d'un objectif de projet et/ou d'un
+verrou scientifique ou technologique n'est PAS une exigence de livrable et ne
+doit jamais être classée DESCRIBE_REQUIREMENTS.
+
+Le contexte scientifique minimal nécessaire avant une première recherche est :
+1. un domaine ou contexte scientifique ;
+2. un objectif du projet ;
+3. au moins un verrou scientifique ou technologique.
+
+Ces informations peuvent être données dans un seul message ou progressivement.
+Utilise le tour actuel, l'historique récent, la mémoire et current_verrous pour
+déterminer ce qui est déjà connu. Ne redemande jamais une information déjà fournie.
+
+Règles :
+- domaine + objectif + verrou disponibles :
+  classe l'action comme ADD_VERROU_AND_SEARCH lorsqu'un nouveau verrou est déclaré,
+  matérialise project_brief et verrous, puis laisse le serveur lancer la recherche ;
+- verrou présent mais domaine et/ou objectif manquants :
+  ne lance aucune recherche ; réponds conversationnellement en demandant uniquement
+  les informations manquantes ;
+- domaine + objectif présents mais aucun verrou :
+  ne lance aucune recherche ; demande uniquement le verrou scientifique ou
+  technologique à étudier ;
+- domaine seul ou objectif seul :
+  demande uniquement les autres éléments scientifiques manquants.
+
+Une demande de précision pendant cet onboarding relève de CONVERSE, pas de
+DESCRIBE_REQUIREMENTS. DESCRIBE_REQUIREMENTS reste réservé aux exigences durables
+du livrable, par exemple structure, style, format ou contraintes rédactionnelles.
+
+Quand le contexte minimal est complet et qu'une recherche doit être lancée,
+produis 2 à 5 requêtes anglaises courtes et complémentaires, centrées sur le
+verrou et ses conditions scientifiques.
 Une liste de méthodes/synonymes fournie par le consultant représente des pistes
 alternatives : répartis-les entre les requêtes, ne les concatène pas en une seule
 et ne les mets pas toutes dans required_terms. Ce champ contient seulement les
@@ -2247,12 +2278,20 @@ INTENTION VALIDÉE
 
 Produis uniquement les arguments nécessaires à cette intention :
 - Pour DESCRIBE_REQUIREMENTS, topics et/ou constraints matérialisent précisément
-  les exigences durables du tour actuel ; plan reste vide. En
-  operating_mode=standalone_chat, si le consultant demande d'enregistrer son
-  contexte sans recherche, project_brief reprend uniquement le nom, le domaine,
-  l'objectif et le contexte explicitement fournis, et verrous reprend le ou les
-  verrous déclarés. Dans ce cas topics et constraints peuvent rester vides,
-  search_requests reste impérativement vide et aucune recherche n'est annoncée.
+  les exigences durables du tour actuel ; plan reste vide.
+- En operating_mode=standalone_chat, toute description explicite d'un projet
+  scientifique, de son domaine, de son objectif, de son contexte, d'un verrou
+  scientifique ou technologique, ou de plusieurs verrous constitue directement
+  une déclaration de contexte autonome. Il n'est PAS nécessaire que le consultant
+  dise explicitement « enregistrer », « mémoriser » ou « rechercher ».
+  project_brief reprend uniquement les éléments explicitement fournis
+  (project_name, domain, objective, additional_context) et verrous reprend chaque
+  verrou explicitement déclaré. Dans ce cas topics et constraints peuvent rester
+  vides. Ne laisse pas project_brief et verrous vides lorsqu'ils sont clairement
+  présents dans le tour consultant.
+- La décision de lancer ensuite automatiquement une recherche en mode autonome
+  appartient au serveur ; n'exige donc pas une commande explicite de recherche
+  pour matérialiser project_brief et verrous.
 - Pour PROPOSE_PLAN, crée une structure scientifique adaptée à ce projet précis :
   déduis librement le nombre de sections, leur hiérarchie et leurs objectifs des
   articles validés, de l'histoire scientifique et de la demande. Ne copie pas le

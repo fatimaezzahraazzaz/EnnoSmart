@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import re
+
 from typing import Any
 
 from agents.EnnoAmelioration.application.intention_service import understand_instruction
+from agents.EnnoAmelioration.application.conversation_scope_v3161 import (
+    message_explicitly_requests_full_document,
+)
 from agents.EnnoAmelioration.application.section_parser import (
     infer_section_from_instruction,
     parse_sections,
@@ -77,10 +82,59 @@ def resolve_background_scope(
     if session is None:
         raise LookupError("Session EnnoAmelioration introuvable.")
 
-    explicit_scope_raw = str(getattr(payload, "target_scope", None) or "").strip()
+    # Important : target_scope peut avoir une valeur par défaut dans le modèle
+    # Pydantic même lorsque le frontend ne l'a PAS envoyé.
+    # On ne le considère donc comme explicite que s'il était réellement présent
+    # dans la requête HTTP.
+    fields_set = set(getattr(payload, "model_fields_set", set()) or set())
+    scope_was_sent = "target_scope" in fields_set
+
+    explicit_scope_raw = (
+        str(getattr(payload, "target_scope", None) or "").strip()
+        if scope_was_sent
+        else ""
+    )
     explicit_scope = _scope_enum(explicit_scope_raw) if explicit_scope_raw else None
     stored_scope = _scope_enum(getattr(session, "target_scope", None))
     message = str(getattr(payload, "message", None) or "").strip()
+
+    # Une demande explicite sur l'ensemble du CIR gagne toujours,
+    # même si le frontend conserve une ancienne cible de section.
+    normalized_early_message = " ".join(str(message or "").casefold().split())
+    explicit_full_message = bool(
+        message_explicitly_requests_full_document(message)
+        or re.search(
+            r"\\bensemble\\b.{0,100}\\b(?:cir|document|dossier|texte)\\b",
+            normalized_early_message,
+        )
+        or re.search(
+            r"\\b(?:tout|toute|entier|entiere|complet|complete|global|integralite)\\w*\\b"
+            r".{0,100}\\b(?:cir|document|dossier|texte)\\b",
+            normalized_early_message,
+        )
+        or re.search(
+            r"\\b(?:cir|document|dossier|texte)\\b.{0,100}"
+            r"\\b(?:tout|toute|entier|entiere|complet|complete|global|integralite)\\w*\\b",
+            normalized_early_message,
+        )
+    )
+
+    if explicit_full_message:
+        session.target_scope = TargetScope.FULL_DOCUMENT.value
+        session.target_section_id = None
+        session.target_section_title = None
+        db.flush()
+        print(
+            "[V3.21.6][BackgroundRoute] "
+            f"session={session_id} route=background "
+            "reason=message_explicit_full_document_priority"
+        )
+        return {
+            "background": True,
+            "scope": TargetScope.FULL_DOCUMENT.value,
+            "reason": "message_explicit_full_document_priority",
+            "semantic_scope": TargetScope.FULL_DOCUMENT.value,
+        }
 
     # Le choix local du frontend prime sur les mots du message et sur un
     # ancien scope FULL_DOCUMENT mémorisé par la conversation.
@@ -106,7 +160,47 @@ def resolve_background_scope(
             "semantic_scope": None,
         }
 
-    if explicit_scope is None and _message_targets_existing_section(session, message):
+    # Le message courant est prioritaire sur le scope mémorisé de la session.
+    # Une session peut rester FULL_DOCUMENT tout en ciblant une seule partie.
+    # Une demande explicite sur l'ensemble du CIR est prioritaire sur toute
+    # similarité lexicale avec une section particulière.
+    normalized_message = " ".join(str(message or "").casefold().split())
+    message_requests_full_document = bool(
+        message_explicitly_requests_full_document(message)
+        or re.search(
+            r"\bensemble\b.{0,100}\b(?:cir|document|dossier|texte)\b",
+            normalized_message,
+        )
+        or re.search(
+            r"\b(?:tout|toute|entier|entiere|complet|complete|global|integralite)\w*\b"
+            r".{0,100}\b(?:cir|document|dossier|texte)\b",
+            normalized_message,
+        )
+        or re.search(
+            r"\b(?:cir|document|dossier|texte)\b.{0,100}"
+            r"\b(?:tout|toute|entier|entiere|complet|complete|global|integralite)\w*\b",
+            normalized_message,
+        )
+    )
+
+    if message_requests_full_document:
+        session.target_scope = TargetScope.FULL_DOCUMENT.value
+        db.flush()
+        print(
+            "[V3.21.2][BackgroundRoute] "
+            f"session={session_id} route=background "
+            "reason=message_explicit_full_document"
+        )
+        return {
+            "background": True,
+            "scope": TargetScope.FULL_DOCUMENT.value,
+            "reason": "message_explicit_full_document",
+            "semantic_scope": TargetScope.FULL_DOCUMENT.value,
+        }
+
+    message_targets_section = _message_targets_existing_section(session, message)
+
+    if message_targets_section:
         print(
             "[V3.21.2][BackgroundRoute] "
             f"session={session_id} route=sync "

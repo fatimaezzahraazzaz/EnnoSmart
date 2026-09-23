@@ -300,10 +300,8 @@ DEMANDE CONSULTANT
                 or ImprovementIntent.RESEARCH in intents
             )
         )
-        needs_diagnostic = bool(
-            ImprovementIntent.ARGUMENTATION in intents
-            or ImprovementIntent.CIR_ELIGIBILITY in intents
-        )
+        # Invariant EnnoAmel : aucun routage vers EnnoDiagnostic.
+        needs_diagnostic = False
 
         if evidence_mode == "project_only":
             needs_scholar = False
@@ -583,7 +581,7 @@ SECTIONS
         for item in classified:
             section = item["section"]
             function = item["function"]
-            needs_diagnostic, needs_scholar, reasons = self._specialists(
+            _needs_diagnostic, needs_scholar, reasons = self._specialists(
                 base.intents,
                 function,
                 document_mode=is_document,
@@ -598,8 +596,8 @@ SECTIONS
                     function=function,
                     confidence=item["confidence"],
                     classifier=item["classifier"],
-                    route=_route_value(needs_diagnostic, needs_scholar),
-                    needs_diagnostic=needs_diagnostic,
+                    route=_route_value(False, needs_scholar),
+                    needs_diagnostic=False,
                     needs_scholar=needs_scholar,
                     rationale=reasons,
                 )
@@ -626,9 +624,7 @@ SECTIONS
             ]
 
         primary = plans[0] if len(plans) == 1 else None
-        needs_diagnostic = (
-            any(item.needs_diagnostic for item in plans) if plans else base.needs_diagnostic
-        )
+        needs_diagnostic = False
         needs_scholar = bool(
             not base.forbids_scholar
             and (any(item.needs_scholar for item in plans) if plans else base.needs_scholar)

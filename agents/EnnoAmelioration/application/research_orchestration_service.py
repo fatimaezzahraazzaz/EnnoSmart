@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import importlib
-import math
 import re
 import unicodedata
 from collections import Counter
 from typing import Any
 
-from ..domain.models import ImprovementRequest, SectionFunction
-from .diagnostic_orchestration_service import ensure_diagnostic_context
+from ..domain.models import ImprovementRequest
 from .research_context_bridge_v310 import (
     enrich_direct_research_context,
     filter_candidates_against_section_context,
@@ -433,321 +431,7 @@ def _domain_detection(
     }
 
 
-_TOKEN_STOP = {
-    "avec", "dans", "pour", "sans", "entre", "vers", "sous", "chez",
-    "cette", "ces", "des", "les", "une", "plus", "moins", "ainsi",
-    "section", "projet", "travaux", "scientifique", "technique", "cir",
-    "donnees", "données", "modele", "modèle", "modeles", "modèles",
-    "resultat", "résultat", "resultats", "résultats", "methode", "méthode",
-    "methodes", "méthodes", "probleme", "problème", "limite", "limites",
-    "ameliorer", "améliorer", "renforcer", "recherche", "publication",
-    "publications", "source", "sources", "preuve", "preuves", "pertinent",
-    "pertinente", "pertinentes", "nouvelle", "nouvelles",
-}
 
-
-def _tokens(value: Any) -> set[str]:
-    original = str(value or "")
-    raw = _norm(original)
-    out: set[str] = set()
-    for token in re.findall(r"\b[a-z0-9][a-z0-9+./_-]{2,}\b", raw):
-        if token in _TOKEN_STOP:
-            continue
-        if len(token) >= 4 or any(ch.isdigit() for ch in token):
-            out.add(token)
-    # Les sigles techniques courts (SAR, ATR, CFD, FEM...) sont très
-    # discriminants et doivent compter dans le rapprochement Diagnostic/section.
-    for acronym in re.findall(r"\b[A-Z][A-Z0-9]{2,}(?:[-_/][A-Z0-9]+)?\b", original):
-        normalized = _norm(acronym)
-        if normalized and normalized not in {"cir", "r&d", "rnd", "api", "pdf"}:
-            out.add(normalized)
-    return out
-
-
-def _research_target_text(request: ImprovementRequest) -> str:
-    """Contexte local utilisé uniquement pour choisir le verrou Diagnostic.
-
-    Le texte source reste la base principale. L'instruction consultant ajoute
-    son objectif (ex. généralisation, biais, représentativité) sans remplacer
-    les faits du dossier.
-    """
-
-    return _clean(
-        "\n".join(
-            part
-            for part in (
-                request.target_section_title or "",
-                request.target_text or "",
-                request.instruction or "",
-            )
-            if str(part or "").strip()
-        ),
-        22000,
-    )
-
-
-def _diagnostic_relevance(
-    target_text: str,
-    item: dict[str, Any],
-    *,
-    document_frequency: Counter[str] | None = None,
-    corpus_size: int = 1,
-) -> tuple[float, int, int]:
-    """Score local pondéré pour relier une section à son vrai verrou.
-
-    - le titre du verrou compte davantage que sa justification longue ;
-    - les termes rares parmi les verrous sont favorisés (IDF), afin que des
-      mots génériques comme ``radar`` ou ``simulation`` n'embarquent pas un
-      verrou voisin ;
-    - les acronymes/identifiants techniques présents dans la section gardent
-      un poids fort sans aucun vocabulaire métier codé en dur.
-    """
-
-    target = _tokens(target_text)
-    title_tokens = _tokens(item.get("title"))
-    body_tokens = _tokens(
-        " ".join(
-            str(item.get(key) or "")
-            for key in ("text", "justification", "evidence_text")
-        )
-    )
-    candidate = title_tokens | body_tokens
-    if not target or not candidate:
-        return 0.0, 0, 0
-
-    df = document_frequency or Counter()
-    title_common = target & title_tokens
-    body_common = target & body_tokens
-
-    def weight(token: str) -> float:
-        # +1 évite division par zéro. Les termes présents dans tous les verrous
-        # reçoivent peu de poids ; les termes discriminants en reçoivent plus.
-        idf = math.log((max(1, corpus_size) + 1.0) / (df.get(token, 0) + 1.0)) + 1.0
-        # Un token court gardé par _tokens est généralement un acronyme ou un
-        # identifiant technique ; il est donc naturellement discriminant.
-        technical_bonus = 1.55 if len(token) <= 5 or any(ch.isdigit() for ch in token) else 1.0
-        return idf * technical_bonus
-
-    title_score = sum(weight(token) for token in title_common) * 3.0
-    body_only = body_common - title_common
-    body_score = sum(weight(token) for token in body_only) * 0.9
-    matched_weight = title_score + body_score
-
-    # Normalisation douce : on favorise la précision sans pénaliser un verrou
-    # dont la justification est longue.
-    denominator = max(
-        4.0,
-        math.sqrt(max(1, len(target)) * max(1, len(title_tokens) + min(len(body_tokens), 30))),
-    )
-    score = matched_weight / denominator
-    return round(score, 6), len(title_common | body_common), len(title_common)
-
-
-def _matched_diagnostic_context(
-    db: Any,
-    project: Any,
-    request: ImprovementRequest,
-    *,
-    diagnostic_override: dict[str, Any] | None = None,
-) -> tuple[dict[str, Any], list[str], list[dict[str, Any]]]:
-    """Sélectionne les verrous réellement liés à la section cible.
-
-    Le meilleur verrou est toujours le primaire. Une section agrégée consacrée
-    aux incertitudes peut conserver plusieurs verrous réellement reliés ; une
-    section ordinaire reste limitée au primaire et à un secondaire proche.
-    """
-
-    if isinstance(diagnostic_override, dict) and diagnostic_override.get("available"):
-        diagnostic = diagnostic_override
-    else:
-        diagnostic, _ = ensure_diagnostic_context(db, project, request)
-
-    lock_items = [
-        dict(item)
-        for item in (diagnostic.get("evidence_items") or [])
-        if isinstance(item, dict) and item.get("type") == "diagnostic_lock"
-    ]
-
-    candidate_token_sets = [
-        _tokens(
-            " ".join(
-                str(item.get(key) or "")
-                for key in ("title", "text", "justification", "evidence_text")
-            )
-        )
-        for item in lock_items
-    ]
-    document_frequency: Counter[str] = Counter()
-    for token_set in candidate_token_sets:
-        document_frequency.update(token_set)
-
-    target_text = _research_target_text(request)
-    rows: list[tuple[float, int, int, dict[str, Any]]] = []
-    for item in lock_items:
-        score, hits, title_hits = _diagnostic_relevance(
-            target_text,
-            item,
-            document_frequency=document_frequency,
-            corpus_size=max(1, len(lock_items)),
-        )
-        if hits:
-            rows.append((score, hits, title_hits, item))
-
-    rows.sort(key=lambda value: (value[0], value[2], value[1]), reverse=True)
-
-    matched_items: list[dict[str, Any]] = []
-    if rows:
-        best_score = rows[0][0]
-        aggregate_lock_section = str(
-            request.research_target_type or ""
-        ).casefold() in {
-            SectionFunction.UNCERTAINTY.value.casefold(),
-            "lock_search",
-        }
-        max_matched = 6 if aggregate_lock_section else 2
-        relative_floor = 0.35 if aggregate_lock_section else 0.50
-        # Le primaire est toujours le meilleur verrou local.
-        matched_items.append(dict(rows[0][3]))
-
-        # Les secondaires doivent rester clairement liés au même besoin, et non
-        # seulement partager un mot de domaine très général.
-        for score, hits, title_hits, item in rows[1:]:
-            if len(matched_items) >= max_matched:
-                break
-            relative = score / best_score if best_score > 0 else 0.0
-            if relative >= relative_floor and (title_hits >= 1 or hits >= 3):
-                matched_items.append(dict(item))
-
-    target_verrous: list[str] = []
-    for item in matched_items:
-        evidence_id = str(item.get("evidence_id") or "")
-        match = re.search(r"D:verrou:([^\s]+)$", evidence_id)
-        if match and match.group(1) not in target_verrous:
-            target_verrous.append(match.group(1))
-
-    context_text = _clean(
-        "\n".join(
-            f"{item.get('title', '')}: {item.get('text', '')}"
-            for item in matched_items
-        ),
-        9000,
-    )
-    context = {
-        "diagnostic_context_text": context_text,
-        "matched_verrou_ids": target_verrous,
-        "matched_evidence_count": len(matched_items),
-        "domain_detection": (
-            dict(diagnostic.get("domain_detection"))
-            if isinstance(diagnostic.get("domain_detection"), dict)
-            else {}
-        ),
-        "selection_policy": (
-            "aggregate_uncertainty_section_all_close_locks_v3_10"
-            if str(request.research_target_type or "").casefold()
-            in {SectionFunction.UNCERTAINTY.value.casefold(), "lock_search"}
-            else "primary_scoped_lock_plus_one_close_secondary_v2_3"
-        ),
-        "source": "EnnoDiagnostic_scoped_current_cir_match",
-    }
-    return context, target_verrous, matched_items
-
-
-def _verrou_id_from_item(item: dict[str, Any], fallback: str) -> str:
-    evidence_id = str(item.get("evidence_id") or "")
-    match = re.search(r"D:verrou:([^\s]+)$", evidence_id)
-    return str(match.group(1) if match else fallback)
-
-
-def _research_verrous(
-    request: ImprovementRequest,
-    diagnostic_context: dict[str, Any],
-    matched_items: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Construit un verrou EnnoScholar par verrou Diagnostic sélectionné.
-
-    Le titre scientifique vient du verrou EnnoDiagnostic, jamais du simple
-    intitulé de section. Le texte de section est conservé comme passage source
-    local afin qu'EnnoScholar retrouve les noms, méthodes et contraintes
-    réellement présents dans le dossier.
-    """
-
-    section_title = _clean(
-        request.target_section_title
-        or request.target_section_id
-        or "Section scientifique à étayer",
-        400,
-    )
-    source_text = _clean(request.target_text, 14000)
-
-    if not matched_items:
-        # V2.2 : aucun fallback pseudo-scientifique basé sur le titre de section.
-        # Si EnnoDiagnostic n'a pas établi de verrou relié, EnnoAmel doit le dire
-        # au lieu de lancer une recherche large susceptible de dériver hors domaine.
-        raise RuntimeError(
-            "Aucun verrou EnnoDiagnostic suffisamment relié à cette section n'a été identifié. "
-            "La recherche EnnoScholar est arrêtée pour éviter de construire une requête à partir "
-            "du seul titre de section."
-        )
-
-    verrous: list[dict[str, Any]] = []
-    for index, item in enumerate(matched_items):
-        verrou_id = _verrou_id_from_item(
-            item,
-            str(request.target_section_id or f"ennoamel_lock_{index + 1}"),
-        )
-        verrou_title = _clean(item.get("title"), 500) or section_title
-        diagnostic_text = _clean(
-            item.get("text") or item.get("evidence_text") or item.get("justification"),
-            7000,
-        )
-        supporting = [
-            {"text": diagnostic_text}
-        ] if diagnostic_text else []
-        verrous.append(
-            {
-                "verrou_id": verrou_id,
-                "title": verrou_title,
-                "original_title": verrou_title,
-                # Le verrou Diagnostic est le problème scientifique ; la section
-                # apporte les preuves/local names utiles à l'intention.
-                "text": _clean(
-                    "\n".join(
-                        part
-                        for part in (
-                            verrou_title,
-                            diagnostic_text,
-                            source_text,
-                        )
-                        if part
-                    ),
-                    18000,
-                ),
-                "raw_item": {
-                    "text": diagnostic_text or source_text,
-                    "source_text": source_text,
-                    "original_title": verrou_title,
-                    "supporting_passages": supporting,
-                    "source_section_title": section_title,
-                    "consultant_instruction": _clean(request.instruction, 3500),
-                },
-                "sources": [
-                    {"excerpt": row["text"]}
-                    for row in supporting
-                    if row.get("text")
-                ],
-                "context": {
-                    "section_title": section_title,
-                    "section_id": request.target_section_id,
-                },
-                "diagnostic_context": diagnostic_context,
-                "source_json": {
-                    "evidence_summary": diagnostic_text,
-                    "matched_verrou_ids": [verrou_id],
-                    "source_section_title": section_title,
-                },
-            }
-        )
-    return verrous
 
 def _existing_decided_article_keys(db: Any, project: Any) -> set[str]:
     """Évite de présenter comme nouvelles les sources déjà gardées/rejetées."""
@@ -1316,73 +1000,43 @@ def launch_targeted_guided_research(
         raise RuntimeError("EnnoScholar n'a pas retourné d'identifiant de session Guided Research.")
 
     project_year = _project_year(project, request)
-    diagnostic_ctx: dict[str, Any] = {}
     target_verrous: list[str] = []
     matched_items: list[dict[str, Any]] = []
     research_target_ids: list[str] = []
+
     direct_context = build_lightweight_research_context(project, request)
     direct_context = enrich_direct_research_context(
         request,
         direct_context,
         conversation_context=dict(conversation_context or {}),
     )
+
     target_type = str(
         direct_context.get("research_target_type") or "scientific_enrichment"
     )
     search_strategy = dict(direct_context.get("search_strategy") or {})
-    diagnostic_policy = str(
-        search_strategy.get("diagnostic_policy") or "not_required"
-    )
-    diagnostic_available = bool(
-        isinstance(diagnostic_package, dict)
-        and diagnostic_package.get("available")
-    )
-    diagnostic_required = bool(
-        diagnostic_available and diagnostic_policy == "use_when_available"
-    )
+
+    # Invariant EnnoAmel : recherche scientifique directement via EnnoScholar.
+    diagnostic_required = False
+    diagnostic_available = False
+    diagnostic_policy = "disabled_in_ennoamel"
     diagnostic_fallback_reason = ""
 
-    if diagnostic_required:
-        diagnostic_ctx, target_verrous, matched_items = _matched_diagnostic_context(
-            db,
-            project,
-            request,
-            diagnostic_override=diagnostic_package,
+    readiness = dict(direct_context.get("search_readiness") or {})
+    if not readiness.get("ready"):
+        raise RuntimeError(
+            "La section ne contient pas assez d'ancres techniques locales pour "
+            "construire une recherche scientifique ciblee. Precisez l'objet, le "
+            "phenomene, la methode ou la difficulte a documenter."
         )
-        if not matched_items or not target_verrous:
-            raise RuntimeError(
-                "EnnoDiagnostic était requis, mais aucun verrou suffisamment relié "
-                "à la section n'a été confirmé."
-            )
-        verrous = _research_verrous(request, diagnostic_ctx, matched_items)
-        for verrou in verrous:
-            contextual_queries = _contextual_queries_for_lock(
-                str(verrou.get("title") or ""),
-                direct_context,
-            )
-            if contextual_queries:
-                verrou["suggested_queries"] = contextual_queries
-        domain_detection = _domain_detection(project, request, diagnostic_ctx)
-        subject_payload: dict[str, Any] = {
-            "diagnostic_context": diagnostic_ctx,
-            "verrous": verrous,
-        }
-        research_mode = "diagnostic_lock_research"
-    else:
-        readiness = dict(direct_context.get("search_readiness") or {})
-        if not readiness.get("ready"):
-            raise RuntimeError(
-                "La section ne contient pas assez d'ancres techniques locales pour "
-                "construire une recherche scientifique ciblee. Precisez l'objet, le "
-                "phenomene, la methode ou la difficulte a documenter."
-            )
-        domain_detection = dict(direct_context.get("domain_detection") or {})
-        research_target_ids = list(direct_context.get("research_target_ids") or [])
-        subject_payload = {
-            "research_context": direct_context.get("research_context") or {},
-            "research_targets": direct_context.get("research_targets") or [],
-        }
-        research_mode = "direct_typed_research_target"
+
+    domain_detection = dict(direct_context.get("domain_detection") or {})
+    research_target_ids = list(direct_context.get("research_target_ids") or [])
+    subject_payload = {
+        "research_context": direct_context.get("research_context") or {},
+        "research_targets": direct_context.get("research_targets") or [],
+    }
+    research_mode = "direct_typed_research_target"
 
     scholar = _precise_scholar_agent()
     payload = {
@@ -1406,12 +1060,17 @@ def launch_targeted_guided_research(
         research_target_ids=research_target_ids,
         limit=15,
     )
-    candidates, section_context_gate = filter_candidates_against_section_context(
-        candidates,
-        direct_context=direct_context,
-        search_metadata=search_meta,
-    )
-    search_meta["section_context_gate"] = section_context_gate
+    # EnnoScholar est propriétaire de la pertinence scientifique :
+    # BGE/reranking + tagging LLM (Direct / Connexe / Fondamental / Hors sujet).
+    # EnnoAmel ne doit pas appliquer un second filtre scientifique après ce classement.
+    search_meta["section_context_gate"] = {
+        "enabled": False,
+        "policy": "ennoscholar_llm_tags_authoritative",
+        "reason": "no_secondary_ennoamel_candidate_filter",
+        "input_count": len(candidates),
+        "kept_count": len(candidates),
+        "removed_count": 0,
+    }
     search_meta.update(
         {
             "matched_diagnostic_evidence": [
@@ -1453,7 +1112,7 @@ def launch_targeted_guided_research(
                 "search_readiness": direct_context.get("search_readiness") or {},
                 "conversation_refinement": dict(conversation_context or {}),
                 "active_version_section_contract": direct_context.get("v3_9_active_version_contract") or {},
-                "section_context_gate": section_context_gate,
+                "section_context_gate": dict(search_meta.get("section_context_gate") or {}),
             },
             "force_refresh": True,
             "excluded_existing_decided_count": len(excluded_keys),

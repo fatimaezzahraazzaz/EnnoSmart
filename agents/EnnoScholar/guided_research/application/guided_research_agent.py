@@ -2032,6 +2032,10 @@ class EnnoScholarGuidedResearchAgent:
             interpretation.get("verrous")
             or interpretation.get("project_brief")
         ):
+            # Mode autonome : dès qu'un contexte scientifique exploitable
+            # contient un brief projet et/ou un verrou, lancer immédiatement
+            # la recherche. La rédaction reste bloquée jusqu'à validation
+            # humaine des sources.
             response = self._add_standalone_verrous_and_search(
                 db,
                 project,
@@ -2039,7 +2043,7 @@ class EnnoScholarGuidedResearchAgent:
                 message,
                 interpretation=interpretation,
                 pending_write_requested=False,
-                run_research=False,
+                run_research=True,
             )
         elif intent == ConsultantIntent.ACCEPT_PLAN:
             response = self._accept_plan(
@@ -2349,6 +2353,43 @@ class EnnoScholarGuidedResearchAgent:
             for row in (interpretation.get("verrous") or [])
             if isinstance(row, Mapping) and _clean(row.get("title"), 1200)
         ][:10]
+
+        # Mode autonome — fallback déterministe :
+        # le LLM peut comprendre correctement un verrou explicite mais omettre
+        # occasionnellement de matérialiser action.verrous. Dans ce cas seulement,
+        # récupérer le verrou directement depuis le texte du consultant.
+        if not payloads and run_research:
+            message_text = _clean(message, 8000)
+            sentences = [
+                part.strip()
+                for part in re.split(r"(?<=[.!?])\s+|[\r\n]+", message_text)
+                if part.strip()
+            ]
+
+            for sentence in sentences:
+                match = re.search(
+                    r"\b(?:principal(?:e)?\s+)?verrou"
+                    r"(?:\s+(?:scientifique|technologique|technique))?"
+                    r"\s*(?:concerne|porte\s+sur|est|:)\s*(.+)",
+                    sentence,
+                    flags=re.IGNORECASE,
+                )
+                if not match:
+                    continue
+
+                fallback_title = _clean(
+                    match.group(1).strip(" .;:-"),
+                    1200,
+                )
+                if fallback_title:
+                    payloads = [{
+                        "title": fallback_title,
+                        "justification": "",
+                        "supporting_context": message_text,
+                        "source_document_ids": [],
+                    }]
+                    break
+
         if not payloads and run_research:
             return self._respond_only(
                 session,
@@ -2597,31 +2638,24 @@ class EnnoScholarGuidedResearchAgent:
             if isinstance(row, Mapping) and _clean(row.get("query"), 1200)
         ][:8]
         if not raw_requests:
+            # Mode autonome : fournir au moteur EnnoScholar une cible scientifique
+            # concise par verrou. Le domaine, l'objectif et les conditions restent
+            # dans target_context_dimensions ; le planner scientifique complet
+            # construit ensuite son portefeuille multi-axes de requêtes.
+            #
+            # Éviter ici de concaténer verrou + domaine + objectif dans une énorme
+            # requête littérale : cela réduit la diversité du retrieval et peut
+            # masquer des articles mécanistiques pourtant pertinents.
             for verrou in active_verrous:
                 title = _clean(verrou.get("title"), 1200)
-                context = " ".join(
-                    value
-                    for value in (
-                        standalone_project_brief.get("domain"),
-                        standalone_project_brief.get("objective"),
-                    )
-                    if value
-                )
-                raw_requests.extend(
-                    [
-                        {
-                            "query": f"{title} {context} scientific evidence",
-                            "query_kind": "scientific_evidence",
-                        },
-                        {
-                            "query": (
-                                f"{title} {context} experimental validation "
-                                "limitations contradictory results"
-                            ),
-                            "query_kind": "direct_scientific_evidence",
-                            "require_direct_evidence": True,
-                        },
-                    ]
+                if not title:
+                    continue
+                raw_requests.append(
+                    {
+                        "query": _clean(title, 500),
+                        "query_kind": "scientific_evidence",
+                        "entity_type": "scientific_concept",
+                    }
                 )
 
         search_requests: list[dict[str, Any]] = []
@@ -2705,6 +2739,7 @@ class EnnoScholarGuidedResearchAgent:
             consultant_message=message,
             candidates=candidates,
             research_completeness=research.get("completeness") or {},
+            standalone_display=True,
         )
         scope_label = (
             "globale"
@@ -3691,6 +3726,21 @@ class EnnoScholarGuidedResearchAgent:
         }
         edits_by_id.update({row["section_id"]: row for row in current_edits})
         writing_edits = list(edits_by_id.values())
+
+        # Une révision ciblée avec les "sources validées" doit utiliser
+        # les Article Cards réellement disponibles, sans hériter d'une
+        # ancienne sélection stricte de sources.
+        #
+        # Les source_identifiers restent contraignants uniquement lorsque
+        # le consultant a explicitement demandé une sélection de sources.
+        explicit_source_selection = (
+            _clean(writing_source_scope, 80) == "explicit_selection"
+        )
+
+        if not explicit_source_selection:
+            for edit in writing_edits:
+                edit["source_identifiers"] = []
+
         if current_target_ids:
             pending_directives = _merge_pending_writing_directives(
                 pending_directives,
@@ -4355,6 +4405,7 @@ class EnnoScholarGuidedResearchAgent:
         consultant_message: str,
         candidates: Iterable[Mapping[str, Any]],
         research_completeness: Mapping[str, Any] | None = None,
+        standalone_display: bool = False,
     ) -> str:
         """Produit une réponse de recherche utile sans écrire ni modifier le document."""
         _ = project
@@ -4396,8 +4447,52 @@ class EnnoScholarGuidedResearchAgent:
                 ),
                 "role_confidence": source.get("role_confidence"),
             })
-            if len(candidate_rows) >= 14:
+            if not standalone_display and len(candidate_rows) >= 14:
                 break
+
+        if standalone_display:
+            sections: list[str] = ["Résultat de la recherche"]
+
+            for row in candidate_rows:
+                ref = _clean(row.get("source_ref"), 40)
+                title = _clean(row.get("title"), 500)
+                year = row.get("year")
+                provider = _clean(row.get("provider"), 120)
+                reason = _clean(
+                    row.get("role_reason")
+                    or row.get("abstract_or_excerpt"),
+                    700,
+                )
+
+                meta = " · ".join(
+                    str(value)
+                    for value in (year, provider)
+                    if value not in (None, "")
+                )
+
+                line = f"- {ref} — {title}"
+                if meta:
+                    line += f" ({meta})"
+                if reason:
+                    line += f" : {reason}"
+
+                sections.append(line)
+
+            if candidate_rows:
+                sections.extend([
+                    "",
+                    "Conclusion",
+                    "Sélectionnez uniquement les publications utiles pour poursuivre "
+                    "l'analyse et la rédaction de l'état de l'art.",
+                ])
+            else:
+                sections.extend([
+                    "",
+                    "Conclusion",
+                    "Aucune publication suffisamment pertinente n'a été retenue.",
+                ])
+
+            return "\n".join(sections).strip()
 
         current_plan = [
             {

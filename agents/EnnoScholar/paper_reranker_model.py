@@ -669,9 +669,14 @@ def rerank_papers_with_bge(
         if isinstance(article, dict)
     ]
 
-    # Le paramètre top_n est conservé uniquement pour compatibilité.
-    # Le pipeline final classe désormais TOUS les candidats uniques.
-    requested_top_n = len(articles)
+    # Par défaut, le pipeline classe tous les candidats uniques.
+    # Lorsqu'un appelant fournit top_n (ex. EnnoAmel/research_target),
+    # le CrossEncoder est plafonné à ce nombre sans modifier le comportement
+    # historique des appels qui ne fournissent aucune limite.
+    if top_n is None:
+        requested_top_n = len(articles)
+    else:
+        requested_top_n = max(1, min(int(top_n), len(articles)))
 
     report: Dict[str, Any] = {
         "enabled": is_bge_reranker_enabled(),
@@ -700,18 +705,21 @@ def rerank_papers_with_bge(
         )
         return articles, report
 
-    # BGE analyse tous les candidats uniques.
-    # Aucun plafond avant le reranking.
-    top_k_input = len(articles)
+    # BGE analyse tous les candidats par défaut.
+    # Un appelant peut toutefois fournir top_n pour plafonner le CrossEncoder.
+    top_k_input = requested_top_n
 
     report["top_k_input"] = top_k_input
 
     head = [
         dict(article)
-        for article in articles
+        for article in articles[:top_k_input]
     ]
 
-    tail = []
+    tail = [
+        dict(article)
+        for article in articles[top_k_input:]
+    ]
 
     try:
         query = _intent_query_text(intent)

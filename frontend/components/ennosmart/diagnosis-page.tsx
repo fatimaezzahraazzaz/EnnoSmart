@@ -4826,6 +4826,38 @@ function listFromText(text: string, fallback: string[]) {
   return lines.length > 0 ? lines : [cleaned]
 }
 
+type DiagnosticPreparationStatus = {
+  sources_prepared: boolean
+  nlp_ready: boolean
+  chunks_ready: boolean
+  corpus_up_to_date: boolean
+}
+
+async function getDiagnosticPreparationStatus(
+  projectId: number
+): Promise<DiagnosticPreparationStatus> {
+  const token = getAccessToken()
+
+  if (!token) {
+    throw new Error("Utilisateur non authentifié.")
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/projects/${projectId}/diagnostic/preparation-status`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  )
+
+  if (!response.ok) {
+    throw new Error("Impossible de vérifier la préparation des sources.")
+  }
+
+  return response.json()
+}
+
 async function postDiagnosticAction(projectId: number, action: "prepare-sources" | "run-agent") {
   const token = getAccessToken()
 
@@ -4943,6 +4975,8 @@ export function DiagnosisPage(
   const [verrous, setVerrous] = useState<VerrouRead[]>([])
   const [diagnosticBundle, setDiagnosticBundle] = useState<any>(null)
   const [prepareReport, setPrepareReport] = useState<any>(null)
+  const [preparationStatus, setPreparationStatus] =
+    useState<DiagnosticPreparationStatus | null>(null)
   const [documentCompareIndex, setDocumentCompareIndex] = useState<any>(null)
   const [documentCompareReport, setDocumentCompareReport] = useState<any>(null)
   const [documentCompareLoading, setDocumentCompareLoading] = useState(false)
@@ -5386,6 +5420,16 @@ export function DiagnosisPage(
     },
   ], [decisions])
   const frascatiPercent = scorePercent(frascatiScore)
+
+  const defendabilityLevel =
+    frascatiPercent === null
+      ? "—"
+      : frascatiPercent >= 80
+        ? "Solide"
+        : frascatiPercent >= 50
+          ? "Moyen"
+          : "À documenter"
+
   const sourceDocuments = useProjectSourceDocuments(project?.id)
 
   const backendMarkdownV93 = useMemo(() => {
@@ -5556,6 +5600,7 @@ export function DiagnosisPage(
         setProject(null)
         setVerrous([])
         setDocuments([])
+        setPreparationStatus(null)
         setDiagnosticBundle(null)
         setScholarBundle(null)
         setArticles([])
@@ -5583,10 +5628,16 @@ export function DiagnosisPage(
       // Le diagnostic officiel contient déjà les verrous décisionnels. L'ancien
       // chargement appelait /verrous en parallèle et relisait deux fois le même
       // gros rapport PostgreSQL/fichier.
-      const [documentsData, diagnosticData, corpusReviewData] = await Promise.all([
+      const [
+        documentsData,
+        diagnosticData,
+        corpusReviewData,
+        preparationStatusData,
+      ] = await Promise.all([
         getDocuments(selectedProject.id).catch(() => []),
         getDiagnosticLatest(selectedProject.id).catch(() => null),
         getDiagnosticCorpusReview(selectedProject.id).catch(() => null),
+        getDiagnosticPreparationStatus(selectedProject.id).catch(() => null),
       ])
 
       const diagnosticVerrous =
@@ -5597,6 +5648,7 @@ export function DiagnosisPage(
       setDocuments(Array.isArray(documentsData) ? documentsData : [])
       setDiagnosticBundle(diagnosticData)
       applyDiagnosticCorpusReview(corpusReviewData)
+      setPreparationStatus(preparationStatusData)
       setLoading(false)
 
       void getCirFinalConsultantStatus(selectedProject.id)
@@ -6466,20 +6518,25 @@ export function DiagnosisPage(
               ) : (
                 <Search data-icon="inline-start" />
               )}
-              Préparer les sources
+              1. Préparer les sources
             </Button>
 
             <Button
               className="min-h-11 w-full sm:min-h-9 2xl:w-auto"
               onClick={runAgentOnly}
-              disabled={running}
+              disabled={running || preparationStatus?.sources_prepared !== true}
+              title={
+                preparationStatus?.sources_prepared === true
+                  ? "Sources préparées : EnnoDiagnostic peut être lancé."
+                  : "Étape 1 obligatoire : préparez d’abord les sources."
+              }
             >
               {runningMode === "agent" ? (
                 <Loader2 className="animate-spin" data-icon="inline-start" />
               ) : (
                 <Play data-icon="inline-start" />
               )}
-              Lancer EnnoDiagnostic
+              2. Lancer EnnoDiagnostic
             </Button>
 
             <Button
@@ -6583,11 +6640,20 @@ export function DiagnosisPage(
           <CardContent className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
             <Button className="min-h-11 w-full sm:min-h-9 sm:w-auto" variant="outline" onClick={prepareSources}>
               <Search className="size-4 mr-2" />
-              Préparer les sources
+              1. Préparer les sources
             </Button>
-            <Button className="min-h-11 w-full bg-brand hover:bg-brand/90 sm:min-h-9 sm:w-auto" onClick={runAgentOnly}>
+            <Button
+              className="min-h-11 w-full bg-brand hover:bg-brand/90 sm:min-h-9 sm:w-auto"
+              onClick={runAgentOnly}
+              disabled={running || preparationStatus?.sources_prepared !== true}
+              title={
+                preparationStatus?.sources_prepared === true
+                  ? "Sources préparées : EnnoDiagnostic peut être lancé."
+                  : "Étape 1 obligatoire : préparez d’abord les sources."
+              }
+            >
               <Play className="size-4 mr-2" />
-              Lancer EnnoDiagnostic
+              2. Lancer EnnoDiagnostic
             </Button>
           </CardContent>
         </Card>
@@ -6607,9 +6673,17 @@ export function DiagnosisPage(
                   </span>
                   <Badge
                     variant="outline"
-                    className={`mb-1 ${riskClass(frascatiRisk)}`}
+                    className={`mb-1 ${
+                      defendabilityLevel === "Solide"
+                        ? "bg-success/10 text-success border-success/30"
+                        : defendabilityLevel === "Moyen"
+                          ? "bg-warning/10 text-warning border-warning/30"
+                          : defendabilityLevel === "À documenter"
+                            ? "bg-destructive/10 text-destructive border-destructive/30"
+                            : "bg-muted text-muted-foreground border-border"
+                    }`}
                   >
-                    Risque {frascatiRisk || "—"}
+                    {defendabilityLevel}
                   </Badge>
                 </div>
               </div>
@@ -6626,7 +6700,7 @@ export function DiagnosisPage(
             <div className="mt-5" role="img" aria-label={`Défendabilité documentaire : ${formatScore(frascatiScore)}`}>
               <div className="relative h-2.5 overflow-hidden rounded-full bg-muted">
                 <div className="absolute inset-y-0 left-1/2 w-px bg-foreground/25" aria-hidden="true" />
-                <div className="absolute inset-y-0 left-3/4 w-px bg-foreground/35" aria-hidden="true" />
+                <div className="absolute inset-y-0 left-[80%] w-px bg-foreground/35" aria-hidden="true" />
                 {frascatiPercent !== null && (
                   <div
                     className="h-full rounded-full bg-brand motion-safe:transition-[width] motion-safe:duration-500"
@@ -6637,7 +6711,7 @@ export function DiagnosisPage(
               <div className="mt-1.5 flex justify-between text-[9px] text-muted-foreground" aria-hidden="true">
                 <span>À documenter</span>
                 <span>50</span>
-                <span>75</span>
+                <span>80</span>
                 <span>Solide</span>
               </div>
             </div>

@@ -212,13 +212,31 @@ def apply_frascati_guard(
     secondary_groups = assessed["secondary_technical_groups"]
 
     # ENNOSMART_PARENT_GROUPING_SAFE_V1
-    # Post-Frascati only: the project assessment above is already frozen.
-    # The LLM receives only clean, already assessed main groups.
-    parent_consolidation = consolidate_parent_locks(main_groups)
-    display_main_groups = (
-        list(parent_consolidation.get("groups") or [])
-        if parent_consolidation.get("valid")
-        else list(main_groups)
+    # TEST TEMPORAIRE : bypass du regroupement parent.
+    # Code original conservé ci-dessous :
+    # parent_consolidation = consolidate_parent_locks(main_groups)
+    # display_main_groups = (
+    #     list(parent_consolidation.get("groups") or [])
+    #     if parent_consolidation.get("valid")
+    #     else list(main_groups)
+    # )
+
+    # Passage direct des verrous évalués vers EnnoDiagnostic / LLM.
+    display_main_groups = list(main_groups)
+
+    parent_consolidation = {
+        "valid": True,
+        "groups": list(main_groups),
+        "audit": {
+            "mode": "TEST_BYPASS_PARENT_GROUPING",
+            "input_count": len(main_groups),
+            "output_count": len(main_groups),
+        },
+    }
+
+    print(
+        f"[EnnoDiagnostic][TEST_BYPASS_PARENT_GROUPING] "
+        f"input={len(main_groups)} output={len(display_main_groups)}"
     )
 
 

@@ -56,7 +56,20 @@ import {
 } from "@/components/ennosmart/workspace-ui"
 
 type ArticleDecision = "garde" | "rejete" | "en_attente"
-type SourceFilter = "all" | "semantic_scholar" | "openalex" | "arxiv" | "memory_v2" | "technical"
+type SourceFilter =
+  | "all"
+  | "semantic_scholar"
+  | "openalex"
+  | "arxiv"
+  | "crossref"
+  | "doaj"
+  | "hal"
+  | "core"
+  | "zenodo"
+  | "europe_pmc"
+  | "github"
+  | "huggingface"
+  | "technical"
 
 function formatScore(score: number | null) {
   if (score === null || score === undefined) return "—"
@@ -1457,10 +1470,27 @@ function getArticleSourceKind(article: ArticleRead | any): SourceFilter {
   const paperId = v46Norm(a.paper_id || sj.paper_id || sj.paperId || sj.id || "")
 
   if (isTechnicalCatalogArticle(article)) return "technical"
-  if (source.includes("memory_v2") || a.memory_v2_prior || sj.memory_v2_prior || String(paperId).includes("memory")) return "memory_v2"
+
+  // Memory V2 reste un mécanisme interne EnnoScholar :
+  // il n'est plus exposé comme fournisseur dans le filtre.
+  if (
+    source.includes("memory_v2") ||
+    a.memory_v2_prior ||
+    sj.memory_v2_prior ||
+    String(paperId).includes("memory")
+  ) return "all"
+
   if (source.includes("semantic")) return "semantic_scholar"
   if (source.includes("openalex")) return "openalex"
   if (source.includes("arxiv") || paperId.includes("arxiv")) return "arxiv"
+  if (source.includes("crossref")) return "crossref"
+  if (source.includes("doaj")) return "doaj"
+  if (source === "hal" || source.includes("hal ")) return "hal"
+  if (source === "core" || source.includes("core ")) return "core"
+  if (source.includes("zenodo")) return "zenodo"
+  if (source.includes("europe_pmc") || source.includes("europe pmc")) return "europe_pmc"
+  if (source.includes("github")) return "github"
+  if (source.includes("huggingface") || source.includes("hugging face")) return "huggingface"
 
   return "all"
 }
@@ -1473,8 +1503,22 @@ function sourceFilterLabel(value: SourceFilter): string {
       return "OpenAlex"
     case "arxiv":
       return "ArXiv"
-    case "memory_v2":
-      return "Mémoire V2"
+    case "crossref":
+      return "Crossref"
+    case "doaj":
+      return "DOAJ"
+    case "hal":
+      return "HAL"
+    case "core":
+      return "CORE"
+    case "zenodo":
+      return "Zenodo"
+    case "europe_pmc":
+      return "Europe PMC"
+    case "github":
+      return "GitHub"
+    case "huggingface":
+      return "Hugging Face"
     case "technical":
       return "Sources techniques"
     default:
@@ -1502,7 +1546,21 @@ function dedupeArticlesGlobally(articles: ArticleRead[]): ArticleRead[] {
     const tag = normalizeTag(article.tag_article || article.source_json?.tag || article.source_json?.tag_article)
     const sourceKind = getArticleSourceKind(article)
     const score = Number(article.score ?? article.source_json?.relevance_score ?? 0)
-    const memoryPenalty = sourceKind === "memory_v2" ? -0.03 : 0
+    const rawArticle: any = article
+    const rawSource = v46Norm(rawArticle.source || rawArticle.source_json?.source || "")
+    const rawPaperId = v46Norm(
+      rawArticle.paper_id ||
+      rawArticle.source_json?.paper_id ||
+      rawArticle.source_json?.paperId ||
+      rawArticle.source_json?.id ||
+      ""
+    )
+    const isMemoryV2 =
+      rawSource.includes("memory_v2") ||
+      Boolean(rawArticle.memory_v2_prior) ||
+      Boolean(rawArticle.source_json?.memory_v2_prior) ||
+      rawPaperId.includes("memory")
+    const memoryPenalty = isMemoryV2 ? -0.03 : 0
     return (tagRank[tag] || 0) * 10 + score + memoryPenalty
   }
 
@@ -4821,7 +4879,21 @@ export function EnnoScholarPage({
               onChange={(event) => setSourceFilter(event.target.value as SourceFilter)}
               className="min-w-36 flex-1 bg-transparent text-sm text-foreground focus-visible:outline-none"
             >
-              {(["all", "semantic_scholar", "openalex", "arxiv", "memory_v2", "technical"] as SourceFilter[]).map((value) => (
+              {([
+                "all",
+                "semantic_scholar",
+                "openalex",
+                "arxiv",
+                "crossref",
+                "doaj",
+                "hal",
+                "core",
+                "zenodo",
+                "europe_pmc",
+                "github",
+                "huggingface",
+                "technical",
+              ] as SourceFilter[]).map((value) => (
                 <option key={value} value={value}>{sourceFilterLabel(value)}</option>
               ))}
             </select>

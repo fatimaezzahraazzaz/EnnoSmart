@@ -19,6 +19,15 @@ import {
 } from "@/components/ui/card"
 
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+
+import {
   Input,
 } from "@/components/ui/input"
 
@@ -31,9 +40,11 @@ import {
   ChevronRight,
   Filter,
   FolderKanban,
+  Loader2,
   PlusCircle,
   RefreshCw,
   Search,
+  Trash2,
   X,
 } from "lucide-react"
 
@@ -44,6 +55,7 @@ import {
 } from "react"
 
 import {
+  deleteProject,
   getProjects,
   type ProjectRead,
 } from "@/lib/api"
@@ -716,6 +728,51 @@ export default function ProjectListPage({
       "all" ||
     yearFilter !==
       "all"
+
+
+  const [deleteTarget, setDeleteTarget] =
+    useState<ProjectRead | null>(null)
+
+  const [deletingProjectId, setDeletingProjectId] =
+    useState<number | null>(null)
+
+  const [deleteError, setDeleteError] =
+    useState<string | null>(null)
+
+
+  function handleDeleteProject(
+    project: ProjectRead,
+  ) {
+    setDeleteError(null)
+    setDeleteTarget(project)
+  }
+
+
+  async function confirmDeleteProject() {
+    if (!deleteTarget) {
+      return
+    }
+
+    const target = deleteTarget
+
+    setDeletingProjectId(target.id)
+    setDeleteError(null)
+
+    try {
+      await deleteProject(target.id)
+      setDeleteTarget(null)
+      await loadProjects()
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "La suppression du projet a échoué."
+
+      setDeleteError(message)
+    } finally {
+      setDeletingProjectId(null)
+    }
+  }
 
 
   /* ------------------------------------------------------------------------ */
@@ -2004,7 +2061,7 @@ export default function ProjectListPage({
                               hover:bg-brand/[0.022]
                               sm:px-5
                               lg:grid
-                              lg:grid-cols-[minmax(220px,1.3fr)_minmax(180px,1fr)_90px_190px_100px_48px]
+                              lg:grid-cols-[minmax(220px,1.3fr)_minmax(180px,1fr)_90px_190px_100px_88px]
                               lg:items-center
                               lg:gap-4
                             "
@@ -2266,6 +2323,7 @@ export default function ProjectListPage({
                                 mt-3
                                 flex
                                 justify-end
+                                gap-1
                                 lg:mt-0
                               "
                             >
@@ -2302,6 +2360,38 @@ export default function ProjectListPage({
 
                               </Button>
 
+
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="
+                                  size-9
+                                  rounded-xl
+                                  text-destructive
+                                  transition
+                                  hover:bg-destructive/10
+                                  hover:text-destructive
+                                "
+                                title="Supprimer définitivement le projet"
+                                onKeyDown={(event) => {
+                                  event.stopPropagation()
+                                }}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  void handleDeleteProject(
+                                    project,
+                                  )
+                                }}
+                              >
+
+                                <Trash2 className="size-4" />
+
+                                <span className="sr-only">
+                                  Supprimer le projet
+                                </span>
+
+                              </Button>
+
                             </div>
 
                           </div>
@@ -2322,6 +2412,271 @@ export default function ProjectListPage({
         </div>
 
       )}
+
+
+      {/* ================================================================== */}
+      {/* Suppression définitive                                             */}
+      {/* ================================================================== */}
+
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (
+            !open &&
+            deletingProjectId === null
+          ) {
+            setDeleteError(null)
+            setDeleteTarget(null)
+          }
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="
+            overflow-hidden
+            rounded-[24px]
+            border-border/80
+            p-0
+            shadow-2xl
+            sm:max-w-[560px]
+          "
+        >
+
+          <div className="px-6 pb-5 pt-6">
+
+            <DialogHeader>
+
+              <div className="flex items-start gap-4">
+
+                <div
+                  className="
+                    grid
+                    size-12
+                    shrink-0
+                    place-items-center
+                    rounded-2xl
+                    bg-destructive/10
+                    text-destructive
+                  "
+                >
+                  <Trash2
+                    className="size-5"
+                    aria-hidden="true"
+                  />
+                </div>
+
+
+                <div className="min-w-0">
+
+                  <DialogTitle
+                    className="
+                      text-lg
+                      font-semibold
+                      tracking-[-0.02em]
+                    "
+                  >
+                    Supprimer définitivement ce projet ?
+                  </DialogTitle>
+
+
+                  <DialogDescription
+                    className="
+                      mt-2
+                      leading-6
+                    "
+                  >
+                    Le projet
+                    {" "}
+                    <span className="font-medium text-foreground">
+                      {deleteTarget?.project_name}
+                    </span>
+                    {" "}
+                    sera supprimé définitivement d’EnnoSmart.
+                  </DialogDescription>
+
+                </div>
+
+              </div>
+
+            </DialogHeader>
+
+
+            <div
+              className="
+                mt-5
+                rounded-2xl
+                border
+                border-destructive/15
+                bg-destructive/[0.045]
+                p-4
+              "
+            >
+
+              <p
+                className="
+                  text-xs
+                  font-semibold
+                  text-foreground
+                "
+              >
+                Cette action supprimera :
+              </p>
+
+
+              <ul
+                className="
+                  mt-3
+                  space-y-2
+                  text-sm
+                  text-muted-foreground
+                "
+              >
+
+                {[
+                  "Le projet",
+                  "Les documents uploadés",
+                  "Les diagnostics EnnoDiagnostic",
+                  "Les recherches et articles EnnoScholar",
+                  "Les conversations",
+                  "Les résultats EnnoAmel",
+                  "Les fichiers générés et données associées",
+                ].map((item) => (
+
+                  <li
+                    key={item}
+                    className="flex items-start gap-2"
+                  >
+
+                    <span
+                      className="
+                        mt-[7px]
+                        size-1.5
+                        shrink-0
+                        rounded-full
+                        bg-destructive/70
+                      "
+                    />
+
+                    <span>
+                      {item}
+                    </span>
+
+                  </li>
+
+                ))}
+
+              </ul>
+
+            </div>
+
+
+            <div
+              className="
+                mt-4
+                rounded-xl
+                border
+                border-warning/20
+                bg-warning/[0.06]
+                px-4
+                py-3
+                text-xs
+                leading-5
+                text-muted-foreground
+              "
+            >
+              Cette action est irréversible.
+              La mémoire historique Memory V2 est conservée.
+            </div>
+
+
+            {deleteError && (
+
+              <div
+                className="
+                  mt-4
+                  rounded-xl
+                  border
+                  border-destructive/20
+                  bg-destructive/[0.06]
+                  px-4
+                  py-3
+                  text-sm
+                  text-destructive
+                "
+              >
+                {deleteError}
+              </div>
+
+            )}
+
+          </div>
+
+
+          <DialogFooter
+            className="
+              mx-0
+              mb-0
+              rounded-none
+              border-t
+              bg-muted/30
+              px-6
+              py-4
+            "
+          >
+
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              disabled={deletingProjectId !== null}
+              onClick={() => {
+                setDeleteError(null)
+                setDeleteTarget(null)
+              }}
+            >
+              Annuler
+            </Button>
+
+
+            <Button
+              type="button"
+              variant="destructive"
+              className="rounded-xl"
+              aria-busy={
+                deletingProjectId ===
+                deleteTarget?.id
+              }
+              disabled={deletingProjectId !== null}
+              onClick={() => {
+                void confirmDeleteProject()
+              }}
+            >
+
+              {deletingProjectId ===
+              deleteTarget?.id ? (
+
+                <Loader2
+                  className="size-4 animate-spin"
+                  aria-hidden="true"
+                />
+
+              ) : (
+
+                <Trash2
+                  className="size-4"
+                  aria-hidden="true"
+                />
+
+              )}
+
+              Supprimer définitivement
+
+            </Button>
+
+          </DialogFooter>
+
+        </DialogContent>
+      </Dialog>
 
 
       {/* ================================================================== */}

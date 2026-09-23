@@ -405,6 +405,96 @@ def diagnostic_context(db: Any, project: Any, target_text: str) -> dict[str, Any
     }
 
 
+
+def _extractive_article_evidence(card: dict[str, Any]) -> dict[str, Any]:
+    """Retourne uniquement les passages originaux extraits du full text.
+
+    Les articles correctement extraits restent conservés dans le corpus.
+    Cette fonction sépare toutefois :
+    - l'article extrait/disponible ;
+    - les passages factuels utilisables par le Writer.
+
+    Aucun résumé/template généré n'est traité comme preuve scientifique.
+    """
+    bank = card.get("article_evidence_bank")
+    if not isinstance(bank, dict):
+        return {}
+
+    buckets = bank.get("paragraph_buckets")
+    if not isinstance(buckets, dict):
+        return {}
+
+    allowed_buckets = (
+        "problem",
+        "solution",
+        "method",
+        "workflow",
+        "definition",
+        "dataset",
+        "validation",
+        "results",
+        "limitations",
+        "future_work",
+    )
+
+    extracted: dict[str, list[dict[str, Any]]] = {}
+    for bucket in allowed_buckets:
+        rows = buckets.get(bucket) or []
+        if not isinstance(rows, list):
+            continue
+
+        clean_rows: list[dict[str, Any]] = []
+        for row in rows[:4]:
+            if not isinstance(row, dict):
+                continue
+            passage = str(row.get("text") or "").strip()
+            if not passage:
+                continue
+            clean_rows.append(
+                {
+                    "section": row.get("section"),
+                    "paragraph_index": row.get("paragraph_index"),
+                    "text": passage[:1800],
+                    "source": row.get("source"),
+                }
+            )
+
+        if clean_rows:
+            extracted[bucket] = clean_rows
+
+    if not extracted:
+        return {}
+
+    return {
+        "article_id": bank.get("article_id") or card.get("article_id"),
+        "title": bank.get("title") or card.get("title"),
+        "strategy": "original_fulltext_passages_only",
+        "fulltext_extracted": True,
+        "paragraphs_are_original_extracts": True,
+        "paragraph_buckets": extracted,
+    }
+
+
+def _extractive_bucket_text(
+    extractive: dict[str, Any],
+    *bucket_names: str,
+    limit: int = 5000,
+) -> str:
+    parts: list[str] = []
+    buckets = extractive.get("paragraph_buckets") or {}
+
+    for bucket in bucket_names:
+        rows = buckets.get(bucket) or []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            passage = str(row.get("text") or "").strip()
+            if passage and passage not in parts:
+                parts.append(passage)
+
+    return "\n\n".join(parts)[:limit]
+
+
 def scholar_context(
     db: Any,
     project: Any,
@@ -498,6 +588,36 @@ def scholar_context(
         )
         if isinstance(authors, str):
             authors = [item.strip() for item in re.split(r"[,;]", authors) if item.strip()]
+        extractive = _extractive_article_evidence(card)
+
+        # IMPORTANT :
+        # On conserve tout article dont le full text / Article Card a été
+        # correctement extrait. En revanche, le Writer reçoit comme PREUVE
+        # uniquement les paragraphes originaux du papier.
+        extractive_method = _extractive_bucket_text(
+            extractive,
+            "method",
+            "workflow",
+            limit=5000,
+        )
+        extractive_results = _extractive_bucket_text(
+            extractive,
+            "results",
+            "validation",
+            limit=5000,
+        )
+        extractive_limits = _extractive_bucket_text(
+            extractive,
+            "limitations",
+            limit=4000,
+        )
+        extractive_problem = _extractive_bucket_text(
+            extractive,
+            "problem",
+            "solution",
+            limit=4000,
+        )
+
         evidence.append(
             {
                 "article_id": article_id,
@@ -514,23 +634,25 @@ def scholar_context(
                 "doi": identity.get("doi")
                 or card.get("doi")
                 or (article.doi if article else None),
-                "method": _compact(
-                    card.get("technical_method_analysis") or card.get("methods"), 1400
-                ),
-                "results": _compact(
-                    card.get("results")
-                    or card.get("key_results")
-                    or card.get("article_evidence_bank"),
-                    1800,
-                ),
-                "limits": _compact(
-                    card.get("concept_limits") or card.get("limitations"), 1400
-                ),
-                "impact": _compact(
-                    card.get("impact_on_verrou")
-                    or card.get("technical_narrative_capsule"),
-                    1400,
-                ),
+                # Les quatre champs ci-dessous servent au Writer.
+                # Ils proviennent uniquement des paragraphes originaux extraits.
+                "problem": extractive_problem,
+                "method": extractive_method,
+                "results": extractive_results,
+                "limits": extractive_limits,
+
+                # Conservation complète de la preuve extraite pour traçabilité.
+                "article_evidence_bank": extractive,
+                "fulltext_extracted": bool(extractive),
+                "evidence_origin": "original_fulltext_passages",
+
+                # Les champs générés/template de l'Article Card restent dans la
+                # carte stockée, mais ne sont PAS utilisés comme preuve factuelle.
+                "generated_card_analysis": {
+                    "technical_method_analysis": card.get("technical_method_analysis"),
+                    "concept_limits": card.get("concept_limits"),
+                    "impact_on_verrou": card.get("impact_on_verrou"),
+                },
                 "source_url": article.url if article else None,
                 "section_ids": list(dict.fromkeys([
                     *_string_list(card.get("section_ids") or source_json.get("section_ids") or []),
@@ -555,6 +677,9 @@ def scholar_context(
                 },
                 "section_context_gate": card.get("section_context_gate") or source_json.get("section_context_gate") or {},
                 "reuse_lexical_score": lexical_score,
+                # La présence de l'article ne signifie pas encore qu'il doit
+                # être cité : la citation devient obligatoire seulement lorsqu'un
+                # argument réellement soutenu par ses passages est rédigé.
                 "citation_required": False,
             }
         )

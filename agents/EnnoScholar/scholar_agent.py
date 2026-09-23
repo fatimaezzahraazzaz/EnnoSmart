@@ -3100,11 +3100,23 @@ class EnnoScholarAgent:
 
         ranked = bge_candidates
 
+        # Les research_targets sont utilisés par EnnoAmel pour une recherche
+        # interactive ciblée : le consultant n'a besoin que d'une shortlist.
+        # Les verrous EnnoDiagnostic conservent le reranking exhaustif historique.
+        is_research_target = bool(
+            str(verrou.get("research_target_id") or "").strip()
+        )
+        bge_rerank_limit = (
+            int(self.max_articles_per_verrou)
+            if is_research_target and self.max_articles_per_verrou is not None
+            else None
+        )
+
         if rerank_papers_with_bge is not None:
             ranked, reranker_report = rerank_papers_with_bge(
                 bge_candidates,
                 intent,
-
+                top_n=bge_rerank_limit,
             )
 
         # V170 - conserver le premier passage BGE.
@@ -3351,6 +3363,7 @@ class EnnoScholarAgent:
                             ) = rerank_papers_with_bge(
                                 new_articles,
                                 intent,
+                                top_n=bge_rerank_limit,
                             )
 
                         ranked = (

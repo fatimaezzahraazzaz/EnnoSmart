@@ -258,11 +258,30 @@ def consolidate_final_parent_view(
         for i, item in enumerate(current, start=1)
     ]
 
-    result = consolidate_parent_locks(adapted)
-    valid = bool(result.get("valid"))
-    consolidated = (
-        [deepcopy(dict(x)) for x in (result.get("groups") or []) if isinstance(x, Mapping)]
-        if valid else adapted
+    # TEST TEMPORAIRE : bypass du regroupement final.
+    # result = consolidate_parent_locks(adapted)
+    # valid = bool(result.get("valid"))
+    # consolidated = (
+    #     [deepcopy(dict(x)) for x in (result.get("groups") or []) if isinstance(x, Mapping)]
+    #     if valid else adapted
+    # )
+
+    result = {
+        "valid": True,
+        "groups": list(adapted),
+        "audit": {
+            "mode": "TEST_BYPASS_FINAL_PARENT",
+            "input_count": len(adapted),
+            "output_count": len(adapted),
+        },
+    }
+
+    valid = True
+    consolidated = list(adapted)
+
+    print(
+        f"[EnnoDiagnostic][TEST_BYPASS_FINAL_PARENT] "
+        f"input={len(adapted)} output={len(consolidated)}"
     )
 
     by_id = {

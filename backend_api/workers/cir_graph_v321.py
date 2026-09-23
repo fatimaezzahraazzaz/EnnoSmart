@@ -179,23 +179,14 @@ def start_node(
             project_id,
         )
 
-        # Idempotence : si V3.20 a déjà un workflow actif, un retry Celery ne
-        # rejoue pas le message consultant.
-        snapshot = _workflow_snapshot(
-            db,
-            project_id,
-            session_id,
-        )
-        workflow = snapshot["workflow"]
-
-        if (
-            workflow
-            and str(workflow.get("version") or "").endswith(
-                "v3_20"
-            )
-        ):
-            # Workflow actif OU déjà terminé : un retry Celery ne doit jamais
-            # rejouer le message initial et créer une seconde candidate.
+        # L'idempotence appartient au JOB Celery/LangGraph, pas à l'ancien
+        # workflow stocké dans la conversation.
+        #
+        # - nouveau task_id/thread : started=False -> le nouveau message doit
+        #   créer un nouveau workflow depuis la version active ;
+        # - retry du même task_id/thread : started=True -> ne pas rejouer le
+        #   message consultant.
+        if bool(state.get("started")):
             started = True
         else:
             send_message(

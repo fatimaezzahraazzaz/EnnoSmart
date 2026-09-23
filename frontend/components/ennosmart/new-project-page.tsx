@@ -286,7 +286,9 @@ export default function NewProjectPage({
   const [customSubprojectName, setCustomSubprojectName] = useState("")
   const [year, setYear] = useState(currentYear())
   const [domainLabel, setDomainLabel] = useState("")
+  const [selectedDomains, setSelectedDomains] = useState<string[]>([])
   const [customDomain, setCustomDomain] = useState("")
+  const [customDomainOpen, setCustomDomainOpen] = useState(false)
 
   const [diagnosticUploadTab, setDiagnosticUploadTab] =
     useState<DiagnosticUploadTab>("documents")
@@ -363,10 +365,7 @@ export default function NewProjectPage({
     }
   }, [])
 
-  const effectiveDomain =
-    domainLabel === "__other__"
-      ? customDomain.trim()
-      : domainLabel.trim()
+  const effectiveDomain = selectedDomains.join(" | ")
 
   const organisme = (
     organismIsLocked
@@ -436,7 +435,8 @@ export default function NewProjectPage({
       organisme.trim().length > 0 &&
       projectName.trim().length > 0 &&
       year.trim().length > 0 &&
-      effectiveDomain.length > 0
+      effectiveDomain.length > 0 &&
+      effectiveDomain.length <= 255
     )
   }, [organisme, projectName, year, effectiveDomain])
 
@@ -999,9 +999,29 @@ export default function NewProjectPage({
                   {/* Organisme */}
 
                   <div className="space-y-2">
-                    <Label htmlFor="organisme">
-                      Organisme / client <span className="text-destructive">*</span>
-                    </Label>
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="organisme">
+                        Organisme / client <span className="text-destructive">*</span>
+                      </Label>
+                      {!organismIsLocked && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOrganismeChoice("__other__")
+                            setCustomOrganisme("")
+                            setProjectChoice("")
+                            setCustomProjectName("")
+                            setSubprojectChoice("__none__")
+                            setCustomSubprojectName("")
+                            resetMessages()
+                          }}
+                          disabled={createdProjectId !== null || catalogLoading}
+                          className="text-xs font-medium text-brand hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          + Ajouter
+                        </button>
+                      )}
+                    </div>
 
                     <div className="relative">
                       <Building2 className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -1037,7 +1057,6 @@ export default function NewProjectPage({
                           {catalog.organisations.map((item) => (
                             <option key={item.name} value={item.name}>{item.name}</option>
                           ))}
-                          <option value="__other__">Autre / nouvel organisme</option>
                         </select>
                       )}
 
@@ -1054,7 +1073,7 @@ export default function NewProjectPage({
                     )}
                     {catalogError && !organismIsLocked && (
                       <p className="text-[11px] leading-5 text-amber-700">
-                        Catalogue indisponible : utilisez « Autre / nouvel organisme ».
+                        Catalogue indisponible : utilisez « + Ajouter ».
                       </p>
                     )}
                     {!organismIsLocked && organismeChoice === "__other__" && (
@@ -1076,9 +1095,25 @@ export default function NewProjectPage({
                   {/* Nom projet */}
 
                   <div className="space-y-2">
-                    <Label htmlFor="projectName">
-                      Nom du projet <span className="text-destructive">*</span>
-                    </Label>
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="projectName">
+                        Nom du projet <span className="text-destructive">*</span>
+                      </Label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProjectChoice("__other__")
+                          setCustomProjectName("")
+                          setSubprojectChoice("__none__")
+                          setCustomSubprojectName("")
+                          resetMessages()
+                        }}
+                        disabled={!organisme || createdProjectId !== null}
+                        className="text-xs font-medium text-brand hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        + Ajouter
+                      </button>
+                    </div>
 
                     <div className="relative">
                       <select
@@ -1102,7 +1137,6 @@ export default function NewProjectPage({
                         {availableProjects.map((item) => (
                           <option key={item.name} value={item.name}>{item.name}</option>
                         ))}
-                        <option value="__other__">Autre / nouveau projet</option>
                       </select>
                       <ChevronDownIcon />
                     </div>
@@ -1126,7 +1160,23 @@ export default function NewProjectPage({
                   {/* Sous-projet */}
 
                   <div className="space-y-2">
-                    <Label htmlFor="subprojectName">Sous-projet <span className="font-normal text-muted-foreground">(facultatif)</span></Label>
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="subprojectName">
+                        Sous-projet <span className="font-normal text-muted-foreground">(facultatif)</span>
+                      </Label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSubprojectChoice("__other__")
+                          setCustomSubprojectName("")
+                          resetMessages()
+                        }}
+                        disabled={!projectName || createdProjectId !== null}
+                        className="text-xs font-medium text-brand hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        + Ajouter
+                      </button>
+                    </div>
                     <div className="relative">
                       <select
                         id="subprojectName"
@@ -1144,7 +1194,6 @@ export default function NewProjectPage({
                         {availableSubprojects.map((item) => (
                           <option key={item} value={item}>{item}</option>
                         ))}
-                        <option value="__other__">Autre / nouveau sous-projet</option>
                       </select>
                       <ChevronDownIcon />
                     </div>
@@ -1198,10 +1247,52 @@ export default function NewProjectPage({
 
                   {/* Domaine */}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="domainLabel">
-                      Domaine <span className="text-destructive">*</span>
-                    </Label>
+                  <div className="space-y-3 md:col-span-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="domainLabel">
+                        Domaine(s) <span className="text-destructive">*</span>
+                      </Label>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomDomainOpen((current) => !current)
+                          setCustomDomain("")
+                        }}
+                        disabled={createdProjectId !== null}
+                        className="text-xs font-medium text-brand hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        + Ajouter un domaine
+                      </button>
+                    </div>
+
+                    {selectedDomains.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedDomains.map((domain) => (
+                          <span
+                            key={domain}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-brand/20 bg-brand/5 px-3 py-1.5 text-xs font-medium text-foreground"
+                          >
+                            {domain}
+
+                            {createdProjectId === null && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSelectedDomains((current) =>
+                                    current.filter((item) => item !== domain)
+                                  )
+                                }
+                                className="rounded-full text-muted-foreground transition hover:text-destructive"
+                                aria-label={`Supprimer ${domain}`}
+                              >
+                                <X className="size-3.5" />
+                              </button>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     <div className="relative">
                       <Sparkles className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -1211,59 +1302,90 @@ export default function NewProjectPage({
                         value={domainLabel}
                         onChange={(event) => {
                           const value = event.target.value
-                          setDomainLabel(value)
 
-                          if (value !== "__other__") {
-                            setCustomDomain("")
+                          if (value) {
+                            setSelectedDomains((current) =>
+                              current.includes(value)
+                                ? current
+                                : [...current, value]
+                            )
                           }
+
+                          setDomainLabel("")
                         }}
-                        required
                         disabled={createdProjectId !== null}
                         className="h-11 w-full appearance-none rounded-xl border border-input bg-background pl-10 pr-9 text-sm text-foreground outline-none transition focus:border-brand/40 focus:ring-2 focus:ring-brand/10 disabled:cursor-not-allowed disabled:bg-muted/60"
                       >
-                        <option value="" disabled>
-                          Sélectionnez un domaine
+                        <option value="">
+                          {selectedDomains.length > 0
+                            ? "Ajouter un autre domaine"
+                            : "Sélectionnez un domaine"}
                         </option>
 
-                        {commonDomains.map((domain) => (
-                          <option key={domain} value={domain}>
-                            {domain}
-                          </option>
-                        ))}
-
-                        <option value="__other__">
-                          Autre domaine
-                        </option>
+                        {commonDomains
+                          .filter((domain) => !selectedDomains.includes(domain))
+                          .map((domain) => (
+                            <option key={domain} value={domain}>
+                              {domain}
+                            </option>
+                          ))}
                       </select>
 
                       <ChevronDownIcon />
                     </div>
 
-                    {domainLabel === "__other__" && (
-                      <div className="mt-3 space-y-2 animate-fadeIn">
-                        <Label htmlFor="customDomain">
-                          Précisez le domaine{" "}
-                          <span className="text-destructive">*</span>
-                        </Label>
-
+                    {customDomainOpen && createdProjectId === null && (
+                      <div className="flex gap-2 animate-fadeIn">
                         <Input
                           id="customDomain"
                           value={customDomain}
                           onChange={(event) =>
                             setCustomDomain(event.target.value)
                           }
-                          placeholder="Exemple : Géosciences, Agriculture, Optique…"
-                          required
-                          readOnly={createdProjectId !== null}
+                          placeholder="Exemple : Vision industrielle"
                           className="h-11 rounded-xl"
                         />
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={!customDomain.trim()}
+                          onClick={() => {
+                            const value = customDomain.trim()
+
+                            if (!value) return
+
+                            setSelectedDomains((current) => {
+                              const exists = current.some(
+                                (item) =>
+                                  item.toLocaleLowerCase("fr") ===
+                                  value.toLocaleLowerCase("fr")
+                              )
+
+                              return exists ? current : [...current, value]
+                            })
+
+                            setCustomDomain("")
+                            setCustomDomainOpen(false)
+                          }}
+                          className="h-11 shrink-0 rounded-xl"
+                        >
+                          Ajouter
+                        </Button>
                       </div>
                     )}
 
+                    {effectiveDomain.length > 255 && (
+                      <p className="text-[11px] text-destructive">
+                        Trop de domaines sélectionnés. La limite actuelle est de 255 caractères.
+                      </p>
+                    )}
+
                     <p className="text-[11px] text-muted-foreground">
-                      Le domaine aide les agents à contextualiser le dossier.
+                      Plusieurs domaines peuvent être associés au même projet. Vous pouvez aussi ajouter vos propres domaines.
                     </p>
                   </div>
+
                 </CardContent>
               </Card>
 
@@ -1331,6 +1453,20 @@ export default function NewProjectPage({
                         Vidéo / Audio ({mediaFiles.length})
                       </Button>
                     </div>
+
+                    {diagnosticUploadTab === "media" && (
+                      <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-900">
+                        <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                        <div>
+                          <p className="font-medium">La transcription peut prendre du temps</p>
+                          <p className="mt-1 text-xs leading-5 text-amber-800">
+                            Pour un fichier long, par exemple 50 minutes ou plusieurs heures,
+                            le traitement peut nécessiter plusieurs minutes ou davantage.
+                            Laissez la transcription se terminer avant de quitter la page.
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                     <div
                       id="diagnostic-upload-panel"

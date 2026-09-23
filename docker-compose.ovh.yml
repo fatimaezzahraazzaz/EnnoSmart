@@ -23,9 +23,10 @@ services:
       retries: 20
 
   redis:
-    image: redis:7-alpine
+    image: redis/redis-stack-server:latest
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    environment:
+      REDIS_ARGS: "--appendonly yes --appendfsync everysec"
     volumes:
       - ${ENNOSMART_REDIS_DATA_DIR:-/mnt/ennosmart-data/redis}:/data
     healthcheck:
@@ -157,7 +158,10 @@ services:
     <<: *backend_image
     restart: unless-stopped
     env_file: .env
-    environment: *backend_environment
+    environment:
+      <<: *backend_environment
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
     volumes: *backend_volumes
     working_dir: /opt/ennosmart
     command: ["python", "-m", "celery", "-A", "backend_api.workers.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=4", "-Q", "ennosmart.cir"]

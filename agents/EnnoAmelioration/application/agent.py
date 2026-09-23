@@ -32,10 +32,6 @@ from ..domain.models import (
     TargetScope,
 )
 from .agent_adapters import scholar_context
-from .diagnostic_orchestration_service import (
-    DiagnosticOrchestrationError,
-    ensure_diagnostic_context,
-)
 from .audit_service import audit_text
 from .cir_style_context import cir_style_context
 from .intention_service import understand_instruction
@@ -820,62 +816,8 @@ class EnnoAmeliorationAgent:
             },
             "cir_style": cir_style_context(project),
         }
-        cached_diagnostic = request.diagnostic_context_override
-        if isinstance(cached_diagnostic, dict):
-            package["diagnostic"] = dict(cached_diagnostic)
-            package["diagnostic_orchestration"] = {
-                **dict(request.diagnostic_orchestration_override or {}),
-                "mode": "reuse_initial_cir_diagnostic",
-                "executed": False,
-                "cache_hit": True,
-            }
-        needs_diagnostic_context = bool(
-            routing.needs_diagnostic
-            or routing.needs_project_evidence
-        )
-        if needs_diagnostic_context and "diagnostic" not in package:
-            if not request.allow_scoped_diagnostic:
-                package["diagnostic"] = {
-                    "available": False,
-                    "completed": False,
-                    "agent": "EnnoDiagnostic",
-                    "reason": (
-                        "Le diagnostic initial du CIR n'est pas disponible et "
-                        "la section n'est pas ambiguë : aucun diagnostic ciblé "
-                        "supplémentaire n'est autorisé."
-                    ),
-                    "evidence_items": [],
-                    "verrous": [],
-                    "domain_detection": {},
-                }
-                package["diagnostic_orchestration"] = {
-                    "agent": "EnnoDiagnostic",
-                    "mode": "scoped_not_authorized_for_unambiguous_section",
-                    "executed": False,
-                }
-            else:
-                try:
-                    diagnostic, orchestration = ensure_diagnostic_context(
-                        db, project, request
-                    )
-                    package["diagnostic"] = diagnostic
-                    package["diagnostic_orchestration"] = orchestration
-                except DiagnosticOrchestrationError as exc:
-                    package["diagnostic"] = {
-                        "available": False,
-                        "completed": False,
-                        "agent": "EnnoDiagnostic",
-                        "reason": str(exc),
-                        "evidence_items": [],
-                        "verrous": [],
-                        "domain_detection": {},
-                    }
-                    package["diagnostic_orchestration"] = {
-                        "agent": "EnnoDiagnostic",
-                        "mode": "failed",
-                        "executed": False,
-                        "error": str(exc),
-                    }
+        # Invariant EnnoAmel :
+        # aucune donnée ni exécution EnnoDiagnostic n'entre dans ce workflow.
         if routing.needs_scholar and (
             not routing.needs_new_research or request.evidence_article_ids
         ):
@@ -960,6 +902,48 @@ class EnnoAmeliorationAgent:
                 f"chars={source_resolution.get('target_chars')} "
                 f"preview={str(request.target_text or '')[:120].replace(chr(10), ' ')!r}"
             )
+        # ============================================================
+        # INVARIANT ARCHITECTURAL ENNOAMEL
+        # EnnoAmel ne lance jamais EnnoDiagnostic.
+        #
+        # - style / clarté / structure -> Writer
+        # - argumentation -> Writer
+        # - renforcement scientifique -> EnnoScholar
+        # - sources validées -> Writer avec Article Cards
+        #
+        # Le texte cible constitue le contexte projet de l'amélioration.
+        # ============================================================
+        no_diagnostic_section_plan = [
+            plan.model_copy(
+                update={
+                    "needs_diagnostic": False,
+                    "route": (
+                        SpecialistRoute.SCHOLAR
+                        if plan.needs_scholar
+                        else SpecialistRoute.WRITER
+                    ),
+                }
+            )
+            for plan in routing.section_plan
+        ]
+
+        routing = routing.model_copy(
+            update={
+                "needs_diagnostic": False,
+                "needs_project_evidence": False,
+                "specialist_route": (
+                    SpecialistRoute.SCHOLAR
+                    if routing.needs_scholar
+                    else SpecialistRoute.WRITER
+                ),
+                "section_plan": no_diagnostic_section_plan,
+                "rationale": [
+                    *routing.rationale,
+                    "Invariant EnnoAmel : EnnoDiagnostic désactivé ; le contexte projet provient du texte cible.",
+                ],
+            }
+        )
+
         # Fallback sémantique pour les anciens appels qui ciblent explicitement
         # une revue scientifique mais ne disposent pas du classifieur zero-shot.
         # La détection passe par le classifieur d'intention générique et ne
@@ -1029,13 +1013,9 @@ class EnnoAmeliorationAgent:
         )
 
         if fresh_policy.mode == FRESH_RESEARCH_MODE:
-            fresh_needs_diagnostic = bool(
-                routing.needs_diagnostic
-                and (
-                    ImprovementIntent.CIR_ELIGIBILITY in routing.intents
-                    or routing.section_function == SectionFunction.UNCERTAINTY
-                )
-            )
+            # EnnoDiagnostic est désactivé dans EnnoAmel.
+            # Une recherche scientifique fraîche part directement vers EnnoScholar.
+            fresh_needs_diagnostic = False
             fresh_route = (
                 SpecialistRoute.DIAGNOSTIC_SCHOLAR
                 if fresh_needs_diagnostic
@@ -1107,57 +1087,6 @@ class EnnoAmeliorationAgent:
             )
         # END ENNOAMEL_FRESH_RESEARCH_V3_14
 
-        # BEGIN ENNOAMEL_FRESH_RESEARCH_V3_13
-        fresh_policy = resolve_fresh_research_policy(
-            instruction=request.instruction,
-            current_choice=research_choice,
-            intents=routing.intents,
-            needs_scholar=bool(routing.needs_scholar),
-            editorial_only=bool(routing.editorial_only),
-            hard_forbid_research=hard_forbid_research,
-            hard_forbid_scholar=hard_forbid_scholar,
-        )
-        if fresh_policy.mode == FRESH_RESEARCH_MODE:
-            research_choice = RESEARCH_LAUNCH_TARGETED
-            routing = routing.model_copy(
-                update={
-                    "needs_scholar": True,
-                    "needs_new_research": True,
-                    "forbids_new_research": False,
-                    "forbids_scholar": False,
-                    "needs_project_evidence": routing.needs_diagnostic,
-                    "specialist_route": (
-                        SpecialistRoute.DIAGNOSTIC_SCHOLAR
-                        if routing.needs_diagnostic
-                        else SpecialistRoute.SCHOLAR
-                    ),
-                    "rationale": [
-                        *routing.rationale,
-                        f"{FRESH_RESEARCH_POLICY_VERSION}: {fresh_policy.reason}",
-                    ],
-                }
-            )
-        elif fresh_policy.mode == REUSE_RESEARCH_MODE:
-            research_choice = RESEARCH_USE_EXISTING
-            routing = routing.model_copy(
-                update={
-                    "needs_scholar": True,
-                    "needs_new_research": False,
-                    "forbids_new_research": True,
-                    "forbids_scholar": False,
-                    "needs_project_evidence": routing.needs_diagnostic,
-                    "specialist_route": (
-                        SpecialistRoute.DIAGNOSTIC_SCHOLAR
-                        if routing.needs_diagnostic
-                        else SpecialistRoute.SCHOLAR
-                    ),
-                    "rationale": [
-                        *routing.rationale,
-                        f"{FRESH_RESEARCH_POLICY_VERSION}: {fresh_policy.reason}",
-                    ],
-                }
-            )
-        # END ENNOAMEL_FRESH_RESEARCH_V3_13
 
         if hard_forbid_scholar:
             routing = routing.model_copy(
@@ -1434,7 +1363,7 @@ class EnnoAmeliorationAgent:
                     diagnostic_orchestration=(evidence.get("diagnostic_orchestration") or {}),
                 )
             except Exception as exc:
-                if not fresh_policy.fallback_without_sources:
+                if fresh_policy.mode == FRESH_RESEARCH_MODE or not fresh_policy.fallback_without_sources:
                     return ImprovementResult(
                         ok=False,
                         state=ImprovementState.REVIEW,
@@ -1483,7 +1412,10 @@ class EnnoAmeliorationAgent:
                     requires_confirmation=True,
                 )
 
-            if research is not None and not fresh_policy.fallback_without_sources:
+            if research is not None and (
+                fresh_policy.mode == FRESH_RESEARCH_MODE
+                or not fresh_policy.fallback_without_sources
+            ):
                 return ImprovementResult(
                     ok=True,
                     state=ImprovementState.AWAITING_EVIDENCE,

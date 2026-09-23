@@ -73,7 +73,7 @@ class TranscriptionResult:
 
 
 HF_TOKEN = os.getenv("HF_TOKEN", "").strip()
-DEFAULT_MODEL = os.getenv("TRANSCRIPTION_MODEL", "turbo").strip() or "turbo"
+DEFAULT_MODEL = os.getenv("TRANSCRIPTION_MODEL", "small").strip() or "small"
 DEFAULT_BATCH_SIZE = max(1, int(os.getenv("TRANSCRIPTION_BATCH_SIZE", "16")))
 DEFAULT_NUM_SPEAKERS = max(1, int(os.getenv("TRANSCRIPTION_NUM_SPEAKERS", "2")))
 DEFAULT_DIARIZATION = (
@@ -595,6 +595,17 @@ def extract_audio_transcription(
       faster-whisper sans diarisation.
     """
     path = Path(file_path)
+
+    _device = _detect_asr_device()
+    logger.warning(
+        "TRANSCRIPTION START | file=%s | model=%s | device=%s | compute_type=%s | diarization=%s | batch=%s",
+        path.name,
+        model_name,
+        _device,
+        _compute_type_for(_device),
+        enable_diarization,
+        batch_size,
+    )
 
     base_result = TranscriptionResult(
         file_name=path.name,

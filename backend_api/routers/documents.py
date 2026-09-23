@@ -3,6 +3,7 @@ from pathlib import Path
 import hashlib
 import logging
 import mimetypes
+import os
 import re
 import tempfile
 from typing import Literal
@@ -302,6 +303,7 @@ def _build_transcription_pdf(
         if speaker:
             pdf.set_text_color(*title_color)
             pdf.set_font("Arial", "B", 11)
+            pdf.set_x(pdf.l_margin)
             pdf.multi_cell(
                 0,
                 6,
@@ -315,6 +317,7 @@ def _build_transcription_pdf(
         pdf.set_font("Arial", size=11)
 
         body = text or str(chunk or "").strip()
+        pdf.set_x(pdf.l_margin)
         pdf.multi_cell(
             0,
             6,
@@ -666,6 +669,12 @@ async def transcribe_video(
     original_filename = file.filename or "media"
     suffix = Path(original_filename).suffix.lower()
 
+    logging.getLogger(__name__).warning(
+        "TRANSCRIPTION REQUEST | project=%s | file=%s",
+        project_id,
+        original_filename,
+    )
+
     if suffix not in AUDIO_VIDEO_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
@@ -693,6 +702,12 @@ async def transcribe_video(
             tmp.flush()
             tmp_path = Path(tmp.name)
 
+        logging.getLogger(__name__).warning(
+            "TRANSCRIPTION UPLOAD COMPLETE | file=%s | size=%s bytes",
+            original_filename,
+            file_size,
+        )
+
         if file_size == 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -705,7 +720,7 @@ async def transcribe_video(
             extract,
             tmp_path,
             enable_transcription=True,
-            transcription_model="turbo",
+            transcription_model=os.getenv("TRANSCRIPTION_MODEL", "small").strip() or "small",
             transcription_language="fr",
             transcription_beam_size=1,
             transcription_group_chunks=False,

@@ -4,6 +4,7 @@ from agents.EnnoAmelioration.application.auto_evidence_selector_v320 import (
     bind_prepared_sources,
     build_traceable_evidence,
     select_sources,
+    validate_prepared_sources_from_fulltext,
 )
 
 from agents.EnnoAmelioration.application.conversation_task_memory_v317 import evolve_task_memory
@@ -1034,16 +1035,20 @@ def decide_research_sources(
                 }
             )
             current["research"] = research_meta
-            current["status"] = "evidence_ready" if ready else "awaiting_sources"
-            progressive["phase"] = (
-                "evidence_ready" if ready else "awaiting_sources"
-            )
+            # En mode CIR complet, Garder/Ecarter ne doit jamais lancer
+            # automatiquement la rédaction. On reste sur la section jusqu'au
+            # clic explicite "Terminer la sélection et continuer".
+            current["status"] = "awaiting_sources"
+            progressive["phase"] = "awaiting_sources"
             _progressive_store(session, progressive)
 
     if not (progressive and progressive.get("active")):
         accepted = list(session.context_json.get("accepted_research_sources") or [])
         ready = [row for row in accepted if row.get("article_card_ready") is True]
-    session.state = "evidence_ready" if ready else "awaiting_evidence"
+    if progressive and progressive.get("active"):
+        session.state = "awaiting_evidence"
+    else:
+        session.state = "evidence_ready" if ready else "awaiting_evidence"
     session.updated_at = _utcnow()
     _add_message(
         db,
@@ -1073,6 +1078,148 @@ def decide_research_sources(
     db.commit()
     db.refresh(session)
     return session
+
+
+
+def finish_progressive_research_selection(
+    db: Session,
+    project: Project,
+    session_id: str,
+) -> tuple[ImprovementSession, ImprovementVersion | None]:
+    """Termine explicitement la sélection humaine de la section courante.
+
+    Aucun Writer n'est lancé ici.
+    Les preuves prêtes sont mémorisées dans l'unité courante, puis le
+    workflow passe à la section suivante. La rédaction scientifique
+    n'intervient qu'après la fin de toutes les sélections.
+    """
+
+    session = get_session(
+        db,
+        project.id,
+        session_id,
+    )
+
+    workflow = _progressive_context(session)
+
+    if not workflow or not workflow.get("active"):
+        raise ValueError(
+            "Aucun parcours CIR progressif actif."
+        )
+
+    unit = progressive_current_unit(workflow)
+
+    if (
+        unit is None
+        or unit.get("action") != "research"
+        or str(unit.get("status") or "") != "awaiting_sources"
+    ):
+        raise ValueError(
+            "La section courante n'attend pas de validation de sources."
+        )
+
+    research = dict(
+        unit.get("research") or {}
+    )
+
+    accepted_sources = [
+        dict(row)
+        for row in (
+            research.get("accepted_sources")
+            or []
+        )
+        if isinstance(row, dict)
+    ]
+
+    ready_article_ids: list[int] = []
+
+    for value in (
+        research.get("ready_article_ids")
+        or []
+    ):
+        try:
+            article_id = int(value)
+        except (TypeError, ValueError):
+            continue
+
+        if article_id > 0 and article_id not in ready_article_ids:
+            ready_article_ids.append(article_id)
+
+    research.update(
+        {
+            "selection_mode": "human",
+            "selection_actor": "consultant",
+            "selection_finalized": True,
+            "accepted_sources": accepted_sources,
+            "ready_article_ids": ready_article_ids,
+            "accepted_count": len(accepted_sources),
+            "ready_count": len(ready_article_ids),
+        }
+    )
+
+    unit["research"] = research
+
+    # Important :
+    # la section est seulement COLLECTÉE, pas encore rédigée.
+    unit["status"] = "research_collected"
+
+    workflow["phase"] = "collecting_sources"
+    workflow["last_progress"] = {
+        "unit_id": unit.get("unit_id"),
+        "stage": "research_selection_finalized",
+        "accepted_count": len(accepted_sources),
+        "ready_count": len(ready_article_ids),
+    }
+
+    _add_message(
+        db,
+        session.id,
+        "assistant",
+        (
+            f"{progressive_progress_label(workflow, unit)} : "
+            f"sélection terminée avec {len(accepted_sources)} article(s) gardé(s), "
+            f"dont {len(ready_article_ids)} preuve(s) exploitable(s). "
+            "Je passe à la section suivante."
+        ),
+        intent="progressive_cir_section_selection_completed",
+        metadata={
+            "workflow": progressive_workflow_public_summary(workflow),
+            "unit_id": unit.get("unit_id"),
+            "accepted_count": len(accepted_sources),
+            "ready_count": len(ready_article_ids),
+            "granularity": "section",
+        },
+    )
+
+    # On quitte le corpus courant dans le contexte global.
+    # Les informations nécessaires restent stockées dans unit["research"].
+    _progressive_store(
+        session,
+        workflow,
+        handoff=None,
+        research_sources=[],
+        accepted_sources=[],
+    )
+
+    progressive_advance_cursor(workflow)
+
+    session.state = "audit"
+    session.updated_at = _utcnow()
+
+    _progressive_store(
+        session,
+        workflow,
+    )
+
+    db.commit()
+    db.refresh(session)
+
+    return _progressive_advance(
+        db,
+        project,
+        session,
+        workflow,
+    )
 
 
 def create_session(
@@ -1343,102 +1490,6 @@ def _progressive_base_text(
     return version, text
 
 
-def _ensure_progressive_initial_diagnostic(
-    db: Session,
-    project: Project,
-    session: ImprovementSession,
-    workflow: dict[str, Any],
-) -> dict[str, Any]:
-    """Résout une seule fois le diagnostic structuré de la version active."""
-
-    current = dict(workflow.get("initial_diagnostic") or {})
-    if (
-        current.get("completed") is True
-        and str(current.get("base_sha256") or "")
-        == str(workflow.get("base_sha256") or "")
-    ):
-        return current
-
-    _, base_text = _progressive_base_text(session, workflow)
-    request = ImprovementRequest(
-        instruction=(
-            "Produis le diagnostic initial structuré du CIR complet. "
-            "Ce diagnostic sera mis en cache et ne sera pas recalculé section "
-            "par section. N'effectue aucune recherche bibliographique."
-        ),
-        full_text=base_text,
-        target_text=base_text,
-        target_scope=TargetScope.FULL_DOCUMENT,
-        project_name=str(project.project_name or ""),
-        project_domain=str(project.domain_label or ""),
-        allow_scoped_diagnostic=False,
-    )
-
-    context: dict[str, Any]
-    orchestration: dict[str, Any]
-    try:
-        from agents.EnnoAmelioration.application.diagnostic_orchestration_service import (
-            ensure_initial_diagnostic_context,
-        )
-
-        context, orchestration = ensure_initial_diagnostic_context(
-            db,
-            project,
-            request,
-        )
-        context = {
-            **dict(context or {}),
-            "completed": True,
-            "scope": "initial_full_cir",
-            "cache_policy": INITIAL_CIR_DIAGNOSTIC_POLICY,
-        }
-        error = None
-    except Exception as exc:
-        # Une panne du Diagnostic ne doit pas provoquer une boucle d'appels ni
-        # empêcher Scholar de travailler directement depuis le texte réel.
-        context = {
-            "available": False,
-            "completed": True,
-            "agent": "EnnoDiagnostic",
-            "status": "initial_diagnostic_failed",
-            "scope": "initial_full_cir",
-            "verrous": [],
-            "evidence_items": [],
-            "domain_detection": {},
-            "reason": f"{exc.__class__.__name__}: {exc}",
-            "cache_policy": INITIAL_CIR_DIAGNOSTIC_POLICY,
-        }
-        orchestration = {
-            "agent": "EnnoDiagnostic",
-            "mode": "initial_failed_cached_no_retry_per_section",
-            "executed": False,
-            "cache_hit": False,
-        }
-        error = context["reason"]
-
-    record = {
-        "completed": True,
-        "policy_version": INITIAL_CIR_DIAGNOSTIC_POLICY,
-        "base_sha256": workflow.get("base_sha256"),
-        "execution_count": 1,
-        "pipeline_execution_count": int(bool(orchestration.get("executed"))),
-        "cache_hit": bool(orchestration.get("cache_hit")),
-        "context": context,
-        "orchestration": orchestration,
-        "error": error,
-    }
-    workflow["initial_diagnostic"] = record
-    stats = workflow.setdefault("stats", {})
-    stats["initial_diagnostic_runs"] = 1
-    workflow["last_progress"] = {
-        "stage": "initial_diagnostic_cached",
-        "available": bool(context.get("available")),
-        "completed": True,
-    }
-    _progressive_store(session, workflow)
-    db.commit()
-    db.refresh(session)
-    return record
 
 
 def _progressive_request_for_unit(
@@ -1449,6 +1500,7 @@ def _progressive_request_for_unit(
     project: Project,
     instruction: str,
     article_ids: list[int] | None = None,
+    evidence_cards: list[dict[str, Any]] | None = None,
     evidence_scope_id: str | None = None,
 ) -> ImprovementRequest:
     """Construit exactement la même requête qu'un traitement manuel de section."""
@@ -1468,19 +1520,6 @@ def _progressive_request_for_unit(
         content=target,
     )
 
-    ambiguous = bool(unit.get("diagnostic_ambiguous"))
-    initial_diagnostic = dict(workflow.get("initial_diagnostic") or {})
-    cached_context = (
-        dict(initial_diagnostic.get("context") or {})
-        if initial_diagnostic.get("completed") and not ambiguous
-        else None
-    )
-    cached_orchestration = (
-        dict(initial_diagnostic.get("orchestration") or {})
-        if cached_context is not None
-        else None
-    )
-
     return ImprovementRequest(
         instruction=instruction.strip(),
         full_text=target,
@@ -1491,12 +1530,12 @@ def _progressive_request_for_unit(
         project_name=str(project.project_name or ""),
         project_domain=str(project.domain_label or ""),
         evidence_article_ids=list(article_ids or []) or None,
+        evidence_cards=list(evidence_cards or []) or None,
         evidence_scope_id=str(evidence_scope_id or "") or None,
-        diagnostic_context_override=cached_context,
-        diagnostic_orchestration_override=cached_orchestration,
-        # Le diagnostic section-scoped est l'exception : il n'est permis que
-        # lorsque la classification de la section est réellement ambiguë.
-        allow_scoped_diagnostic=ambiguous,
+        diagnostic_context_override=None,
+        diagnostic_orchestration_override=None,
+        # Invariant EnnoAmel : EnnoDiagnostic n'est jamais lancé.
+        allow_scoped_diagnostic=False,
         sections=[local_section],
     )
 
@@ -1530,6 +1569,7 @@ def _progressive_auto_research_instruction(
     title = str(unit.get("section_title") or "").strip()
     section_ref = str(unit.get("section_ref") or "").strip()
     label = " — ".join(value for value in (section_ref, title) if value)
+
     return (
         "Workflow automatique d'amélioration du CIR complet. La cible est "
         "UNIQUEMENT la section courante.\n\n"
@@ -1548,10 +1588,45 @@ def _progressive_auto_research_instruction(
 def _progressive_auto_write_instruction(
     workflow: dict[str, Any],
     unit: dict[str, Any],
+    *,
+    validated_supports: list[dict[str, Any]] | None = None,
 ) -> str:
     title = str(unit.get("section_title") or "").strip()
     section_ref = str(unit.get("section_ref") or "").strip()
     label = " — ".join(value for value in (section_ref, title) if value)
+
+    supports: list[str] = []
+
+    for row in validated_supports or []:
+        if not isinstance(row, dict):
+            continue
+
+        claim = str(
+            row.get("post_extract_supported_claim") or ""
+        ).strip()
+
+        article_id = row.get("article_id")
+
+        if claim and article_id:
+            supports.append(
+                f"- article_id={article_id}: {claim}"
+            )
+
+    support_contract = (
+        "\n\nARGUMENTS SCIENTIFIQUES AUTORISES "
+        "APRES LECTURE DU FULL TEXT\n"
+        + "\n".join(supports)
+        + "\n"
+        "Construis l'argumentation uniquement dans ces limites. "
+        "Pour chaque apport scientifique, construis une chaîne courte : "
+        "constat établi dans la littérature -> implication bornée pour "
+        "la section -> limite/incertitude encore ouverte. "
+        "Place ensuite immédiatement la citation [A#] correspondant "
+        "à l'Article Card. "
+        "Ne transforme jamais un résultat de l'article en fait du projet."
+        if supports
+        else ""
+    )
     return (
         "Workflow automatique d'amélioration du CIR complet. Rédige UNIQUEMENT "
         "la section courante.\n\n"
@@ -1560,7 +1635,12 @@ def _progressive_auto_write_instruction(
         "texte intégral ou l'Article Card a été vérifié et rendu disponible "
         "pour ce tour. Ne relance ni EnnoDiagnostic ni EnnoScholar. Renforce les "
         "arguments faibles avec des preuves traçables, conserve les faits et "
-        "références existants, et n'ajoute aucune affirmation non soutenue."
+        "références existants. Pour CHAQUE nouvel argument scientifique ajouté, "
+        "insère immédiatement la citation autorisée correspondante sous la forme "
+        "[A1], [A2], etc., en utilisant uniquement le citation_id fourni par "
+        "l'Article Card. N'ajoute aucun argument scientifique sans preuve et "
+        "citation associée."
+        + support_contract
     ).strip()
 
 
@@ -1758,7 +1838,8 @@ def _progressive_scientific_write_fallback(
         metadata={
             "workflow": progressive_workflow_public_summary(workflow),
             "unit_id": unit.get("unit_id"),
-            "ready_article_ids": ready_article_ids,
+            "extracted_article_ids": extracted_article_ids,
+            "ready_article_ids": writing_article_ids,
             "reason": str(reason or "")[:600],
         },
     )
@@ -1913,9 +1994,13 @@ def _progressive_launch_current_research(
     workflow: dict[str, Any],
     unit: dict[str, Any],
 ) -> tuple[ImprovementSession, ImprovementVersion | None]:
-    """V3.20 : recherche + sélection automatique + rédaction.
+    """Recherche scientifique d'une section puis attente de validation humaine.
 
-    Il n'existe plus d'état awaiting_sources dans le mode CIR complet.
+    En mode CIR complet :
+    - EnnoScholar cherche les candidats ;
+    - aucun article n'est sélectionné automatiquement par EnnoAmel ;
+    - le consultant garde / écarte les sources ;
+    - la rédaction n'est PAS lancée ici.
     """
     _, base_text = _progressive_base_text(
         session,
@@ -1927,7 +2012,7 @@ def _progressive_launch_current_research(
         base_text=base_text,
         unit=unit,
         project=project,
-        instruction=_progressive_auto_research_instruction(
+        instruction=_progressive_research_instruction(
             workflow,
             unit,
         ),
@@ -1968,6 +2053,7 @@ def _progressive_launch_current_research(
                     request,
                     result,
                 )
+
     except Exception as exc:
         _progressive_no_source_fallback(
             db,
@@ -2019,160 +2105,31 @@ def _progressive_launch_current_research(
             workflow,
         )
 
-    target_text = progressive_unit_source(
-        base_text,
-        unit,
-    )
-
-    selection = select_sources(
-        section_text=target_text,
-        section_title=str(
-            unit.get("section_title") or ""
-        ),
-        weakness_reasons=list(
-            unit.get("weakness_reasons") or []
-        ),
-        candidate_sources=sources,
-        max_selected=3,
-    )
-
-    selected_ids = [
-        int(value)
-        for value in (
-            selection.get("selected_article_ids") or []
-        )
-        if int(value) > 0
-    ]
-    selected_candidate_ids = [
-        str(value or "").strip()
-        for value in (
-            selection.get("selected_candidate_ids") or []
-        )
-        if str(value or "").strip()
-    ]
-
     unit["research"] = {
         "guided_session_id": handoff.get("guided_session_id"),
         "corpus_scope_id": handoff.get("corpus_scope_id"),
         "candidate_count": len(sources),
-        "selection_mode": "automatic",
-        "auto_selection": selection,
+        "selection_mode": "consultant",
         "accepted_sources": [],
         "ready_article_ids": [],
     }
 
+    unit["status"] = "awaiting_sources"
+    workflow["phase"] = "awaiting_sources"
     workflow["last_progress"] = {
         "unit_id": unit.get("unit_id"),
-        "stage": "auto_source_selection",
+        "stage": "awaiting_consultant_source_selection",
     }
-
-    if not selected_candidate_ids:
-        _progressive_no_source_fallback(
-            db,
-            session,
-            workflow,
-            unit,
-            reason=(
-                "Aucune publication candidate n'a été jugée suffisamment "
-                "directe pour cette section par le sélecteur automatique."
-            ),
-        )
-        return _progressive_advance(
-            db,
-            project,
-            session,
-            workflow,
-        )
-
-    try:
-        preparation = _automatic_prepare_selected_sources(
-            db,
-            project,
-            handoff,
-            sources,
-            selected_candidate_ids,
-        )
-    except Exception as exc:
-        _progressive_no_source_fallback(
-            db,
-            session,
-            workflow,
-            unit,
-            reason=(
-                "La présélection était pertinente, mais aucune extraction "
-                "scientifique vérifiée n'a pu être préparée : "
-                f"{exc.__class__.__name__}: {exc}"
-            ),
-        )
-        return _progressive_advance(
-            db,
-            project,
-            session,
-            workflow,
-        )
-
-    ready_article_ids = list(
-        preparation.get("ready_article_ids") or []
-    )
-    ready_sources = list(
-        preparation.get("ready_sources") or []
-    )
-    prepared_sources = list(
-        preparation.get("prepared_sources") or []
-    )
-    selection = bind_prepared_sources(
-        selection=selection,
-        prepared_sources=ready_sources,
-    )
-    selection = {
-        **selection,
-        "preparation": {
-            "candidate_ids": list(
-                preparation.get("candidate_ids") or []
-            ),
-            "ready_article_ids": ready_article_ids,
-            "ready_count": len(ready_article_ids),
-            "decision_actor": "ennoamel_auto",
-            "fulltext_and_article_card_required": True,
-        },
-    }
-    unit["research"].update(
-        {
-            "auto_selection": selection,
-            "accepted_sources": ready_sources,
-            "ready_article_ids": ready_article_ids,
-            "prepared_candidate_count": len(prepared_sources),
-            "selection_actor": "ennoamel_auto",
-        }
-    )
-
-    if not ready_article_ids:
-        _progressive_no_source_fallback(
-            db,
-            session,
-            workflow,
-            unit,
-            reason=(
-                "Les articles présélectionnés n'ont produit aucun texte "
-                "intégral vérifié ni aucune Article Card prête."
-            ),
-        )
-        return _progressive_advance(
-            db,
-            project,
-            session,
-            workflow,
-        )
 
     _progressive_store(
         session,
         workflow,
-        # On garde le handoff uniquement pendant le traitement de CETTE section.
         handoff=handoff,
-        research_sources=prepared_sources,
-        accepted_sources=ready_sources,
+        research_sources=sources,
+        accepted_sources=[],
     )
-    session.state = "evidence_ready"
+
+    session.state = "awaiting_evidence"
 
     _add_message(
         db,
@@ -2180,58 +2137,25 @@ def _progressive_launch_current_research(
         "assistant",
         (
             f"{progressive_progress_label(workflow, unit)} : "
-            f"{len(sources)} publication(s) candidate(s) analysée(s) "
-            f"automatiquement ; {len(selected_candidate_ids)} présélectionnée(s), puis "
-            f"{len(ready_article_ids)} retenue(s) après extraction vérifiée. "
-            "Je rédige maintenant avec ces seules preuves exploitables."
+            f"{len(sources)} publication(s) candidate(s) trouvée(s). "
+            "Gardez les articles utiles et écartez les autres. "
+            "Lorsque votre sélection est terminée, utilisez "
+            "« Terminer la sélection et continuer » pour passer à la section suivante."
         ),
-        intent="progressive_cir_auto_evidence_selected",
+        intent="progressive_cir_sources_waiting_validation",
         metadata={
             "workflow": progressive_workflow_public_summary(workflow),
             "unit_id": unit.get("unit_id"),
             "candidate_count": len(sources),
-            "preselected_article_ids": selected_ids,
-            "preselected_candidate_ids": selected_candidate_ids,
-            "ready_article_ids": ready_article_ids,
-            "selection_actor": "ennoamel_auto",
-            "selection": selection,
+            "guided_session_id": handoff.get("guided_session_id"),
+            "selection_actor": "consultant",
             "granularity": "section",
         },
     )
+
     db.commit()
     db.refresh(session)
-
-    try:
-        _progressive_write_current_unit(
-            db,
-            project,
-            session,
-            workflow,
-            unit,
-            scientific=True,
-            auto_article_ids=ready_article_ids,
-            auto_selection=selection,
-        )
-    except Exception as exc:
-        # Ici les Article Cards sont déjà prêtes. Ne jamais convertir un échec
-        # de rédaction/contrôle en faux message « aucune source exploitable ».
-        _progressive_scientific_write_fallback(
-            db,
-            session,
-            workflow,
-            unit,
-            reason=f"{exc.__class__.__name__}: {exc}",
-        )
-
-    return _progressive_advance(
-        db,
-        project,
-        session,
-        workflow,
-    )
-
-
-
+    return session, None
 
 def _progressive_write_current_unit(
     db: Session,
@@ -2243,6 +2167,7 @@ def _progressive_write_current_unit(
     scientific: bool,
     auto_article_ids: list[int] | None = None,
     auto_selection: dict[str, Any] | None = None,
+    human_article_ids: list[int] | None = None,
 ) -> None:
     _, base_text = _progressive_base_text(
         session,
@@ -2250,15 +2175,70 @@ def _progressive_write_current_unit(
     )
 
     article_ids: list[int] = []
+    evidence_cards: list[dict[str, Any]] = []
     evidence_scope_id: str | None = None
     guided_session_id: str | None = None
 
     research = dict(unit.get("research") or {})
 
     if scientific:
-        # V3.20 : en CIR complet, la sélection est automatique. Le chemin
-        # manuel reste disponible uniquement si auto_article_ids n'est pas fourni.
-        if auto_article_ids is not None:
+        # Sélection humaine du parcours CIR complet :
+        # les IDs appartiennent exclusivement à la section courante.
+        if human_article_ids is not None:
+            article_ids = [
+                int(value)
+                for value in human_article_ids
+                if int(value) > 0
+            ]
+
+            evidence_scope_id = (
+                str(research.get("corpus_scope_id") or "")
+                or None
+            )
+            guided_session_id = (
+                str(research.get("guided_session_id") or "")
+                or None
+            )
+
+            if not article_ids:
+                raise RuntimeError(
+                    "HUMAN_EVIDENCE_EMPTY_SELECTION"
+                )
+
+            # Le bundle peut contenir l'historique de plusieurs sections,
+            # mais seules les Article Cards de CETTE section sont transmises.
+            bundle = _accepted_evidence_bundle(
+                db,
+                project,
+                session,
+            )
+
+            allowed_ids = set(article_ids)
+
+            for card in list(bundle.get("cards") or []):
+                if not isinstance(card, dict):
+                    continue
+
+                raw_id = (
+                    card.get("article_id")
+                    or (card.get("identity") or {}).get("article_id")
+                )
+
+                try:
+                    card_id = int(raw_id)
+                except (TypeError, ValueError):
+                    continue
+
+                if card_id in allowed_ids:
+                    evidence_cards.append(card)
+
+            if not evidence_cards:
+                raise RuntimeError(
+                    "HUMAN_EVIDENCE_CARDS_MISSING"
+                )
+
+        # Ancien chemin automatique conservé pour compatibilité.
+        elif auto_article_ids is not None:
             article_ids = [
                 int(value)
                 for value in auto_article_ids
@@ -2276,6 +2256,42 @@ def _progressive_write_current_unit(
                 raise RuntimeError(
                     "AUTO_EVIDENCE_EMPTY_SELECTION"
                 )
+
+            # Les IDs seuls ne suffisent pas au Writer : charger les Article
+            # Cards vérifiées contenant les preuves et les citation_id.
+            bundle = _accepted_evidence_bundle(
+                db,
+                project,
+                session,
+            )
+            allowed_ids = set(article_ids)
+            for card in list(bundle.get("cards") or []):
+                if not isinstance(card, dict):
+                    continue
+                raw_id = (
+                    card.get("article_id")
+                    or (card.get("identity") or {}).get("article_id")
+                )
+                try:
+                    card_id = int(raw_id)
+                except (TypeError, ValueError):
+                    continue
+                if card_id in allowed_ids:
+                    evidence_cards.append(card)
+
+            if not evidence_cards:
+                raise RuntimeError(
+                    "AUTO_EVIDENCE_CARDS_MISSING"
+                )
+
+            evidence_scope_id = (
+                str(bundle.get("corpus_scope_id") or "")
+                or evidence_scope_id
+            )
+            guided_session_id = (
+                str(bundle.get("guided_session_id") or "")
+                or guided_session_id
+            )
         else:
             bundle = _accepted_evidence_bundle(
                 db,
@@ -2284,6 +2300,9 @@ def _progressive_write_current_unit(
             )
             article_ids = list(
                 bundle.get("article_ids") or []
+            )
+            evidence_cards = list(
+                bundle.get("cards") or []
             )
             evidence_scope_id = (
                 str(bundle.get("corpus_scope_id") or "")
@@ -2311,6 +2330,20 @@ def _progressive_write_current_unit(
             _progressive_auto_write_instruction(
                 workflow,
                 unit,
+                validated_supports=list(
+                    (
+                        (
+                            auto_selection
+                            or {}
+                        ).get(
+                            "post_extraction_validation"
+                        )
+                        or {}
+                    ).get(
+                        "eligible_sources"
+                    )
+                    or []
+                ),
             )
             if scientific and auto_article_ids is not None
             else _progressive_write_instruction(
@@ -2320,6 +2353,7 @@ def _progressive_write_current_unit(
             )
         ),
         article_ids=article_ids,
+        evidence_cards=evidence_cards,
         evidence_scope_id=evidence_scope_id,
     )
 
@@ -2347,9 +2381,102 @@ def _progressive_write_current_unit(
             or "Le Writer n'a pas produit de version exploitable de la section."
         )
 
+    if scientific and (
+        auto_article_ids is not None
+        or human_article_ids is not None
+    ):
+
+        scholar_rows = list(
+            (
+                (
+                    result.evidence
+                    or {}
+                ).get("scholar")
+                or {}
+            ).get("evidence")
+            or []
+        )
+
+        allowed_citations = {
+            str(
+                row.get("citation_id")
+                or ""
+            ).strip().upper()
+
+            for row in scholar_rows
+
+            if isinstance(row, dict)
+            and str(
+                row.get("citation_id")
+                or ""
+            ).strip()
+        }
+
+        cited = {
+            match.upper()
+
+            for match in re.findall(
+                r"\[\s*(A\d+)\s*\]",
+                str(
+                    result.improved_target
+                    or ""
+                ),
+                flags=re.I,
+            )
+        }
+
+        used_allowed = sorted(
+            cited.intersection(
+                allowed_citations
+            )
+        )
+
+        if not used_allowed:
+            raise ProgressiveUnitUnwritable(
+                "AUTO_SCIENTIFIC_CITATION_MISSING: "
+                "le Writer n'a intégré aucune citation [A#] "
+                "autorisée dans la section renforcée."
+            )
+
     final_trace: dict[str, Any] = {}
 
-    if scientific and auto_article_ids is not None:
+    if scientific and human_article_ids is not None:
+        allowed_ids = set(article_ids)
+        section_sources: list[dict[str, Any]] = []
+
+        for row in list(research.get("accepted_sources") or []):
+            if not isinstance(row, dict):
+                continue
+
+            raw_id = (
+                row.get("article_id")
+                or (
+                    row.get("fulltext_preparation")
+                    or {}
+                ).get("article_id")
+            )
+
+            try:
+                row_id = int(raw_id)
+            except (TypeError, ValueError):
+                continue
+
+            if row_id in allowed_ids:
+                section_sources.append(dict(row))
+
+        research.update(
+            {
+                "selection_mode": "human",
+                "selection_actor": "consultant",
+                "ready_article_ids": list(article_ids),
+                "accepted_sources": section_sources,
+                "corpus_scope_id": evidence_scope_id,
+                "guided_session_id": guided_session_id,
+            }
+        )
+        unit["research"] = research
+
+    elif scientific and auto_article_ids is not None:
         final_trace = build_traceable_evidence(
             result=result,
             selection=dict(auto_selection or {}),
@@ -2358,36 +2485,21 @@ def _progressive_write_current_unit(
         # Une source n'est "retenue automatiquement" que si Article Cards /
         # extraction a effectivement produit une preuve exploitable.
         if int(final_trace.get("writing_ready_count") or 0) <= 0:
-            # Les Article Cards ont déjà été préparées et transmises au writer.
-            # Un rattachement incomplet dans revision_integrity est désormais une
-            # alerte consultative, jamais un pare-feu qui détruit la candidate.
-            advisory_sources = list(
-                final_trace.get("advisory_sources") or []
-            )
+
+            # Une source seulement disponible n'est jamais déclarée
+            # utilisée. Les articles extraits restent conservés.
             final_trace.update(
                 {
-                    "auto_accepted": advisory_sources,
-                    "auto_accepted_article_ids": list(
-                        dict.fromkeys(
-                            int(row.get("article_id"))
-                            for row in advisory_sources
-                            if row.get("article_id")
-                        )
-                    ),
-                    "auto_accepted_candidate_ids": list(
-                        dict.fromkeys(
-                            str(row.get("candidate_id") or "")
-                            for row in advisory_sources
-                            if str(row.get("candidate_id") or "").strip()
-                        )
-                    ),
-                    "writing_ready_count": len(advisory_sources),
+                    "auto_accepted": [],
+                    "auto_accepted_article_ids": [],
+                    "auto_accepted_candidate_ids": [],
+                    "writing_ready_count": 0,
                     "traceability_complete": False,
                     "control_mode": "advisory_only",
                     "advisory_warnings": [
-                        "Le contrôle automatique n'a pas relié chaque passage "
-                        "à son extrait avec certitude. La proposition reste "
-                        "visible pour validation du consultant."
+                        "Aucune utilisation scientifique traçable "
+                        "n'a été confirmée dans la candidate ; "
+                        "les articles extraits restent conservés."
                     ],
                 }
             )
@@ -2922,20 +3034,85 @@ def _progressive_advance(
         db.commit()
         db.refresh(session)
 
-    # Une seule résolution structurée sur le CIR complet. Tous les tours non
-    # ambigus réutilisent ce cache ; seul un tour marqué ambigu peut demander un
-    # ScopedDiagnostic.
-    _ensure_progressive_initial_diagnostic(
-        db,
-        project,
-        session,
-        workflow,
-    )
+    # Invariant EnnoAmel : aucun diagnostic initial ou ciblé n'est lancé.
+    # Le workflow travaille directement à partir du texte du CIR et d'EnnoScholar
+    # lorsqu'un renforcement scientifique est demandé.
 
     while True:
         unit = progressive_current_unit(workflow)
 
         if unit is None:
+            collected_units = [
+                row
+                for row in (workflow.get("units") or [])
+                if isinstance(row, dict)
+                and str(row.get("status") or "") == "research_collected"
+            ]
+
+            if collected_units:
+                # Toutes les sélections sont maintenant terminées.
+                # On démarre un second passage consacré uniquement
+                # à la rédaction.
+                for row in collected_units:
+                    research = dict(
+                        row.get("research") or {}
+                    )
+
+                    ready_ids = [
+                        int(value)
+                        for value in (
+                            research.get("ready_article_ids")
+                            or []
+                        )
+                        if str(value).isdigit()
+                        and int(value) > 0
+                    ]
+
+                    if ready_ids:
+                        row["status"] = "evidence_ready"
+                    else:
+                        # Aucun texte intégral exploitable :
+                        # la section reste inchangée.
+                        row["status"] = "kept"
+
+                workflow["cursor"] = 0
+                workflow["phase"] = "final_writing"
+                workflow["last_progress"] = {
+                    "stage": "final_writing_started",
+                    "research_section_count": len(collected_units),
+                }
+
+                _progressive_store(
+                    session,
+                    workflow,
+                    handoff=None,
+                    research_sources=[],
+                    accepted_sources=[],
+                )
+
+                session.state = "audit"
+
+                _add_message(
+                    db,
+                    session.id,
+                    "assistant",
+                    (
+                        "Toutes les sélections scientifiques sont terminées. "
+                        "Je lance maintenant la rédaction du CIR section par section "
+                        "avec uniquement les articles gardés et dont les preuves sont exploitables."
+                    ),
+                    intent="progressive_cir_final_writing_started",
+                    metadata={
+                        "workflow": progressive_workflow_public_summary(workflow),
+                        "research_section_count": len(collected_units),
+                        "granularity": "section",
+                    },
+                )
+
+                db.commit()
+                db.refresh(session)
+                continue
+
             return _progressive_finalize(
                 db,
                 session,
@@ -3006,6 +3183,20 @@ def _progressive_advance(
             }:
                 if status == "evidence_ready":
                     try:
+                        research = dict(
+                            unit.get("research") or {}
+                        )
+
+                        human_article_ids = [
+                            int(value)
+                            for value in (
+                                research.get("ready_article_ids")
+                                or []
+                            )
+                            if str(value).isdigit()
+                            and int(value) > 0
+                        ]
+
                         _progressive_write_current_unit(
                             db,
                             project,
@@ -3013,6 +3204,7 @@ def _progressive_advance(
                             workflow,
                             unit,
                             scientific=True,
+                            human_article_ids=human_article_ids,
                         )
                     except ProgressiveUnitUnwritable as exc:
                         _progressive_unwritable_fallback(
@@ -3550,6 +3742,62 @@ def send_message(
         db.rollback()
         raise RuntimeError(f"La rédaction n'a pas abouti : {exc}") from exc
 
+    # Invariant de sécurité pour une amélioration ciblée :
+    # seul le span exact de la section résolue peut être modifié.
+    if (
+        result.ok
+        and effective_scope == TargetScope.SECTION
+        and resolved_section is not None
+        and result.improved_target
+    ):
+        section_start = int(resolved_section.start)
+        section_end = int(resolved_section.end)
+
+        if not (
+            0 <= section_start < section_end <= len(full_text)
+        ):
+            raise RuntimeError(
+                "Bornes de section invalides : la candidate n'est pas publiée."
+            )
+
+        original_section = full_text[section_start:section_end]
+        improved_section = str(result.improved_target or "").strip()
+
+        # Corrige les titres accidentellement dupliqués du type :
+        # "4. 4. Stabilisation ..." -> "4. Stabilisation ..."
+        improved_section = re.sub(
+            r"^(\s*)(\d+(?:\.\d+)*)\.\s+\2\.\s+",
+            r"\1\2. ",
+            improved_section,
+            count=1,
+        )
+
+        # Préserve exactement les espaces / retours entourant la section.
+        leading = re.match(r"^\s*", original_section).group(0)
+        trailing = re.search(r"\s*$", original_section).group(0)
+
+        guarded_full_text = (
+            full_text[:section_start]
+            + leading
+            + improved_section
+            + trailing
+            + full_text[section_end:]
+        )
+
+        result = result.model_copy(
+            update={
+                "improved_full_text": guarded_full_text,
+            }
+        )
+
+        print(
+            "[EnnoAmel][SectionBoundaryGuard] "
+            f"section={resolved_section.section_id} "
+            f"title={resolved_section.title!r} "
+            f"start={section_start} end={section_end} "
+            f"outside_text_preserved=True"
+        )
+
     research_handoff: dict[str, Any] | None = None
     scholar_payload = result.evidence.get("scholar") if isinstance(result.evidence, dict) else None
     needs_scholar_handoff = bool(
@@ -3661,9 +3909,21 @@ def send_message(
     else:
         session.state = result.state.value
 
-    session.target_scope = effective_scope.value
-    session.target_section_id = resolved_section.section_id if resolved_section else effective_section_id
-    session.target_section_title = resolved_section.title if resolved_section else effective_section_title
+    # Le scope de SESSION décrit la source de travail.
+    # Un document uploadé reste toujours un CIR complet.
+    # effective_scope reste uniquement le scope du MESSAGE courant.
+    if source_kind == "document":
+        session.target_scope = TargetScope.FULL_DOCUMENT.value
+        session.target_section_id = None
+        session.target_section_title = None
+    else:
+        session.target_scope = effective_scope.value
+        session.target_section_id = (
+            resolved_section.section_id if resolved_section else effective_section_id
+        )
+        session.target_section_title = (
+            resolved_section.title if resolved_section else effective_section_title
+        )
     previous_context = dict(session.context_json or {})
     resolved_handoff = None
     if research_handoff is not None:

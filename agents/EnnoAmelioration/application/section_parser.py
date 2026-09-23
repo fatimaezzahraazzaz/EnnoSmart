@@ -147,8 +147,22 @@ def infer_section_from_instruction(
     """Rapproche la demande des titres réellement présents dans le document."""
 
     message = str(instruction or "")
-    numeric_refs = re.findall(r"\b\d+(?:\.\d+){1,6}\b", message)
-    for reference in numeric_refs:
+
+    # Références explicites de section :
+    # "partie 4", "section 4", "chapitre 4", mais aussi "section 4.1".
+    numeric_refs = re.findall(
+        r"\b(?:section|partie|chapitre)\s*(?:n[°o]\s*)?(\d+(?:\.\d+){0,6})\b",
+        message,
+        flags=re.I,
+    )
+
+    # Conserve aussi le support historique des références hiérarchiques seules
+    # comme "4.1" ou "5.2.1".
+    numeric_refs.extend(
+        re.findall(r"\b\d+(?:\.\d+){1,6}\b", message)
+    )
+
+    for reference in dict.fromkeys(numeric_refs):
         for section in sections:
             first_line = (
                 str(section.content or "").lstrip().splitlines()[0]
@@ -157,7 +171,7 @@ def infer_section_from_instruction(
             )
             visible_heading = f"{section.title}\n{first_line}"
             found_references = re.findall(
-                r"(?<!\d)(\d+(?:\.\d+)+)\.?(?!\d)",
+                r"(?m)^\s*(\d+(?:\.\d+)*)\b",
                 visible_heading,
             )
             if reference in found_references:
@@ -165,45 +179,88 @@ def infer_section_from_instruction(
 
     normalized_message = _match_text(message)
     message_tokens = set(normalized_message.split())
+
     ignored = {
         "a", "au", "aux", "avec", "ce", "ces", "cette", "chapitre", "dans",
         "de", "des", "du", "et", "la", "le", "les", "l", "partie", "passage",
         "section", "sous", "texte", "un", "une",
+        "ameliore", "ameliorer", "reformule", "reformuler", "uniquement",
+        "rendre", "plus", "claire", "clair", "fluide", "professionnelle",
+        "professionnel", "garde", "garder", "exactement", "meme", "memes",
+        "fait", "faits", "scientifique", "scientifiques", "ajoute", "ajouter",
+        "aucune", "nouvelle", "nouveau", "information", "informations",
+        "modifier", "modifie", "sans",
     }
+
+    target_tokens = {
+        token
+        for token in message_tokens
+        if token not in ignored and len(token) >= 4
+    }
+
+    # Un titre ou thème placé entre guillemets est un signal très fort.
+    quoted_phrases = [
+        _match_text(value)
+        for value in re.findall(r'[«“"]([^»”"]{4,180})[»”"]', message)
+        if _match_text(value)
+    ]
+
     best: ParsedSection | None = None
     best_score = 0.0
+
     for section in sections:
         normalized_title = _match_text(section.title)
-        if not normalized_title:
-            continue
+        normalized_content = _match_text(section.content or "")
+        normalized_section = " ".join(
+            value for value in (normalized_title, normalized_content) if value
+        )
+
+        score = 0.0
+
+        # 1. Titre/thème explicitement cité dans le message.
+        for phrase in quoted_phrases:
+            if phrase and phrase in normalized_section:
+                score = max(score, 200.0 + len(phrase.split()))
+
+        # 2. Titre exact présent dans le message.
         title_tokens = {
             token
             for token in normalized_title.split()
             if token not in ignored and len(token) >= 3
         }
-        if not title_tokens:
-            continue
-        exact_title_match = bool(
-            normalized_title in normalized_message
-            and (
-                len(title_tokens) >= 2
-                or max((len(token) for token in title_tokens), default=0) >= 4
-            )
-        )
-        if exact_title_match:
-            score = 100.0 + len(title_tokens)
-        else:
-            overlap = title_tokens & message_tokens
-            if not overlap:
-                continue
-            coverage = len(overlap) / len(title_tokens)
-            precision = len(overlap) / max(1, len(message_tokens))
-            score = coverage * 10.0 + precision
-            if len(overlap) == 1 and len(title_tokens) > 1:
-                score *= 0.35
+
+        if normalized_title and normalized_title in normalized_message:
+            score = max(score, 100.0 + len(title_tokens))
+
+        # 3. Correspondance sémantique simple avec les mots du titre.
+        if title_tokens:
+            overlap = title_tokens & target_tokens
+            if overlap:
+                coverage = len(overlap) / len(title_tokens)
+                title_score = coverage * 10.0 + len(overlap)
+                if len(overlap) == 1 and len(title_tokens) > 1:
+                    title_score *= 0.35
+                score = max(score, title_score)
+
+        # 4. Fallback robuste : recherche des mots spécifiques du message
+        # directement dans le contenu de la section.
+        if target_tokens and normalized_section:
+            section_tokens = set(normalized_section.split())
+            overlap = target_tokens & section_tokens
+
+            if len(overlap) >= 2:
+                coverage = len(overlap) / max(1, len(target_tokens))
+
+                # On exige plusieurs mots concordants afin d'éviter qu'un mot
+                # générique présent partout cible une mauvaise section.
+                if coverage >= 0.35 or len(overlap) >= 3:
+                    content_score = 20.0 + (coverage * 10.0) + len(overlap)
+                    score = max(score, content_score)
+
         if score > best_score:
             best = section
             best_score = score
+
     return best if best_score >= 3.0 else None
 
 

@@ -1122,6 +1122,53 @@ def update_article_decision(
             status_code=status.HTTP_409_CONFLICT,
             detail="La vérification d'accès doit se terminer avant cette décision.",
         )
+    # Règle EnnoScholar :
+    # un article ne peut être "gardé" que si le consultant a réellement
+    # importé son PDF et que cet upload a été vérifié avec succès.
+    #
+    # Un texte intégral obtenu automatiquement (direct / MCP / autre)
+    # peut servir à la consultation, mais ne suffit pas pour valider
+    # définitivement l'article pour la rédaction.
+    if payload.consultant_status == "garde":
+        current_source_json = (
+            dict(article.source_json)
+            if isinstance(article.source_json, dict)
+            else {}
+        )
+
+        manual_upload_verified = bool(
+            current_source_json.get("manual_upload_verified")
+        )
+        uploaded_pdf_available = bool(
+            current_source_json.get("uploaded_pdf_available")
+        )
+        resolution_source = str(
+            current_source_json.get("fulltext_resolution_source") or ""
+        ).upper()
+
+        identity_verification = current_source_json.get(
+            "manual_upload_identity_verification"
+        )
+        identity_verified = bool(
+            isinstance(identity_verification, dict)
+            and identity_verification.get("verified")
+        )
+
+        if not (
+            manual_upload_verified
+            and uploaded_pdf_available
+            and resolution_source == "MANUAL_UPLOAD"
+            and identity_verified
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Article non gardé : importez d'abord le PDF correspondant "
+                    "à cette publication. Le PDF doit être vérifié et extrait "
+                    "avant de pouvoir utiliser l'article pour la rédaction."
+                ),
+            )
+
     if payload.consultant_status in {"garde", "rejete"} and evidence_status == "ACCESS_UNCONFIRMED":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

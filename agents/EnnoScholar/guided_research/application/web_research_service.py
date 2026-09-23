@@ -1000,29 +1000,52 @@ class WebResearchService:
             ),
             reverse=True,
         )
-        limit = max(
-            1,
-            min(int(max_candidates or cls.CHAT_REVIEW_MAX_CANDIDATES),
-                cls.CHAT_REVIEW_MAX_CANDIDATES),
-        )
-        direct = [
-            row for row in accepted
-            if row.get("relevance_role") == "direct_evidence"
-        ][: min(cls.CHAT_REVIEW_MAX_DIRECT, limit)]
-        remaining = max(0, limit - len(direct))
-        connected = [
-            row for row in accepted
-            if row.get("relevance_role") == "connected_evidence"
-        ][: min(cls.CHAT_REVIEW_MAX_CONNECTED, remaining)]
-        selected = [*direct, *connected]
+        # max_candidates <= 0 signifie : aucun quota fonctionnel.
+        # Utilisé uniquement par le chat autonome afin d'afficher tous les
+        # articles qui passent réellement les filtres de pertinence.
+        unbounded = int(max_candidates or 0) <= 0
+
+        if unbounded:
+            selected = list(accepted)
+            limit = None
+            max_direct = None
+            max_connected = None
+        else:
+            limit = max(
+                1,
+                min(
+                    int(max_candidates),
+                    cls.CHAT_REVIEW_MAX_CANDIDATES,
+                ),
+            )
+            direct = [
+                row for row in accepted
+                if row.get("relevance_role") == "direct_evidence"
+            ][: min(cls.CHAT_REVIEW_MAX_DIRECT, limit)]
+
+            remaining = max(0, limit - len(direct))
+
+            connected = [
+                row for row in accepted
+                if row.get("relevance_role") == "connected_evidence"
+            ][: min(cls.CHAT_REVIEW_MAX_CONNECTED, remaining)]
+
+            selected = [*direct, *connected]
+            max_direct = cls.CHAT_REVIEW_MAX_DIRECT
+            max_connected = cls.CHAT_REVIEW_MAX_CONNECTED
+
         return selected, {
-            "policy": "chat_request_primary_strict_shortlist_no_padding_v2",
+            "policy": (
+                "standalone_relevance_only_no_quota_v1"
+                if unbounded
+                else "chat_request_primary_strict_shortlist_no_padding_v2"
+            ),
             "input_count": len(candidates),
             "aligned_count": len(accepted),
             "output_count": len(selected),
             "max_candidates": limit,
-            "max_direct": cls.CHAT_REVIEW_MAX_DIRECT,
-            "max_connected": cls.CHAT_REVIEW_MAX_CONNECTED,
+            "max_direct": max_direct,
+            "max_connected": max_connected,
             "no_padding": True,
             "verrou_context_is_secondary": True,
             "rejected_examples": rejected,
@@ -1109,27 +1132,50 @@ Une seule décision par ID fourni. Aucune source n'est automatiquement gardée.
                 supplied_text = _clean(f"{supplied['title']} {supplied['abstract']}")
                 confidence = max(0.0, min(1.0, float(decision.get("confidence") or 0)))
                 grounded = bool(quote and quote.casefold() in supplied_text.casefold())
+
+                # Une preuve directe doit rester strictement vérifiable dans
+                # le résumé fourni par la source.
                 if role == "direct_evidence" and (
-                    not grounded or quote.casefold() not in supplied["abstract"].casefold()
+                    not grounded
+                    or quote.casefold() not in supplied["abstract"].casefold()
                 ):
                     continue
-                eligible = role != "irrelevant" and grounded and confidence >= 0.70
+
+                # Une source connexe peut être conservée sur la base de la
+                # pertinence sémantique même si le LLM a légèrement reformulé
+                # l'extrait. Elle ne sera jamais présentée comme preuve directe.
+                if role == "direct_evidence":
+                    eligible = grounded and confidence >= 0.70
+                elif role == "connected_evidence":
+                    eligible = confidence >= 0.65
+                else:
+                    eligible = False
+
                 annotated.append({
-                    **candidate, "relevance_role": role,
+                    **candidate,
+                    "relevance_role": role,
                     "direct_evidence": role == "direct_evidence",
-                    "full_scholar_tag": "Direct" if role == "direct_evidence" else "Connexe",
+                    "full_scholar_tag": (
+                        "Direct" if role == "direct_evidence" else "Connexe"
+                    ),
                     "role_reason": _clean(decision.get("reason"), 600),
                     "role_confidence": confidence,
                 })
                 alignments[identifier] = [{
-                    "eligible": eligible, "alignment_score": confidence if eligible else 0.0,
-                    "rejection_reason": "" if eligible else "standalone_question_not_supported",
-                    "evidence_excerpt": quote, "method": "standalone_semantic_review",
+                    "eligible": eligible,
+                    "alignment_score": confidence if eligible else 0.0,
+                    "rejection_reason": (
+                        "" if eligible else "standalone_question_not_supported"
+                    ),
+                    "evidence_excerpt": quote if grounded else "",
+                    "method": "standalone_semantic_review",
                 }]
             if not annotated:
                 raise ValueError("No valid grounded decisions")
             selected, report = self._select_full_chat_candidates(
-                annotated, requests_list, max_candidates=max_candidates,
+                annotated,
+                requests_list,
+                max_candidates=0,
                 reviewed_alignments=alignments,
             )
             report.update({"semantic_review": "completed", "input_count": len(candidates),
@@ -1139,7 +1185,9 @@ Une seule décision par ID fourni. Aucune source n'est automatiquement gardée.
             # A failed review must not turn broad engine matches into confirmed
             # direct evidence. Keep the former shortlist as unverified context.
             selected, report = self._select_full_chat_candidates(
-                candidates, requests_list, max_candidates=max_candidates,
+                candidates,
+                requests_list,
+                max_candidates=0,
             )
             selected = [{**row, "relevance_role": "connected_evidence",
                          "direct_evidence": False, "full_scholar_tag": "Connexe",
