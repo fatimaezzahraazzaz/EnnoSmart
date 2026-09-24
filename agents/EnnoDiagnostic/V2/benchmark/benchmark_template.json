@@ -1,0 +1,28 @@
+{
+  "project_id": "example_project",
+  "documents": [
+    {
+      "name": "rapport.pdf",
+      "mode": "raw"
+    },
+    {
+      "name": "fiche_cir.docx",
+      "mode": "cir"
+    }
+  ],
+  "expected": {
+    "objectives": [],
+    "locks": [
+      {
+        "id": "lock_1",
+        "statement": "Verrou attendu",
+        "explicitness": "implicit",
+        "evidence": "Citation exacte",
+        "document": "rapport.pdf"
+      }
+    ],
+    "methods": [],
+    "results": [],
+    "parameters": []
+  }
+}
