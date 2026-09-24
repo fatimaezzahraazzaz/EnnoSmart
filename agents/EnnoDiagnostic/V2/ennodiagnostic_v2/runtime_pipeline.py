@@ -22,6 +22,12 @@ def build_runtime_pipeline(
         max_output_tokens=2200,
     )
 
+    qualification_llm = EnnoSmartLLMAdapter(
+        request_name="ennodiagnostic:v2:lock_qualification",
+        temperature=0.0,
+        max_output_tokens=1800,
+    )
+
     frascati_llm = None
     if run_frascati:
         frascati_llm = EnnoSmartLLMAdapter(
@@ -38,6 +44,7 @@ def build_runtime_pipeline(
     return EnnoDiagnosticV2(
         semantic_llm=semantic_llm,
         consolidation_llm=consolidation_llm,
+        qualification_llm=qualification_llm,
         frascati_llm=frascati_llm,
         config=config,
     )

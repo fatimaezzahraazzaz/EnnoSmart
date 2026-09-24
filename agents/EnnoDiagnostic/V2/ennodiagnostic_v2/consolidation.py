@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Iterable, List
 
 from .schemas import CanonicalEntity, EvidenceRef, ExtractionItem
@@ -27,7 +28,15 @@ R?gles imp?ratives :
 5. Une exigence de s?ret? ne doit pas automatiquement ?tre fusionn?e
    avec un probl?me d'int?gration.
 6. Si tu h?sites, garde les candidats s?par?s.
-7. Le canonical_statement doit seulement synth?tiser les preuves fournies.
+7. Si une source distingue explicitement "premier verrou",
+   "deuxi?me verrou", "troisi?me verrou", etc., consid?re ces ?l?ments
+   comme des probl?mes distincts. Ne fusionne jamais deux num?ros
+   diff?rents provenant du m?me document.
+8. Partager le m?me contexte industriel ou les m?mes mots-cl?s
+   ne suffit pas pour fusionner deux probl?mes.
+9. Fusionne seulement lorsque les candidats d?crivent r?ellement
+   la m?me incertitude sous-jacente ou des manifestations du m?me probl?me.
+10. Le canonical_statement doit seulement synth?tiser les preuves fournies.
 8. N'ajoute aucune nouvelle difficult? qui n'est pas pr?sente dans les preuves.
 9. Ne d?cide PAS encore si le candidat est r?ellement ?ligible CIR.
 10. Ne d?cide PAS encore si c'est un faux verrou : la qualification aura lieu ensuite.
@@ -45,6 +54,65 @@ JSON attendu uniquement :
 }
 """.strip()
 
+
+
+_EXPLICIT_LOCK_MARKERS = [
+    (r"\b(?:premier|1er|1er\.|verrou\s*1)\b", "1"),
+    (r"\b(?:deuxi[e?]me|2[e?]me|2e|verrou\s*2)\b", "2"),
+    (r"\b(?:troisi[e?]me|3[e?]me|3e|verrou\s*3)\b", "3"),
+    (r"\b(?:quatri[e?]me|4[e?]me|4e|verrou\s*4)\b", "4"),
+    (r"\b(?:cinqui[e?]me|5[e?]me|5e|verrou\s*5)\b", "5"),
+    (r"\b(?:sixi[e?]me|6[e?]me|6e|verrou\s*6)\b", "6"),
+    (r"\bdernier\s+verrou\b", "last"),
+]
+
+
+def _explicit_lock_marker(item: ExtractionItem):
+    """
+    Retourne l'identifiant explicite d'un verrou quand la source
+    distingue clairement premier/deuxi?me/troisi?me verrou, etc.
+
+    Ce marqueur sert uniquement ? emp?cher une fusion destructrice.
+    """
+    text = " ".join([
+        str(item.statement or ""),
+        str(item.evidence.quote or ""),
+    ]).lower()
+
+    # On exige un contexte de verrou explicite pour ?viter qu'un simple
+    # "deuxi?me test" soit interpr?t? comme un identifiant de verrou.
+    if "verrou" not in text:
+        return None
+
+    for pattern, marker in _EXPLICIT_LOCK_MARKERS:
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            return marker
+
+    return None
+
+
+def _cluster_violates_explicit_separation(source_items):
+    """
+    Deux verrous explicitement distingu?s dans LE MEME DOCUMENT
+    ne peuvent jamais ?tre fusionn?s automatiquement.
+    """
+    by_document = {}
+
+    for item in source_items:
+        marker = _explicit_lock_marker(item)
+
+        if marker is None:
+            continue
+
+        by_document.setdefault(
+            item.evidence.document_id,
+            set(),
+        ).add(marker)
+
+    return any(
+        len(markers) > 1
+        for markers in by_document.values()
+    )
 
 def _entity_id(statement: str) -> str:
     digest = hashlib.sha1(statement.strip().lower().encode("utf-8")).hexdigest()[:12]
@@ -195,6 +263,19 @@ class GlobalLockConsolidator:
                 continue
 
             source_items = [by_id[item_id] for item_id in valid_ids]
+
+            # Garde-fou non-LLM :
+            # si la source elle-m?me distingue explicitement plusieurs
+            # verrous num?rot?s dans le m?me document, on refuse leur fusion.
+            if _cluster_violates_explicit_separation(source_items):
+                for source_item in source_items:
+                    entities.append(
+                        _fallback_singleton(
+                            source_item,
+                            "explicit_source_locks_must_remain_separate",
+                        )
+                    )
+                continue
 
             canonical_statement = str(
                 cluster.get("canonical_statement") or ""

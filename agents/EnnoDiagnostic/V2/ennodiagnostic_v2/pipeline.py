@@ -5,6 +5,7 @@ from .config import PipelineConfig
 from .frascati import FrascatiEvaluator
 from .fusion import fuse_items
 from .consolidation import GlobalLockConsolidator
+from .qualification import LockQualifier
 from .review import build_review_queue
 from .schemas import DocumentInput, PipelineResult
 from .semantic_extractor import LLMClientProtocol, SemanticExtractor
@@ -17,6 +18,7 @@ class EnnoDiagnosticV2:
         *,
         semantic_llm: LLMClientProtocol,
         consolidation_llm: Optional[LLMClientProtocol] = None,
+        qualification_llm: Optional[LLMClientProtocol] = None,
         frascati_llm: Optional[LLMClientProtocol] = None,
         config: Optional[PipelineConfig] = None,
     ):
@@ -25,6 +27,7 @@ class EnnoDiagnosticV2:
         self.consolidator = GlobalLockConsolidator(
             consolidation_llm or semantic_llm
         )
+        self.qualifier = LockQualifier(qualification_llm)
         self.frascati = FrascatiEvaluator(
             frascati_llm if self.config.run_frascati else None
         )
@@ -59,6 +62,11 @@ class EnnoDiagnosticV2:
         )
 
         entities = lock_entities + non_lock_entities
+
+        # Qualification = annotation uniquement.
+        # Aucun candidat n'est supprim?.
+        entities = self.qualifier.qualify(entities, chunks=chunks)
+
         frascati = self.frascati.assess(entities)
         review = build_review_queue(
             entities,
