@@ -17,6 +17,5 @@ class FusionConfig:
 class PipelineConfig:
     chunk: ChunkConfig = field(default_factory=ChunkConfig)
     fusion: FusionConfig = field(default_factory=FusionConfig)
-    use_fastjudge: bool = True
     run_frascati: bool = True
     require_human_review_for_locks: bool = True

@@ -77,7 +77,6 @@ def fuse_items(items: Iterable[ExtractionItem], cfg: FusionConfig):
             metadata={
                 "source_count": len(cluster),
                 "document_count": len(docs),
-                "fastjudge_disagreement_count": sum(x.fastjudge_disagreement for x in cluster),
             },
         ))
     return entities

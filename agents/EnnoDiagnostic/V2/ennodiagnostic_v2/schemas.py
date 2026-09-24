@@ -46,9 +46,6 @@ class ExtractionItem:
     technical_object: str = ""
     unresolved_question: str = ""
     llm_confidence: Optional[float] = None
-    fastjudge_label: Optional[str] = None
-    fastjudge_score: Optional[float] = None
-    fastjudge_disagreement: bool = False
     needs_review: bool = False
     metadata: Dict[str, Any] = field(default_factory=dict)
 

@@ -1,8 +1,8 @@
-from ennodiagnostic_v2 import EnnoDiagnosticV2, DocumentInput
+﻿from ennodiagnostic_v2 import EnnoDiagnosticV2, DocumentInput
 from ennodiagnostic_v2.semantic_extractor import CallableLLMAdapter
 
 def my_llm(system_prompt, user_prompt):
-    # Remplacer par le client LLM EnnoSmart réel.
+    # Remplacer par le client LLM EnnoSmart rÃ©el.
     return {
         "objectives": [],
         "locks": [],
@@ -13,7 +13,7 @@ def my_llm(system_prompt, user_prompt):
 
 pipeline = EnnoDiagnosticV2(
     semantic_llm=CallableLLMAdapter(my_llm),
-    fastjudge=None,
+
     frascati_llm=None,
 )
 

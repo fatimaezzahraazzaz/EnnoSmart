@@ -2,9 +2,9 @@ from typing import Iterable, Optional
 from .audit import build_audit
 from .chunking import build_chunks
 from .config import PipelineConfig
-from .fastjudge_adapter import FastJudgeProtocol, annotate_with_fastjudge
 from .frascati import FrascatiEvaluator
 from .fusion import fuse_items
+from .consolidation import GlobalLockConsolidator
 from .review import build_review_queue
 from .schemas import DocumentInput, PipelineResult
 from .semantic_extractor import LLMClientProtocol, SemanticExtractor
@@ -16,13 +16,15 @@ class EnnoDiagnosticV2:
         self,
         *,
         semantic_llm: LLMClientProtocol,
-        fastjudge: Optional[FastJudgeProtocol] = None,
+        consolidation_llm: Optional[LLMClientProtocol] = None,
         frascati_llm: Optional[LLMClientProtocol] = None,
         config: Optional[PipelineConfig] = None,
     ):
         self.config = config or PipelineConfig()
         self.extractor = SemanticExtractor(semantic_llm)
-        self.fastjudge = fastjudge
+        self.consolidator = GlobalLockConsolidator(
+            consolidation_llm or semantic_llm
+        )
         self.frascati = FrascatiEvaluator(
             frascati_llm if self.config.run_frascati else None
         )
@@ -43,11 +45,20 @@ class EnnoDiagnosticV2:
             })
 
         extractions = self.extractor.extract(chunks)
-        extractions = annotate_with_fastjudge(
-            extractions,
-            self.fastjudge if self.config.use_fastjudge else None,
+
+        lock_entities = self.consolidator.consolidate(extractions)
+
+        non_lock_items = [
+            item for item in extractions
+            if item.kind != "lock"
+        ]
+
+        non_lock_entities = fuse_items(
+            non_lock_items,
+            self.config.fusion,
         )
-        entities = fuse_items(extractions, self.config.fusion)
+
+        entities = lock_entities + non_lock_entities
         frascati = self.frascati.assess(entities)
         review = build_review_queue(
             entities,
