@@ -3,9 +3,10 @@ from __future__ import annotations
 
 """Persistance du corpus documentaire complet pour le chat RAG.
 
-Ce module conserve, après l'extraction et avant la réduction NLP, le texte
-intégral des documents du projet. Il ne remplace ni le NLP ni le RAG principal.
-Il fournit seulement une source documentaire complète au chat EnnoDiagnostic.
+Ce module conserve, juste après l'extraction, le texte intégral des documents
+du projet. Dans le parcours EnnoDiagnostic V2, ce corpus est la source unique
+commune au diagnostic, au détecteur IA, aux comparaisons documentaires et au
+RAG documentaire. L'ancien NLP peut subsister uniquement pour compatibilité.
 """
 
 import hashlib
@@ -49,14 +50,17 @@ def _split_sections(text: str) -> List[Dict[str, Any]]:
     for index, match in enumerate(matches):
         start = match.end()
         end = matches[index + 1].start() if index + 1 < len(matches) else len(raw)
-        body = raw[start:end].strip()
+        segment = raw[start:end]
+        leading = len(segment) - len(segment.lstrip())
+        body = segment.strip()
         if not body:
             continue
+        body_start = start + leading
         sections.append({
             "section_title": match.group(1).strip(),
             "text": body,
-            "char_start": start,
-            "char_end": end,
+            "char_start": body_start,
+            "char_end": body_start + len(body),
             "paragraph_index": index,
         })
     return sections

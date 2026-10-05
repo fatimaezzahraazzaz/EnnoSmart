@@ -710,6 +710,18 @@ export default function UploadPage({
           </CardHeader>
 
           <CardContent className="space-y-4">
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-900">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <div>
+                <p className="font-medium">La transcription peut prendre du temps</p>
+                <p className="mt-1 text-xs leading-5 text-amber-800">
+                  Pour un fichier long, par exemple 50 minutes ou plusieurs heures,
+                  le traitement peut nécessiter plusieurs minutes ou davantage.
+                  Laissez la transcription se terminer avant de quitter la page.
+                </p>
+              </div>
+            </div>
+
             {transcriptionError && (
               <div className="p-3 rounded-md border border-destructive/30 bg-destructive/10 text-destructive text-sm">
                 <AlertCircle className="inline size-4 mr-2" />

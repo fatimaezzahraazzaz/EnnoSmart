@@ -249,6 +249,48 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
 
     scope = _collect_session_scope(snapshot)
     contract = _contract_from_snapshot(snapshot)
+
+    # FIX: une fois le plan consultant approuvé, les verrou_ids du plan
+    # deviennent la source de vérité pour la génération.
+    #
+    # Le classifieur conversationnel peut parfois réinterpréter une réponse
+    # courte ("oui, tu peux rédiger") et produire un mauvais target_verrou_ids.
+    # On ne doit jamais laisser cette nouvelle interprétation remplacer le
+    # périmètre explicitement validé par le consultant.
+    approved_plan = (
+        list(contract.get("approved_plan") or [])
+        if isinstance(contract, Mapping)
+        else []
+    )
+
+    contract_verrou_ids: list[str] = []
+    for section in approved_plan:
+        if not isinstance(section, Mapping):
+            continue
+        for raw_verrou_id in section.get("verrou_ids") or []:
+            verrou_id = _clean(raw_verrou_id, 120)
+            if verrou_id and verrou_id not in contract_verrou_ids:
+                contract_verrou_ids.append(verrou_id)
+
+    if contract_verrou_ids:
+        consultant_verrous = list(scope.get("consultant_verrous") or [])
+
+        scope_identifiers: set[str] = set()
+        for verrou_id in contract_verrou_ids:
+            scope_identifiers |= _normalized_verrou_identifiers(verrou_id)
+
+        # Ajoute également les titres/alias du verrou correspondant.
+        for row in consultant_verrous:
+            row_identifiers = _normalized_verrou_identifiers(row)
+            if row_identifiers & scope_identifiers:
+                scope_identifiers |= row_identifiers
+
+        scope = {
+            "mode": "scoped",
+            "identifiers": sorted(scope_identifiers),
+            "raw_active_verrous": list(contract_verrou_ids),
+            "consultant_verrous": consultant_verrous,
+        }
     # Le workflow diagnostic conserve son corpus projet. En autonome, aucune
     # source d'une autre conversation ne peut être matérialisée dans ce runtime.
     from services.ennoscholar_project_corpus_service import get_effective_guided_sources
@@ -261,10 +303,15 @@ def prepare_conversation_run(db: Any, project: Any, session_id: str) -> dict[str
         str(snapshot_context.get("operating_mode") or "").strip().casefold()
         == "standalone_chat"
     )
+    # Le plan approuvé est prioritaire sur le scope proposé par le routeur.
     active_verrou_ids = (
-        list(snapshot_context.get("active_verrou_ids") or [])
-        if str(snapshot_context.get("review_scope") or "") == "per_verrou"
-        else []
+        list(contract_verrou_ids)
+        if contract_verrou_ids
+        else (
+            list(snapshot_context.get("active_verrou_ids") or [])
+            if str(snapshot_context.get("review_scope") or "") == "per_verrou"
+            else []
+        )
     )
     if standalone_chat:
         from agents.EnnoScholar.guided_research.application.standalone_scope import (

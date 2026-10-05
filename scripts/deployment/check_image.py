@@ -18,10 +18,13 @@ MODULES = (
     "modules.NLP.frascati_guard",
     "modules.NLP.llm_parent_lock_consolidator",
     "modules.NLP.history_parent_support",
-    "agents.EnnoDiagnostic.final_parent_consolidation",
-    "agents.EnnoDiagnostic.historical_continuity_cache",
-    "agents.EnnoDiagnostic.visible_lock_title_guard",
-    "agents.EnnoDiagnostic.ennodiagnostic_agent",
+    "modules.NLP.document_loader",
+    "modules.NLP.project_fact_gate",
+    "agents.EnnoDiagnostic.V2.ennodiagnostic_v2.full_runtime",
+    "agents.EnnoDiagnostic.V2.ennodiagnostic_v2.global_fast_path",
+    "agents.EnnoDiagnostic.V2.ennodiagnostic_v2.completeness_auditor",
+    "services.ennodiagnostic_v2_service",
+    "agents.EnnoAmelioration.application.diagnostic_orchestration_service",
 )
 
 

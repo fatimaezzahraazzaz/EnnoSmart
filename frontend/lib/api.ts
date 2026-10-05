@@ -459,6 +459,21 @@ async function apiRequest<T>(
   return data as T
 }
 
+export async function sendDiagnosticFeedback(
+  projectId: number,
+  comments: Record<string, string>,
+  screenshots: Array<{ section: string; file: File }>,
+) {
+  const form = new FormData()
+  form.append("payload", JSON.stringify(comments))
+  form.append("attachment_sections", JSON.stringify(screenshots.map((item) => item.section)))
+  screenshots.forEach(({ file }) => form.append("files", file))
+  return apiRequest<{ status: "sent"; message: string }>(
+    `/projects/${projectId}/diagnostic-feedback`,
+    { method: "POST", body: form },
+  )
+}
+
 async function apiBlobRequest(
   path: string,
   init: RequestInit = {},
@@ -676,6 +691,17 @@ export async function getProject(projectId: number) {
   return apiRequest<ProjectRead>(`/projects/${projectId}`)
 }
 
+export async function deleteProject(projectId: number) {
+  const result = await apiRequest<{
+    status: string
+    project_id: number
+  }>(`/projects/${projectId}`, {
+    method: "DELETE",
+  })
+  clearReadCache("project")
+  return result
+}
+
 export async function createProject(payload: {
   organisme: string
   project_name: string
@@ -824,6 +850,22 @@ export async function updateVerrouDecision(
 ) {
   const verrou = await apiRequest<VerrouRead>(
     `/projects/${projectId}/verrous/${verrouId}/decision`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ consultant_status }),
+    }
+  )
+  clearReadCache("project-overviews")
+  return verrou
+}
+
+export async function updateV2EntityDecision(
+  projectId: number,
+  entityId: string,
+  consultant_status: "garde" | "rejete" | "en_attente"
+) {
+  const verrou = await apiRequest<VerrouRead>(
+    `/projects/${projectId}/diagnostic/verrous/entity/${encodeURIComponent(entityId)}/decision`,
     {
       method: "PATCH",
       body: JSON.stringify({ consultant_status }),
@@ -1839,6 +1881,21 @@ export async function decideImprovementSources(
       method: "POST",
       body: JSON.stringify({ candidate_ids: candidateIds, decision, reason, guided_session_id: guidedSessionId }),
     },
+  )
+}
+
+
+export async function finishImprovementSourceSelection(
+  projectId: number,
+  sessionId: string,
+) {
+  return apiRequest<{
+    ok: boolean
+    session: ImprovementSession
+    candidate_version_id?: string | null
+  }>(
+    `/api/projects/${projectId}/improvements/sessions/${encodeURIComponent(sessionId)}/sources/finish`,
+    { method: "POST" },
   )
 }
 

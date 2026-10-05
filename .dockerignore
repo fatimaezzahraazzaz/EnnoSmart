@@ -88,3 +88,24 @@ rollback_*.ps1
 storage_v2_reports/
 poppler-*/
 archiv/
+
+# Archives et traces locales : jamais dans les images de production.
+ennodiagnostic_patch_backups/
+ennodiagnostic_debug/
+ennodiagnostic_validations/
+frontend_backups/
+migration_export/
+releases/
+**/*_before_*.py
+**/*_backup.py
+*_regression.py
+lock_test_fixtures.py
+lock_pipeline_real_validation.py
+lock_diagnostic_run18.*
+lock_*results.txt
+lock_real_validation_console*.txt
+traceability_backend_files.txt
+mini_cir_*.txt
+agents/EnnoDiagnostic/V2/examples/
+modules/NLP/data/raw_semantic_dataset.csv
+modules/NLP/data/raw_verrou_prototypes.json

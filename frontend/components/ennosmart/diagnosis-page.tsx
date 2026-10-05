@@ -61,24 +61,21 @@ import {
   getDocuments,
   getProjects,
   getVerrous,
-  importExistingDiagnostic,
   runDiagnostic,
-  syncVerrous,
   updateDiagnosticCorpusReview,
   updateVerrouDecision,
+  updateV2EntityDecision,
   type DiagnosticCorpusReview,
   type DocumentRead,
   type ProjectRead,
   type VerrouRead,
 } from "@/lib/api"
 import { getCurrentProjectId, setCurrentProjectId } from "@/lib/project-session"
-import { CirFinalConsultantPanel } from "@/components/ennosmart/cir-final-consultant-panel"
 import CirPreviousContinuityTab from "@/components/ennosmart/cir-previous-continuity-tab"
 import { DiagnosticRagChat } from "@/components/ennosmart/diagnostic-rag-chat"
 import {
   ContextBadge,
   PageHeader,
-  StatusNotice,
   WorkflowSteps,
 } from "@/components/ennosmart/workspace-ui"
 
@@ -90,52 +87,26 @@ import {
   type SourceEvidence,
 } from "@/components/ennosmart/source-documents-dialog"
 type ConsultantDecision = "garde" | "rejete" | "reformuler" | "en_attente"
-type RunMode = "prepare" | "agent" | "full" | "import" | null
+type RunMode = "diagnostic" | null
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
-
-const prepareSteps = [
-  "Lecture des fichiers raw",
-  "Extraction texte",
-  "Analyse NLP",
-  "Contrôle Frascati",
-  "Création chunks",
-  "Indexation RAG / Chroma",
-]
-
-const agentSteps = [
-  "Lecture Chroma",
-  "Score IA documentaire",
-  "Récupération Frascati",
-  "Génération EnnoDiagnostic",
-  "Synchronisation des verrous",
-]
-
-const fullSteps = [
-  "Extraction documents",
-  "NLP + Frascati",
-  "RAG / Chroma",
-  "Score IA",
-  "Agent EnnoDiagnostic",
-  "Synchronisation",
-]
 
 const diagnosticTabs = [
   { value: "overview", label: "Vue d’ensemble" },
   { value: "diagnostic", label: "Diagnostic CIR" },
-  { value: "controle-ia", label: "Contrôle IA" },
+  { value: "controle-ia", label: "Détection IA" },
   { value: "cir-precedent", label: "CIR précédent" },
   { value: "comparaison-docs", label: "Comparaison docs" },
   { value: "validation", label: "Validation" },
-  { value: "cir-final-consultant", label: "Déposer le CIR final" },
 ] as const
 
 const diagnosticSubsections = [
   { value: "objectif", label: "Objectif global", shortLabel: "Objectif" },
-  { value: "eligibilite", label: "Étude d’éligibilité", shortLabel: "Éligibilité" },
   { value: "verrous", label: "Verrous & preuves", shortLabel: "Verrous" },
+  { value: "methodes", label: "Méthodes", shortLabel: "Méthodes" },
   { value: "demarche", label: "Pertinence des démarches", shortLabel: "Démarche" },
-  { value: "resultats", label: "Résultats & métriques", shortLabel: "Résultats" },
+  { value: "resultats", label: "Résultats", shortLabel: "Résultats" },
+  { value: "metriques", label: "Métriques", shortLabel: "Métriques" },
   { value: "parametres", label: "Paramètres & contraintes", shortLabel: "Paramètres" },
 ] as const
 
@@ -175,6 +146,7 @@ function unwrapCirPreviousReportForDisplay(value: any): any {
   for (const candidate of candidates) {
     if (!candidate || typeof candidate !== "object") continue
     if (
+      candidate?.comparison_status ||
       candidate?.has_previous_cir === true ||
       candidate?.previous_cir_available === true ||
       candidate?.inputs_status?.previous_cir_available === true ||
@@ -201,6 +173,13 @@ function cirReportHasComparisons(value: any) {
 }
 
 function chooseCirMemoryReport(...values: any[]) {
+  // Un résultat explicite (y compris vide ou en erreur) ne doit pas être
+  // remplacé par les rapprochements d'un ancien diagnostic.
+  for (const value of values) {
+    const report = unwrapCirPreviousReportForDisplay(value)
+    if (report?.comparison_status) return report
+  }
+
   for (const value of values) {
     const report = unwrapCirPreviousReportForDisplay(value)
     if (cirReportHasComparisons(report)) return report
@@ -251,7 +230,7 @@ function riskClass(risk: string | null | undefined) {
     return "bg-destructive/10 text-destructive border-destructive/30"
   }
 
-  if (value.includes("moy") || value.includes("medium")) {
+  if (value.includes("moy") || value.includes("modér") || value.includes("medium")) {
     return "bg-warning/10 text-warning border-warning/30"
   }
 
@@ -260,6 +239,267 @@ function riskClass(risk: string | null | undefined) {
   }
 
   return "bg-muted text-muted-foreground border-border"
+}
+
+function v2LockStatusLabel(status: string | null | undefined) {
+  const labels: Record<string, string> = {
+    VALID_LOCK: "Verrou valide",
+    NEEDS_REFORMULATION: "À reformuler",
+    REQUIREMENT_ONLY: "Exigence seulement",
+    ENGINEERING_DIFFICULTY: "Difficulté d’ingénierie",
+    INSUFFICIENT_EVIDENCE: "Preuves insuffisantes",
+    NOT_EVALUATED: "Non évalué",
+  }
+  const value = String(status || "").trim()
+  return labels[value] || cleanDisplayText(value) || "Non évalué"
+}
+
+function v2ExplicitLockOrder(entity: any): number | null {
+  const evidence = Array.isArray(entity?.evidences) ? entity.evidences : []
+  const sourceText = evidence.map((item: any) => String(item?.quote || "")).join("\n").toLowerCase()
+  const numbered = sourceText.match(/\bverrou\s*(\d+)\b|\b(\d+)(?:er|e|ème)?\s+verrou\b/)
+  if (numbered) return Number(numbered[1] || numbered[2])
+  const ordinals: Array<[RegExp, number]> = [
+    [/\bpremier\s+verrou\b/, 1],
+    [/\bdeuxi[eè]me\s+verrou\b/, 2],
+    [/\btroisi[eè]me\s+verrou\b/, 3],
+    [/\bquatri[eè]me\s+verrou\b/, 4],
+    [/\bcinqui[eè]me\s+verrou\b/, 5],
+    [/\bdernier\s+verrou\b/, 999],
+  ]
+  return ordinals.find(([pattern]) => pattern.test(sourceText))?.[1] ?? null
+}
+
+function v2RndStatusLabel(status: string | null | undefined) {
+  const labels: Record<string, string> = {
+    RESEARCH_APPROACH: "Démarche R&D structurée",
+    MIXED_APPROACH: "Démarche mixte R&D / ingénierie",
+    ENGINEERING_ONLY: "Démarche d’ingénierie classique",
+    INSUFFICIENT_EVIDENCE: "Preuves insuffisantes",
+  }
+  const value = String(status || "").trim()
+  return labels[value] || cleanDisplayText(value)
+}
+
+function v2FrascatiCriterionLabel(criterion: string | null | undefined) {
+  const labels: Record<string, string> = {
+    uncertainty: "Incertitude",
+    novelty: "Nouveauté",
+    creativity: "Créativité",
+    systematic: "Démarche systématique",
+    transferability: "Transférabilité",
+  }
+  const value = String(criterion || "").trim()
+  return labels[value.toLowerCase()] || cleanDisplayText(value) || "Critère"
+}
+
+
+function collectV2EvidenceMapV216(diagnosticV2: any) {
+  const map: Record<string, SourceEvidence> = {}
+
+  const register = (evidence: any) => {
+    if (!evidence || typeof evidence !== "object") return
+    const id = cleanDisplayText(String(evidence?.evidence_id || ""))
+    if (!id) return
+    map[id] = evidence as SourceEvidence
+  }
+
+  const extractions = [
+    ...(Array.isArray(diagnosticV2?.extractions) ? diagnosticV2.extractions : []),
+    ...(Array.isArray(diagnosticV2?.core?.extractions) ? diagnosticV2.core.extractions : []),
+  ]
+  extractions.forEach((item: any) => register(item?.evidence))
+
+  // V2 : preuves créées directement depuis les chunks pour les étapes de démarche.
+  const rndStepEvidences = Array.isArray(diagnosticV2?.rnd_approach?.step_evidences)
+    ? diagnosticV2.rnd_approach.step_evidences
+    : []
+  rndStepEvidences.forEach((evidence: any) => register(evidence))
+
+  const entities = [
+    ...(Array.isArray(diagnosticV2?.entities) ? diagnosticV2.entities : []),
+    ...(Array.isArray(diagnosticV2?.core?.entities) ? diagnosticV2.core.entities : []),
+  ]
+  entities.forEach((entity: any) => {
+    if (Array.isArray(entity?.evidences)) {
+      entity.evidences.forEach(register)
+    }
+  })
+
+  return map
+}
+
+function resolveV2EvidenceV216(
+  evidenceIds: any,
+  evidenceMap: Record<string, SourceEvidence>
+) {
+  if (!Array.isArray(evidenceIds)) return []
+  const seen = new Set<string>()
+  return evidenceIds
+    .map((value: any) => cleanDisplayText(String(value || "")))
+    .filter(Boolean)
+    .filter((id: string) => {
+      if (seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+    .map((id: string) => evidenceMap[id])
+    .filter(Boolean)
+}
+
+function V2ScoreComponentsV216({ components }: { components: any[] }) {
+  if (!Array.isArray(components) || components.length === 0) return null
+
+  return (
+    <div className="mt-4 space-y-2">
+      {components.map((component: any, index: number) => {
+        const label = cleanDisplayText(String(
+          component?.name || component?.label || component?.criterion || `Critère ${index + 1}`
+        ))
+        const score = Number(component?.score)
+        const maxScore = Number(component?.max_score)
+        const explanation = cleanDisplayText(String(component?.explanation || ""))
+
+        return (
+          <details key={`${label}-${index}`} className="group rounded-lg border bg-background">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+              <span className="min-w-0 text-xs font-medium text-foreground">{label}</span>
+              <span className="flex shrink-0 items-center gap-2">
+                <span className="text-xs font-semibold tabular-nums text-brand">
+                  {Number.isFinite(score) ? score : "—"}
+                  {Number.isFinite(maxScore) ? ` / ${maxScore}` : ""}
+                </span>
+                <span className="text-[10px] text-muted-foreground group-open:hidden">
+                  Voir explication
+                </span>
+                <span className="hidden text-[10px] text-brand group-open:inline">
+                  Masquer
+                </span>
+              </span>
+            </summary>
+            <div className="border-t px-3 py-2.5">
+              <p className="text-xs leading-5 text-muted-foreground">
+                {explanation || "Aucune explication disponible."}
+              </p>
+            </div>
+          </details>
+        )
+      })}
+    </div>
+  )
+}
+function V2TraceableSectionV216({
+  title,
+  description,
+  icon,
+  items,
+  evidenceMap,
+  projectId,
+  sourceDocuments,
+  tone = "default",
+}: {
+  title: string
+  description?: string
+  icon?: any
+  items: any[]
+  evidenceMap: Record<string, SourceEvidence>
+  projectId?: number | string
+  sourceDocuments: DbSourceDocument[]
+  tone?: "default" | "success"
+}) {
+  const Icon = icon
+  const values = Array.isArray(items)
+    ? items.filter((item: any) => cleanDisplayText(String(item?.text || "")))
+    : []
+  const toneClass = tone === "success" ? "border-success/20 bg-success/5" : ""
+
+  return (
+    <Card className={`min-w-0 ${toneClass}`}>
+      <CardHeader>
+        <CardTitle className="flex min-w-0 items-start gap-2 text-sm">
+          {Icon ? <Icon className="mt-0.5 size-4 shrink-0 text-brand" /> : null}
+          <span className="min-w-0 [overflow-wrap:anywhere]">{title}</span>
+        </CardTitle>
+        {description ? <CardDescription className="text-xs">{description}</CardDescription> : null}
+      </CardHeader>
+      <CardContent className="min-w-0">
+        <div className="min-w-0 rounded-xl border bg-white/80 p-3 sm:p-4">
+          {values.length > 0 ? (
+            <ol className="space-y-3">
+              {values.map((item: any, index: number) => {
+                const evidences = resolveV2EvidenceV216(item?.evidence_ids, evidenceMap)
+                const category = cleanDisplayText(String(item?.category || ""))
+                const sourceRole = cleanDisplayText(String(item?.source_role || ""))
+                const temporalStatus = cleanDisplayText(String(item?.temporal_status || ""))
+                const temporalLabel: Record<string, string> = {
+                  planned: "Prévu",
+                  in_progress: "En cours",
+                  performed: "Réalisé",
+                }
+                return (
+                  <li key={`${title}-${index}`} className="rounded-lg border bg-background p-3">
+                    <div className="flex items-start gap-3">
+                      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand/10 text-[10px] font-semibold text-brand">
+                        {index + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        {category ? (
+                          <Badge variant="outline" className="mb-2 text-[10px]">
+                            {category.replace(/_/g, " ")}
+                          </Badge>
+                        ) : null}
+                        {(sourceRole === "project_evidence" || temporalLabel[temporalStatus]) ? (
+                          <div className="mb-2 flex flex-wrap gap-1.5">
+                            {sourceRole === "project_evidence" ? (
+                              <Badge variant="outline" className="text-[10px]">Projet</Badge>
+                            ) : null}
+                            {temporalLabel[temporalStatus] ? (
+                              <Badge variant="outline" className="text-[10px]">
+                                {temporalLabel[temporalStatus]}
+                              </Badge>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        <p className="text-sm leading-6 text-foreground">
+                          {cleanDisplayText(String(item?.text || ""))}
+                        </p>
+                        {evidences.length > 0 && projectId ? (
+                          <div className="mt-2">
+                            <SourceTextWithDocuments
+                              projectId={projectId}
+                              text={cleanDisplayText(String(
+                                (evidences[0] as any)?.document_name || (evidences[0] as any)?.document || "Voir la preuve"
+                              ))}
+                              documents={sourceDocuments}
+                              evidence={evidences}
+                              compact
+                              hideTextWhenMatched
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </li>
+                )
+              })}
+            </ol>
+          ) : (
+            <p className="text-sm text-muted-foreground">Aucun élément disponible.</p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function v2FrascatiStatusLabel(status: string | null | undefined) {
+  const labels: Record<string, string> = {
+    supported: "Démontré",
+    partial: "Partiel",
+    insufficient: "Insuffisant",
+  }
+  const value = String(status || "").trim()
+  return labels[value.toLowerCase()] || cleanDisplayText(value) || "Non évalué"
 }
 
 function tagClass(tag: string | null) {
@@ -4531,30 +4771,6 @@ async function getPreviousCirFinals(projectId: number) {
   return Array.isArray(data?.items) ? data.items : []
 }
 
-async function getCirFinalConsultantStatus(projectId: number) {
-  const token = getAccessToken()
-
-  if (!token) return false
-
-  try {
-    const response = await fetch(
-      `${API_BASE_URL}/projects/${projectId}/cir-final-consultant/latest`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    )
-
-    if (!response.ok) return false
-
-    const data = await response.json().catch(() => null)
-    return Boolean(data && data?.status !== "empty")
-  } catch {
-    return false
-  }
-}
-
 async function getDocumentComparePairs(projectId: number, force = false) {
   const token = getAccessToken()
 
@@ -4753,18 +4969,6 @@ function countByDecision(verrous: VerrouRead[]) {
   }
 }
 
-function extractRunId(data: any) {
-  const value =
-    data?.id ||
-    data?.run_id ||
-    data?.diagnostic_run_id ||
-    data?.diagnostic_run?.id ||
-    data?.run?.id
-
-  const id = Number(value)
-  return Number.isFinite(id) ? id : null
-}
-
 function pickSection(display: any, keys: string[]) {
   const sections = display?.report_sections || {}
 
@@ -4824,43 +5028,6 @@ function listFromText(text: string, fallback: string[]) {
     .slice(0, 9)
 
   return lines.length > 0 ? lines : [cleaned]
-}
-
-async function postDiagnosticAction(projectId: number, action: "prepare-sources" | "run-agent") {
-  const token = getAccessToken()
-
-  if (!token) {
-    throw new Error("Utilisateur non authentifié.")
-  }
-
-  const response = await fetch(`${API_BASE_URL}/projects/${projectId}/diagnostic/${action}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  })
-
-  let data: any = null
-
-  try {
-    data = await response.json()
-  } catch {
-    data = null
-  }
-
-  if (!response.ok) {
-    const detail =
-      typeof data?.detail === "string"
-        ? data.detail
-        : Array.isArray(data?.detail)
-          ? data.detail.map((item: any) => item.msg || item.type || item).join(" | ")
-          : "Erreur API."
-
-    throw new Error(detail)
-  }
-
-  return data
 }
 
 function formatDocumentSize(value: number) {
@@ -4926,12 +5093,13 @@ async function getPreviousCirComparisonLatest(projectId: number) {
 }
 
 export function DiagnosisPage(
-  { onOpenScholar }: { onOpenScholar?: () => void } = {}
+  { onOpenScholar, scholarAvailable = false }: { onOpenScholar?: () => void; scholarAvailable?: boolean } = {}
 ) {
   const [activeTab, setActiveTab] = useState("overview")
   const [diagnosticSection, setDiagnosticSection] = useState<DiagnosticSubsection>("objectif")
   const [loading, setLoading] = useState(true)
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null)
+  const [candidateActionLoadingId, setCandidateActionLoadingId] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [project, setProject] = useState<ProjectRead | null>(null)
   const [projects, setProjects] = useState<ProjectRead[]>([])
@@ -4942,7 +5110,6 @@ export function DiagnosisPage(
   const [corpusKeepIds, setCorpusKeepIds] = useState<Set<number>>(new Set())
   const [verrous, setVerrous] = useState<VerrouRead[]>([])
   const [diagnosticBundle, setDiagnosticBundle] = useState<any>(null)
-  const [prepareReport, setPrepareReport] = useState<any>(null)
   const [documentCompareIndex, setDocumentCompareIndex] = useState<any>(null)
   const [documentCompareReport, setDocumentCompareReport] = useState<any>(null)
   const [documentCompareLoading, setDocumentCompareLoading] = useState(false)
@@ -4960,7 +5127,6 @@ export function DiagnosisPage(
   const [previousCirCompareLoading, setPreviousCirCompareLoading] = useState(false)
   const [scholarBundle, setScholarBundle] = useState<any>(null)
   const [articles, setArticles] = useState<any[]>([])
-  const [cirFinalRegistered, setCirFinalRegistered] = useState(false)
   const [manualFormOpen, setManualFormOpen] = useState(false)
   const [manualTitle, setManualTitle] = useState("")
   const [manualDescription, setManualDescription] = useState("")
@@ -4978,35 +5144,85 @@ export function DiagnosisPage(
   const reportMarkdown = display?.report_markdown || ""
   const reportSections = display?.report_sections || {}
 
-  const pipelineStats = useMemo(() => {
+  const diagnosticV2 =
+    diagnosticBundle?.diagnostic_v2 ||
+    display?.diagnostic_v2 ||
+    diagnosticBundle?.bundle?.report?.diagnostic_v2 ||
+    {}
+  const v2Scoring = diagnosticV2?.scoring || {}
+  const v2Eligibility = diagnosticV2?.eligibility || v2Scoring?.eligibility || {}
+  const v2Defensibility = diagnosticV2?.defensibility || v2Scoring?.defensibility || {}
+  const v2ProjectSynthesis = diagnosticV2?.project_synthesis || {}
+  const v2RndApproach = diagnosticV2?.rnd_approach || {}
+  const v2ProjectFrascati = diagnosticV2?.project_frascati || {}
+  const v2EvidenceMap = useMemo(() => collectV2EvidenceMapV216(diagnosticV2), [diagnosticV2])
+  const v2Methods = Array.isArray(v2ProjectSynthesis?.methods) ? v2ProjectSynthesis.methods : []
+  const v2Results = Array.isArray(v2ProjectSynthesis?.results) ? v2ProjectSynthesis.results : []
+  const v2Metrics = Array.isArray(v2ProjectSynthesis?.metrics) ? v2ProjectSynthesis.metrics : []
+  const v2Parameters = Array.isArray(v2ProjectSynthesis?.parameters) ? v2ProjectSynthesis.parameters : []
+  const v2RndSteps = Array.isArray(v2ProjectSynthesis?.demarches) ? v2ProjectSynthesis.demarches : []
+
+  const v2ObjectivePoints = Array.isArray(v2ProjectSynthesis?.objective_points)
+    ? v2ProjectSynthesis.objective_points
+        .map((point: any) => cleanDisplayText(point))
+        .filter(Boolean)
+    : []
+
+  const v2LockFamilies = Array.isArray(diagnosticV2?.lock_families?.families)
+    ? diagnosticV2.lock_families.families.filter(
+        (family: any) => Array.isArray(family?.member_entity_ids) && family.member_entity_ids.length > 1
+      )
+    : []
+  const v2LockEntities = Array.isArray(diagnosticV2?.entities)
+    ? diagnosticV2.entities
+        .filter((entity: any) => entity?.kind === "lock")
+        .map((entity: any, index: number) => ({ entity, index }))
+        .sort((left: any, right: any) => {
+          const leftOrder = v2ExplicitLockOrder(left.entity)
+          const rightOrder = v2ExplicitLockOrder(right.entity)
+          return (leftOrder ?? 10000) - (rightOrder ?? 10000) || left.index - right.index
+        })
+        .map(({ entity }: any) => entity)
+    : []
+  const v2QualificationCounts = v2LockEntities.reduce(
+    (counts: Record<string, number>, entity: any) => {
+      const status = String(
+        entity?.metadata?.qualification_status || "NOT_EVALUATED"
+      ).trim() || "NOT_EVALUATED"
+      counts[status] = (counts[status] || 0) + 1
+      return counts
+    },
+    {} as Record<string, number>
+  )
+
+  const pipelineStats = useMemo<any>(() => {
     const fromLatest = display?.pipeline_stats || {}
-    const fromPrepare = {
-      documents_loaded_count: prepareReport?.documents_loaded_count,
-      raw_candidates: prepareReport?.nlp_stats?.raw_candidates,
-      raw_kept: prepareReport?.nlp_stats?.raw_kept,
-      merged_verrous: prepareReport?.nlp_stats?.merged_verrous,
-      chunks_prepared: prepareReport?.index_report?.chunks_prepared,
-      chunks_indexed: prepareReport?.index_report?.chunks_indexed,
-    }
 
     return {
-      ...fromPrepare,
+      documents_loaded_count:
+        diagnosticBundle?.bundle?.report?.documents_count ??
+        diagnosticBundle?.bundle?.report?.pipeline_before_agent?.documents_loaded_count ??
+        documents.length,
       ...Object.fromEntries(
         Object.entries(fromLatest).filter(([, value]) => value !== null && value !== undefined)
       ),
     }
-  }, [display, prepareReport])
+  }, [diagnosticBundle, display, documents.length])
 
   const frascatiScore =
+    v2Defensibility?.score ??
     display?.frascati_summary?.rnd_defensibility_index ??
     diagnosticBundle?.frascati_summary?.rnd_defensibility_index ??
-    prepareReport?.nlp_stats?.rnd_defensibility_index ??
     display?.frascati_summary?.eligibility_assessment_score ??
     diagnosticBundle?.frascati_summary?.eligibility_assessment_score ??
-    prepareReport?.nlp_stats?.eligibility_assessment_score ??
     display?.frascati_summary?.average_frascati_score ??
     display?.frascati_score ??
-    prepareReport?.nlp_stats?.global_frascati_score ??
+    null
+
+  const eligibilityScore =
+    v2Eligibility?.score ??
+    display?.frascati_summary?.eligibility_assessment_score ??
+    diagnosticBundle?.frascati_summary?.eligibility_assessment_score ??
     null
 
   const frascatiDocumentaryCoverage =
@@ -5014,25 +5230,48 @@ export function DiagnosisPage(
     diagnosticBundle?.frascati_summary?.documentary_coverage ??
     display?.frascati_summary?.average_frascati_score ??
     diagnosticBundle?.frascati_summary?.average_frascati_score ??
-    prepareReport?.nlp_stats?.global_frascati_score ??
     null
 
   const demarcheAudit =
+    (Object.keys(v2RndApproach).length > 0 ? v2RndApproach : null) ||
     display?.frascati_summary?.demarche_legibility ||
     diagnosticBundle?.frascati_summary?.demarche_legibility ||
     diagnosticBundle?.demarche_legibility ||
-    prepareReport?.demarche_legibility ||
     {}
 
   const frascatiRisk =
+    diagnosticV2?.risk_level ||
+    v2Scoring?.risk_level ||
     display?.frascati_summary?.risk_level ||
     display?.frascati_risk_level ||
-    prepareReport?.nlp_stats?.frascati_risk_level ||
     "moyen"
 
-  const aiScore = display?.ai_score ?? display?.ai_detection?.summary?.average_ai_percentage ?? null
-  const aiRisk = display?.ai_risk_level ?? display?.ai_detection?.summary?.risk_level ?? "—"
-  const aiPassages = display?.ai_suspected_passages || []
+  const cirPotential =
+    diagnosticV2?.potential_level ||
+    v2Scoring?.potential_level ||
+    "—"
+
+  const aiDetection =
+    diagnosticV2?.ai_detection ||
+    display?.ai_detection ||
+    display?.ai_detection_report ||
+    diagnosticBundle?.bundle?.report?.ai_detection_report ||
+    {}
+  const aiScore =
+    display?.ai_score ??
+    aiDetection?.summary?.average_ai_percentage ??
+    aiDetection?.average_ai_percentage ??
+    null
+  const aiRisk =
+    display?.ai_risk_level ??
+    aiDetection?.summary?.risk_level ??
+    aiDetection?.risk_level ??
+    "—"
+  const aiPassages =
+    display?.ai_suspected_passages ||
+    aiDetection?.suspected_passages ||
+    aiDetection?.passages ||
+    []
 
   const styleMemory = display?.style_memory || {}
   const styleMemoryOk = Boolean(display?.style_memory_ok || styleMemory?.ok)
@@ -5082,6 +5321,7 @@ export function DiagnosisPage(
   // Un tableau vide est truthy en JavaScript : utiliser || masquait donc les
   // comparaisons réellement remplies par comparison-latest.
   const cirMemoryComparisons = firstNonEmptyArray(
+    cirMemory?.comparisons,
     display?.cir_memory_verrou_comparisons,
     cirMemory?.verrou_comparisons,
     cirMemory?.comparisons,
@@ -5353,7 +5593,27 @@ export function DiagnosisPage(
   }, [scholarResults, scholarSummary, scholarReport, scholarPayload, articles.length])
 
 
-  const decisions = useMemo(() => countByDecision(verrous), [verrous])
+  const v2ReviewStatuses = diagnosticV2?.engine === "ennodiagnostic_v2"
+    ? [
+        ...v2LockEntities
+          .filter((entity: any) => entity?.metadata?.has_project_evidence === true ||
+            entity?.metadata?.source_roles?.includes?.("project_evidence"))
+          .map((entity: any) =>
+            verrous.find((verrou) =>
+              String((verrou.source_json as any)?.entity_id || "") === String(entity?.entity_id || "")
+            )?.consultant_status || "en_attente"
+          ),
+        ...verrous.filter(isManualConsultantVerrou).map((verrou) => verrou.consultant_status),
+      ]
+    : []
+  const decisions = diagnosticV2?.engine === "ennodiagnostic_v2"
+    ? {
+        garde: v2ReviewStatuses.filter((value) => value === "garde").length,
+        rejete: v2ReviewStatuses.filter((value) => value === "rejete").length,
+        reformuler: v2ReviewStatuses.filter((value) => value === "reformuler").length,
+        en_attente: v2ReviewStatuses.filter((value) => value === "en_attente").length,
+      }
+    : countByDecision(verrous)
   const validationDecisionGroups = useMemo(() => getValidationDecisionGroups(verrous), [verrous])
   const decisionSegments = useMemo(() => [
     {
@@ -5385,7 +5645,30 @@ export function DiagnosisPage(
       dot: "bg-warning",
     },
   ], [decisions])
+  const eligibilityPercent = scorePercent(eligibilityScore)
   const frascatiPercent = scorePercent(frascatiScore)
+
+  const eligibilityLevel =
+    eligibilityPercent === null
+      ? "—"
+      : eligibilityPercent >= 75
+        ? "Éligibilité élevée"
+        : eligibilityPercent >= 60
+          ? "À consolider"
+          : eligibilityPercent >= 40
+            ? "Incertaine"
+            : "Faible"
+
+  const defendabilityLevel =
+    cleanDisplayText(v2Defensibility?.level) ||
+    (frascatiPercent === null
+      ? "—"
+      : frascatiPercent >= 80
+        ? "Solide"
+        : frascatiPercent >= 50
+          ? "Moyen"
+          : "À documenter")
+
   const sourceDocuments = useProjectSourceDocuments(project?.id)
 
   const backendMarkdownV93 = useMemo(() => {
@@ -5406,6 +5689,7 @@ export function DiagnosisPage(
 
   const summary = useMemo(() => {
     return (
+      cleanDisplayText(v2ProjectSynthesis?.project_summary) ||
       pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
         "Synthèse stratégique du projet",
         "Synthèse stratégique",
@@ -5413,10 +5697,11 @@ export function DiagnosisPage(
       cleanDisplayText(pickSection(display, ["synthese", "synthèse", "synthese_strategique", "summary"]) || "") ||
       "La synthèse stratégique apparaîtra après l’exécution d’EnnoDiagnostic."
     )
-  }, [backendSectionsV93, backendMarkdownV93, display])
+  }, [v2ProjectSynthesis, backendSectionsV93, backendMarkdownV93, display])
 
   const objective = useMemo(() => {
     return (
+      cleanDisplayText(v2ProjectSynthesis?.main_objective) ||
       pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
         "Objectif global reformulé",
         "Objectif global",
@@ -5424,9 +5709,23 @@ export function DiagnosisPage(
       cleanDisplayText(pickSection(display, ["objectif", "objectif_global", "objective"]) || "") ||
       "L’objectif global apparaîtra après l’exécution d’EnnoDiagnostic."
     )
-  }, [backendSectionsV93, backendMarkdownV93, display])
+  }, [v2ProjectSynthesis, backendSectionsV93, backendMarkdownV93, display])
+
+  const v2ObjectiveText = [
+    cleanDisplayText(v2ProjectSynthesis?.main_objective) || objective,
+    v2ObjectivePoints.length > 0
+      ? v2ObjectivePoints
+          .map((point: string) => `- ${point}`)
+          .join("\n")
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n")
 
   const lectureFrascatiText = useMemo(() => {
+    const v2Summary = cleanDisplayText(v2ProjectFrascati?.summary)
+    if (v2Summary) return v2Summary
+
     const merged = pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
       "Étude d'éligibilité",
       "Analyse Frascati",
@@ -5442,9 +5741,23 @@ export function DiagnosisPage(
     return pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
       "Lecture Frascati du dossier",
     ])
-  }, [backendSectionsV93, backendMarkdownV93])
+  }, [v2ProjectFrascati, backendSectionsV93, backendMarkdownV93])
 
   const frascatiJustificationText = useMemo(() => {
+    const v2Criteria = Array.isArray(v2ProjectFrascati?.criteria)
+      ? v2ProjectFrascati.criteria
+      : []
+    if (v2Criteria.length > 0) {
+      return v2Criteria
+        .map((item: any) => {
+          const criterion = v2FrascatiCriterionLabel(item?.criterion)
+          const status = v2FrascatiStatusLabel(item?.status)
+          const explanation = cleanDisplayText(item?.explanation)
+          return `${criterion} — ${status}${explanation ? ` : ${explanation}` : ""}`
+        })
+        .join("\n\n")
+    }
+
     const explicit = getBackendFrascatiJustificationV94(
       diagnosticBundle,
       backendSectionsV93,
@@ -5458,7 +5771,7 @@ export function DiagnosisPage(
     ])
     const parts = merged.split(/Justification projet-spécifique|Analyse approfondie reliée aux preuves/i)
     return parts.length > 1 ? parts.slice(1).join(" ").trim() : ""
-  }, [diagnosticBundle, backendSectionsV93, backendMarkdownV93])
+  }, [v2ProjectFrascati, diagnosticBundle, backendSectionsV93, backendMarkdownV93])
 
   const verrousForDisplay = useMemo(() => {
     return collectBackendDisplayVerrousV139(
@@ -5469,27 +5782,50 @@ export function DiagnosisPage(
   }, [diagnosticBundle, display, verrous])
 
   const demarcheText = useMemo(() => {
+    const status = v2RndStatusLabel(v2RndApproach?.status)
+    const strengths = Array.isArray(v2RndApproach?.strengths)
+      ? v2RndApproach.strengths.map((item: unknown) => cleanDisplayText(String(item || ""))).filter(Boolean)
+      : []
+    const weaknesses = Array.isArray(v2RndApproach?.weaknesses)
+      ? v2RndApproach.weaknesses.map((item: unknown) => cleanDisplayText(String(item || ""))).filter(Boolean)
+      : []
+    const missingEvidence = Array.isArray(v2RndApproach?.missing_evidence)
+      ? v2RndApproach.missing_evidence.map((item: unknown) => cleanDisplayText(String(item || ""))).filter(Boolean)
+      : []
+    const v2Parts = [
+      status ? `Statut : ${status}` : "",
+      cleanDisplayText(v2RndApproach?.rationale),
+      strengths.length > 0 ? `Points forts : ${strengths.join(" ; ")}` : "",
+      weaknesses.length > 0 ? `Points à consolider : ${weaknesses.join(" ; ")}` : "",
+      missingEvidence.length > 0 ? `Preuves manquantes : ${missingEvidence.join(" ; ")}` : "",
+    ].filter(Boolean)
+    if (v2Parts.length > 0) return v2Parts.join("\n\n")
+
     return pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
       "Démarche expérimentale détectée",
       "Démarche détectée",
       "Démarche expérimentale",
     ])
-  }, [backendSectionsV93, backendMarkdownV93])
+  }, [v2RndApproach, backendSectionsV93, backendMarkdownV93])
 
   const resultatsText = useMemo(() => {
-    return pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
+    return cleanDisplayText(v2ProjectSynthesis?.results_summary) || pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
       "Résultats et métriques disponibles",
       "Résultats / métriques",
       "Résultats",
     ])
-  }, [backendSectionsV93, backendMarkdownV93])
+  }, [v2ProjectSynthesis, backendSectionsV93, backendMarkdownV93])
 
   const parametresText = useMemo(() => {
-    return pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
+    const v2Text = [
+      cleanDisplayText(v2ProjectSynthesis?.technical_context),
+      cleanDisplayText(v2ProjectSynthesis?.constraints_summary),
+    ].filter(Boolean).join("\n\n")
+    return v2Text || pickBackendSectionV93(backendSectionsV93, backendMarkdownV93, [
       "Paramètres et contraintes techniques",
       "Paramètres techniques",
     ])
-  }, [backendSectionsV93, backendMarkdownV93])
+  }, [v2ProjectSynthesis, backendSectionsV93, backendMarkdownV93])
 
   const demarcheStructuredSectionV194 = useMemo(() => {
     return getBackendSectionPayloadV194(diagnosticBundle, display, "demarche_detectee")
@@ -5504,7 +5840,13 @@ export function DiagnosisPage(
   }, [diagnosticBundle, display])
 
 
-  const hasDiagnostic = Boolean(backendMarkdownV93 || latestRun || verrousForDisplay.length > 0 || reportMarkdown)
+  const hasDiagnostic = Boolean(
+    diagnosticV2?.engine === "ennodiagnostic_v2" ||
+    backendMarkdownV93 ||
+    latestRun ||
+    verrousForDisplay.length > 0 ||
+    reportMarkdown
+  )
 
   const pendingImprovementDocuments =
     diagnosticCorpusReview?.pending_improvement_documents || []
@@ -5521,18 +5863,13 @@ export function DiagnosisPage(
   const reviewedVerrousCount =
     decisions.garde + decisions.reformuler + decisions.rejete
   const pendingReviewCount = decisions.en_attente
+  const reviewTotal = diagnosticV2?.engine === "ennodiagnostic_v2"
+    ? v2ReviewStatuses.length
+    : verrousForDisplay.length
   const reviewProgress =
-    verrousForDisplay.length > 0
-      ? Math.round((reviewedVerrousCount / verrousForDisplay.length) * 100)
+    reviewTotal > 0
+      ? Math.round((reviewedVerrousCount / reviewTotal) * 100)
       : 0
-
-  const nextDiagnosticAction = !hasDiagnostic
-    ? "Préparer les sources puis lancer EnnoDiagnostic"
-    : pendingReviewCount > 0
-      ? `Examiner ${pendingReviewCount} verrou(s) encore en attente`
-      : selectedVerrousForScholar.length > 0
-        ? `Passer ${selectedVerrousForScholar.length} verrou(s) retenu(s) à EnnoScholar`
-        : "Relire la synthèse et finaliser les décisions"
 
   const loadData = async () => {
     // V12 : ouverture rapide SANS vider les anciens résultats.
@@ -5559,7 +5896,6 @@ export function DiagnosisPage(
         setDiagnosticBundle(null)
         setScholarBundle(null)
         setArticles([])
-        setCirFinalRegistered(false)
         setPreviousCirList([])
         setDocumentCompareIndex(null)
         setPreviousCirComparisonReport(null)
@@ -5583,7 +5919,11 @@ export function DiagnosisPage(
       // Le diagnostic officiel contient déjà les verrous décisionnels. L'ancien
       // chargement appelait /verrous en parallèle et relisait deux fois le même
       // gros rapport PostgreSQL/fichier.
-      const [documentsData, diagnosticData, corpusReviewData] = await Promise.all([
+      const [
+        documentsData,
+        diagnosticData,
+        corpusReviewData,
+      ] = await Promise.all([
         getDocuments(selectedProject.id).catch(() => []),
         getDiagnosticLatest(selectedProject.id).catch(() => null),
         getDiagnosticCorpusReview(selectedProject.id).catch(() => null),
@@ -5598,10 +5938,6 @@ export function DiagnosisPage(
       setDiagnosticBundle(diagnosticData)
       applyDiagnosticCorpusReview(corpusReviewData)
       setLoading(false)
-
-      void getCirFinalConsultantStatus(selectedProject.id)
-        .then(setCirFinalRegistered)
-        .catch(() => setCirFinalRegistered(false))
 
       // Données secondaires : elles ne bloquent pas l’affichage du diagnostic.
       Promise.all([
@@ -5685,87 +6021,21 @@ export function DiagnosisPage(
     }
   }
 
-  const currentSteps =
-    runningMode === "prepare"
-      ? prepareSteps
-      : runningMode === "agent"
-        ? agentSteps
-        : fullSteps
-
   const startProgress = (mode: RunMode) => {
     setRunningMode(mode)
   }
 
   const stopProgress = (_success = true) => undefined
 
-  const prepareSources = async () => {
-    if (!project) return
-
-    setError("")
-    setActiveTab("overview")
-    startProgress("prepare")
-
-    try {
-      const result = await postDiagnosticAction(project.id, "prepare-sources")
-      setPrepareReport(result)
-      await loadData()
-      stopProgress(true)
-    } catch (err) {
-      stopProgress(false)
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Impossible de préparer les sources EnnoDiagnostic."
-      )
-    } finally {
-      setTimeout(() => setRunningMode(null), 700)
-    }
-  }
-
-  const runAgentOnly = async () => {
-    if (!project) return
-
-    setError("")
-    setActiveTab("overview")
-    startProgress("agent")
-
-    try {
-      const runResult = await postDiagnosticAction(project.id, "run-agent")
-      const runId = extractRunId(runResult)
-
-      if (runId) {
-        await syncVerrous(project.id, runId).catch(() => null)
-      }
-
-      await loadData()
-      stopProgress(true)
-    } catch (err) {
-      stopProgress(false)
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Impossible de lancer l’agent EnnoDiagnostic."
-      )
-    } finally {
-      setTimeout(() => setRunningMode(null), 700)
-    }
-  }
-
   const runFullDiagnostic = async () => {
     if (!project) return
 
     setError("")
     setActiveTab("overview")
-    startProgress("full")
+    startProgress("diagnostic")
 
     try {
-      const runResult = await runDiagnostic(project.id)
-      const runId = extractRunId(runResult)
-
-      if (runId) {
-        await syncVerrous(project.id, runId).catch(() => null)
-      }
-
+      await runDiagnostic(project.id)
       await loadData()
       stopProgress(true)
     } catch (err) {
@@ -5773,36 +6043,7 @@ export function DiagnosisPage(
       setError(
         err instanceof Error
           ? err.message
-          : "Impossible de lancer EnnoDiagnostic complet."
-      )
-    } finally {
-      setTimeout(() => setRunningMode(null), 700)
-    }
-  }
-
-  const prepareSourcesAndRunDiagnostic = async () => {
-    if (!project) return
-
-    setError("")
-    setActiveTab("overview")
-    startProgress("full")
-
-    try {
-      const prepared = await postDiagnosticAction(project.id, "prepare-sources")
-      setPrepareReport(prepared)
-      const runResult = await postDiagnosticAction(project.id, "run-agent")
-      const runId = extractRunId(runResult)
-      if (runId) {
-        await syncVerrous(project.id, runId).catch(() => null)
-      }
-      await loadData()
-      stopProgress(true)
-    } catch (err) {
-      stopProgress(false)
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Impossible de préparer puis relancer EnnoDiagnostic."
+          : "Impossible de lancer le diagnostic."
       )
     } finally {
       setTimeout(() => setRunningMode(null), 700)
@@ -5825,7 +6066,7 @@ export function DiagnosisPage(
       setCorpusReviewOpen(false)
       setCorpusKeepIds(new Set())
       if (runAfterSave) {
-        await prepareSourcesAndRunDiagnostic()
+        await runFullDiagnostic()
       }
     } catch (err) {
       setError(
@@ -5838,39 +6079,10 @@ export function DiagnosisPage(
     }
   }
 
-  const importExisting = async () => {
-    if (!project) return
-
-    setError("")
-    startProgress("import")
-
-    try {
-      const imported = await importExistingDiagnostic(project.id)
-      const runId = extractRunId(imported)
-
-      if (runId) {
-        await syncVerrous(project.id, runId).catch(() => null)
-      }
-
-      await loadData()
-      stopProgress(true)
-    } catch (err) {
-      stopProgress(false)
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Impossible d’importer le diagnostic existant."
-      )
-    } finally {
-      setTimeout(() => setRunningMode(null), 700)
-    }
-  }
-
   const changeProject = async (projectId: number) => {
     setCurrentProjectId(projectId)
     setLoading(true)
     setError("")
-    setPrepareReport(null)
     setCorpusReviewOpen(false)
     setDiagnosticCorpusReview(null)
 
@@ -5886,7 +6098,6 @@ export function DiagnosisPage(
       setSelectedPairIndex(null)
       setScholarBundle(null)
       setArticles([])
-      setCirFinalRegistered(false)
       setPreviousCirList([])
       setPreviousCirComparisonReport(null)
       setCirPreviousComparisonReport(null)
@@ -5909,10 +6120,6 @@ export function DiagnosisPage(
       setDiagnosticBundle(diagnosticData)
       applyDiagnosticCorpusReview(corpusReviewData)
       setLoading(false)
-
-      void getCirFinalConsultantStatus(projectId)
-        .then(setCirFinalRegistered)
-        .catch(() => setCirFinalRegistered(false))
 
       Promise.all([
         getScholarLatest(projectId).catch(() => null),
@@ -6255,6 +6462,29 @@ export function DiagnosisPage(
     }
   }
 
+  const updateV2CandidateDecision = async (
+    entityId: string,
+    decision: "garde" | "rejete"
+  ) => {
+    if (!project || !entityId) return
+    setCandidateActionLoadingId(entityId)
+    setError("")
+    try {
+      const updated = await updateV2EntityDecision(project.id, entityId, decision)
+      setVerrous((previous) => {
+        const withoutCandidate = previous.filter((verrou) =>
+          Number(verrou.id) !== Number(updated.id) &&
+          String((verrou.source_json as any)?.entity_id || "") !== entityId
+        )
+        return [...withoutCandidate, updated]
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Impossible d’enregistrer la décision consultant.")
+    } finally {
+      setCandidateActionLoadingId(null)
+    }
+  }
+
   if (loading) {
     return (
       <div
@@ -6410,7 +6640,7 @@ export function DiagnosisPage(
               ) : (
                 <Play className="size-4" />
               )}
-              Préparer les sources puis relancer
+              Enregistrer et lancer le diagnostic
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -6438,7 +6668,7 @@ export function DiagnosisPage(
           </>
         }
         actions={
-          <div className="grid w-full min-w-0 gap-2 sm:w-[32rem] sm:grid-cols-2 xl:w-[34rem] 2xl:flex 2xl:w-auto">
+          <div className="grid w-full min-w-0 gap-2 sm:w-[30rem] sm:grid-cols-2 2xl:flex 2xl:w-auto">
             {projects.length > 1 && (
               <select
                 aria-label="Changer de projet"
@@ -6456,30 +6686,17 @@ export function DiagnosisPage(
             )}
 
             <Button
-              variant="outline"
               className="min-h-11 w-full sm:min-h-9 2xl:w-auto"
-              onClick={prepareSources}
+              onClick={runFullDiagnostic}
               disabled={running}
+              aria-busy={running}
             >
-              {runningMode === "prepare" ? (
-                <Loader2 className="animate-spin" data-icon="inline-start" />
-              ) : (
-                <Search data-icon="inline-start" />
-              )}
-              Préparer les sources
-            </Button>
-
-            <Button
-              className="min-h-11 w-full sm:min-h-9 2xl:w-auto"
-              onClick={runAgentOnly}
-              disabled={running}
-            >
-              {runningMode === "agent" ? (
+              {running ? (
                 <Loader2 className="animate-spin" data-icon="inline-start" />
               ) : (
                 <Play data-icon="inline-start" />
               )}
-              Lancer EnnoDiagnostic
+              Lancer le diagnostic
             </Button>
 
             <Button
@@ -6500,19 +6717,15 @@ export function DiagnosisPage(
         steps={[
           {
             label: "Sources",
-            detail: "Préparation",
-            status: hasDiagnostic
-              ? "complete"
-              : runningMode === "prepare"
-                ? "current"
-                : "upcoming",
+            detail: "Préparation automatique",
+            status: hasDiagnostic ? "complete" : running ? "current" : "upcoming",
           },
           {
             label: "Diagnostic",
-            detail: "Analyse IA",
+            detail: "Analyse V2",
             status: hasDiagnostic
               ? "complete"
-              : running && runningMode !== "prepare"
+              : running
                 ? "current"
                 : "upcoming",
           },
@@ -6531,10 +6744,10 @@ export function DiagnosisPage(
           },
           {
             label: "Validation",
-            detail: cirFinalRegistered ? "CIR final archivé" : "CIR final à déposer",
-            status: cirFinalRegistered
+            detail: pendingReviewCount === 0 ? "Revue terminée" : "Décisions consultant",
+            status: hasDiagnostic && pendingReviewCount === 0
               ? "complete"
-              : hasDiagnostic && pendingReviewCount === 0
+              : hasDiagnostic
                 ? "current"
                 : "upcoming",
           },
@@ -6542,19 +6755,18 @@ export function DiagnosisPage(
       />
 
       {running && (
-        <StatusNotice
-          state="processing"
-          live
-          title={runningMode === "prepare"
-                ? "Préparation des sources en cours"
-                : runningMode === "agent"
-                  ? "Agent EnnoDiagnostic en cours"
-                  : "EnnoDiagnostic complet en cours"}
-          description="Le traitement est exécuté par le backend. Aucune estimation fiable n'est exposée ; vous pouvez laisser cette page ouverte."
+        <div
+          className="flex items-center gap-3 rounded-xl border border-brand/20 bg-brand/5 p-4"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
         >
-          <p className="mb-2 font-medium text-foreground">Séquence prévue</p>
-          <p>{currentSteps.join(" · ")}</p>
-        </StatusNotice>
+          <Loader2 className="size-5 shrink-0 animate-spin text-brand motion-reduce:animate-none" aria-hidden="true" />
+          <div>
+            <p className="text-sm font-semibold text-foreground">Diagnostic en cours…</p>
+            <p className="mt-1 text-xs text-muted-foreground">Votre dossier est en cours d’analyse. Les résultats s’afficheront ici à la fin du diagnostic.</p>
+          </div>
+        </div>
       )}
 
       {error && (
@@ -6577,23 +6789,61 @@ export function DiagnosisPage(
               Diagnostic non lancé
             </CardTitle>
             <CardDescription className="text-xs">
-              Prépare d’abord les sources, puis lance EnnoDiagnostic.
+              La préparation des sources est intégrée au lancement du diagnostic V2.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
-            <Button className="min-h-11 w-full sm:min-h-9 sm:w-auto" variant="outline" onClick={prepareSources}>
-              <Search className="size-4 mr-2" />
-              Préparer les sources
-            </Button>
-            <Button className="min-h-11 w-full bg-brand hover:bg-brand/90 sm:min-h-9 sm:w-auto" onClick={runAgentOnly}>
-              <Play className="size-4 mr-2" />
-              Lancer EnnoDiagnostic
-            </Button>
+          <CardContent className="text-sm text-muted-foreground">
+            Utilisez le bouton « Lancer le diagnostic » ci-dessus. La préparation du corpus démarre automatiquement.
           </CardContent>
         </Card>
       )}
 
-      <section className="grid min-w-0 gap-4 xl:grid-cols-[0.92fr_1.08fr_1.35fr]">
+      <section className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card className="overflow-hidden rounded-2xl border-brand/15 bg-gradient-to-br from-white via-white to-brand/[0.035] shadow-sm">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Éligibilité CIR
+                </p>
+                <div className="mt-3 flex flex-wrap items-end gap-3">
+                  <span className="text-4xl font-semibold tracking-[-0.05em] text-foreground">
+                    {formatScore(eligibilityScore)}
+                  </span>
+                  <Badge variant="outline" className="mb-1 border-brand/25 bg-brand/[0.06] text-brand">
+                    {eligibilityLevel}
+                  </Badge>
+                </div>
+              </div>
+
+              <span className="grid size-11 shrink-0 place-items-center rounded-2xl border border-brand/15 bg-brand/[0.06] text-brand">
+                <Target className="size-5" aria-hidden="true" />
+              </span>
+            </div>
+
+            <div className="mt-5">
+              <div className="rounded-lg border bg-background px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Potentiel CIR</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{cirPotential}</p>
+              </div>
+            </div>
+
+            <V2ScoreComponentsV216
+              components={Array.isArray(v2Eligibility?.components) ? v2Eligibility.components : []}
+            />
+            <details className="group mt-4 rounded-lg border border-brand/15 bg-white">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 text-xs font-semibold text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand [&::-webkit-details-marker]:hidden">
+                Pourquoi ce score d’éligibilité ?
+                <span className="text-muted-foreground group-open:hidden">Afficher</span>
+                <span className="hidden text-muted-foreground group-open:inline">Masquer</span>
+              </summary>
+              <p className="border-t px-3 py-3 text-xs leading-5 text-muted-foreground">
+                {cleanDisplayText(v2Eligibility?.explanation) || "Aucune explication globale disponible pour ce diagnostic."}
+              </p>
+            </details>
+          </CardContent>
+        </Card>
+
         <Card className="overflow-hidden rounded-2xl border-brand/15 bg-gradient-to-br from-white via-white to-brand/[0.035] shadow-sm">
           <CardContent className="p-5">
             <div className="flex items-start justify-between gap-4">
@@ -6607,9 +6857,17 @@ export function DiagnosisPage(
                   </span>
                   <Badge
                     variant="outline"
-                    className={`mb-1 ${riskClass(frascatiRisk)}`}
+                    className={`mb-1 ${
+                      defendabilityLevel === "Solide"
+                        ? "bg-success/10 text-success border-success/30"
+                        : defendabilityLevel === "Moyen"
+                          ? "bg-warning/10 text-warning border-warning/30"
+                          : defendabilityLevel === "À documenter"
+                            ? "bg-destructive/10 text-destructive border-destructive/30"
+                            : "bg-muted text-muted-foreground border-border"
+                    }`}
                   >
-                    Risque {frascatiRisk || "—"}
+                    {defendabilityLevel}
                   </Badge>
                 </div>
               </div>
@@ -6619,14 +6877,21 @@ export function DiagnosisPage(
               </span>
             </div>
 
-            <p className="mt-4 max-w-sm text-xs leading-5 text-muted-foreground">
-              Indice interne de défendabilité documentaire. La décision finale reste celle du consultant CIR.
-            </p>
+            <details className="group mt-4 rounded-lg border border-brand/15 bg-white">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 text-xs font-semibold text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand [&::-webkit-details-marker]:hidden">
+                Pourquoi ce score de défendabilité ?
+                <span className="text-muted-foreground group-open:hidden">Afficher</span>
+                <span className="hidden text-muted-foreground group-open:inline">Masquer</span>
+              </summary>
+              <p className="border-t px-3 py-3 text-xs leading-5 text-muted-foreground">
+                {cleanDisplayText(v2Defensibility?.explanation) || "Aucune explication globale disponible pour ce diagnostic."}
+              </p>
+            </details>
 
             <div className="mt-5" role="img" aria-label={`Défendabilité documentaire : ${formatScore(frascatiScore)}`}>
               <div className="relative h-2.5 overflow-hidden rounded-full bg-muted">
                 <div className="absolute inset-y-0 left-1/2 w-px bg-foreground/25" aria-hidden="true" />
-                <div className="absolute inset-y-0 left-3/4 w-px bg-foreground/35" aria-hidden="true" />
+                <div className="absolute inset-y-0 left-[80%] w-px bg-foreground/35" aria-hidden="true" />
                 {frascatiPercent !== null && (
                   <div
                     className="h-full rounded-full bg-brand motion-safe:transition-[width] motion-safe:duration-500"
@@ -6637,7 +6902,7 @@ export function DiagnosisPage(
               <div className="mt-1.5 flex justify-between text-[9px] text-muted-foreground" aria-hidden="true">
                 <span>À documenter</span>
                 <span>50</span>
-                <span>75</span>
+                <span>80</span>
                 <span>Solide</span>
               </div>
             </div>
@@ -6653,10 +6918,10 @@ export function DiagnosisPage(
                 </p>
                 <div className="mt-3 flex items-baseline gap-2">
                   <span className="text-3xl font-semibold tracking-[-0.04em] text-foreground">
-                    {reviewedVerrousCount}/{verrousForDisplay.length || 0}
+                    {reviewedVerrousCount}/{reviewTotal || 0}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    verrou(s) examiné(s)
+                    point(s) projet examiné(s)
                   </span>
                 </div>
               </div>
@@ -6673,6 +6938,15 @@ export function DiagnosisPage(
               </Badge>
             </div>
 
+            {diagnosticV2?.engine === "ennodiagnostic_v2" && (
+              <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                {v2LockEntities.length + verrous.filter(isManualConsultantVerrou).length} point(s) analysé(s) au total.
+                {v2LockEntities.length + verrous.filter(isManualConsultantVerrou).length > reviewTotal && (
+                  <> {v2LockEntities.length + verrous.filter(isManualConsultantVerrou).length - reviewTotal} point(s) de contexte hors revue consultant.</>
+                )}
+              </p>
+            )}
+
             <div
               className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-muted"
               role="img"
@@ -6683,7 +6957,7 @@ export function DiagnosisPage(
                   <span
                     key={segment.key}
                     className={`${segment.color} h-full motion-safe:transition-[width] motion-safe:duration-500`}
-                    style={{ width: `${(segment.count / Math.max(verrousForDisplay.length, 1)) * 100}%` }}
+                    style={{ width: `${(segment.count / Math.max(reviewTotal, 1)) * 100}%` }}
                   />
                 ) : null
               )}
@@ -6820,12 +7094,12 @@ export function DiagnosisPage(
 
               <div className="flex flex-col justify-center gap-2 border-t border-brand/15 bg-white/65 p-5 lg:border-l lg:border-t-0">
                 <Button
-                  className="w-full bg-brand hover:bg-brand/90"
-                  disabled={selectedVerrousForScholar.length === 0 || !onOpenScholar}
-                  onClick={() => onOpenScholar?.()}
+                  className={scholarAvailable ? "w-full bg-brand hover:bg-brand/90" : "w-full border border-border bg-muted text-muted-foreground disabled:opacity-100"}
+                  disabled={!scholarAvailable || selectedVerrousForScholar.length === 0 || !onOpenScholar}
+                  onClick={() => scholarAvailable && onOpenScholar?.()}
                 >
-                  <Search className="size-4" data-icon="inline-start" aria-hidden="true" />
-                  Passer à EnnoScholar
+                  {scholarAvailable ? <Search className="size-4" data-icon="inline-start" aria-hidden="true" /> : <Lock className="size-4" data-icon="inline-start" aria-hidden="true" />}
+                  {scholarAvailable ? "Passer à EnnoScholar" : "EnnoScholar · Prochainement"}
                   <ArrowRight className="size-4" data-icon="inline-end" aria-hidden="true" />
                 </Button>
 
@@ -6837,7 +7111,7 @@ export function DiagnosisPage(
                   Revoir les verrous
                 </Button>
 
-                {!onOpenScholar && scholarRunId ? (
+                {scholarAvailable && !onOpenScholar && scholarRunId ? (
                   <p className="text-center text-[10px] leading-4 text-muted-foreground">
                     Le passage est prêt. Ouvrez EnnoScholar depuis le menu latéral.
                   </p>
@@ -6873,14 +7147,14 @@ export function DiagnosisPage(
               Analyse
             </p>
             <TabsList className="grid h-auto w-full grid-cols-3 gap-1 bg-muted/35 p-1">
-              <TabsTrigger value="overview" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4">
+              <TabsTrigger value="overview" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4 data-active:bg-brand data-active:font-semibold data-active:text-white data-active:shadow-md">
                 Vue d’ensemble
               </TabsTrigger>
-              <TabsTrigger value="diagnostic" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4">
+              <TabsTrigger value="diagnostic" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4 data-active:bg-brand data-active:font-semibold data-active:text-white data-active:shadow-md">
                 Diagnostic CIR
               </TabsTrigger>
-              <TabsTrigger value="controle-ia" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4">
-                Contrôle IA
+              <TabsTrigger value="controle-ia" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4 data-active:bg-brand data-active:font-semibold data-active:text-white data-active:shadow-md">
+                Détection IA
               </TabsTrigger>
             </TabsList>
           </div>
@@ -6890,10 +7164,10 @@ export function DiagnosisPage(
               Consolidation
             </p>
             <TabsList className="grid h-auto w-full grid-cols-2 gap-1 bg-muted/35 p-1">
-              <TabsTrigger value="cir-precedent" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4">
+              <TabsTrigger value="cir-precedent" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4 data-active:bg-brand data-active:font-semibold data-active:text-white data-active:shadow-md">
                 CIR précédent
               </TabsTrigger>
-              <TabsTrigger value="comparaison-docs" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4">
+              <TabsTrigger value="comparaison-docs" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4 data-active:bg-brand data-active:font-semibold data-active:text-white data-active:shadow-md">
                 Comparaison docs
               </TabsTrigger>
             </TabsList>
@@ -6903,12 +7177,9 @@ export function DiagnosisPage(
             <p className="px-2 pb-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-success">
               Finalisation
             </p>
-            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 bg-muted/35 p-1">
-              <TabsTrigger value="validation" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4">
+            <TabsList className="grid h-auto w-full grid-cols-1 gap-1 bg-muted/35 p-1">
+              <TabsTrigger value="validation" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4 data-active:bg-brand data-active:font-semibold data-active:text-white data-active:shadow-md">
                 Validation
-              </TabsTrigger>
-              <TabsTrigger value="cir-final-consultant" className="min-h-10 min-w-0 whitespace-normal px-2 py-2 text-xs leading-4">
-                Déposer le CIR final
               </TabsTrigger>
             </TabsList>
           </div>
@@ -6935,99 +7206,20 @@ export function DiagnosisPage(
             </CardHeader>
 
             <CardContent className="p-0">
-              <div className="border-b border-border px-5 py-5">
+              <div className="px-5 py-5">
                 <BackendSectionRendererV93 text={summary} />
               </div>
-
-              <div className="grid min-w-0 md:grid-cols-3">
-                <div className="min-w-0 p-5 md:border-r md:border-border">
-                  <div className="flex items-center gap-2 text-brand">
-                    <Target className="size-4" aria-hidden="true" />
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em]">
-                      Objectif global
-                    </p>
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-foreground">
-                    {cleanDisplayText(objective).slice(0, 420)}
-                    {cleanDisplayText(objective).length > 420 ? "…" : ""}
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="mt-3 px-0 text-brand"
-                    onClick={() => {
-                      setActiveTab("diagnostic")
-                      setDiagnosticSection("objectif")
-                    }}
-                  >
-                    Voir le détail
-                    <ArrowRight className="size-4" data-icon="inline-end" />
-                  </Button>
-                </div>
-
-                <div className="min-w-0 border-t border-border p-5 md:border-r md:border-t-0">
-                  <div className="flex items-center gap-2 text-brand">
-                    <CheckCircle2 className="size-4" aria-hidden="true" />
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em]">
-                      Conclusion d’éligibilité
-                    </p>
-                  </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    <span className="text-2xl font-semibold text-foreground">
-                      {formatScore(frascatiScore)}
-                    </span>
-                    <Badge variant="outline" className={riskClass(frascatiRisk)}>
-                      Risque {frascatiRisk || "—"}
-                    </Badge>
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    {cleanDisplayText(lectureFrascatiText || frascatiJustificationText).slice(0, 320) ||
-                      "L’étude détaillée relie les critères Frascati aux preuves du dossier."}
-                    {cleanDisplayText(lectureFrascatiText || frascatiJustificationText).length > 320 ? "…" : ""}
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="mt-3 px-0 text-brand"
-                    onClick={() => {
-                      setActiveTab("diagnostic")
-                      setDiagnosticSection("eligibilite")
-                    }}
-                  >
-                    Voir l’étude
-                    <ArrowRight className="size-4" data-icon="inline-end" />
-                  </Button>
-                </div>
-
-                <div className="min-w-0 border-t border-border p-5 md:border-t-0">
-                  <div className="flex items-center gap-2 text-brand">
-                    <ArrowRight className="size-4" aria-hidden="true" />
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em]">
-                      Prochaine étape
-                    </p>
-                  </div>
-                  <p className="mt-3 text-sm font-semibold leading-6 text-foreground">
-                    {nextDiagnosticAction}
-                  </p>
-                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                    {pendingReviewCount > 0
-                      ? "Terminez les décisions consultant avant le passage vers l’agent scientifique."
-                      : selectedVerrousForScholar.length > 0
-                        ? `${selectedVerrousForScholar.length} verrou(s) retenu(s) sont prêts à être transmis à EnnoScholar.`
-                        : "Aucun verrou retenu n’est encore prêt pour EnnoScholar."}
-                  </p>
-                  <Button
-                    size="sm"
-                    className="mt-4"
-                    onClick={() => {
-                      setActiveTab("diagnostic")
-                      setDiagnosticSection(pendingReviewCount > 0 ? "verrous" : "eligibilite")
-                    }}
-                  >
-                    Continuer
-                    <ArrowRight className="size-4" data-icon="inline-end" />
-                  </Button>
-                </div>
+              <div className="border-t border-border px-5 py-4">
+                <Button
+                  className="min-h-11 bg-brand hover:bg-brand/90"
+                  onClick={() => {
+                    setActiveTab("diagnostic")
+                    setDiagnosticSection("objectif")
+                  }}
+                >
+                  Continuer vers le diagnostic · Objectif
+                  <ArrowRight className="size-4" data-icon="inline-end" />
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -7042,7 +7234,7 @@ export function DiagnosisPage(
                     Diagnostic CIR
                   </p>
                   <p className="mt-0.5 text-xs font-medium text-foreground">
-                    6 sections métier
+                    7 sections métier
                   </p>
                 </div>
 
@@ -7086,7 +7278,7 @@ export function DiagnosisPage(
               </p>
             </div>
             <p className="shrink-0 text-xs text-muted-foreground">
-              {diagnosticSubsections.findIndex((section) => section.value === diagnosticSection) + 1}/6
+              {diagnosticSubsections.findIndex((section) => section.value === diagnosticSection) + 1}/{diagnosticSubsections.length}
             </p>
           </div>
 
@@ -7094,27 +7286,8 @@ export function DiagnosisPage(
             <BackendSectionCardV93
                         title="Objectif global"
                         icon={Target}
-                        text={objective}
+                        text={v2ObjectiveText}
                         emptyText="L’objectif global apparaîtra après l’exécution d’EnnoDiagnostic."
-                      />
-          )}
-
-          {diagnosticSection === "eligibilite" && (
-            <UnifiedEligibilityStudyCardV191
-                        score={frascatiScore}
-                        signalsCount={Number(
-                          display?.frascati_summary?.scores_count ??
-                            diagnosticBundle?.frascati_summary?.scores_count ??
-                            0
-                        )}
-                        candidateCount={verrousForDisplay.length}
-                        reading={lectureFrascatiText}
-                        justification={frascatiJustificationText}
-                        demarche={demarcheAudit}
-                        evidenceReport={eligibilityEvidenceReport}
-                        proofClaims={eligibilityProofClaims}
-                        projectId={project?.id}
-                        sourceDocuments={sourceDocuments}
                       />
           )}
 
@@ -7125,11 +7298,10 @@ export function DiagnosisPage(
                   <div className="min-w-0">
                     <CardTitle className="flex items-center gap-2 text-sm">
                       <Lock className="size-4 text-brand" />
-                      Verrous synchronisés pour validation
+                      Analyse des verrous du dossier
                     </CardTitle>
                     <CardDescription className="mt-1 max-w-3xl text-xs leading-5">
-                      Chaque verrou conserve l’ensemble des éléments du diagnostic : raisonnement,
-                      incertitude, preuves, contrôle consultant, documents sources et décision humaine.
+                      Retrouvez les points cités dans le document, leur qualification par l’agent et les décisions à prendre.
                     </CardDescription>
                   </div>
 
@@ -7151,6 +7323,247 @@ export function DiagnosisPage(
               </CardHeader>
 
               <CardContent className="space-y-4 p-4 sm:p-5">
+                {v2LockFamilies.length > 0 && (
+                <section aria-labelledby="lock-families-title" className="rounded-xl border border-brand/15 bg-brand/[0.025] p-4 sm:p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 id="lock-families-title" className="text-sm font-semibold text-foreground">
+                        Familles de verrous
+                      </h3>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Regroupements thématiques de plusieurs verrous proches. Chaque verrou garde sa propre qualification et sa décision.
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="border-brand/20 bg-white text-brand">
+                      {v2LockFamilies.length} famille(s)
+                    </Badge>
+                  </div>
+
+                  {v2LockFamilies.length > 0 ? (
+                    <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                      {v2LockFamilies.map((family: any, index: number) => {
+                        const members = Array.isArray(family?.member_entity_ids)
+                          ? family.member_entity_ids.length
+                          : 0
+                        return (
+                          <article key={family?.family_id || index} className="rounded-lg border bg-white p-4">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="outline" className="text-[10px]">
+                                {v2LockStatusLabel(family?.status)}
+                              </Badge>
+                              <span className="text-[10px] text-muted-foreground">
+                                {members} verrou(s) précis
+                              </span>
+                            </div>
+                            <h4 className="mt-2 text-sm font-semibold leading-6 text-foreground">
+                              {cleanDisplayText(family?.title) || `Famille ${index + 1}`}
+                            </h4>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                              {cleanDisplayText(family?.statement || family?.rationale) ||
+                                "Aucune synthèse disponible pour cette famille."}
+                            </p>
+                          </article>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-sm text-muted-foreground">
+                      Aucune famille de verrous n’a encore été produite par le diagnostic V2.
+                    </p>
+                  )}
+                </section>
+                )}
+
+                {diagnosticV2?.engine === "ennodiagnostic_v2" && (
+                <section aria-labelledby="v2-qualification-title" className="rounded-xl border border-border bg-muted/[0.18] p-4 sm:p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 id="v2-qualification-title" className="text-sm font-semibold text-foreground">
+                        Points techniques examinés dans le document
+                      </h3>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Chaque point garde son statut propre. « Verrou valide » et « À reformuler » sont proposés à la décision du consultant ; les autres restent visibles avec la raison du classement.
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="bg-background text-muted-foreground">
+                      {v2LockEntities.length} point(s) analysé(s)
+                    </Badge>
+                  </div>
+
+                  {v2LockEntities.length > 0 || verrousForDisplay.some(isManualConsultantVerrou) ? (
+                    <>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {Object.entries(v2QualificationCounts).map(([status, count]) => (
+                          <Badge key={status} variant="outline" className="bg-background text-[10px]">
+                            {v2LockStatusLabel(status)} · {Number(count)}
+                          </Badge>
+                        ))}
+                      </div>
+
+                      <div className="mt-4 space-y-3">
+                        {v2LockEntities.map((entity: any, index: number) => {
+                          const metadata = entity?.metadata || {}
+                          const status = String(metadata?.qualification_status || "NOT_EVALUATED")
+                          const originalStatement = cleanDisplayText(entity?.statement)
+                          const suggestedStatement = cleanDisplayText(metadata?.suggested_statement)
+                          const reason = cleanDisplayText(metadata?.qualification_reason)
+                          const missingEvidence = Array.isArray(metadata?.missing_evidence)
+                            ? metadata.missing_evidence.map((value: unknown) => cleanDisplayText(String(value || ""))).filter(Boolean)
+                            : []
+                          const entityEvidence = Array.isArray(entity?.evidences)
+                            ? entity.evidences
+                            : []
+                          const evidenceCount = entityEvidence.length
+                          const sourceQuote = cleanDisplayText(
+                            entityEvidence.find((evidence: any) => /\bverrou\b/i.test(String(evidence?.quote || "")))?.quote ||
+                            entityEvidence[0]?.quote
+                          )
+                          const entityId = String(entity?.entity_id || "")
+                          const persistedVerrou = verrousForDisplay.find((verrou) =>
+                            String((verrou.source_json as any)?.entity_id ||
+                              (verrou.source_json as any)?.v2_entity?.entity_id || "") === entityId
+                          )
+                          const consultantStatus = persistedVerrou?.consultant_status || "en_attente"
+                          const decisionLoading = candidateActionLoadingId === entityId
+                          const projectEvidence = metadata?.has_project_evidence === true ||
+                            (Array.isArray(metadata?.source_roles) && metadata.source_roles.includes("project_evidence"))
+
+                          return (
+                            <article
+                              key={entity?.entity_id || `v2-lock-${index}`}
+                              className="rounded-lg border bg-background p-4 sm:p-5"
+                            >
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs font-semibold text-foreground">
+                                  Point {index + 1}
+                                </span>
+                                <Badge variant="outline" className={`text-[11px] ${
+                                  status === "VALID_LOCK" ? "border-success/30 bg-success/5 text-success" :
+                                  status === "NEEDS_REFORMULATION" ? "border-warning/30 bg-warning/5 text-warning" :
+                                  "bg-muted/50 text-muted-foreground"
+                                }`}>
+                                  {v2LockStatusLabel(status)}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {evidenceCount} passage(s) source
+                                </span>
+                              </div>
+                              <p className="mt-3 text-xs font-medium text-muted-foreground">Formulation analysée par l’agent</p>
+                              <h4 className="mt-1 text-sm font-semibold leading-6 text-foreground">
+                                {originalStatement || `Point ${index + 1}`}
+                              </h4>
+                              {reason && (
+                                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                                  <span className="font-medium text-foreground">Avis de l’agent : </span>{reason}
+                                </p>
+                              )}
+                              {suggestedStatement && suggestedStatement !== originalStatement && (
+                                <div className="mt-3 rounded-lg border border-warning/20 bg-warning/5 p-3">
+                                  <p className="text-xs font-semibold text-foreground">Reformulation proposée par l’agent</p>
+                                  <p className="mt-1 text-sm leading-6 text-foreground">{suggestedStatement}</p>
+                                </div>
+                              )}
+                              {missingEvidence.length > 0 && (
+                                <div className="mt-3">
+                                  <p className="text-xs font-semibold text-foreground">À préciser ou documenter</p>
+                                  <ul className="mt-1 list-disc space-y-1 pl-5 text-xs leading-5 text-muted-foreground">
+                                    {missingEvidence.map((item: string, missingIndex: number) => (
+                                      <li key={`${entity?.entity_id || index}-missing-${missingIndex}`}>{item}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {sourceQuote && (
+                                <details className="mt-3 rounded-lg border bg-white">
+                                  <summary className="min-h-10 cursor-pointer px-3 py-2.5 text-xs font-medium text-foreground">
+                                    Voir le texte source
+                                  </summary>
+                                  <div className="space-y-3 border-t p-3">
+                                    <div>
+                                      <p className="text-xs font-semibold text-foreground">Passage exact du document</p>
+                                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{sourceQuote}</p>
+                                    </div>
+                                    {entityEvidence.length > 0 && project?.id && (
+                                      <SourceTextWithDocuments
+                                        projectId={project.id}
+                                        text={cleanDisplayText(String(entityEvidence[0]?.document_name || "Voir la preuve"))}
+                                        documents={sourceDocuments}
+                                        evidence={entityEvidence}
+                                        compact
+                                        hideTextWhenMatched
+                                      />
+                                    )}
+                                  </div>
+                                </details>
+                              )}
+                              {projectEvidence && entityId && (
+                                <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
+                                  <span className="mr-auto text-xs text-muted-foreground">
+                                    Décision consultant : {decisionLabel(consultantStatus)}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={consultantStatus === "garde" ? "default" : "outline"}
+                                    className="min-h-10"
+                                    aria-pressed={consultantStatus === "garde"}
+                                    disabled={decisionLoading}
+                                    onClick={() => updateV2CandidateDecision(entityId, "garde")}
+                                  >
+                                    {decisionLoading && consultantStatus !== "garde" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                                    Retenir
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={consultantStatus === "rejete" ? "destructive" : "outline"}
+                                    className="min-h-10"
+                                    aria-pressed={consultantStatus === "rejete"}
+                                    disabled={decisionLoading}
+                                    onClick={() => updateV2CandidateDecision(entityId, "rejete")}
+                                  >
+                                    {decisionLoading && consultantStatus !== "rejete" ? <Loader2 className="size-4 animate-spin" /> : <XCircle className="size-4" />}
+                                    Ne pas retenir
+                                  </Button>
+                                </div>
+                              )}
+                            </article>
+                          )
+                        })}
+                        {verrousForDisplay.filter(isManualConsultantVerrou).map((verrou) => (
+                          <article key={`manual-${verrou.id}`} className="rounded-lg border bg-background p-4 sm:p-5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="outline">Ajout consultant</Badge>
+                              <Badge variant="outline" className={decisionClass(verrou.consultant_status)}>
+                                {decisionLabel(verrou.consultant_status)}
+                              </Badge>
+                            </div>
+                            <h4 className="mt-2 text-sm font-semibold leading-6 text-foreground">{verrou.title}</h4>
+                            {verrou.justification && (
+                              <p className="mt-2 text-sm leading-6 text-muted-foreground">{cleanDisplayText(verrou.justification)}</p>
+                            )}
+                            <div className="mt-4 flex flex-wrap justify-end gap-2 border-t pt-4">
+                              <Button type="button" size="sm" variant={verrou.consultant_status === "garde" ? "default" : "outline"}
+                                className="min-h-10" aria-pressed={verrou.consultant_status === "garde"}
+                                disabled={actionLoadingId === verrou.id}
+                                onClick={() => updateDecision(verrou.id, "garde")}>Retenir</Button>
+                              <Button type="button" size="sm" variant={verrou.consultant_status === "rejete" ? "destructive" : "outline"}
+                                className="min-h-10" aria-pressed={verrou.consultant_status === "rejete"}
+                                disabled={actionLoadingId === verrou.id}
+                                onClick={() => updateDecision(verrou.id, "rejete")}>Ne pas retenir</Button>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="mt-4 text-sm text-muted-foreground">
+                      Aucune entité verrou V2 disponible.
+                    </p>
+                  )}
+                </section>
+                )}
+
                 {manualFormOpen && (
                   <form
                     id="manual-verrou-form"
@@ -7250,6 +7663,8 @@ export function DiagnosisPage(
                   </div>
                 )}
 
+                {diagnosticV2?.engine !== "ennodiagnostic_v2" && (
+                <>
                 {verrousForDisplay.length === 0 ? (
                   <div className="rounded-xl border border-dashed p-8 text-center">
                     <p className="text-sm font-medium text-foreground">
@@ -7273,6 +7688,11 @@ export function DiagnosisPage(
                           (verrou as any)?.is_db_synced === true
                       )
                       const isManual = isManualConsultantVerrou(verrou)
+                      const v2QualificationStatus = String(
+                        (verrou.source_json as any)?.qualification_status ||
+                        (verrou.source_json as any)?.v2_entity?.metadata?.qualification_status || ""
+                      )
+                      const isV2Qualified = Boolean(v2QualificationStatus)
                       const verrouKeywords = Array.isArray(verrou.source_json?.keywords)
                         ? verrou.source_json.keywords.filter(Boolean).slice(0, 6)
                         : []
@@ -7323,7 +7743,9 @@ export function DiagnosisPage(
                                     ? "Ajout consultant"
                                     : historicalMemoryMetric.isMemoryCard
                                       ? "Mémoire CIR confirmée"
-                                      : "Signal R&D détecté"}
+                                      : isV2Qualified
+                                        ? v2LockStatusLabel(v2QualificationStatus)
+                                        : "Signal R&D détecté"}
                                 </Badge>
                                 <Badge
                                   variant="outline"
@@ -7331,7 +7753,8 @@ export function DiagnosisPage(
                                 >
                                   {decisionLabel(verrou.consultant_status)}
                                 </Badge>
-                                {!isManual && (
+                                {!isManual && (historicalMemoryMetric.isMemoryCard ||
+                                  (verrou.score !== null && verrou.score !== undefined && Number.isFinite(Number(verrou.score)))) && (
                                   <Badge variant="outline" className="whitespace-nowrap text-[10px] tabular-nums">
                                     {historicalMemoryMetric.isMemoryCard
                                       ? `${historicalMemoryMetric.percentage ?? "—"} % continuité`
@@ -7344,10 +7767,12 @@ export function DiagnosisPage(
                                 {verrou.title}
                               </p>
 
-                              <p className="mt-1 max-w-5xl text-xs leading-5 text-muted-foreground">
-                                {cleanDisplayText(whyVerrou).slice(0, 260) ||
-                                  "Verrou à confirmer à partir des preuves sources."}
-                              </p>
+                              {!isV2Qualified && (
+                                <p className="mt-1 max-w-5xl text-xs leading-5 text-muted-foreground">
+                                  {cleanDisplayText(whyVerrou).slice(0, 260) ||
+                                    "Verrou à confirmer à partir des preuves sources."}
+                                </p>
+                              )}
 
                               {verrouKeywords.length > 0 && (
                                 <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Mots-clés du verrou">
@@ -7797,56 +8222,141 @@ export function DiagnosisPage(
                     })}
                   </Accordion>
                 )}
+                </>
+                )}
               </CardContent>
             </Card>
           )}
 
+          {diagnosticSection === "methodes" && (
+            v2Methods.length > 0 ? (
+              <V2TraceableSectionV216
+                title="Méthodes"
+                description="Méthodes et approches techniques identifiées dans le dossier."
+                icon={Search}
+                items={v2Methods}
+                evidenceMap={v2EvidenceMap}
+                projectId={project.id}
+                sourceDocuments={sourceDocuments}
+              />
+            ) : (
+              <BackendSectionCardV93
+                title="Méthodes"
+                description="Méthodes et approches techniques identifiées dans le dossier."
+                icon={Search}
+                text={cleanDisplayText(v2ProjectSynthesis?.methods_summary)}
+                emptyText="Aucune méthode détectée."
+              />
+            )
+          )}
+
           {diagnosticSection === "demarche" && (
-            <BackendSectionCardV93
-                          title="Pertinence des démarches"
-                          description="Nécessité des étapes, distinction R&D / ingénierie classique et possibilité d’aller directement à la solution finale."
-                          icon={Search}
-                          text={demarcheText}
-                          emptyText="Aucune démarche détectée."
-                          projectId={project.id}
-                          sourceDocuments={sourceDocuments}
-                          structuredSection={demarcheStructuredSectionV194}
-                          preserveDemarcheAudit
-                        />
+            v2RndSteps.length > 0 ? (
+              <V2TraceableSectionV216
+                title="Pertinence des démarches"
+                description="Nécessité des étapes, distinction R&D / ingénierie classique et possibilité d’aller directement à la solution finale."
+                icon={Search}
+                items={v2RndSteps}
+                evidenceMap={v2EvidenceMap}
+                projectId={project.id}
+                sourceDocuments={sourceDocuments}
+              />
+            ) : (
+              <BackendSectionCardV93
+                title="Pertinence des démarches"
+                description="Nécessité des étapes, distinction R&D / ingénierie classique et possibilité d’aller directement à la solution finale."
+                icon={Search}
+                text={demarcheText}
+                emptyText="Aucune démarche détectée."
+                projectId={project.id}
+                sourceDocuments={sourceDocuments}
+                structuredSection={demarcheStructuredSectionV194}
+                preserveDemarcheAudit
+              />
+            )
           )}
 
           {diagnosticSection === "resultats" && (
-            <BackendSectionCardV93
-                          title="Résultats / métriques"
-                          description="Résultats chiffrés, observations qualitatives et éléments insuffisants à confirmer."
-                          icon={TrendingUp}
-                          text={resultatsText}
-                          emptyText="Aucun résultat ou métrique disponible."
-                          tone="success"
-                          projectId={project.id}
-                          sourceDocuments={sourceDocuments}
-                          structuredSection={resultatsStructuredSectionV194}
-                        />
+            v2Results.length > 0 ? (
+              <V2TraceableSectionV216
+                title="Résultats obtenus"
+                description="Valeurs et constats effectivement observés pendant les travaux."
+                icon={TrendingUp}
+                items={v2Results}
+                evidenceMap={v2EvidenceMap}
+                projectId={project.id}
+                sourceDocuments={sourceDocuments}
+                tone="success"
+              />
+            ) : (
+              <BackendSectionCardV93
+                title="Résultats obtenus"
+                description="Valeurs et constats effectivement observés pendant les travaux."
+                icon={TrendingUp}
+                text={v2Metrics.length > 0 ? "" : resultatsText}
+                emptyText="Aucun résultat obtenu disponible."
+                tone="success"
+                projectId={project.id}
+                sourceDocuments={sourceDocuments}
+                structuredSection={v2Metrics.length > 0 ? null : resultatsStructuredSectionV194}
+              />
+            )
+          )}
+
+          {diagnosticSection === "metriques" && (
+            v2Metrics.length > 0 ? (
+              <V2TraceableSectionV216
+                title="Métriques évaluées"
+                description="Ce que le projet mesure, sans présumer qu'une valeur a déjà été obtenue."
+                icon={TrendingUp}
+                items={v2Metrics}
+                evidenceMap={v2EvidenceMap}
+                projectId={project.id}
+                sourceDocuments={sourceDocuments}
+              />
+            ) : (
+              <BackendSectionCardV93
+                title="Métriques évaluées"
+                description="Ce que le projet mesure, sans présumer qu'une valeur a déjà été obtenue."
+                icon={TrendingUp}
+                text=""
+                emptyText="Aucune métrique distincte disponible dans ce diagnostic."
+                projectId={project.id}
+                sourceDocuments={sourceDocuments}
+              />
+            )
           )}
 
           {diagnosticSection === "parametres" && (
-            <BackendSectionCardV93
-                          title="Paramètres et contraintes techniques"
-                          description="Paramètres, jeux de données, conditions expérimentales et contraintes techniques."
-                          icon={FileText}
-                          text={parametresText}
-                          emptyText="Aucun paramètre technique disponible."
-                          projectId={project.id}
-                          sourceDocuments={sourceDocuments}
-                          structuredSection={parametresStructuredSectionV194}
-                        />
+            v2Parameters.length > 0 ? (
+              <V2TraceableSectionV216
+                title="Paramètres et contraintes techniques"
+                description="Paramètres, jeux de données, conditions expérimentales et contraintes techniques."
+                icon={FileText}
+                items={v2Parameters}
+                evidenceMap={v2EvidenceMap}
+                projectId={project.id}
+                sourceDocuments={sourceDocuments}
+              />
+            ) : (
+              <BackendSectionCardV93
+                title="Paramètres et contraintes techniques"
+                description="Paramètres, jeux de données, conditions expérimentales et contraintes techniques."
+                icon={FileText}
+                text={parametresText}
+                emptyText="Aucun paramètre technique disponible."
+                projectId={project.id}
+                sourceDocuments={sourceDocuments}
+                structuredSection={parametresStructuredSectionV194}
+              />
+            )
           )}
         </TabsContent>
 
         <TabsContent value="controle-ia" className="space-y-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Contrôle IA documentaire</CardTitle>
+              <CardTitle className="text-sm">Détection IA documentaire</CardTitle>
               <CardDescription className="text-xs">
                 Score indicatif calculé sur les textes sources extraits avant reformulation LLM.
               </CardDescription>
@@ -8144,7 +8654,7 @@ export function DiagnosisPage(
               </CardTitle>
               <CardDescription className="text-xs">
                 {previousCirAvailable
-                  ? "Un CIR précédent est déjà enregistré. Tu peux lancer directement la comparaison sans réimporter le fichier."
+                  ? "La comparaison est calculée automatiquement à la fin d’EnnoDiagnostic. Après un ajout manuel du CIR précédent, tu peux la lancer ici sans refaire le diagnostic."
                   : "Aucun CIR précédent n’est encore enregistré. Ajoute d’abord un CIR final précédent pour activer la comparaison."}
               </CardDescription>
             </CardHeader>
@@ -8240,72 +8750,6 @@ export function DiagnosisPage(
               </pre>
             </details>
           )}
-        </TabsContent>
-
-        <TabsContent value="cir-final-consultant" className="space-y-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
-          <Card className="overflow-hidden border-success/25 bg-gradient-to-br from-success/5 via-white to-white">
-            <CardHeader className="border-b bg-white/75">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="flex min-w-0 items-start gap-3">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-success/20 bg-success/10 text-success">
-                    <Upload className="size-5" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-success">
-                      Clôture du dossier
-                    </p>
-                    <CardTitle className="mt-1 text-base">
-                      Déposer le CIR final réellement livré
-                    </CardTitle>
-                    <CardDescription className="mt-1 max-w-3xl text-xs leading-5">
-                      EnnoSmart ne génère pas ici l’intégralité du CIR. Lorsque le consultant a terminé et validé la version définitive sur son poste, cette version doit être déposée pour conserver la référence réellement livrée et maintenir la mémoire CIR du projet à jour.
-                    </CardDescription>
-                  </div>
-                </div>
-
-                <Badge variant="outline" className="shrink-0 border-warning/30 bg-warning/10 text-warning">
-                  À faire à la clôture
-                </Badge>
-              </div>
-            </CardHeader>
-
-            <CardContent className="grid gap-3 pt-5 md:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-xl border bg-white p-3">
-                <p className="text-xs font-semibold text-foreground">Version officielle</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Conserver le document réellement remis au client ou utilisé pour la déclaration.
-                </p>
-              </div>
-              <div className="rounded-xl border bg-white p-3">
-                <p className="text-xs font-semibold text-foreground">Mémoire CIR à jour</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  La version finale devient une référence fiable pour les futurs travaux.
-                </p>
-              </div>
-              <div className="rounded-xl border bg-white p-3">
-                <p className="text-xs font-semibold text-foreground">Comparaison N / N-1</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Le CIR de cette année pourra servir de repère historique lors du prochain exercice.
-                </p>
-              </div>
-              <div className="rounded-xl border bg-white p-3">
-                <p className="text-xs font-semibold text-foreground">Traçabilité</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  La plateforme conserve le lien entre analyse, décisions et livrable final.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <CirFinalConsultantPanel
-            projectId={project.id}
-            apiBaseUrl={API_BASE_URL}
-            authToken={getAccessToken() || undefined}
-            defaultOrganisme={project.organisme || ""}
-            defaultProject={project.project_name || ""}
-            defaultYear={project.year || ""}
-            onStatusChange={setCirFinalRegistered}
-          />
         </TabsContent>
 
         <TabsContent value="comparaison-docs" className="space-y-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
@@ -8585,65 +9029,6 @@ export function DiagnosisPage(
         </TabsContent>
 
         <TabsContent value="validation" className="space-y-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
-          <Card
-            className={
-              cirFinalRegistered
-                ? "overflow-hidden rounded-2xl border-success/30 bg-success/[0.045] shadow-sm"
-                : "overflow-hidden rounded-2xl border-warning/30 bg-warning/[0.045] shadow-sm"
-            }
-          >
-            <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex min-w-0 items-start gap-3">
-                <span
-                  className={`grid size-10 shrink-0 place-items-center rounded-xl border ${
-                    cirFinalRegistered
-                      ? "border-success/30 bg-white text-success"
-                      : "border-warning/30 bg-white text-warning"
-                  }`}
-                >
-                  {cirFinalRegistered ? (
-                    <CheckCircle2 className="size-5" aria-hidden="true" />
-                  ) : (
-                    <Upload className="size-5" aria-hidden="true" />
-                  )}
-                </span>
-
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                    Clôture du dossier
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-foreground">
-                    {cirFinalRegistered
-                      ? "Validation finale complétée"
-                      : "La revue est terminée, le CIR final reste à déposer"}
-                  </p>
-                  <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
-                    {cirFinalRegistered
-                      ? "La version réellement livrée est archivée dans EnnoSmart et pourra servir de référence historique pour les exercices suivants."
-                      : "La validation ne passe au vert qu’après dépôt de la version CIR finale réellement livrée par le consultant."}
-                  </p>
-                </div>
-              </div>
-
-              {cirFinalRegistered ? (
-                <Badge
-                  variant="outline"
-                  className="shrink-0 border-success/30 bg-white text-success"
-                >
-                  CIR final archivé
-                </Badge>
-              ) : (
-                <Button
-                  className="shrink-0"
-                  onClick={() => setActiveTab("cir-final-consultant")}
-                >
-                  Déposer le CIR final
-                  <ArrowRight className="size-4" data-icon="inline-end" />
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-
           <div className="grid gap-3 sm:grid-cols-3">
             {validationDecisionGroups.map(({ status, label, items }) => {
               return (

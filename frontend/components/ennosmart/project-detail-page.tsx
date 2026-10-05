@@ -17,6 +17,7 @@ import {
   FileText,
   FolderKanban,
   Loader2,
+  LockKeyhole,
   RefreshCw,
   Search,
   Trash2,
@@ -56,6 +57,7 @@ import {
 interface ProjectDetailPageProps {
   navigateTo: (page: AppPage) => void
   enabledAgents?: AgentAvailability
+  canUseAdvancedAgents?: boolean
 }
 
 const defaultAgentAvailability: AgentAvailability = {
@@ -210,9 +212,33 @@ function pageNumbers(current: number, total: number) {
 /* Page                                                                       */
 /* -------------------------------------------------------------------------- */
 
+function UpcomingAgentCard({ title, description }: { title: string; description: string }) {
+  return (
+    <Card className="overflow-hidden rounded-2xl border-border bg-muted/40 shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span className="grid size-8 place-items-center rounded-xl bg-muted">
+            <LockKeyhole className="size-4" aria-hidden="true" />
+          </span>
+          {title}
+        </CardTitle>
+        <CardDescription className="text-xs leading-5">{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Badge variant="outline" className="bg-muted text-muted-foreground">Prochainement</Badge>
+        <Button disabled className="w-full rounded-xl border border-border bg-muted text-muted-foreground disabled:opacity-100">
+          <LockKeyhole className="size-4" aria-hidden="true" />
+          {title} · Prochainement
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function ProjectDetailPage({
   navigateTo,
   enabledAgents = defaultAgentAvailability,
+  canUseAdvancedAgents = false,
 }: ProjectDetailPageProps) {
   const [project, setProject] = useState<ProjectRead | null>(null)
   const [projects, setProjects] = useState<ProjectRead[]>([])
@@ -949,7 +975,7 @@ export default function ProjectDetailPage({
 
           {/* EnnoScholar */}
 
-          {enabledAgents.scholar !== false && (
+          {canUseAdvancedAgents && enabledAgents.scholar !== false ? (
           <Card className={`overflow-hidden rounded-2xl shadow-sm ${statusCardClass(scholarState)}`}>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
@@ -1013,11 +1039,13 @@ export default function ProjectDetailPage({
               </div>
             </CardContent>
           </Card>
+          ) : (
+            <UpcomingAgentCard title="EnnoScholar" description="Recherche scientifique, tri des articles et état de l’art." />
           )}
 
           {/* EnnoAmelioration */}
 
-          {enabledAgents.improvement !== false && (
+          {canUseAdvancedAgents && enabledAgents.improvement !== false ? (
           <Card className="overflow-hidden rounded-2xl border-brand/15 bg-[linear-gradient(135deg,rgba(109,70,178,0.035),rgba(255,255,255,0.96))] shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
@@ -1052,6 +1080,8 @@ export default function ProjectDetailPage({
               </Button>
             </CardContent>
           </Card>
+          ) : (
+            <UpcomingAgentCard title="EnnoAmelioration" description="Révision des sections et du CIR à partir des preuves disponibles." />
           )}
         </section>
 

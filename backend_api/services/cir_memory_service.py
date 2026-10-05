@@ -541,8 +541,6 @@ def _load_existing_cir_pipeline():
         "modules.nlp.cir_pipeline",
         "NLP.cir_pipeline",
         "nlp.cir_pipeline",
-        "agents.EnnoDiagnostic.NLP.cir_pipeline",
-        "agents.EnnoDiagnostic.nlp.cir_pipeline",
         "agents.NLP.cir_pipeline",
         "ennodiagnostic.NLP.cir_pipeline",
         "ennodiagnostic.nlp.cir_pipeline",

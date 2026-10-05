@@ -45,6 +45,7 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   createImprovementSession,
   decideImprovementSources,
+  finishImprovementSourceSelection,
   decideImprovementVersion,
   deleteImprovementSession,
   getDocuments,
@@ -891,6 +892,17 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
     || current?.context?.scholar_handoff?.sources
     || []
   ) as Array<Record<string, any>>
+
+  const progressiveWorkflow = (
+    current?.context?.cir_progressive_workflow
+    || null
+  ) as Record<string, any> | null
+
+  const awaitingProgressiveSourceSelection = Boolean(
+    progressiveWorkflow?.active
+    && progressiveWorkflow?.phase === "awaiting_sources"
+  )
+
   const researchSourcesByMessage = useMemo(
     () => improvementResearchByMessage(current?.messages || [], current?.context || {}),
     [current?.messages, current?.context],
@@ -1101,10 +1113,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
   const createSession = async () => {
     if (!projectId) return
     const selectedDocumentId = Number(newDocumentId) || undefined
-    if (targetMode === "full_document" && !selectedDocumentId) {
-      setError("Choisissez un document CIR du projet ou importez-le depuis votre PC.")
-      return
-    }
+    const targetScope: ImprovementMode = selectedDocumentId ? "full_document" : "section"
     if (!selectedDocumentId && !newText.trim()) {
       setError("Collez une section, choisissez un document ou importez un fichier.")
       return
@@ -1121,9 +1130,9 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
     try {
       const response = await createImprovementSession(projectId, {
         title: newTitle.trim() || undefined,
-        source_text: targetMode === "section" ? newText.trim() || undefined : undefined,
+        source_text: targetScope === "section" ? newText.trim() || undefined : undefined,
         source_document_id: selectedDocumentId,
-        target_scope: targetMode,
+        target_scope: targetScope,
       })
       sessionCreated = true
       setCurrent(response.session)
@@ -1131,7 +1140,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
       setPendingMessage(instruction)
       const improved = await sendImprovementMessage(projectId, response.session.session_id, {
         message: instruction,
-        target_scope: targetMode,
+        target_scope: targetScope === "section" ? "section" : undefined,
       })
       setCurrent(improved.session)
       backgroundQueued = Boolean(improved.background && isBackgroundJobActive(improved.background_job))
@@ -1170,6 +1179,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
       setNewDocumentId(String(document.id))
       setNewTitle((title) => title.trim() || file.name)
       setNewText("")
+      setTargetMode("full_document")
     } catch (requestError) {
       setError(getErrorMessage(requestError))
     } finally {
@@ -1198,7 +1208,7 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
       const response = await sendImprovementMessage(projectId, current.session_id, {
         message: outgoingMessage,
         selected_text: selectedText || undefined,
-        target_scope: selectedText ? "selection" : selectedSectionId ? "section" : targetMode,
+        target_scope: selectedText ? "selection" : selectedSectionId ? "section" : undefined,
         target_section_id: selectedText ? undefined : selectedSectionId || undefined,
         target_section_title: selectedText ? undefined : section?.title,
       })
@@ -1268,6 +1278,28 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
         "",
         guidedSessionId,
       )
+      setCurrent(response.session)
+      await refreshList(projectId)
+    } catch (requestError) {
+      setError(getErrorMessage(requestError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+
+  const finishSourceSelection = async () => {
+    if (!projectId || !current || busy || backgroundActive) return
+
+    setBusy(true)
+    setError("")
+
+    try {
+      const response = await finishImprovementSourceSelection(
+        projectId,
+        current.session_id,
+      )
+
       setCurrent(response.session)
       await refreshList(projectId)
     } catch (requestError) {
@@ -1461,40 +1493,6 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                   </option>
                 ))}
               </select>
-            )}
-
-            {current && (
-              <div className="hidden items-center gap-1 rounded-xl border bg-muted/30 p-1 md:flex">
-                {([[
-                  "section",
-                  "Section",
-                ], [
-                  "full_document",
-                  "CIR complet",
-                ]] as Array<[ImprovementMode, string]>).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    className={cn(
-                      "rounded-lg px-2.5 py-1 text-[11px] font-medium transition",
-                      targetMode === mode
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                    onClick={() => {
-                      setTargetMode(mode)
-                      if (mode === "full_document") {
-                        setSelectedText("")
-                        setSelectedSectionId(null)
-                      } else {
-                        setSelectedText("")
-                      }
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
             )}
 
             {current && (
@@ -1774,88 +1772,39 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                       </div>
 
                       <div className="space-y-3 p-4 sm:p-4 lg:p-4 2xl:p-4">
-                        {/* Portée */}
+                        {/* Source : texte collé = section ; document = CIR complet */}
                         <section>
-                          <p className="mb-2 text-xs font-semibold text-foreground">
-                            Portée du texte
-                          </p>
+                          <label
+                            className="mb-2 block text-xs font-semibold text-foreground"
+                            htmlFor="improvement-source-text"
+                          >
+                            Texte à améliorer
+                          </label>
 
-                          <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-muted/[0.28] p-1">
-                            {([
-                              ["section", "Section", FileText],
-                              ["full_document", "CIR complet", FileUp],
-                            ] as Array<[ImprovementMode, string, typeof FileText]>).map(
-                              ([mode, label, Icon]) => (
-                                <button
-                                  key={mode}
-                                  type="button"
-                                  className={cn(
-                                    "flex min-h-8 cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 text-[13px] font-medium transition-all",
-                                    targetMode === mode
-                                      ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                                      : "border-transparent bg-transparent text-muted-foreground hover:bg-background hover:text-foreground",
-                                  )}
-                                  onClick={() => {
-                                    setTargetMode(mode)
-                                    if (mode === "full_document") setNewText("")
-                                  }}
-                                >
-                                  <Icon className="size-4" />
-                                  {label}
-                                </button>
-                              ),
-                            )}
+                          <Textarea
+                            id="improvement-source-text"
+                            className="improvement-text-scroll field-sizing-fixed h-[clamp(118px,17dvh,155px)] min-h-[112px] max-h-[22dvh] resize-y overflow-y-auto rounded-xl border-border/80 bg-background px-4 py-3 text-[13px] leading-5.5 shadow-none focus-visible:ring-2 focus-visible:ring-primary/15 2xl:text-sm"
+                            placeholder="Collez ici une section à améliorer, ou choisissez/importez un CIR complet ci-dessous…"
+                            wrap="soft"
+                            value={newText}
+                            onChange={(event) => {
+                              const value = event.target.value
+                              setNewText(value)
+                              if (value.trim()) {
+                                setNewDocumentId("")
+                                setTargetMode("section")
+                              }
+                            }}
+                          />
+
+                          <div className="my-2.5 flex items-center gap-3">
+                            <div className="h-px flex-1 bg-border" />
+                            <span className="shrink-0 text-[11px] text-muted-foreground">
+                              ou utiliser un CIR complet
+                            </span>
+                            <div className="h-px flex-1 bg-border" />
                           </div>
                         </section>
-
-                        {/* Source texte ou document */}
-                        {targetMode === "section" ? (
-                          <section>
-                            <label
-                              className="mb-2 block text-xs font-semibold text-foreground"
-                              htmlFor="improvement-source-text"
-                            >
-                              Texte de la section
-                            </label>
-
-                            <Textarea
-                              id="improvement-source-text"
-                              className="improvement-text-scroll field-sizing-fixed h-[clamp(118px,17dvh,155px)] min-h-[112px] max-h-[22dvh] resize-y overflow-y-auto rounded-xl border-border/80 bg-background px-4 py-3 text-[13px] leading-5.5 shadow-none focus-visible:ring-2 focus-visible:ring-primary/15 2xl:text-sm"
-                              placeholder="Collez ici la section à améliorer…"
-                              wrap="soft"
-                              value={newText}
-                              onChange={(event) => {
-                                setNewText(event.target.value)
-                                if (event.target.value.trim()) setNewDocumentId("")
-                              }}
-                            />
-
-                            <div className="my-2.5 flex items-center gap-3">
-                              <div className="h-px flex-1 bg-border" />
-                              <span className="shrink-0 text-[11px] text-muted-foreground">
-                                ou partir d&apos;un document
-                              </span>
-                              <div className="h-px flex-1 bg-border" />
-                            </div>
-                          </section>
-                        ) : (
-                          <section className="rounded-xl border border-primary/10 bg-primary/[0.035] px-4 py-3">
-                            <div className="flex items-start gap-3">
-                              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-background text-primary shadow-sm ring-1 ring-primary/10">
-                                <FileText className="size-4" />
-                              </span>
-                              <div>
-                                <p className="text-xs font-semibold text-foreground">
-                                  CIR complet
-                                </p>
-                                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                  Le document est chargé avec sa structure afin de préserver les sections,
-                                  sous-sections et éléments du fichier original.
-                                </p>
-                              </div>
-                            </div>
-                          </section>
-                        )}
 
                         {/* Choix document */}
                         <section className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -1863,15 +1812,17 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                             className="h-10 min-w-0 rounded-xl border border-border/80 bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                             value={newDocumentId}
                             onChange={(event) => {
-                              setNewDocumentId(event.target.value)
-                              if (event.target.value) setNewText("")
+                              const value = event.target.value
+                              setNewDocumentId(value)
+                              if (value) {
+                                setNewText("")
+                                setTargetMode("full_document")
+                              } else {
+                                setTargetMode("section")
+                              }
                             }}
                           >
-                            <option value="">
-                              {targetMode === "full_document"
-                                ? "Choisir le document CIR"
-                                : "Choisir un document du projet"}
-                            </option>
+                            <option value="">Choisir un CIR complet du projet</option>
                             {documents.map((document) => (
                               <option key={document.id} value={document.id}>
                                 {document.filename}
@@ -2592,6 +2543,39 @@ export default function EnnoAmeliorationPage({ onImmersiveModeChange, onCreatePr
                       })}
                     </div>
                   )}
+
+                  {awaitingProgressiveSourceSelection && researchSources.length > 0 && (
+                    <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+                      <p className="text-sm font-semibold">
+                        Sélection de cette section
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Gardez les publications utiles et écartez les autres.
+                        Lorsque votre choix est terminé, continuez vers la section suivante.
+                      </p>
+
+                      <Button
+                        type="button"
+                        className="mt-3"
+                        disabled={busy || backgroundActive}
+                        onClick={() => void finishSourceSelection()}
+                      >
+                        {busy ? (
+                          <>
+                            <Loader2 className="mr-2 size-4 animate-spin motion-reduce:animate-none" />
+                            Traitement…
+                          </>
+                        ) : (
+                          <>
+                            <Check className="mr-2 size-4" />
+                            Terminer la sélection et continuer
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+
                   <div className="rounded-xl border p-3">
                     <div className="flex items-center gap-2"><Library className="size-4 text-primary" /><p className="text-sm font-semibold">Corpus scientifique validé</p></div>
                     <p className="mt-2 text-xs text-muted-foreground">

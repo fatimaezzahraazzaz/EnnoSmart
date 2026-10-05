@@ -152,21 +152,53 @@ suite de t?ches de d?veloppement sans d?marche exp?rimentale claire.
 5. TRANSFERABILITY
 ============================================================
 
-Le projet doit produire des r?sultats ou connaissances
-qui peuvent ?tre document?s, r?utilis?s ou reproduits.
+Ce crit?re concerne la capacit? ? conserver, transmettre,
+r?utiliser ou reproduire les CONNAISSANCES TECHNIQUES
+issues de la d?marche R&D.
+
+Attention :
+ne confonds jamais la reproductibilit? d'une fonctionnalit?
+logicielle ou d'une impl?mentation classique avec la
+transf?rabilit? des r?sultats d'une d?marche R&D.
+
+Le simple fait qu'un d?veloppement fonctionne,
+qu'une biblioth?que puisse ?tre r?install?e,
+ou qu'une configuration puisse ?tre reproduite
+ne suffit PAS.
 
 SUPPORTED :
-m?thodes, param?tres, protocoles, r?sultats,
-conditions et enseignements sont suffisamment document?s.
+les preuves d?crivent suffisamment :
+- la m?thode ou le protocole ;
+- les param?tres / conditions ;
+- les r?sultats obtenus ;
+- les enseignements techniques ;
+de fa?on ? permettre la reproduction des essais
+ou la r?utilisation des connaissances acquises.
 
 PARTIAL :
-certaines connaissances ou r?sultats sont d?crits,
-mais la reproductibilit? ou r?utilisation reste incompl?te.
+il existe d?j? une mati?re technique exploitable :
+- m?thode ou exp?rimentation identifiable ;
+- param?tres ou conditions ?tudi?s ;
+- r?sultats techniques observ?s ;
+
+mais certaines informations n?cessaires ? une reproduction
+compl?te ou ? une r?utilisation fiable restent absentes.
+
+Un protocole incomplet ne signifie donc pas automatiquement
+INSUFFICIENT si des r?sultats exp?rimentaux et leurs conditions
+sont d?j? document?s.
 
 INSUFFICIENT :
-les documents indiquent seulement que la solution fonctionne
-sans d?crire comment les r?sultats ont ?t? obtenus
-ni ce qui a ?t? appris.
+- seulement un r?sultat fonctionnel final ;
+- seulement "la solution fonctionne" ;
+- simple int?gration / configuration / d?veloppement classique ;
+- aucune connaissance technique issue d'une exp?rimentation ;
+- absence de param?tres, conditions ou r?sultats techniques
+  permettant de comprendre ce qui a ?t? appris.
+
+Une activit? d'ing?nierie classique ne devient pas
+transf?rable au sens Frascati simplement parce que son
+impl?mentation peut ?tre reproduite.
 
 ============================================================
 REGLES
@@ -180,6 +212,24 @@ REGLES
 5. Ne donne aucun score num?rique.
 6. Pour chaque crit?re, explique bri?vement pourquoi.
 7. Indique les informations manquantes pour renforcer le dossier.
+
+
+============================================================
+ATTRIBUTION PROJET / LITTERATURE
+============================================================
+
+SOURCE_ROLE peut valoir project_evidence, literature, contextual ou unknown.
+
+REGLES CRITIQUES :
+1. UNCERTAINTY : une difficulté décrite uniquement dans la littérature ne suffit
+   pas à démontrer que le projet l'a réellement rencontrée.
+2. NOVELTY : la littérature peut décrire l'existant et ses limites, mais il faut
+   des preuves du projet pour décrire ce que le projet cherche à dépasser ou produit.
+3. CREATIVITY : juge les hypothèses et approches du projet, pas celles des articles.
+4. SYSTEMATIC : juge uniquement la démarche expérimentale décrite pour le projet.
+5. TRANSFERABILITY : juge la documentation des méthodes, paramètres, résultats
+   et connaissances du projet.
+6. Ne supprime aucune preuve ; distingue seulement son rôle.
 
 Retourne uniquement :
 
@@ -251,6 +301,8 @@ def _build_prompt(
                 f"ENTITY_ID: {entity.entity_id}",
                 f"VERROU: {entity.statement}",
                 f"QUALIFICATION: {entity.metadata.get('qualification_status')}",
+                f"SOURCE_ROLES: {entity.metadata.get('source_roles')}",
+                f"HAS_PROJECT_EVIDENCE: {entity.metadata.get('has_project_evidence')}",
                 f"RAISON: {entity.metadata.get('qualification_reason')}",
                 f"REFORMULATION: {entity.metadata.get('suggested_statement')}",
             ])
@@ -284,6 +336,7 @@ def _build_prompt(
             "\n".join([
                 f"EVIDENCE_ID: {item.evidence.evidence_id}",
                 f"TYPE: {item.kind}",
+                f"SOURCE_ROLE: {item.metadata.get('source_role', 'unknown')}",
                 f"STATEMENT: {item.statement}",
                 f"PREUVE: {quote}",
             ])

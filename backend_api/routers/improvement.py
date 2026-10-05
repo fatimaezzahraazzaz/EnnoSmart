@@ -27,6 +27,7 @@ from services.improvement_service import (
     decide_version,
     delete_session,
     decide_research_sources,
+    finish_progressive_research_selection,
     get_session,
     list_session_summaries,
     restore_version,
@@ -184,11 +185,17 @@ def create_improvement_message(
             # Les demandes de SECTION restent totalement synchrones et conservent
             # la validation humaine des sources.
             if background_requested:
+                background_payload = payload.model_dump()
+                background_payload["target_scope"] = "full_document"
+                background_payload["target_section_id"] = None
+                background_payload["target_section_title"] = None
+                background_payload["selected_text"] = None
+
                 job = enqueue_full_cir_job(
                     project_id=project.id,
                     session_id=session_id,
                     user_id=current_user.id,
-                    payload=payload.model_dump(),
+                    payload=background_payload,
                 )
                 mirror_status_into_session(
                     db,
@@ -360,6 +367,46 @@ def decide_improvement_sources(
     except Exception as exc:
         db.rollback()
         raise _http_error(exc) from exc
+
+
+@router.post("/sessions/{session_id}/sources/finish")
+def finish_improvement_source_selection(
+    project_id: int,
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_project_for_user(
+        db,
+        project_id,
+        current_user,
+    )
+
+    try:
+        with session_execution_lock(
+            "improvement",
+            f"{project.id}:{session_id}",
+        ):
+            session, candidate = finish_progressive_research_selection(
+                db,
+                project,
+                session_id,
+            )
+
+        return {
+            "ok": True,
+            "session": serialize_session(session),
+            "candidate_version_id": (
+                candidate.id
+                if candidate is not None
+                else None
+            ),
+        }
+
+    except Exception as exc:
+        db.rollback()
+        raise _http_error(exc) from exc
+
 
 @router.get("/sessions/{session_id}/background")
 def get_improvement_background_job(

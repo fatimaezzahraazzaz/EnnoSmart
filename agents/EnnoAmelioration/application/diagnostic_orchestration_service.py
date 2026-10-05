@@ -2,19 +2,19 @@ from __future__ import annotations
 
 """Orchestration ciblée d'EnnoDiagnostic depuis EnnoAmel.
 
-V2.3 — règle d'architecture :
+V2.5 — EnnoDiagnostic V2, corpus ciblé isolé :
 
 * EnnoAmel n'analyse JAMAIS automatiquement les documents bruts du projet
   lorsqu'un consultant travaille sur un texte/CIR chargé dans EnnoAmel.
 * Le corpus Diagnostic de ce tour vient exclusivement du texte actuellement
   fourni à EnnoAmel : section cible + contexte CIR local utile.
-* Ce corpus est envoyé au vrai pipeline NLP/Frascati, indexé dans un espace RAG
-  isolé, puis reformulé par le vrai EnnoDiagnosticAgent.
+* Ce corpus est conservé en fulltext, indexé dans un espace RAG isolé,
+  puis analysé par EnnoDiagnostic V2 (Fast Path et fallback sémantique V2).
 * Un diagnostic historique du projet peut être conservé comme contexte secondaire
   consultatif, mais il ne remplace jamais le diagnostic ciblé et ses verrous ne
   sont pas injectés dans la recherche EnnoScholar de ce tour.
 
-Ainsi : EnnoAmel orchestre réellement NLP -> EnnoDiagnostic -> EnnoScholar sans
+Ainsi : EnnoAmel orchestre réellement fulltext -> EnnoDiagnostic V2 -> EnnoScholar sans
 réimplémenter les modèles et sans confondre le CIR à améliorer avec les documents
 bruts déjà attachés au projet.
 """
@@ -22,7 +22,6 @@ bruts déjà attachés au projet.
 import hashlib
 import importlib
 import json
-import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -34,7 +33,7 @@ from ..domain.models import ImprovementRequest, TargetScope
 from .agent_adapters import diagnostic_context
 
 
-SCOPED_DIAGNOSTIC_VERSION = "v2_4_ennoamel_cached_initial_and_scoped"
+SCOPED_DIAGNOSTIC_VERSION = "v2_5_ennoamel_scoped_global_fast"
 
 
 class DiagnosticOrchestrationError(RuntimeError):
@@ -135,7 +134,7 @@ def _local_cir_context(request: ImprovementRequest, flank_chars: int = 14000) ->
     end = min(len(full), index + len(target) + flank_chars)
     context = full[start:end]
 
-    # Retirer la section cible évite de la compter deux fois dans le NLP.
+    # Retirer la section cible évite de la compter deux fois dans le corpus.
     local_index = context.find(target)
     if local_index >= 0:
         context = context[:local_index] + "\n" + context[local_index + len(target):]
@@ -227,117 +226,17 @@ def _save_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
 
 
-def _candidate_groups_from_nlp(nlp_result: dict[str, Any]) -> list[dict[str, Any]]:
-    groups: list[dict[str, Any]] = []
-    frascati = nlp_result.get("frascati_guard") or {}
-    if isinstance(frascati, dict):
-        for key in ("verrous_probables", "verrous_a_verifier", "technical_lock_groups"):
-            rows = frascati.get(key) or []
-            if isinstance(rows, list):
-                groups.extend(dict(row) for row in rows if isinstance(row, dict))
-
-    pack = nlp_result.get("multi_document_evidence_pack_for_ennodiagnostic") or {}
-    if isinstance(pack, dict):
-        rows = pack.get("verrous_rnd_locaux") or []
-        if isinstance(rows, list):
-            groups.extend(dict(row) for row in rows if isinstance(row, dict))
-
-    output: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for row in groups:
-        key = _clean(row.get("lock_group_id") or row.get("passage_id") or row.get("candidate_group_label"), 500)
-        if not key:
-            key = hashlib.sha1(repr(row).encode("utf-8", errors="ignore")).hexdigest()
-        if key in seen:
-            continue
-        seen.add(key)
-        output.append(row)
-    return output
 
 
-def _fallback_extract_locks(nlp_result: dict[str, Any]) -> list[dict[str, Any]]:
-    """Fallback NLP uniquement si le LLM EnnoDiagnostic ne retourne pas de liste structurée."""
-
-    locks: list[dict[str, Any]] = []
-    for row in _candidate_groups_from_nlp(nlp_result):
-        if row.get("display_as_main_lock") is False or row.get("display_as_lock") is False:
-            continue
-        decision = _clean(row.get("frascati_decision"), 80)
-        if decision and decision not in {"verrou_probable", "verrou_a_verifier"}:
-            continue
-        title = _clean(
-            row.get("candidate_group_label")
-            or row.get("title")
-            or row.get("section_title")
-            or row.get("text"),
-            500,
-        )
-        if not title:
-            continue
-        supports = [item for item in (row.get("supporting_passages") or []) if isinstance(item, dict)]
-        representative = _clean(
-            row.get("text") or row.get("source_text") or row.get("excerpt"),
-            4000,
-        )
-        evidence_text = "\n".join(
-            part
-            for part in [
-                representative,
-                *[
-                    _clean(item.get("text") or item.get("excerpt"), 1200)
-                    for item in supports[:6]
-                ],
-            ]
-            if part
-        )
-        locks.append(
-            {
-                "title": title,
-                "justification": evidence_text,
-                "text": evidence_text,
-                "score": row.get("frascati_score"),
-                "consultant_status": "en_attente",
-                "needs_human_validation": True,
-                "source_json": {
-                    "scientific_lock": title,
-                    "evidence_summary": evidence_text,
-                    "lock_group_id": row.get("lock_group_id") or row.get("passage_id"),
-                    "supporting_passages": supports,
-                    "frascati_decision": row.get("frascati_decision"),
-                    "source": "scoped_nlp_fallback",
-                },
-            }
-        )
-    return locks
 
 
-def _extract_final_locks(report: dict[str, Any], nlp_result: dict[str, Any]) -> list[dict[str, Any]]:
-    try:
-        service = _diagnostic_service()
-        extractor = getattr(service, "_extract_final_verrous_from_report", None)
-        if callable(extractor):
-            locks = extractor(report)
-            if isinstance(locks, list) and locks:
-                return [dict(row) for row in locks if isinstance(row, dict)]
-    except Exception:
-        pass
-
-    synthesis = report.get("verrou_synthesis_report") if isinstance(report, dict) else {}
-    if not isinstance(synthesis, dict):
-        synthesis = {}
-    candidates = (
-        synthesis.get("llm_reformulated_verrous")
-        or synthesis.get("final_items")
-        or synthesis.get("accepted_items")
-        or synthesis.get("final_verrous")
-        or report.get("llm_reformulated_verrous")
-        or report.get("consultant_verrous_cir")
-        or report.get("verrous_reformules")
-        or []
-    ) if isinstance(report, dict) else []
-    if isinstance(candidates, list) and candidates:
-        return [dict(row) for row in candidates if isinstance(row, dict)]
-    return _fallback_extract_locks(nlp_result)
+def _extract_final_locks(report: dict[str, Any]) -> list[dict[str, Any]]:
+    """Use the same qualified V2 locks as the main diagnostic, including an empty list."""
+    service = _diagnostic_service()
+    locks = service._extract_v2_verrous_from_report(report)
+    if not isinstance(locks, list):
+        raise DiagnosticOrchestrationError("Sortie verrou V2 ciblée invalide.")
+    return [dict(row) for row in locks if isinstance(row, dict)]
 
 
 def _context_from_scoped_run(
@@ -345,14 +244,14 @@ def _context_from_scoped_run(
     request: ImprovementRequest,
     scope_key: str,
     scope_project: str,
-    nlp_result: dict[str, Any],
+    analysis: dict[str, Any],
     report: dict[str, Any],
     index_report: dict[str, Any],
     report_path: str,
     cache_hit: bool,
     project_background: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    locks = _extract_final_locks(report, nlp_result)
+    locks = _extract_final_locks(report)
     evidence_items: list[dict[str, Any]] = []
     verrou_payload: list[dict[str, Any]] = []
 
@@ -378,6 +277,7 @@ def _context_from_scoped_run(
         )
         raw_id = _clean(
             row.get("id")
+            or row.get("entity_id")
             or row.get("lock_group_id")
             or source_json.get("lock_group_id"),
             120,
@@ -416,13 +316,10 @@ def _context_from_scoped_run(
             }
         )
 
-    frascati = nlp_result.get("frascati_guard") if isinstance(nlp_result, dict) else {}
-    if not isinstance(frascati, dict):
-        frascati = {}
-
-    domain = nlp_result.get("domain_detection") if isinstance(nlp_result, dict) else {}
-    if not isinstance(domain, dict):
-        domain = {}
+    frascati = analysis.get("project_frascati") or {}
+    core = analysis.get("core") or {}
+    stats = core.get("audit") or {}
+    domain = (report.get("project_context") or {}).get("domain_detection") or {}
 
     background_summary: dict[str, Any] = {}
     if isinstance(project_background, dict) and project_background.get("available"):
@@ -457,13 +354,14 @@ def _context_from_scoped_run(
         "verrous": verrou_payload,
         "diagnostic_sections": {},
         "frascati_summary": {
-            "risk_report": frascati.get("risk_report") or {},
-            "qualified_lock_groups_count": nlp_result.get("stats", {}).get("qualified_lock_groups")
-            if isinstance(nlp_result.get("stats"), dict)
-            else None,
+            "summary": frascati.get("summary") or "",
+            "criteria": frascati.get("criteria") or [],
+            "qualified_lock_groups_count": len(verrou_payload),
         },
         "evidence_items": evidence_items,
-        "scoped_nlp_stats": nlp_result.get("stats") or {},
+        "scoped_engine": "ennodiagnostic_v2",
+        "scoped_analysis_stats": stats,
+        "scoped_nlp_stats": stats,  # Existing consumer field; no V1 NLP execution.
         "scoped_index_report": index_report,
         "scoped_report_path": report_path,
         "cache_hit": cache_hit,
@@ -480,7 +378,7 @@ def _run_scoped_diagnostic(
     force_refresh: bool = False,
     allow_empty: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Exécute le vrai NLP + RAG + EnnoDiagnostic sur le CIR courant d'EnnoAmel."""
+    """Exécute le fulltext + RAG + EnnoDiagnostic V2 sur le CIR courant d'EnnoAmel."""
 
     _ensure_imports()
     scope_key = _scope_hash(project, request)
@@ -490,24 +388,24 @@ def _run_scoped_diagnostic(
     year = _year(project)
     ps = _scoped_project_store(organisation, scope_project, year)
 
-    nlp_path = ps.nlp_dir / "nlp_result.json"
+    analysis_path = ps.diagnostics_dir / "diagnostic_v2_analysis.json"
     report_path = ps.diagnostics_dir / "ennodiagnostic_report.json"
     manifest_path = ps.diagnostics_dir / "ennoamel_scope_manifest.json"
 
     # Le diagnostic scoped est immuable pour un hash de texte donné : réutiliser
-    # le cache évite de repayer NLP/LLM à chaque message de la même section.
-    if not force_refresh and nlp_path.exists() and report_path.exists() and manifest_path.exists():
+    # le cache évite de repayer analyse V2/LLM à chaque message de la même section.
+    if not force_refresh and analysis_path.exists() and report_path.exists() and manifest_path.exists():
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             if manifest.get("scope_key") == scope_key and manifest.get("version") == SCOPED_DIAGNOSTIC_VERSION:
-                nlp_result = json.loads(nlp_path.read_text(encoding="utf-8"))
+                analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
                 report = json.loads(report_path.read_text(encoding="utf-8"))
                 background = diagnostic_context(db, project, request.target_text)
                 context = _context_from_scoped_run(
                     request=request,
                     scope_key=scope_key,
                     scope_project=scope_project,
-                    nlp_result=nlp_result,
+                    analysis=analysis,
                     report=report,
                     index_report=manifest.get("index_report") or {},
                     report_path=str(report_path),
@@ -532,75 +430,61 @@ def _run_scoped_diagnostic(
             pass
 
     try:
-        from modules.NLP.pipeline_route import run_nlp_pipeline_routed
-        from modules.RAG.indexer import index_nlp_result
-        from agents.EnnoDiagnostic.ennodiagnostic_agent import EnnoDiagnosticAgent
+        from agents.EnnoDiagnostic.V2.ennodiagnostic_v2.full_runtime import build_full_runtime, parse_domain_tags
+        from agents.EnnoDiagnostic.V2.ennodiagnostic_v2.schemas import DocumentInput
+        from modules.RAG.full_document_corpus import persist_full_documents_for_chat
+        from modules.RAG.indexer import index_fulltext_corpus
     except Exception as exc:  # pragma: no cover
         raise DiagnosticOrchestrationError(
-            "Les composants NLP/RAG/EnnoDiagnostic ciblés sont indisponibles : "
-            f"{type(exc).__name__}: {exc}"
+            f"Les composants EnnoDiagnostic V2/RAG ciblés sont indisponibles : {type(exc).__name__}: {exc}"
         ) from exc
 
     documents, modes = _virtual_documents(request, scope_key)
+    for document in documents:
+        document["document_id"] = hashlib.sha256(
+            document["source_path"].encode("utf-8")
+        ).hexdigest()[:24]
     print(
         "[EnnoAmel][ScopedDiagnostic] "
-        f"scope={scope_key} source=ennoamel_current_cir docs={len(documents)} "
+        f"engine=ennodiagnostic_v2 scope={scope_key} source=ennoamel_current_cir docs={len(documents)} "
         "project_raw_documents_used=0",
         flush=True,
     )
     try:
-        nlp_result = run_nlp_pipeline_routed(
-            documents=documents,
-            document_modes=modes,
-            max_candidates=int(os.getenv("ENNOAMEL_SCOPED_NLP_MAX_CANDIDATES", "260")),
-            include_state_of_art_in_candidates=True,
-            organisme=organisation,
-            project=scope_project,
-            year=year,
-        )
-    except Exception as exc:
-        raise DiagnosticOrchestrationError(
-            "Le NLP/Frascati ciblé sur la section/CIR EnnoAmel a échoué : "
-            f"{type(exc).__name__}: {exc}"
-        ) from exc
-
-    if not isinstance(nlp_result, dict):
-        raise DiagnosticOrchestrationError("Le NLP ciblé n'a pas retourné de résultat exploitable.")
-    _save_json(nlp_path, nlp_result)
-
-    try:
-        index_report = index_nlp_result(
-            organisme=organisation,
-            project=scope_project,
-            nlp_result=nlp_result,
-            reset=True,
-            year=year,
+        persist_full_documents_for_chat(store=ps, documents=documents)
+        index_report = index_fulltext_corpus(
+            organisme=organisation, project=scope_project, reset=True, year=year,
         ) or {}
-    except Exception as exc:
-        raise DiagnosticOrchestrationError(
-            "L'indexation RAG ciblée du texte EnnoAmel a échoué : "
-            f"{type(exc).__name__}: {exc}"
-        ) from exc
-
-    try:
-        agent = EnnoDiagnosticAgent(
-            organisme=organisation,
-            project=scope_project,
-            year=year,
-            use_llm=True,
-            # La mémoire de style d'un autre projet n'est pas une preuve du CIR
-            # courant. Pour ce diagnostic de routage, on reste local.
-            use_style_memory=False,
+        inputs = [DocumentInput(
+            document_id=document["document_id"],
+            name=document["document"], text=document["text"],
+            declared_mode=modes[document["document"]],
+            metadata={key: value for key, value in document.items() if key != "text"},
+        ) for document in documents]
+        domain_tags = parse_domain_tags(getattr(project, "domain_label", None))
+        runtime = build_full_runtime(
+            domain_tags=domain_tags,
+            fast_cache_dir=str(ps.project_dir / "analysis_cache" / "global_fast"),
         )
-        report = agent.generate_diagnostic(save=True)
+        analysis = runtime.run(inputs).to_dict()
+        report = {
+            "ok": True, "engine": "ennodiagnostic_v2", "status": "completed",
+            "diagnostic_v2": analysis,
+            "project_context": {
+                "domain_tags": domain_tags,
+                "domain_detection": {
+                    "display_label": " | ".join(domain_tags),
+                    "source": "project_domain_tags",
+                    "confidence": 0.0,
+                } if domain_tags else {},
+            },
+        }
     except Exception as exc:
         raise DiagnosticOrchestrationError(
-            "Le vrai EnnoDiagnostic ciblé sur la section/CIR EnnoAmel a échoué : "
+            "EnnoDiagnostic V2 ciblé sur la section/CIR EnnoAmel a échoué : "
             f"{type(exc).__name__}: {exc}"
         ) from exc
-
-    if not isinstance(report, dict):
-        raise DiagnosticOrchestrationError("EnnoDiagnostic ciblé n'a pas retourné de rapport exploitable.")
+    _save_json(analysis_path, analysis)
     _save_json(report_path, report)
     _save_json(
         manifest_path,
@@ -627,7 +511,7 @@ def _run_scoped_diagnostic(
         request=request,
         scope_key=scope_key,
         scope_project=scope_project,
-        nlp_result=nlp_result,
+        analysis=analysis,
         report=report,
         index_report=index_report if isinstance(index_report, dict) else {},
         report_path=str(report_path),

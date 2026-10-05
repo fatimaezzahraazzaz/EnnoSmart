@@ -31,6 +31,8 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { DiagnosticVideoGuide } from "@/components/ennosmart/diagnostic-video-guide"
+import { DiagnosticFeedbackForm } from "@/components/ennosmart/diagnostic-feedback-form"
 
 import {
   Avatar,
@@ -208,7 +210,11 @@ function isAgentPageEnabled(page: AppPage, enabledAgents: AgentAvailability) {
 
 
 function navigationForRole(role: string, enabledAgents: AgentAvailability) {
-  const items = baseNavItems.filter((item) => isAgentPageEnabled(item.id, enabledAgents))
+  const items = baseNavItems.filter(
+    (item) =>
+      isAgentPageEnabled(item.id, enabledAgents) &&
+      (role === "superadmin" || (item.id !== "scholar" && item.id !== "improvement")),
+  )
 
   if (
     role === "admin" ||
@@ -809,6 +815,7 @@ export default function AppShell({
           <ProjectDetailPage
             navigateTo={navigateTo}
             enabledAgents={enabledAgents}
+            canUseAdvancedAgents={user.role === "superadmin"}
           />
         )
 
@@ -843,6 +850,7 @@ export default function AppShell({
 
         return enabledAgents.diagnostic !== false ? (
           <DiagnosisPage
+            scholarAvailable={user.role === "superadmin" && enabledAgents.scholar !== false}
             onOpenScholar={() =>
               navigateTo("scholar")
             }
@@ -1766,6 +1774,7 @@ export default function AppShell({
               sm:px-6
               lg:px-8
             `,
+            activePage === "diagnosis" && "h-auto min-h-[76px] py-2.5",
             workspaceImmersive &&
               "lg:hidden",
           )}
@@ -1795,6 +1804,7 @@ export default function AppShell({
 
           <div className="min-w-0 flex-1">
 
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <h1
               className="
                 truncate
@@ -1808,6 +1818,11 @@ export default function AppShell({
               {currentPageTitle}
 
             </h1>
+            {activePage === "diagnosis" && currentProject && (
+              <DiagnosticFeedbackForm key={currentProject.id} project={currentProject} />
+            )}
+            {activePage === "diagnosis" && <DiagnosticVideoGuide />}
+            </div>
 
 
             <p

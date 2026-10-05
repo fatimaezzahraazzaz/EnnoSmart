@@ -64,6 +64,7 @@ export type SourceEvidence = {
   year?: string | number | null
   previous_year?: string | number | null
   page_number?: number | null
+  page?: number | null
   paragraph_index?: number | null
   char_start?: number | null
   char_end?: number | null
@@ -79,6 +80,7 @@ export type SourceEvidence = {
   semantic_link?: Record<string, unknown> | null
   justification_bridge_fr?: string | null
   excerpt?: string | null
+  quote?: string | null
   text?: string | null
   source_text?: string | null
   content?: string | null
@@ -167,14 +169,16 @@ function cleanDisplayDocumentName(value?: string | null): string {
 function evidenceText(evidence?: SourceEvidence | null): string {
   if (!evidence) return ""
 
-  return String(
-    evidence.source_text_original ||
-      evidence.excerpt ||
-      evidence.text ||
-      evidence.source_text ||
-      evidence.content ||
-      "",
-  ).trim()
+  // Les EvidenceRef V2 portent le passage exact dans `quote`.
+  // Le même texte alimente le panneau des preuves et la requête de surlignage.
+  return [
+    evidence.source_text_original,
+    evidence.quote,
+    evidence.excerpt,
+    evidence.text,
+    evidence.source_text,
+    evidence.content,
+  ].find((value) => typeof value === "string" && value.trim())?.trim() || ""
 }
 
 function evidenceSourcePath(evidence?: SourceEvidence | null): string {
@@ -563,7 +567,7 @@ function previewUrlForEvidence(
 
   const page =
     highlightedPage ||
-    normalizedPdfPage(evidence?.page_number)
+    normalizedPdfPage(evidence?.page_number ?? evidence?.page)
 
   const isPdf =
     contentKind(document) === "pdf" ||
@@ -576,7 +580,7 @@ function previewUrlForEvidence(
 
 function formatEvidenceLocation(evidence: SourceEvidence): string {
   const parts: string[] = []
-  const page = normalizedPdfPage(evidence.page_number)
+  const page = normalizedPdfPage(evidence.page_number ?? evidence.page)
 
   if (page) parts.push(`Page ${page}`)
   if (
@@ -992,7 +996,7 @@ export function SourceDocumentDialog({
                 selectedEvidence.rag_chunk_id ||
                 selectedEvidence.evidence_id ||
                 null,
-              page_number: selectedEvidence.page_number ?? null,
+              page_number: selectedEvidence.page_number ?? selectedEvidence.page ?? null,
               paragraph_index: selectedEvidence.paragraph_index ?? null,
               char_start: selectedEvidence.char_start ?? null,
               char_end: selectedEvidence.char_end ?? null,
@@ -1347,7 +1351,7 @@ export function SourceDocumentDialog({
               ? previewIsPdf
                 ? "Le backend a généré une copie PDF avec le passage surligné."
                 : "Le backend a généré un aperçu HTML avec le passage surligné."
-              : kind === "pdf" && selectedEvidence?.page_number != null
+              : kind === "pdf" && (selectedEvidence?.page_number ?? selectedEvidence?.page) != null
                 ? `La visionneuse est positionnée sur ${formatEvidenceLocation(selectedEvidence)}.`
                 : kind === "text" && selectedEvidence && Boolean(
                     findFlexibleTextRange(preview.text, evidenceText(selectedEvidence))

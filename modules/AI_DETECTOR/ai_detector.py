@@ -151,6 +151,150 @@ def extract_passages_from_nlp(nlp_result: Dict[str, Any], min_chars: int, max_ch
     return out
 
 
+def _split_fulltext_with_offsets(
+    text: str,
+    *,
+    min_chars: int,
+    max_chars: int,
+) -> List[Dict[str, Any]]:
+    """Découpe le texte complet sans perdre les offsets dans le document."""
+    source = clean_text(text)
+    if not source:
+        return []
+
+    max_chars = max(200, int(max_chars or 2500))
+    min_chars = max(1, int(min_chars or 120))
+    chunks: List[Dict[str, Any]] = []
+    start = 0
+
+    while start < len(source):
+        end = min(len(source), start + max_chars)
+        if end < len(source):
+            floor = start + int(max_chars * 0.55)
+            candidates = [
+                source.rfind("\n\n", floor, end),
+                source.rfind("\n", floor, end),
+                source.rfind(". ", floor, end),
+                source.rfind("; ", floor, end),
+            ]
+            boundary = max(candidates)
+            if boundary >= floor:
+                end = boundary + (2 if source[boundary:boundary + 2] in {". ", "; "} else 1)
+
+        raw_chunk = source[start:end]
+        leading = len(raw_chunk) - len(raw_chunk.lstrip())
+        chunk_text = raw_chunk.strip()
+        chunk_start = start + leading
+        chunk_end = chunk_start + len(chunk_text)
+
+        if len(chunk_text) >= min_chars:
+            chunks.append({
+                "text": chunk_text,
+                "char_start": chunk_start,
+                "char_end": chunk_end,
+            })
+
+        if end <= start:
+            break
+        start = end
+
+    return chunks
+
+
+def extract_passages_from_fulltext_corpus(
+    corpus_dir: str | Path,
+    *,
+    min_chars: int,
+    max_chars: int,
+) -> List[Dict[str, Any]]:
+    """
+    Charge uniquement le corpus fulltext V2.
+
+    Aucun ``nlp_result.json``, chunk RAG ou texte généré par LLM n'est lu ici.
+    Chaque passage conserve le document, le chemin source et ses offsets.
+    """
+    corpus_dir = Path(corpus_dir)
+    if not corpus_dir.is_dir():
+        raise RuntimeError(
+            f"Corpus fulltext introuvable pour la détection IA : {corpus_dir}"
+        )
+
+    passages: List[Dict[str, Any]] = []
+    seen = set()
+
+    for path in sorted(corpus_dir.glob("*.json")):
+        if path.name.lower() in {"manifest.json", "nlp_result.json"}:
+            continue
+
+        payload = read_json(path, {})
+        if not isinstance(payload, dict):
+            continue
+
+        text = clean_text(payload.get("text"))
+        if not text:
+            continue
+
+        document = str(
+            payload.get("document")
+            or payload.get("file_name")
+            or path.stem
+        ).strip()
+        document_id = str(
+            payload.get("document_id")
+            or payload.get("text_sha256")
+            or path.stem
+        ).strip()
+        source_path = str(payload.get("source_path") or "").strip()
+
+        for index, chunk in enumerate(
+            _split_fulltext_with_offsets(
+                text,
+                min_chars=min_chars,
+                max_chars=max_chars,
+            )
+        ):
+            chunk_text = str(chunk.get("text") or "")
+            dedupe_key = (document_id, chunk.get("char_start"), chunk_text[:250])
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+
+            passages.append({
+                "passage_id": f"fulltext_{document_id}_{index}",
+                "original_passage_id": f"fulltext_{document_id}",
+                "role": "document_fulltext",
+                "pack_key": "fulltext_rag_v1",
+                "document_id": document_id,
+                "document": document,
+                "document_name": document,
+                "filename": document,
+                "source_path": source_path,
+                "char_start": chunk.get("char_start"),
+                "char_end": chunk.get("char_end"),
+                "text": chunk_text,
+                "source_text_original": chunk_text,
+                "text_excerpt": chunk_text,
+                "excerpt": chunk_text,
+                "source": "fulltext_corpus_v1",
+                "text_origin": "extracted_before_llm",
+                "metadata": {
+                    "schema_version": payload.get("schema_version"),
+                    "extension": payload.get("extension"),
+                    "loader": payload.get("loader"),
+                    "document_type": payload.get("document_type"),
+                    "content_origin": payload.get("content_origin"),
+                    "fulltext_corpus_path": str(path),
+                },
+            })
+
+    if not passages:
+        raise RuntimeError(
+            f"Le corpus fulltext ne contient aucun passage exploitable : {corpus_dir}"
+        )
+
+    return passages
+
+
 GENERIC_AI_PHRASES = [
     "il est important de noter",
     "dans le cadre de",
@@ -301,6 +445,14 @@ def risk_from_score(score: float, medium: float, high: float) -> str:
     return "low"
 
 
+def risk_label_fr(risk: str) -> str:
+    return {
+        "high": "élevé",
+        "medium": "moyen",
+        "low": "faible",
+    }.get(str(risk or "").lower(), "inconnu")
+
+
 def analyze_passage(
     passage: Dict[str, Any],
     model_name: str,
@@ -330,6 +482,8 @@ def analyze_passage(
         **passage,
         "ai_score": round(final_score, 4),
         "ai_risk": risk,
+        "risk_level": risk_label_fr(risk),
+        "needs_human_validation": risk in {"medium", "high"},
         "scoring_mode": mode,
         "model": mod,
         "heuristic": heur,
@@ -341,7 +495,10 @@ def summarize_results(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         return {
             "passages_count": 0,
             "average_ai_score": None,
-            "risk_level": "unknown",
+            "average_ai_percentage": None,
+            "risk_level": "inconnu",
+            "suspected_passages_count": 0,
+            "traceable_suspected_passages_count": 0,
             "high_count": 0,
             "medium_count": 0,
             "low_count": 0,
@@ -355,13 +512,22 @@ def summarize_results(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     medium_count = sum(1 for x in results if x.get("ai_risk") == "medium")
     low_count = sum(1 for x in results if x.get("ai_risk") == "low")
 
-    risk_level = "high" if high_count else ("medium" if medium_count else "low")
+    risk = "high" if high_count else ("medium" if medium_count else "low")
     docs = sorted(set(str(x.get("document") or "") for x in results if x.get("document")))
+    suspected = [x for x in results if x.get("ai_risk") in {"medium", "high"}]
+    traceable_suspected = [
+        x
+        for x in suspected
+        if x.get("document_id") or x.get("document") or x.get("source_path")
+    ]
 
     return {
         "passages_count": len(results),
         "average_ai_score": round(avg, 4),
-        "risk_level": risk_level,
+        "average_ai_percentage": round(avg * 100, 2),
+        "risk_level": risk_label_fr(risk),
+        "suspected_passages_count": len(suspected),
+        "traceable_suspected_passages_count": len(traceable_suspected),
         "high_count": high_count,
         "medium_count": medium_count,
         "low_count": low_count,
@@ -422,4 +588,112 @@ def run_ai_detection_on_nlp_result(nlp_result_path: str | Path, output_path: str
     }
 
     write_json(output_path, report)
+    return report
+
+
+def run_ai_detection_on_fulltext_corpus(
+    corpus_dir: str | Path,
+    output_path: str | Path | None = None,
+) -> Dict[str, Any]:
+    """Exécute la détection IA sur le texte complet extrait par le pipeline V2."""
+    load_env()
+
+    corpus_dir = Path(corpus_dir)
+    model_name = env_str(
+        "AI_DETECTOR_MODEL",
+        "AICodexLab/answerdotai-ModernBERT-base-ai-detector",
+    )
+    max_chars = env_int("AI_DETECTOR_MAX_CHARS", 2500)
+    min_chars = env_int("AI_DETECTOR_MIN_CHARS", 120)
+    medium_threshold = env_float("AI_DETECTOR_THRESHOLD_MEDIUM", 0.45)
+    high_threshold = env_float("AI_DETECTOR_THRESHOLD_HIGH", 0.70)
+    model_weight = env_float("AI_DETECTOR_MODEL_WEIGHT", 0.75)
+    heuristic_weight = env_float("AI_DETECTOR_HEURISTIC_WEIGHT", 0.25)
+
+    passages = extract_passages_from_fulltext_corpus(
+        corpus_dir,
+        min_chars=min_chars,
+        max_chars=max_chars,
+    )
+    results = [
+        analyze_passage(
+            passage,
+            model_name=model_name,
+            model_weight=model_weight,
+            heuristic_weight=heuristic_weight,
+            medium_threshold=medium_threshold,
+            high_threshold=high_threshold,
+        )
+        for passage in passages
+    ]
+    results = sorted(
+        results,
+        key=lambda item: float(item.get("ai_score") or 0),
+        reverse=True,
+    )
+    summary = summarize_results(results)
+    suspected = [
+        item
+        for item in results
+        if item.get("ai_risk") in {"medium", "high"}
+    ]
+
+    ai_detection = {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "model_name": model_name,
+        "input_policy": "fulltext_corpus_before_llm_only",
+        "global_ai_score": summary.get("average_ai_score"),
+        "global_ai_percentage": summary.get("average_ai_percentage"),
+        "risk_level": summary.get("risk_level"),
+        "total_passages_analyzed": summary.get("passages_count"),
+        "suspected_passages_count": summary.get("suspected_passages_count"),
+        "traceable_suspected_passages_count": summary.get(
+            "traceable_suspected_passages_count"
+        ),
+        "high_risk_passages_count": summary.get("high_count"),
+        "medium_risk_passages_count": summary.get("medium_count"),
+        "low_risk_passages_count": summary.get("low_count"),
+        "documents": summary.get("documents") or [],
+        "passages": results,
+        "suspected_passages": suspected,
+        "disclaimer": (
+            "Ce score est indicatif. Il analyse uniquement le texte complet "
+            "extrait avant toute reformulation par EnnoDiagnostic V2."
+        ),
+    }
+    report = {
+        "ok": True,
+        "generated_at": ai_detection["generated_at"],
+        "source": "fulltext_rag_v1",
+        "input_policy": "fulltext_corpus_before_llm_only",
+        "loader_report": {
+            "source": "fulltext_rag_v1",
+            "corpus_dir": str(corpus_dir),
+            "nlp_result_used": False,
+            "rag_chunks_used": False,
+            "passages_loaded": len(passages),
+            "documents_covered": summary.get("documents") or [],
+        },
+        "important_note": (
+            "La détection IA lit directement le corpus fulltext V2. "
+            "Elle n'utilise ni nlp_result.json ni une synthèse générée par LLM."
+        ),
+        "config": {
+            "model_name": model_name,
+            "max_chars": max_chars,
+            "min_chars": min_chars,
+            "medium_threshold": medium_threshold,
+            "high_threshold": high_threshold,
+            "model_weight": model_weight,
+            "heuristic_weight": heuristic_weight,
+        },
+        "summary": summary,
+        "passages": results,
+        "top_passages": suspected[:10] or results[:10],
+        "ai_detection": ai_detection,
+    }
+
+    if output_path is not None:
+        write_json(Path(output_path), report)
+
     return report

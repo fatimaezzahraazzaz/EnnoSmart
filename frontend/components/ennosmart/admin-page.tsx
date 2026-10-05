@@ -2246,7 +2246,8 @@ export default function AdminPage({
 
 
               {tab ===
-                "team" && (
+                "team" &&
+                user.role === "superadmin" && (
                 <Button
                   onClick={() =>
                     setShowCreate(

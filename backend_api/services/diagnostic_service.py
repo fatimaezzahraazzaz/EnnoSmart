@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-DIAGNOSTIC_SERVICE_VERSION = "v148_fresh_assessment_clean_project_runs"
+DIAGNOSTIC_SERVICE_VERSION = "v151_ennodiagnostic_v2_only"
 
 from datetime import date, datetime
-from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
@@ -16,7 +15,6 @@ import sys
 
 from sqlalchemy.orm import Session
 
-from core.config import settings
 from db.models import DiagnosticRun, Project, Verrou
 from services.document_corpus_service import (
     CORPUS_DIAGNOSTIC,
@@ -24,13 +22,12 @@ from services.document_corpus_service import (
     documents_for_corpus,
 )
 from services.document_storage_service import read_document_bytes
-from services.file_service import load_json_file, project_output_dir, run_optional_ai_script
+from services.file_service import load_json_file, project_output_dir
 from services.diagnostic_reset_service import exclusive_project_diagnostic
 from services.project_artifact_service import (
     artifact_uri,
     get_json_artifact,
     json_artifact_exists,
-    materialized_json_artifact,
     save_json_artifact,
 )
 from modules.common.runtime_paths import code_root, data_root
@@ -124,65 +121,8 @@ RAG_CHUNKS_ARTIFACT_KEY = "rag/chunks.json"
 PREPARE_REPORT_ARTIFACT_KEY = "diagnostics/prepare_sources_report.json"
 
 
-def _same_project_family(left: Project, right: Project) -> bool:
-    return (
-        str(left.organisme or "").strip().casefold()
-        == str(right.organisme or "").strip().casefold()
-        and str(left.project_name or "").strip().casefold()
-        == str(right.project_name or "").strip().casefold()
-        and str(getattr(left, "subproject_name", None) or "").strip().casefold()
-        == str(getattr(right, "subproject_name", None) or "").strip().casefold()
-    )
 
 
-@contextmanager
-def materialized_diagnostic_inputs(
-    db: Session,
-    project: Project,
-    *,
-    include_rag_chunks: bool = True,
-):
-    """Matérialise le NLP courant et N-1 uniquement pendant un traitement legacy."""
-
-    family = [
-        row
-        for row in db.query(Project).filter(
-            Project.organisme == project.organisme,
-            Project.project_name == project.project_name,
-        ).all()
-        if _same_project_family(row, project)
-    ]
-    if not any(int(row.id) == int(project.id) for row in family):
-        family.append(project)
-
-    with ExitStack() as stack:
-        current_nlp = get_project_store(project).nlp_dir / "nlp_result.json"
-        current_chunks = get_project_store(project).rag_dir / "chunks.json"
-        for row in family:
-            store = get_project_store(row)
-            stack.enter_context(
-                materialized_json_artifact(
-                    db,
-                    row.id,
-                    NLP_ARTIFACT_KEY,
-                    store.nlp_dir / "nlp_result.json",
-                    artifact_kind="nlp_result",
-                    write_back=int(row.id) == int(project.id),
-                    required=int(row.id) == int(project.id),
-                )
-            )
-        if include_rag_chunks:
-            stack.enter_context(
-                materialized_json_artifact(
-                    db,
-                    project.id,
-                    RAG_CHUNKS_ARTIFACT_KEY,
-                    current_chunks,
-                    artifact_kind="rag_chunks",
-                    required=True,
-                )
-            )
-        yield {"nlp_result": current_nlp, "rag_chunks": current_chunks}
 
 
 # ============================================================
@@ -397,22 +337,6 @@ def _diagnostic_document_metadata(
     return metadata
 
 
-def _diagnostic_max_candidates(document_count: int) -> int:
-    """Dimensionne le rappel NLP selon le volume documentaire, sans cas client."""
-    explicit = str(os.getenv("ENNOSMART_NLP_MAX_CANDIDATES") or "").strip()
-    if explicit:
-        return max(1, int(explicit))
-
-    minimum = max(1, int(os.getenv("ENNOSMART_NLP_MIN_CANDIDATES", "700")))
-    per_document = max(
-        1,
-        int(os.getenv("ENNOSMART_NLP_CANDIDATES_PER_DOCUMENT", "120")),
-    )
-    cap = max(
-        minimum,
-        int(os.getenv("ENNOSMART_NLP_MAX_CANDIDATES_CAP", "2500")),
-    )
-    return min(cap, max(minimum, max(1, int(document_count)) * per_document))
 
 
 def _reset_generated_diagnostic_artifacts(project_store: Any) -> Dict[str, Any]:
@@ -798,35 +722,33 @@ def read_diagnostic_bundle(project: Project, *, compact: bool = False) -> Dict[s
 # Full AI pipeline
 # ============================================================
 
-def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
-    """
-    Documents bruts -> extraction -> NLP/Frascati -> RAG/Chroma.
+def _prepare_ennodiagnostic_v2_sources(
+    db: Session,
+    project: Project,
+) -> Dict[str, Any]:
+    """Extrait une seule fois le corpus complet requis par EnnoDiagnostic V2.
 
-    V146 memory-safe :
-    - le resultat NLP complet est ecrit une seule fois sur disque ;
-    - il est utilise pour l'indexation, puis libere autant que possible ;
-    - la valeur retournee au backend reste compacte (stats uniquement) ;
-    - le frontend ne recoit jamais tous les passages/chunks NLP.
+    Cette préparation ne lance ni le NLP V1, ni Frascati V1, ni Chroma. Les
+    modules historiques seront raccordés séparément au corpus fulltext.
     """
     ensure_ennosmart_imports()
 
     from modules.NLP.document_loader import load_documents
-    from modules.NLP.pipeline_route import run_nlp_pipeline_routed
-    from modules.RAG.indexer import index_nlp_result
+    from modules.RAG.full_document_corpus import persist_full_documents_for_chat
+    from services.diagnostic_reset_service import reset_previous_agent_runs
 
     ps = get_project_store(project)
-    from services.diagnostic_reset_service import reset_previous_agent_runs
-    database_reset = reset_previous_agent_runs(db, project, ps, status="Préparation des sources en cours")
-    reset_report = _reset_generated_diagnostic_artifacts(ps)
-    reset_report['database_history_deleted'] = True
-    reset_report['agent_runs_reset'] = database_reset
-    print(
-        "[prepare-sources][reset] Artefacts générés supprimés : "
-        f"count={reset_report.get('removed_count')}",
-        flush=True,
+    database_reset = reset_previous_agent_runs(
+        db,
+        project,
+        ps,
+        status="Préparation EnnoDiagnostic V2 en cours",
     )
+    reset_report = _reset_generated_diagnostic_artifacts(ps)
+    reset_report["database_history_deleted"] = True
+    reset_report["agent_runs_reset"] = database_reset
 
-    print("[prepare-sources][1/6] Reconstruction des documents", flush=True)
+    print("[EnnoDiagnostic V2][1/4] Reconstruction des documents", flush=True)
     selected_documents = documents_for_corpus(
         db,
         project.id,
@@ -843,45 +765,34 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
     allowed_ext = _supported_raw_extensions_from_extraction_router()
     raw_paths: List[str] = []
     skipped_paths: List[str] = []
-
     for value in copied_from_db:
         path = Path(value)
         if _is_supported_raw_document(path, allowed_ext):
             raw_paths.append(str(path))
         elif path.is_file():
             skipped_paths.append(str(path))
-
     raw_paths = sorted(dict.fromkeys(raw_paths))
 
     if not raw_paths:
         raise RuntimeError(
-            f"Aucun document brut supporte trouve dans : {ps.documents_raw_dir}. "
-            f"Extensions acceptees : {sorted(allowed_ext)}"
+            f"Aucun document brut supporté trouvé dans : {ps.documents_raw_dir}. "
+            f"Extensions acceptées : {sorted(allowed_ext)}"
         )
 
     print(
-        f"[prepare-sources][2/6] Extraction de {len(raw_paths)} document(s)",
+        f"[EnnoDiagnostic V2][2/4] Extraction fulltext de {len(raw_paths)} document(s)",
         flush=True,
-    )
-
-    document_metadata = _diagnostic_document_metadata(ps, selected_documents)
-    # Les images sont conservées séparément avec leur ancrage structurel, mais
-    # aucun modèle de vision ne les décrit et elles ne participent pas au NLP.
-    diagnostic_vision_mode = "text_only"
-    diagnostic_formula_mode = os.getenv(
-        "ENNOSMART_DIAGNOSTIC_FORMULA_MODE",
-        "fast",
     )
     documents = load_documents(
         raw_paths,
         use_ennosmart_extraction=True,
-        # Le corpus a déjà été choisi explicitement dans l'application : un
-        # CIR pré-rédigé déposé comme document brut est une preuve courante.
-        include_cir_final=True,
-        metadata_by_path=document_metadata,
-        vision_mode=diagnostic_vision_mode,
-        formula_mode=diagnostic_formula_mode,
+        include_cir_final=False,
+        metadata_by_path=_diagnostic_document_metadata(ps, selected_documents),
+        vision_mode="text_only",
+        formula_mode=os.getenv("ENNOSMART_DIAGNOSTIC_FORMULA_MODE", "fast"),
     )
+    if not documents:
+        raise RuntimeError("Aucun texte exploitable extrait des documents bruts.")
 
     visual_asset_report: Dict[str, Any] = {
         "assets_count": 0,
@@ -893,8 +804,6 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
 
         visual_asset_report = persist_visual_assets(
             store=ps,
-            # Partir des sources sélectionnées, et non des seuls documents qui
-            # ont produit du texte : une image autonome reste ainsi conservée.
             documents=[
                 {
                     "document": Path(source_path).name,
@@ -903,234 +812,57 @@ def run_nlp_and_rag(db: Session, project: Project) -> Dict[str, Any]:
                 for source_path in raw_paths
             ],
         )
-        print(
-            "[prepare-sources][visuals] Images conservées sans modèle de vision : "
-            f"assets={visual_asset_report.get('assets_count')}",
-            flush=True,
-        )
     except Exception as exc:
-        print(f"[prepare-sources][visuals] WARNING: {exc}", flush=True)
+        print(f"[EnnoDiagnostic V2][visuals] WARNING: {exc}", flush=True)
 
-    if not documents:
-        raise RuntimeError("Aucun texte exploitable extrait des documents bruts.")
-
-    # V7 - conserver le texte complet extrait avant la réduction NLP.
-    # Le chat RAG utilise ce corpus documentaire complet comme preuve primaire.
+    print("[EnnoDiagnostic V2][3/4] Persistance du corpus fulltext", flush=True)
     try:
-        from modules.RAG.full_document_corpus import persist_full_documents_for_chat
-        full_document_corpus_report = persist_full_documents_for_chat(
+        fulltext_report = persist_full_documents_for_chat(
             store=ps,
             documents=documents,
         )
-        print(
-            "[prepare-sources][fulltext] Corpus complet : "
-            f"documents={full_document_corpus_report.get('documents_count')}, "
-            f"chars={full_document_corpus_report.get('total_chars')}",
-            flush=True,
-        )
     except Exception as exc:
-        # Le diagnostic principal reste disponible même si ce corpus auxiliaire
-        # ne peut pas être écrit.
-        print(f"[prepare-sources][fulltext] WARNING: {exc}", flush=True)
-
-    documents_loaded_count = len(documents)
-    print(
-        f"[prepare-sources][3/6] NLP/Frascati sur {documents_loaded_count} document(s)",
-        flush=True,
-    )
-
-    nlp_result_raw = run_nlp_pipeline_routed(
-        documents=documents,
-        # Tous les fichiers explicitement inclus dans le corpus Diagnostic
-        # suivent la même voie factuelle, quel que soit leur format ou titre.
-        document_modes={
-            str(document.get("document") or document.get("source_path") or ""): "raw"
-            for document in documents
-        },
-        max_candidates=_diagnostic_max_candidates(len(documents)),
-        include_state_of_art_in_candidates=True,
-        organisme=project.organisme,
-        project=project.project_name,
-        year=_year(project),
-    )
-
-    # Les documents extraits ne sont plus necessaires apres le NLP.
-    del documents
-    gc.collect()
-
-    if not isinstance(nlp_result_raw, dict):
         raise RuntimeError(
-            "Le pipeline NLP n'a pas retourne un dictionnaire exploitable."
+            f"Impossible de sauvegarder le corpus fulltext V2 : {exc}"
+        ) from exc
+    finally:
+        del documents
+        gc.collect()
+
+    if int(fulltext_report.get("documents_count") or 0) <= 0:
+        raise RuntimeError(
+            "Le corpus fulltext V2 a été créé sans document exploitable."
         )
 
-    # Une seule normalisation JSON du resultat complet.
-    nlp_result = sanitize_json_value(nlp_result_raw)
-    del nlp_result_raw
-    gc.collect()
-
-    stats = (
-        sanitize_json_value(nlp_result.get("stats") or {})
-        if isinstance(nlp_result, dict)
-        else {}
-    )
-
-    # La base conserve une seule copie gzip. Les anciens modules qui exigent un
-    # chemin la matérialisent uniquement pendant leur exécution.
-    nlp_path = ps.nlp_dir / "nlp_result.json"
     print(
-        "[prepare-sources][4/6] Sauvegarde NLP compressée en base",
+        "[EnnoDiagnostic V2][4/4] Sources prêtes : "
+        f"documents={fulltext_report.get('documents_count')}, "
+        f"chars={fulltext_report.get('total_chars')}",
         flush=True,
     )
-
-    print("[prepare-sources][5/6] Indexation RAG / Chroma", flush=True)
-    def persist_index_artifact(relative_path: str, payload: Any) -> None:
-        kind = "nlp_result" if relative_path == NLP_ARTIFACT_KEY else "rag_chunks"
-        save_json_artifact(
-            db,
-            project.id,
-            relative_path,
-            payload,
-            artifact_kind=kind,
-            metadata={
-                "organisme": project.organisme,
-                "project": project.project_name,
-                "subproject": getattr(project, "subproject_name", None),
-                "year": _year(project),
-            },
-        )
-
-    index_report_raw = index_nlp_result(
-        organisme=project.organisme,
-        project=project.project_name,
-        subproject=getattr(project, "subproject_name", None),
-        nlp_result=nlp_result,
-        reset=True,
-        year=_year(project),
-        persist_json_files=False,
-        artifact_sink=persist_index_artifact,
-    )
-    index_report = sanitize_json_value(index_report_raw or {})
-
-    # Le gros résultat NLP reste dans l'artefact DB, jamais dans la réponse HTTP.
-    del nlp_result
-    gc.collect()
-
-    print(
-        "[prepare-sources][6/6] Termine : "
-        f"candidats={stats.get('raw_candidates')}, "
-        f"kept={stats.get('raw_kept')}, "
-        f"verrous={stats.get('merged_verrous')}, "
-        f"chunks={index_report.get('chunks_indexed')}",
-        flush=True,
-    )
-
-    return {
+    return sanitize_json_value({
         "documents_copied_from_db": copied_from_db,
         "documents_used_paths": raw_paths,
         "documents_used_count": len(raw_paths),
-        "documents_loaded_count": documents_loaded_count,
+        "documents_loaded_count": fulltext_report.get("documents_count"),
         "documents_skipped_paths": skipped_paths,
         "documents_skipped_count": len(skipped_paths),
         "allowed_extensions": sorted(allowed_ext),
         "corpus_manifest": corpus_manifest,
-        "reset_report": sanitize_json_value(reset_report),
-        "visual_asset_report": sanitize_json_value(visual_asset_report),
-        # Compatibilite avec le reste du backend, sans contenu NLP massif.
-        "nlp_result": {"stats": stats},
-        "nlp_stats": stats,
-        "nlp_result_path": artifact_uri(project.id, NLP_ARTIFACT_KEY),
-        "index_report": index_report,
-    }
-
-def _legacy_agent_project_root(project: Project) -> Path:
-    r"""
-    Racine attendue par l'ancien ai_content_detector.py de l'agent :
-    <racine-donnees>/object_storage_v2/runtime/organismes/{org}/projects/{project}
-
-    Le backend récent travaille avec :
-    <racine-donnees>/object_storage_v2/runtime/organismes/{org}/projects/{project}/years/{year}
-
-    On adapte le backend pour fournir au détecteur IA de l'agent ses fichiers
-    au format qu'il attend, sans modifier l'agent.
-    """
-    base_dir = ennosmart_base_dir()
-    return (
-        base_dir
-        / "storage"
-        / "organismes"
-        / _slug(project.organisme, "organisme")
-        / "projects"
-        / _slug(project.project_name, "projet")
-    )
+        "reset_report": reset_report,
+        "visual_asset_report": visual_asset_report,
+        "fulltext_corpus": fulltext_report,
+        "fulltext_corpus_path": str(
+            Path(ps.documents_processed_dir) / "fulltext_rag_v1"
+        ),
+    })
 
 
-def _copy_if_exists(src: Path, dst: Path) -> bool:
-    try:
-        if src.exists() and src.is_file():
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-            return True
-    except Exception:
-        pass
-    return False
 
 
-def _mirror_year_files_for_agent_ai(project: Project) -> Dict[str, Any]:
-    """
-    Adaptation backend -> agent, sans toucher à l'agent.
 
-    L'agent IA lit :
-    - project_root/nlp/nlp_result.json
-    - project_root/rag/chunks.json
-    - project_root/documents/processed
 
-    Le backend met les vrais fichiers dans years/{year}.
-    Donc on copie les fichiers utiles depuis years/{year} vers l'ancien root projet.
-    """
-    ps = get_project_store(project)
-    legacy_root = _legacy_agent_project_root(project)
 
-    report: Dict[str, Any] = {
-        "policy": "backend_adapter_for_existing_agent_ai_detector",
-        "year_root": str(ps.project_dir),
-        "legacy_agent_root": str(legacy_root),
-        "copied": [],
-        "notes": [
-            "Aucune modification de agents/EnnoDiagnostic/ai_content_detector.py.",
-            "Le backend recopie les fichiers NLP/RAG au format attendu par l'agent.",
-        ],
-    }
-
-    mappings = [
-        (ps.nlp_dir / "nlp_result.json", legacy_root / "nlp" / "nlp_result.json"),
-        (ps.rag_dir / "chunks.json", legacy_root / "rag" / "chunks.json"),
-    ]
-
-    for src, dst in mappings:
-        ok = _copy_if_exists(src, dst)
-        report["copied"].append({"src": str(src), "dst": str(dst), "ok": ok})
-
-    # Processed dir optionnel : on le recopie seulement s'il existe.
-    try:
-        src_dir = ps.documents_processed_dir
-        dst_dir = legacy_root / "documents" / "processed"
-        if src_dir.exists() and src_dir.is_dir():
-            dst_dir.mkdir(parents=True, exist_ok=True)
-            count = 0
-            for file in src_dir.rglob("*"):
-                if file.is_file():
-                    rel = file.relative_to(src_dir)
-                    target = dst_dir / rel
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(file, target)
-                    count += 1
-            report["processed_files_copied"] = count
-        else:
-            report["processed_files_copied"] = 0
-    except Exception as e:
-        report["processed_copy_error"] = str(e)
-
-    return sanitize_json_value(report)
 
 
 def _normalize_ai_report(raw: Dict[str, Any]) -> Dict[str, Any]:
@@ -1152,12 +884,14 @@ def _normalize_ai_report(raw: Dict[str, Any]) -> Dict[str, Any]:
     })
 
 
-def run_ai_detector_if_enabled(project: Project, agent_out_dir: Path) -> Dict[str, Any]:
+def run_ai_detector_if_enabled(
+    project: Project,
+    agent_out_dir: Optional[Path] = None,
+) -> Dict[str, Any]:
     """
-    Lance le détecteur IA existant dans agents/EnnoDiagnostic.
+    Lance le module historique AI_DETECTOR sur le corpus fulltext V2.
 
-    Le périmètre projet complet (sous-projet et année inclus) est transmis au
-    détecteur pour que chaque passage reste relié au bon document source.
+    Il ne lit ni ``nlp_result.json`` ni les sorties générées par le LLM.
     """
     if os.getenv("ENNOSMART_RUN_AI_DETECTOR", "1").strip() != "1":
         return {"ok": False, "skipped": True, "message": "Détection IA désactivée."}
@@ -1165,38 +899,37 @@ def run_ai_detector_if_enabled(project: Project, agent_out_dir: Path) -> Dict[st
     ensure_ennosmart_imports()
 
     try:
-        from agents.EnnoDiagnostic.ai_content_detector import EnnoAIDetectionService
+        from modules.AI_DETECTOR import run_ai_detection_on_fulltext_corpus
 
         project_store = get_project_store(project)
+        output_root = Path(agent_out_dir or project_store.project_dir)
+        fulltext_corpus_dir = (
+            Path(project_store.documents_processed_dir)
+            / "fulltext_rag_v1"
+        )
         adapter_report = {
-            "policy": "direct_project_store_scope",
+            "policy": "direct_fulltext_corpus_v2",
             "project_root": str(project_store.project_root_dir),
             "year_root": str(project_store.project_dir),
+            "fulltext_corpus_dir": str(fulltext_corpus_dir),
             "legacy_mirror_used": False,
             "note": (
-                "Le détecteur lit directement le projet, le sous-projet et "
-                "l'année demandés sans recopier les fichiers dans le projet parent."
+                "Le détecteur lit exclusivement documents/processed/"
+                "fulltext_rag_v1 et ignore nlp_result.json."
             ),
         }
 
-        # API originale de ton agent : pas de paramètre year.
-        service = EnnoAIDetectionService(
-            organisme=project.organisme,
-            project=project.project_name,
-            subproject=getattr(project, "subproject_name", None),
-            year=_year(project),
-            allow_rag_fallback=True,
+        raw_report = run_ai_detection_on_fulltext_corpus(
+            fulltext_corpus_dir,
         )
-
-        raw_report = service.run(save=True)
         normalized = _normalize_ai_report(raw_report)
         normalized["backend_adapter"] = adapter_report
 
         # L'agent EnnoDiagnostic lit ce fichier via self.diagnostic_dir.
-        save_json(agent_out_dir / "ennodiagnostic" / "ai_detection_report.json", normalized)
+        save_json(output_root / "ennodiagnostic" / "ai_detection_report.json", normalized)
 
         # On garde aussi une copie backend/reporting.
-        save_json(agent_out_dir / "diagnostics" / "ai_detection_report.json", normalized)
+        save_json(output_root / "diagnostics" / "ai_detection_report.json", normalized)
 
         # Et une copie dans le ProjectStore annuel pour le front/latest.
         try:
@@ -1222,58 +955,350 @@ def run_ai_detector_if_enabled(project: Project, agent_out_dir: Path) -> Dict[st
         return {"ok": False, "error": str(e), "message": "Score IA indisponible."}
 
 
-def run_true_ennodiagnostic_agent(project: Project, prior_pipeline: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Chroma → EnnoDiagnosticAgent → LLM reformulation R&D/CIR."""
+
+def run_rag_fulltext_index_if_enabled(project: Project) -> Dict[str, Any]:
+    """Indexe le corpus fulltext V2 dans la collection Chroma dédiée au chat.
+
+    Le diagnostic ne doit pas redevenir dépendant du RAG : une erreur Chroma
+    est donc exposée dans le rapport mais n'annule pas l'intelligence V2.
+    """
+    if os.getenv("ENNOSMART_RUN_RAG_INDEX", "1").strip() != "1":
+        return {
+            "ok": False,
+            "skipped": True,
+            "source": "fulltext_rag_v1",
+            "nlp_result_used": False,
+            "message": "Indexation RAG fulltext désactivée.",
+        }
+
     ensure_ennosmart_imports()
+    try:
+        from modules.RAG.indexer import index_fulltext_corpus
 
-    from agents.EnnoDiagnostic.ennodiagnostic_agent import EnnoDiagnosticAgent
+        return sanitize_json_value(
+            index_fulltext_corpus(
+                organisme=project.organisme,
+                project=project.project_name,
+                subproject=getattr(project, "subproject_name", None),
+                year=_year(project),
+                reset=True,
+            )
+        )
+    except Exception as exc:
+        print(f"[RAG fulltext][WARN] {exc}", flush=True)
+        return {
+            "ok": False,
+            "skipped": False,
+            "source": "fulltext_rag_v1",
+            "nlp_result_used": False,
+            "error": str(exc),
+        }
 
-    ps = get_project_store(project)
-    out_dir = ps.project_dir
 
-    from modules.NLP.assessment_refresh import refresh_prepared_assessment
-    assessment_refresh = refresh_prepared_assessment(ps.nlp_dir / "nlp_result.json")
-    print(f"[EnnoDiagnostic][ASSESSMENT_VERSION] {assessment_refresh}", flush=True)
-    ai_detection_runtime = run_ai_detector_if_enabled(project, out_dir)
-    use_llm = os.getenv("ENNOSMART_DIAG_USE_LLM", "1").strip() != "0"
+def _extract_v2_project_facts_for_cir_memory(report: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Réutilise les listes projet validées et leurs preuves, sans réextraction."""
+    payload = _v2_diagnostic_payload(report)
+    core = payload.get("core") or payload
+    synthesis = report.get("project_synthesis") or payload.get("project_synthesis") or {}
+    extractions = core.get("extractions") or []
+    entities = core.get("entities") or []
+    evidence_by_id = {}
+    source_by_id = {}
+    for item in extractions:
+        if not isinstance(item, dict):
+            continue
+        source_by_id[item.get("item_id")] = item
+        evidence = item.get("evidence") or {}
+        if evidence.get("evidence_id"):
+            evidence_by_id[evidence["evidence_id"]] = evidence
+    for entity in entities:
+        for evidence in entity.get("evidences") or []:
+            if evidence.get("evidence_id"):
+                evidence_by_id[evidence["evidence_id"]] = evidence
 
-    agent = EnnoDiagnosticAgent(
-        organisme=project.organisme,
-        project=project.project_name,
-        subproject=getattr(project, "subproject_name", None),
-        year=_year(project),
-        out_dir=str(out_dir),
-        use_llm=use_llm,
+    output = []
+    for kind, key in (("method", "methods"), ("demarche", "demarches"),
+                      ("parameter", "parameters"), ("metric", "metrics"), ("result", "results")):
+        for index, point in enumerate(synthesis.get(key) or []):
+            if not isinstance(point, dict) or point.get("source_role") != "project_evidence":
+                continue
+            evidence_ids = point.get("evidence_ids") or []
+            if not evidence_ids or any(
+                eid not in evidence_by_id or not evidence_by_id[eid].get("quote_verified")
+                for eid in evidence_ids
+            ):
+                continue
+            output.append({
+                "id": f"v2_{kind}_{index}", "kind": kind, "statement": point.get("text"),
+                "source_role": "project_evidence", "temporal_status": point.get("temporal_status", "unclear"),
+                "original_item_ids": point.get("original_item_ids") or [],
+                "evidences": [evidence_by_id[eid] for eid in evidence_ids],
+            })
+
+    for entity in entities:
+        if entity.get("kind") != "objective":
+            continue
+        metadata = entity.get("metadata") or {}
+        roles = metadata.get("evidence_source_roles") or {}
+        sources = [source_by_id[sid] for sid in entity.get("source_item_ids") or [] if sid in source_by_id]
+        source_roles = {
+            (s.get("evidence") or {}).get("evidence_id"): (s.get("metadata") or {}).get("source_role")
+            for s in sources
+        }
+        proofs = [e for e in entity.get("evidences") or []
+                  if e.get("quote_verified") and roles.get(e.get("evidence_id"), source_roles.get(e.get("evidence_id"))) == "project_evidence"]
+        if not proofs:
+            continue
+        project_sources = [s for s in sources if (s.get("metadata") or {}).get("source_role") == "project_evidence"]
+        statement = entity.get("statement")
+        if len(project_sources) != len(sources) and project_sources:
+            statement = project_sources[0].get("statement")
+        temporal = {s.get("temporal_status", "unclear") for s in project_sources}
+        output.append({
+            "id": entity.get("entity_id"), "kind": "objective", "statement": statement,
+            "source_role": "project_evidence", "temporal_status": next(iter(temporal)) if len(temporal) == 1 else "unclear",
+            "original_item_ids": entity.get("source_item_ids") or [], "evidences": proofs,
+        })
+    return output
+
+
+def run_previous_cir_comparison(project: Project, report: Dict[str, Any]) -> Dict[str, Any]:
+    """Compare les faits projet et verrous qualifiés courants, sans nouveau LLM."""
+    from modules.CIR_MEMORY.cir_memory import (
+        compare_current_raw_with_cir_memory,
+        comparison_report_path,
+        write_json,
     )
 
-    # Le rapport complet est retourné en mémoire puis archivé une seule fois en
-    # base par ``_persist_complete_run``. Les sous-étapes peuvent encore écrire
-    # des caches de travail, supprimés seulement après le commit réussi.
-    report = sanitize_json_value(agent.generate_diagnostic(save=False))
-    report = sanitize_json_value({
-        **report,
+    scope = {
+        "organisme": project.organisme,
+        "project": project.project_name,
+        "year": _year(project),
+        "subproject": str(getattr(project, "subproject_name", "") or "").strip(),
+    }
+    try:
+        return sanitize_json_value(compare_current_raw_with_cir_memory(
+            **scope, current_verrous=_extract_v2_verrous_from_report(report),
+            current_project_facts=_extract_v2_project_facts_for_cir_memory(report),
+        ))
+    except Exception as exc:
+        # Une erreur de comparaison ne doit ni invalider le diagnostic, ni
+        # laisser afficher silencieusement les rapprochements d'un ancien run.
+        failed = {
+            "ok": False, "comparison_status": "error", "error": str(exc),
+            "generated_at": datetime.utcnow().isoformat(),
+            "current_year": _year(project), "comparisons": [], "verrou_comparisons": [],
+        }
+        try:
+            write_json(comparison_report_path(**scope), failed)
+        except Exception as storage_exc:
+            failed["storage_error"] = str(storage_exc)
+        print(f"[EnnoDiagnostic][CIR_MEMORY][WARN] {exc}", flush=True)
+        return failed
+
+
+def run_true_ennodiagnostic_agent(
+    project: Project,
+    prior_pipeline: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Point d'entrée backend EnnoDiagnostic.
+
+    V2 reste le moteur de diagnostic. La détection IA est ensuite exécutée
+    comme module indépendant sur le même corpus fulltext. La comparaison CIR
+    est calculée après le diagnostic, sans intervenir dans son raisonnement.
+    """
+    ensure_ennosmart_imports()
+
+    from services.ennodiagnostic_v2_service import run_ennodiagnostic_v2
+
+    print(
+        "[EnnoDiagnostic V2] Lancement du nouveau moteur...",
+        flush=True,
+    )
+
+    v2_report = sanitize_json_value(
+        run_ennodiagnostic_v2(project)
+    )
+
+    diagnostic_v2 = (
+        v2_report.get("diagnostic_v2")
+        if isinstance(v2_report, dict)
+        else {}
+    ) or {}
+
+    scoring = (
+        diagnostic_v2.get("scoring")
+        if isinstance(diagnostic_v2, dict)
+        else {}
+    ) or {}
+
+    project_synthesis = (
+        diagnostic_v2.get("project_synthesis")
+        if isinstance(diagnostic_v2, dict)
+        else {}
+    ) or {}
+
+    lock_families = (
+        diagnostic_v2.get("lock_families")
+        if isinstance(diagnostic_v2, dict)
+        else {}
+    ) or {}
+
+    core = (
+        diagnostic_v2.get("core")
+        if isinstance(diagnostic_v2, dict)
+        else {}
+    ) or {}
+
+    rnd_approach = (
+        diagnostic_v2.get("rnd_approach")
+        if isinstance(diagnostic_v2, dict)
+        else {}
+    ) or {}
+
+    project_frascati = (
+        diagnostic_v2.get("project_frascati")
+        if isinstance(diagnostic_v2, dict)
+        else {}
+    ) or {}
+
+    report = {
+        **v2_report,
+        "version": (
+            diagnostic_v2.get("version")
+            or "ennodiagnostic_v2"
+        ),
+        "project_summary": project_synthesis,
+        "summary": project_synthesis.get(
+            "project_summary"
+        ),
+        "eligibility": scoring.get(
+            "eligibility"
+        ) or {},
+        "defensibility": scoring.get(
+            "defensibility"
+        ) or {},
+        "risk_level": scoring.get(
+            "risk_level"
+        ),
+        "potential_level": scoring.get(
+            "potential_level"
+        ),
+        "scoring": scoring,
+        "lock_families": lock_families,
+        "project_synthesis": project_synthesis,
+        "rnd_approach": rnd_approach,
+        "project_frascati": project_frascati,
+        "entities": core.get(
+            "entities"
+        ) or [],
+        "extractions": core.get(
+            "extractions"
+        ) or [],
         "pipeline_before_agent": {
-            "documents_loaded_count": (prior_pipeline or {}).get("documents_loaded_count"),
-            "index_report": (prior_pipeline or {}).get("index_report"),
-            "nlp_stats": ((prior_pipeline or {}).get("nlp_result") or {}).get("stats"),
+            "pipeline": "fulltext_to_ennodiagnostic_v2",
+            "documents_loaded_count": (
+                prior_pipeline or {}
+            ).get("documents_loaded_count"),
+            "fulltext_corpus": (
+                prior_pipeline or {}
+            ).get("fulltext_corpus") or {},
         },
-        "ai_detection_report_runtime": ai_detection_runtime,
-        "assessment_refresh": assessment_refresh,
-    })
+        "independent_modules": {
+            "ai_detector": "pending",
+            "document_compare": "not_run",
+            "cir_memory": "not_run",
+            "rag": "not_run",
+        },
+    }
 
-    return report
+    cir_report = run_previous_cir_comparison(project, report)
+    report["cir_memory_report"] = cir_report
+    report["independent_modules"]["cir_memory"] = (
+        cir_report.get("comparison_status") or "completed"
+        if cir_report.get("ok") else "error"
+    )
 
+    ai_report = sanitize_json_value(
+        run_ai_detector_if_enabled(project)
+    )
+    report["ai_detection_report"] = ai_report
+    if ai_report.get("ok"):
+        report["independent_modules"]["ai_detector"] = "completed_fulltext"
+    elif ai_report.get("skipped"):
+        report["independent_modules"]["ai_detector"] = "skipped"
+    else:
+        report["independent_modules"]["ai_detector"] = "error"
+
+    print(
+        "[EnnoDiagnostic V2] Terminé : "
+        f"eligibilite={((report.get('eligibility') or {}).get('score'))}, "
+        f"defendabilite={((report.get('defensibility') or {}).get('score'))}, "
+        f"domaines={((report.get('project_context') or {}).get('domain_tags'))}",
+        flush=True,
+    )
+
+    return sanitize_json_value(report)
 
 def run_full_ennodiagnostic_pipeline(db: Session, project: Project) -> Dict[str, Any]:
-    nlp_rag = run_nlp_and_rag(db, project)
-    with materialized_diagnostic_inputs(db, project):
-        report = run_true_ennodiagnostic_agent(project, prior_pipeline=nlp_rag)
-    return sanitize_json_value({
-        "nlp_rag": {
-            "documents_loaded_count": nlp_rag.get("documents_loaded_count"),
-            "index_report": nlp_rag.get("index_report"),
-            "nlp_stats": (nlp_rag.get("nlp_result") or {}).get("stats"),
+    preparation = _prepare_ennodiagnostic_v2_sources(db, project)
+    prepare_record = sanitize_json_value({
+        "ok": True,
+        "step": "prepare_sources",
+        "engine": "ennodiagnostic_v2",
+        "pipeline": "documents_raw_extraction_fulltext_v2",
+        "documents_used_count": preparation.get("documents_used_count"),
+        "documents_loaded_count": preparation.get("documents_loaded_count"),
+        "documents_used_paths": preparation.get("documents_used_paths") or [],
+        "corpus_manifest": preparation.get("corpus_manifest") or {},
+        "fulltext_corpus": preparation.get("fulltext_corpus") or {},
+        "raw_pipeline_result": {
+            "pipeline": "fulltext_to_ennodiagnostic_v2",
+            "documents_loaded_count": preparation.get("documents_loaded_count"),
+            "fulltext_corpus": preparation.get("fulltext_corpus") or {},
+            "fulltext_corpus_path": preparation.get("fulltext_corpus_path"),
+            "corpus_manifest": preparation.get("corpus_manifest") or {},
         },
+        "generated_at": datetime.utcnow().isoformat(),
+    })
+    save_json_artifact(
+        db,
+        project.id,
+        PREPARE_REPORT_ARTIFACT_KEY,
+        prepare_record,
+        artifact_kind="diagnostic_prepare_report",
+    )
+
+    print("[EnnoDiagnostic V2][RAG] Indexation fulltext / Chroma", flush=True)
+    rag_index_report = run_rag_fulltext_index_if_enabled(project)
+
+    report = run_true_ennodiagnostic_agent(
+        project,
+        prior_pipeline=preparation,
+    )
+    report["rag_index_report"] = rag_index_report
+    independent = report.get("independent_modules")
+    if not isinstance(independent, dict):
+        independent = {}
+        report["independent_modules"] = independent
+    if rag_index_report.get("ok"):
+        independent["rag"] = "completed_fulltext"
+    elif rag_index_report.get("skipped"):
+        independent["rag"] = "skipped"
+    else:
+        independent["rag"] = "error"
+
+    return sanitize_json_value({
+        "v2_preparation": {
+            "documents_loaded_count": preparation.get("documents_loaded_count"),
+            "fulltext_corpus": preparation.get("fulltext_corpus") or {},
+            "fulltext_corpus_path": preparation.get("fulltext_corpus_path"),
+            "corpus_manifest": preparation.get("corpus_manifest") or {},
+            "rag_index": rag_index_report,
+        },
+        "prepare_report": prepare_record,
+        "rag_index_report": rag_index_report,
         "report": report,
     })
 
@@ -1413,10 +1438,173 @@ def _recovered_lock_display_score(
     return None
 
 
+def _v2_diagnostic_payload(report: Dict[str, Any]) -> Dict[str, Any]:
+    """Retourne la sortie native V2, sans fallback vers les formats V1."""
+    if not isinstance(report, dict):
+        return {}
+    payload = report.get("diagnostic_v2")
+    if isinstance(payload, dict) and payload:
+        return payload
+    if report.get("engine") == "ennodiagnostic_v2":
+        # Accepte aussi une vue V2 aplatie pour les imports/outils de test.
+        return report
+    return {}
+
+
+def _is_v2_report(report: Dict[str, Any]) -> bool:
+    return bool(_v2_diagnostic_payload(report))
+
+
+def _extract_v2_verrous_from_report(report: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Convertit les entités verrou V2 qualifiées en lignes métier ``Verrou``.
+
+    Les familles restent une vue de synthèse sauvegardée dans le rapport. Les
+    décisions consultant portent sur les verrous précis (entités membres).
+    """
+    payload = _v2_diagnostic_payload(report)
+    if not payload:
+        return []
+
+    core = payload.get("core") if isinstance(payload.get("core"), dict) else {}
+    entities = core.get("entities") or payload.get("entities") or []
+    if not isinstance(entities, list):
+        entities = []
+
+    family_block = (
+        payload.get("lock_families")
+        if isinstance(payload.get("lock_families"), dict)
+        else {}
+    )
+    families = family_block.get("families") or []
+    if not isinstance(families, list):
+        families = []
+
+    family_by_entity_id: Dict[str, Dict[str, Any]] = {}
+    for family in families:
+        if not isinstance(family, dict):
+            continue
+        for entity_id in family.get("member_entity_ids") or []:
+            key = str(entity_id or "").strip()
+            if key and key not in family_by_entity_id:
+                family_by_entity_id[key] = family
+
+    accepted_statuses = {"VALID_LOCK", "NEEDS_REFORMULATION"}
+    out: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+
+    for entity in entities:
+        if not isinstance(entity, dict) or entity.get("kind") != "lock":
+            continue
+
+        entity_id = str(entity.get("entity_id") or "").strip()
+        metadata = (
+            entity.get("metadata")
+            if isinstance(entity.get("metadata"), dict)
+            else {}
+        )
+        status = str(
+            metadata.get("qualification_status") or "NOT_EVALUATED"
+        ).strip().upper()
+        family = family_by_entity_id.get(entity_id, {})
+
+        # Contrat V2 strict : seules les entités qualifiées VALID_LOCK ou
+        # NEEDS_REFORMULATION deviennent des lignes Verrou PostgreSQL.
+        # Une famille est uniquement une vue d’affichage et ne peut jamais
+        # promouvoir une entité exclue par sa qualification.
+        if status not in accepted_statuses:
+            continue
+
+        original_statement = _clean_text(entity.get("statement"), 5000)
+        suggested_statement = _clean_text(
+            metadata.get("suggested_statement"),
+            5000,
+        )
+        title = _clean_text(
+            suggested_statement
+            if status == "NEEDS_REFORMULATION" and suggested_statement
+            else original_statement,
+            500,
+        )
+        if not title:
+            continue
+
+        dedupe_key = entity_id or re.sub(r"\s+", " ", title.casefold()).strip()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+
+        evidences = entity.get("evidences") or []
+        if not isinstance(evidences, list):
+            evidences = []
+        evidence_ids = [
+            str(evidence.get("evidence_id"))
+            for evidence in evidences
+            if isinstance(evidence, dict) and evidence.get("evidence_id")
+        ]
+        source_documents = list(dict.fromkeys(
+            _clean_text(
+                evidence.get("document_name") or evidence.get("document_id"),
+                500,
+            )
+            for evidence in evidences
+            if isinstance(evidence, dict)
+            and _clean_text(
+                evidence.get("document_name") or evidence.get("document_id")
+            )
+        ))
+        justification = _clean_text(
+            metadata.get("qualification_reason")
+            or family.get("rationale")
+            or original_statement,
+            5000,
+        )
+
+        out.append(sanitize_json_value({
+            "title": title,
+            "titre": title,
+            "verrou": title,
+            "description": justification,
+            "justification": justification,
+            "text": original_statement or justification,
+            "tag_cir": (
+                "PERTINENT"
+                if status == "VALID_LOCK"
+                else "A_REFORMULER"
+            ),
+            "score": None,
+            "consultant_status": "en_attente",
+            "source_document": ", ".join(source_documents),
+            "needs_human_validation": True,
+            "entity_id": entity_id,
+            "family_id": family.get("family_id"),
+            "family_title": family.get("title"),
+            "qualification_status": status,
+            "source_json": {
+                "engine": "ennodiagnostic_v2",
+                "v2_entity": entity,
+                "v2_family": family or None,
+                "entity_id": entity_id,
+                "family_id": family.get("family_id"),
+                "qualification_status": status,
+                "qualification_reason": metadata.get("qualification_reason"),
+                "evidence_ids": evidence_ids,
+                "source_documents": source_documents,
+                "persistence_version": "ennodiagnostic_v2_backend_1",
+            },
+        }))
+
+    return out
+
+
 def _extract_final_verrous_from_report(report: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Extrait uniquement les verrous finaux acceptés par l'agent."""
+    """Extrait les verrous persistables, V2 d'abord puis legacy à l'import."""
     if not isinstance(report, dict):
         return []
+
+    # Un rapport identifié V2 ne doit jamais retomber silencieusement sur les
+    # anciens champs final_verrous/llm_reformulated_verrous.
+    if _is_v2_report(report):
+        return _extract_v2_verrous_from_report(report)
 
     synthesis = report.get("verrou_synthesis_report")
     synthesis = synthesis if isinstance(synthesis, dict) else {}
@@ -1594,6 +1782,11 @@ def extract_complete_diagnostic_snapshot(report: Dict[str, Any]) -> Dict[str, An
     - Frascati, IA, mémoire, Chroma et traçabilité.
     """
     report = sanitize_json_value(report if isinstance(report, dict) else {})
+    v2 = _v2_diagnostic_payload(report)
+    v2_core = v2.get("core") if isinstance(v2.get("core"), dict) else {}
+    v2_scoring = (
+        v2.get("scoring") if isinstance(v2.get("scoring"), dict) else {}
+    )
     diagnostic = report.get("diagnostic") if isinstance(report.get("diagnostic"), dict) else {}
     static = report.get("static_diagnostic") if isinstance(report.get("static_diagnostic"), dict) else {}
 
@@ -1685,6 +1878,8 @@ def extract_complete_diagnostic_snapshot(report: Dict[str, Any]) -> Dict[str, An
         for key in (
             "ok",
             "available",
+            "comparison_status",
+            "error",
             "has_previous_cir",
             "previous_cir_years_used",
             "previous_years",
@@ -1693,6 +1888,7 @@ def extract_complete_diagnostic_snapshot(report: Dict[str, Any]) -> Dict[str, An
             "evolution_or_partial_continuity",
             "continuity_strong",
             "verrou_comparisons",
+            "comparisons",
             "strict_axis_continuity",
             "historical_family_coverage",
         )
@@ -1709,8 +1905,23 @@ def extract_complete_diagnostic_snapshot(report: Dict[str, Any]) -> Dict[str, An
     return sanitize_json_value({
         "snapshot_version": "v149_compact_db_plus_gzip_artifact",
         "generated_at": report.get("generated_at") or datetime.utcnow().isoformat(),
+        "engine": report.get("engine"),
         "mode": report.get("mode"),
         "status": report.get("status") or diagnostic.get("status"),
+        # Sorties métier natives EnnoDiagnostic V2. Elles restent directement
+        # requêtables dans DiagnosticRun.raw_result_json ; les chunks complets
+        # restent uniquement dans l'artefact gzip du rapport intégral.
+        "eligibility": report.get("eligibility") or v2_scoring.get("eligibility") or {},
+        "defensibility": report.get("defensibility") or v2_scoring.get("defensibility") or {},
+        "risk_level": report.get("risk_level") or v2_scoring.get("risk_level"),
+        "potential_level": report.get("potential_level") or v2_scoring.get("potential_level"),
+        "scoring": report.get("scoring") or v2_scoring,
+        "lock_families": report.get("lock_families") or v2.get("lock_families") or {},
+        "entities": report.get("entities") or v2_core.get("entities") or [],
+        "extractions": report.get("extractions") or v2_core.get("extractions") or [],
+        "project_synthesis": report.get("project_synthesis") or v2.get("project_synthesis") or {},
+        "rnd_approach": report.get("rnd_approach") or v2.get("rnd_approach") or {},
+        "project_frascati": report.get("project_frascati") or v2.get("project_frascati") or {},
         "report_markdown": markdown,
         "sections_by_key": sections_by_key,
         "sections_by_title": sections_by_title,
@@ -1745,6 +1956,7 @@ def _compact_report_for_database(
     return sanitize_json_value({
         "ok": report.get("ok"),
         "status": report.get("status"),
+        "engine": report.get("engine"),
         "version": report.get("version"),
         "mode": report.get("mode"),
         "generated_at": report.get("generated_at"),
@@ -1759,6 +1971,18 @@ def _compact_report_for_database(
         "diagnostic_sections_by_key": snapshot.get("sections_by_key") or {},
         "diagnostic_sections": snapshot.get("sections_by_title") or {},
         "report_sections": snapshot.get("canonical_sections") or {},
+        "eligibility": snapshot.get("eligibility") or {},
+        "defensibility": snapshot.get("defensibility") or {},
+        "risk_level": snapshot.get("risk_level"),
+        "potential_level": snapshot.get("potential_level"),
+        "scoring": snapshot.get("scoring") or {},
+        "lock_families": snapshot.get("lock_families") or {},
+        "entities": snapshot.get("entities") or [],
+        "extractions": snapshot.get("extractions") or [],
+        "project_synthesis": snapshot.get("project_synthesis") or {},
+        "rnd_approach": snapshot.get("rnd_approach") or {},
+        "project_frascati": snapshot.get("project_frascati") or {},
+        "cir_memory_report": snapshot.get("cir_memory_report") or {},
         # Les autres données métier sont dans ``diagnostic_snapshot`` au même
         # niveau de l'enveloppe ; ne pas les recopier une seconde fois ici.
         "inputs_status": report.get("inputs_status") or {},
@@ -1949,6 +2173,11 @@ def sync_verrous_from_diagnostic(
             ]
 
     if not candidates:
+        if _is_v2_report(report):
+            # Un diagnostic V2 sans verrou qualifié reste un résultat métier
+            # valide (par exemple dossier purement ingénierie). Il ne doit pas
+            # être transformé en erreur HTTP 422.
+            return []
         raise RuntimeError(
             "Aucun verrou final disponible dans le diagnostic courant."
         )
@@ -2243,7 +2472,7 @@ def _persist_complete_run(
         run.report_path = full_report_artifact["uri"]
         run.raw_result_json = payload
         synced = sync_verrous_from_diagnostic(db, run, commit=False)
-        if not synced:
+        if not synced and not _is_v2_report(report):
             raise RuntimeError(
                 "Le rapport a été généré mais aucun verrou final n'a été trouvé dans "
                 "verrou_synthesis_report.llm_reformulated_verrous."
@@ -2274,45 +2503,16 @@ def _persist_complete_run(
 
 @exclusive_project_diagnostic
 def prepare_ennodiagnostic_sources(db: Session, project: Project) -> Dict[str, Any]:
-    """
-    Prepare les sources sans LLM.
-
-    V146 :
-    - le rapport sauvegarde et la reponse HTTP sont compacts ;
-    - aucun passage NLP complet n'est renvoye au navigateur ;
-    - l'agent suivant recupere seulement les stats et les chemins utiles.
-    """
-    nlp_rag = run_nlp_and_rag(db, project)
+    """Prépare uniquement le fulltext utilisé par EnnoDiagnostic V2."""
+    preparation = _prepare_ennodiagnostic_v2_sources(db, project)
     ps = get_project_store(project)
-
-    nlp_stats = sanitize_json_value(
-        nlp_rag.get("nlp_stats")
-        or (nlp_rag.get("nlp_result") or {}).get("stats")
-        or {}
-    )
-    index_report = sanitize_json_value(nlp_rag.get("index_report") or {})
-
-    # Structure minimale attendue par l'agent. Le gros NLP reste compressé en
-    # base et sera matérialisé uniquement pendant l'exécution suivante.
-    compact_pipeline = {
-        "documents_used_count": nlp_rag.get("documents_used_count"),
-        "documents_loaded_count": nlp_rag.get("documents_loaded_count"),
-        "documents_used_paths": nlp_rag.get("documents_used_paths") or [],
-        "documents_skipped_count": nlp_rag.get("documents_skipped_count"),
-        "nlp_result": {"stats": nlp_stats},
-        "nlp_stats": nlp_stats,
-        "index_report": index_report,
-        "nlp_result_path": nlp_rag.get("nlp_result_path"),
-        "corpus_manifest": nlp_rag.get("corpus_manifest") or {},
-        "reset_report": nlp_rag.get("reset_report") or {},
-        "visual_asset_report": nlp_rag.get("visual_asset_report") or {},
-    }
 
     result = {
         "ok": True,
         "step": "prepare_sources",
-        "pipeline": "documents_raw_extraction_nlp_frascati_rag_chroma",
-        "response_policy": "compact_v146_no_full_nlp_payload",
+        "engine": "ennodiagnostic_v2",
+        "pipeline": "documents_raw_extraction_fulltext_v2",
+        "response_policy": "compact_fulltext_manifest_no_document_text",
         "project": {
             "id": project.id,
             "organisme": project.organisme,
@@ -2320,19 +2520,17 @@ def prepare_ennodiagnostic_sources(db: Session, project: Project) -> Dict[str, A
             "subproject_name": getattr(project, "subproject_name", None),
             "year": _year(project),
         },
-        "documents_used_count": compact_pipeline["documents_used_count"],
-        "documents_loaded_count": compact_pipeline["documents_loaded_count"],
-        "documents_used_paths": compact_pipeline["documents_used_paths"],
-        "corpus_manifest": compact_pipeline["corpus_manifest"],
-        "reset_report": compact_pipeline["reset_report"],
-        "visual_asset_report": compact_pipeline["visual_asset_report"],
-        "nlp_stats": nlp_stats,
-        "index_report": index_report,
+        "documents_used_count": preparation.get("documents_used_count"),
+        "documents_loaded_count": preparation.get("documents_loaded_count"),
+        "documents_used_paths": preparation.get("documents_used_paths") or [],
+        "corpus_manifest": preparation.get("corpus_manifest") or {},
+        "reset_report": preparation.get("reset_report") or {},
+        "visual_asset_report": preparation.get("visual_asset_report") or {},
+        "fulltext_corpus": preparation.get("fulltext_corpus") or {},
         "paths": {
             "project_dir": str(ps.project_dir),
             "raw_dir": str(ps.documents_raw_dir),
-            "nlp_result": artifact_uri(project.id, NLP_ARTIFACT_KEY),
-            "rag_chunks": artifact_uri(project.id, RAG_CHUNKS_ARTIFACT_KEY),
+            "fulltext_corpus": preparation.get("fulltext_corpus_path"),
             "visual_assets_manifest": str(
                 ps.documents_processed_dir
                 / "visual_assets_v1"
@@ -2343,7 +2541,15 @@ def prepare_ennodiagnostic_sources(db: Session, project: Project) -> Dict[str, A
                 PREPARE_REPORT_ARTIFACT_KEY,
             ),
         },
-        "raw_pipeline_result": compact_pipeline,
+        "raw_pipeline_result": {
+            "pipeline": "fulltext_to_ennodiagnostic_v2",
+            "documents_used_count": preparation.get("documents_used_count"),
+            "documents_loaded_count": preparation.get("documents_loaded_count"),
+            "documents_used_paths": preparation.get("documents_used_paths") or [],
+            "fulltext_corpus": preparation.get("fulltext_corpus") or {},
+            "fulltext_corpus_path": preparation.get("fulltext_corpus_path"),
+            "corpus_manifest": preparation.get("corpus_manifest") or {},
+        },
         "generated_at": datetime.utcnow().isoformat(),
     }
 
@@ -2356,7 +2562,7 @@ def prepare_ennodiagnostic_sources(db: Session, project: Project) -> Dict[str, A
         artifact_kind="diagnostic_prepare_report",
     )
 
-    project.status = "Sources preparees"
+    project.status = "Sources V2 préparées"
     db.commit()
 
     print(
@@ -2368,22 +2574,19 @@ def prepare_ennodiagnostic_sources(db: Session, project: Project) -> Dict[str, A
 @exclusive_project_diagnostic
 def run_ennodiagnostic_agent_only(db: Session, project: Project) -> DiagnosticRun:
     """
-    Lance l'agent depuis Chroma puis sauvegarde atomiquement :
-    DiagnosticRun complet + toutes les sections + verrous DB.
+    Lance V2 depuis le corpus fulltext déjà préparé puis sauvegarde le résultat.
     """
     ps = get_project_store(project)
-    rag_chunks = ps.rag_dir / "chunks.json"
-    nlp_result = ps.nlp_dir / "nlp_result.json"
+    from services.ennodiagnostic_v2_service import load_v2_fulltext_manifest
 
-    nlp_ready = json_artifact_exists(db, project.id, NLP_ARTIFACT_KEY) or nlp_result.exists()
-    chunks_ready = (
-        json_artifact_exists(db, project.id, RAG_CHUNKS_ARTIFACT_KEY)
-        or rag_chunks.exists()
+    fulltext_manifest = load_v2_fulltext_manifest(ps)
+    fulltext_ready = bool(
+        int(fulltext_manifest.get("documents_count") or 0) > 0
     )
-    if not chunks_ready or not nlp_ready:
+    if not fulltext_ready:
         raise RuntimeError(
-            "Sources non préparées. Lance d'abord /diagnostic/prepare-sources "
-            "ou utilise /diagnostic/run."
+            "Corpus fulltext V2 non préparé. Lance d'abord "
+            "/diagnostic/prepare-sources ou utilise /diagnostic/run."
         )
 
     prepare_report = _load_prepare_report(db, project)
@@ -2408,26 +2611,38 @@ def run_ennodiagnostic_agent_only(db: Session, project: Project) -> DiagnosticRu
     )
     from services.diagnostic_reset_service import reset_previous_agent_runs
     reset_previous_agent_runs(db, project, ps)
-    with materialized_diagnostic_inputs(db, project):
-        report = run_true_ennodiagnostic_agent(project, prior_pipeline=prior_pipeline)
-    paths = diagnostic_paths(project)
+    report = run_true_ennodiagnostic_agent(
+        project,
+        prior_pipeline=prior_pipeline,
+    )
 
     return _persist_complete_run(
         db,
         project,
         report=report,
-        status_value="completed_agent_only_v142",
-        pipeline_name="chroma_score_ia_style_memory_llm_ennodiagnostic_complete_db",
+        status_value="completed_ennodiagnostic_v2",
+        pipeline_name="fulltext_ennodiagnostic_v2_complete_db",
         button="ennodiagnostic_agent_only",
-        report_path=str(paths["report"]) if paths["report"].exists() else str(ps.project_dir / "ennodiagnostic" / "ennodiagnostic_report.json"),
-        nlp_result_path=artifact_uri(project.id, NLP_ARTIFACT_KEY),
-        selected_verrous_path=str(paths["selected_verrous"]) if paths["selected_verrous"].exists() else None,
+        report_path=artifact_uri(
+            project.id,
+            "diagnostics/latest_full_report.json",
+        ),
+        nlp_result_path=None,
+        selected_verrous_path=None,
         prepare_report=prepare_report,
-        pipeline_result={"agent_only": True},
+        pipeline_result={
+            "agent_only": True,
+            "engine": "ennodiagnostic_v2",
+            "fulltext_corpus": fulltext_manifest,
+        },
         bundle_metadata={
-            "report_path_used": str(paths["report"]),
-            "nlp_path_used": artifact_uri(project.id, NLP_ARTIFACT_KEY),
-            "rag_chunks_path": artifact_uri(project.id, RAG_CHUNKS_ARTIFACT_KEY),
+            "report_path_used": artifact_uri(
+                project.id,
+                "diagnostics/latest_full_report.json",
+            ),
+            "fulltext_corpus_path": str(
+                Path(ps.documents_processed_dir) / "fulltext_rag_v1"
+            ),
         },
     )
 
@@ -2465,49 +2680,31 @@ def create_diagnostic_run_from_files(db: Session, project: Project) -> Diagnosti
 
 @exclusive_project_diagnostic
 def run_ennodiagnostic(db: Session, project: Project) -> DiagnosticRun:
-    """Un seul bouton : extraction -> NLP -> RAG -> agent -> DB complète -> verrous DB."""
-    output_dir = project_output_dir(project)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    if getattr(settings, "ENNODIAGNOSTIC_SCRIPT", None):
-        from services.diagnostic_reset_service import reset_previous_agent_runs
-        reset_previous_agent_runs(db, project, get_project_store(project))
-        pipeline_result = run_optional_ai_script(
-            script_path=settings.ENNODIAGNOSTIC_SCRIPT,
-            args=[
-                "--organisme", project.organisme,
-                "--project", project.project_name,
-                "--year", str(project.year),
-                "--output-dir", str(output_dir),
-            ],
-            timeout_seconds=settings.AI_RUN_TIMEOUT_SECONDS,
-        )
-        pipeline_result = sanitize_json_value(pipeline_result)
-        report = _report_from_pipeline_result(pipeline_result)
-        if not report:
-            bundle = read_diagnostic_bundle(project)
-            report = bundle.get("report") if isinstance(bundle.get("report"), dict) else {}
-    else:
-        pipeline_result = run_full_ennodiagnostic_pipeline(db, project)
-        pipeline_result = sanitize_json_value(pipeline_result)
-        report = _report_from_pipeline_result(pipeline_result)
-
-    paths = diagnostic_paths(project)
-    prepare_report = _load_prepare_report(db, project)
+    """Un seul bouton backend : extraction fulltext -> RAG si nécessaire -> V2 -> persistance DB."""
+    pipeline_result = sanitize_json_value(
+        run_full_ennodiagnostic_pipeline(db, project)
+    )
+    report = _report_from_pipeline_result(pipeline_result)
+    prepare_report = (
+        pipeline_result.get("prepare_report")
+        if isinstance(pipeline_result.get("prepare_report"), dict)
+        else _load_prepare_report(db, project)
+    )
+    ps = get_project_store(project)
 
     return _persist_complete_run(
         db,
         project,
         report=report,
-        status_value="completed_full_v142",
-        pipeline_name="extraction_nlp_frascati_rag_chroma_llm_complete_db",
+        status_value="completed_ennodiagnostic_v2",
+        pipeline_name="extraction_fulltext_ennodiagnostic_v2_complete_db",
         button="single_ennodiagnostic_button",
         report_path=artifact_uri(
             project.id,
             "diagnostics/latest_full_report.json",
         ),
-        nlp_result_path=artifact_uri(project.id, NLP_ARTIFACT_KEY),
-        selected_verrous_path=str(paths["selected_verrous"]) if paths["selected_verrous"].exists() else None,
+        nlp_result_path=None,
+        selected_verrous_path=None,
         prepare_report=prepare_report,
         pipeline_result=pipeline_result,
         bundle_metadata={
@@ -2515,7 +2712,8 @@ def run_ennodiagnostic(db: Session, project: Project) -> DiagnosticRun:
                 project.id,
                 "diagnostics/latest_full_report.json",
             ),
-            "nlp_path_used": artifact_uri(project.id, NLP_ARTIFACT_KEY),
-            "rag_chunks_path": artifact_uri(project.id, RAG_CHUNKS_ARTIFACT_KEY),
+            "fulltext_corpus_path": str(
+                Path(ps.documents_processed_dir) / "fulltext_rag_v1"
+            ),
         },
     )

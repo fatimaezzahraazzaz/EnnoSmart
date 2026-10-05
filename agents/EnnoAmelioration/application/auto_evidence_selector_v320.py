@@ -475,6 +475,451 @@ Retourne un verdict pour CHAQUE candidate_id du pool.
     }
 
 
+
+def _post_extract_schema() -> dict[str, Any]:
+    return {
+        "title": "ennoamel_post_extract_relevance_v1",
+        "type": "object",
+        "required": ["decisions"],
+        "properties": {
+            "decisions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": [
+                        "article_id",
+                        "decision",
+                        "relevance",
+                        "reason",
+                        "supported_claim",
+                        "supporting_refs",
+                    ],
+                    "properties": {
+                        "article_id": {"type": "string"},
+                        "decision": {
+                            "type": "string",
+                            "enum": ["use", "reject"],
+                        },
+                        "relevance": {
+                            "type": "string",
+                            "enum": ["direct", "partial", "irrelevant"],
+                        },
+                        "reason": {"type": "string"},
+                        "supported_claim": {"type": "string"},
+                        "supporting_refs": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                    },
+                },
+            }
+        },
+    }
+
+
+def _original_passages_from_card(
+    card: dict[str, Any],
+    *,
+    max_passages: int = 14,
+) -> list[dict[str, Any]]:
+    """Extrait uniquement les vrais paragraphes issus du full text."""
+
+    bank = card.get("article_evidence_bank")
+    if not isinstance(bank, dict):
+        return []
+
+    rules = (
+        bank.get("rules")
+        if isinstance(bank.get("rules"), dict)
+        else {}
+    )
+
+    if rules.get("paragraphs_are_original_extracts") is not True:
+        return []
+
+    buckets = bank.get("paragraph_buckets")
+    if not isinstance(buckets, dict):
+        return []
+
+    ordered = (
+        "problem",
+        "solution",
+        "method",
+        "workflow",
+        "validation",
+        "results",
+        "limitations",
+        "definition",
+        "future_work",
+    )
+
+    passages: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    for bucket in ordered:
+        rows = buckets.get(bucket) or []
+        if not isinstance(rows, list):
+            continue
+
+        for row in rows[:4]:
+            if not isinstance(row, dict):
+                continue
+
+            value = _clean(row.get("text"), 1800)
+            key = _norm(value)
+
+            if not value or not key or key in seen:
+                continue
+
+            seen.add(key)
+
+            passages.append(
+                {
+                    "ref": f"P{len(passages) + 1}",
+                    "bucket": bucket,
+                    "section": _clean(row.get("section"), 200),
+                    "text": value,
+                }
+            )
+
+            if len(passages) >= max_passages:
+                return passages
+
+    return passages
+
+
+def validate_prepared_sources_from_fulltext(
+    *,
+    section_text: str,
+    section_title: str,
+    weakness_reasons: list[str] | None,
+    preliminary_selection: dict[str, Any],
+    prepared_sources: list[dict[str, Any]],
+    evidence_cards: list[dict[str, Any]],
+    llm: LLMClient | None = None,
+) -> dict[str, Any]:
+    """Validation APRES extraction.
+
+    Important :
+    - tout article extrait reste conservé ;
+    - seuls les articles dont les paragraphes ORIGINAUX soutiennent
+      directement la section sont autorisés pour la rédaction.
+    """
+
+    cards_by_article: dict[int, dict[str, Any]] = {}
+
+    for card in evidence_cards or []:
+        if not isinstance(card, dict):
+            continue
+
+        article_id = _article_id(card)
+
+        if article_id is not None:
+            cards_by_article[article_id] = dict(card)
+
+    selected_by_article: dict[int, dict[str, Any]] = {}
+
+    for row in preliminary_selection.get("selected") or []:
+        if not isinstance(row, dict):
+            continue
+
+        article_id = _article_id(row)
+
+        if article_id is not None:
+            selected_by_article[article_id] = dict(row)
+
+    preserved: list[dict[str, Any]] = []
+    candidates: list[dict[str, Any]] = []
+    rejected_preflight: list[dict[str, Any]] = []
+
+    passage_maps: dict[int, dict[str, dict[str, Any]]] = {}
+
+    for raw in prepared_sources or []:
+        if not isinstance(raw, dict):
+            continue
+
+        source = dict(raw)
+        article_id = _article_id(source)
+
+        # IMPORTANT : même s'il sera rejeté pour l'écriture,
+        # l'article extrait reste conservé ici.
+        preserved.append(source)
+
+        if article_id is None:
+            rejected_preflight.append(
+                {
+                    **source,
+                    "decision": "reject",
+                    "reason": "prepared_article_id_missing",
+                    "stage": "post_extract_preflight",
+                }
+            )
+            continue
+
+        card = cards_by_article.get(article_id)
+
+        passages = _original_passages_from_card(card or {})
+
+        if not passages:
+            rejected_preflight.append(
+                {
+                    **source,
+                    "article_id": article_id,
+                    "decision": "reject",
+                    "reason": "no_original_fulltext_passage_available",
+                    "stage": "post_extract_preflight",
+                }
+            )
+            continue
+
+        passage_maps[article_id] = {
+            row["ref"]: row
+            for row in passages
+        }
+
+        preliminary = selected_by_article.get(article_id) or {}
+
+        candidates.append(
+            {
+                "article_id": str(article_id),
+                "candidate_id": (
+                    _row_candidate_id(source)
+                    or _row_candidate_id(preliminary)
+                ),
+                "title": _clean(
+                    source.get("title")
+                    or preliminary.get("title"),
+                    900,
+                ),
+                "initial_supported_need": _clean(
+                    preliminary.get("supported_need"),
+                    1400,
+                ),
+                "initial_reason": _clean(
+                    preliminary.get("reason"),
+                    1200,
+                ),
+                "passages": passages,
+            }
+        )
+
+    if not candidates:
+        return {
+            "policy_version": "ennoamel_post_extract_relevance_v1",
+            "preserved_extracted_sources": preserved,
+            "eligible_sources": [],
+            "eligible_article_ids": [],
+            "rejected_for_writing": rejected_preflight,
+            "decision_mode": "no_original_passages",
+        }
+
+    prompt = f"""
+Tu vérifies la pertinence scientifique APRES extraction du texte intégral.
+
+SECTION CIR COURANTE
+Titre : {_clean(section_title, 500)}
+
+Texte :
+{_clean(section_text, 14000)}
+
+FAIBLESSES A RENFORCER
+{json.dumps(list(weakness_reasons or []), ensure_ascii=False)}
+
+ARTICLES EXTRAITS
+{json.dumps(candidates, ensure_ascii=False)}
+
+REGLES STRICTES
+
+1. Base ta décision UNIQUEMENT sur les passages originaux P1, P2... fournis.
+
+2. "use" uniquement si au moins un passage soutient DIRECTEMENT une
+   affirmation scientifique utile à cette section.
+
+3. Une simple proximité de mots, de domaine ou de thème est insuffisante.
+
+4. Vérifie la compatibilité réelle :
+   - phénomène étudié ;
+   - système ou matériau ;
+   - mécanisme ;
+   - conditions/régime expérimental ;
+   - type de résultat démontré.
+
+5. Un résultat obtenu sur un système voisin ne peut pas automatiquement
+   justifier le système du CIR.
+
+6. Si l'article n'est pertinent qu'à un niveau général ou indirect :
+   relevance="partial" et decision="reject".
+
+7. supporting_refs doit contenir uniquement les P# qui soutiennent
+   réellement supported_claim.
+
+8. supported_claim doit être une affirmation précise et bornée que le
+   Writer peut défendre sans extrapolation.
+
+9. Si aucun passage n'est assez direct : reject.
+
+10. Un article rejeté ici reste CONSERVE dans le corpus extrait.
+    Ce verdict décide uniquement s'il peut être utilisé automatiquement
+    dans la rédaction.
+""".strip()
+
+    verifier = llm or LLMClient()
+
+    payload: dict[str, Any] = {}
+    llm_meta: dict[str, Any] = {}
+
+    try:
+        raw = verifier.generate(
+            prompt,
+            temperature=0.0,
+            max_output_tokens=2600,
+            max_input_tokens=50000,
+            retries=0,
+            json_mode=True,
+            response_schema=_post_extract_schema(),
+            request_name="ennoamelioration:post_extract_relevance_v1",
+        )
+
+        payload = _extract_json(raw)
+
+        try:
+            llm_meta = verifier.get_last_generation_meta()
+        except Exception:
+            llm_meta = {}
+
+    except Exception as exc:
+        llm_meta = {
+            "error": f"{exc.__class__.__name__}: {exc}"
+        }
+
+    prepared_by_article = {
+        _article_id(row): dict(row)
+        for row in preserved
+        if _article_id(row) is not None
+    }
+
+    decisions = {
+        str(row.get("article_id") or ""): row
+        for row in (payload.get("decisions") or [])
+        if isinstance(row, dict)
+    }
+
+    eligible_sources: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = list(rejected_preflight)
+
+    for candidate in candidates:
+        article_id = int(candidate["article_id"])
+
+        decision = decisions.get(str(article_id))
+
+        if not isinstance(decision, dict):
+            rejected.append(
+                {
+                    **prepared_by_article[article_id],
+                    "article_id": article_id,
+                    "decision": "reject",
+                    "reason": "post_extract_semantic_verdict_missing",
+                    "stage": "post_extract_semantic",
+                }
+            )
+            continue
+
+        choice = str(
+            decision.get("decision") or ""
+        ).casefold()
+
+        relevance = str(
+            decision.get("relevance") or ""
+        ).casefold()
+
+        valid_refs = [
+            str(ref)
+            for ref in (
+                decision.get("supporting_refs") or []
+            )
+            if str(ref)
+            in passage_maps.get(article_id, {})
+        ]
+
+        supported_claim = _clean(
+            decision.get("supported_claim"),
+            1800,
+        )
+
+        if (
+            choice == "use"
+            and relevance == "direct"
+            and valid_refs
+            and supported_claim
+        ):
+            supporting_passages = [
+                passage_maps[article_id][ref]
+                for ref in valid_refs
+            ]
+
+            eligible_sources.append(
+                {
+                    **prepared_by_article[article_id],
+                    "article_id": article_id,
+                    "post_extract_relevance": "direct",
+                    "post_extract_supported_claim": supported_claim,
+                    "post_extract_supporting_refs": valid_refs,
+                    "post_extract_supporting_passages": supporting_passages,
+                    "post_extract_reason": _clean(
+                        decision.get("reason"),
+                        1200,
+                    ),
+                    "writing_eligible": True,
+                }
+            )
+
+        else:
+            rejected.append(
+                {
+                    **prepared_by_article[article_id],
+                    "article_id": article_id,
+                    "decision": "reject",
+                    "relevance": relevance or "irrelevant",
+                    "reason": (
+                        _clean(
+                            decision.get("reason"),
+                            1200,
+                        )
+                        or "not_direct_after_fulltext"
+                    ),
+                    "supported_claim": supported_claim,
+                    "supporting_refs": valid_refs,
+                    "stage": "post_extract_semantic",
+                    "writing_eligible": False,
+                }
+            )
+
+    return {
+        "policy_version": "ennoamel_post_extract_relevance_v1",
+
+        # TOUS les articles extraits restent ici.
+        "preserved_extracted_sources": preserved,
+
+        # Seulement ceux-ci sont autorisés pour le Writer.
+        "eligible_sources": eligible_sources,
+        "eligible_article_ids": [
+            int(row["article_id"])
+            for row in eligible_sources
+        ],
+
+        "rejected_for_writing": rejected,
+
+        "decision_mode": (
+            "llm_fulltext_original_passages"
+            if decisions
+            else "conservative_reject_without_verifier"
+        ),
+
+        "llm": llm_meta,
+    }
+
+
+
 def bind_prepared_sources(
     *,
     selection: dict[str, Any],
@@ -686,8 +1131,29 @@ def build_traceable_evidence(
         if article_id is not None:
             prepared_article_for_source[id(source)] = article_id
 
-    if not used_source_keys:
-        used_source_keys = set(evidence_for_source)
+    # Source réellement utilisée = citation effectivement présente
+    # dans la candidate.
+    candidate_text = str(
+        getattr(result, "improved_target", None) or ""
+    )
+
+    cited_ids = {
+        value.upper()
+        for value in re.findall(
+            r"(?<![A-Za-z0-9])(A\d+)(?![A-Za-z0-9])",
+            candidate_text,
+            flags=re.I,
+        )
+    }
+
+    for source_key, evidence_row in evidence_for_source.items():
+        citation_id = str(
+            evidence_row.get("citation_id") or ""
+        ).strip().upper()
+
+        if citation_id and citation_id in cited_ids:
+            used_source_keys.add(source_key)
+
 
     final: list[dict[str, Any]] = []
     advisory_sources: list[dict[str, Any]] = []

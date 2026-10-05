@@ -13,7 +13,7 @@ activités internes sont ensuite périmétrées séparément.
 from typing import Any, Dict, Iterable, List, Mapping, Set
 
 try:
-    from agents.EnnoDiagnostic.project_fact_gate import (
+    from .project_fact_gate import (
         gate_project_fact,
         has_explicit_executed_method,
         is_external_or_reference as _gate_external_or_reference,

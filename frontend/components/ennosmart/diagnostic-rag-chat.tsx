@@ -310,7 +310,7 @@ export function DiagnosticRagChat({
   const [sending, setSending] = useState(false)
   const [error, setError] = useState("")
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
-  const [selectedDocumentId, setSelectedDocumentId] = useState("")
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([])
   const [selectedSource, setSelectedSource] = useState<ChatSource | null>(null)
   const [preview, setPreview] = useState<PreviewState>(EMPTY_PREVIEW)
   const [evidenceOpen, setEvidenceOpen] = useState(true)
@@ -333,21 +333,18 @@ export function DiagnosticRagChat({
     [sourceDocuments]
   )
 
-  const selectedDocument = useMemo(
-    () =>
-      documentOptions.find(
-        (document) => String(document.id) === selectedDocumentId
-      ) || null,
-    [documentOptions, selectedDocumentId]
+  const selectedDocuments = useMemo(
+    () => documentOptions.filter((document) => selectedDocumentIds.includes(String(document.id))),
+    [documentOptions, selectedDocumentIds]
   )
-
-  const selectedDocumentName = selectedDocument
-    ? String(
-        selectedDocument.filename ||
-          selectedDocument.stored_filename ||
-          `Document ${selectedDocument.id}`
-      )
-    : ""
+  const selectedDocumentName = selectedDocuments.map((document) =>
+    document.filename || document.stored_filename || `Document ${document.id}`
+  ).join(" ; ")
+  const scopeLabel = selectedDocuments.length === 0
+    ? "Tous les documents"
+    : selectedDocuments.length === 1
+      ? selectedDocumentName
+      : `${selectedDocuments.length} documents sélectionnés`
 
   const latestAssistantMessage = useMemo(
     () =>
@@ -359,7 +356,7 @@ export function DiagnosticRagChat({
             Array.isArray(message.sources) &&
             message.sources.length > 0
         ) || null,
-    [messages]
+    [messages, selectedDocumentName]
   )
 
   const latestSources = useMemo(
@@ -392,11 +389,11 @@ export function DiagnosticRagChat({
 
   const history = useMemo(
     () =>
-      messages.slice(-10).map((message) => ({
+      messages.filter((message) => message.scopeLabel === (selectedDocumentName || "Tous les documents")).slice(-10).map((message) => ({
         role: message.role,
         content: message.content,
       })),
-    [messages]
+    [messages, selectedDocumentName]
   )
 
   const loadStatus = async () => {
@@ -419,7 +416,7 @@ export function DiagnosticRagChat({
       )
 
       if (!response.ok) {
-        setStatus(null)
+        setStatus({ ready: false, reason: `Statut du chat indisponible (HTTP ${response.status}).` })
         return
       }
 
@@ -432,7 +429,7 @@ export function DiagnosticRagChat({
         latest_run_id: data?.latest_run_id,
       })
     } catch {
-      setStatus(null)
+      setStatus({ ready: false, reason: "Connexion au chat indisponible. Vérifiez que le backend est démarré." })
     }
   }
 
@@ -554,7 +551,7 @@ export function DiagnosticRagChat({
     const matched = byId || byName
 
     if (matched) {
-      setSelectedDocumentId(String(matched.id))
+      setSelectedDocumentIds([String(matched.id)])
     }
   }
 
@@ -593,12 +590,10 @@ export function DiagnosticRagChat({
           body: JSON.stringify({
             message: content,
             history,
-            document_scope: selectedDocument
-              ? {
-                  document_id: selectedDocument.id,
-                  document_name: selectedDocumentName,
-                }
-              : null,
+            document_scopes: selectedDocuments.map((document) => ({
+              document_id: document.id,
+              document_name: document.filename || document.stored_filename,
+            })),
           }),
         }
       )
@@ -630,10 +625,7 @@ export function DiagnosticRagChat({
           String(payload?.answer || "").trim() ||
           "Aucune réponse exploitable n'a été produite.",
         sources,
-        scopeLabel:
-          String(payload?.document_scope?.document_name || "").trim() ||
-          selectedDocumentName ||
-          "Tous les documents",
+        scopeLabel: selectedDocumentName || "Tous les documents",
       }
 
       setMessages((current) => [...current, assistantMessage])
@@ -704,7 +696,7 @@ export function DiagnosticRagChat({
     setMessages([])
     setInput("")
     setError("")
-    setSelectedDocumentId("")
+    setSelectedDocumentIds([])
     setSelectedSource(null)
     setEvidenceFilter("all")
     setEvidenceOpen(true)
@@ -749,10 +741,6 @@ export function DiagnosticRagChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestAssistantMessage?.id])
 
-  if (!status?.ready) {
-    return null
-  }
-
   const previewIsPdf = preview.mediaType
     .toLowerCase()
     .includes("pdf")
@@ -793,7 +781,9 @@ export function DiagnosticRagChat({
             openAssistant()
           }
         }}
-        className="fixed bottom-6 right-6 z-[93] size-14 rounded-full bg-brand p-0 shadow-[0_12px_32px_rgba(93,63,211,0.34)] hover:bg-brand/90"
+        className={`${open ? "hidden" : "fixed"} bottom-6 right-6 z-[93] h-12 gap-2 rounded-full bg-brand px-4 shadow-lg hover:bg-brand/90`}
+        aria-expanded={open}
+        aria-controls="diagnostic-document-chat"
         aria-label={
           open
             ? "Fermer le chat documentaire"
@@ -806,15 +796,24 @@ export function DiagnosticRagChat({
         ) : (
           <MessageCircle className="size-5" />
         )}
+        <span>Chat documentaire</span>
       </Button>
 
       {open ? (
         <section
+          id="diagnostic-document-chat"
           className={windowClass}
           role="dialog"
           aria-modal="true"
           aria-label="Assistant documentaire EnnoDiagnostic"
         >
+          {!status?.ready && (
+            <div role="status" className="flex shrink-0 items-center gap-3 border-b bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <AlertCircle className="size-4 shrink-0" />
+              <p className="flex-1">{status?.reason || "Vérification de la disponibilité des sources…"}</p>
+              <Button type="button" variant="outline" size="sm" onClick={() => void loadStatus()}>Actualiser</Button>
+            </div>
+          )}
           {/* HEADER */}
           <header className="flex h-16 shrink-0 items-center gap-3 border-b border-border/70 bg-background px-4 sm:px-5">
             <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand shadow-sm">
@@ -826,14 +825,14 @@ export function DiagnosticRagChat({
                 Assistant documentaire
               </p>
               <p className="truncate text-[11px] font-medium text-brand">
-                EnnoDiagnostic
+                EnnoDiagnostic · Sources du projet
               </p>
             </div>
 
             <div className="hidden items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 md:flex">
-              <span className="size-2 rounded-full bg-emerald-500" />
+              <span className={`size-2 rounded-full ${status?.ready ? "bg-emerald-500" : "bg-amber-500"}`} />
               <span className="text-[10px] font-semibold text-emerald-700">
-                Prêt
+                {status?.ready ? "Prêt" : "Indisponible"}
               </span>
             </div>
 
@@ -887,6 +886,7 @@ export function DiagnosticRagChat({
               className="size-9 rounded-xl border border-transparent hover:border-border"
               onClick={() => setOpen(false)}
               title="Fermer"
+              aria-label="Fermer le chat documentaire"
             >
               <X className="size-4" />
             </Button>
@@ -911,31 +911,9 @@ export function DiagnosticRagChat({
               </div>
 
               <div className="ml-auto flex min-w-0 items-center gap-2">
-                <div className="relative hidden sm:block">
-                  <Filter className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-brand" />
-                  <select
-                    value={selectedDocumentId}
-                    onChange={(event) => {
-                      setSelectedDocumentId(event.target.value)
-                    }}
-                    className="h-8 max-w-[230px] rounded-lg border border-border bg-background pl-8 pr-7 text-[10px] font-medium text-foreground outline-none transition focus:border-brand"
-                    title="Portée de la recherche"
-                  >
-                    <option value="">
-                      Tous les documents
-                    </option>
-                    {documentOptions.map((document) => (
-                      <option
-                        key={document.id}
-                        value={String(document.id)}
-                      >
-                        {document.filename ||
-                          document.stored_filename ||
-                          `Document ${document.id}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <span className="hidden max-w-[230px] truncate text-xs text-muted-foreground sm:block" title={selectedDocumentName || scopeLabel}>
+                  {scopeLabel}
+                </span>
 
                 {latestSources.length > 0 ? (
                   <div className="hidden rounded-lg border bg-background p-0.5 lg:flex">
@@ -1240,6 +1218,7 @@ export function DiagnosticRagChat({
                               key={suggestion}
                               type="button"
                               onClick={() => void sendMessage(suggestion)}
+                              disabled={!status?.ready || sending}
                               className="rounded-xl border border-border bg-background px-3 py-2.5 text-left text-[10px] font-medium leading-4 text-foreground transition hover:border-brand/30 hover:bg-brand/[0.025]"
                             >
                               {suggestion}
@@ -1428,37 +1407,42 @@ export function DiagnosticRagChat({
                       setInput(event.target.value)
                     }
                     onKeyDown={handleKeyDown}
-                    placeholder="Posez une question précise sur ce dossier..."
+                    aria-label="Votre question sur les documents"
+                    disabled={!status?.ready || sending}
+                    placeholder="Posez une question technique ou générale sur les documents..."
                     className="min-h-[58px] resize-none border-0 bg-transparent px-3.5 py-3 text-xs shadow-none focus-visible:ring-0"
                   />
 
                   <div className="flex items-center gap-2 border-t border-border/50 px-2.5 py-2">
-                    <div className="relative min-w-0 flex-1">
-                      <Filter className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-brand" />
-                      <select
-                        value={selectedDocumentId}
-                        onChange={(event) =>
-                          setSelectedDocumentId(
-                            event.target.value
-                          )
-                        }
-                        className="h-8 max-w-full rounded-lg border-0 bg-brand/[0.035] pl-8 pr-7 text-[9px] font-medium text-foreground outline-none"
-                      >
-                        <option value="">
+                    <details className="relative min-w-0 flex-1">
+                      <summary className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-brand/5 px-3 text-xs font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">
+                        <Filter className="size-4 shrink-0 text-brand" />
+                        <span className="truncate">{scopeLabel}</span>
+                        <ChevronDown className="ml-auto size-4 shrink-0" />
+                      </summary>
+                      <fieldset disabled={sending} className="absolute bottom-full left-0 z-10 mb-2 max-h-64 w-[min(360px,calc(100vw-4rem))] overflow-y-auto rounded-xl border bg-background p-3 shadow-lg">
+                        <legend className="sr-only">Documents à interroger</legend>
+                        <p className="mb-2 text-xs text-muted-foreground">Choisissez un ou plusieurs documents.</p>
+                        <label className="flex min-h-10 cursor-pointer items-center gap-2 border-b text-xs font-medium">
+                          <input type="checkbox" checked={selectedDocumentIds.length === 0} onChange={() => setSelectedDocumentIds([])} />
                           Tous les documents du projet
-                        </option>
+                        </label>
                         {documentOptions.map((document) => (
-                          <option
-                            key={document.id}
-                            value={String(document.id)}
-                          >
-                            {document.filename ||
-                              document.stored_filename ||
-                              `Document ${document.id}`}
-                          </option>
+                          <label key={document.id} className="flex min-h-10 cursor-pointer items-start gap-2 py-2 text-xs leading-5">
+                            <input
+                              type="checkbox"
+                              className="mt-1 shrink-0"
+                              checked={selectedDocumentIds.includes(String(document.id))}
+                              onChange={(event) => setSelectedDocumentIds((current) => event.target.checked
+                                ? [...current, String(document.id)]
+                                : current.filter((id) => id !== String(document.id)))}
+                            />
+                            <span className="break-words">{document.filename || document.stored_filename || `Document ${document.id}`}</span>
+                          </label>
                         ))}
-                      </select>
-                    </div>
+                        {documentOptions.length === 0 && <p className="py-2 text-xs text-muted-foreground">Aucun document disponible.</p>}
+                      </fieldset>
+                    </details>
 
                     {selectedSource ? (
                       <Button
@@ -1466,6 +1450,7 @@ export function DiagnosticRagChat({
                         variant="ghost"
                         size="sm"
                         className="hidden h-8 rounded-lg px-2 text-[9px] text-brand lg:inline-flex"
+                        disabled={sending}
                         onClick={() =>
                           useSourceAsScope(
                             selectedSource
@@ -1484,7 +1469,7 @@ export function DiagnosticRagChat({
                       disabled={
                         !input.trim() ||
                         sending ||
-                        !status.ready
+                        !status?.ready
                       }
                     >
                       {sending ? (

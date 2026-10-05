@@ -1,59 +1,39 @@
-# EnnoDiagnostic V2 — architecture de stabilisation
+# EnnoDiagnostic V2 — moteur actif
 
-Cette V2 propose une architecture plus simple pour EnnoDiagnostic et fonctionne
-avec **documents bruts, pré-CIR, CIR structurés et plusieurs documents ensemble**.
+Le backend Diagnostic et le diagnostic ciblé d’EnnoAmélioration utilisent V2.
+L’agent Diagnostic V1 a été retiré. Le dossier `modules/NLP` conserve uniquement
+les composants encore partagés avec l’extraction documentaire, la mémoire CIR
+et le routage d’EnnoAmélioration.
 
-## Pipeline
+## Flux actuel
 
 ```text
-DOCUMENT(S)
-    ↓
-Structure légère + chunks avec contexte
-    ↓
-LLM = extracteur sémantique principal
-    ↓
-Extraction multi-label par chunk
-- objectifs
-- verrous potentiels
-- méthodes
-- paramètres
-- résultats
-- preuves exactes
-    ↓
-FastJudge = signal secondaire, jamais un veto
-    ↓
-Fusion inter-chunks / inter-documents
-    ↓
-Qualification Frascati
-    ↓
-Validation consultant
-    ↓
-Pack traçable pour UI / RAG
+documents → extraction texte déterministe → fulltext + index RAG
+    → Global Fast Path : dossier global ou lots selon le préflight
+    → validation des faits et preuves + audit de complétude
+    → consolidation des verrous → qualification
+    → familles + synthèse projet + démarche R&D + Frascati
+    → scoring Python → PostgreSQL → UI
 ```
 
-## Principes
+Le fallback d’extraction sémantique par chunks est un chemin **V2**, indépendant
+et conservé. Il ne réactive aucun code Diagnostic V1.
 
-- Tous les documents utilisent le **même moteur sémantique**.
-- Le type RAW / pré-CIR / CIR sert seulement de contexte.
-- Un passage peut être à la fois `résultat` et preuve d'un `verrou`.
-- FastJudge ne supprime jamais une extraction du LLM.
-- Les regex servent au nettoyage et à la structure, pas à comprendre le sens.
-- Frascati est appliqué **après** l'extraction.
-- Une preuve doit être une citation du passage source.
-- Aucun pourcentage global n'est produit si la qualification n'est pas fiable.
+La revue globale peut enrichir la vue des faits selon les incertitudes détectées.
+Les preuves et identifiants sources restent conservés. La consolidation traite
+les relations contradictoires localement, sans abandonner les composants
+cohérents ni modifier les règles d’incertitude autonome.
 
-## Important
+## Configuration
 
-C'est une base V2 propre et exécutable, pas une promesse de perfection.
-Avant de remplacer la version déployée, fais tourner V1 et V2 en parallèle sur
-un benchmark manuel d'environ 10 dossiers.
+- `ENNOSMART_DIAGNOSTIC_GLOBAL_FAST_PATH=1`
+- `ENNOSMART_DIAGNOSTIC_GLOBAL_REASONER_PROVIDER=openai`
+- `ENNOSMART_DIAGNOSTIC_GLOBAL_REASONER_MODEL=gpt-5`
+- `ENNOSMART_DIAGNOSTIC_GLOBAL_FAST_EFFORT=medium`
+- `ENNOSMART_DIAGNOSTIC_GLOBAL_REASONER_EFFORT=high`
 
-Commence par :
-1. `integration/MIGRATION_FROM_CURRENT.md`
-2. `benchmark/README.md`
-3. `examples/example_run.py`
+Le modèle global est indépendant du modèle choisi pour les autres agents.
+Le cache global est stocké dans `analysis_cache/global_fast` du projet.
+Les chunks RAG restent disponibles pour le chat et les citations.
 
-Tests :
-```bash
-python -m pytest -q
-```
+Voir `docs/UPGRADE_DIAGNOSTIC_V2.md` pour le remplacement de l’application serveur.

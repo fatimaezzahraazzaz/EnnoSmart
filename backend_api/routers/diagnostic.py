@@ -1,4 +1,4 @@
-DIAGNOSTIC_ROUTER_VERSION = "v143_complete_db_persistence"
+DIAGNOSTIC_ROUTER_VERSION = "v150_ennodiagnostic_v2_backend"
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form
 from sqlalchemy.orm import Session, defer
@@ -54,9 +54,9 @@ router = APIRouter(tags=["ennodiagnostic"], dependencies=[Depends(require_agent_
 # router, dans le thread principal d'Uvicorn.
 RAG_NATIVE_PRELOAD_VERSION = "v147_main_thread"
 ensure_ennosmart_imports()
-from modules.RAG.indexer import index_nlp_result as _PRELOADED_INDEX_NLP_RESULT
+from modules.RAG.indexer import index_fulltext_corpus as _PRELOADED_INDEX_FULLTEXT
 print(
-    "[EnnoDiagnostic][V147] RAG / SentenceTransformers / PyArrow "
+    "[EnnoDiagnostic][V2] RAG fulltext / SentenceTransformers / PyArrow "
     "precharges dans le thread principal.",
     flush=True,
 )
@@ -522,6 +522,9 @@ def _extract_final_accepted_verrous_from_report(report: dict) -> list[dict[str, 
     """
     if not isinstance(report, dict):
         return []
+
+    if diagnostic_service_module._is_v2_report(report):
+        return diagnostic_service_module._extract_v2_verrous_from_report(report)
 
     verrou_report = report.get("verrou_synthesis_report") or {}
     if not isinstance(verrou_report, dict):
@@ -1691,8 +1694,33 @@ def get_latest_diagnostic(
     persisted_snapshot = _as_dict(
         bundle.get("diagnostic_snapshot") or persisted.get("diagnostic_snapshot")
     )
+    selected_report = _as_dict(bundle.get("report"))
+    v2_view_source = persisted_snapshot or selected_report
+    v2_view = {
+        "engine": (
+            v2_view_source.get("engine")
+            or selected_report.get("engine")
+        ),
+        "eligibility": v2_view_source.get("eligibility") or {},
+        "defensibility": v2_view_source.get("defensibility") or {},
+        "risk_level": v2_view_source.get("risk_level"),
+        "potential_level": v2_view_source.get("potential_level"),
+        "scoring": v2_view_source.get("scoring") or {},
+        "lock_families": v2_view_source.get("lock_families") or {},
+        "entities": v2_view_source.get("entities") or [],
+        "extractions": v2_view_source.get("extractions") or [],
+        "project_synthesis": v2_view_source.get("project_synthesis") or {},
+        "rnd_approach": v2_view_source.get("rnd_approach") or {},
+        "project_frascati": v2_view_source.get("project_frascati") or {},
+    }
+    display["diagnostic_v2"] = v2_view
+    is_persisted_v2 = v2_view.get("engine") == "ennodiagnostic_v2"
     display["database_persistence"] = {
-        "ok": bool(latest_run and persisted_snapshot and db_verrous_dump),
+        "ok": bool(
+            latest_run
+            and persisted_snapshot
+            and (db_verrous_dump or is_persisted_v2)
+        ),
         "version": persisted.get("persistence_version"),
         "run_id": latest_run.id if latest_run else None,
         "sections_count": persisted_snapshot.get("sections_count", 0),
@@ -1723,6 +1751,7 @@ def get_latest_diagnostic(
             "latest_run": latest_run_dump,
             "bundle": {} if compact else bundle,
             "display": display,
+            "diagnostic_v2": v2_view,
             "validation_verrous": response_verrous,
             "source_policy": {
                 "diagnostic_display_source": "backend_display_service_v143",
@@ -1830,42 +1859,39 @@ def _save_upload_file(upload: UploadFile, target_dir: Path, prefix: str) -> Path
     return target
 
 
-def _resolve_project_raw_file(raw_dir, value: str):
-    """
-    Accepte soit un chemin complet issu de l'index, soit un nom de fichier.
-    Empêche de comparer un fichier hors du dossier raw du projet.
-    """
-    from pathlib import Path
-
+def _resolve_project_fulltext_file(fulltext_dir, value: str):
+    """Résout un artefact JSON strictement dans le corpus fulltext du projet."""
     if not value:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Chemin de fichier manquant.",
+            detail="Document fulltext manquant.",
         )
 
-    raw_root = Path(raw_dir).resolve()
-    p = Path(value)
-
-    if not p.is_absolute():
-        p = raw_root / value
-
-    p = p.resolve()
+    root = Path(fulltext_dir).resolve()
+    path = Path(value)
+    if not path.is_absolute():
+        path = root / value
+    path = path.resolve()
 
     try:
-        p.relative_to(raw_root)
+        path.relative_to(root)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Fichier hors du dossier raw du projet.",
+            detail="Document hors du corpus fulltext du projet.",
         )
 
-    if not p.exists() or not p.is_file():
+    if (
+        not path.is_file()
+        or path.suffix.lower() != ".json"
+        or path.name.lower() in {"manifest.json", "nlp_result.json"}
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Fichier introuvable : {p.name}",
+            detail=f"Document fulltext introuvable : {path.name}",
         )
 
-    return p
+    return path
 
 
 @router.get("/projects/{project_id}/diagnostic/document-compare/auto-pairs")
@@ -1878,7 +1904,7 @@ def get_document_compare_pairs(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Retourne l'index des paires de documents bruts comparables.
+    Retourne l'index des paires comparables depuis le corpus fulltext V2.
     Si l'index n'existe pas ou force=true, il le recrée.
     """
     project = get_project_for_user(db, project_id, current_user)
@@ -1886,22 +1912,23 @@ def get_document_compare_pairs(
     try:
         from services.diagnostic_service import get_project_store
         doc_compare = _load_document_compare_module()
-        auto_compare_project_pairs = doc_compare.auto_compare_project_pairs
+        auto_compare_fulltext_pairs = doc_compare.auto_compare_fulltext_pairs
 
         ps = get_project_store(project)
-        raw_dir = ps.documents_raw_dir
+        fulltext_dir = ps.documents_processed_dir / "fulltext_rag_v1"
         output_dir = ps.project_dir / "document_compare"
         index_path = output_dir / "auto_compare_index.json"
 
         if index_path.exists() and not force:
             try:
                 data = json.loads(index_path.read_text(encoding="utf-8"))
-                return sanitize_json_value(data)
+                if data.get("input_policy") == "fulltext_corpus_v2":
+                    return sanitize_json_value(data)
             except Exception:
                 pass
 
-        report = auto_compare_project_pairs(
-            project_uploaded_dir=str(raw_dir),
+        report = auto_compare_fulltext_pairs(
+            fulltext_corpus_dir=str(fulltext_dir),
             output_dir=str(output_dir),
             min_similarity=min_similarity,
             include_medium=include_medium,
@@ -1924,7 +1951,7 @@ def run_document_compare_pairs(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Force la détection des paires de documents bruts comparables.
+    Force la détection des paires depuis le corpus fulltext V2.
     """
     project = get_project_for_user(db, project_id, current_user)
     payload = payload or {}
@@ -1932,14 +1959,14 @@ def run_document_compare_pairs(
     try:
         from services.diagnostic_service import get_project_store
         doc_compare = _load_document_compare_module()
-        auto_compare_project_pairs = doc_compare.auto_compare_project_pairs
+        auto_compare_fulltext_pairs = doc_compare.auto_compare_fulltext_pairs
 
         ps = get_project_store(project)
-        raw_dir = ps.documents_raw_dir
+        fulltext_dir = ps.documents_processed_dir / "fulltext_rag_v1"
         output_dir = ps.project_dir / "document_compare"
 
-        report = auto_compare_project_pairs(
-            project_uploaded_dir=str(raw_dir),
+        report = auto_compare_fulltext_pairs(
+            fulltext_corpus_dir=str(fulltext_dir),
             output_dir=str(output_dir),
             min_similarity=float(payload.get("min_similarity", 0.70)),
             include_medium=bool(payload.get("include_medium", True)),
@@ -2020,7 +2047,7 @@ def compare_document_pair(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Compare deux documents bruts A/B.
+    Compare deux documents A/B déjà extraits dans le corpus fulltext V2.
     Le body accepte :
     - file_a + file_b
     ou
@@ -2032,10 +2059,10 @@ def compare_document_pair(
         from services.diagnostic_service import get_project_store
         doc_compare = _load_document_compare_module()
         compare_pair_to_report = doc_compare.compare_pair_to_report
-        auto_compare_project_pairs = doc_compare.auto_compare_project_pairs
+        auto_compare_fulltext_pairs = doc_compare.auto_compare_fulltext_pairs
 
         ps = get_project_store(project)
-        raw_dir = ps.documents_raw_dir
+        fulltext_dir = ps.documents_processed_dir / "fulltext_rag_v1"
         output_dir = ps.project_dir / "document_compare"
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -2047,8 +2074,10 @@ def compare_document_pair(
             if index_path.exists():
                 index = json.loads(index_path.read_text(encoding="utf-8"))
             else:
-                index = auto_compare_project_pairs(
-                    project_uploaded_dir=str(raw_dir),
+                index = {}
+            if index.get("input_policy") != "fulltext_corpus_v2":
+                index = auto_compare_fulltext_pairs(
+                    fulltext_corpus_dir=str(fulltext_dir),
                     output_dir=str(output_dir),
                     min_similarity=0.70,
                     include_medium=True,
@@ -2067,8 +2096,8 @@ def compare_document_pair(
             file_a = pair.get("file_a")
             file_b = pair.get("file_b")
 
-        path_a = _resolve_project_raw_file(raw_dir, str(file_a or ""))
-        path_b = _resolve_project_raw_file(raw_dir, str(file_b or ""))
+        path_a = _resolve_project_fulltext_file(fulltext_dir, str(file_a or ""))
+        path_b = _resolve_project_fulltext_file(fulltext_dir, str(file_b or ""))
 
         report = compare_pair_to_report(
             file_a=str(path_a),
@@ -2088,6 +2117,40 @@ def compare_document_pair(
         )
 
 
+
+def _current_v2_verrous_for_cir_memory(db: Session, project_id: int) -> list[dict[str, Any]]:
+    """Vue sérialisée des verrous PostgreSQL du diagnostic courant.
+
+    Les ``source_json`` V2 conservent l'entité native et ses preuves ; CIR_MEMORY
+    peut donc comparer les verrous sans relire l'ancien nlp_result.json.
+    """
+    rows = get_latest_diagnostic_verrous(db, project_id)
+    out: list[dict[str, Any]] = []
+    for row in rows or []:
+        source_json = row.source_json if isinstance(row.source_json, dict) else {}
+        out.append(
+            sanitize_json_value(
+                {
+                    "id": row.id,
+                    "verrou_id": row.id,
+                    "title": row.title,
+                    "tag_cir": row.tag_cir,
+                    "score": row.score,
+                    "consultant_status": row.consultant_status,
+                    "justification": row.justification,
+                    "source_json": source_json,
+                    "qualification_status": source_json.get("qualification_status"),
+                }
+            )
+        )
+    return out
+
+
+def _current_v2_project_facts_for_cir_memory(db: Session, project_id: int) -> list[dict[str, Any]]:
+    report, _ = _extract_latest_run_report(_latest_run_for_project(db, project_id))
+    return diagnostic_service_module._extract_v2_project_facts_for_cir_memory(report)
+
+
 @router.post("/projects/{project_id}/diagnostic/cir-memory/compare")
 def compare_with_previous_cir(
     project_id: int,
@@ -2096,34 +2159,24 @@ def compare_with_previous_cir(
 ):
     """
     Lance uniquement la comparaison avec le CIR précédent :
-    dossier courant NLP/Frascati vs CIR final mémoire N-1.
+    verrous EnnoDiagnostic V2 courants vs CIR final mémoire N-1.
     """
     project = get_project_for_user(db, project_id, current_user)
 
     try:
-        from services.diagnostic_service import materialized_diagnostic_inputs
         from modules.CIR_MEMORY.cir_memory import compare_current_raw_with_cir_memory
 
-        with materialized_diagnostic_inputs(
-            db,
-            project,
-            include_rag_chunks=False,
-        ) as inputs:
-            report = compare_current_raw_with_cir_memory(
-                organisme=project.organisme,
-                project=project.project_name,
-                year=str(project.year),
-                nlp_result_path=inputs["nlp_result"],
-                subproject=str(getattr(project, "subproject_name", "") or "").strip(),
-            )
+        current_verrous = _current_v2_verrous_for_cir_memory(db, project.id)
+        report = compare_current_raw_with_cir_memory(
+            organisme=project.organisme,
+            project=project.project_name,
+            year=str(project.year),
+            current_verrous=current_verrous,
+            current_project_facts=_current_v2_project_facts_for_cir_memory(db, project.id),
+            subproject=str(getattr(project, "subproject_name", "") or "").strip(),
+        )
 
         return sanitize_json_value(report)
-
-    except FileNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Sources NLP introuvables. Lancez d'abord Préparer les sources.",
-        ) from exc
     except HTTPException:
         raise
     except Exception as exc:
@@ -2146,34 +2199,24 @@ def compare_current_with_previous_cir_independent(
 
     Cette route ne lance pas EnnoDiagnostic, ne relance pas le LLM diagnostic,
     ne relance pas le score IA et ne refait pas le NLP.
-    Elle compare le nlp_result.json courant déjà préparé avec la mémoire CIR N-1.
+    Elle compare les faits projet V2 et les verrous qualifiés avec la mémoire CIR N-1.
     """
     project = get_project_for_user(db, project_id, current_user)
 
     try:
-        from services.diagnostic_service import materialized_diagnostic_inputs
         from modules.CIR_MEMORY.cir_memory import compare_current_raw_with_cir_memory
 
-        with materialized_diagnostic_inputs(
-            db,
-            project,
-            include_rag_chunks=False,
-        ) as inputs:
-            report = compare_current_raw_with_cir_memory(
-                organisme=project.organisme,
-                project=project.project_name,
-                year=str(project.year),
-                nlp_result_path=inputs["nlp_result"],
-                subproject=str(getattr(project, "subproject_name", "") or "").strip(),
-            )
+        current_verrous = _current_v2_verrous_for_cir_memory(db, project.id)
+        report = compare_current_raw_with_cir_memory(
+            organisme=project.organisme,
+            project=project.project_name,
+            year=str(project.year),
+            current_verrous=current_verrous,
+            current_project_facts=_current_v2_project_facts_for_cir_memory(db, project.id),
+            subproject=str(getattr(project, "subproject_name", "") or "").strip(),
+        )
 
         return sanitize_json_value(report)
-
-    except FileNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Sources NLP introuvables. Lancez d'abord Préparer les sources.",
-        ) from exc
     except HTTPException:
         raise
     except Exception as exc:
@@ -2235,18 +2278,91 @@ def get_latest_previous_cir_comparison(
             detail=f"Lecture comparaison CIR précédent impossible : {exc}",
         )
 
+@router.get("/projects/{project_id}/diagnostic/preparation-status")
+def get_diagnostic_preparation_status(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = get_project_for_user(db, project_id, current_user)
+
+    ps = diagnostic_service_module.get_project_store(project)
+    from services.ennodiagnostic_v2_service import load_v2_fulltext_manifest
+
+    fulltext_manifest = load_v2_fulltext_manifest(ps)
+    fulltext_ready = bool(
+        int(fulltext_manifest.get("documents_count") or 0) > 0
+    )
+
+    # Indicateurs legacy conservés temporairement pour diagnostic technique.
+    # Ils ne conditionnent plus l'exécution d'EnnoDiagnostic V2.
+    rag_chunks = ps.rag_dir / "chunks.json"
+    nlp_result = ps.nlp_dir / "nlp_result.json"
+
+    nlp_ready = (
+        diagnostic_service_module.json_artifact_exists(
+            db,
+            project.id,
+            diagnostic_service_module.NLP_ARTIFACT_KEY,
+        )
+        or nlp_result.exists()
+    )
+
+    chunks_ready = (
+        diagnostic_service_module.json_artifact_exists(
+            db,
+            project.id,
+            diagnostic_service_module.RAG_CHUNKS_ARTIFACT_KEY,
+        )
+        or rag_chunks.exists()
+    )
+
+    prepare_report = diagnostic_service_module._load_prepare_report(db, project)
+
+    prepared_manifest = (
+        prepare_report.get("corpus_manifest")
+        if isinstance(prepare_report.get("corpus_manifest"), dict)
+        else {}
+    )
+
+    current_manifest = diagnostic_service_module.diagnostic_corpus_manifest(
+        db,
+        project.id,
+    )
+
+    fingerprint_matches = bool(
+        prepared_manifest.get("fingerprint")
+        and prepared_manifest.get("fingerprint")
+        == current_manifest.get("fingerprint")
+    )
+
+    sources_prepared = bool(
+        fulltext_ready
+        and fingerprint_matches
+    )
+
+    return {
+        "engine": "ennodiagnostic_v2",
+        "sources_prepared": sources_prepared,
+        "fulltext_ready": fulltext_ready,
+        "fulltext_manifest": fulltext_manifest,
+        "nlp_ready": bool(nlp_ready),
+        "chunks_ready": bool(chunks_ready),
+        "legacy_nlp_required": False,
+        "legacy_rag_required": False,
+        "corpus_up_to_date": fingerprint_matches,
+        "current_fingerprint": current_manifest.get("fingerprint"),
+        "prepared_fingerprint": prepared_manifest.get("fingerprint"),
+    }
+
+
 @router.post("/projects/{project_id}/diagnostic/prepare-sources")
 def prepare_diagnostic_sources(
     project_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Étape 1 :
-    upload/raw documents -> extraction -> NLP -> Frascati -> RAG/Chroma.
-
-    Ne lance pas le LLM.
-    """
+    """Étape 1 V2 : documents bruts -> extraction fulltext, sans LLM."""
     project = get_project_for_user(db, project_id, current_user)
     try:
         return prepare_ennodiagnostic_sources(db, project)
@@ -2445,6 +2561,100 @@ def update_verrou_decision(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Statut invalide. Valeurs autorisées : {sorted(allowed)}",
         )
+
+    verrou.consultant_status = payload.consultant_status
+    db.commit()
+    db.refresh(verrou)
+    return verrou
+
+
+@router.patch(
+    "/projects/{project_id}/diagnostic/verrous/entity/{entity_id}/decision",
+    response_model=VerrouRead,
+)
+def update_v2_entity_decision(
+    project_id: int,
+    entity_id: str,
+    payload: VerrouDecisionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Enregistre l'avis humain sur un candidat V2 sans resynchroniser le run."""
+    project = get_project_for_user(db, project_id, current_user)
+    if payload.consultant_status not in {"garde", "rejete", "en_attente"}:
+        raise HTTPException(status_code=400, detail="Décision invalide pour ce candidat.")
+
+    run = _latest_run_for_project(db, project.id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Aucun diagnostic disponible.")
+    report, _content = _extract_latest_run_report(run)
+    v2 = diagnostic_service_module._v2_diagnostic_payload(report)
+    if not v2:
+        raw = _as_dict(run.raw_result_json)
+        v2 = diagnostic_service_module._v2_diagnostic_payload(
+            _as_dict(raw.get("diagnostic_snapshot"))
+        )
+    if not v2:
+        raise HTTPException(status_code=404, detail="Diagnostic V2 introuvable.")
+    core = _as_dict(v2.get("core"))
+    entities = core.get("entities") or v2.get("entities") or []
+    entity = next(
+        (
+            item for item in entities
+            if isinstance(item, dict)
+            and item.get("kind") == "lock"
+            and str(item.get("entity_id") or "") == entity_id
+        ),
+        None,
+    )
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Candidat verrou introuvable.")
+    metadata = _as_dict(entity.get("metadata"))
+    roles = metadata.get("source_roles") or []
+    if metadata.get("has_project_evidence") is not True and "project_evidence" not in roles:
+        raise HTTPException(status_code=400, detail="Ce candidat n'est pas étayé par le projet.")
+
+    verrou = next(
+        (
+            row for row in db.query(Verrou)
+            .filter(Verrou.diagnostic_run_id == run.id)
+            .all()
+            if isinstance(row.source_json, dict)
+            and str(row.source_json.get("entity_id") or "") == entity_id
+        ),
+        None,
+    )
+    if verrou is None:
+        original = str(entity.get("statement") or "").strip()
+        suggested = str(metadata.get("suggested_statement") or "").strip()
+        qualification = str(metadata.get("qualification_status") or "NOT_EVALUATED")
+        title = suggested if qualification == "NEEDS_REFORMULATION" and suggested else original
+        if not title:
+            raise HTTPException(status_code=400, detail="Candidat sans formulation exploitable.")
+        verrou = Verrou(
+            diagnostic_run_id=run.id,
+            title=title[:500],
+            tag_cir=(
+                "PERTINENT" if qualification == "VALID_LOCK"
+                else "A_REFORMULER" if qualification == "NEEDS_REFORMULATION"
+                else "A_EXAMINER"
+            ),
+            score=None,
+            justification=str(metadata.get("qualification_reason") or original),
+            source_json=sanitize_json_value({
+                "engine": "ennodiagnostic_v2",
+                "v2_entity": entity,
+                "entity_id": entity_id,
+                "qualification_status": qualification,
+                "source_documents": list(dict.fromkeys(
+                    str(evidence.get("document_name") or evidence.get("document_id") or "")
+                    for evidence in (entity.get("evidences") or [])
+                    if isinstance(evidence, dict)
+                )),
+                "created_by_consultant_decision": True,
+            }),
+        )
+        db.add(verrou)
 
     verrou.consultant_status = payload.consultant_status
     db.commit()
@@ -2733,20 +2943,29 @@ def upload_previous_cir_final(
 
     comparison = None
     try:
-        current_nlp = diagnostic_paths(project)["nlp_result"]
-        if current_nlp.exists():
+        current_verrous = _current_v2_verrous_for_cir_memory(db, project.id)
+        current_project_facts = _current_v2_project_facts_for_cir_memory(db, project.id)
+        if current_verrous or current_project_facts:
             comparison = compare_current_raw_with_cir_memory(
                 organisme=project.organisme,
                 project=project.project_name,
                 year=str(project.year),
-                nlp_result_path=current_nlp,
+                current_verrous=current_verrous,
+                current_project_facts=current_project_facts,
                 subproject=subproject,
             )
+        else:
+            comparison = {
+                "ok": True,
+                "has_previous_cir": True,
+                "comparison_deferred": True,
+                "message": "CIR précédent enregistré. Lancez EnnoDiagnostic V2 pour comparer les verrous courants.",
+            }
     except Exception as exc:
         comparison = {
             "ok": False,
             "error": str(exc),
-            "note": "Le CIR précédent est enregistré. Relance Préparer les sources puis EnnoDiagnostic pour recalculer la comparaison.",
+            "note": "Le CIR précédent est enregistré. Relancez EnnoDiagnostic V2 pour recalculer la comparaison.",
         }
 
     return sanitize_json_value({
@@ -2771,43 +2990,14 @@ def list_previous_cir_finals(
     ensure_ennosmart_imports()
 
     try:
-        from modules.CIR_MEMORY.cir_memory import STORAGE_DIR, slug, cir_final_report_path
+        from modules.CIR_MEMORY.cir_memory import list_available_previous_cirs
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Module CIR_MEMORY indisponible : {exc}")
 
     subproject = str(getattr(project, "subproject_name", "") or "").strip()
-    project_scope = STORAGE_DIR / slug(project.organisme) / "projects" / slug(project.project_name)
-    if subproject:
-        project_scope = project_scope / "subprojects" / slug(subproject)
-    years_root = project_scope / "years"
-    if not years_root.exists():
-        return {"ok": True, "items": []}
-
-    items = []
-    for year_dir in sorted([p for p in years_root.iterdir() if p.is_dir()], reverse=True):
-        year = year_dir.name
-        if str(year) == str(project.year):
-            continue
-        report_path = cir_final_report_path(
-            project.organisme,
-            project.project_name,
-            year,
-            subproject=subproject,
-        )
-        if not report_path.exists():
-            continue
-        try:
-            report = json.loads(report_path.read_text(encoding="utf-8"))
-        except Exception:
-            report = {}
-        items.append({
-            "year": year,
-            "ok": bool(report.get("ok")),
-            "items_count": report.get("items_count"),
-            "roles": report.get("roles") or {},
-            "file": report.get("cir_final_file"),
-            "report_path": str(report_path),
-            "generated_at": report.get("generated_at"),
-        })
+    items = list_available_previous_cirs(
+        project.organisme, project.project_name, str(project.year),
+        subproject=subproject,
+    )
 
     return sanitize_json_value({"ok": True, "items": items})

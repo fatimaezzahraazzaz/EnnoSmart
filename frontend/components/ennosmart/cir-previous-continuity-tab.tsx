@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   ArrowRight,
   FileSearch,
@@ -31,6 +31,11 @@ type CirPreviousContinuityTabProps = {
   organisme?: string
   projectName?: string
   currentYear?: string | number
+}
+
+const categoryLabels: Record<string, string> = {
+  objective: "Objectifs", lock: "Verrous", method: "Méthodes", demarche: "Démarches",
+  parameter: "Paramètres", metric: "Métriques", result: "Résultats",
 }
 
 function asArray<T = any>(value: any): T[] {
@@ -97,6 +102,7 @@ function unwrapReport(value: any): any {
   for (const candidate of queue) {
     if (!candidate || typeof candidate !== "object") continue
     if (
+      candidate?.comparison_status ||
       candidate?.has_previous_cir === true ||
       candidate?.previous_cir_available === true ||
       candidate?.inputs_status?.previous_cir_available === true ||
@@ -113,8 +119,8 @@ function unwrapReport(value: any): any {
 
 function comparisonList(report: any): any[] {
   const candidates = [
-    report?.verrou_comparisons,
     report?.comparisons,
+    report?.verrou_comparisons,
     report?.continuity_strong,
     report?.evolution_or_partial_continuity,
     report?.new_or_not_found,
@@ -333,7 +339,7 @@ function currentTitle(item: any): string {
       current?.verrou_title ||
       current?.original_verrou?.title ||
       current?.original_verrou?.verrou_title ||
-      "Verrou courant",
+      "Élément courant",
   )
 }
 
@@ -445,7 +451,7 @@ function consultantReading(item: any, year: string): string {
     return `Le passage du CIR ${year} constitue un antécédent utile, mais le dossier courant semble apporter une évolution sur « ${current} ». Les nouveaux essais, paramètres et résultats doivent être explicités.`
   }
 
-  return `Le verrou « ${current} » n’a pas été retrouvé avec une correspondance forte dans le CIR ${year}. Le consultant doit néanmoins vérifier qu’il ne s’agit pas d’un changement de formulation.`
+  return `L’élément « ${current} » n’a pas été retrouvé avec une correspondance forte dans le CIR ${year}. Le consultant doit néanmoins vérifier qu’il ne s’agit pas d’un changement de formulation.`
 }
 
 function EvidencePanel({
@@ -514,6 +520,11 @@ export default function CirPreviousContinuityTab({
   const documents = useProjectSourceDocuments(projectId)
   const report = useMemo(() => unwrapReport(diagnostic), [diagnostic])
   const comparisons = useMemo(() => comparisonList(report), [report])
+  const [selectedCategory, setSelectedCategory] = useState("all")
+  useEffect(() => { setSelectedCategory("all") }, [projectId])
+  const visibleComparisons = comparisons.filter((item) =>
+    selectedCategory === "all" || (currentItem(item)?.kind || "lock") === selectedCategory
+  )
 
   const averageContinuity = useMemo(() => {
     const values = comparisons
@@ -535,7 +546,7 @@ export default function CirPreviousContinuityTab({
     comparisons.length > 0
   )
 
-  if (!hasPreviousCir) {
+  if (!hasPreviousCir && report?.comparison_status !== "error") {
     return (
       <Card>
         <CardHeader>
@@ -552,16 +563,26 @@ export default function CirPreviousContinuityTab({
   }
 
   if (comparisons.length === 0) {
+    const comparisonFailed = report?.comparison_status === "error"
+    const noCurrentFacts = report?.comparison_status === "no_current_facts"
+    const noCurrentLocks =
+      report?.comparison_status === "no_current_locks" ||
+      (report?.summary?.current_items_count === 0 && Boolean(report?.generated_at))
     return (
       <Card className="border-amber-200 bg-amber-50/60">
         <CardHeader>
           <CardTitle className="text-sm flex items-center gap-2">
             <History className="size-4 text-amber-700" />
-            CIR {year} détecté
+            {comparisonFailed ? "Comparaison CIR indisponible" : noCurrentLocks || noCurrentFacts ? "Comparaison CIR terminée" : `CIR ${year} disponible`}
           </CardTitle>
           <CardDescription className="leading-5">
-            Le CIR précédent est disponible, mais le détail de ses rapprochements
-            n’est pas encore chargé. Actualise la page ou relance uniquement la comparaison CIR.
+            {comparisonFailed
+              ? "La comparaison n’a pas pu se terminer. Le diagnostic reste disponible ; vous pouvez relancer uniquement la comparaison CIR."
+              : noCurrentFacts
+                ? `Le CIR ${year} est disponible, mais aucun fait projet avec preuve vérifiée n’est disponible dans le diagnostic courant pour cette comparaison.`
+                : noCurrentLocks
+                ? `Le CIR ${year} est disponible, mais le diagnostic courant ne contient aucun verrou qualifié à comparer. Consultez les candidats dans Diagnostic CIR.`
+                : "La comparaison sera calculée automatiquement à la fin du prochain EnnoDiagnostic. Si vous venez d’ajouter un CIR précédent, vous pouvez lancer uniquement la comparaison avec le bouton ci-dessus."}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -577,7 +598,7 @@ export default function CirPreviousContinuityTab({
             Comparaison CIR N-1 avec extraits ciblés et surlignage
           </CardTitle>
           <CardDescription className="text-xs leading-5">
-            Chaque extrait courant et historique est relié à son document source.
+            Objectifs, verrous, méthodes, démarches, paramètres, métriques et résultats sont rapprochés du CIR précédent avec leurs preuves.
             L’ouverture du document surligne automatiquement le passage comparé.
           </CardDescription>
         </CardHeader>
@@ -606,8 +627,18 @@ export default function CirPreviousContinuityTab({
         </CardContent>
       </Card>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <label htmlFor={`cir-category-${projectId}`} className="text-sm font-medium">Rubrique à comparer</label>
+        <select id={`cir-category-${projectId}`} className="min-h-11 rounded-lg border bg-background px-3 text-sm" value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}>
+          <option value="all">Toutes les rubriques ({comparisons.length})</option>
+          {Object.entries(categoryLabels).map(([kind, label]) => (
+            <option key={kind} value={kind}>{label} ({comparisons.filter((item) => (currentItem(item)?.kind || "lock") === kind).length})</option>
+          ))}
+        </select>
+      </div>
       <div className="space-y-4">
-        {comparisons.map((item, index) => {
+        {visibleComparisons.length === 0 && <p className="text-sm text-muted-foreground">Aucun élément à comparer dans cette rubrique.</p>}
+        {visibleComparisons.map((item, index) => {
           const current = currentItem(item)
           const previous = previousCandidate(item)
           const currentEvidence = collectEvidence(current, current?.display_excerpt || current?.text)
@@ -638,6 +669,9 @@ export default function CirPreviousContinuityTab({
                 </div>
 
                 <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline">
+                    {categoryLabels[current?.kind || "lock"] || "Élément projet"}
+                  </Badge>
                   <Badge variant="secondary">
                     similarité {similarity === null ? "—" : formatPercent(similarity)}
                   </Badge>

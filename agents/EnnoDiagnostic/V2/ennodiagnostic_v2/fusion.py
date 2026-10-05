@@ -29,7 +29,16 @@ def token_jaccard(a: str, b: str) -> float:
 def is_similar(a: ExtractionItem, b: ExtractionItem, cfg: FusionConfig) -> bool:
     if a.kind != b.kind:
         return False
-    threshold = cfg.lock_token_jaccard if a.kind == "lock" else cfg.default_token_jaccard
+    # Les verrous conservent leur logique historique. Pour les autres faits,
+    # une proximité lexicale ne prouve pas une identité expérimentale :
+    # modèle, variable, métrique, étape et valeur doivent rester distincts.
+    if a.kind != "lock":
+        if (a.metadata or {}).get("source_role") != (b.metadata or {}).get("source_role"):
+            return False
+        if a.kind == "demarche" and a.temporal_status != b.temporal_status:
+            return False
+        return _norm(a.statement) == _norm(b.statement)
+    threshold = cfg.lock_token_jaccard
     jac = token_jaccard(a.statement, b.statement)
     seq = SequenceMatcher(None, _norm(a.statement), _norm(b.statement)).ratio()
     return jac >= threshold or seq >= cfg.sequence_ratio
@@ -50,7 +59,11 @@ def fuse_items(items: Iterable[ExtractionItem], cfg: FusionConfig):
     clusters = []
     for item in items:
         target = next(
-            (cluster for cluster in clusters if any(is_similar(item, x, cfg) for x in cluster)),
+            (cluster for cluster in clusters if (
+                any(is_similar(item, x, cfg) for x in cluster)
+                if item.kind == "lock"
+                else all(is_similar(item, x, cfg) for x in cluster)
+            )),
             None,
         )
         if target is None:

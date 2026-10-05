@@ -6,9 +6,9 @@ Chat RAG flottant d'EnnoDiagnostic.
 
 Règles :
 - isolation stricte par organisme / projet / année ;
-- la collection Chroma EnnoDiagnostic existante reste la source sémantique principale ;
-- les passages bruts des documents clients sont indexés dans une collection compagnon
-  propre au même projet ;
+- pour les projets V2, le corpus ``fulltext_rag_v1`` et sa collection Chroma dédiée
+  sont la source documentaire unique du chat ;
+- la collection NLP historique reste disponible uniquement comme fallback legacy ;
 - les sorties EnnoDiagnostic sont utilisées comme analyse secondaire, jamais comme
   preuve brute du client ;
 - aucune information d'un autre projet ou d'une autre année n'est chargée.
@@ -22,13 +22,14 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from modules.LLM.llm_client import LLMClient
+from modules.RAG.config import FULLTEXT_CHAT_COLLECTION_SUFFIX
+from modules.RAG.indexer import fulltext_corpus_fingerprint, fulltext_corpus_to_chunks, index_fulltext_corpus
 from modules.RAG.project_store import ProjectStore
 from modules.RAG.retriever import EnnoRetriever, detect_role_filter
 from modules.RAG.vector_store import RAGVectorStore, encode_texts
 
 
 CHAT_SERVICE_VERSION = "diagnostic_rag_chat_v7_7_0_passage_provenance"
-RAW_COLLECTION_SUFFIX = "_client_raw_chat_v7"
 
 DOCUMENT_LIST_KEYS = (
     "documents",
@@ -413,6 +414,15 @@ def _iter_diagnostic_sections(payload: Mapping[str, Any]) -> Iterable[Tuple[str,
         return None
 
     for candidate in candidates:
+        # La synthèse V2 est une analyse secondaire, jamais une preuve du corpus.
+        v2 = candidate.get("diagnostic_v2")
+        if isinstance(v2, Mapping):
+            for key in ("project_synthesis", "rnd_approach", "project_frascati", "scoring"):
+                value = v2.get(key)
+                if value:
+                    item = emit(f"EnnoDiagnostic V2 — {key}", json.dumps(value, ensure_ascii=False))
+                    if item:
+                        yield item
         for key in (
             "canonical_sections",
             "sections_by_key",
@@ -855,7 +865,7 @@ def _evidence_nature(source: Mapping[str, Any]) -> str:
         return "hypothese_ou_piste"
     if role == "objectif" or any(marker in text[:500] for marker in ("objectif", "le but", "vise a")):
         return "objectif"
-    if role == "resultat" or re.search(r"\b\d+(?:[,.]\d+)?\s*%", str(source.get("text") or "")):
+    if role == "resultat" or meta.get("verified_measurement_table") is True or re.search(r"\b\d+(?:[,.]\d+)?\s*%", str(source.get("text") or "")):
         return "resultat_mesure"
     if role in {"methode", "parametre"}:
         return "methode_ou_parametre"
@@ -881,7 +891,7 @@ class DiagnosticRAGChatService:
         ).ensure()
 
         self.base_collection_name = self.store.collection_name
-        self.raw_collection_name = self.base_collection_name + RAW_COLLECTION_SUFFIX
+        self.raw_collection_name = self.base_collection_name + FULLTEXT_CHAT_COLLECTION_SUFFIX
 
         self.retriever = EnnoRetriever(
             organisme=organisme,
@@ -908,20 +918,34 @@ class DiagnosticRAGChatService:
     def fulltext_corpus_dir(self) -> Path:
         return self.store.documents_processed_dir / "fulltext_rag_v1"
 
-    def _raw_fingerprint(self) -> str:
-        rows: List[str] = []
+    def _fulltext_available(self) -> bool:
+        return bool(
+            self.fulltext_corpus_dir.is_dir()
+            and any(
+                path.is_file() and path.name.lower() not in {"manifest.json", "nlp_result.json"}
+                for path in self.fulltext_corpus_dir.glob("*.json")
+            )
+        )
 
+    def _active_document_collections(self) -> List[str]:
+        # V2 : ne jamais mélanger une ancienne collection NLP avec le fulltext
+        # courant. Le fallback base+raw reste uniquement pour les anciens projets.
+        if self._fulltext_available():
+            return [self.raw_collection_name]
+        return [self.base_collection_name, self.raw_collection_name]
+
+    def _raw_fingerprint(self) -> str:
+        if self._fulltext_available():
+            return fulltext_corpus_fingerprint(self.fulltext_corpus_dir)
+
+        # Compatibilité legacy : seulement si aucun corpus fulltext V2 n'existe.
+        rows: List[str] = []
         nlp_path = self.store.nlp_dir / "nlp_result.json"
         if nlp_path.exists():
             stat = nlp_path.stat()
             rows.append(f"{nlp_path}:{stat.st_size}:{stat.st_mtime_ns}")
 
-        if self.fulltext_corpus_dir.exists():
-            for path in sorted(self.fulltext_corpus_dir.rglob("*.json")):
-                if path.is_file():
-                    stat = path.stat()
-                    rows.append(f"{path}:{stat.st_size}:{stat.st_mtime_ns}")
-        elif self.store.documents_processed_dir.exists():
+        if self.store.documents_processed_dir.exists():
             for path in sorted(self.store.documents_processed_dir.rglob("*")):
                 if path.is_file() and path.suffix.lower() in {".json", ".txt"}:
                     stat = path.stat()
@@ -1151,6 +1175,14 @@ class DiagnosticRAGChatService:
         return chunks
 
     def ensure_raw_index(self) -> Dict[str, Any]:
+        if self._fulltext_available():
+            # Réutilise le même index et le même manifeste que la préparation V2.
+            return index_fulltext_corpus(
+                organisme=self.store.organisme_name,
+                project=self.store.project_name,
+                subproject=self.store.subproject_name,
+                year=self.store.year,
+            )
         fingerprint = self._raw_fingerprint()
         previous: Dict[str, Any] = {}
 
@@ -1600,7 +1632,9 @@ class DiagnosticRAGChatService:
         text = _normalise(item.get("text"))[:1400]
         document_type = _normalise(meta.get("document_type"))
 
-        if document_type in SECONDARY_BROAD_DOCUMENT_TYPES:
+        # Un document brut peut mêler projet, littérature et contexte. Son type
+        # global ne suffit pas à exclure tous ses passages du chat documentaire.
+        if document_type in SECONDARY_BROAD_DOCUMENT_TYPES and _source_kind(item) != "client_raw":
             return True
 
         return any(
@@ -1612,7 +1646,7 @@ class DiagnosticRAGChatService:
     def available_documents(self) -> List[Dict[str, Any]]:
         documents: Dict[str, Dict[str, Any]] = {}
 
-        for collection_name in (self.base_collection_name, self.raw_collection_name):
+        for collection_name in self._active_document_collections():
             try:
                 collection = self.vector_store.collection(collection_name)
                 payload = collection.get(include=["metadatas"])
@@ -1656,8 +1690,50 @@ class DiagnosticRAGChatService:
             }
 
         normalized_question = _normalise(question)
+        documents = self.available_documents()
+
+        # A document title is a scope only when it is actually cited. Matching
+        # a few words in a title is unsafe for project-wide questions (notably
+        # generic filenames such as "Results <project>.xlsx").
+        document_cues = (
+            "fichier", "document", "presentation", "diapositive", "rapport",
+            "tableur", "classeur", "pdf", "docx", "xlsx", "pptx",
+        )
+        explicitly_asks_document = any(
+            re.search(rf"\b{re.escape(cue)}\b", normalized_question)
+            for cue in document_cues
+        )
+        project_cues = (
+            "projet", "dossier", "ensemble des travaux", "tous les documents",
+            "chaque document", "resume global", "synthese globale",
+        )
+        project_asked = any(cue in normalized_question for cue in project_cues)
+        collective_asked = any(cue in normalized_question for cue in (
+            "tous les documents", "chaque document", "ensemble des documents",
+        ))
+        if collective_asked:
+            return None
+        named = [
+            document for document in documents
+            if (key := _document_key(document.get("document_name")))
+            and len(key.split()) >= 2
+            and re.search(rf"(?<!\w){re.escape(key)}(?!\w)", normalized_question)
+        ]
+        if len(named) == 1 and (explicitly_asks_document or not project_asked):
+            return {**named[0], "mode": "auto_named_document"}
+        if (project_asked and not explicitly_asks_document) or (
+            len(self._coverage_subquestions(question)) >= 3
+            and not explicitly_asks_document
+        ):
+            return None
+
+        # An anaphora ("ce document") needs an explicit UI selection. It must
+        # never guess a file from a couple of matching topical words.
+        if not explicitly_asks_document:
+            return None
+
         matches: List[Tuple[int, Dict[str, Any]]] = []
-        for document in self.available_documents():
+        for document in documents:
             key = _document_key(document.get("document_name"))
             if not key:
                 continue
@@ -1694,6 +1770,11 @@ class DiagnosticRAGChatService:
     ) -> bool:
         if not scope:
             return True
+        if "documents" in scope:
+            return any(
+                DiagnosticRAGChatService._matches_document_scope(item, document)
+                for document in scope["documents"]
+            )
 
         meta = _source_metadata(item)
         scope_id = _clean(scope.get("document_id"))
@@ -1911,7 +1992,7 @@ class DiagnosticRAGChatService:
                             found.append(item)
 
         # 2) Compatibilité : balayage des collections Chroma déjà existantes.
-        for collection_name in (self.raw_collection_name, self.base_collection_name):
+        for collection_name in self._active_document_collections():
             try:
                 collection = self.vector_store.collection(collection_name)
                 if int(collection.count()) <= 0:
@@ -2264,6 +2345,172 @@ class DiagnosticRAGChatService:
             _clean(meta.get("section_title")),
             _clean(source.get("text"))[:1200],
             size=28,
+        )
+
+    @classmethod
+    def _coverage_passage_matches(
+        cls,
+        source: Mapping[str, Any],
+        subquestion: str,
+        project_question: str = "",
+    ) -> bool:
+        """Check support for a requested kind, not just retrieval membership.
+
+        Reuse the existing role, evidence-nature and passage-provenance signals.
+        Raw fulltext chunks have no semantic role, so their actual passage text
+        and table structure provide the remaining evidence. A mixed passage may
+        legitimately support more than one kind.
+        """
+        intent = cls._question_intent(subquestion)
+        if intent == "limitation":
+            intent = "lock"
+        if intent not in {"objective", "lock", "method", "result"}:
+            return bool(_clean(source.get("text") or source.get("excerpt")))
+
+        text = _clean(source.get("text") or source.get("excerpt"))
+        if not text:
+            return False
+        # The model only receives this excerpt. A relevant sentence beyond the
+        # excerpt cannot make the visible evidence support a coverage unit.
+        text = cls._sentence_aware_excerpt(text, 2200)
+        meta = _source_metadata(source)
+        role = _normalise(meta.get("role") or meta.get("final_role") or source.get("role"))
+        nature = _clean(source.get("evidence_nature") or source.get("_evidence_nature"))
+        if not nature:
+            nature = _evidence_nature(source)
+        provenance = source.get("_passage_provenance")
+        origin = _clean(
+            source.get("passage_origin")
+            or (provenance.get("origin") if isinstance(provenance, Mapping) else "")
+        )
+        if not origin:
+            origin = _clean(_passage_provenance(source).get("origin"))
+
+        project_target = bool(re.search(
+            r"\b(projet|travaux du projet|travaux realises|dossier)\b",
+            _normalise(project_question),
+        )) and not any(term in _normalise(project_question) for term in (
+            "etat de l art", "litterature", "article externe", "travaux externes",
+        ))
+        if project_target and origin in {
+            "external_literature", "consultant_or_interviewer",
+            "administrative_or_cir_comment", "agent_analysis",
+        }:
+            return False
+
+        content = _normalise(f"{meta.get('section_title') or source.get('section_title') or ''} {text}")
+        if project_target and origin == "ambiguous_or_mixed":
+            administrative_discussion = any(marker in content for marker in (
+                "eligibilite", "cotation", "traces ecrites",
+                "structuration du dossier", "structuration d un document",
+            ))
+            concrete_technical_content = any(marker in content for marker in (
+                "tests unitaires", "code genere", "algorithme", "prompting",
+                "compilation", "couverture du code", "protocole experimental",
+            ))
+            if administrative_discussion and not concrete_technical_content:
+                return False
+            external_claim = any(marker in content for marker in (
+                "dans le papier", "cet article", "l article", "les auteurs",
+                "dans leur etude", "selon les auteurs", "ils ont choisi",
+                "ils ont effectue", "ils ont utilise", "les chercheurs",
+                "une autre approche a utilise", "cette etude a",
+                "l etude a inclus", "des etudes recentes", "une revue de",
+                "les premieres approches", "les premiers approches",
+                "les etudes plus recentes", "etudes utilisant",
+                "etudes analysees",
+                "il existe des outils", "ils existent des outils",
+                "benchmark des outils existants",
+                "this paper", "the authors", "rq1", "rq2", "rq3",
+            ))
+            project_claim = any(marker in content for marker in (
+                "le projet cherche", "le projet vise", "notre projet",
+                "dans ce projet", "nos essais", "nos resultats",
+                "dans nos experimentations", "nous avons teste",
+                "nous avons observe", "nous avons obtenu", "nous avons developpe",
+            ))
+            cited_literature = bool(
+                re.search(r"\[\d+\]", text)
+                or re.search(r"\b\d+\s+etudes\b", content)
+            )
+            if (external_claim or cited_literature) and not project_claim:
+                return False
+        if intent == "objective":
+            return (
+                role in {"objectif", "objective"}
+                or nature == "objectif"
+                or bool(re.search(
+                    r"\b(objectifs?|finalite|but|ambition)\b|"
+                    r"\b(vis(?:e|ent)|cherch(?:e|ent)|a pour but|a pour objectif)\b",
+                    content,
+                ))
+            )
+        if intent == "lock":
+            return (
+                role in {"verrou", "lock", "limite"}
+                or nature == "limite_ou_incertitude"
+                or bool(re.search(
+                    r"\b(verrous?|difficultes?|incertitudes?|limites?|"
+                    r"obstacles?|echecs?|insuffisances?|problemes?|"
+                    r"non maitrise|ne parvient pas|impossible)\b",
+                    content,
+                ))
+            )
+        if intent == "method":
+            return (
+                role in {"methode", "method", "demarche"}
+                or nature == "methode_ou_parametre"
+                or bool(re.search(
+                    r"\b(methodes?|approches?|protocoles?|algorithmes?|"
+                    r"strategies?|experimentations?|pipeline|"
+                    r"prompting|zero shot|few shot|self consistency|"
+                    r"essais?|tests? realises)\b",
+                    content,
+                ))
+            )
+
+        has_numeric_result = (
+            cls._coverage_has_measured_result(source)
+            or bool(re.search(r"\b\d+(?:[,.]\d+)?\s*%", text))
+            or bool(re.search(
+                r"(?:compilabilit[eé]|compilability|couverture|coverage|"
+                r"performance|pr[eé]cision|accuracy|score|taux)"
+                r".{0,70}\b\d+[,.]\d+\b",
+                text,
+                flags=re.I | re.S,
+            ))
+        )
+        return (
+            role in {"resultat", "result", "metric", "metrique"}
+            or nature == "resultat_mesure"
+            or bool(meta.get("verified_measurement_table"))
+            or bool(re.search(
+                r"\b(observe(?:e|es|s)?|obtenu(?:e|es|s)?|atteint)\b|"
+                r"\b(les resultats montrent|resultat mesure|resultat obtenu|"
+                r"gain mesure|amelioration constatee)\b",
+                content,
+            ))
+            or has_numeric_result
+        )
+
+    @staticmethod
+    def _coverage_has_measured_result(source: Mapping[str, Any]) -> bool:
+        text = _clean(source.get("text") or source.get("excerpt"))
+        meta = _source_metadata(source)
+        if meta.get("verified_measurement_table") is True:
+            return True
+        content = _normalise(f"{meta.get('section_title') or ''} {text}")
+        table_like = "|" in text and ("[TABLEAU" in text or text.count("|") >= 2)
+        return bool(
+            table_like
+            and
+            re.search(r"\b\d+(?:[,.]\d+)?\b", text)
+            and re.search(
+                r"\b(compilabilite|compilability|couverture|coverage|"
+                r"performance|precision|accuracy|score|taux|mesures?|"
+                r"metriques?|benchmark|smells?)\b",
+                content,
+            )
         )
 
 
@@ -3110,6 +3357,87 @@ class DiagnosticRAGChatService:
                 document_scope=document_scope,
             )
 
+            bucket = [
+                source for source in bucket
+                if self._coverage_passage_matches(source, subquestion, question)
+            ]
+            needs_wider_search = not bucket or (
+                self._question_intent(subquestion) == "result"
+                and not any(self._coverage_has_measured_result(source) for source in bucket)
+            )
+            if needs_wider_search:
+                # A top-ranked hit is not evidence for a need merely because
+                # its embedding matched the query. Search more of the project
+                # before declaring that need undocumented. Explicit UI document
+                # scopes remain strict.
+                wider_scope = document_scope
+                wider = [
+                    source for source in self._retrieve_with_local_neighbors(
+                        subquestion,
+                        (),
+                        top_k=18,
+                        document_scope=wider_scope,
+                    )
+                    if self._coverage_passage_matches(source, subquestion, question)
+                ]
+                bucket = list({
+                    self._coverage_source_key(source): source
+                    for source in [*bucket, *wider]
+                }.values())
+
+            if self._question_intent(subquestion) == "result" and self._fulltext_available():
+                # Generic multi-part result questions do not name a metric, so
+                # the metric-specific table anchor is not activated. Inspect
+                # existing fulltext table chunks, then apply the same reranker;
+                # this stays inside the current corpus and adds no LLM call.
+                table_candidates = [
+                    source for source in fulltext_corpus_to_chunks(self.store)
+                    if self._matches_document_scope(source, document_scope)
+                    and self._coverage_has_measured_result(source)
+                    and self._coverage_passage_matches(source, subquestion, question)
+                ]
+                if table_candidates:
+                    ranked_tables = self._rank_and_dedupe_sources(
+                        question=subquestion,
+                        candidates=table_candidates,
+                        document_scope=document_scope,
+                        top_k=8,
+                    )
+                    bucket = list({
+                        self._coverage_source_key(source): source
+                        for source in [*bucket, *ranked_tables]
+                    }.values())
+
+            def coverage_rank(source: Mapping[str, Any]) -> Tuple[float, float]:
+                provenance = source.get("_passage_provenance")
+                origin = _clean(
+                    provenance.get("origin") if isinstance(provenance, Mapping) else ""
+                ) or _clean(_passage_provenance(source).get("origin"))
+                project_bonus = 1.5 if origin == "project_current" else 0.0
+                measured_bonus = (
+                    2.0 if self._question_intent(subquestion) == "result"
+                    and self._coverage_has_measured_result(source) else 0.0
+                )
+                generic_question_tokens = {
+                    "peux", "resumer", "quels", "quelles", "sont", "dans", "pour",
+                    "avec", "projet", "dossier", "objectifs", "methodes",
+                    "resultats", "difficultes", "principales", "techniques",
+                    "testees", "obtenus", "principal", "document",
+                }
+                identity_tokens = {
+                    token for token in _normalise(question).split()
+                    if len(token) >= 2 and token not in generic_question_tokens
+                }
+                title_tokens = set(_document_key(_source_document(source)).split())
+                title_bonus = 0.8 if len(identity_tokens & title_tokens) >= 2 else 0.0
+                return (
+                    project_bonus + measured_bonus + title_bonus
+                    + float(source.get("_chat_score") or 0.0),
+                    float(source.get("_chat_score") or 0.0),
+                )
+
+            bucket.sort(key=coverage_rank, reverse=True)
+
             keys: List[str] = []
 
             for source in bucket:
@@ -3145,6 +3473,11 @@ class DiagnosticRAGChatService:
         )
         global_keys: List[str] = []
         for source in global_sources:
+            if not any(
+                self._coverage_passage_matches(source, unit, question)
+                for unit in subquestions
+            ):
+                continue
             key = self._coverage_source_key(source)
             global_keys.append(key)
             if key not in merged:
@@ -3178,10 +3511,10 @@ class DiagnosticRAGChatService:
                 if len(selected_sources) >= top_k:
                     break
                 available = [key for key in keys if key not in selected_keys]
-                if round_index >= len(available):
+                if not available:
                     continue
                 # Si le candidat visé est un doublon, on essaie les suivants.
-                for key in available[round_index:]:
+                for key in available:
                     if try_add(key):
                         break
             if len(selected_sources) >= top_k:
@@ -3213,6 +3546,7 @@ class DiagnosticRAGChatService:
         question: str,
         history: Sequence[Mapping[str, Any]],
         per_document_limit: int = 4,
+        document_scopes: Optional[Sequence[Mapping[str, Any]]] = None,
     ) -> Tuple[List[Dict[str, Any]], List[str], List[Dict[str, Any]]]:
         """Récupère une couverture équilibrée pour chaque document du projet.
 
@@ -3225,7 +3559,7 @@ class DiagnosticRAGChatService:
           une preuve exploitable ;
         - aucun nom de document ou connaissance métier n'est codé en dur.
         """
-        documents = self.available_documents()
+        documents = list(document_scopes) if document_scopes is not None else self.available_documents()
         subquestions = self._coverage_subquestions(question)
 
         if not documents:
@@ -3296,6 +3630,19 @@ class DiagnosticRAGChatService:
                 }
             )
 
+        if document_scopes is not None:
+            # Réserve d'abord une place à chaque document sélectionné avant
+            # d'ajouter ses passages complémentaires au catalogue limité.
+            buckets = [
+                [item for item in selected if item.get("_multi_document_order") == order]
+                for order in range(len(documents))
+            ]
+            selected = [
+                bucket[rank]
+                for rank in range(per_document_limit)
+                for bucket in buckets
+                if len(bucket) > rank
+            ]
         return selected, subquestions, report
 
     @staticmethod
@@ -3347,6 +3694,7 @@ class DiagnosticRAGChatService:
     def _coverage_plan(
         subquestions: Sequence[str],
         evidence: Sequence[Mapping[str, Any]],
+        project_question: str = "",
     ) -> List[Dict[str, Any]]:
         if len(subquestions) <= 1:
             return []
@@ -3356,8 +3704,10 @@ class DiagnosticRAGChatService:
             evidence_ids = [
                 _clean(item.get("evidence_id"))
                 for item in evidence
-                if index in (item.get("coverage_unit_indices") or [])
-                and _clean(item.get("evidence_id"))
+                if _clean(item.get("evidence_id"))
+                and DiagnosticRAGChatService._coverage_passage_matches(
+                    item, question, project_question,
+                )
             ]
             plan.append(
                 {
@@ -3368,6 +3718,147 @@ class DiagnosticRAGChatService:
                 }
             )
         return plan
+
+    @staticmethod
+    def _asks_for_measured_values(question: str) -> bool:
+        q = _normalise(question)
+        result_request = any(term in q for term in (
+            "resultat", "performance", "valeur", "chiffre", "mesure", "taux", "combien",
+        ))
+        measure_request = any(term in q for term in (
+            "compil", "couvert", "coverage", "precision", "accuracy", "score",
+            "pourcent", "branche", "ligne", "latence", "temps", "quantitatif",
+            "erreur", "error", "vitesse", "speed", "debit", "memoire",
+            "consommation", "rappel", "recall", "rendement", "cout", "gain",
+        ))
+        return result_request and measure_request
+
+    def _measured_table_sources(
+        self,
+        question: str,
+        document_scope: Optional[Mapping[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Retrouve les lignes chiffrées et leurs en-têtes dans le corpus RAG V2.
+
+        Cette vérification reste locale et déterministe. Elle ne produit ni valeur,
+        ni document, ni passage absent du corpus déjà indexé.
+        """
+        if not self._asks_for_measured_values(question) or not self._fulltext_available():
+            return []
+
+        q = _normalise(question)
+        metric_groups = (
+            ("compil", "compilab", "compilation", "compilable"),
+            ("couvert", "cover", "coverage", "couverage"),
+            ("precision", "accuracy"),
+            ("latence", "latency", "duree", "temps"),
+            ("branche", "branch"),
+            ("ligne", "line"),
+            ("erreur", "error"),
+            ("vitesse", "speed", "debit", "throughput"),
+            ("memoire", "memory", "ram"),
+            ("consommation", "power", "energy"),
+            ("rappel", "recall"),
+            ("rendement", "efficiency"),
+            ("cout", "cost"),
+        )
+        requested = [group for group in metric_groups if any(term in q for term in group)]
+        try:
+            chunks = [
+                chunk for chunk in fulltext_corpus_to_chunks(self.store)
+                if self._matches_document_scope(chunk, document_scope)
+            ]
+        except Exception:
+            return []
+
+        by_document: Dict[str, List[Dict[str, Any]]] = {}
+        for chunk in chunks:
+            by_document.setdefault(_source_document(chunk), []).append(chunk)
+
+        question_tokens = {
+            token for token in re.findall(r"[a-z0-9]{4,}", q)
+            if token not in {"quels", "quelles", "pour", "dans", "avec", "sont", "obtenus",
+                             "resultats", "termes", "projet", "documents", "chiffres"}
+        }
+        candidates: List[Tuple[float, Dict[str, Any], Optional[Dict[str, Any]]]] = []
+        for document_chunks in by_document.values():
+            metric_headers = [
+                chunk for chunk in document_chunks
+                if "|" in _clean(chunk.get("text"))
+                and all(
+                    any(term in _normalise(chunk.get("text")) for term in group)
+                    for group in requested
+                )
+            ]
+            if not metric_headers:
+                continue
+
+            for chunk in document_chunks:
+                raw = str(chunk.get("text") or "")
+                table_rows = [
+                    line for line in raw.splitlines()
+                    if "|" in line and re.search(r"\b\d+[.,]\d+\b|\b\d+\s*%", line)
+                ]
+                if not table_rows:
+                    continue
+                combined = _normalise(f"{_source_document(chunk)} {raw}")
+                overlap = len(question_tokens & set(combined.split()))
+                if overlap == 0 and not requested:
+                    continue
+                position = _safe_int(_source_metadata(chunk).get("paragraph_index"))
+                preceding_headers = [
+                    item for item in metric_headers
+                    if _safe_int(_source_metadata(item).get("paragraph_index")) <= position
+                ]
+                header = max(
+                    preceding_headers or metric_headers,
+                    key=lambda item: _safe_int(_source_metadata(item).get("paragraph_index")),
+                )
+                nonempty_lines = sum(1 for line in raw.splitlines() if line.strip())
+                table_density = len(table_rows) / max(1, nonempty_lines)
+                score = (
+                    min(12, len(table_rows)) * 0.5
+                    + 6 * table_density
+                    + min(3, overlap)
+                    + (1 if chunk is header else 0)
+                )
+                if _passage_provenance(chunk).get("origin") == "external_literature" and not any(
+                    marker in q for marker in ("litterature", "etat de l art", "article externe")
+                ):
+                    score -= 4
+                proof = dict(chunk)
+                proof["metadata"] = {
+                    **_source_metadata(chunk),
+                    "verified_measurement_table": True,
+                }
+                candidates.append((score, proof, header))
+
+        candidates.sort(key=lambda row: row[0], reverse=True)
+        by_result_document: Dict[str, List[Tuple[float, Dict[str, Any], Optional[Dict[str, Any]]]]] = {}
+        for row in candidates:
+            by_result_document.setdefault(_source_document(row[1]), []).append(row)
+        if not by_result_document:
+            return []
+        best_document = max(
+            by_result_document,
+            key=lambda name: sum(row[0] for row in by_result_document[name][:3]),
+        )
+        selected: List[Dict[str, Any]] = []
+        best_rows = by_result_document[best_document][:2]
+        for _, proof, _ in best_rows:
+            if not any(self._coverage_source_key(item) == self._coverage_source_key(proof) for item in selected):
+                selected.append(proof)
+        for _, _, header in best_rows:
+            if header is not None and not any(
+                self._coverage_source_key(item) == self._coverage_source_key(header)
+                for item in selected
+            ):
+                selected.append(dict(header))
+        selected.sort(key=lambda item: (
+            _source_document(item),
+            _safe_int(_source_metadata(item).get("paragraph_index")),
+        ))
+        return selected[:4]
 
     def _retrieve_project_sources(
         self,
@@ -3388,26 +3879,27 @@ class DiagnosticRAGChatService:
         # Le filtre document est appliqué après sur-échantillonnage pour rester
         # compatible avec le VectorStore existant.
         for query in queries:
-            candidates.extend(
-                self.vector_store.search(
-                    collection_name=self.base_collection_name,
-                    query=query,
-                    top_k=fetch_k,
-                    role_filter=role_plan,
-                    document_type_exclude=[],
-                    oversample=10,
+            if not self._fulltext_available():
+                candidates.extend(
+                    self.vector_store.search(
+                        collection_name=self.base_collection_name,
+                        query=query,
+                        top_k=fetch_k,
+                        role_filter=role_plan,
+                        document_type_exclude=[],
+                        oversample=10,
+                    )
                 )
-            )
-            candidates.extend(
-                self.vector_store.search(
-                    collection_name=self.base_collection_name,
-                    query=query,
-                    top_k=fetch_k,
-                    role_filter=None,
-                    document_type_exclude=[],
-                    oversample=10,
+                candidates.extend(
+                    self.vector_store.search(
+                        collection_name=self.base_collection_name,
+                        query=query,
+                        top_k=fetch_k,
+                        role_filter=None,
+                        document_type_exclude=[],
+                        oversample=10,
+                    )
                 )
-            )
 
             if self._collection_count(self.raw_collection_name) > 0:
                 candidates.extend(
@@ -3651,7 +4143,7 @@ class DiagnosticRAGChatService:
             else "Tous les documents du projet sélectionné"
         )
         strict_rule = (
-            "La réponse doit porter EXCLUSIVEMENT sur ce document. "
+            "La réponse doit porter EXCLUSIVEMENT sur les documents sélectionnés ci-dessus. "
             "N'utilise aucun autre document, même s'il contient un passage similaire."
             if document_scope
             else "La réponse peut croiser les documents du projet uniquement lorsque cela est utile."
@@ -3667,6 +4159,15 @@ class DiagnosticRAGChatService:
             json.dumps(list(multi_document_plan or []), ensure_ascii=False, indent=2)
             if multi_document_plan
             else "Aucune couverture exhaustive multi-document active."
+        )
+        measured_result_rule = (
+            "Si la question demande des mesures : cite les valeurs exactes, leur unité si elle "
+            "figure dans la preuve, le modèle/la configuration et la stratégie correspondants. "
+            "Lis les en-têtes du tableau avant d'attribuer ses colonnes. Sépare les mesures "
+            "du dossier des références externes, et signale explicitement toute attribution "
+            "incertaine. Ne remplace pas les chiffres présents par une appréciation vague."
+            if DiagnosticRAGChatService._asks_for_measured_values(question)
+            else ""
         )
         return f"""
 Tu es l'assistant documentaire flottant d'EnnoDiagnostic.
@@ -3806,6 +4307,7 @@ RÈGLES DE COUVERTURE
     un fichier, même si plusieurs autres documents contiennent des informations similaires.
 40. Dans ce mode, ne termine pas par une synthèse globale qui efface les distinctions de provenance ;
     une courte conclusion est possible uniquement après avoir traité tous les fichiers.
+{measured_result_rule}
 
 CATALOGUE DE PREUVES
 {json.dumps(list(evidence), ensure_ascii=False, indent=2)}
@@ -4200,18 +4702,44 @@ CATALOGUE DE PREUVES
         history: Sequence[Mapping[str, Any]],
         diagnostic_payload: Mapping[str, Any],
         document_scope: Optional[Mapping[str, Any]] = None,
+        document_scopes: Optional[Sequence[Mapping[str, Any]]] = None,
     ) -> Dict[str, Any]:
         clean_question = _clean(question)
         if not clean_question:
             raise ValueError("La question est vide.")
 
         raw_index_report = self.ensure_raw_index()
-        resolved_scope = self._resolve_document_scope(
-            clean_question,
-            document_scope,
-        )
+        requested_scopes = list(document_scopes or ([document_scope] if document_scope else []))
+        selected_documents = []
+        if requested_scopes:
+            available = self.available_documents()
+            for requested in requested_scopes:
+                matches = [
+                    doc for doc in available
+                    if _clean(requested.get("document_id")) == _clean(doc.get("document_id"))
+                ] if _clean(requested.get("document_id")) else [
+                    doc for doc in available
+                    if _document_key(requested.get("document_name"))
+                    and _document_key(requested.get("document_name")) == _document_key(doc.get("document_name"))
+                ]
+                if len(matches) != 1:
+                    raise ValueError("Un document sélectionné est absent ou ambigu dans l'index de ce projet.")
+                if matches[0] not in selected_documents:
+                    selected_documents.append(matches[0])
 
-        exhaustive_multi_document = (
+        explicit_multi = len(selected_documents) > 1
+        if explicit_multi:
+            resolved_scope = {
+                "documents": selected_documents,
+                "document_name": " ; ".join(doc["document_name"] for doc in selected_documents),
+                "mode": "explicit_multi_document",
+            }
+        else:
+            resolved_scope = self._resolve_document_scope(
+                clean_question, selected_documents[0] if selected_documents else None,
+            )
+
+        exhaustive_multi_document = explicit_multi or (
             resolved_scope is None
             and self._wants_exhaustive_multi_document_coverage(clean_question)
         )
@@ -4227,6 +4755,7 @@ CATALOGUE DE PREUVES
                 question=clean_question,
                 history=history,
                 per_document_limit=4,
+                document_scopes=selected_documents if explicit_multi else None,
             )
 
         elif self._question_intent(clean_question) == "protocol_contrast":
@@ -4245,6 +4774,16 @@ CATALOGUE DE PREUVES
                 top_k=8,
                 document_scope=resolved_scope,
             )
+
+        if not exhaustive_multi_document and not self._experimental_stage_preference(clean_question):
+            measured_sources = self._measured_table_sources(clean_question, resolved_scope)
+            if measured_sources:
+                seen = {self._coverage_source_key(source) for source in measured_sources}
+                project_sources = [
+                    *measured_sources,
+                    *(source for source in project_sources
+                      if self._coverage_source_key(source) not in seen),
+                ][:8]
 
         diagnostic_sources: List[Dict[str, Any]] = []
         if (
@@ -4265,7 +4804,7 @@ CATALOGUE DE PREUVES
 
         # Garde expérimentale déjà validée pour les questions ordinales
         # ("première/deuxième/dernière évaluation").
-        experimental_anchor = self._experimental_fulltext_source(
+        experimental_anchor = None if explicit_multi else self._experimental_fulltext_source(
             question=clean_question,
             document_scope=resolved_scope,
         )
@@ -4294,12 +4833,13 @@ CATALOGUE DE PREUVES
                 *filtered_sources,
             ]
 
-        combined_sources = self._prioritize_experimental_context(
-            clean_question,
-            combined_sources,
-        )
+        if not explicit_multi:
+            combined_sources = self._prioritize_experimental_context(
+                clean_question,
+                combined_sources,
+            )
 
-        if self._question_intent(clean_question) == "protocol_contrast":
+        if not exhaustive_multi_document and self._question_intent(clean_question) == "protocol_contrast":
             explicit = [
                 item for item in combined_sources
                 if self._protocol_contrast_features(
@@ -4323,10 +4863,17 @@ CATALOGUE DE PREUVES
             max_sources=evidence_limit,
             max_chars=evidence_excerpt_chars,
         )
+        if resolved_scope:
+            evidence = [
+                item for item in evidence
+                if item.get("source_kind") != "diagnostic_output"
+                and self._matches_document_scope({"metadata": item}, resolved_scope)
+            ]
 
         coverage_plan = self._coverage_plan(
             coverage_subquestions,
             evidence,
+            clean_question,
         )
 
         multi_document_plan = (
@@ -4485,15 +5032,11 @@ CATALOGUE DE PREUVES
         # Garde finale : en portée stricte aucune source d'un autre document et
         # aucune synthèse d'agent ne peut être renvoyée.
         if resolved_scope:
-            scope_key = _document_key(resolved_scope.get("document_name"))
             selected_sources = [
                 item
                 for item in selected_sources
                 if item.get("source_kind") != "diagnostic_output"
-                and (
-                    not scope_key
-                    or _document_key(item.get("document")) == scope_key
-                )
+                and self._matches_document_scope({"metadata": item}, resolved_scope)
             ]
 
             strict_mapping = {

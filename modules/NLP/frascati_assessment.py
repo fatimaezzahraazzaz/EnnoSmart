@@ -22,7 +22,7 @@ probabilité d'éligibilité CIR et pas à un score officiel du Manuel de Frasca
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Set
 
 try:
-    from agents.EnnoDiagnostic.project_fact_gate import (
+    from .project_fact_gate import (
         is_external_or_reference as _gate_external_or_reference,
         is_noise_or_interview as _gate_noise_or_interview,
     )

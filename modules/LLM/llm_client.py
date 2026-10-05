@@ -450,6 +450,8 @@ class LLMClient:
         request_name: Optional[str],
         max_input_tokens: Optional[int],
         max_output_tokens: int,
+        prompt_char_limit: Optional[int] = None,
+        fail_on_truncation: bool = False,
     ) -> Tuple[str, Dict[str, Any]]:
         text = str(prompt or "").strip()
         context_window = self._context_window_for_provider(provider)
@@ -460,13 +462,19 @@ class LLMClient:
         context_budget = max(256, context_window - int(max_output_tokens) - 512)
         input_budget = min(requested_budget, context_budget)
 
-        char_limit = (
+        char_limit = prompt_char_limit or (
             self.writer_max_prompt_chars
             if self._is_writer_request(request_name)
             else self.max_prompt_chars
         )
         char_budget = min(char_limit, max(900, int(input_budget * 3.6)))
         truncated = len(text) > char_budget
+
+        if truncated and fail_on_truncation:
+            raise ValueError(
+                f"Prompt trop long pour {request_name or 'llm'} : "
+                f"{len(text)} caractères > budget {char_budget}."
+            )
 
         if truncated:
             head_len = int(char_budget * 0.78)
@@ -497,6 +505,9 @@ class LLMClient:
         json_mode: bool = False,
         request_name: Optional[str] = None,
         response_schema: Optional[Mapping[str, Any]] = None,
+        prompt_char_limit: Optional[int] = None,
+        fail_on_truncation: bool = False,
+        reasoning_effort: Optional[str] = None,
         **kwargs: Any,
     ) -> str:
         """Exécute un appel après admission dans la file de capacité globale."""
@@ -511,6 +522,9 @@ class LLMClient:
                     json_mode=json_mode,
                     request_name=request_name,
                     response_schema=response_schema,
+                    prompt_char_limit=prompt_char_limit,
+                    fail_on_truncation=fail_on_truncation,
+                    reasoning_effort=reasoning_effort,
                     **kwargs,
                 )
             finally:
@@ -528,6 +542,10 @@ class LLMClient:
         json_mode: bool = False,
         request_name: Optional[str] = None,
         response_schema: Optional[Mapping[str, Any]] = None,
+        prompt_char_limit: Optional[int] = None,
+        fail_on_truncation: bool = False,
+        reasoning_effort: Optional[str] = None,
+        background: bool = False,
         **_: Any,
     ) -> str:
         if not str(prompt or "").strip():
@@ -555,6 +573,8 @@ class LLMClient:
                 request_name=request_name,
                 max_input_tokens=max_input_tokens,
                 max_output_tokens=max_output_tokens,
+                prompt_char_limit=prompt_char_limit,
+                fail_on_truncation=fail_on_truncation,
             )
 
             if current_provider == "openai" and not self.openai_api_key:
@@ -578,15 +598,17 @@ class LLMClient:
                 started = time.time()
                 try:
                     if current_provider == "openai":
-                        content, usage = self._generate_openai(
-                            provider_prompt,
-                            current_model,
-                            temperature,
-                            max_output_tokens,
-                            retries,
-                            json_mode,
-                            schema,
-                        )
+                        if background:
+                            content, usage = self._generate_openai_background(
+                                provider_prompt, current_model, max_output_tokens,
+                                retries, json_mode, schema, reasoning_effort,
+                            )
+                        else:
+                            content, usage = self._generate_openai(
+                                provider_prompt, current_model, temperature,
+                                max_output_tokens, retries, json_mode, schema,
+                                reasoning_effort,
+                            )
                     elif current_provider == "ollama":
                         content, usage = self._generate_ollama(
                             provider_prompt,
@@ -606,6 +628,7 @@ class LLMClient:
                             retries,
                             json_mode,
                             schema,
+                            reasoning_effort,
                         )
                     else:
                         content, usage = self._generate_gemini(
@@ -927,6 +950,7 @@ class LLMClient:
         retries: int,
         json_mode: bool,
         response_schema: Optional[Mapping[str, Any]],
+        reasoning_effort: Optional[str] = None,
     ) -> Tuple[str, Dict[str, Any]]:
         url = f"{self.openai_base_url}/chat/completions"
         payload: Dict[str, Any] = {
@@ -938,8 +962,10 @@ class LLMClient:
             "max_completion_tokens": int(max_output_tokens),
             "store": bool(self.openai_store),
         }
-        if self.openai_send_temperature:
+        if self.openai_send_temperature and not reasoning_effort:
             payload["temperature"] = float(temperature)
+        if reasoning_effort:
+            payload["reasoning_effort"] = reasoning_effort
         if response_schema:
             schema_name = re.sub(
                 r"[^a-zA-Z0-9_-]+",
@@ -980,6 +1006,112 @@ class LLMClient:
                 else None
             ),
             "response_id": data.get("id"),
+        }
+
+    def _generate_openai_background(
+        self,
+        prompt: str,
+        model: str,
+        max_output_tokens: int,
+        retries: int,
+        json_mode: bool,
+        response_schema: Optional[Mapping[str, Any]],
+        reasoning_effort: Optional[str],
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Run a long Responses request without tying completion to one HTTP read timeout."""
+        url = f"{self.openai_base_url}/responses"
+        payload: Dict[str, Any] = {
+            "model": model,
+            "instructions": self._system_message(json_mode),
+            "input": prompt,
+            "max_output_tokens": int(max_output_tokens),
+            "background": True,
+            "store": bool(self.openai_store),
+        }
+        if reasoning_effort:
+            payload["reasoning"] = {"effort": reasoning_effort}
+        if response_schema:
+            schema_name = re.sub(
+                r"[^a-zA-Z0-9_-]+", "_",
+                str(response_schema.get("title") or "structured_response"),
+            )[:64]
+            payload["text"] = {"format": {
+                "type": "json_schema", "name": schema_name or "structured_response",
+                "strict": False, "schema": dict(response_schema),
+            }}
+        elif json_mode:
+            payload["text"] = {"format": {"type": "json_object"}}
+            # Responses checks input messages for the JSON instruction; the
+            # separate instructions field alone does not satisfy that check.
+            payload["input"] = "Réponds uniquement en JSON.\n\n" + prompt
+        headers = {
+            "Authorization": f"Bearer {self.openai_api_key}",
+            "Content-Type": "application/json",
+        }
+        data = self._post_with_retry(url, payload, headers, retries, "OpenAI")
+        response_id = str(data.get("id") or "").strip()
+        if not response_id:
+            raise RuntimeError("OpenAI Responses: identifiant de réponse absent.")
+        print(f"[LLMClient] OpenAI background model={model} status={data.get('status')} response_id={response_id}", flush=True)
+        started = time.monotonic()
+        next_log = started + 20.0
+        poll_failures = 0
+        while data.get("status") in {"queued", "in_progress"}:
+            if time.monotonic() - started > 900:
+                raise RuntimeError(f"OpenAI Responses: attente dépassée ({response_id}).")
+            time.sleep(2.0)
+            try:
+                response = requests.get(
+                    f"{url}/{response_id}", headers=headers,
+                    timeout=(self.connect_timeout, min(self.read_timeout, 30)),
+                )
+            except requests.RequestException as exc:
+                poll_failures += 1
+                if poll_failures >= 3:
+                    raise RuntimeError(f"OpenAI Responses: suivi interrompu ({response_id}): {exc}") from exc
+                continue
+            if response.status_code == 429 or response.status_code >= 500:
+                poll_failures += 1
+                if poll_failures < 3:
+                    continue
+            else:
+                poll_failures = 0
+            if response.status_code != 200:
+                raise RuntimeError(
+                    f"OpenAI Responses: lecture HTTP {response.status_code}: "
+                    f"{response.text[:800]}"
+                )
+            data = response.json()
+            if not isinstance(data, dict) or data.get("id") != response_id:
+                raise RuntimeError("OpenAI Responses: réponse de suivi invalide.")
+            if time.monotonic() >= next_log:
+                print(
+                    f"[LLMClient] OpenAI background model={model} "
+                    f"status={data.get('status')} elapsed={int(time.monotonic() - started)}s",
+                    flush=True,
+                )
+                next_log = time.monotonic() + 20.0
+        if data.get("status") != "completed":
+            detail = data.get("error") or data.get("incomplete_details") or data.get("status")
+            raise RuntimeError(f"OpenAI Responses: {detail}")
+        parts = []
+        for message in data.get("output") or []:
+            if isinstance(message, dict) and message.get("type") == "message":
+                for part in message.get("content") or []:
+                    if isinstance(part, dict) and part.get("type") == "output_text":
+                        parts.append(str(part.get("text") or ""))
+        content = "\n".join(parts).strip()
+        if not content:
+            raise RuntimeError("OpenAI Responses: réponse vide.")
+        usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+        details = usage.get("input_tokens_details") or {}
+        return content, {
+            "prompt_tokens": usage.get("input_tokens"),
+            "completion_tokens": usage.get("output_tokens"),
+            "total_tokens": usage.get("total_tokens"),
+            "cached_tokens": details.get("cached_tokens") if isinstance(details, dict) else None,
+            "response_id": response_id,
+            "response_model": data.get("model") or model,
         }
 
     def _generate_ollama(
@@ -1039,6 +1171,7 @@ class LLMClient:
         retries: int,
         json_mode: bool,
         response_schema: Optional[Mapping[str, Any]],
+        reasoning_effort: Optional[str] = None,
     ) -> Tuple[str, Dict[str, Any]]:
         url = f"{self.openrouter_base_url}/chat/completions"
         payload: Dict[str, Any] = {
@@ -1050,6 +1183,8 @@ class LLMClient:
             "temperature": float(temperature),
             "max_tokens": int(max_output_tokens),
         }
+        if reasoning_effort:
+            payload["reasoning"] = {"effort": reasoning_effort}
         if response_schema:
             schema_name = re.sub(
                 r"[^a-zA-Z0-9_-]+",

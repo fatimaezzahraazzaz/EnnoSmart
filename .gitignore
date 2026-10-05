@@ -118,6 +118,9 @@ tests/
 **/tests/
 test_*.py
 **/test_*.py
+!test_ennodiagnostic_v2_backend.py
+!test_ai_detector_fulltext.py
+!test_document_compare_fulltext.py
 verify_*.py
 **/verify_*.py
 integration/
@@ -226,6 +229,24 @@ modules/llm_gateway/
 /_visual_filter_hotfix/
 .codex_tmp/
 .ennosmart_patch_backups/
+
+# Archives de travail et paquets de déploiement locaux.
+/ennodiagnostic_patch_backups/
+/ennodiagnostic_debug/
+/ennodiagnostic_validations/
+/frontend_backups/
+/releases/
+/lock_diagnostic_run18.txt
+/lock_invariants_test_results.txt
+/lock_real_validation_console*.txt
+/traceability_backend_files.txt
+/mini_cir_*.txt
+**/*_before_*.py
+**/*_backup.py
+
+# Régressions de la suppression de Diagnostic V1.
+!/tests/
+!/tests/test_v2_only_cleanup.py
 
 # Sauvegardes des patches locaux, jamais nécessaires au déploiement.
 /.patch_backups/

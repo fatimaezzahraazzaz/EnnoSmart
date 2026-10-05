@@ -149,6 +149,80 @@ def same_numeric_signature(a: str, b: str) -> bool:
 # Chargement document
 # =========================================================
 
+def load_text_from_fulltext_file(path: str) -> Dict[str, Any]:
+    """Charge un document déjà extrait dans ``fulltext_rag_v1``."""
+    p = Path(path)
+    if not p.is_file() or p.suffix.lower() != ".json":
+        return {
+            "ok": False,
+            "document": p.name,
+            "path": str(p),
+            "text": "",
+            "error": f"Artefact fulltext introuvable : {p}",
+        }
+    if p.name.lower() == "manifest.json":
+        return {
+            "ok": False,
+            "document": p.name,
+            "path": str(p),
+            "text": "",
+            "error": "Le manifeste fulltext n'est pas un document comparable.",
+        }
+
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {
+            "ok": False,
+            "document": p.name,
+            "path": str(p),
+            "text": "",
+            "error": f"JSON fulltext illisible : {exc}",
+        }
+
+    if not isinstance(payload, dict):
+        return {
+            "ok": False,
+            "document": p.name,
+            "path": str(p),
+            "text": "",
+            "error": "Format fulltext invalide.",
+        }
+
+    text = normalize_text(payload.get("text") or "")
+    if not text:
+        return {
+            "ok": False,
+            "document": str(payload.get("document") or p.name),
+            "path": str(p),
+            "text": "",
+            "error": "Aucun texte complet disponible.",
+        }
+
+    document = str(
+        payload.get("document")
+        or payload.get("file_name")
+        or p.stem
+    ).strip()
+    return {
+        "ok": True,
+        "document": document,
+        "document_id": str(
+            payload.get("document_id")
+            or payload.get("text_sha256")
+            or p.stem
+        ),
+        "path": str(p),
+        "source_path": str(payload.get("source_path") or ""),
+        "extension": str(payload.get("extension") or Path(document).suffix),
+        "text": text,
+        "chars": len(text),
+        "loader": "fulltext_rag_v1",
+        "input_policy": "fulltext_corpus_v2",
+        "error": None,
+    }
+
+
 def load_text_from_file(path: str) -> Dict[str, Any]:
     p = Path(path)
 
@@ -162,6 +236,9 @@ def load_text_from_file(path: str) -> Dict[str, Any]:
         }
 
     ext = p.suffix.lower()
+
+    if ext == ".json":
+        return load_text_from_fulltext_file(str(p))
 
     if ext not in SUPPORTED_EXTENSIONS:
         return {
@@ -703,6 +780,12 @@ def compare_documents(path_a: str, path_b: str) -> Dict[str, Any]:
 
     return {
         "ok": True,
+        "input_policy": (
+            "fulltext_corpus_v2"
+            if doc_a.get("input_policy") == "fulltext_corpus_v2"
+            and doc_b.get("input_policy") == "fulltext_corpus_v2"
+            else "direct_document_extraction"
+        ),
         "summary": summary,
         "doc_a": doc_a,
         "doc_b": doc_b,
@@ -718,6 +801,10 @@ def compare_documents(path_a: str, path_b: str) -> Dict[str, Any]:
 
 def normalize_filename_group(filename: str) -> str:
     name = Path(filename).stem.lower()
+    # Les séparateurs doivent devenir des espaces avant la détection de v1,
+    # rev2, copie, etc. ``_`` est un caractère de mot pour les regex et
+    # empêchait auparavant ``Etude_v1`` d'être reconnu comme une version.
+    name = re.sub(r"[_\-.]+", " ", name)
 
     replacements = [
         r"\(\d+\)",
@@ -741,7 +828,6 @@ def normalize_filename_group(filename: str) -> str:
     for pat in replacements:
         name = re.sub(pat, " ", name, flags=re.I)
 
-    name = re.sub(r"[_\-.]+", " ", name)
     name = re.sub(r"\s+", " ", name).strip()
 
     return simple_norm(name)
@@ -926,6 +1012,78 @@ def discover_comparable_file_pairs(
     return pairs[:max_pairs]
 
 
+def discover_comparable_fulltext_pairs(
+    fulltext_corpus_dir: str,
+    min_similarity: float = 0.70,
+    include_medium: bool = True,
+    max_pairs: int = 30,
+) -> List[Dict[str, Any]]:
+    """Détecte les paires depuis les métadonnées du corpus fulltext V2."""
+    folder = Path(fulltext_corpus_dir)
+    if not folder.is_dir():
+        return []
+
+    documents: List[Dict[str, Any]] = []
+    for path in sorted(folder.glob("*.json"), key=lambda item: item.name.lower()):
+        if path.name.lower() in {"manifest.json", "nlp_result.json"}:
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(payload, dict) or not normalize_text(payload.get("text") or ""):
+            continue
+        document = str(
+            payload.get("document")
+            or payload.get("file_name")
+            or path.stem
+        ).strip()
+        documents.append({
+            "path": path,
+            "document": document,
+            "document_id": str(
+                payload.get("document_id")
+                or payload.get("text_sha256")
+                or path.stem
+            ),
+            "source_path": str(payload.get("source_path") or ""),
+        })
+
+    pairs: List[Dict[str, Any]] = []
+    for a, b in itertools.combinations(documents, 2):
+        cls = classify_pair(a["document"], b["document"])
+        if cls["similarity"] < min_similarity or cls["decision"] == "reject":
+            continue
+        if cls["decision"] == "medium" and not include_medium:
+            continue
+        pairs.append({
+            "file_a": str(a["path"]).replace("\\", "/"),
+            "file_b": str(b["path"]).replace("\\", "/"),
+            "name_a": a["document"],
+            "name_b": b["document"],
+            "document_id_a": a["document_id"],
+            "document_id_b": b["document_id"],
+            "source_path_a": a["source_path"],
+            "source_path_b": b["source_path"],
+            "similarity": round(cls["similarity"], 4),
+            "decision": cls["decision"],
+            "reason": cls["reason"],
+            "common_tokens": cls["common_tokens"],
+            "group_a": normalize_filename_group(a["document"]),
+            "group_b": normalize_filename_group(b["document"]),
+            "input_policy": "fulltext_corpus_v2",
+        })
+
+    decision_rank = {"strong": 0, "medium": 1}
+    pairs.sort(
+        key=lambda item: (
+            decision_rank.get(item["decision"], 9),
+            -item["similarity"],
+        )
+    )
+    return pairs[:max_pairs]
+
+
 def report_filename_for_pair(file_a: str, file_b: str) -> str:
     a = safe_id(Path(file_a).stem, 45)
     b = safe_id(Path(file_b).stem, 45)
@@ -993,4 +1151,37 @@ def auto_compare_project_pairs(
         encoding="utf-8",
     )
 
+    return index
+
+
+def auto_compare_fulltext_pairs(
+    fulltext_corpus_dir: str,
+    output_dir: str,
+    min_similarity: float = 0.70,
+    include_medium: bool = True,
+    force: bool = False,
+) -> Dict[str, Any]:
+    """Prépare l'index des comparaisons depuis le corpus fulltext V2."""
+    del force
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    pairs = discover_comparable_fulltext_pairs(
+        fulltext_corpus_dir,
+        min_similarity=min_similarity,
+        include_medium=include_medium,
+    )
+    index = {
+        "ok": True,
+        "input_policy": "fulltext_corpus_v2",
+        "fulltext_corpus_dir": str(fulltext_corpus_dir).replace("\\", "/"),
+        "nlp_result_used": False,
+        "output_dir": str(out).replace("\\", "/"),
+        "pairs_count": len(pairs),
+        "pairs": pairs,
+        "reports": [],
+    }
+    (out / "auto_compare_index.json").write_text(
+        json.dumps(index, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     return index

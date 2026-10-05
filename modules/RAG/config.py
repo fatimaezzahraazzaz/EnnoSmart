@@ -18,6 +18,7 @@ EMBEDDING_MODEL_NAME = os.getenv(
 )
 
 DEFAULT_TOP_K = int(os.getenv("ENNOSMART_RAG_TOP_K", "8"))
+FULLTEXT_CHAT_COLLECTION_SUFFIX = "_client_raw_chat_v7"
 # Un clone neuf télécharge le modèle au premier démarrage. Une fois le cache
 # Hugging Face préchargé, la production peut imposer le mode hors ligne.
 EMBEDDING_OFFLINE = os.getenv("ENNOSMART_EMBEDDING_OFFLINE", "0").strip() == "1"

@@ -1,0 +1,60 @@
+{
+  "candidates": [
+    {
+      "passage_id": "S1",
+      "document": "AI_RADAR",
+      "original_model_role": "verrou",
+      "direct_lock_candidate": true,
+      "text": "Incertitude sur non-maîtrise de la stabilité du compromis seuil IoU vs Average Precision pour petites bounding boxes ATD."
+    },
+    {
+      "passage_id": "S2",
+      "document": "AI_RADAR",
+      "original_model_role": "verrou",
+      "direct_lock_candidate": true,
+      "text": "Incertitudes sur la robustesse de la classification multi-classes ATR en conditions d'entraînement dégradées et augmentées physiquement."
+    },
+    {
+      "passage_id": "S3",
+      "document": "AI_RADAR",
+      "original_model_role": "verrou",
+      "direct_lock_candidate": true,
+      "text": "Incertitude sur données synthétiques et données réelles de la BDD mesurée SUIPPES."
+    },
+    {
+      "passage_id": "S4",
+      "document": "AI_RADAR",
+      "original_model_role": "verrou",
+      "direct_lock_candidate": true,
+      "text": "Incertitude sur non-maîtrise de la représentation fidèle des modèles IA pour simulations MOCEM et détections ATR."
+    },
+    {
+      "passage_id": "S5",
+      "document": "AI_RADAR",
+      "original_model_role": "verrou",
+      "direct_lock_candidate": true,
+      "text": "Maîtrise incertaine de la validité de la généralisation des modèles ATD entraînés sur données synthétiques aux situations réelles de mesure."
+    },
+    {
+      "passage_id": "S6",
+      "document": "AI_RADAR",
+      "original_model_role": "verrou",
+      "direct_lock_candidate": true,
+      "text": "Incertitude sur non-maîtrise de la validation et production des données simulées MOCEM dégradées par l'Administration."
+    },
+    {
+      "passage_id": "S8",
+      "document": "AI_RADAR",
+      "original_model_role": "verrou",
+      "direct_lock_candidate": true,
+      "text": "Incertitude sur la robustesse et l'optimisation du compromis seuil IoU vs performance de classification pour petites bounding boxes en ATR."
+    },
+    {
+      "passage_id": "M1",
+      "document": "AI_RADAR_MEMOIRE_CIR",
+      "semantic_role": "limite",
+      "supporting_lock_evidence": true,
+      "text": "MOCEM permet-il de générer des jeux d'images SAR qui suivent une distribution suffisamment proche de la réalité ? Problématique de Dataset Shift."
+    }
+  ]
+}

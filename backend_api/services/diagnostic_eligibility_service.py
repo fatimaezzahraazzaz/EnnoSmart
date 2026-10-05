@@ -41,8 +41,8 @@ def extract_diagnostic_eligibility_score(payload: Any) -> float | None:
     """Retourne le score global EnnoDiagnostic sous forme normalisée (0..1).
 
     Les runs historiques n'ont pas tous la même enveloppe JSON. L'ordre des
-    sources reprend celui du frontend EnnoDiagnostic : indice de défendabilité
-    R&D, score d'éligibilité, puis anciens indicateurs Frascati de compatibilité.
+    sources privilégie le score d'éligibilité V2, puis conserve les anciens
+    indicateurs Frascati pour les runs historiques.
     """
 
     raw = _as_dict(payload)
@@ -59,6 +59,18 @@ def extract_diagnostic_eligibility_score(payload: Any) -> float | None:
     script_report = _nested_dict(raw, "script_or_pipeline_result", "report")
     bundle_report = _nested_dict(raw, "bundle", "report")
     display = _as_dict(raw.get("display"))
+
+    # Lecture du score déjà calculé : aucune modification du scoring.
+    for source in (raw, snapshot, report, script_report, bundle_report, display):
+        for eligibility in (
+            _as_dict(source.get("eligibility")),
+            _nested_dict(source, "scoring", "eligibility"),
+            _nested_dict(source, "diagnostic_v2", "eligibility"),
+            _nested_dict(source, "diagnostic_v2", "scoring", "eligibility"),
+        ):
+            score = _normalize_score(eligibility.get("score"))
+            if score is not None:
+                return score
 
     frascati_sources = [
         _as_dict(raw.get("frascati_summary")),

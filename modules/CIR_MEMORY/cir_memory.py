@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 """
-CIR_MEMORY V162 - comparaison N/N-1 + traçabilité documentaire et surlignage
+CIR_MEMORY V163 - entrée courante EnnoDiagnostic V2 + mémoire N/N-1
 
 Corrections par rapport V2 :
 1) CIR final mémoire = SANS FrascatiGuard, sections structurées uniquement.
@@ -1440,6 +1440,13 @@ def _normalise_memory_role(value: Any, pack_key: Any = "") -> str:
         "verrous": "verrou",
         "methode": "methode",
         "methodes": "methode",
+        "method": "methode",
+        "demarche": "demarche",
+        "metric": "metrique",
+        "metrique": "metrique",
+        "parameter": "parametre",
+        "result": "resultat",
+        "objective": "objectif",
         "resultat": "resultat",
         "resultats": "resultat",
         "limite": "limite",
@@ -1616,13 +1623,18 @@ def _iter_memory_v2_json_files() -> List[Path]:
         root = EXPERIENCE_MEMORY_V2_DIR / root_name
         if not root.exists():
             continue
-        files.extend(sorted(root.rglob("*.json")))
+        # Les exports de l'engine V2 *.cards.json contiennent des résumés,
+        # et *.run_v2.json des logs/catalogues : ni l'un ni l'autre ne porte
+        # les passages exacts. Ne pas parcourir leurs milliers de descendants
+        # à chaque chargement N-1. Les autres formats restent compatibles.
+        files.extend(p for p in sorted(root.rglob("*.json"))
+                     if not p.name.endswith((".cards.json", ".run_v2.json")))
         files.extend(sorted(root.rglob("*.jsonl")))
 
     # Compatibilité avec une Memory V2 stockée directement à la racine.
     if EXPERIENCE_MEMORY_V2_DIR.exists():
         for candidate in sorted(EXPERIENCE_MEMORY_V2_DIR.glob("*.json")):
-            if candidate.name in MEMORY_V2_CATALOG_NAMES:
+            if candidate.name in MEMORY_V2_CATALOG_NAMES or candidate.name == "global_memory_graph.json":
                 continue
             files.append(candidate)
 
@@ -1883,6 +1895,8 @@ def load_previous_cir_items_from_memory_v2(
         "etat_art",
         "parametre",
         "general",
+        "demarche",
+        "metrique",
     }
 
     raw_items: List[Dict[str, Any]] = []
@@ -2105,6 +2119,35 @@ def load_previous_cir_memory_items(
             return [str(previous_year)], items
 
     return [], []
+
+
+def list_available_previous_cirs(
+    organisme: str,
+    project: str,
+    current_year: str,
+    subproject: str = "",
+) -> List[Dict[str, Any]]:
+    """Expose la même mémoire factuelle N-1/N-2/N-3 que la comparaison.
+
+    Un catalogue ou des cartes résumées seuls ne prouvent pas la disponibilité
+    des passages. Les cartes de style et les documents d'autres projets restent
+    exclus par le chargeur partagé.
+    """
+    years, passages = load_previous_cir_memory_items(
+        organisme, project, current_year, subproject=subproject,
+    )
+    return [
+        {
+            "year": year,
+            "ok": True,
+            "source": passages[0].get("previous_source"),
+            "items_count": passages[0].get("previous_cir_sections_count", len(passages)),
+            "passages_count": len(passages),
+            "file": passages[0].get("document"),
+        }
+        for year in years
+        if passages
+    ]
 
 
 
@@ -2344,9 +2387,28 @@ def grouped_verrous_to_current_items(verrous: Any) -> List[Dict[str, Any]]:
         if not isinstance(source_json, dict):
             source_json = {}
 
+        v2_entity = source_json.get("v2_entity")
+        if not isinstance(v2_entity, dict):
+            v2_entity = {}
+        v2_metadata = v2_entity.get("metadata")
+        if not isinstance(v2_metadata, dict):
+            v2_metadata = {}
+        qualification_status = clean_text(
+            verrou.get("qualification_status")
+            or source_json.get("qualification_status")
+            or v2_metadata.get("qualification_status")
+        ).upper()
+
+        v2_title = ""
+        if v2_entity:
+            if qualification_status == "NEEDS_REFORMULATION":
+                v2_title = clean_text(v2_metadata.get("suggested_statement"))
+            v2_title = v2_title or clean_text(v2_entity.get("statement"))
+
         title = (
             _first_text_from_keys(verrou, _GROUPED_VERROU_TITLE_KEYS)
             or _first_text_from_keys(source_json, _GROUPED_VERROU_TITLE_KEYS)
+            or v2_title
             or f"Verrou R&D candidat {index}"
         )
 
@@ -2356,12 +2418,22 @@ def grouped_verrous_to_current_items(verrous: Any) -> List[Dict[str, Any]]:
                 value = obj.get(key)
                 if isinstance(value, str) and clean_text(value):
                     body_fragments.append(clean_text(value))
+        if v2_entity:
+            for value in (
+                v2_entity.get("statement"),
+                v2_metadata.get("qualification_reason"),
+                v2_metadata.get("suggested_statement"),
+            ):
+                if isinstance(value, str) and clean_text(value):
+                    body_fragments.append(clean_text(value))
 
         evidence_values: List[Any] = []
         for obj in (verrou, source_json):
             for key in _GROUPED_VERROU_EVIDENCE_KEYS:
                 if key in obj:
                     evidence_values.append(obj.get(key))
+        if isinstance(v2_entity.get("evidences"), list):
+            evidence_values.append(v2_entity.get("evidences"))
         evidence_fragments = _collect_text_fragments(evidence_values, max_items=35, max_chars=14000)
 
         combined_parts: List[str] = []
@@ -2418,12 +2490,24 @@ def grouped_verrous_to_current_items(verrous: Any) -> List[Dict[str, Any]]:
         )
 
         out.append({
-            "id": verrou.get("id") or verrou.get("verrou_id") or f"diagnostic_verrou_{index}",
-            "item_id": verrou.get("id") or verrou.get("verrou_id") or f"diagnostic_verrou_{index}",
+            "id": (
+                verrou.get("id")
+                or verrou.get("verrou_id")
+                or source_json.get("entity_id")
+                or v2_entity.get("entity_id")
+                or f"diagnostic_verrou_{index}"
+            ),
+            "item_id": (
+                verrou.get("id")
+                or verrou.get("verrou_id")
+                or source_json.get("entity_id")
+                or v2_entity.get("entity_id")
+                or f"diagnostic_verrou_{index}"
+            ),
             "role": "verrou",
-            "pack_key": "llm_reformulated_verrous",
-            "section_key": "llm_reformulated_verrous",
-            "section_type": "verrou_rnd_candidat_regroupe",
+            "pack_key": "v2_entities" if v2_entity else "llm_reformulated_verrous",
+            "section_key": "v2_entities" if v2_entity else "llm_reformulated_verrous",
+            "section_type": "verrou_v2_qualifie" if v2_entity else "verrou_rnd_candidat_regroupe",
             "section_title": title,
             "text": full_text,
             "display_excerpt": display_excerpt,
@@ -2440,10 +2524,44 @@ def grouped_verrous_to_current_items(verrous: Any) -> List[Dict[str, Any]]:
             "primary_evidence": primary_evidence,
             "supporting_passages": supporting_passages,
             "consultant_status": verrou.get("consultant_status") or "en_attente",
+            "qualification_status": qualification_status or None,
+            "entity_id": source_json.get("entity_id") or v2_entity.get("entity_id"),
+            "source_contract": "ennodiagnostic_v2" if v2_entity else "legacy_grouped_verrou",
             "original_verrou": verrou,
         })
 
     return out
+
+
+def project_facts_to_current_items(facts: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    roles = {"objective": "objectif", "method": "methode", "demarche": "demarche",
+             "parameter": "parametre", "metric": "metrique", "result": "resultat"}
+    output = []
+    for fact in facts or []:
+        kind = fact.get("kind")
+        proofs = fact.get("evidences") or []
+        if kind not in roles or fact.get("source_role") != "project_evidence" or not proofs:
+            continue
+        if any(not p.get("quote_verified") or not p.get("evidence_id") for p in proofs):
+            continue
+        statement = clean_text(fact.get("statement"))
+        if not statement:
+            continue
+        evidence = _collect_source_evidence_records(proofs, max_items=len(proofs))
+        primary = _best_source_evidence(evidence) or {}
+        output.append({
+            "id": fact.get("id"), "item_id": fact.get("id"), "kind": kind,
+            "role": roles[kind], "section_title": statement, "text": statement,
+            "source_role": "project_evidence", "source_contract": "ennodiagnostic_v2",
+            "temporal_status": fact.get("temporal_status", "unclear"),
+            "original_item_ids": fact.get("original_item_ids") or [],
+            "evidence_ids": [p["evidence_id"] for p in proofs], "evidences": proofs,
+            "source_evidence": evidence, "primary_evidence": primary, "supporting_passages": evidence,
+            "document": primary.get("document"), "document_id": primary.get("document_id"),
+            "source_path": primary.get("source_path"), "passage_id": primary.get("passage_id"),
+            "display_excerpt": primary.get("excerpt") or primary.get("text") or proofs[0].get("quote"),
+        })
+    return output
 
 
 def _candidate_year_roots_for_report(
@@ -2631,6 +2749,21 @@ def compare_one(
     shortlist_size: int = 120,
     previous_fast_index: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
+    # Les faits non verrou sont rapprochés des rubriques pertinentes du CIR.
+    # Une méthode ne doit pas devenir identique à un résultat parce que les
+    # deux passages partagent le même vocabulaire technique.
+    related_roles = {
+        "objectif": {"objectif", "general"},
+        "methode": {"methode", "demarche", "travaux", "general"},
+        "demarche": {"methode", "demarche", "travaux", "general"},
+        "parametre": {"parametre", "general"},
+        "metrique": {"metrique", "metric", "parametre", "resultat", "general"},
+        "resultat": {"resultat", "contribution", "general"},
+    }
+    allowed = related_roles.get(current.get("role")) if current.get("kind") else None
+    if allowed:
+        previous_items = [p for p in previous_items if p.get("role") in allowed]
+        previous_fast_index = [f for f in previous_fast_index or [] if f.get("role") in allowed]
     fast_index = previous_fast_index or build_previous_fast_index(previous_items)
     shortlisted = shortlist_previous_items(
         current=current,
@@ -2660,7 +2793,7 @@ def compare_one(
     else:
         dec = {
             "status": "new_or_not_found",
-            "label": "Aucun CIR précédent trouvé",
+            "label": "Aucune correspondance trouvée dans le CIR précédent",
             "continuity_score": 0.0,
             "novelty_score": 1.0,
         }
@@ -2753,32 +2886,48 @@ def compare_current_raw_with_cir_memory(
     shortlist_size: Optional[int] = None,
     subproject: str = "",
     previous_memory: Optional[Tuple[List[str], List[Dict[str, Any]]]] = None,
+    current_project_facts: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    if nlp_result_path:
-        nlp_path = Path(nlp_result_path).expanduser().resolve()
-        if not nlp_path.exists() or not nlp_path.is_file():
-            raise FileNotFoundError(f"NLP courant introuvable : {nlp_path}")
+    explicit_current_verrous = current_verrous is not None or current_project_facts is not None
+    nlp_path: Optional[Path] = None
+    nlp: Dict[str, Any] = {}
+    current_pack = _safe_pack({})
+    nlp_pack_source = "not_used_v2"
+
+    # V2 : si les verrous courants sont fournis explicitement depuis PostgreSQL,
+    # la comparaison ne doit plus exiger ni lire nlp_result.json.
+    if not explicit_current_verrous:
+        if nlp_result_path:
+            nlp_path = Path(nlp_result_path).expanduser().resolve()
+            if not nlp_path.exists() or not nlp_path.is_file():
+                raise FileNotFoundError(f"NLP courant introuvable : {nlp_path}")
+        else:
+            resolved_nlp_path = resolve_current_nlp_result_path(
+                organisme=organisme,
+                project=project,
+                year=year,
+                subproject=subproject,
+                required=True,
+            )
+            if resolved_nlp_path is None:
+                raise FileNotFoundError("nlp_result.json courant introuvable.")
+            nlp_path = resolved_nlp_path
+
+        print(f"[CIR_MEMORY][legacy] NLP courant utilisé : {nlp_path}", flush=True)
+        nlp = read_json(nlp_path, {})
+        current_pack, nlp_pack_source = get_current_raw_pack_with_frascati(nlp)
     else:
-        resolved_nlp_path = resolve_current_nlp_result_path(
-            organisme=organisme,
-            project=project,
-            year=year,
-            subproject=subproject,
-            required=True,
+        print(
+            "[CIR_MEMORY][V2] Verrous courants lus depuis le diagnostic V2 / PostgreSQL ; "
+            "nlp_result.json non utilisé.",
+            flush=True,
         )
-        if resolved_nlp_path is None:
-            raise FileNotFoundError("nlp_result.json courant introuvable.")
-        nlp_path = resolved_nlp_path
-
-    print(f"[CIR_MEMORY][V162] NLP courant utilisé : {nlp_path}", flush=True)
-
-    nlp = read_json(nlp_path, {})
-    current_pack, nlp_pack_source = get_current_raw_pack_with_frascati(nlp)
-
-    explicit_current_verrous = current_verrous is not None
     grouped_items = grouped_verrous_to_current_items(current_verrous)
+    project_items = project_facts_to_current_items(current_project_facts)
+    if current_project_facts is not None:
+        grouped_items = [*grouped_items, *project_items]
     grouped_report_path: Optional[Path] = None
-    current_source = "argument_current_verrous" if grouped_items else ""
+    current_source = "diagnostic_v2_postgresql_verrous" if grouped_items else ""
 
     # La route dédiée n'envoie pas forcément la liste : elle peut alors relire
     # le rapport sauvegardé. Pendant un nouveau diagnostic, une liste explicite
@@ -2805,7 +2954,7 @@ def compare_current_raw_with_cir_memory(
         raw_current_items = []
         eligible_current_items = []
         current_items = []
-        current_pack_source = "argument_current_verrous_empty"
+        current_pack_source = "diagnostic_v2_postgresql_verrous_empty"
         fallback_to_nlp_role_verrou = False
     else:
         raw_current_items = pack_to_items(
@@ -2824,14 +2973,14 @@ def compare_current_raw_with_cir_memory(
         fallback_to_nlp_role_verrou = True
 
     print(
-        f"[CIR_MEMORY][V162] source verrous courants={current_pack_source} | "
+        f"[CIR_MEMORY][V163] source verrous courants={current_pack_source} | "
         f"raw={len(raw_current_items)} | éligibles={len(eligible_current_items)} | "
-        f"verrous_comparés={len(current_items)}",
+        f"éléments_comparés={len(current_items)}",
         flush=True,
     )
     if fallback_to_nlp_role_verrou:
         print(
-            "[CIR_MEMORY][V162][WARN] Aucun verrou regroupé EnnoDiagnostic trouvé ; "
+            "[CIR_MEMORY][V163][WARN] Aucun verrou regroupé EnnoDiagnostic trouvé ; "
             "fallback sur les items NLP role=verrou.",
             flush=True,
         )
@@ -2855,7 +3004,10 @@ def compare_current_raw_with_cir_memory(
         "raw_current_items_count": len(raw_current_items),
         "eligible_current_items_count": len(eligible_current_items),
         "current_items_count": len(current_items),
-        "current_verrous_count": len(current_items),
+        "current_verrous_count": sum(i.get("role") == "verrou" for i in current_items),
+        "current_items_by_kind": {kind: sum((i.get("kind") or "lock") == kind for i in current_items)
+                                  for kind in ("objective", "lock", "method", "demarche", "parameter", "metric", "result")},
+        "comparison_scope": "project_facts_and_locks" if current_project_facts is not None else "locks",
         "current_verrous_source": current_pack_source,
         "grouped_verrous_used": bool(grouped_items),
         "grouped_verrous_report_path": str(grouped_report_path) if grouped_report_path else None,
@@ -2868,21 +3020,22 @@ def compare_current_raw_with_cir_memory(
             len(raw_current_items) - len(eligible_current_items)
             if fallback_to_nlp_role_verrou else 0
         ),
-        "filter_version": "v162_grouped_verrous_source_highlight",
+        "filter_version": "v163_v2_current_verrous_no_nlp",
         "shortlist_size": shortlist_size,
     }
 
     if not previous_items:
         report = {
             "ok": True,
-            "version": "cir_memory_v162_grouped_verrous_source_highlight",
+            "version": "cir_memory_v163_v2_current_verrous_no_nlp",
             "has_previous_cir": False,
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "organisme": organisme,
             "project": project,
             "subproject": subproject or None,
             "current_year": str(year),
-            "nlp_result_path": str(nlp_path),
+            "nlp_result_path": str(nlp_path) if nlp_path is not None else None,
+            "current_input_policy": "diagnostic_v2_postgresql_verrous" if explicit_current_verrous else "legacy_nlp_result",
             "current_pack_source": current_pack_source,
             "summary": {
                 **base_summary,
@@ -2912,7 +3065,7 @@ def compare_current_raw_with_cir_memory(
                 110,
             )
             print(
-                f"[CIR_MEMORY][V162] comparaison verrou {index}/{len(current_items)} : {title}",
+                f"[CIR_MEMORY][V163] comparaison élément {index}/{len(current_items)} : {title}",
                 flush=True,
             )
             item_started_at = time.perf_counter()
@@ -2940,7 +3093,7 @@ def compare_current_raw_with_cir_memory(
         )
 
         print(
-            f"[CIR_MEMORY][V162] comparaison terminée : {len(comparisons)} verrou(s) "
+            f"[CIR_MEMORY][V163] comparaison terminée : {len(comparisons)} verrou(s) "
             f"en {comparison_elapsed_seconds}s | paires complètes={full_pairs_scored}/"
             f"{full_pairs_theoretical}",
             flush=True,
@@ -2951,14 +3104,15 @@ def compare_current_raw_with_cir_memory(
 
         report = {
             "ok": True,
-            "version": "cir_memory_v162_grouped_verrous_source_highlight",
+            "version": "cir_memory_v163_v2_current_verrous_no_nlp",
             "has_previous_cir": True,
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "organisme": organisme,
             "project": project,
             "subproject": subproject or None,
             "current_year": str(year),
-            "nlp_result_path": str(nlp_path),
+            "nlp_result_path": str(nlp_path) if nlp_path is not None else None,
+            "current_input_policy": "diagnostic_v2_postgresql_verrous" if explicit_current_verrous else "legacy_nlp_result",
             "previous_cir_years_used": previous_years,
             "current_pack_source": current_pack_source,
             "previous_cir_rule": "Même organisme/projet : N-1 dans Memory V2, sinon N-2/N-3. Cartes de style exclues.",
@@ -2987,7 +3141,7 @@ def compare_current_raw_with_cir_memory(
                 **summ,
             },
             "comparisons": comparisons,
-            "verrou_comparisons": comparisons,
+            "verrou_comparisons": [c for c in comparisons if (c.get("current_item") or {}).get("role") == "verrou"],
             "new_or_not_found": [
                 c for c in comparisons
                 if (c.get("decision") or {}).get("status") == "new_or_not_found"
@@ -3002,6 +3156,14 @@ def compare_current_raw_with_cir_memory(
             ],
         }
 
+    report["comparison_status"] = (
+        "no_previous_cir" if not previous_items
+        else ("no_current_facts" if current_project_facts is not None else "no_current_locks") if not current_items
+        else "completed"
+    )
+    report["summary"]["new_items_count"] = len(report.get("new_or_not_found") or [])
+    report["summary"]["evolution_items_count"] = len(report.get("evolution_or_partial_continuity") or [])
+    report["summary"]["continuity_items_count"] = len(report.get("continuity_strong") or [])
     out_path = comparison_report_path(
         organisme,
         project,

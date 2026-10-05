@@ -17,6 +17,8 @@ import {
 import { AppPage } from "@/components/ennosmart/app-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { CirFinalConsultantPanel } from "@/components/ennosmart/cir-final-consultant-panel"
 import {
   EmptyState,
   LoadingState,
@@ -24,12 +26,14 @@ import {
 } from "@/components/ennosmart/workspace-ui"
 import {
   getProjectOverviews,
+  getAccessToken,
   type ProjectOverview,
   type UserRead,
 } from "@/lib/api"
 import { setCurrentProjectId } from "@/lib/project-session"
 
 type ProjectDashboard = ProjectOverview
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
 interface DashboardPageProps {
   navigateTo: (page: AppPage) => void
@@ -632,6 +636,8 @@ export default function DashboardPage({
     lastUpdatedAt,
     setLastUpdatedAt,
   ] = useState<Date | null>(null)
+  const [cirFinalStatus, setCirFinalStatus] = useState<Record<number, boolean | null>>({})
+  const [cirFinalProject, setCirFinalProject] = useState<ProjectDashboard | null>(null)
 
   const loadDashboard = async () => {
     setLoading(true)
@@ -728,6 +734,30 @@ export default function DashboardPage({
         getRecentProjects(items),
       [items],
     )
+
+  useEffect(() => {
+    let cancelled = false
+    const token = getAccessToken()
+    if (!token || recentProjects.length === 0) return
+
+    void Promise.all(recentProjects.map(async (item) => {
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/projects/${item.project.id}/cir-final-consultant/latest`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        )
+        if (!response.ok) return [item.project.id, null] as const
+        const data = await response.json()
+        return [item.project.id, Boolean(data && data.status !== "empty")] as const
+      } catch {
+        return [item.project.id, null] as const
+      }
+    })).then((statuses) => {
+      if (!cancelled) setCirFinalStatus(Object.fromEntries(statuses))
+    })
+
+    return () => { cancelled = true }
+  }, [recentProjects])
 
   const isAdmin =
     user.role === "admin" ||
@@ -1000,17 +1030,11 @@ export default function DashboardPage({
               </Button>
             </div>
 
-            <div className="hidden grid-cols-[minmax(250px,1.45fr)_105px_125px_110px_110px_100px_28px] gap-3 border-b border-slate-100 bg-slate-50/55 px-5 py-2.5 text-[9px] font-bold uppercase tracking-[0.08em] text-slate-500 lg:grid">
+            <div className="hidden grid-cols-[minmax(250px,1.45fr)_105px_150px_100px_28px] gap-3 border-b border-slate-100 bg-slate-50/55 px-5 py-2.5 text-[9px] font-bold uppercase tracking-[0.08em] text-slate-500 lg:grid">
               <span>Dossier</span>
               <span>Statut</span>
               <span className="text-center">
                 Score d’éligibilité
-              </span>
-              <span className="text-center">
-                EnnoScholar
-              </span>
-              <span className="text-center">
-                Risque
               </span>
               <span className="text-center">
                 Dernière activité
@@ -1026,11 +1050,6 @@ export default function DashboardPage({
                       .eligibility
                       ?.score ??
                     null
-
-                  const risk =
-                    riskFromProject(
-                      item,
-                    )
 
                   return (
                     <div
@@ -1062,7 +1081,7 @@ export default function DashboardPage({
                       }}
                       className="group cursor-pointer px-5 py-4 transition hover:bg-violet-50/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500/35"
                     >
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-[minmax(250px,1.45fr)_105px_125px_110px_110px_100px_28px] lg:items-center lg:gap-3">
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-[minmax(250px,1.45fr)_105px_150px_100px_28px] lg:items-center lg:gap-3">
 
                         {/* Dossier */}
 
@@ -1114,6 +1133,28 @@ export default function DashboardPage({
                                   verrou(x)
                                 </Badge>
                               </div>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  setCirFinalProject(item)
+                                }}
+                                onKeyDown={(event) => event.stopPropagation()}
+                                className={`mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+                                  cirFinalStatus[item.project.id] === true
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                                    : cirFinalStatus[item.project.id] === false
+                                      ? "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                                      : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                                }`}
+                              >
+                                {cirFinalStatus[item.project.id] === true ? <CheckCircle2 className="size-3.5" /> : <Upload className="size-3.5" />}
+                                {cirFinalStatus[item.project.id] === true
+                                  ? "CIR final enregistré"
+                                  : cirFinalStatus[item.project.id] === false
+                                    ? "Déposer le CIR final"
+                                    : "Vérifier le CIR final"}
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -1145,46 +1186,6 @@ export default function DashboardPage({
                           <EligibilityScore
                             value={score}
                           />
-                        </div>
-
-                        {/* EnnoScholar */}
-
-                        <div>
-                          <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.08em] text-slate-400 lg:hidden">
-                            EnnoScholar
-                          </p>
-
-                          <div className="lg:text-center">
-                            <Badge
-                              variant="outline"
-                              className={
-                                scholarIsAvailable(item)
-                                  ? "h-6 rounded-full border-indigo-200 bg-indigo-50 px-2 text-[9px] font-semibold text-indigo-700"
-                                  : "h-6 rounded-full border-slate-200 bg-slate-50 px-2 text-[9px] font-medium text-slate-500"
-                              }
-                            >
-                              {scholarIsAvailable(item)
-                                ? "Disponible"
-                                : "Non lancé"}
-                            </Badge>
-                          </div>
-                        </div>
-
-                        {/* Risque */}
-
-                        <div className="lg:text-center">
-                          <p className="mb-1.5 text-[9px] font-bold uppercase tracking-[0.08em] text-slate-400 lg:hidden">
-                            Risque
-                          </p>
-
-                          <Badge
-                            variant="outline"
-                            className={`h-6 rounded-full px-2 text-[9px] font-medium ${riskBadgeClass(
-                              risk,
-                            )}`}
-                          >
-                            {risk}
-                          </Badge>
                         </div>
 
                         {/* Date */}
@@ -1253,6 +1254,30 @@ export default function DashboardPage({
           />
         </div>
       )}
+      <Dialog open={cirFinalProject !== null} onOpenChange={(open) => { if (!open) setCirFinalProject(null) }}>
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>CIR final du projet</DialogTitle>
+            <DialogDescription>
+              Déposez la version finale réellement livrée pour ce dossier.
+            </DialogDescription>
+          </DialogHeader>
+          {cirFinalProject && (
+            <CirFinalConsultantPanel
+              projectId={cirFinalProject.project.id}
+              apiBaseUrl={API_BASE_URL}
+              authToken={getAccessToken() || undefined}
+              defaultOrganisme={cirFinalProject.project.organisme}
+              defaultProject={cirFinalProject.project.project_name}
+              defaultYear={cirFinalProject.project.year}
+              onStatusChange={(registered) => setCirFinalStatus((previous) => ({
+                ...previous,
+                [cirFinalProject.project.id]: registered,
+              }))}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

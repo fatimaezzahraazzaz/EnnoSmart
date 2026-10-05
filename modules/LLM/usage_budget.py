@@ -23,6 +23,9 @@ PRICES = {
     "gpt-4.1": {"input": 2.00, "cached": 0.50, "output": 8.00},
     "gpt-4.1-mini": {"input": 0.40, "cached": 0.10, "output": 1.60},
     "gpt-4.1-nano": {"input": 0.10, "cached": 0.025, "output": 0.40},
+    # GPT-5 standard API rates verified 2026-10-01:
+    # https://developers.openai.com/api/docs/models/gpt-5
+    "gpt-5": {"input": 1.25, "cached": 0.125, "output": 10.00},
     "gpt-5.6": {"input": 5.00, "cached": 0.50, "output": 30.00},
     "gpt-5.6-sol": {"input": 5.00, "cached": 0.50, "output": 30.00},
     "gpt-5.6-terra": {"input": 2.50, "cached": 0.25, "output": 15.00},
@@ -95,6 +98,8 @@ def _now() -> str:
 def _canonical_model(value: Any) -> str:
     model = str(value or "unknown").lower().strip().split("/")[-1]
     for name in sorted(PRICES, key=len, reverse=True):
+        if name == "gpt-5" and model != name and not re.fullmatch(r"gpt-5-\d{4}-\d{2}-\d{2}", model):
+            continue
         if model == name or model.startswith(name + "-"):
             return name
     return model
