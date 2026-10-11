@@ -1,0 +1,20 @@
+{
+  "case": "mechanical_mesh",
+  "query": "Je travaille en mécanique sur la génération automatique de maillages 3D à l’aide de modèles entraînés. Je cherche les articles scientifiques les plus pertinents sur ce sujet, y compris les articles payants. Pour les meilleurs articles, indique-moi si tu as uniquement l’abstract ou si tu as réellement pu accéder au texte complet.",
+  "references": [
+    {"label": "3DMeshNet", "doi": "10.1016/j.gmod.2025.101257"},
+    {"label": "DDPM-Polycube", "doi": "10.1007/s00366-025-02248-3"},
+    {"label": "DL-Polycube", "doi": "10.1007/s00366-025-02161-9"},
+    {"label": "Graph Neural Networks for Mesh Generation and Adaptation in Structural and Fluid Mechanics", "doi": "10.3390/math12182933"},
+    {"label": "MeshingNet3D", "doi": "10.1016/j.advengsoft.2021.103021"},
+    {"label": "AMBER", "arxiv_id": "2406.14161"},
+    {"label": "Learned Adaptive Mesh Generation", "arxiv_id": "2505.20457"},
+    {"label": "Faster and efficient tetrahedral mesh generation using generator neural networks for 2D and 3D geometries", "doi": "10.1007/s00521-023-09119-2"},
+    {"label": "NeurFrame", "arxiv_id": "2603.12820"},
+    {"label": "Meshing using neural networks for improving the efficiency of computer modelling", "doi": "10.1007/s00366-023-01812-z"}
+  ],
+  "other_cases": [
+    {"id": "junit", "query": "Définition d'un processus reproductible de génération de tests unitaires Java/JUnit par IA générative, avec robustesse, qualité des tests et généralisation.", "references": [], "status": "awaiting_human_reference_set"},
+    {"id": "few_shot_synthetic", "query": "Générer des données synthétiques diversifiées à partir de très peu d'exemples sans reproduire simplement les données initiales.", "references": [], "status": "awaiting_human_reference_set"}
+  ]
+}

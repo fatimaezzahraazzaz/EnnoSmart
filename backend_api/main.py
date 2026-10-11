@@ -49,6 +49,8 @@ from routers import diagnostic
 from routers import diagnostic_chat
 from routers import diagnostic_feedback
 from routers import scholar
+from routers import scholar_v2
+from routers import scholar_v3
 from routers import cir_final_consultant
 from routers import cir_memory
 from routers import improvement
@@ -110,6 +112,8 @@ def create_app() -> FastAPI:
     app.include_router(diagnostic_chat.router)
     app.include_router(diagnostic_feedback.router)
     app.include_router(scholar.router)
+    app.include_router(scholar_v2.router)
+    app.include_router(scholar_v3.router)
 
     app.include_router(cir_final_consultant.router)
     app.include_router(cir_memory.router)

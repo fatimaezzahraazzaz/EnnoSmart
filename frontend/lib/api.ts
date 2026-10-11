@@ -1,5 +1,7 @@
 "use client"
 
+import type { ScholarV2ArticlePage, ScholarV2Request, ScholarV2Response } from "@/lib/scholar-v2"
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -457,6 +459,22 @@ async function apiRequest<T>(
   }
 
   return data as T
+}
+
+export async function sendScholarV2Message(payload: ScholarV2Request): Promise<ScholarV2Response> {
+  return apiRequest<ScholarV2Response>("/scholar-v2/chat", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function getScholarV2Articles(sessionId: string, offset = 0, limit = 20): Promise<ScholarV2ArticlePage> {
+  return apiRequest<ScholarV2ArticlePage>(`/scholar-v2/sessions/${encodeURIComponent(sessionId)}/articles?offset=${offset}&limit=${limit}`)
+}
+
+/** V3 shares token refresh/authentication only; all paths and data are isolated. */
+export function scholarV3Request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  return apiRequest<T>(`/scholar-v3${path}`, options)
 }
 
 export async function sendDiagnosticFeedback(

@@ -106,6 +106,16 @@ const EnnoScholarPage = dynamic(
   },
 )
 
+const EnnoScholarV2Chat = dynamic(
+  () => import("@/components/ennosmart/ennoscholar-v2-chat"),
+  { ssr: false, loading: agentPageLoading },
+)
+
+const EnnoScholarV3Chat = dynamic(
+  () => import("@/components/ennosmart/ennoscholar-v3-chat"),
+  { ssr: false, loading: agentPageLoading },
+)
+
 
 const EnnoAmeliorationPage = dynamic(
   () => import("@/components/ennosmart/ennoamelioration-page"),
@@ -128,6 +138,8 @@ export type AppPage =
   | "upload"
   | "diagnosis"
   | "scholar"
+  | "scholar-v2"
+  | "scholar-v3"
   | "improvement"
   | "profile"
   | "admin"
@@ -151,6 +163,7 @@ interface AppShellProps {
   user: UserRead
   onLogout: () => void
   onUserUpdated: (user: UserRead) => void
+  initialPage?: AppPage
 }
 
 
@@ -177,6 +190,16 @@ const baseNavItems = [
   {
     id: "scholar" as AppPage,
     label: "EnnoScholar",
+    icon: BookOpen,
+  },
+  {
+    id: "scholar-v2" as AppPage,
+    label: "EnnoScholar V2",
+    icon: BookOpen,
+  },
+  {
+    id: "scholar-v3" as AppPage,
+    label: "EnnoScholar V3",
     icon: BookOpen,
   },
   {
@@ -313,6 +336,12 @@ const pageDescriptions:
     scholar:
       "Recherche, sélection et validation des preuves",
 
+    "scholar-v2":
+      "Assistant de recherche scientifique conversationnel",
+
+    "scholar-v3":
+      "Recherche scientifique, analyse et comparaison des publications",
+
     improvement:
       "Amélioration guidée des livrables CIR",
 
@@ -338,13 +367,14 @@ export default function AppShell({
   user,
   onLogout,
   onUserUpdated,
+  initialPage = "dashboard",
 }: AppShellProps) {
 
   const [
     activePage,
     setActivePage,
   ] =
-    useState<AppPage>("dashboard")
+    useState<AppPage>(initialPage)
 
 
   const [
@@ -550,6 +580,8 @@ export default function AppShell({
             items: select([
               "diagnosis",
               "scholar",
+              "scholar-v2",
+              "scholar-v3",
               "improvement",
             ]),
           },
@@ -580,6 +612,8 @@ export default function AppShell({
             items: select([
               "diagnosis",
               "scholar",
+              "scholar-v2",
+              "scholar-v3",
               "improvement",
             ]),
           },
@@ -600,6 +634,8 @@ export default function AppShell({
           items: select([
             "diagnosis",
             "scholar",
+            "scholar-v2",
+            "scholar-v3",
             "improvement",
           ]),
         },
@@ -867,6 +903,12 @@ export default function AppShell({
             }
           />
         ) : null
+
+      case "scholar-v2":
+        return <EnnoScholarV2Chat userId={user.id} />
+
+      case "scholar-v3":
+        return <EnnoScholarV3Chat userId={user.id} />
 
 
       case "improvement":

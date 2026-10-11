@@ -118,6 +118,10 @@ tests/
 **/tests/
 test_*.py
 **/test_*.py
+# V3 regression tests and research fixtures are part of the implementation.
+!tests/
+!tests/ennoscholar_v3/
+!tests/ennoscholar_v3/**
 !test_ennodiagnostic_v2_backend.py
 !test_ai_detector_fulltext.py
 !test_document_compare_fulltext.py
@@ -248,12 +252,21 @@ modules/llm_gateway/
 !/tests/
 !/tests/test_v2_only_cleanup.py
 
+# Isolated EnnoScholar V2 regression tests.
+!/tests/ennoscholar_v2/
+!/tests/ennoscholar_v2/*.py
+
 # Sauvegardes des patches locaux, jamais nécessaires au déploiement.
 /.patch_backups/
 /.ennosmart_global_llm_grouping_patch.json
 # Ce contrôle fait partie du déploiement, malgré la règle générale verify_*.py.
 !/scripts/deployment/verify_runtime_paths.py
 !/scripts/deployment/test_bootstrap.py
+
+# Preserve recorded V3 evaluation evidence; exclude generated Python caches.
+!/tests/ennoscholar_v3/research/observed_results_2026-10-11.json
+/tests/ennoscholar_v3/**/__pycache__/
+/tests/ennoscholar_v3/**/*.py[cod]
 
 .codex_tmp/
 .ennosmart_patch_backups/

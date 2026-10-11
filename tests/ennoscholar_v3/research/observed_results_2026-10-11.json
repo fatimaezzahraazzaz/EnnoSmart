@@ -1,0 +1,2093 @@
+{
+  "date": "2026-10-11",
+  "status": "scientifically_not_validated",
+  "model": "gpt-5.5",
+  "query": "Je travaille en mécanique sur la génération automatique de maillages 3D à l’aide de modèles entraînés. Je cherche les articles scientifiques les plus pertinents sur ce sujet, y compris les articles payants. Pour les meilleurs articles, indique-moi si tu as uniquement l’abstract ou si tu as réellement pu accéder au texte complet.",
+  "benchmark_supplied_to_agent": false,
+  "ranking_origin": "real_V3_evaluate_research_after_multiturn_authenticated_frontend",
+  "ranked_articles": [
+    {
+      "rank": 1,
+      "id": "paper_e1e890b4be0f080d715f",
+      "title": "A survey of AI methods for geometry preparation and mesh generation in engineering simulation",
+      "authors": [
+        "Steven Owen",
+        "Nathan Brown",
+        "Nikos Chrisochoides",
+        "Rao Garimella",
+        "Xianfeng Gu",
+        "Franck Ledoux",
+        "Na Lei",
+        "Roshan Quadros",
+        "Navamita Ray",
+        "Nick Winovich",
+        "Yongjie Jessica Zhang"
+      ],
+      "year": 2026,
+      "doi": "10.1007/s00366-026-02379-1",
+      "arxiv_id": "2512.23719",
+      "verified": true,
+      "publisher_access": "open_access",
+      "access_level": "fulltext",
+      "fulltext_available": true,
+      "analysis_basis": "fulltext",
+      "fulltext_source": "https://arxiv.org/pdf/2512.23719",
+      "metadata_errors": [],
+      "fulltext_truncated": true
+    },
+    {
+      "rank": 2,
+      "id": "paper_c7cf68c86f5278cd351c",
+      "title": "DDPM-Polycube: a denoising diffusion probabilistic model for polycube-based hexahedral mesh generation and volumetric spline construction",
+      "authors": [
+        "Yuxuan Yu",
+        "Yuzhuo Fang",
+        "Hua Tong",
+        "Jiashuo Liu",
+        "Yongjie Jessica Zhang"
+      ],
+      "year": 2026,
+      "doi": "10.1007/s00366-025-02248-3",
+      "arxiv_id": "2503.13541",
+      "verified": true,
+      "publisher_access": "open_access",
+      "access_level": "fulltext",
+      "fulltext_available": true,
+      "analysis_basis": "fulltext",
+      "fulltext_source": "https://link.springer.com/content/pdf/10.1007/s00366-025-02248-3.pdf?error=cookies_not_supported&code=b1202476-a8bd-4535-b4f3-c00361b6bd7e",
+      "metadata_errors": [],
+      "fulltext_truncated": true
+    },
+    {
+      "rank": 3,
+      "id": "paper_d0c1dd3bb6d9592b0886",
+      "title": "Patient-Specific Heart Geometry Modeling for Solid Biomechanics Using Deep Learning",
+      "authors": [
+        "Daniel H. Pak",
+        "Minliang Liu",
+        "Theodore Kim",
+        "Liang Liang",
+        "Andres Caballero",
+        "John Onofrey",
+        "Shawn S. Ahn",
+        "Yilin Xu",
+        "Raymond McKay",
+        "Wei Sun",
+        "Rudolph Gleason",
+        "James S. Duncan"
+      ],
+      "year": 2024,
+      "doi": "10.1109/tmi.2023.3294128",
+      "arxiv_id": "",
+      "verified": true,
+      "publisher_access": "paywalled",
+      "access_level": "abstract_only",
+      "fulltext_available": null,
+      "analysis_basis": "abstract",
+      "fulltext_source": "",
+      "metadata_errors": [],
+      "fulltext_truncated": false
+    },
+    {
+      "rank": 4,
+      "id": "paper_b496ea19377756356908",
+      "title": "DL-Polycube: Deep learning enhanced polycube method for high-quality hexahedral mesh generation and volumetric spline construction",
+      "authors": [
+        "Yuxuan Yu",
+        "Yuzhuo Fang",
+        "Hua Tong",
+        "Yongjie Jessica Zhang"
+      ],
+      "year": 2024,
+      "doi": "10.48550/arxiv.2410.18852",
+      "arxiv_id": "2410.18852",
+      "verified": true,
+      "publisher_access": "open_access",
+      "access_level": "fulltext",
+      "fulltext_available": true,
+      "analysis_basis": null,
+      "fulltext_source": "https://arxiv.org/html/2410.18852",
+      "metadata_errors": [],
+      "fulltext_truncated": null
+    },
+    {
+      "rank": 5,
+      "id": "paper_ebf05fb39cf1d1274149",
+      "title": "AMBER: Adaptive Mesh Generation by Iterative Mesh Resolution Prediction",
+      "authors": [
+        "Niklas Freymuth",
+        "Tobias Würth",
+        "Nicolas Schreiber",
+        "Balazs Gyenes",
+        "Andreas Boltres",
+        "Johannes Mitsch",
+        "Aleksandar Taranovic",
+        "Tai Hoang",
+        "Philipp Dahlinger",
+        "Philipp Becker",
+        "Luise Kärger",
+        "Gerhard Neumann"
+      ],
+      "year": 2025,
+      "doi": "10.48550/arxiv.2505.23663",
+      "arxiv_id": "2505.23663",
+      "verified": true,
+      "publisher_access": "unknown",
+      "access_level": "fulltext",
+      "fulltext_available": true,
+      "analysis_basis": null,
+      "fulltext_source": "https://arxiv.org/html/2505.23663",
+      "metadata_errors": [],
+      "fulltext_truncated": null
+    },
+    {
+      "rank": 6,
+      "id": "paper_0f0dfdb5a36f3f51b949",
+      "title": "Neural Volumetric Mesh Generator",
+      "authors": [
+        "Yan Zheng",
+        "Lemeng Wu",
+        "Xingchao Liu",
+        "Zhen Chen",
+        "Qiang Liu",
+        "Qixing Huang"
+      ],
+      "year": 2022,
+      "doi": "",
+      "arxiv_id": "2210.03158",
+      "verified": true,
+      "publisher_access": "open_access",
+      "access_level": "fulltext",
+      "fulltext_available": true,
+      "analysis_basis": null,
+      "fulltext_source": "https://arxiv.org/html/2210.03158",
+      "metadata_errors": [],
+      "fulltext_truncated": null
+    },
+    {
+      "rank": 7,
+      "id": "paper_de1c67b7993dd02b30b8",
+      "title": "NeurFrame: Learning Continuous Frame Fields for Structured Mesh Generation",
+      "authors": [
+        "Xiaoyang Yu",
+        "Canjia Huang",
+        "Zhonggui Chen",
+        "Juan Cao"
+      ],
+      "year": 2026,
+      "doi": "10.48550/arxiv.2603.12820",
+      "arxiv_id": "2603.12820",
+      "verified": true,
+      "publisher_access": "open_access",
+      "access_level": "fulltext",
+      "fulltext_available": true,
+      "analysis_basis": null,
+      "fulltext_source": "https://arxiv.org/html/2603.12820",
+      "metadata_errors": [],
+      "fulltext_truncated": null
+    },
+    {
+      "rank": 8,
+      "id": "paper_af6602a6be2707b68b0d",
+      "title": "Reinforcement Learning for Block Decomposition of CAD Models",
+      "authors": [
+        "Benjamin C. DiPrete",
+        "Rao V. Garimella",
+        "Cristina Garcia Cardona",
+        "Navamita Ray"
+      ],
+      "year": 2023,
+      "doi": "10.48550/arxiv.2302.11066",
+      "arxiv_id": "2302.11066",
+      "verified": true,
+      "publisher_access": "open_access",
+      "access_level": "abstract_only",
+      "fulltext_available": null,
+      "analysis_basis": null,
+      "fulltext_source": "",
+      "metadata_errors": [],
+      "fulltext_truncated": null
+    },
+    {
+      "rank": 9,
+      "id": "paper_f43038942389d0713846",
+      "title": "Graph Neural Networks for Mesh Generation and Adaptation in Structural and Fluid Mechanics",
+      "authors": [
+        "Ugo Pelissier",
+        "Augustin Parret-Fréaud",
+        "Felipe Bordeu",
+        "Youssef Mesri"
+      ],
+      "year": 2024,
+      "doi": "10.3390/math12182933",
+      "arxiv_id": "",
+      "verified": true,
+      "publisher_access": "open_access",
+      "access_level": "abstract_only",
+      "fulltext_available": null,
+      "analysis_basis": null,
+      "fulltext_source": "",
+      "metadata_errors": [],
+      "fulltext_truncated": null
+    },
+    {
+      "rank": 10,
+      "id": "paper_5609dd6cb4f5bbcaf1fd",
+      "title": "A Machine Learning Approach to Predict Near-optimal Meshes for Turbulent Compressible Flow Simulations",
+      "authors": [
+        "Sergi Sanchez-Gamero",
+        "Oubay Hassan",
+        "Ruben Sevilla"
+      ],
+      "year": 2024,
+      "doi": "10.1080/10618562.2024.2306941",
+      "arxiv_id": "2406.16057",
+      "verified": true,
+      "publisher_access": "open_access",
+      "access_level": "abstract_only",
+      "fulltext_available": null,
+      "analysis_basis": null,
+      "fulltext_source": "",
+      "metadata_errors": [],
+      "fulltext_truncated": null
+    }
+  ],
+  "final_multiturn_metrics": {
+    "gold_bibliographically_verified": 10,
+    "human_relevance_validation_complete": false,
+    "Recall@5": 0.1,
+    "Recall@10": 0.3,
+    "Precision@10": null,
+    "precision_annotations_needed": 10,
+    "benchmark_discovered": 5,
+    "benchmark_verified_in_registry": 5,
+    "metadata_errors": 0,
+    "unverified_ranked_references": 0,
+    "direct_papers_model_tag": 3,
+    "method_families_model_tag": [
+      "Deep learning deformation-based automatic volumetric mesh generation for patient-specific cardiac biomechanics",
+      "Diffusion polycube hexahedral meshing",
+      "Survey / taxonomy of AI-assisted CAD-to-mesh workflows, covering classical ML, geometric deep learning, generative representation learning, reinforcement learning, and LLM/tool-agent automation."
+    ],
+    "analysed_papers": 3,
+    "fulltexts_downloaded": 6,
+    "fulltexts_analysed": 2,
+    "access_status_errors": 0,
+    "web_searches": 0,
+    "native_web_calls": 0,
+    "duration_seconds": 118.219,
+    "estimated_cost_usd": 0.153265,
+    "missing": [
+      {
+        "reference": "3DMeshNet",
+        "doi": "10.1016/j.gmod.2025.101257",
+        "arxiv_id": null,
+        "rank": null,
+        "discovered": false,
+        "observed_cause": [
+          "research_limit_reached"
+        ],
+        "cause_status": "hypothesis_except_observed_retrieval_or_limit"
+      },
+      {
+        "reference": "DL-Polycube",
+        "doi": "10.1007/s00366-025-02161-9",
+        "arxiv_id": null,
+        "rank": null,
+        "discovered": true,
+        "observed_cause": [
+          "ranking_or_not_selected"
+        ],
+        "cause_status": "hypothesis_except_observed_retrieval_or_limit"
+      },
+      {
+        "reference": "MeshingNet3D",
+        "doi": "10.1016/j.advengsoft.2021.103021",
+        "arxiv_id": null,
+        "rank": null,
+        "discovered": false,
+        "observed_cause": [
+          "research_limit_reached"
+        ],
+        "cause_status": "hypothesis_except_observed_retrieval_or_limit"
+      },
+      {
+        "reference": "AMBER",
+        "doi": null,
+        "arxiv_id": "2406.14161",
+        "rank": null,
+        "discovered": true,
+        "observed_cause": [
+          "ranking_or_not_selected"
+        ],
+        "cause_status": "hypothesis_except_observed_retrieval_or_limit"
+      },
+      {
+        "reference": "Learned Adaptive Mesh Generation",
+        "doi": null,
+        "arxiv_id": "2505.20457",
+        "rank": null,
+        "discovered": false,
+        "observed_cause": [
+          "research_limit_reached"
+        ],
+        "cause_status": "hypothesis_except_observed_retrieval_or_limit"
+      },
+      {
+        "reference": "Faster and efficient tetrahedral mesh generation using generator neural networks for 2D and 3D geometries",
+        "doi": "10.1007/s00521-023-09119-2",
+        "arxiv_id": null,
+        "rank": null,
+        "discovered": false,
+        "observed_cause": [
+          "research_limit_reached"
+        ],
+        "cause_status": "hypothesis_except_observed_retrieval_or_limit"
+      },
+      {
+        "reference": "Meshing using neural networks for improving the efficiency of computer modelling",
+        "doi": "10.1007/s00366-023-01812-z",
+        "arxiv_id": null,
+        "rank": null,
+        "discovered": false,
+        "observed_cause": [
+          "research_limit_reached"
+        ],
+        "cause_status": "hypothesis_except_observed_retrieval_or_limit"
+      }
+    ]
+  },
+  "V2_single_turn_metrics": {
+    "gold_bibliographically_verified": 10,
+    "human_relevance_validation_complete": false,
+    "Recall@5": 0.2,
+    "Recall@10": 0.2,
+    "Precision@10": null,
+    "precision_annotations_needed": 10,
+    "benchmark_discovered": 8,
+    "benchmark_verified_in_registry": 0,
+    "metadata_errors": 0,
+    "unverified_ranked_references": 9,
+    "direct_papers_model_tag": 0,
+    "method_families_model_tag": [],
+    "analysed_papers": 0,
+    "fulltexts_downloaded": 0,
+    "fulltexts_analysed": 0,
+    "access_status_errors": 0,
+    "web_searches": 0,
+    "native_web_calls": 0,
+    "duration_seconds": 306.64100000006147,
+    "estimated_cost_usd": null,
+    "missing": [
+      {
+        "reference": "3DMeshNet",
+        "doi": "10.1016/j.gmod.2025.101257",
+        "arxiv_id": null,
+        "rank": null,
+        "discovered": false,
+        "observed_cause": [
+          "not_discovered_query_or_source_gap"
+        ],
+        "cause_status": "hypothesis_except_observed_retrieval_or_limit"
+      },
+      {
+        "reference": "DDPM-Polycube",
+        "doi": "10.1007/s00366-025-02248-3",
+        "arxiv_id": null,
+        "rank": null,
+        "discovered": true,
+        "observed_cause": [
+          "ranking_or_not_selected"
+        ],
+        "cause_status": "hypothesis_except_observed_retrieval_or_limit"
+      },
+      {
+        "reference": "MeshingNet3D",
+        "doi": "10.1016/j.advengsoft.2021.103021",
+        "arxiv_id": null,
+        "rank": null,
+        "discovered": false,
+        "observed_cause": [
+          "not_discovered_query_or_source_gap"
+        ],
+        "cause_status": "hypothesis_except_observed_retrieval_or_limit"
+      },
+      {
+        "reference": "AMBER",
+        "doi": null,
+        "arxiv_id": "2406.14161",
+        "rank": null,
+        "discovered": true,
+        "observed_cause": [
+          "ranking_or_not_selected"
+        ],
+        "cause_status": "hypothesis_except_observed_retrieval_or_limit"
+      },
+      {
+        "reference": "Learned Adaptive Mesh Generation",
+        "doi": null,
+        "arxiv_id": "2505.20457",
+        "rank": null,
+        "discovered": true,
+        "observed_cause": [
+          "ranking_or_not_selected"
+        ],
+        "cause_status": "hypothesis_except_observed_retrieval_or_limit"
+      },
+      {
+        "reference": "Faster and efficient tetrahedral mesh generation using generator neural networks for 2D and 3D geometries",
+        "doi": "10.1007/s00521-023-09119-2",
+        "arxiv_id": null,
+        "rank": null,
+        "discovered": true,
+        "observed_cause": [
+          "ranking_or_not_selected"
+        ],
+        "cause_status": "hypothesis_except_observed_retrieval_or_limit"
+      },
+      {
+        "reference": "NeurFrame",
+        "doi": null,
+        "arxiv_id": "2603.12820",
+        "rank": null,
+        "discovered": true,
+        "observed_cause": [
+          "ranking_or_not_selected"
+        ],
+        "cause_status": "hypothesis_except_observed_retrieval_or_limit"
+      },
+      {
+        "reference": "Meshing using neural networks for improving the efficiency of computer modelling",
+        "doi": "10.1007/s00366-023-01812-z",
+        "arxiv_id": null,
+        "rank": null,
+        "discovered": true,
+        "observed_cause": [
+          "ranking_or_not_selected"
+        ],
+        "cause_status": "hypothesis_except_observed_retrieval_or_limit"
+      }
+    ]
+  },
+  "benchmark_observations": [
+    {
+      "label": "3DMeshNet",
+      "doi": "10.1016/j.gmod.2025.101257",
+      "arxiv_id": null,
+      "rank_strict": null,
+      "discovered_in_UI_corpus": false,
+      "discovered_in_any_V3_run": false
+    },
+    {
+      "label": "DDPM-Polycube",
+      "doi": "10.1007/s00366-025-02248-3",
+      "arxiv_id": null,
+      "rank_strict": 2,
+      "discovered_in_UI_corpus": true,
+      "discovered_in_any_V3_run": true
+    },
+    {
+      "label": "DL-Polycube",
+      "doi": "10.1007/s00366-025-02161-9",
+      "arxiv_id": null,
+      "rank_strict": null,
+      "discovered_in_UI_corpus": true,
+      "discovered_in_any_V3_run": true
+    },
+    {
+      "label": "Graph Neural Networks for Mesh Generation and Adaptation in Structural and Fluid Mechanics",
+      "doi": "10.3390/math12182933",
+      "arxiv_id": null,
+      "rank_strict": 9,
+      "discovered_in_UI_corpus": true,
+      "discovered_in_any_V3_run": true
+    },
+    {
+      "label": "MeshingNet3D",
+      "doi": "10.1016/j.advengsoft.2021.103021",
+      "arxiv_id": null,
+      "rank_strict": null,
+      "discovered_in_UI_corpus": false,
+      "discovered_in_any_V3_run": true
+    },
+    {
+      "label": "AMBER",
+      "doi": null,
+      "arxiv_id": "2406.14161",
+      "rank_strict": null,
+      "discovered_in_UI_corpus": true,
+      "discovered_in_any_V3_run": true
+    },
+    {
+      "label": "Learned Adaptive Mesh Generation",
+      "doi": null,
+      "arxiv_id": "2505.20457",
+      "rank_strict": null,
+      "discovered_in_UI_corpus": false,
+      "discovered_in_any_V3_run": false
+    },
+    {
+      "label": "Faster and efficient tetrahedral mesh generation using generator neural networks for 2D and 3D geometries",
+      "doi": "10.1007/s00521-023-09119-2",
+      "arxiv_id": null,
+      "rank_strict": null,
+      "discovered_in_UI_corpus": false,
+      "discovered_in_any_V3_run": true
+    },
+    {
+      "label": "NeurFrame",
+      "doi": null,
+      "arxiv_id": "2603.12820",
+      "rank_strict": 7,
+      "discovered_in_UI_corpus": true,
+      "discovered_in_any_V3_run": true
+    },
+    {
+      "label": "Meshing using neural networks for improving the efficiency of computer modelling",
+      "doi": "10.1007/s00366-023-01812-z",
+      "arxiv_id": null,
+      "rank_strict": null,
+      "discovered_in_UI_corpus": false,
+      "discovered_in_any_V3_run": true
+    }
+  ],
+  "runs": [
+    {
+      "artifact": ".codex_tmp\\scholar-v3-live-01\\v3_live.json",
+      "execution_origin": "independent_live_agent",
+      "query": "Je travaille en mécanique sur la génération automatique de maillages 3D à l’aide de modèles entraînés. Je cherche les articles scientifiques les plus pertinents sur ce sujet, y compris les articles payants. Pour les meilleurs articles, indique-moi si tu as uniquement l’abstract ou si tu as réellement pu accéder au texte complet.",
+      "duration_seconds": 97.15599999995902,
+      "partial": true,
+      "reason": "context_budget",
+      "tool_counts": {
+        "web_search": 1,
+        "search_scientific": 6
+      },
+      "usage": {
+        "input_tokens": 67072,
+        "output_tokens": 3427,
+        "estimated_cost_usd": 0.44816999999999996,
+        "model": "gpt-5.5"
+      },
+      "native_web_operations": [
+        {
+          "tool": "web_search",
+          "status": "completed",
+          "at": "2026-10-11T13:45:42.055064+00:00",
+          "action": {
+            "type": "search",
+            "queries": [
+              "machine learning automatic 3D mesh generation mechanics finite element mesh generation neural network",
+              "deep learning 3D mesh generation finite element meshing tetrahedral mesh",
+              "learning based mesh generation 3D unstructured meshes finite element size field metric"
+            ],
+            "query": "machine learning automatic 3D mesh generation mechanics finite element mesh generation neural network",
+            "sources": [
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0965997821000508"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S1570865916300357"
+              },
+              {
+                "type": "url",
+                "url": "https://link.springer.com/article/10.1007/s00366-026-02379-1"
+              },
+              {
+                "type": "url",
+                "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7304029/"
+              },
+              {
+                "type": "url",
+                "url": "https://discovery.ucl.ac.uk/id/eprint/10215238/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0045794926000180"
+              },
+              {
+                "type": "url",
+                "url": "https://research.dial.uclouvain.be/entities/publication/9469d0a2-ec9e-4bd8-8dc5-83885fe217d8"
+              },
+              {
+                "type": "url",
+                "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2752024/"
+              },
+              {
+                "type": "url",
+                "url": "https://onlinelibrary.wiley.com/doi/pdf/10.1002/pse.135"
+              },
+              {
+                "type": "url",
+                "url": "https://doi.org/10.1016%2Fj.jocs.2023.102109"
+              },
+              {
+                "type": "url",
+                "url": "https://www.graphics.stanford.edu/papers/meshing-sig03/"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2004.07016"
+              },
+              {
+                "type": "url",
+                "url": "https://drhewang.com/pages/MeshingNet.html"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2203.11203"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2606.08287"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/physics/0606232"
+              },
+              {
+                "type": "url",
+                "url": "https://people.eecs.berkeley.edu/~jrs/papers/umg.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://discovery.ucl.ac.uk/id/eprint/10215238/1/Wang_ExtractPage7.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://pages.saclay.inria.fr/frederic.alauzet/proceedings/Marcum_Unstructured%20mesh%20generation%20using%20advancing%20layers%20and%20metric-based%20transition.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://core.ac.uk/download/pdf/80444165.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://files01.core.ac.uk/download/pdf/80444165.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Mesh_generation"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Gmsh"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/1doufhi"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/TopologyAI/comments/1v91x4h/opensource_3d_ai_generates_meshes_with/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/MLQuestions/comments/m0cprf"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/MLQuestions/comments/165wfgf"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/deeplearning/comments/1pxbkkw/neural_networks_for_predicting_structural/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/wz77nv"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/MachineLearning/comments/d8o0xj"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Unstructured_grid"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/1jgd176"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/learnmachinelearning/comments/1hz9gzr"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/1nefaxw/scientifichybridml_for_fem_opinions_trends_scope/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/u_welsim/comments/ih211i"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/1wlcsgg/using_neural_network_to_predict_stress_of_a/"
+              },
+              {
+                "type": "url",
+                "url": "https://es.wikipedia.org/wiki/Generaci%C3%B3n_de_mallas"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/TetGen"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "artifact": ".codex_tmp\\scholar-v3-live-02\\v3_live.json",
+      "execution_origin": "independent_live_agent",
+      "query": "Je travaille en mécanique sur la génération automatique de maillages 3D à l’aide de modèles entraînés. Je cherche les articles scientifiques les plus pertinents sur ce sujet, y compris les articles payants. Pour les meilleurs articles, indique-moi si tu as uniquement l’abstract ou si tu as réellement pu accéder au texte complet.",
+      "duration_seconds": 292.2970000000205,
+      "partial": true,
+      "reason": "tool_budget",
+      "tool_counts": {
+        "web_search": 3,
+        "search_scientific": 8,
+        "get_article_metadata": 12,
+        "get_fulltext": 1
+      },
+      "usage": {
+        "input_tokens": 169719,
+        "output_tokens": 4777,
+        "estimated_cost_usd": 1.021905,
+        "model": "gpt-5.5"
+      },
+      "native_web_operations": [
+        {
+          "tool": "web_search",
+          "status": "completed",
+          "at": "2026-10-11T13:50:52.654574+00:00",
+          "action": {
+            "type": "search",
+            "queries": [
+              "machine learning automatic 3D mesh generation mechanics finite element tetrahedral hexahedral neural network",
+              "deep learning 3D mesh generation finite element analysis mesh sizing field metric tetrahedral meshing",
+              "neural network hexahedral mesh generation polycube frame field mechanical simulation"
+            ],
+            "query": "machine learning automatic 3D mesh generation mechanics finite element tetrahedral hexahedral neural network",
+            "sources": [
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S1877705817343655"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/abs/pii/S0010448519303823"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/abs/pii/S0045782516301037"
+              },
+              {
+                "type": "url",
+                "url": "https://doi.org/https%3A%2F%2Fdoi.org%2F10.1145%2F3554920"
+              },
+              {
+                "type": "url",
+                "url": "https://www.nafems.org/publications/resource_center/c_nov_20_uk_14/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/abs/pii/S0965997821000508"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/abs/pii/S0167839622000140"
+              },
+              {
+                "type": "url",
+                "url": "https://citeseerx.ist.psu.edu/document?doi=fc35e1c1a3803133cc063b5fb9a4ce24b452f38b&repid=rep1&type=pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0045794926000180"
+              },
+              {
+                "type": "url",
+                "url": "https://link.springer.com/article/10.1007/s44379-025-00013-3"
+              },
+              {
+                "type": "url",
+                "url": "https://link.springer.com/article/10.1007/s00366-025-02161-9"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0965997821000508"
+              },
+              {
+                "type": "url",
+                "url": "https://link.springer.com/article/10.1007/s00366-026-02379-1"
+              },
+              {
+                "type": "url",
+                "url": "https://etheses.whiterose.ac.uk/id/eprint/30960/1/Kelly_AG_MechanicalEngineering_PhD_2022.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://etheses.whiterose.ac.uk/34981/1/Zhang_Z_Computing_PhD_2024.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2406.14161"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2004.07016"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2407.01560"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2104.09276"
+              },
+              {
+                "type": "url",
+                "url": "https://gaoxifeng.github.io/papers/2022/hex-mesh-survey.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://persson.berkeley.edu/pub/ml_meshing_musa26.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://www.cs.utexas.edu/~bajaj/cvc/software/docsMMM/MMM.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Mesh_generation"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/1tuk6zm/mesh_tree_based_maillage_bas%C3%A9e_sur_larbre_de/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/1doufhi"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/13ma3us"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/u_welsim/comments/ih211i"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/13vo4gt/favorite_mesh_generation_software_and_why/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/neuralnetworks/comments/1jfmuhu"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Gmsh"
+              },
+              {
+                "type": "url",
+                "url": "https://es.wikipedia.org/wiki/Generaci%C3%B3n_de_mallas"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/wz77nv"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/MLQuestions/comments/165wfgf"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/MLQuestions/comments/m0cprf"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/FEniCS_Project"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Unstructured_grid"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/u_welsim/comments/1trzy1t/mesh_of_engineering_simulation_2_element_size/"
+              }
+            ]
+          }
+        },
+        {
+          "tool": "web_search",
+          "status": "completed",
+          "at": "2026-10-11T13:52:40.583323+00:00",
+          "action": {
+            "type": "search",
+            "queries": [
+              "\"3D\" \"mesh generation\" \"finite element\" \"deep learning\" \"tetrahedral\" \"automatic\"",
+              "\"AMBER\" \"Adaptive Mesh\" \"Expert Reconstruction\" \"mesh generation\"",
+              "\"Neural\" \"tetrahedral mesh generation\" \"finite element\""
+            ],
+            "query": "\"3D\" \"mesh generation\" \"finite element\" \"deep learning\" \"tetrahedral\" \"automatic\"",
+            "sources": [
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2505.23663"
+              },
+              {
+                "type": "url",
+                "url": "https://openreview.net/pdf/111a6b9f2960b27b002810293ffaa743180c694a.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2406.14161"
+              },
+              {
+                "type": "url",
+                "url": "https://publikationen.bibliothek.kit.edu/1000188120/170552845"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0965997821000508"
+              },
+              {
+                "type": "url",
+                "url": "https://www.alphaxiv.org/fr/overview/2505.23663"
+              },
+              {
+                "type": "url",
+                "url": "https://publikationen.bibliothek.kit.edu/1000193728/182434757"
+              },
+              {
+                "type": "url",
+                "url": "https://openreview.net/pdf?id=rgWPEi6eEZ"
+              },
+              {
+                "type": "url",
+                "url": "https://www.alphaxiv.org/abs/2505.23663v2"
+              },
+              {
+                "type": "url",
+                "url": "https://journals.sagepub.com/doi/abs/10.3233/ATDE260079"
+              },
+              {
+                "type": "url",
+                "url": "https://www.researchgate.net/publication/381579587_Iterative_Sizing_Field_Prediction_for_Adaptive_Mesh_Generation_From_Expert_Demonstrations"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/abs/pii/S0098300416306914"
+              },
+              {
+                "type": "url",
+                "url": "https://ouci.dntb.gov.ua/en/works/9jwoV5n7/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.frontiersin.org/journals/systems-neuroscience/articles/10.3389/fnsys.2024.1327674/full"
+              },
+              {
+                "type": "url",
+                "url": "https://www.mdpi.com/2227-7390/12/18/2933"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/abs/pii/S0893608020304445"
+              },
+              {
+                "type": "url",
+                "url": "https://www.researchgate.net/publication/392204577_AMBER_Adaptive_Mesh_Generation_by_Iterative_Mesh_Resolution_Prediction"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0010448525000120"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Amira_%28software%29"
+              }
+            ]
+          }
+        },
+        {
+          "tool": "web_search",
+          "status": "completed",
+          "at": "2026-10-11T13:53:10.454041+00:00",
+          "action": {
+            "type": "search",
+            "queries": [
+              "\"Reinforcement learning based automatic block decomposition\" hexahedral meshing",
+              "\"Learning to Generate 3D\" \"tetrahedral\" mesh generation finite element",
+              "\"MeshingNet3D\" adapted tetrahedral meshes computational mechanics abstract"
+            ],
+            "query": "\"Reinforcement learning based automatic block decomposition\" hexahedral meshing",
+            "sources": [
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0010448525000120"
+              },
+              {
+                "type": "url",
+                "url": "https://discovery.ucl.ac.uk/id/eprint/10215238/"
+              },
+              {
+                "type": "url",
+                "url": "https://eprints.whiterose.ac.uk/id/eprint/173988/6/MeshingNet_Journal.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://www.researchgate.net/publication/388891736_Reinforcement_learning_based_automatic_block_decomposition_of_solid_models_for_hexahedral_meshing?_tp=eyJjb250ZXh0Ijp7InBhZ2UiOiJzY2llbnRpZmljQ29udHJpYnV0aW9ucyIsInByZXZpb3VzUGFnZSI6bnVsbCwic3ViUGFnZSI6bnVsbH19"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0965997821000508"
+              },
+              {
+                "type": "url",
+                "url": "https://epubs.siam.org/doi/pdf/10.1137/1.9781611979138.1"
+              },
+              {
+                "type": "url",
+                "url": "https://etheses.whiterose.ac.uk/34981/1/Zhang_Z_Computing_PhD_2024.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://drhewang.com/pages/MeshingNet.html"
+              },
+              {
+                "type": "url",
+                "url": "https://discovery.ucl.ac.uk/id/eprint/10215238/1/Wang_ExtractPage7.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://epubs.siam.org/doi/pdf/10.1137/1.9781611979138.19"
+              },
+              {
+                "type": "url",
+                "url": "https://www.researchgate.net/publication/351618305_MeshingNet3D_Efficient_generation_of_adapted_tetrahedral_meshes_for_computational_mechanics"
+              },
+              {
+                "type": "url",
+                "url": "https://www.researchgate.net/publication/399275930_A_Survey_of_AI_Methods_for_Geometry_Preparation_and_Mesh_Generation_in_Engineering_Simulation"
+              },
+              {
+                "type": "url",
+                "url": "https://link.springer.com/article/10.1007/s00366-022-01677-8"
+              },
+              {
+                "type": "url",
+                "url": "https://www.researchgate.net/publication/351482481_MeshingNet3D_Efficient_Generation_of_Adapted_Tetrahedral_Meshes_for_Computational_Mechanics"
+              },
+              {
+                "type": "url",
+                "url": "https://explore.metascienceobservatory.org/papers/W4313594102"
+              },
+              {
+                "type": "url",
+                "url": "https://eurekamag.com/research/096/357/096357092.php"
+              },
+              {
+                "type": "url",
+                "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12877039/"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "artifact": ".codex_tmp\\scholar-v3-live-03\\v3_live.json",
+      "execution_origin": "independent_live_agent",
+      "query": "Je travaille en mécanique sur la génération automatique de maillages 3D à l’aide de modèles entraînés. Je cherche les articles scientifiques les plus pertinents sur ce sujet, y compris les articles payants. Pour les meilleurs articles, indique-moi si tu as uniquement l’abstract ou si tu as réellement pu accéder au texte complet.",
+      "duration_seconds": 539.9370000001509,
+      "partial": true,
+      "reason": "context_budget",
+      "tool_counts": {
+        "web_search": 4,
+        "search_scientific": 4,
+        "update_research_state": 1,
+        "get_article_metadata": 10,
+        "get_fulltext": 6,
+        "analyze_article": 8,
+        "find_similar_articles": 3
+      },
+      "usage": {
+        "input_tokens": 282143,
+        "output_tokens": 16435,
+        "estimated_cost_usd": 1.9437649999999997,
+        "model": "gpt-5.5"
+      },
+      "native_web_operations": [
+        {
+          "tool": "web_search",
+          "status": "completed",
+          "at": "2026-10-11T13:57:28.853101+00:00",
+          "action": {
+            "type": "search",
+            "queries": [
+              "machine learning automatic 3D mesh generation volumetric meshes mechanics simulation FEM CFD neural network tetrahedral hexahedral mesh generation",
+              "deep learning 3D mesh generation finite element mesh generation automatic volumetric meshing trained models",
+              "neural network tetrahedral mesh generation simulation finite element 3D",
+              "learning based hexahedral mesh generation polycube 3D simulation"
+            ],
+            "query": "machine learning automatic 3D mesh generation volumetric meshes mechanics simulation FEM CFD neural network tetrahedral hexahedral mesh generation",
+            "sources": [
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/abs/pii/S0045782516301037"
+              },
+              {
+                "type": "url",
+                "url": "https://epubs.siam.org/doi/abs/10.1137/1.9781611979138.3"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2605.20274"
+              },
+              {
+                "type": "url",
+                "url": "https://epubs.siam.org/doi/pdf/10.1137/1.9781611979138.3"
+              },
+              {
+                "type": "url",
+                "url": "https://discovery.ucl.ac.uk/id/eprint/10215238/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0965997821000508"
+              },
+              {
+                "type": "url",
+                "url": "https://link.springer.com/article/10.1007/s00366-025-02161-9"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0010448513001589"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2410.18852"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/abs/pii/S0167839622000140"
+              },
+              {
+                "type": "url",
+                "url": "https://doi.org/10.1016/j.cagd.2026.102605"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2103.04183"
+              },
+              {
+                "type": "url",
+                "url": "https://miccai2021.org/openaccess/paperlinks/2021/09/01/155-Paper0247.html"
+              },
+              {
+                "type": "url",
+                "url": "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4041642"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/abs/pii/S0010448511001655"
+              },
+              {
+                "type": "url",
+                "url": "https://discovery.ucl.ac.uk/10215238/1/Wang_ExtractPage7.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://www.nafems.org/publications/resource_center/nwc21-501-c/"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2210.03158"
+              },
+              {
+                "type": "url",
+                "url": "https://zhenchen-jay.github.io/uploads/NVMG.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://zhenchen-jay.github.io/uploads/NVMG_full.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://gfzpublic.gfz.de/pubman/item/item_240856_2/component/file_240855/15148.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Mesh_generation"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/TopologyAI/comments/1v91x4h/opensource_3d_ai_generates_meshes_with/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/neuralnetworks/comments/1jfmuhu"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/13vo4gt/favorite_mesh_generation_software_and_why/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/CFD/comments/mt6gs5"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/CFD/comments/14503nk"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Image-based_meshing"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/1doufhi"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/u_welsim/comments/1wkozj6/the_mesh_of_engineering_simulation_5_stl_meshing/"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Spatial_twist_continuum"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Gmsh"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/StableDiffusion/comments/1divlbc"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/wz77nv"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/FEATool_Multiphysics"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/FEniCS_Project"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/13ma3us"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/CFD/comments/15h0sr3"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/CFD/comments/17b9zr9"
+              }
+            ]
+          }
+        },
+        {
+          "tool": "web_search",
+          "status": "completed",
+          "at": "2026-10-11T13:58:13.360681+00:00",
+          "action": {
+            "type": "search",
+            "queries": [
+              "\"MeshingNet3D\" \"Efficient generation of adapted tetrahedral meshes\"",
+              "\"Graph Neural Networks for Mesh Generation and Adaptation in Structural and Fluid Mechanics\"",
+              "\"Meshing using neural networks for improving the efficiency of computer modelling\"",
+              "\"DL-Polycube\" hexahedral mesh generation volumetric spline construction"
+            ],
+            "query": "\"MeshingNet3D\" \"Efficient generation of adapted tetrahedral meshes\"",
+            "sources": [
+              {
+                "type": "url",
+                "url": "https://discovery.ucl.ac.uk/id/eprint/10215238/"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2410.18852"
+              },
+              {
+                "type": "url",
+                "url": "https://eprints.whiterose.ac.uk/173988/6/MeshingNet_Journal.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://link.springer.com/article/10.1007/s00366-025-02161-9"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0965997821000508"
+              },
+              {
+                "type": "url",
+                "url": "https://www.mdpi.com/2227-7390/12/18/2933"
+              },
+              {
+                "type": "url",
+                "url": "https://cronfa.swan.ac.uk/Record/cronfa63253/Download/63253__27212__44326192a62d43eab81c0d35572f35d5.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://drhewang.com/pages/MeshingNet.html"
+              },
+              {
+                "type": "url",
+                "url": "https://github.com/CMU-CBML/DL-polycube"
+              },
+              {
+                "type": "url",
+                "url": "https://cronfa.swansea.ac.uk/Record/cronfa63253"
+              },
+              {
+                "type": "url",
+                "url": "https://link.springer.com/article/10.1007/s00366-025-02248-3"
+              },
+              {
+                "type": "url",
+                "url": "https://www.siam.org/media/5hrhczyt/gd25_abstracts.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/abs/pii/S0965997821000508"
+              },
+              {
+                "type": "url",
+                "url": "https://doi.org/10.1016/j.cagd.2026.102605"
+              },
+              {
+                "type": "url",
+                "url": "https://www.juestc.uestc.edu.cn/article/doi/10.12178/1001-0548.2024246"
+              },
+              {
+                "type": "url",
+                "url": "https://link.springer.com/article/10.1007/s00366-023-01812-z"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2503.13541"
+              },
+              {
+                "type": "url",
+                "url": "https://discovery.ucl.ac.uk/id/eprint/10215238/1/Wang_ExtractPage7.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://pdfs.semanticscholar.org/37d3/2c8676bf363559b4edd38feb2c09d599e7ab.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://epubs.siam.org/doi/pdf/10.1137/1.9781611979138.1"
+              }
+            ]
+          }
+        },
+        {
+          "tool": "web_search",
+          "status": "completed",
+          "at": "2026-10-11T14:02:11.246042+00:00",
+          "action": {
+            "type": "open_page",
+            "url": "https://link.springer.com/article/10.1007/s00366-023-01812-z"
+          }
+        }
+      ]
+    },
+    {
+      "artifact": ".codex_tmp\\scholar-v3-live-04\\v3_live.json",
+      "execution_origin": "real_frontend_postgresql_authenticated",
+      "query": "Je travaille en mécanique sur la génération automatique de maillages 3D à l’aide de modèles entraînés. Je cherche les articles scientifiques les plus pertinents sur ce sujet, y compris les articles payants. Pour les meilleurs articles, indique-moi si tu as uniquement l’abstract ou si tu as réellement pu accéder au texte complet.",
+      "duration_seconds": 600.016,
+      "partial": true,
+      "reason": "timeout",
+      "tool_counts": {
+        "web_search": 3,
+        "search_scientific": 15,
+        "get_article_metadata": 8,
+        "get_fulltext": 8,
+        "analyze_article": 3
+      },
+      "usage": {
+        "input_tokens": 197958,
+        "output_tokens": 8739,
+        "estimated_cost_usd": 1.28196,
+        "model": "gpt-5.5"
+      },
+      "native_web_operations": [
+        {
+          "tool": "web_search",
+          "status": "completed",
+          "at": "2026-10-11T14:11:15.891510+00:00",
+          "action": {
+            "type": "search",
+            "queries": [
+              "machine learning automatic 3D mesh generation finite element CFD trained models tetrahedral hexahedral mesh generation paper",
+              "deep learning 3D mesh generation finite element mesh generation volumetric mechanics paper",
+              "neural mesh generation 3D computational mechanics tetrahedral mesh paper",
+              "learning to generate meshes for computational simulations 3D FEM CFD"
+            ],
+            "query": "machine learning automatic 3D mesh generation finite element CFD trained models tetrahedral hexahedral mesh generation paper",
+            "sources": [
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0010448522001312"
+              },
+              {
+                "type": "url",
+                "url": "https://eprints.whiterose.ac.uk/173988/6/MeshingNet_Journal.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://discovery.ucl.ac.uk/id/eprint/10215238/"
+              },
+              {
+                "type": "url",
+                "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3061445/"
+              },
+              {
+                "type": "url",
+                "url": "https://link.springer.com/article/10.1007/s44379-025-00013-3"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0010448525000120"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0965997821000508"
+              },
+              {
+                "type": "url",
+                "url": "https://ojs.aaai.org/index.php/AAAI/article/view/39920"
+              },
+              {
+                "type": "url",
+                "url": "https://miccai2021.org/openaccess/paperlinks/2021/09/01/155-Paper0247.html"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/1708.08954"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S1524070325000049"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2004.07016"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2102.12923"
+              },
+              {
+                "type": "url",
+                "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7304029/"
+              },
+              {
+                "type": "url",
+                "url": "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4041642"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2210.03158"
+              },
+              {
+                "type": "url",
+                "url": "https://doi.org/10.1002/1097-0207%2820000910/20%2949%3A1/2%3C289%3A%3AAID-NME934%3E3.0.CO%3B2-L"
+              },
+              {
+                "type": "url",
+                "url": "https://openreview.net/pdf?id=uz-wSWJku_V"
+              },
+              {
+                "type": "url",
+                "url": "https://ninercommons.charlotte.edu/nanna/record/19765/files/Bounds_uncc_0694D_14478.pdf?registerDownload=1&version=1&withMetadata=0&withWatermark=0"
+              },
+              {
+                "type": "url",
+                "url": "https://scispace.com/pdf/meshingnet-a-new-mesh-generation-method-based-on-deep-4c9fxwi7um.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://graphics.stanford.edu/papers/meshing-sig03/meshing.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://compmech.unipv.it/wp-content/uploads/2020/10/cabiddu-lm.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/u_welsim/comments/ih211i"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Mesh_generation"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/CFD/comments/1awhf8b"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Spatial_twist_continuum"
+              },
+              {
+                "type": "url",
+                "url": "https://es.wikipedia.org/wiki/Generaci%C3%B3n_de_mallas"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/1ucnwin/looking_to_learn_better_meshing_practices/"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Gmsh"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/13vo4gt/favorite_mesh_generation_software_and_why/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/CFD/comments/1jtdqxm"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/CFD/comments/kq9an9"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/CFD/comments/1oeyo94"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Parallel_mesh_generation"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/CFD/comments/migr2g"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/CFD/comments/1u3277k/how_to_achieve_a_mesh_like_this/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/CFD/comments/1jlhrth"
+              }
+            ]
+          }
+        },
+        {
+          "tool": "web_search",
+          "status": "completed",
+          "at": "2026-10-11T14:12:54.819101+00:00",
+          "action": {
+            "type": "search",
+            "queries": [
+              "\"Neural Volumetric Mesh Generator\"",
+              "\"DL-Polycube\" deep learning enhanced polycube hexahedral mesh generation",
+              "\"DeepCarve\" cardiac volumetric mesh deep learning finite element",
+              "\"A survey of AI methods for geometry preparation and mesh generation in engineering simulation\""
+            ],
+            "query": "\"Neural Volumetric Mesh Generator\"",
+            "sources": [
+              {
+                "type": "url",
+                "url": "https://doi.org/10.1007/s00366-026-02379-1"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2410.18852"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2512.23719"
+              },
+              {
+                "type": "url",
+                "url": "https://pubmed.ncbi.nlm.nih.gov/37432807/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.siam.org/media/5hrhczyt/gd25_abstracts.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://github.com/CMU-CBML/DL-polycube"
+              },
+              {
+                "type": "url",
+                "url": "https://link.springer.com/article/10.1007/s00366-026-02379-1"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2210.03158"
+              },
+              {
+                "type": "url",
+                "url": "https://epubs.siam.org/doi/pdf/10.1137/1.9781611979138.1"
+              },
+              {
+                "type": "url",
+                "url": "https://www.catalyzex.com/paper/dl-polycube-deep-learning-enhanced-polycube"
+              },
+              {
+                "type": "url",
+                "url": "https://www.aimodels.fyi/papers/arxiv/survey-ai-methods-geometry-preparation-mesh-generation"
+              },
+              {
+                "type": "url",
+                "url": "https://doi.org/10.1016/j.cagd.2026.102605"
+              },
+              {
+                "type": "url",
+                "url": "https://www.alphaxiv.org/abs/2512.23719v2"
+              },
+              {
+                "type": "url",
+                "url": "https://www.alphaxiv.org/abs/2512.23719v1"
+              },
+              {
+                "type": "url",
+                "url": "https://zhenchen-jay.github.io/uploads/NVMG.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11324740/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.researchgate.net/publication/399275930_A_Survey_of_AI_Methods_for_Geometry_Preparation_and_Mesh_Generation_in_Engineering_Simulation"
+              },
+              {
+                "type": "url",
+                "url": "https://doi.org/10.1007/s00366-025-02248-3"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2503.13541"
+              },
+              {
+                "type": "url",
+                "url": "https://eprints.soton.ac.uk/490903/1/2403.04998v1.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://openreview.net/pdf/fe409bf249bc0155d61accacd87b1543db3fee4d.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://research.manchester.ac.uk/files/655441145/2505.03599v1.pdf"
+              }
+            ]
+          }
+        },
+        {
+          "tool": "web_search",
+          "status": "completed",
+          "at": "2026-10-11T14:14:55.837720+00:00",
+          "action": {
+            "type": "search",
+            "queries": [
+              "AI methods geometry preparation mesh generation engineering simulation survey Owen Brown Chrisochoides Garimella Gu Ledoux Lei Quadros Ray Winovich Zhang 2026",
+              "DeepCarve Deep Cardiac Volumetric Mesh patient-specific heart geometry modeling solid biomechanics using deep learning volumetric mesh",
+              "DDPM-Polycube denoising diffusion probabilistic model polycube hexahedral mesh generation volumetric spline construction",
+              "deep learning automatic 3D volumetric mesh generation finite element mechanics hexahedral tetrahedral"
+            ],
+            "query": "AI methods geometry preparation mesh generation engineering simulation survey Owen Brown Chrisochoides Garimella Gu Ledoux Lei Quadros Ray Winovich Zhang 2026",
+            "sources": [
+              {
+                "type": "url",
+                "url": "https://doi.org/10.1007/s00366-025-02248-3"
+              },
+              {
+                "type": "url",
+                "url": "https://pubmed.ncbi.nlm.nih.gov/37432807/"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2503.13541"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2512.23719"
+              },
+              {
+                "type": "url",
+                "url": "https://doi.org/10.1007/s00366-026-02379-1"
+              },
+              {
+                "type": "url",
+                "url": "https://researchconnect.stonybrook.edu/en/publications/a-survey-of-ai-methods-for-geometry-preparation-and-mesh-generati/"
+              },
+              {
+                "type": "url",
+                "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10764002/"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2604.17266"
+              },
+              {
+                "type": "url",
+                "url": "https://epubs.siam.org/doi/abs/10.1137/1.9781611979138.1"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0010448522001312"
+              },
+              {
+                "type": "url",
+                "url": "https://doi.org/10.1016/j.cagd.2026.102605"
+              },
+              {
+                "type": "url",
+                "url": "https://www.aimodels.fyi/papers/arxiv/survey-ai-methods-geometry-preparation-mesh-generation"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2410.18852"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/org/science/article/pii/S152614922600038X"
+              },
+              {
+                "type": "url",
+                "url": "https://doi.org/10.1007/s00366-026-02379-1?trk=article-ssr-frontend-pulse_little-text-block"
+              },
+              {
+                "type": "url",
+                "url": "https://www.emergentmind.com/papers/2604.17266"
+              },
+              {
+                "type": "url",
+                "url": "https://eprints.soton.ac.uk/490903/1/2403.04998v1.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://openreview.net/pdf/fe409bf249bc0155d61accacd87b1543db3fee4d.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://eprints.soton.ac.uk/492072/1/2407.00535v1.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://research.manchester.ac.uk/files/655441145/2505.03599v1.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://www.cs.utexas.edu/~bajaj/cvc/software/docsMMM/MMM.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://epubs.siam.org/doi/pdf/10.1137/1.9781611979138.1"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Mesh_generation"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/1doufhi"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/1tuk6zm/mesh_tree_based_maillage_bas%C3%A9e_sur_larbre_de/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/u_welsim/comments/ih211i"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/1jgd176"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Spatial_twist_continuum"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/JMesh"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/13ma3us"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Gmsh"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Image-based_meshing"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/AR_MR_XR/comments/18mdyna"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/FEATool_Multiphysics"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/1ucnwin/looking_to_learn_better_meshing_practices/"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/wz77nv"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/13vo4gt/favorite_mesh_generation_software_and_why/"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "artifact": ".codex_tmp\\scholar-v3-live-05\\v3_live.json",
+      "execution_origin": "real_frontend_postgresql_authenticated",
+      "query": "Poursuis cette recherche : analyse en priorité les textes complets déjà récupérés pour les publications les plus proches de la génération de maillages volumiques 3D en mécanique. Puis fournis une sélection classée, en distinguant génération directe, prédiction de champs et méthodes hybrides. Indique pour chaque article la base réellement analysée et les limites. Vérifie les références encore incertaines et explore seulement les lacunes utiles.",
+      "duration_seconds": 198.25,
+      "partial": true,
+      "reason": "cancelled",
+      "tool_counts": {
+        "analyze_article": 6,
+        "get_fulltext": 1
+      },
+      "usage": {
+        "input_tokens": 150144,
+        "output_tokens": 18335,
+        "estimated_cost_usd": 1.3007699999999998,
+        "model": "gpt-5.5",
+        "estimate_incomplete": true
+      },
+      "native_web_operations": []
+    },
+    {
+      "artifact": ".codex_tmp\\scholar-v3-live-06\\v3_live.json",
+      "execution_origin": "real_frontend_postgresql_authenticated",
+      "query": "Reprends les analyses interrompues sur les meilleurs articles déjà découverts. Analyse les passages des textes complets récupérés, classe les publications les plus pertinentes pour le maillage volumique 3D en mécanique, compare leurs méthodes et leurs limites et indique précisément la base analysée pour chaque référence. Ne repars pas dans une collecte générale ; explique les lacunes restantes.",
+      "duration_seconds": 606.516,
+      "partial": true,
+      "reason": "timeout",
+      "tool_counts": {
+        "analyze_article": 5,
+        "get_fulltext": 1
+      },
+      "usage": {
+        "input_tokens": 34244,
+        "output_tokens": 2695,
+        "estimated_cost_usd": 0.25207,
+        "model": "gpt-5.5",
+        "estimate_incomplete": true
+      },
+      "native_web_operations": []
+    },
+    {
+      "artifact": ".codex_tmp\\scholar-v3-live-08\\v3_live.json",
+      "execution_origin": "independent_live_agent",
+      "query": "Je travaille en mécanique sur la génération automatique de maillages 3D à l’aide de modèles entraînés. Je cherche les articles scientifiques les plus pertinents sur ce sujet, y compris les articles payants. Pour les meilleurs articles, indique-moi si tu as uniquement l’abstract ou si tu as réellement pu accéder au texte complet.",
+      "duration_seconds": 958.8599999998696,
+      "partial": true,
+      "reason": "timeout",
+      "tool_counts": {
+        "web_search": 1,
+        "search_scientific": 5,
+        "get_article_metadata": 6
+      },
+      "usage": {
+        "input_tokens": 55028,
+        "output_tokens": 956,
+        "estimated_cost_usd": 0.31382,
+        "model": "gpt-5.5",
+        "estimate_incomplete": true
+      },
+      "native_web_operations": [
+        {
+          "tool": "web_search",
+          "status": "completed",
+          "at": "2026-10-11T14:54:27.559465+00:00",
+          "action": {
+            "type": "search",
+            "queries": [
+              "machine learning 3D mesh generation finite element tetrahedral hexahedral meshing survey",
+              "deep learning automatic 3D mesh generation mechanical simulation finite element mesh",
+              "neural mesh generation 3D volumetric meshing tetrahedral hexahedral"
+            ],
+            "query": "machine learning 3D mesh generation finite element tetrahedral hexahedral meshing survey",
+            "sources": [
+              {
+                "type": "url",
+                "url": "https://onlinelibrary.wiley.com/doi/pdf/10.1002/pse.135"
+              },
+              {
+                "type": "url",
+                "url": "https://doi.org/https%3A%2F%2Fdoi.org%2F10.1145%2F3554920"
+              },
+              {
+                "type": "url",
+                "url": "https://link.springer.com/article/10.1007/s00366-026-02379-1"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2202.12670"
+              },
+              {
+                "type": "url",
+                "url": "https://www.tandfonline.com/doi/abs/10.1080/12506559.1995.10511161"
+              },
+              {
+                "type": "url",
+                "url": "https://onlinelibrary.wiley.com/doi/abs/10.1002/nme.139"
+              },
+              {
+                "type": "url",
+                "url": "https://www.juestc.uestc.edu.cn/en/article/doi/10.12178/1001-0548.2024246?viewType=citedby-info"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2210.03158"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/abs/pii/S0965997821000508"
+              },
+              {
+                "type": "url",
+                "url": "https://iris.cnr.it/handle/20.500.14243/417742"
+              },
+              {
+                "type": "url",
+                "url": "https://www.kci.go.kr/kciportal/mobile/ci/sereArticleSearch/ciSereArtiView.kci?sereArticleSearchBean.artiId=ART003343842"
+              },
+              {
+                "type": "url",
+                "url": "https://doi.org/10.1111/cgf.70349"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sciencedirect.com/science/article/pii/S0376042105000114"
+              },
+              {
+                "type": "url",
+                "url": "https://doi.org/10.1145/3554920"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/2512.23719"
+              },
+              {
+                "type": "url",
+                "url": "https://arxiv.org/abs/1708.08954"
+              },
+              {
+                "type": "url",
+                "url": "https://www.cs.utexas.edu/~bajaj/cvc/software/docsMMM/MMM.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://zhenchen-jay.github.io/uploads/NVMG.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://www.sci.utah.edu/publications/SCITechReports/UUSCI-2007-008.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://zhenchen-jay.github.io/uploads/NVMG_full.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://ysflight.in.coocan.jp/publication/yamakawa_phdthesis.pdf"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Mesh_generation"
+              },
+              {
+                "type": "url",
+                "url": "https://es.wikipedia.org/wiki/Generaci%C3%B3n_de_mallas"
+              },
+              {
+                "type": "url",
+                "url": "https://www.reddit.com/r/fea/comments/1jgd176"
+              },
+              {
+                "type": "url",
+                "url": "https://en.wikipedia.org/wiki/Grid_classification"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "artifact": ".codex_tmp\\scholar-v3-live-09\\v3_live.json",
+      "execution_origin": "real_frontend_postgresql_authenticated",
+      "query": "Termine la sélection à partir du corpus de cette conversation. Analyse les textes complets déjà présents pour les publications pertinentes qui restent à analyser, puis enregistre un classement et rédige une comparaison concise avec les statuts d’accès réels. Utilise exclusivement les données disponibles : ne lance aucune recherche ni téléchargement supplémentaire.",
+      "duration_seconds": null,
+      "partial": true,
+      "reason": "upstream_error",
+      "tool_counts": {},
+      "usage": {},
+      "native_web_operations": []
+    },
+    {
+      "artifact": ".codex_tmp\\scholar-v3-live-10\\v3_live.json",
+      "execution_origin": "real_frontend_postgresql_authenticated",
+      "query": "Fournis maintenant le classement provisoire des dix publications les plus pertinentes déjà découvertes pour ma demande de maillages volumiques 3D en mécanique. Utilise uniquement les analyses et notices déjà conservées, sans recherche, téléchargement ni nouvelle analyse. Enregistre la sélection classée avec evaluate_research puis donne un tableau concis, avec les identifiants vérifiés et la distinction texte récupéré / texte analysé / abstract / métadonnées. Explique les lacunes et ne présente pas ce classement provisoire comme un état de l’art validé.",
+      "duration_seconds": 118.219,
+      "partial": true,
+      "reason": "upstream_error",
+      "tool_counts": {
+        "evaluate_research": 1
+      },
+      "usage": {
+        "input_tokens": 24239,
+        "output_tokens": 1069,
+        "estimated_cost_usd": 0.153265,
+        "model": "gpt-5.5",
+        "estimate_incomplete": true,
+        "unreported_reserved_cost_usd": 1.7451949999999998
+      },
+      "native_web_operations": []
+    }
+  ],
+  "validation": {
+    "V3_tests": 32,
+    "regression_tests": 284,
+    "protected_files": 170,
+    "protected_files_modified": 0,
+    "frontend_typecheck": "passed",
+    "frontend_build": "passed"
+  },
+  "limits": [
+    "Initial independent runs did not produce a satisfactory top ten.",
+    "Final ranking follows multiple continuation turns and is not directly equivalent to the V2 single-turn run.",
+    "Several OpenAI connection/timeouts and provider delays interrupted calls; costs are incomplete estimates.",
+    "A review is ranked first; ranking of direct methods remains unsatisfactory.",
+    "Four downloaded texts have not been successfully analysed.",
+    "Human Precision@10 annotations are absent; no fabricated precision score."
+  ]
+}
