@@ -20,7 +20,8 @@ def test_catalogue_has_batch_and_no_unitary_notice_tool():
     names = [tool.get("name") for tool in TOOLS]
     assert "get_articles" in names and "get_article" not in names
     tool = next(tool for tool in TOOLS if tool.get("name") == "get_articles")
-    assert tool["parameters"]["required"] == ["article_ids"]
+    assert tool["parameters"]["required"] == ["article_ids", "request_kind"]
+    assert "bibliographic_search" in tool["parameters"]["properties"]["request_kind"]["enum"]
     assert tool["parameters"]["properties"]["article_ids"]["maxItems"] == 12
 
 

@@ -30,6 +30,9 @@ def response(*items, input_tokens=2500):
 
 
 def function(name, arguments, call_id):
+    # This reproduction isolates context/timeout mechanics. Bibliographic closure
+    # has a separate simulated integration suite with explicit request_kind.
+    arguments = {"request_kind": "other", **arguments}
     return {"type": "function_call", "name": name, "arguments": json.dumps(arguments), "call_id": call_id, "id": "fc_" + call_id}
 
 

@@ -15,7 +15,8 @@ from urllib.parse import urlparse
 from openai import APITimeoutError
 from pydantic import ValidationError
 
-from .citations import parse_output
+from .citations import (BIBLIOGRAPHY_INSTRUCTION, BibliographyError, bibliography_format,
+    parse_output, render_bibliography)
 from .config import ScholarConfig
 from .conversation import CONVERSATION_INSTRUCTION
 from .article_reference import (DISCOVERY_TOOLS, REFERENCE_INSTRUCTION, clarification_message,
@@ -45,6 +46,22 @@ Utilise maintenant les résultats déjà collectés. N'appelle un nouvel outil q
 information indispensable manque. Ne répète pas les recherches ni la récupération de
 notices déjà obtenues. Termine les vérifications fulltext et analyses nécessaires en batch,
 puis produis immédiatement la meilleure réponse possible."""
+
+REQUEST_KINDS = ["bibliographic_search", "article_analysis", "followup", "other"]
+REQUEST_INSTRUCTION = """Déclare request_kind dans chaque fonction selon la demande ORIGINALE
+de ce tour, pas selon l'outil : bibliographic_search pour trouver/comparer les meilleures références,
+article_analysis pour lire/analyser un article ciblé, followup pour une question sur les résultats
+précédents, other sinon. Une recherche nécessaire à une analyse ou un suivi ne change pas ce type.
+Sans appel de fonction, hors synthèse JSON structurée, préfixe ta réponse par
+<!--scholar_request:TYPE--> ; ce marqueur sera retiré. Le JSON final n'a aucun préfixe.
+Pour bibliographic_search, une sélection explicite et justifiée est obligatoire avant la synthèse.
+Compare ensemble les candidats réellement visibles/examinés à la demande originale : objet,
+opération, dimension, méthode et application; distingue production directe/hybride, adaptation,
+réparation/lissage, reconstruction pour une autre application et utilisation en simulation.
+Les notices doivent être comparées avant citations, année, accès ou existence d'une analyse.
+Un candidat DIRECT peut dépasser un CONNEXE déjà analysé. Aucun benchmark ni domaine prédéfini.
+Enregistre tes finalistes avec set_article_selection et une raison scientifique courte par ID.
+Une inspection ou un pin automatique ne constitue pas cette sélection. N'invente pas de notice."""
 
 
 @dataclass
@@ -98,7 +115,11 @@ TOOLS = [
          "exclude_article_ids": {"type": ["array", "null"], "items": STRING, "maxItems": 10000}, "cursor": OPTIONAL_STRING}),
     function_tool("set_article_selection", "Mémoriser TES finalistes scientifiques et les notices à garder épinglées. Remplace ces deux listes, chacune de 0 à 12 IDs connus. Le jugement appartient au chat, aucun score Python. Les autres travaux et analyses restent backend.",
         {"finalist_article_ids": {"type": "array", "items": STRING, "maxItems": 12},
-         "pinned_article_ids": {"type": "array", "items": STRING, "maxItems": 12}}),
+         "pinned_article_ids": {"type": "array", "items": STRING, "maxItems": 12},
+         "justifications": {"type": ["array", "null"], "maxItems": 12, "items": {
+             "type": "object", "additionalProperties": False, "properties": {
+                 "article_id": STRING, "reason": {"type": "string", "minLength": 1, "maxLength": 500}},
+             "required": ["article_id", "reason"]}}}),
     function_tool("read_article", "Résoudre un article depuis une URL publique, un DOI ou un identifiant arXiv. Ne garantit pas le full text.",
         {"url_or_doi": STRING}),
     function_tool("get_articles", "Retrouver en UN appel les notices de quelques candidats utiles (1 à 12), avec abstracts compacts et analyses vérifiées; jamais le texte intégral. Ne pas récupérer tous les candidats ni répéter des notices déjà disponibles.",
@@ -111,6 +132,11 @@ TOOLS = [
         {"article_or_topic": STRING, "article_id": OPTIONAL_STRING,
             "queries": {"type": "array", "items": STRING, "maxItems": 4}, "limit": LIMIT}),
 ]
+
+for _tool in TOOLS:
+    if _tool["type"] == "function":
+        _tool["parameters"]["properties"]["request_kind"] = {"type": "string", "enum": REQUEST_KINDS}
+        _tool["parameters"]["required"].append("request_kind")
 
 
 class ScholarChatAgent:
@@ -367,6 +393,33 @@ class ScholarChatAgent:
         memory = memory or ScientificMemory()
         ArticleStore(registry).annotate()
         active = ActiveSources(registry, self.config.active_article_limit, memory)
+        bibliographic = False
+        selection_ready = False
+        comparison_phase = False
+        comparison_requested_ids = []
+        comparison_presented = False
+        bibliography_repair = False
+        last_visible_rows = []
+        last_index_ids = []
+
+        def declare_request(kind):
+            nonlocal bibliographic, selection_ready
+            if kind not in REQUEST_KINDS:
+                raise ValueError("Type de demande invalide.")
+            if kind == "bibliographic_search" and not bibliographic:
+                bibliographic, selection_ready = True, False
+
+        def declare_text(answer):
+            marker = re.match(r"\s*<!--scholar_request:(\w+)-->\s*", answer)
+            if marker:
+                declare_request(marker.group(1))
+                return answer[marker.end():]
+            return answer
+
+        def require_grounding(answer):
+            if bibliographic and selection_ready:
+                return render_bibliography(answer, registry, active.finalists)
+            return answer, [], []
         no_new_search = explicitly_no_new_search(message)
         local_reference = resolve_pending_reference(message, registry, memory.pending_clarification) or resolve_message_reference(message, registry)
         if local_reference and local_reference["status"] == "resolved":
@@ -381,8 +434,17 @@ class ScholarChatAgent:
                 local_reference["status"], local_reference.get("article_id", ""), str(no_new_search).lower())
 
         def build_instructions():
-            selection_policy = "\nSélection scientifique mémorisée (IDs, pas de nouveaux jugements) : " + json.dumps({"finalist_article_ids": active.finalists, "pinned_article_ids": active.pinned}, ensure_ascii=False)
-            return SYSTEM_PROMPT + "\n" + COLLECTED_CORPUS_INSTRUCTION + selection_policy + "\n" + CONVERSATION_INSTRUCTION + "\n" + reference_policy + "\nSélection active serveur des sources réellement récupérées (données, autres notices disponibles via get_articles) :\n" + json.dumps(active.render(self.config.max_input_tokens // 3), ensure_ascii=False)
+            nonlocal last_visible_rows, comparison_presented, last_index_ids
+            selection_policy = "\nSélection scientifique mémorisée : " + json.dumps({"finalist_article_ids": active.finalists,
+                "finalist_justifications": active.justifications, "pinned_article_ids": active.pinned}, ensure_ascii=False)
+            last_visible_rows = active.comparison_context(comparison_requested_ids or None, self.config.max_input_tokens // 3) if comparison_phase else active.render(self.config.max_input_tokens // 3)
+            comparison_presented = comparison_phase
+            index = active.examined_index(self.config.max_input_tokens // 6) if comparison_phase else []
+            last_index_ids = [row["article_id"] for row in index]
+            recall = ("\nIndex des candidats précédemment examinés (titres/IDs seulement, pas encore une comparaison commune). Pour revoir un candidat hors fenêtre, propose-le via set_article_selection; ses notices seront présentées ensemble AVANT validation : " + json.dumps(index, ensure_ascii=False) if index else "")
+            closing = ("\nCOMPARAISON COMMUNE obligatoire : compare ces candidats ensemble à la demande originale puis appelle set_article_selection avec des justifications. Aucun nouveau réseau."
+                if comparison_phase else "")
+            return SYSTEM_PROMPT + "\n" + COLLECTED_CORPUS_INSTRUCTION + "\n" + REQUEST_INSTRUCTION + selection_policy + "\n" + CONVERSATION_INSTRUCTION + "\n" + reference_policy + closing + recall + ("\n" + BIBLIOGRAPHY_INSTRUCTION if bibliographic and selection_ready else "") + "\nSélection active serveur des sources réellement récupérées (données, autres notices disponibles via get_articles) :\n" + json.dumps(last_visible_rows, ensure_ascii=False)
 
         instructions = build_instructions()
         history_budget = max(0, self.config.max_input_tokens - estimate_tokens(instructions) - estimate_tokens(TOOLS) - estimate_tokens(message) - 2000)
@@ -419,16 +481,34 @@ class ScholarChatAgent:
 
         def finish(answer, citations, reason=None):
             nonlocal outcome
+            cited_ids = []
+            if bibliographic:
+                if not selection_ready:
+                    reason = reason or "scientific_selection_incomplete"
+                    answer, citations = fallback(), []
+                else:
+                    try:
+                        answer, citations, cited_ids = require_grounding(answer)
+                    except BibliographyError as exc:
+                        logger.info("EnnoScholar V2 turn=%s bibliography_rejected error=%s", turn_id, str(exc))
+                        reason = reason or "bibliography_validation_failed"
+                        answer, citations = fallback(), []
+            if bibliographic:
+                logger.info("EnnoScholar V2 turn=%s closure reason=%s inspected=%s finalists=%s cited=%s selection_ready=%s",
+                    turn_id, reason or "completed", json.dumps(active.inspected), json.dumps(active.finalists), json.dumps(cited_ids), selection_ready)
             outcome = reason or "completed"
             if reason:
-                prefix = ("Réponse partielle.\n\n"
+                prefix = ("Réponse partielle : la comparaison et la sélection scientifique finales n'ont pas pu être achevées.\n\n" if bibliographic and not selection_ready
+                    else "Réponse partielle : les références finales n'ont pas pu être validées.\n\n" if reason == "bibliography_validation_failed"
+                    else "Réponse partielle.\n\n"
                     if reason in {"synthesis_timeout", "synthesis_unavailable"} else "Réponse partielle : la limite de recherche a été atteinte. Voici les résultats disponibles.\n\n")
                 citations = [citation.model_copy(update={
                     "start_index": citation.start_index + len(prefix) if citation.start_index is not None else None,
                     "end_index": citation.end_index + len(prefix) if citation.end_index is not None else None}) for citation in citations]
                 answer = prefix + answer
             known_urls = {citation.url for citation in citations}
-            citations.extend(citation for url, citation in consulted.items() if url not in known_urls)
+            if not bibliographic:
+                citations.extend(citation for url, citation in consulted.items() if url not in known_urls)
             known_urls.update(citation.url for citation in citations)
             for identifier in active.identifiers:
                 record = registry[identifier]
@@ -471,12 +551,19 @@ class ScholarChatAgent:
             timeout = min(timeout, remaining)
             logger.info("EnnoScholar V2 turn=%s synthesis attempt=%s timeout=%.1f tools=none", turn_id, attempt, timeout)
             rounds += 1
+            active.remember_visible(last_visible_rows)
+            logger.info("EnnoScholar V2 turn=%s visible round=%s phase=synthesis ids=%s", turn_id, rounds,
+                json.dumps([row["id"] for row in last_visible_rows]))
+            options = {"text": bibliography_format()} if bibliographic and selection_ready else {}
             response = client.with_options(timeout=timeout, max_retries=0).responses.create(
                 model=self.config.model, instructions=final_instructions, input=final_items,
-                tools=[], tool_choice="none", store=False, max_output_tokens=self.config.max_output_tokens)
+                tools=[], tool_choice="none", store=False, max_output_tokens=self.config.max_output_tokens, **options)
             if getattr(response, "status", "completed") != "completed":
                 raise RuntimeError("Synthèse non terminée.")
-            return parse_output([item.model_dump(exclude_none=True) for item in response.output])
+            answer, citations = parse_output([item.model_dump(exclude_none=True) for item in response.output])
+            answer = declare_text(answer)
+            require_grounding(answer)
+            return answer, citations
 
         def retry_synthesis(final_instructions, final_items, reason=None, phase_deadline=None):
             # Exactly one recovery request. Its clock never uses the tool-stage deadline.
@@ -490,11 +577,16 @@ class ScholarChatAgent:
                     return finish(answer, citations, reason)
             except Exception as exc:
                 logger.info("EnnoScholar V2 turn=%s synthesis_timeout retry=exhausted error=%s fallback=deterministic", turn_id, type(exc).__name__)
+                if isinstance(exc, BibliographyError):
+                    return finish(fallback(), [], "bibliography_validation_failed")
             return finish(fallback(), [], "synthesis_timeout")
 
         def finalize(reason):
             # A separate bounded synthesis phase can outlive the tool-stage deadline.
             # No scientific/network tool is reachable from this phase.
+            if bibliographic and not selection_ready:
+                logger.info("EnnoScholar V2 turn=%s selection_limit trigger=%s", turn_id, reason or "analysis_deadline")
+                return finish(fallback(), [], reason or "scientific_selection_incomplete")
             phase_deadline = time.monotonic() + self.config.synthesis_timeout + self.config.synthesis_retry_timeout
             final_instructions = build_instructions() + "\nLa recherche est terminée. Aucun nouvel outil. Synthétise uniquement les résultats réellement collectés; indique les données manquantes sans demander de réduire le sujet."
             final_items = items
@@ -508,6 +600,9 @@ class ScholarChatAgent:
                         return finish(answer, citations, reason)
                 except APITimeoutError:
                     return retry_synthesis(final_instructions, final_items, reason, phase_deadline)
+                except BibliographyError as exc:
+                    logger.info("EnnoScholar V2 turn=%s bibliography_regeneration error=%s tools=none", turn_id, str(exc))
+                    return retry_synthesis(final_instructions + "\nRépare uniquement les associations bibliographiques depuis les notices serveur : " + str(exc), final_items, reason, phase_deadline)
                 except Exception as exc:
                     logger.info("EnnoScholar V2 turn=%s synthesis_fallback=%s", turn_id, type(exc).__name__)
             return finish(fallback(), [], reason or "synthesis_unavailable")
@@ -530,7 +625,9 @@ class ScholarChatAgent:
                     if time.monotonic() >= analysis_deadline and registry:
                         # Enter the reserved synthesis tail normally; a soft timeout
                         # is never an immediate partial answer or tools=[] transition.
-                        return finalize(None)
+                        return finalize("analysis_time_budget_reached" if bibliographic else None)
+                    if bibliographic and registry and not selection_ready and _ >= self.config.max_rounds - 2:
+                        comparison_phase = True
                     finishing = sum(counts.values()) >= soft_budget or time.monotonic() >= soft_deadline
                     current_instructions = build_instructions() + ("\n" + SOFT_INSTRUCTION if finishing else "")
                     metrics = context_metrics(items, current_instructions, TOOLS)
@@ -577,14 +674,25 @@ class ScholarChatAgent:
                             time.monotonic() - started, remaining, sum(counts.values()), sorted(excluded))
                     if time.monotonic() >= fulltext_deadline:
                         available_tools = [tool for tool in available_tools if tool.get("name") != "get_fulltext"]
+                    tool_choice = "auto"
+                    if comparison_phase:
+                        available_tools = [tool for tool in TOOLS if tool.get("name") == "set_article_selection"]
+                        tool_choice = {"type": "function", "name": "set_article_selection"}
+                    elif bibliography_repair:
+                        available_tools, tool_choice = [], "none"
                     rounds += 1
+                    active.remember_visible(last_visible_rows)
+                    logger.info("EnnoScholar V2 turn=%s visible round=%s phase=%s ids=%s examined_index_ids=%s", turn_id, rounds,
+                        "comparison" if comparison_phase else "bibliography_repair" if bibliography_repair else "chat",
+                        json.dumps([row["id"] for row in last_visible_rows]), json.dumps(last_index_ids))
                     try:
+                        options = {"text": bibliography_format()} if bibliographic and selection_ready else {}
                         response = request_client.responses.create(model=self.config.model, instructions=current_instructions,
-                            input=items, tools=available_tools, tool_choice="auto", store=False,
+                            input=items, tools=available_tools, tool_choice=tool_choice, store=False,
                             max_tool_calls=self.config.hard_tool_budget - sum(counts.values()),
                             context_management=[{"type": "compaction", "compact_threshold": self.config.compact_threshold}],
                             include=["web_search_call.action.sources", "reasoning.encrypted_content"],
-                            max_output_tokens=self.config.max_output_tokens)
+                            max_output_tokens=self.config.max_output_tokens, **options)
                     except APITimeoutError:
                         if not registry:
                             raise
@@ -602,12 +710,41 @@ class ScholarChatAgent:
                             else:
                                 count_tool("web_search", "completed" if item.get("status") == "completed" else "error")
                     answer, citations = parse_output(output)
+                    answer = declare_text(answer)
                     for citation in citations:
                         consulted[citation.url] = citation.model_copy(update={"cited": False, "start_index": None, "end_index": None})
                     calls = [item for item in output if item.get("type") == "function_call"]
+                    # Scope must be known even when the proposed tools are refused
+                    # by a deadline; a skipped search is not a completed comparison.
+                    for proposed in calls:
+                        try:
+                            metadata = json.loads(proposed.get("arguments", "{}"))
+                            kind = metadata.get("request_kind")
+                            if kind is not None:
+                                declare_request(kind)
+                            elif proposed.get("name") in {"search_scientific", "search_collected_articles", "find_similar_articles"}:
+                                declare_request("bibliographic_search")
+                        except (ValueError, TypeError, AttributeError):
+                            pass  # The existing tool argument handler reports the error.
                     if not calls:
                         if not answer.strip():
                             raise RuntimeError("Réponse OpenAI sans texte ni appel d'outil.")
+                        if bibliographic and not selection_ready:
+                            if not registry:
+                                return finish(fallback(), [], "scientific_selection_incomplete")
+                            comparison_phase = True
+                            items.append({"role": "user", "content": "Ne synthétise pas encore. Compare la fenêtre commune à ma demande originale et enregistre tes finalistes justifiés via set_article_selection."})
+                            logger.info("EnnoScholar V2 turn=%s selection_required round=%s", turn_id, rounds)
+                            continue
+                        try:
+                            require_grounding(answer)
+                        except BibliographyError as exc:
+                            logger.info("EnnoScholar V2 turn=%s bibliography_rejected error=%s", turn_id, str(exc))
+                            if bibliography_repair:
+                                return finish(fallback(), [], "bibliography_validation_failed")
+                            bibliography_repair = True
+                            items.append({"role": "user", "content": "Régénère uniquement la réponse bibliographique structurée avec les métadonnées exactes du registre. Aucun outil. Erreur : " + str(exc)})
+                            continue
                         reason = "tool_budget_reached" if sum(counts.values()) >= self.config.hard_tool_budget else None
                         return finish(answer, citations, reason)
                     # Keep opaque reasoning and native compaction items within this turn.
@@ -615,7 +752,10 @@ class ScholarChatAgent:
                     for call in calls:
                         name = call.get("name", "")
                         soft_time = time.monotonic() >= soft_deadline
-                        if no_new_search and name in DISCOVERY_TOOLS:
+                        if (bibliography_repair or (comparison_phase and name != "set_article_selection")):
+                            activity.append(ToolActivity(tool=name, status="skipped"))
+                            result = {"error": "Clôture uniquement : aucun outil de recherche, lecture ou analyse ne doit être relancé."}
+                        elif no_new_search and name in DISCOVERY_TOOLS:
                             activity.append(ToolActivity(tool=name, status="skipped"))
                             result = {"error": "Recherche interdite par l'utilisateur pour ce tour. Résoudre uniquement dans le registre de session; notices, fulltext et analyses d'articles connus restent autorisés."}
                             logger.info("EnnoScholar V2 turn=%s tool=%s status=skipped reason=no_new_search", turn_id, name)
@@ -634,16 +774,45 @@ class ScholarChatAgent:
                             status = "completed"
                             try:
                                 arguments = json.loads(call.get("arguments", "{}"))
+                                # Model-owned intent classification, never a keyword/ranking rule.
+                                declared = arguments.pop("request_kind", None)
+                                if declared is not None:
+                                    declare_request(declared)
+                                elif name in {"search_scientific", "search_collected_articles", "find_similar_articles"}:
+                                    declare_request("bibliographic_search")
                                 tool_deadline = fulltext_deadline if name in {"get_fulltext", "search_scientific", "find_similar_articles"} else analysis_deadline
                                 if name == "search_scientific":
                                     tool_deadline = min(tool_deadline, time.monotonic() + self.config.search_timeout, soft_deadline)
                                 if name == "set_article_selection":
-                                    result = active.select(arguments.get("finalist_article_ids"), arguments.get("pinned_article_ids"))
+                                    chosen = arguments.get("finalist_article_ids") or []
+                                    if bibliographic:
+                                        store = ArticleStore(registry)
+                                        visible = {store.work_id(row["id"]) for row in last_visible_rows}
+                                        examined = {store.work_id(key) for key in [*active.examined, *active.inspected]}
+                                        selected = {store.work_id(key) for key in chosen}
+                                        if not chosen or None in selected or not selected <= examined or arguments.get("justifications") is None:
+                                            raise ValueError("Choisis des finalistes réellement examinés et justifie chacun.")
+                                        if not comparison_presented or not selected <= visible:
+                                            comparison_requested_ids = list(chosen)
+                                            comparison_phase = True
+                                            raise ValueError("Ces candidats seront présentés ensemble au prochain tour avant validation de la sélection.")
+                                    result = active.select(chosen, arguments.get("pinned_article_ids"), arguments.get("justifications"))
+                                    if bibliographic:
+                                        selection_ready, comparison_phase = True, False
+                                    logger.info("EnnoScholar V2 turn=%s selection finalists=%s justifications=%s", turn_id,
+                                        json.dumps(active.finalists), json.dumps(active.justifications, ensure_ascii=False))
                                 elif no_new_search and name == "read_article":
                                     # Do not bypass the ban through this external DOI/URL reader.
                                     result = self.execute_tool("resolve_article_reference", {"reference": arguments.get("url_or_doi")}, registry, request_client)
                                 else:
                                     result = self.execute_tool(name, arguments, registry, request_client, deadline=tool_deadline)
+                                if name in {"search_scientific", "search_collected_articles", "find_similar_articles", "read_article"} and bibliographic:
+                                    selection_ready = False
+                                if name == "search_collected_articles":
+                                    logger.info("EnnoScholar V2 turn=%s local_search round=%s query=%s returned_ids=%s matches=%s exclusions=%s cursor=%s next_cursor=%s",
+                                        turn_id, rounds, json.dumps(arguments.get("query"), ensure_ascii=False),
+                                        json.dumps([row.get("article_id") for row in result.get("articles", [])]), result.get("matched_work_count"),
+                                        json.dumps(arguments.get("exclude_article_ids")), arguments.get("cursor"), result.get("next_cursor"))
                                 if name == "search_scientific":
                                     logger.info("EnnoScholar V2 turn=%s search query_count=%s corpus=%s collection=%s", turn_id,
                                         len(arguments.get("queries", [])), len(registry), json.dumps(result.get("collection", []), ensure_ascii=False))
@@ -677,6 +846,7 @@ class ScholarChatAgent:
                         logger.info("EnnoScholar V2 turn=%s tool=%s result_tokens=%s wire_tokens=%s result_bytes=%s wire_bytes=%s active_articles=%s",
                             turn_id, name, estimate_tokens(result), estimate_tokens(wire_result),
                             serialized_bytes(result), serialized_bytes(wire_result), len(active.identifiers))
+                        logger.info("EnnoScholar V2 turn=%s inspection round=%s inspected_ids=%s", turn_id, rounds, json.dumps(active.inspected))
                         items.append({"type": "function_call_output", "call_id": call["call_id"], "output": json.dumps(wire_result, ensure_ascii=False)})
                     before_pruning = len(items)
                     items = prune_native_compaction(items)

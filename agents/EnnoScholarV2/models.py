@@ -106,6 +106,8 @@ class ScientificMemory(BaseModel):
     inspected_article_ids: list[str] = Field(default_factory=list)
     pinned_article_ids: list[str] = Field(default_factory=list)
     finalist_article_ids: list[str] = Field(default_factory=list)
+    finalist_justifications: dict[str, str] = Field(default_factory=dict)
+    examined_article_ids: list[str] = Field(default_factory=list)
     detailed_article_ids: list[str] = Field(default_factory=list)
     pending_clarification: dict | None = None
 

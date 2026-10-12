@@ -51,7 +51,7 @@ def test_iterative_discovery_web_registration_and_selective_reading(monkeypatch,
         FulltextResult(access_level="abstract_only", text=quote, reason="Aucun texte intégral légal disponible."))
     requests, examined = [], []
     def create(**kwargs):
-        if "text" in kwargs:
+        if "text" in kwargs and isinstance(kwargs["input"], str):
             payload = json.loads(kwargs["input"])
             return SimpleNamespace(status="completed", output_text=json.dumps({"method": "Trained model for the requested task",
                 "access_level": "abstract_only", "analysis_basis": "abstract", "evidence": [evidence_reference(payload, quote, ["method"])]}))
@@ -84,23 +84,44 @@ def test_iterative_discovery_web_registration_and_selective_reading(monkeypatch,
             return response(call("get_fulltext", {"article_ids": examined[:1], "candidate_urls": []}, "fulltext"))
         if number == 7:
             return response(call("analyze_articles", {"article_ids": examined[:1], "user_context": topic}, "analysis"))
-        selected = next(notice for notice in notices if notice["doi"] == direct.doi)
-        assert selected["analysis"]["analysis_basis"] == "abstract" and selected["access_level"] == "abstract_only"
-        assert "fulltext" not in selected  # An unsuccessful lookup does not register a fulltext.
-        return response(message(f"DIRECT : {direct.title} — Abstract uniquement.\n"
-            f"DIRECT : {web_article.title}.\nCONNEXE : {adjacent.title} — utilise un objet existant."))
-    fake_client.responses.create.side_effect = create
+        if number == 8:
+            selected = next(notice for notice in notices if notice["doi"] == direct.doi)
+            assert selected["analysis"]["analysis_basis"] == "abstract" and selected["access_level"] == "abstract_only"
+            assert "fulltext" not in selected  # An unsuccessful lookup does not register a fulltext.
+            return response(message("Les candidats sont prêts pour la comparaison finale."))
+        chosen = sorted([row for row in notices if row["doi"] in {direct.doi, web_article.doi, adjacent.doi}],
+            key=lambda row: [direct.doi, web_article.doi, adjacent.doi].index(row["doi"]))
+        if number == 9:
+            return response(call("set_article_selection", {"finalist_article_ids": [row["id"] for row in chosen],
+                "pinned_article_ids": [row["id"] for row in chosen], "justifications": [{"article_id": row["id"],
+                    "reason": "CONNEXE : simulation sur objet existant." if row["doi"] == adjacent.doi else "DIRECT : production apprise de l'objet demandé."} for row in chosen]}))
+        return response(message(json.dumps({"summary": "Comparaison de la tâche principale et des usages connexes.",
+            "references": [{"article_id": row["id"], "title": row["title"], "doi": row["doi"], "arxiv_id": row["arxiv_id"],
+                "contribution": "CONNEXE : utilise un objet existant." if row["doi"] == adjacent.doi else "DIRECT : production apprise de l'objet demandé.",
+                "evidence_ids": []} for row in chosen]})))
+    def bibliographic_create(**kwargs):
+        result = create(**kwargs)
+        for item in getattr(result, "output", []):
+            if item.get("type") == "function_call":
+                arguments = json.loads(item["arguments"])
+                arguments["request_kind"] = "bibliographic_search"
+                item["arguments"] = json.dumps(arguments)
+        return result
+    fake_client.responses.create.side_effect = bibliographic_create
     registry = {}
     result = agent.run(topic, [], registry)
     assert len(registry) == 602 and len(result.active_article_ids) <= 12 and not result.partial
     assert result.tool_counts == {"search_scientific": 2, "get_articles": 2, "web_search": 1,
-        "read_article": 1, "get_fulltext": 1, "analyze_articles": 1}
+        "read_article": 1, "get_fulltext": 1, "analyze_articles": 1, "set_article_selection": 1}
     assert result.answer.index(direct.title) < result.answer.index(adjacent.title)
     assert registry[examined[0]].article.doi in {direct.doi, web_article.doi}
     assert all(identifier in result.active_article_ids for identifier in examined)
-    assert any(citation.url == web_article.url for citation in result.citations)
-    assert len(requests) == 8 and fake_client.responses.create.call_count == 9  # No ranking calls.
-    assert all(request["context_management"] and request["tool_choice"] == "auto" for request in requests)
+    assert any(citation.url == "https://doi.org/" + web_article.doi and citation.cited for citation in result.citations)
+    assert len(requests) == 10 and fake_client.responses.create.call_count == 11
+    assert [registry[key].article.doi for key in result.scientific_memory.finalist_article_ids] == [direct.doi, web_article.doi, adjacent.doi]
+    assert all(request["context_management"] for request in requests)
+    assert requests[8]["tool_choice"] == {"type": "function", "name": "set_article_selection"}
+    assert all(request["tool_choice"] == "auto" for i, request in enumerate(requests) if i != 8)
     assert all("BACKEND_PRIVATE_LONG_ABSTRACT " * 100 not in request["instructions"] for request in requests)
     assert any(specialized in item["arguments"] for request in requests for item in request["input"] if item.get("type") == "function_call")
 

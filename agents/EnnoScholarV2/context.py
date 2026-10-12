@@ -154,6 +154,8 @@ class ActiveSources:
         self.pinned = self._unique(self.memory.pinned_article_ids)[:self.limit]
         self.inspected = self._unique(self.memory.inspected_article_ids)
         self.finalists = self._unique(self.memory.finalist_article_ids)[:self.limit]
+        self.justifications = dict(self.memory.finalist_justifications)
+        self.examined = self._unique(self.memory.examined_article_ids)
         self.candidate_window = self._unique(self.memory.candidate_window)[:self.limit]
         self.candidate_excerpts = dict(self.memory.candidate_excerpts)
         # Restore scientific memory before any fallback for a legacy/new session.
@@ -212,17 +214,80 @@ class ActiveSources:
             self.detailed.update(identifiers)
         return identifiers
 
-    def select(self, finalists, pinned):
+    def select(self, finalists, pinned, justifications=None):
         if not all(isinstance(ids, list) and len(ids) <= self.limit and all(isinstance(key, str) and key in self.registry for key in ids) for ids in (finalists, pinned)):
             raise ValueError("Les finalistes et pins doivent être des identifiants connus, au plus douze par sélection.")
         self.store = ArticleStore(self.registry)
-        self.finalists, self.pinned = self._unique(finalists), self._unique(pinned)
+        selected = self._unique(finalists)
+        reasons = {}
+        if justifications is not None:
+            if not isinstance(justifications, list) or len(justifications) > self.limit:
+                raise ValueError("Au plus douze justifications sont acceptées.")
+            for row in justifications:
+                if not isinstance(row, dict) or not isinstance(row.get("reason"), str) or not 1 <= len(row["reason"].strip()) <= 500:
+                    raise ValueError("Chaque finaliste exige une justification scientifique courte.")
+                identifier = row.get("article_id")
+                canonical = self.store.work_id(identifier) if isinstance(identifier, str) else None
+                if not canonical or canonical in reasons:
+                    raise ValueError("Justification inconnue ou dupliquée.")
+                reasons[canonical] = row["reason"].strip()
+            if set(reasons) != {self.store.work_id(key) for key in selected}:
+                raise ValueError("Les justifications doivent correspondre exactement aux finalistes.")
+        self.finalists, self.pinned = selected, self._unique(pinned)
+        self.justifications = {key: reasons.get(self.store.work_id(key), self.justifications.get(key, "")) for key in selected}
         self.identifiers = self._unique([*self.finalists, *self.pinned, *self.candidate_window, *self.identifiers])[:self.limit]
-        return {"finalist_article_ids": self.finalists, "pinned_article_ids": self.pinned, "selection_updated": True}
+        return {"finalist_article_ids": self.finalists, "pinned_article_ids": self.pinned,
+            "finalist_justifications": self.justifications, "selection_updated": True}
+
+    def remember_visible(self, rows):
+        """Only called immediately before an actual model request, never during retrieval."""
+        self.examined = self._unique([*self.examined, *(row["id"] for row in rows)])
+
+    def comparison_context(self, requested_ids=None, budget=None):
+        """Common, equally sized metadata view; no access/citation bonus or scientific sort."""
+        self.store = ArticleStore(self.registry)
+        identifiers = self._unique([*(requested_ids or []), *self.finalists, *self.identifiers, *self.candidate_window,
+            *self.inspected, *self.examined])[:self.limit]
+        rows = []
+        for identifier in identifiers:
+            work = self.store.by_id[identifier]
+            # Keep this version's title/DOI/arXiv tuple together. Canonical
+            # aggregation may supply a missing abstract, never another identity.
+            article = self.registry[identifier].article
+            if not article.abstract and work.article.abstract:
+                article = article.model_copy(update={"abstract": work.article.abstract})
+            row = compact_article(article, abstract_limit=1200)
+            row["title"] = article.title
+            row["selection_justification"] = self.justifications.get(identifier, "")
+            if budget is not None:
+                share = budget // max(1, len(identifiers) - len(rows))
+                if estimate_tokens(row) > share:
+                    row["abstract"] = row["abstract"][:200]
+                    row["abstract_truncated"] = len(article.abstract) > len(row["abstract"])
+                cost = estimate_tokens(row)
+                if cost > budget:
+                    continue
+                budget -= cost
+            rows.append(row)
+        return rows
+
+    def examined_index(self, budget):
+        """Recall titles/IDs of previously seen candidates; never rank or expose full texts."""
+        self.store = ArticleStore(self.registry)
+        rows = []
+        for identifier in self._unique([*self.examined, *self.inspected]):
+            row = {"article_id": identifier, "title": self.registry[identifier].article.title[:300]}
+            cost = estimate_tokens(row)
+            if cost > budget:
+                break
+            rows.append(row)
+            budget -= cost
+        return rows
 
     def snapshot(self):
         return ScientificMemory(active_article_ids=self.identifiers, candidate_window=self.candidate_window, candidate_excerpts=self.candidate_excerpts,
             inspected_article_ids=self.inspected, pinned_article_ids=self.pinned, finalist_article_ids=self.finalists,
+            finalist_justifications=self.justifications, examined_article_ids=self.examined,
             detailed_article_ids=sorted(self.detailed), pending_clarification=self.memory.pending_clarification)
 
     def render(self, token_budget):

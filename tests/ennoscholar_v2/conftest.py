@@ -29,6 +29,11 @@ def message(text, annotations=None):
 
 def call(name, arguments, call_id="call_1"):
     import json
+    # Legacy orchestration fixtures exercise tools independently of final scientific
+    # selection. Selection-specific fixtures explicitly declare bibliographic_search.
+    arguments = {"request_kind": "other", **arguments}
+    if name == "set_article_selection":
+        arguments.setdefault("justifications", None)
     return {"type": "function_call", "name": name, "arguments": json.dumps(arguments), "call_id": call_id, "id": "fc_" + call_id}
 
 
