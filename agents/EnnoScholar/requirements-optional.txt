@@ -1,0 +1,2 @@
+# Capacités lourdes partagées par toute l'application.
+-r ../../requirements-optional.txt

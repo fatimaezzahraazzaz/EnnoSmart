@@ -1,0 +1,21 @@
+{
+  "_comment": "Corrections d'identité validées humainement. Une entrée active remplace uniquement l'identité envoyée au MCP ; elle ne modifie pas automatiquement la base SQL.",
+  "articles": {
+    "12643": {
+      "enabled": true,
+      "reason": "Le record utilisé pour ce test doit cibler le rapport arXiv de Hidetoshi Furukawa et non le DOI MDPI incompatible.",
+      "title": "Deep Learning for Target Classification from SAR Imagery: Data Augmentation and Translation Invariance",
+      "doi": null,
+      "authors": [
+        "Hidetoshi Furukawa"
+      ],
+      "year": 2017,
+      "source": "arxiv",
+      "known_urls": [
+        "https://arxiv.org/abs/1708.07920",
+        "https://arxiv.org/pdf/1708.07920"
+      ],
+      "inherit_database_urls": false
+    }
+  }
+}

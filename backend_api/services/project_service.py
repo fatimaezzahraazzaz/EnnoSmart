@@ -1,0 +1,37 @@
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
+from db.models import Project, ProjectAccessRequest, User
+
+
+def get_project_for_user(db: Session, project_id: int, current_user: User) -> Project:
+    project = db.query(Project).filter(Project.id == project_id).first()
+
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Projet introuvable.",
+        )
+
+    has_shared_access = (
+        db.query(ProjectAccessRequest.id)
+        .filter(
+            ProjectAccessRequest.project_id == project.id,
+            ProjectAccessRequest.requester_id == current_user.id,
+            ProjectAccessRequest.status == "accepted",
+        )
+        .first()
+        is not None
+    )
+
+    if (
+        current_user.role not in {"admin", "superadmin"}
+        and project.consultant_id != current_user.id
+        and not has_shared_access
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accès interdit à ce projet.",
+        )
+
+    return project

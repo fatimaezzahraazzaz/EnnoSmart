@@ -1,0 +1,17 @@
+{
+  "real_backend": true,
+  "authentication": "isolated_fixture",
+  "database": "isolated_sqlite",
+  "real_llm": "gpt-6.1-sol",
+  "status": "completed",
+  "partial": false,
+  "output_tokens": 721,
+  "displayed_in_chat": true,
+  "clickable_sources": 13,
+  "tool_counts": {
+    "web_search": 0,
+    "finalize_response": 1
+  },
+  "duration_seconds": 18.422,
+  "estimated_cost_usd": 0.047772
+}

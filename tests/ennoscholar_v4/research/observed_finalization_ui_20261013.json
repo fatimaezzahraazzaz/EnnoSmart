@@ -1,0 +1,41 @@
+{
+  "real_backend": true,
+  "real_llm": "gpt-6.1-sol",
+  "session_id": "1346be76f32e43b487f3429639668b89",
+  "status": "completed",
+  "table_rows": 6,
+  "clickable_links": 32,
+  "markdown_displayed": true,
+  "secondary_collapsed": true,
+  "primary_order_saved": true,
+  "used_sources_count": 9,
+  "discovered_url_count": 34,
+  "secondary_loaded": true,
+  "secondary_excludes_primary": true,
+  "secondary_identifiable": true,
+  "reload_restored": true,
+  "followup": {
+    "run_id": "30325b95079b4dcf9371512dad03c787",
+    "status": "completed",
+    "partial": false,
+    "expected_title": "eDDPM-polycube: An extended diffusion-based method for hexahedral mesh and volumetric spline construction",
+    "cited_expected": true,
+    "order_preserved": true,
+    "no_new_search": true,
+    "usage": {
+      "model": "gpt-6.1-sol",
+      "input_tokens": 44952,
+      "output_tokens": 1414,
+      "estimated_cost_usd": 0.104044,
+      "unreported_reserved_cost_usd": 0
+    },
+    "duration_seconds": 36.75,
+    "tool_counts": {
+      "web_search": 0,
+      "get_article": 1,
+      "analyze_article": 1,
+      "finalize_response": 1
+    }
+  },
+  "runtime_errors": []
+}

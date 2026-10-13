@@ -1,0 +1,610 @@
+{
+  "exact_prompt": "Je travaille en mécanique sur la génération automatique de maillages volumiques 3D à l'aide de modèles entraînés.\n\nRecherche les articles scientifiques les plus pertinents sur ce sujet, y compris les articles payants.\n\nPour chaque article, explique brièvement sa contribution scientifique et indique si tu as réellement analysé le texte complet ou uniquement l'abstract.\n\nPrivilégie les travaux qui génèrent réellement des maillages 3D, et pas ceux qui utilisent simplement un maillage pour prédire des grandeurs physiques.",
+  "session_id": "8f35796738b34cc897874fe0e63ead56",
+  "run_id": "abc23ba7a9ad45f798563b228927e6f7",
+  "backend": "real_authenticated_api_sqlite",
+  "before": {
+    "usage": {
+      "model": "gpt-6.1-sol",
+      "input_tokens": 264248,
+      "output_tokens": 10122,
+      "estimated_cost_usd": 0.6797159999999999,
+      "unreported_reserved_cost_usd": 0.0
+    },
+    "duration_seconds": 485.328,
+    "tool_counts": {
+      "web_search": 5,
+      "update_research_state": 2,
+      "search_scientific": 3,
+      "get_article": 3,
+      "get_fulltext": 8,
+      "record_candidate_decisions": 3,
+      "analyze_article": 9,
+      "verify_bibliography": 2,
+      "finalize_response": 2
+    },
+    "reason": "round_budget",
+    "partial": true
+  },
+  "after": {
+    "status": "completed",
+    "partial": false,
+    "reason": null,
+    "fallback": false,
+    "exploration_stop_reason": null,
+    "exploration_rounds": 6,
+    "finalization_rounds": 0,
+    "finalization_attempt_count": 1,
+    "finalization_refusals": [],
+    "tool_counts": {
+      "web_search": 4,
+      "search_scientific": 3,
+      "update_research_state": 1,
+      "get_article": 2,
+      "record_candidate_decisions": 2,
+      "get_fulltext": 2,
+      "analyze_article": 3,
+      "verify_bibliography": 2,
+      "finalize_response": 1
+    },
+    "usage": {
+      "model": "gpt-6.1-sol",
+      "input_tokens": 118413,
+      "output_tokens": 5426,
+      "estimated_cost_usd": 0.331086,
+      "unreported_reserved_cost_usd": 0.0
+    },
+    "duration_seconds": 265.297,
+    "primary_article_ids": [
+      "paper_08161c5d31313909241a",
+      "paper_7343e4f0cf5a62497734",
+      "paper_479171fd080c69829ce0",
+      "paper_942bde322abe27ebd8ff",
+      "paper_2abfe8cdce038cd76416"
+    ],
+    "displayed_article_ids": [
+      "paper_08161c5d31313909241a",
+      "paper_7343e4f0cf5a62497734",
+      "paper_479171fd080c69829ce0",
+      "paper_942bde322abe27ebd8ff",
+      "paper_2abfe8cdce038cd76416"
+    ],
+    "complementary_count": 0,
+    "discovered_sources_count": 84,
+    "library_counts": {
+      "relevant": 5,
+      "retained_complementary": 0,
+      "unexamined": 11,
+      "examined_pending": 1,
+      "rejected": 3
+    },
+    "coverage_sufficient": true,
+    "publication_accepted": true,
+    "research_status": "sufficient"
+  },
+  "library_total": 20,
+  "message_persisted": true,
+  "articles": [
+    {
+      "id": "paper_942bde322abe27ebd8ff",
+      "title": "DL-Polycube: deep learning enhanced generalized polycube method for high-quality hexahedral mesh generation and volumetric spline construction",
+      "doi": "10.1007/s00366-025-02161-9",
+      "arxiv_id": "",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": "abstract",
+      "selected": false
+    },
+    {
+      "id": "paper_2abfe8cdce038cd76416",
+      "title": "CubeFlipNet: Reinforcement Learning for HexMesh Generation via Cube-Flip Operations with a Polycube Alignment Prior",
+      "doi": "10.1137/1.9781611979138.3",
+      "arxiv_id": "",
+      "verified": true,
+      "access_status": "abstract_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_7343e4f0cf5a62497734",
+      "title": "DDPM-Polycube: a denoising diffusion probabilistic model for polycube-based hexahedral mesh generation and volumetric spline construction",
+      "doi": "10.1007/s00366-025-02248-3",
+      "arxiv_id": "2503.13541",
+      "verified": true,
+      "access_status": "fulltext_analyzed",
+      "publisher_access": "unknown",
+      "analysis_basis": "fulltext",
+      "selected": false
+    },
+    {
+      "id": "paper_0f129976a97a96c91e05",
+      "title": "A survey of AI methods for geometry preparation and mesh generation in engineering simulation",
+      "doi": "10.1007/s00366-026-02379-1",
+      "arxiv_id": "2512.23719",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_3a70ffdb46c69333fe41",
+      "title": "Element-saving hexahedral 3-refinement templates",
+      "doi": "10.1016/j.cagd.2026.102550",
+      "arxiv_id": "2512.14862",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_803c1f4d21eccadb5111",
+      "title": "Indirect quadrangular mesh generation and validation of curved finite elements",
+      "doi": "",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_16a2071799341e62c0cb",
+      "title": "Mesh refinement and optimization for keys and sectional geometries using cohort intelligence algorithm",
+      "doi": "10.1007/s44245-026-00355-z",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_62417c5606aed6674c7e",
+      "title": "Replace Human Intelligence with Fast and Smart Geometric Reasoning and Graph Neural Network to Accelerate Next Gen ModSim Workflows",
+      "doi": "10.2172/2997308",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_08fa5de8ce3612b9c130",
+      "title": "DL-Polycube: Deep learning enhanced polycube method for high-quality hexahedral mesh generation and volumetric spline construction",
+      "doi": "10.48550/arxiv.2410.18852",
+      "arxiv_id": "2410.18852",
+      "verified": false,
+      "access_status": "abstract_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_0c3d6005fd07515f26de",
+      "title": "DRL-MeshGen: automated block-structured mesh generation framework via deep reinforcement learning and optimal conformal mapping",
+      "doi": "10.1007/s00366-025-02199-9",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_abea03dba7855bb2ea14",
+      "title": "Automatic mesh generation for optimal CFD of a blade passage using deep reinforcement learning",
+      "doi": "10.1016/j.jcp.2025.114306",
+      "arxiv_id": "2402.15079",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_9e8fed7f18d3de73240c",
+      "title": "Mesh Generation for Flow Analysis by using Deep Reinforcement Learning",
+      "doi": "10.2514/6.2024-0382",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_deb17e3aebf34553b71c",
+      "title": "Intelligent quadrilateral mesh generation for ship structures based on hybrid deep reinforcement learning",
+      "doi": "10.1016/j.oceaneng.2026.125711",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_37aff1dd05cafd145705",
+      "title": "Optimal mesh generation for a blade passage using deep reinforcement learning",
+      "doi": "10.48550/arxiv.2209.05280",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_61beb15c245559c97180",
+      "title": "Non-iterative generation of an optimal mesh for a blade passage using deep reinforcement learning",
+      "doi": "10.1016/j.cpc.2023.108962",
+      "arxiv_id": "2209.05280",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_c52c179af878d4af9cdf",
+      "title": "Development of agent-based mesh generator for flow analysis using deep reinforcement learning",
+      "doi": "10.1007/s00366-024-02045-4",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_1b1ee3f2e4ab3fb04d2e",
+      "title": "Delay Optimization of Wi-Fi Mesh in Neighbourhood Area Network Using Deep Reinforcement Learning",
+      "doi": "10.1109/atnt61688.2024.10719157",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "abstract_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_ffd8840139588c46c7d1",
+      "title": "Shocks Under Control: Taming Transonic Compressible Flow over an RAE2822 Airfoil with Deep Reinforcement Learning",
+      "doi": "10.48550/arxiv.2511.07564",
+      "arxiv_id": "2511.07564",
+      "verified": false,
+      "access_status": "abstract_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_479171fd080c69829ce0",
+      "title": "TetGAN: A Convolutional Neural Network for Tetrahedral Mesh Generation",
+      "doi": "10.48550/arxiv.2210.05735",
+      "arxiv_id": "2210.05735",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_08161c5d31313909241a",
+      "title": "MeshingNet3D: Efficient generation of adapted tetrahedral meshes for computational mechanics",
+      "doi": "10.1016/j.advengsoft.2021.103021",
+      "arxiv_id": "",
+      "verified": true,
+      "access_status": "extraction_failed",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    }
+  ],
+  "used_sources": [
+    {
+      "url": "https://doi.org/10.1016/j.advengsoft.2021.103021",
+      "title": "MeshingNet3D: Efficient generation of adapted tetrahedral meshes for computational mechanics",
+      "cited": true,
+      "source_kind": "recommended_publication"
+    },
+    {
+      "url": "https://doi.org/10.1007/s00366-025-02248-3",
+      "title": "DDPM-Polycube: a denoising diffusion probabilistic model for polycube-based hexahedral mesh generation and volumetric spline construction",
+      "cited": true,
+      "source_kind": "recommended_publication"
+    },
+    {
+      "url": "https://doi.org/10.48550/arxiv.2210.05735",
+      "title": "TetGAN: A Convolutional Neural Network for Tetrahedral Mesh Generation",
+      "cited": true,
+      "source_kind": "recommended_publication"
+    },
+    {
+      "url": "https://doi.org/10.1007/s00366-025-02161-9",
+      "title": "DL-Polycube: deep learning enhanced generalized polycube method for high-quality hexahedral mesh generation and volumetric spline construction",
+      "cited": true,
+      "source_kind": "recommended_publication"
+    },
+    {
+      "url": "https://doi.org/10.1137/1.9781611979138.3",
+      "title": "CubeFlipNet: Reinforcement Learning for HexMesh Generation via Cube-Flip Operations with a Polycube Alignment Prior",
+      "cited": true,
+      "source_kind": "recommended_publication"
+    },
+    {
+      "url": "https://link.springer.com/content/pdf/10.1007/s00366-025-02248-3.pdf?error=cookies_not_supported&code=4ccc95a4-3000-4768-a65e-0e51060730f8",
+      "title": "7  Conclusions and future work, page PDF 19",
+      "cited": true,
+      "source_kind": "evidence"
+    }
+  ],
+  "stored_discovered_url_count": 84,
+  "primary_articles_at_publication": [
+    {
+      "id": "paper_08161c5d31313909241a",
+      "title": "MeshingNet3D: Efficient generation of adapted tetrahedral meshes for computational mechanics",
+      "doi": "10.1016/j.advengsoft.2021.103021",
+      "arxiv_id": "",
+      "verified": true,
+      "access_status": "extraction_failed",
+      "analysis_basis": null
+    },
+    {
+      "id": "paper_7343e4f0cf5a62497734",
+      "title": "DDPM-Polycube: a denoising diffusion probabilistic model for polycube-based hexahedral mesh generation and volumetric spline construction",
+      "doi": "10.1007/s00366-025-02248-3",
+      "arxiv_id": "2503.13541",
+      "verified": true,
+      "access_status": "fulltext_analyzed",
+      "analysis_basis": "fulltext"
+    },
+    {
+      "id": "paper_479171fd080c69829ce0",
+      "title": "TetGAN: A Convolutional Neural Network for Tetrahedral Mesh Generation",
+      "doi": "10.48550/arxiv.2210.05735",
+      "arxiv_id": "2210.05735",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "analysis_basis": null
+    },
+    {
+      "id": "paper_942bde322abe27ebd8ff",
+      "title": "DL-Polycube: deep learning enhanced generalized polycube method for high-quality hexahedral mesh generation and volumetric spline construction",
+      "doi": "10.1007/s00366-025-02161-9",
+      "arxiv_id": "",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "analysis_basis": null
+    },
+    {
+      "id": "paper_2abfe8cdce038cd76416",
+      "title": "CubeFlipNet: Reinforcement Learning for HexMesh Generation via Cube-Flip Operations with a Polycube Alignment Prior",
+      "doi": "10.1137/1.9781611979138.3",
+      "arxiv_id": "",
+      "verified": true,
+      "access_status": "abstract_only",
+      "analysis_basis": null
+    }
+  ],
+  "library_snapshot": "Current owner-scoped library, which may include later follow-up analyses. Publication metadata above is the original run snapshot.",
+  "regression": {
+    "usage": {
+      "model": "gpt-6.1-sol",
+      "input_tokens": 13682,
+      "output_tokens": 1230,
+      "estimated_cost_usd": 0.039664,
+      "unreported_reserved_cost_usd": 0.0
+    },
+    "duration_seconds": 43.282,
+    "tool_counts": {
+      "web_search": 0,
+      "update_research_state": 1,
+      "search_scientific": 1,
+      "finalize_response": 1
+    },
+    "exploration_stop_reason": "context_budget",
+    "primary_article_ids": [
+      "paper_bbbc8737f1e0af3aefd1"
+    ],
+    "coverage_sufficient": false
+  },
+  "transmission_trace": [
+    {
+      "round": 1,
+      "phase": "exploration",
+      "input_chars": 997,
+      "offered_article_ids": [],
+      "offered_abstract_ids": [],
+      "abstract_deliveries": {}
+    },
+    {
+      "round": 2,
+      "phase": "exploration",
+      "input_chars": 30200,
+      "offered_article_ids": [
+        "paper_942bde322abe27ebd8ff",
+        "paper_2abfe8cdce038cd76416",
+        "paper_7343e4f0cf5a62497734",
+        "paper_0f129976a97a96c91e05",
+        "paper_3a70ffdb46c69333fe41",
+        "paper_803c1f4d21eccadb5111",
+        "paper_16a2071799341e62c0cb",
+        "paper_62417c5606aed6674c7e"
+      ],
+      "offered_abstract_ids": [
+        "paper_942bde322abe27ebd8ff",
+        "paper_2abfe8cdce038cd76416",
+        "paper_7343e4f0cf5a62497734",
+        "paper_0f129976a97a96c91e05",
+        "paper_3a70ffdb46c69333fe41",
+        "paper_803c1f4d21eccadb5111",
+        "paper_16a2071799341e62c0cb",
+        "paper_62417c5606aed6674c7e"
+      ],
+      "abstract_deliveries": {
+        "paper_942bde322abe27ebd8ff": {
+          "chars": 1370,
+          "truncated": false
+        },
+        "paper_2abfe8cdce038cd76416": {
+          "chars": 866,
+          "truncated": false
+        },
+        "paper_7343e4f0cf5a62497734": {
+          "chars": 1429,
+          "truncated": false
+        },
+        "paper_0f129976a97a96c91e05": {
+          "chars": 831,
+          "truncated": false
+        },
+        "paper_3a70ffdb46c69333fe41": {
+          "chars": 1600,
+          "truncated": true
+        },
+        "paper_803c1f4d21eccadb5111": {
+          "chars": 1600,
+          "truncated": true
+        },
+        "paper_16a2071799341e62c0cb": {
+          "chars": 1600,
+          "truncated": true
+        },
+        "paper_62417c5606aed6674c7e": {
+          "chars": 1600,
+          "truncated": true
+        }
+      }
+    },
+    {
+      "round": 3,
+      "phase": "exploration",
+      "input_chars": 17179,
+      "offered_article_ids": [],
+      "offered_abstract_ids": [
+        "paper_942bde322abe27ebd8ff",
+        "paper_7343e4f0cf5a62497734",
+        "paper_2abfe8cdce038cd76416"
+      ],
+      "abstract_deliveries": {
+        "paper_942bde322abe27ebd8ff": {
+          "chars": 160,
+          "truncated": true
+        },
+        "paper_7343e4f0cf5a62497734": {
+          "chars": 160,
+          "truncated": true
+        },
+        "paper_2abfe8cdce038cd76416": {
+          "chars": 160,
+          "truncated": true
+        }
+      }
+    },
+    {
+      "round": 4,
+      "phase": "exploration",
+      "input_chars": 39318,
+      "offered_article_ids": [
+        "paper_479171fd080c69829ce0",
+        "paper_08161c5d31313909241a",
+        "paper_7343e4f0cf5a62497734",
+        "paper_942bde322abe27ebd8ff",
+        "paper_2abfe8cdce038cd76416"
+      ],
+      "offered_abstract_ids": [
+        "paper_942bde322abe27ebd8ff",
+        "paper_7343e4f0cf5a62497734",
+        "paper_2abfe8cdce038cd76416",
+        "paper_479171fd080c69829ce0"
+      ],
+      "abstract_deliveries": {
+        "paper_942bde322abe27ebd8ff": {
+          "chars": 300,
+          "truncated": true
+        },
+        "paper_7343e4f0cf5a62497734": {
+          "chars": 300,
+          "truncated": true
+        },
+        "paper_2abfe8cdce038cd76416": {
+          "chars": 300,
+          "truncated": true
+        },
+        "paper_479171fd080c69829ce0": {
+          "chars": 749,
+          "truncated": false
+        }
+      }
+    },
+    {
+      "round": 5,
+      "phase": "exploration",
+      "input_chars": 30079,
+      "offered_article_ids": [
+        "paper_479171fd080c69829ce0",
+        "paper_08161c5d31313909241a"
+      ],
+      "offered_abstract_ids": [
+        "paper_7343e4f0cf5a62497734",
+        "paper_942bde322abe27ebd8ff",
+        "paper_479171fd080c69829ce0",
+        "paper_2abfe8cdce038cd76416"
+      ],
+      "abstract_deliveries": {
+        "paper_7343e4f0cf5a62497734": {
+          "chars": 160,
+          "truncated": true
+        },
+        "paper_942bde322abe27ebd8ff": {
+          "chars": 160,
+          "truncated": true
+        },
+        "paper_479171fd080c69829ce0": {
+          "chars": 300,
+          "truncated": true
+        },
+        "paper_2abfe8cdce038cd76416": {
+          "chars": 160,
+          "truncated": true
+        }
+      }
+    },
+    {
+      "round": 6,
+      "phase": "exploration",
+      "input_chars": 19618,
+      "offered_article_ids": [],
+      "offered_abstract_ids": [
+        "paper_7343e4f0cf5a62497734",
+        "paper_942bde322abe27ebd8ff",
+        "paper_479171fd080c69829ce0",
+        "paper_2abfe8cdce038cd76416"
+      ],
+      "abstract_deliveries": {
+        "paper_7343e4f0cf5a62497734": {
+          "chars": 160,
+          "truncated": true
+        },
+        "paper_942bde322abe27ebd8ff": {
+          "chars": 160,
+          "truncated": true
+        },
+        "paper_479171fd080c69829ce0": {
+          "chars": 160,
+          "truncated": true
+        },
+        "paper_2abfe8cdce038cd76416": {
+          "chars": 160,
+          "truncated": true
+        }
+      }
+    }
+  ]
+}

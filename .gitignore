@@ -1,0 +1,286 @@
+# ---------------------------------------------------------------------------
+# Secrets and machine-specific configuration
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+!.env.*.example
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+.venv-*/
+.venv_*/
+venv/
+**/venv/
+
+# ---------------------------------------------------------------------------
+# Node / Next.js
+# ---------------------------------------------------------------------------
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---------------------------------------------------------------------------
+# Runtime data, client documents, extracted texts and local databases
+# ---------------------------------------------------------------------------
+/storage/
+/backend_api/storage/
+/data/
+/projects/
+/dataset_final/
+/modules/NLP/data/raw_semantic_dataset.csv
+/modules/NLP/data/raw_verrou_prototypes.json
+/outputs/
+/chroma/
+**/chroma/
+**/chroma.sqlite3
+/.huggingface/
+/.cache/
+
+# Les modèles volumineux restent hors Git. Le seul artefact applicatif maison
+# indispensable au pipeline NLP est explicitement versionné ci-dessous.
+/models/*
+!/models/fastjudge/
+/models/fastjudge/*
+!/models/fastjudge/fastjudge_linearsvc_C025.joblib
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+*.msg
+
+# Volumes locaux des services de production (jamais versionnés).
+/.postgres-data/
+/.redis-data/
+/.grobid-data/
+
+# Local model checkpoints and training corpora.
+train/data/
+train/models/
+train/final_gliner_cir_dataset*/
+train/ner_candidates.json
+train/**/*.pt
+train/**/*.pth
+train/**/*.bin
+train/**/*.safetensors
+train/**/*.pkl
+train/**/*.jpg
+train/**/*.jpeg
+train/**/*.png
+
+# Annotation batches may contain client text.
+llm_annotation/prompts/
+llm_annotation/responses/
+llm_annotation/stats/
+llm_annotation/*.json
+llm_annotation/*.txt
+
+# ---------------------------------------------------------------------------
+# Generated caches, reports and test outputs
+# ---------------------------------------------------------------------------
+.codex_logs/
+.streamlit/
+.tmp*/
+logs/
+_ocr_debug/
+_test_outputs/
+_tests/
+tests/
+**/tests/
+test_*.py
+**/test_*.py
+# V3 regression tests and research fixtures are part of the implementation.
+!tests/
+!tests/ennoscholar_v3/
+!tests/ennoscholar_v3/**
+!test_ennodiagnostic_v2_backend.py
+!test_ai_detector_fulltext.py
+!test_document_compare_fulltext.py
+verify_*.py
+**/verify_*.py
+integration/
+_upgrade_backups/
+.guided_research_*
+backend_api/backend_*.json
+backend_api/backend_*.txt
+backend_api/*_results.json
+backend_api/classification_results*.json
+backend_api/test_results_batch.json
+*_result*.json
+result_*.json
+ocr_*.json
+upload_extract_*.json
+scholar_test_result*.json
+test_*_api.json
+test_modeles_*.json
+/test_*.json
+
+# Frontend-only debug helpers and unused starter placeholders.
+/frontend/app/debug-diagnostic/
+/frontend/scripts/debug_token_browser_console.js
+/frontend/components/ennosmart/scholar.py
+/frontend/public/placeholder*
+/frontend/pnpm-lock.yaml
+
+# ---------------------------------------------------------------------------
+# Local backups, archives and one-off repair copies
+# ---------------------------------------------------------------------------
+_backup*/
+_backups/
+_restore/
+_patches/
+archiv/
+ennoscholar_*_v*/
+agents/EnnoScholar.backup*/
+agents/EnnoScholar_backup*/
+*.zip
+*.dump
+*.tar.gz
+*.tgz
+*.bak
+*.bak_*
+*.backup
+*.backup_*
+*.before*
+*.broken_*
+*.corrected.py
+* - Copie.py
+*.v[0-9]*.py
+_rerun_*.py
+patch_*.py
+rollback_*.ps1
+requirements_*backup*.txt
+requirements_before_*.txt
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Bundled third-party binaries are installed locally, not committed.
+poppler-*/
+
+# Legacy modules intentionally excluded from the active application.
+NLP_v1/
+RAGv1/
+chat/
+llm_gateway/
+modules/NLP_v1/
+modules/RAGv1/
+modules/chat/
+modules/llm_gateway/
+/tmp/
+/train/data_v2/
+/_debug/
+
+# Local patch packages / backups
+/EnnoSmart_V5_*/
+/_ennosmart_patch_backups/
+
+# Temporary pytest folders
+/.pytest_tmp*/
+
+# EnnoAmelioration local patch packages
+/EnnoAmelioration_*/
+/ennoamelioration_patch_markdown_v3_1/
+/_ennosmart_patch_backups/
+
+# Local runtime configuration
+/.ennosmart-cir-runtime.env
+
+# Pytest temporary folders
+/.pytest_tmp*/
+
+# Local EnnoScholar patches / installers / backups
+/EnnoScholar_V*/
+/ennoscholar_quality_restored_v1/
+/ennoscholar_strict_section_claim_mapping_v2/
+/backup_*/
+/_patch_backups/
+/.ennoscholar_*_backup.txt
+
+# Local image/visual patch folders
+/_image_writer_patch/
+/_visual_filter_hotfix/
+.codex_tmp/
+.ennosmart_patch_backups/
+
+# Archives de travail et paquets de déploiement locaux.
+/ennodiagnostic_patch_backups/
+/ennodiagnostic_debug/
+/ennodiagnostic_validations/
+/frontend_backups/
+/releases/
+/lock_diagnostic_run18.txt
+/lock_invariants_test_results.txt
+/lock_real_validation_console*.txt
+/traceability_backend_files.txt
+/mini_cir_*.txt
+**/*_before_*.py
+**/*_backup.py
+
+# Régressions de la suppression de Diagnostic V1.
+!/tests/
+!/tests/test_v2_only_cleanup.py
+
+# Isolated EnnoScholar V2 regression tests.
+!/tests/ennoscholar_v2/
+!/tests/ennoscholar_v2/*.py
+
+# Sauvegardes des patches locaux, jamais nécessaires au déploiement.
+/.patch_backups/
+/.ennosmart_global_llm_grouping_patch.json
+# Ce contrôle fait partie du déploiement, malgré la règle générale verify_*.py.
+!/scripts/deployment/verify_runtime_paths.py
+!/scripts/deployment/test_bootstrap.py
+
+# Preserve recorded V3 evaluation evidence; exclude generated Python caches.
+!/tests/ennoscholar_v3/research/observed_results_2026-10-11.json
+/tests/ennoscholar_v3/**/__pycache__/
+/tests/ennoscholar_v3/**/*.py[cod]
+
+# Independent V3.1 regression tests (override historical test_*.py ignores).
+!/tests/ennoscholar_v31/
+!/tests/ennoscholar_v31/*.py
+
+.codex_tmp/
+.ennosmart_patch_backups/
+# V4 tests and recorded research validation (never API keys or private uploads).
+!/tests/ennoscholar_v4/
+!/tests/ennoscholar_v4/*.py
+!/tests/ennoscholar_v4/research/
+!/tests/ennoscholar_v4/research/*.json
+/tests/ennoscholar_v4/**/__pycache__/
+/tests/ennoscholar_v4/**/*.py[cod]
+
+# Sanitized backup: private runtime storage inventories stay local.
+/storage_v2_reports/

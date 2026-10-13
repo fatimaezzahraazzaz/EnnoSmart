@@ -1,0 +1,51 @@
+{
+  "real_backend": true,
+  "real_llm": "gpt-6.1-sol",
+  "session_id": "8f35796738b34cc897874fe0e63ead56",
+  "status": "completed",
+  "table_rows": 5,
+  "clickable_links": 18,
+  "markdown_displayed": true,
+  "secondary_collapsed": true,
+  "primary_order_saved": true,
+  "used_sources_count": 6,
+  "discovered_url_count": 84,
+  "secondary_loaded": true,
+  "secondary_excludes_primary": true,
+  "library_counts": {
+    "relevant": 5,
+    "retained_complementary": 0,
+    "unexamined": 11,
+    "examined_pending": 1,
+    "rejected": 3
+  },
+  "coverage_status_displayed": true,
+  "native_markup_hidden": true,
+  "secondary_identifiable": true,
+  "reload_restored": true,
+  "followup": {
+    "run_id": "e6cefd0a325246418fdc101e64d6f870",
+    "status": "completed",
+    "partial": false,
+    "expected_title": "DL-Polycube: deep learning enhanced generalized polycube method for high-quality hexahedral mesh generation and volumetric spline construction",
+    "cited_expected": true,
+    "order_preserved": true,
+    "no_new_search": true,
+    "usage": {
+      "model": "gpt-6.1-sol",
+      "input_tokens": 44034,
+      "output_tokens": 1099,
+      "estimated_cost_usd": 0.09905800000000001,
+      "unreported_reserved_cost_usd": 0
+    },
+    "duration_seconds": 38.516,
+    "tool_counts": {
+      "web_search": 0,
+      "get_article": 1,
+      "analyze_article": 1,
+      "finalize_response": 1
+    }
+  },
+  "runtime_errors": [],
+  "responsive": true
+}

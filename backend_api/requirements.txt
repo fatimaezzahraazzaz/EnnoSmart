@@ -1,0 +1,2 @@
+# Source canonique unique pour éviter les oublis et les versions divergentes.
+-r ../requirements.txt

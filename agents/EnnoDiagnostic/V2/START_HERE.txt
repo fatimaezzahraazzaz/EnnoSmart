@@ -1,0 +1,5 @@
+1. Lire README.md
+2. Lire integration/MIGRATION_FROM_CURRENT.md
+3. Brancher le client LLM existant avec CallableLLMAdapter
+4. Brancher FastJudge comme signal secondaire
+5. Faire tourner le benchmark avant de remplacer la version déployée

@@ -1,0 +1,2266 @@
+{
+  "purpose": "Evaluation only. Never import into production prompts/retrieval/ranking. Reference identities are checked; scientific relevance still requires independent expert annotation.",
+  "cases": [
+    {
+      "case": "mechanical_mesh",
+      "query": "Je travaille en mécanique sur la génération automatique de maillages 3D à l’aide de modèles entraînés. Je cherche les articles scientifiques les plus pertinents sur ce sujet, y compris les articles payants. Pour les meilleurs articles, indique-moi si tu as uniquement l’abstract ou si tu as réellement pu accéder au texte complet.",
+      "references": [
+        {
+          "label": "3DMeshNet",
+          "doi": "10.1016/j.gmod.2025.101257",
+          "original_error": "PublisherAccessRestricted",
+          "bibliographic_status": "verified",
+          "human_relevance": null,
+          "title": "3DMeshNet: A three-dimensional differential neural network for structured mesh generation",
+          "authors": [
+            "Jiaming Peng",
+            "Xinhai Chen",
+            "Jie Liu"
+          ],
+          "year": 2025,
+          "registry_verified": true,
+          "registry_source": "https://api.crossref.org/works/10.1016%2Fj.gmod.2025.101257",
+          "url": "https://linkinghub.elsevier.com/retrieve/pii/S1524070325000049",
+          "original_url": "https://www.sciencedirect.com/science/article/pii/S1524070325000049",
+          "original_http_status": 403,
+          "preprint_verified_url": "https://arxiv.org/abs/2407.01560",
+          "registry_checked_at": "2026-10-12T11:20:50.271590+00:00",
+          "registry_record": {
+            "DOI": "10.1016/j.gmod.2025.101257",
+            "title": [
+              "3DMeshNet: A three-dimensional differential neural network for structured mesh generation"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0009-0007-7898-7123",
+                "authenticated-orcid": false,
+                "given": "Jiaming",
+                "family": "Peng",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Xinhai",
+                "family": "Chen",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Jie",
+                "family": "Liu",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "published": {
+              "date-parts": [
+                [
+                  2025,
+                  6
+                ]
+              ]
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  2025,
+                  6
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "label": "DDPM-Polycube",
+          "doi": "10.1007/s00366-025-02248-3",
+          "title": "DDPM-Polycube: a denoising diffusion probabilistic model for polycube-based hexahedral mesh generation and volumetric spline construction",
+          "authors": [
+            "Yuxuan Yu",
+            "Yuzhuo Fang",
+            "Hua Tong",
+            "Jiashuo Liu",
+            "Yongjie Jessica Zhang"
+          ],
+          "year": 2026,
+          "publisher": "Springer Science and Business Media LLC",
+          "url": "https://link.springer.com/10.1007/s00366-025-02248-3",
+          "registry_verified": true,
+          "registry_source": "https://api.crossref.org/works/10.1007%2Fs00366-025-02248-3",
+          "original_url": "https://link.springer.com/article/10.1007/s00366-025-02248-3",
+          "original_http_status": 200,
+          "original_title": "DDPM-Polycube: a denoising diffusion probabilistic model for polycube-based hexahedral mesh generation and volumetric spline construction",
+          "original_authors": [
+            "Yu, Yuxuan",
+            "Fang, Yuzhuo",
+            "Tong, Hua",
+            "Liu, Jiashuo",
+            "Zhang, Yongjie Jessica"
+          ],
+          "original_date": "2026/02",
+          "original_doi": "10.1007/s00366-025-02248-3",
+          "original_verified": true,
+          "bibliographic_status": "verified",
+          "human_relevance": null,
+          "registry_checked_at": "2026-10-12T11:20:50.460683+00:00",
+          "registry_record": {
+            "DOI": "10.1007/s00366-025-02248-3",
+            "title": [
+              "DDPM-Polycube: a denoising diffusion probabilistic model for polycube-based hexahedral mesh generation and volumetric spline construction"
+            ],
+            "author": [
+              {
+                "given": "Yuxuan",
+                "family": "Yu",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Yuzhuo",
+                "family": "Fang",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Hua",
+                "family": "Tong",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Jiashuo",
+                "family": "Liu",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Yongjie Jessica",
+                "family": "Zhang",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "published": {
+              "date-parts": [
+                [
+                  2026,
+                  1,
+                  8
+                ]
+              ]
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  2026,
+                  1,
+                  8
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "label": "DL-Polycube",
+          "doi": "10.1007/s00366-025-02161-9",
+          "title": "DL-Polycube: deep learning enhanced generalized polycube method for high-quality hexahedral mesh generation and volumetric spline construction",
+          "authors": [
+            "Yuxuan Yu",
+            "Yuzhuo Fang",
+            "Hua Tong",
+            "Yongjie Jessica Zhang"
+          ],
+          "year": 2025,
+          "publisher": "Springer Science and Business Media LLC",
+          "url": "https://link.springer.com/10.1007/s00366-025-02161-9",
+          "registry_verified": true,
+          "registry_source": "https://api.crossref.org/works/10.1007%2Fs00366-025-02161-9",
+          "original_url": "https://link.springer.com/article/10.1007/s00366-025-02161-9",
+          "original_http_status": 200,
+          "original_title": "DL-Polycube: deep learning enhanced generalized polycube method for high-quality hexahedral mesh generation and volumetric spline construction",
+          "original_authors": [
+            "Yu, Yuxuan",
+            "Fang, Yuzhuo",
+            "Tong, Hua",
+            "Zhang, Yongjie Jessica"
+          ],
+          "original_date": "2025/06",
+          "original_doi": "10.1007/s00366-025-02161-9",
+          "original_verified": true,
+          "bibliographic_status": "verified",
+          "human_relevance": null,
+          "registry_checked_at": "2026-10-12T11:20:50.665974+00:00",
+          "registry_record": {
+            "DOI": "10.1007/s00366-025-02161-9",
+            "title": [
+              "DL-Polycube: deep learning enhanced generalized polycube method for high-quality hexahedral mesh generation and volumetric spline construction"
+            ],
+            "author": [
+              {
+                "given": "Yuxuan",
+                "family": "Yu",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Yuzhuo",
+                "family": "Fang",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Hua",
+                "family": "Tong",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Yongjie Jessica",
+                "family": "Zhang",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "published": {
+              "date-parts": [
+                [
+                  2025,
+                  5,
+                  30
+                ]
+              ]
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  2025,
+                  5,
+                  30
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "label": "Graph Neural Networks for Mesh Generation and Adaptation in Structural and Fluid Mechanics",
+          "doi": "10.3390/math12182933",
+          "title": "Graph Neural Networks for Mesh Generation and Adaptation in Structural and Fluid Mechanics",
+          "authors": [
+            "Ugo Pelissier",
+            "Augustin Parret-Fréaud",
+            "Felipe Bordeu",
+            "Youssef Mesri"
+          ],
+          "year": 2024,
+          "publisher": "MDPI AG",
+          "url": "https://www.mdpi.com/2227-7390/12/18/2933",
+          "registry_verified": true,
+          "registry_source": "https://api.crossref.org/works/10.3390%2Fmath12182933",
+          "original_url": "https://www.mdpi.com/2227-7390/12/18/2933",
+          "original_http_status": 200,
+          "original_title": "",
+          "original_authors": [],
+          "original_date": "",
+          "original_doi": "",
+          "original_verified": false,
+          "bibliographic_status": "verified",
+          "human_relevance": null,
+          "registry_checked_at": "2026-10-12T11:20:50.853216+00:00",
+          "registry_record": {
+            "DOI": "10.3390/math12182933",
+            "title": [
+              "Graph Neural Networks for Mesh Generation and Adaptation in Structural and Fluid Mechanics"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0001-7691-0260",
+                "authenticated-orcid": false,
+                "given": "Ugo",
+                "family": "Pelissier",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Computing and Fluids Research Group (CFL), Centre for Material Forming (CEMEF), Mines Paris, PSL University, UMR7635 CNRS, 06904 Sophia Antipolis, France"
+                  },
+                  {
+                    "name": "Digital Sciences & Technologies Department, Safran Tech, Rue des Jeunes Bois, Châteaufort, 78114 Magny-Les-Hameaux, France"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-4918-2573",
+                "authenticated-orcid": false,
+                "given": "Augustin",
+                "family": "Parret-Fréaud",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "Digital Sciences & Technologies Department, Safran Tech, Rue des Jeunes Bois, Châteaufort, 78114 Magny-Les-Hameaux, France"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Felipe",
+                "family": "Bordeu",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "Digital Sciences & Technologies Department, Safran Tech, Rue des Jeunes Bois, Châteaufort, 78114 Magny-Les-Hameaux, France"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Youssef",
+                "family": "Mesri",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "Computing and Fluids Research Group (CFL), Centre for Material Forming (CEMEF), Mines Paris, PSL University, UMR7635 CNRS, 06904 Sophia Antipolis, France"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "published": {
+              "date-parts": [
+                [
+                  2024,
+                  9,
+                  20
+                ]
+              ]
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  2024,
+                  9,
+                  20
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "label": "MeshingNet3D",
+          "doi": "10.1016/j.advengsoft.2021.103021",
+          "title": "MeshingNet3D: Efficient generation of adapted tetrahedral meshes for computational mechanics",
+          "authors": [
+            "Zheyan Zhang",
+            "Peter K. Jimack",
+            "He Wang"
+          ],
+          "year": 2021,
+          "publisher": "Elsevier BV",
+          "url": "https://linkinghub.elsevier.com/retrieve/pii/S0965997821000508",
+          "registry_verified": true,
+          "registry_source": "https://api.crossref.org/works/10.1016%2Fj.advengsoft.2021.103021",
+          "original_url": "https://linkinghub.elsevier.com/retrieve/pii/S0965997821000508",
+          "original_http_status": 200,
+          "original_title": "",
+          "original_authors": [],
+          "original_date": "",
+          "original_doi": "",
+          "original_verified": false,
+          "bibliographic_status": "verified",
+          "human_relevance": null,
+          "registry_checked_at": "2026-10-12T11:20:51.106354+00:00",
+          "registry_record": {
+            "DOI": "10.1016/j.advengsoft.2021.103021",
+            "title": [
+              "MeshingNet3D: Efficient generation of adapted tetrahedral meshes for computational mechanics"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0002-8779-6659",
+                "authenticated-orcid": false,
+                "given": "Zheyan",
+                "family": "Zhang",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0001-9463-7595",
+                "authenticated-orcid": false,
+                "given": "Peter K.",
+                "family": "Jimack",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-2281-5679",
+                "authenticated-orcid": false,
+                "given": "He",
+                "family": "Wang",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "published": {
+              "date-parts": [
+                [
+                  2021,
+                  7
+                ]
+              ]
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  2021,
+                  7
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "label": "AMBER",
+          "arxiv_id": "2406.14161",
+          "original_url": "https://arxiv.org/abs/2406.14161",
+          "original_http_status": 200,
+          "original_title": "Iterative Sizing Field Prediction for Adaptive Mesh Generation From Expert Demonstrations",
+          "original_authors": [
+            "Freymuth, Niklas",
+            "Dahlinger, Philipp",
+            "Würth, Tobias",
+            "Becker, Philipp",
+            "Taranovic, Aleksandar",
+            "Grönheim, Onno",
+            "Kärger, Luise",
+            "Neumann, Gerhard"
+          ],
+          "original_date": "2024/06/20",
+          "original_doi": "",
+          "original_verified": true,
+          "title": "Iterative Sizing Field Prediction for Adaptive Mesh Generation From Expert Demonstrations",
+          "authors": [
+            "Freymuth, Niklas",
+            "Dahlinger, Philipp",
+            "Würth, Tobias",
+            "Becker, Philipp",
+            "Taranovic, Aleksandar",
+            "Grönheim, Onno",
+            "Kärger, Luise",
+            "Neumann, Gerhard"
+          ],
+          "year": 2024,
+          "url": "https://arxiv.org/abs/2406.14161",
+          "registry_verified": false,
+          "bibliographic_status": "verified",
+          "human_relevance": null
+        },
+        {
+          "label": "Learned Adaptive Mesh Generation",
+          "arxiv_id": "2505.20457",
+          "original_url": "https://arxiv.org/abs/2505.20457",
+          "original_http_status": 200,
+          "original_title": "Learned Adaptive Mesh Generation",
+          "original_authors": [
+            "Zhang, Zhiyuan",
+            "Vaxman, Amir",
+            "Papanicolopulos, Stefanos-Aldo",
+            "Subr, Kartic"
+          ],
+          "original_date": "2025/05/26",
+          "original_doi": "",
+          "original_verified": true,
+          "title": "Learned Adaptive Mesh Generation",
+          "authors": [
+            "Zhang, Zhiyuan",
+            "Vaxman, Amir",
+            "Papanicolopulos, Stefanos-Aldo",
+            "Subr, Kartic"
+          ],
+          "year": 2025,
+          "url": "https://arxiv.org/abs/2505.20457",
+          "registry_verified": false,
+          "bibliographic_status": "verified",
+          "human_relevance": null
+        },
+        {
+          "label": "Faster and efficient tetrahedral mesh generation using generator neural networks for 2D and 3D geometries",
+          "doi": "10.1007/s00521-023-09119-2",
+          "title": "Faster and efficient tetrahedral mesh generation using generator neural networks for 2D and 3D geometries",
+          "authors": [
+            "Sumedh Soman",
+            "Ninad Mehendale"
+          ],
+          "year": 2023,
+          "publisher": "Springer Science and Business Media LLC",
+          "url": "https://link.springer.com/10.1007/s00521-023-09119-2",
+          "registry_verified": true,
+          "registry_source": "https://api.crossref.org/works/10.1007%2Fs00521-023-09119-2",
+          "original_url": "https://link.springer.com/article/10.1007/s00521-023-09119-2",
+          "original_http_status": 200,
+          "original_title": "Faster and efficient tetrahedral mesh generation using generator neural networks for 2D and 3D geometries",
+          "original_authors": [
+            "Soman, Sumedh",
+            "Mehendale, Ninad"
+          ],
+          "original_date": "2024/02",
+          "original_doi": "10.1007/s00521-023-09119-2",
+          "original_verified": true,
+          "bibliographic_status": "verified",
+          "human_relevance": null,
+          "registry_checked_at": "2026-10-12T11:20:51.310774+00:00",
+          "registry_record": {
+            "DOI": "10.1007/s00521-023-09119-2",
+            "title": [
+              "Faster and efficient tetrahedral mesh generation using generator neural networks for 2D and 3D geometries"
+            ],
+            "author": [
+              {
+                "given": "Sumedh",
+                "family": "Soman",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-3037-5076",
+                "authenticated-orcid": false,
+                "given": "Ninad",
+                "family": "Mehendale",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "published": {
+              "date-parts": [
+                [
+                  2023,
+                  11,
+                  17
+                ]
+              ]
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  2023,
+                  11,
+                  17
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "label": "NeurFrame",
+          "arxiv_id": "2603.12820",
+          "original_url": "https://arxiv.org/abs/2603.12820",
+          "original_http_status": 200,
+          "original_title": "NeurFrame: Learning Continuous Frame Fields for Structured Mesh Generation",
+          "original_authors": [
+            "Yu, Xiaoyang",
+            "Huang, Canjia",
+            "Chen, Zhonggui",
+            "Cao, Juan"
+          ],
+          "original_date": "2026/03/13",
+          "original_doi": "",
+          "original_verified": true,
+          "title": "NeurFrame: Learning Continuous Frame Fields for Structured Mesh Generation",
+          "authors": [
+            "Yu, Xiaoyang",
+            "Huang, Canjia",
+            "Chen, Zhonggui",
+            "Cao, Juan"
+          ],
+          "year": 2026,
+          "url": "https://arxiv.org/abs/2603.12820",
+          "registry_verified": false,
+          "bibliographic_status": "verified",
+          "human_relevance": null
+        },
+        {
+          "label": "Meshing using neural networks for improving the efficiency of computer modelling",
+          "doi": "10.1007/s00366-023-01812-z",
+          "title": "Meshing using neural networks for improving the efficiency of computer modelling",
+          "authors": [
+            "Callum Lock",
+            "Oubay Hassan",
+            "Ruben Sevilla",
+            "Jason Jones"
+          ],
+          "year": 2023,
+          "publisher": "Springer Science and Business Media LLC",
+          "url": "https://link.springer.com/10.1007/s00366-023-01812-z",
+          "registry_verified": true,
+          "registry_source": "https://api.crossref.org/works/10.1007%2Fs00366-023-01812-z",
+          "original_url": "https://link.springer.com/article/10.1007/s00366-023-01812-z",
+          "original_http_status": 200,
+          "original_title": "Meshing using neural networks for improving the efficiency of computer modelling",
+          "original_authors": [
+            "Lock, Callum",
+            "Hassan, Oubay",
+            "Sevilla, Ruben",
+            "Jones, Jason"
+          ],
+          "original_date": "2023/12",
+          "original_doi": "10.1007/s00366-023-01812-z",
+          "original_verified": true,
+          "bibliographic_status": "verified",
+          "human_relevance": null,
+          "registry_checked_at": "2026-10-12T11:20:51.503695+00:00",
+          "registry_record": {
+            "DOI": "10.1007/s00366-023-01812-z",
+            "title": [
+              "Meshing using neural networks for improving the efficiency of computer modelling"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0001-6096-3755",
+                "authenticated-orcid": false,
+                "given": "Callum",
+                "family": "Lock",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Oubay",
+                "family": "Hassan",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Ruben",
+                "family": "Sevilla",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Jason",
+                "family": "Jones",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "published": {
+              "date-parts": [
+                [
+                  2023,
+                  4,
+                  11
+                ]
+              ]
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  2023,
+                  4,
+                  11
+                ]
+              ]
+            }
+          }
+        }
+      ],
+      "other_cases": [
+        {
+          "id": "junit",
+          "query": "Définition d'un processus reproductible de génération de tests unitaires Java/JUnit par IA générative, avec robustesse, qualité des tests et généralisation.",
+          "references": [],
+          "status": "awaiting_human_reference_set"
+        },
+        {
+          "id": "few_shot_synthetic",
+          "query": "Générer des données synthétiques diversifiées à partir de très peu d'exemples sans reproduire simplement les données initiales.",
+          "references": [],
+          "status": "awaiting_human_reference_set"
+        }
+      ],
+      "verified_at": "2026-10-11T13:41:07.803241+00:00",
+      "expected_families": [
+        "direct volumetric generation",
+        "hexahedral generation",
+        "adaptive generation",
+        "hybrid methods"
+      ]
+    },
+    {
+      "case": "protein_structure",
+      "query": "Je cherche les travaux méthodologiques centraux sur la prédiction de structures de protéines et de complexes biomoléculaires par apprentissage. Compare les contributions, résultats démontrés et limites, avec le niveau réel d’accès aux sources.",
+      "expected_families": [
+        "protein folding",
+        "biomolecular complexes"
+      ],
+      "references": [
+        {
+          "label": "AlphaFold structure prediction",
+          "doi": "10.1038/s41586-021-03819-2",
+          "original_url": "https://www.nature.com/articles/s41586-021-03819-2",
+          "human_relevance": null,
+          "title": "Highly accurate protein structure prediction with AlphaFold",
+          "authors": [
+            "John Jumper",
+            "Richard Evans",
+            "Alexander Pritzel",
+            "Tim Green",
+            "Michael Figurnov",
+            "Olaf Ronneberger",
+            "Kathryn Tunyasuvunakool",
+            "Russ Bates",
+            "Augustin Žídek",
+            "Anna Potapenko",
+            "Alex Bridgland",
+            "Clemens Meyer",
+            "Simon A. A. Kohl",
+            "Andrew J. Ballard",
+            "Andrew Cowie",
+            "Bernardino Romera-Paredes",
+            "Stanislav Nikolov",
+            "Rishub Jain",
+            "Jonas Adler",
+            "Trevor Back",
+            "Stig Petersen",
+            "David Reiman",
+            "Ellen Clancy",
+            "Michal Zielinski",
+            "Martin Steinegger",
+            "Michalina Pacholska",
+            "Tamas Berghammer",
+            "Sebastian Bodenstein",
+            "David Silver",
+            "Oriol Vinyals",
+            "Andrew W. Senior",
+            "Koray Kavukcuoglu",
+            "Pushmeet Kohli",
+            "Demis Hassabis"
+          ],
+          "year": 2021,
+          "bibliographic_status": "verified",
+          "registry_source": "https://api.crossref.org/works/10.1038%2Fs41586-021-03819-2",
+          "registry_checked_at": "2026-10-12T11:20:51.682617+00:00",
+          "registry_record": {
+            "DOI": "10.1038/s41586-021-03819-2",
+            "title": [
+              "Highly accurate protein structure prediction with AlphaFold"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0001-6169-6580",
+                "authenticated-orcid": false,
+                "given": "John",
+                "family": "Jumper",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Richard",
+                "family": "Evans",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Alexander",
+                "family": "Pritzel",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-3227-1505",
+                "authenticated-orcid": false,
+                "given": "Tim",
+                "family": "Green",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Michael",
+                "family": "Figurnov",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Olaf",
+                "family": "Ronneberger",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Kathryn",
+                "family": "Tunyasuvunakool",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Russ",
+                "family": "Bates",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Augustin",
+                "family": "Žídek",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Anna",
+                "family": "Potapenko",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Alex",
+                "family": "Bridgland",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Clemens",
+                "family": "Meyer",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-4271-4418",
+                "authenticated-orcid": false,
+                "given": "Simon A. A.",
+                "family": "Kohl",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Andrew J.",
+                "family": "Ballard",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Andrew",
+                "family": "Cowie",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Bernardino",
+                "family": "Romera-Paredes",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Stanislav",
+                "family": "Nikolov",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Rishub",
+                "family": "Jain",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0001-9928-3407",
+                "authenticated-orcid": false,
+                "given": "Jonas",
+                "family": "Adler",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Trevor",
+                "family": "Back",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Stig",
+                "family": "Petersen",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "David",
+                "family": "Reiman",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Ellen",
+                "family": "Clancy",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Michal",
+                "family": "Zielinski",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0001-8781-9753",
+                "authenticated-orcid": false,
+                "given": "Martin",
+                "family": "Steinegger",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-2160-6226",
+                "authenticated-orcid": false,
+                "given": "Michalina",
+                "family": "Pacholska",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Tamas",
+                "family": "Berghammer",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Sebastian",
+                "family": "Bodenstein",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-5197-2892",
+                "authenticated-orcid": false,
+                "given": "David",
+                "family": "Silver",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Oriol",
+                "family": "Vinyals",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-2401-5691",
+                "authenticated-orcid": false,
+                "given": "Andrew W.",
+                "family": "Senior",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Koray",
+                "family": "Kavukcuoglu",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Pushmeet",
+                "family": "Kohli",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-2812-9917",
+                "authenticated-orcid": false,
+                "given": "Demis",
+                "family": "Hassabis",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "published": {
+              "date-parts": [
+                [
+                  2021,
+                  7,
+                  15
+                ]
+              ]
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  2021,
+                  7,
+                  15
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "label": "Biomolecular interaction prediction",
+          "doi": "10.1038/s41586-024-07487-w",
+          "original_url": "https://www.nature.com/articles/s41586-024-07487-w",
+          "human_relevance": null,
+          "title": "Accurate structure prediction of biomolecular interactions with AlphaFold 3",
+          "authors": [
+            "Josh Abramson",
+            "Jonas Adler",
+            "Jack Dunger",
+            "Richard Evans",
+            "Tim Green",
+            "Alexander Pritzel",
+            "Olaf Ronneberger",
+            "Lindsay Willmore",
+            "Andrew J. Ballard",
+            "Joshua Bambrick",
+            "Sebastian W. Bodenstein",
+            "David A. Evans",
+            "Chia-Chun Hung",
+            "Michael O’Neill",
+            "David Reiman",
+            "Kathryn Tunyasuvunakool",
+            "Zachary Wu",
+            "Akvilė Žemgulytė",
+            "Eirini Arvaniti",
+            "Charles Beattie",
+            "Ottavia Bertolli",
+            "Alex Bridgland",
+            "Alexey Cherepanov",
+            "Miles Congreve",
+            "Alexander I. Cowen-Rivers",
+            "Andrew Cowie",
+            "Michael Figurnov",
+            "Fabian B. Fuchs",
+            "Hannah Gladman",
+            "Rishub Jain",
+            "Yousuf A. Khan",
+            "Caroline M. R. Low",
+            "Kuba Perlin",
+            "Anna Potapenko",
+            "Pascal Savy",
+            "Sukhdeep Singh",
+            "Adrian Stecula",
+            "Ashok Thillaisundaram",
+            "Catherine Tong",
+            "Sergei Yakneen",
+            "Ellen D. Zhong",
+            "Michal Zielinski",
+            "Augustin Žídek",
+            "Victor Bapst",
+            "Pushmeet Kohli",
+            "Max Jaderberg",
+            "Demis Hassabis",
+            "John M. Jumper"
+          ],
+          "year": 2024,
+          "bibliographic_status": "verified",
+          "registry_source": "https://api.crossref.org/works/10.1038%2Fs41586-024-07487-w",
+          "registry_checked_at": "2026-10-12T11:20:51.881445+00:00",
+          "registry_record": {
+            "DOI": "10.1038/s41586-024-07487-w",
+            "title": [
+              "Accurate structure prediction of biomolecular interactions with AlphaFold 3"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0009-0000-3496-6952",
+                "authenticated-orcid": false,
+                "given": "Josh",
+                "family": "Abramson",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0001-9928-3407",
+                "authenticated-orcid": false,
+                "given": "Jonas",
+                "family": "Adler",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Jack",
+                "family": "Dunger",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-4675-8469",
+                "authenticated-orcid": false,
+                "given": "Richard",
+                "family": "Evans",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-3227-1505",
+                "authenticated-orcid": false,
+                "given": "Tim",
+                "family": "Green",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-4233-9040",
+                "authenticated-orcid": false,
+                "given": "Alexander",
+                "family": "Pritzel",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-4266-1515",
+                "authenticated-orcid": false,
+                "given": "Olaf",
+                "family": "Ronneberger",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-4314-0778",
+                "authenticated-orcid": false,
+                "given": "Lindsay",
+                "family": "Willmore",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-4956-5304",
+                "authenticated-orcid": false,
+                "given": "Andrew J.",
+                "family": "Ballard",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0009-0003-3908-0722",
+                "authenticated-orcid": false,
+                "given": "Joshua",
+                "family": "Bambrick",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Sebastian W.",
+                "family": "Bodenstein",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "David A.",
+                "family": "Evans",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-5264-9165",
+                "authenticated-orcid": false,
+                "given": "Chia-Chun",
+                "family": "Hung",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Michael",
+                "family": "O’Neill",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-1605-7197",
+                "authenticated-orcid": false,
+                "given": "David",
+                "family": "Reiman",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-8594-1074",
+                "authenticated-orcid": false,
+                "given": "Kathryn",
+                "family": "Tunyasuvunakool",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-2429-9812",
+                "authenticated-orcid": false,
+                "given": "Zachary",
+                "family": "Wu",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Akvilė",
+                "family": "Žemgulytė",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Eirini",
+                "family": "Arvaniti",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-1840-054X",
+                "authenticated-orcid": false,
+                "given": "Charles",
+                "family": "Beattie",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0001-8578-3216",
+                "authenticated-orcid": false,
+                "given": "Ottavia",
+                "family": "Bertolli",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Alex",
+                "family": "Bridgland",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-5227-0622",
+                "authenticated-orcid": false,
+                "given": "Alexey",
+                "family": "Cherepanov",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Miles",
+                "family": "Congreve",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Alexander I.",
+                "family": "Cowen-Rivers",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-4491-1434",
+                "authenticated-orcid": false,
+                "given": "Andrew",
+                "family": "Cowie",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-1386-8741",
+                "authenticated-orcid": false,
+                "given": "Michael",
+                "family": "Figurnov",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Fabian B.",
+                "family": "Fuchs",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Hannah",
+                "family": "Gladman",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Rishub",
+                "family": "Jain",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-0201-2796",
+                "authenticated-orcid": false,
+                "given": "Yousuf A.",
+                "family": "Khan",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Caroline M. R.",
+                "family": "Low",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Kuba",
+                "family": "Perlin",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Anna",
+                "family": "Potapenko",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Pascal",
+                "family": "Savy",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Sukhdeep",
+                "family": "Singh",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0001-6914-6743",
+                "authenticated-orcid": false,
+                "given": "Adrian",
+                "family": "Stecula",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Ashok",
+                "family": "Thillaisundaram",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0001-7570-4801",
+                "authenticated-orcid": false,
+                "given": "Catherine",
+                "family": "Tong",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0001-7827-9839",
+                "authenticated-orcid": false,
+                "given": "Sergei",
+                "family": "Yakneen",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0001-6345-1907",
+                "authenticated-orcid": false,
+                "given": "Ellen D.",
+                "family": "Zhong",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Michal",
+                "family": "Zielinski",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-0748-9684",
+                "authenticated-orcid": false,
+                "given": "Augustin",
+                "family": "Žídek",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Victor",
+                "family": "Bapst",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-7466-7997",
+                "authenticated-orcid": false,
+                "given": "Pushmeet",
+                "family": "Kohli",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-9033-2695",
+                "authenticated-orcid": false,
+                "given": "Max",
+                "family": "Jaderberg",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-2812-9917",
+                "authenticated-orcid": false,
+                "given": "Demis",
+                "family": "Hassabis",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0001-6169-6580",
+                "authenticated-orcid": false,
+                "given": "John M.",
+                "family": "Jumper",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "published": {
+              "date-parts": [
+                [
+                  2024,
+                  5,
+                  8
+                ]
+              ]
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  2024,
+                  5,
+                  8
+                ]
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case": "quantum_tomography",
+      "query": "Je cherche les méthodes de tomographie d’états quantiques par réseaux entraînés, notamment pour reconstruire des états mixtes bruités. Compare les approches et leurs limites expérimentales, avec des sources vérifiées.",
+      "expected_families": [
+        "attention reconstruction",
+        "convolutional reconstruction"
+      ],
+      "references": [
+        {
+          "label": "Attention-based tomography",
+          "doi": "10.1088/2632-2153/ac362b",
+          "original_url": "https://doi.org/10.1088/2632-2153/ac362b",
+          "human_relevance": null,
+          "title": "Attention-based quantum tomography",
+          "authors": [
+            "Peter Cha",
+            "Paul Ginsparg",
+            "Felix Wu",
+            "Juan Carrasquilla",
+            "Peter L McMahon",
+            "Eun-Ah Kim"
+          ],
+          "year": 2021,
+          "bibliographic_status": "verified",
+          "registry_source": "https://api.crossref.org/works/10.1088%2F2632-2153%2Fac362b",
+          "registry_checked_at": "2026-10-12T11:20:52.066613+00:00",
+          "registry_record": {
+            "DOI": "10.1088/2632-2153/ac362b",
+            "title": [
+              "Attention-based quantum tomography"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0002-5653-4920",
+                "authenticated-orcid": false,
+                "given": "Peter",
+                "family": "Cha",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Paul",
+                "family": "Ginsparg",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Felix",
+                "family": "Wu",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Juan",
+                "family": "Carrasquilla",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Peter L",
+                "family": "McMahon",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Eun-Ah",
+                "family": "Kim",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "published": {
+              "date-parts": [
+                [
+                  2021,
+                  11,
+                  23
+                ]
+              ]
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  2021,
+                  11,
+                  23
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "label": "Convolutional tomography",
+          "doi": "10.1038/s41534-022-00621-4",
+          "original_url": "https://www.nature.com/articles/s41534-022-00621-4",
+          "human_relevance": null,
+          "title": "Efficient quantum state tomography with convolutional neural networks",
+          "authors": [
+            "Tobias Schmale",
+            "Moritz Reh",
+            "Martin Gärttner"
+          ],
+          "year": 2022,
+          "bibliographic_status": "verified",
+          "registry_source": "https://api.crossref.org/works/10.1038%2Fs41534-022-00621-4",
+          "registry_checked_at": "2026-10-12T11:20:52.262071+00:00",
+          "registry_record": {
+            "DOI": "10.1038/s41534-022-00621-4",
+            "title": [
+              "Efficient quantum state tomography with convolutional neural networks"
+            ],
+            "author": [
+              {
+                "given": "Tobias",
+                "family": "Schmale",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Moritz",
+                "family": "Reh",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Martin",
+                "family": "Gärttner",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "published": {
+              "date-parts": [
+                [
+                  2022,
+                  9,
+                  23
+                ]
+              ]
+            },
+            "issued": {
+              "date-parts": [
+                [
+                  2022,
+                  9,
+                  23
+                ]
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

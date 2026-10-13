@@ -1,0 +1,196 @@
+x-backend: &backend_image
+  image: ennosmart-backend:${ENNOSMART_IMAGE_TAG:-local}
+  build:
+    context: .
+    dockerfile: deploy/ovh/Dockerfile.backend
+
+services:
+  postgres:
+    # La base locale et le dump de migration sont en PostgreSQL 17.
+    # Garder la même version majeure évite les restaurations incompatibles.
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    volumes:
+      - ${ENNOSMART_POSTGRES_DATA_DIR:-/mnt/ennosmart-data/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - ${ENNOSMART_REDIS_DATA_DIR:-/mnt/ennosmart-data/redis}:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  chroma:
+    # Même version que le client Python (requirements.txt). Le service reste
+    # uniquement sur le réseau Docker : aucun port Chroma n'est publié sur OVH.
+    image: ${CHROMA_IMAGE:-chromadb/chroma:1.5.9}
+    restart: unless-stopped
+    environment:
+      CHROMA_PERSIST_PATH: /data
+      CHROMA_ALLOW_RESET: "false"
+      ANONYMIZED_TELEMETRY: "FALSE"
+    volumes:
+      - ${ENNOSMART_CHROMA_DATA_DIR:-/mnt/ennosmart-data/chroma}:/data
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "bash", "-c", 'exec 3<>/dev/tcp/127.0.0.1/8000 && printf "GET /api/v2/heartbeat HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3 && head -n 1 <&3 | grep -q "200 OK"']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  grobid:
+    image: ${GROBID_IMAGE:-grobid/grobid:0.9.0-crf}
+    restart: unless-stopped
+
+  api:
+    <<: *backend_image
+    restart: unless-stopped
+    env_file: .env
+    environment: &backend_environment
+      ENNOSMART_ROOT: /opt/ennosmart
+      ENNOSMART_BASE_DIR: /opt/ennosmart
+      ENNOSMART_DATA_ROOT: /var/lib/ennosmart
+      ENNOSMART_STORAGE_ROOT: /var/lib/ennosmart/object_storage_v2/runtime
+      UPLOAD_ROOT: /var/lib/ennosmart/object_storage_v2/runtime/uploads
+      AI_OUTPUT_ROOT: /var/lib/ennosmart/object_storage_v2/runtime/outputs/safe_rag_upload
+      ENNOSMART_EXPERIENCE_MEMORY_V2_DIR: /var/lib/ennosmart/object_storage_v2/runtime/experience_memory_v2
+      ENNOSMART_MEMORY_V2_ROOT: /var/lib/ennosmart/object_storage_v2/runtime/organismes
+      POWER_AUTOMATE_AUDIT_ROOT: /var/lib/ennosmart/object_storage_v2/runtime/power_automate_import
+      ENNOSCHOLAR_LEGAL_MCP_CACHE_DB: /var/lib/ennosmart/object_storage_v2/runtime/mcp/legal_fulltext_cache.sqlite3
+      ENNOSMART_LOG_ROOT: /var/lib/ennosmart/object_storage_v2/runtime/logs
+      ENNOSMART_CACHE_ROOT: /var/lib/ennosmart/object_storage_v2/runtime/cache
+      HF_HOME: /var/lib/ennosmart/object_storage_v2/runtime/cache/huggingface
+      HF_HUB_CACHE: /var/lib/ennosmart/object_storage_v2/runtime/cache/huggingface/hub
+      ENNOSMART_NLI_CACHE_DIR: /var/lib/ennosmart/object_storage_v2/runtime/cache/huggingface/hub
+      ENNOSMART_EMBEDDING_OFFLINE: "1"
+      ENNOSMART_NLI_ALLOW_DOWNLOAD: "0"
+      LIBREOFFICE_BIN: /usr/bin/libreoffice
+      TESSERACT_CMD: /usr/bin/tesseract
+      ENNOSMART_STORAGE_V2_ENABLED: "true"
+      ENNOSMART_OBJECT_STORAGE_PROVIDER: ${ENNOSMART_OBJECT_STORAGE_PROVIDER:-local}
+      ENNOSMART_STORAGE_V2_LOCAL_ROOT: /var/lib/ennosmart/object_storage_v2
+      ENNOSMART_CHROMA_MODE: http
+      ENNOSMART_CHROMA_HOST: chroma
+      ENNOSMART_CHROMA_PORT: 8000
+      ENNOSMART_CHROMA_SSL: "false"
+      ENNOSMART_CHROMA_ENFORCE_SCOPE: "true"
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      SESSION_LOCK_REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      ENNOSMART_CELERY_BROKER_URL: redis://redis:6379/1
+      ENNOSMART_CELERY_RESULT_BACKEND: redis://redis:6379/2
+      ENNOSMART_CIR_BROKER_URL: redis://redis:6379/1
+      ENNOSMART_CIR_RESULT_BACKEND: redis://redis:6379/2
+      ENNOSMART_CIR_LANGGRAPH_REDIS_URL: redis://redis:6379/0
+      ENNOSMART_CIR_STATUS_REDIS_URL: redis://redis:6379/3
+      ENNOSMART_CIR_REDIS_URL: redis://redis:6379/3
+      ENNOSMART_LANGGRAPH_REDIS_URL: redis://redis:6379/0
+      ENNOSMART_LLM_REDIS_URL: redis://redis:6379/0
+      GROBID_URL: http://grobid:8070
+      ENNOSCHOLAR_LEGAL_MCP_HOST: 0.0.0.0
+      ENNOSCHOLAR_LEGAL_MCP_PORT: 8010
+      ENNOSCHOLAR_LEGAL_MCP_URL: http://legal-mcp:8010/mcp
+      ENNOSCHOLAR_LEGAL_MCP_REST_URL: http://legal-mcp:8010/api/resolve
+    volumes: &backend_volumes
+      - ${ENNOSMART_HOST_DATA_DIR:-/mnt/ennosmart-data}:/var/lib/ennosmart
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      models-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      grobid:
+        condition: service_started
+      chroma:
+        condition: service_healthy
+
+  # Téléchargement une fois dans le cache partagé ; aucun appel aux agents.
+  # Même image et mêmes variables que le code réellement exécuté par l'API.
+  models-init:
+    <<: *backend_image
+    restart: "no"
+    env_file: .env
+    environment: *backend_environment
+    volumes: *backend_volumes
+    working_dir: /opt/ennosmart
+    command: ["python", "scripts/deployment/prefetch_models.py"]
+
+  scholar-worker:
+    <<: *backend_image
+    restart: unless-stopped
+    env_file: .env
+    environment: *backend_environment
+    volumes: *backend_volumes
+    working_dir: /opt/ennosmart/backend_api
+    command: ["celery", "-A", "worker.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=2", "-Q", "celery"]
+    depends_on:
+      models-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+
+  cir-worker:
+    <<: *backend_image
+    restart: unless-stopped
+    env_file: .env
+    environment: *backend_environment
+    volumes: *backend_volumes
+    working_dir: /opt/ennosmart
+    command: ["python", "-m", "celery", "-A", "backend_api.workers.celery_app:celery_app", "worker", "--loglevel=INFO", "--concurrency=4", "-Q", "ennosmart.cir"]
+    depends_on:
+      models-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+
+  legal-mcp:
+    <<: *backend_image
+    restart: unless-stopped
+    env_file: .env
+    environment: *backend_environment
+    volumes: *backend_volumes
+    working_dir: /opt/ennosmart
+    command: ["python", "-m", "mcp_servers.legal_fulltext_mcp.server"]
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: deploy/ovh/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL must be set}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - api

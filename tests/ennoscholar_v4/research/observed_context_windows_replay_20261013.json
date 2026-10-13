@@ -1,0 +1,1065 @@
+{
+  "exact_prompt": "Je travaille en mécanique sur la génération automatique de maillages volumiques 3D à l'aide de modèles entraînés.\n\nRecherche les articles scientifiques les plus pertinents sur ce sujet, y compris les articles payants.\n\nPour chaque article, explique brièvement sa contribution scientifique et indique si tu as réellement analysé le texte complet ou uniquement l'abstract.\n\nPrivilégie les travaux qui génèrent réellement des maillages 3D, et pas ceux qui utilisent simplement un maillage pour prédire des grandeurs physiques.",
+  "session_id": "fe2560e4be2b482eb40c1e791d6c9300",
+  "run_id": "4eb1df047b8642c78a78a6f6d1f64e2b",
+  "backend": "real_authenticated_api_sqlite",
+  "before": {
+    "usage": {
+      "model": "gpt-6.1-sol",
+      "input_tokens": 264248,
+      "output_tokens": 10122,
+      "estimated_cost_usd": 0.6797159999999999,
+      "unreported_reserved_cost_usd": 0.0
+    },
+    "duration_seconds": 485.328,
+    "tool_counts": {
+      "web_search": 5,
+      "update_research_state": 2,
+      "search_scientific": 3,
+      "get_article": 3,
+      "get_fulltext": 8,
+      "record_candidate_decisions": 3,
+      "analyze_article": 9,
+      "verify_bibliography": 2,
+      "finalize_response": 2
+    },
+    "reason": "round_budget",
+    "partial": true
+  },
+  "after": {
+    "status": "completed",
+    "partial": false,
+    "reason": null,
+    "fallback": false,
+    "exploration_stop_reason": "exploration_round_budget",
+    "exploration_rounds": 6,
+    "finalization_rounds": 2,
+    "finalization_attempt_count": 2,
+    "finalization_refusals": [
+      {
+        "rejection_code": "doi_label_mismatch",
+        "error": "Le libellé ne correspond pas à cette publication : utiliser son titre, un titre abrégé identifiable ou son marqueur paper_.",
+        "phase": "finalization"
+      }
+    ],
+    "tool_counts": {
+      "web_search": 4,
+      "update_research_state": 1,
+      "search_scientific": 2,
+      "get_article": 2,
+      "search_collected_articles": 1,
+      "record_candidate_decisions": 2,
+      "get_fulltext": 3,
+      "analyze_article": 1,
+      "verify_bibliography": 1,
+      "finalize_response": 2
+    },
+    "usage": {
+      "model": "gpt-6.1-sol",
+      "input_tokens": 133479,
+      "output_tokens": 7753,
+      "estimated_cost_usd": 0.384488,
+      "unreported_reserved_cost_usd": 0.0
+    },
+    "duration_seconds": 327.032,
+    "primary_article_ids": [
+      "paper_bbbc8737f1e0af3aefd1",
+      "paper_8a053517b056ca70a240",
+      "paper_fab4823c942d9b72e946",
+      "paper_942bde322abe27ebd8ff",
+      "paper_f298a95c1297f15e123a",
+      "paper_a4b6ec3988a48757ef89",
+      "paper_0c1c5c0239d66e8b3525"
+    ],
+    "displayed_article_ids": [
+      "paper_bbbc8737f1e0af3aefd1",
+      "paper_8a053517b056ca70a240",
+      "paper_fab4823c942d9b72e946",
+      "paper_942bde322abe27ebd8ff",
+      "paper_f298a95c1297f15e123a",
+      "paper_a4b6ec3988a48757ef89",
+      "paper_0c1c5c0239d66e8b3525"
+    ],
+    "complementary_count": 0,
+    "discovered_sources_count": 62,
+    "library_counts": {
+      "relevant": 7,
+      "retained_complementary": 0,
+      "unexamined": 61,
+      "examined_pending": 1,
+      "rejected": 1
+    },
+    "coverage_sufficient": false,
+    "publication_accepted": true,
+    "research_status": "incomplete"
+  },
+  "library_total": 70,
+  "message_persisted": true,
+  "articles": [
+    {
+      "id": "paper_f298a95c1297f15e123a",
+      "title": "TetGAN: A Convolutional Neural Network for Tetrahedral Mesh Generation",
+      "doi": "10.48550/arxiv.2210.05735",
+      "arxiv_id": "2210.05735",
+      "verified": true,
+      "access_status": "fulltext_extracted",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_69b301b8a92d98cb103b",
+      "title": "DeepCrysTet: A Deep Learning Approach Using Tetrahedral Mesh for Predicting Properties of Crystalline Materials",
+      "doi": "",
+      "arxiv_id": "2310.06852",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_10d82fa8fce2f2008296",
+      "title": "Enhancing Alzheimer's Diagnosis: Leveraging Anatomical Landmarks in Graph Convolutional Neural Networks on Tetrahedral Meshes",
+      "doi": "",
+      "arxiv_id": "2503.05031",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_8a053517b056ca70a240",
+      "title": "Learned Adaptive Mesh Generation",
+      "doi": "",
+      "arxiv_id": "2505.20457",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_45c5deb120e772d7e684",
+      "title": "Skinning a Parameterization of Three-Dimensional Space for Neural Network Cloth",
+      "doi": "",
+      "arxiv_id": "2006.04874",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_4d271b1d95a5384471cf",
+      "title": "Weakly-Supervised 3D Reconstruction of Clothed Humans via Normal Maps",
+      "doi": "",
+      "arxiv_id": "2311.16042",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_e34ef8977c5390b41f4d",
+      "title": "DDSL: Deep Differentiable Simplex Layer for Learning Geometric Signals",
+      "doi": "",
+      "arxiv_id": "1901.11082",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_061b19baed4cb81bce91",
+      "title": "PhysRig: Differentiable Physics-Based Skinning and Rigging Framework for Realistic Articulated Object Modeling",
+      "doi": "",
+      "arxiv_id": "2506.20936",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_0c17641b0799e333aa5d",
+      "title": "SVM-Based Topological Optimization of Tetrahedral Meshes",
+      "doi": "10.1007/978-3-642-33573-0_13",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_ca9b4e88c5bce4e74ad0",
+      "title": "Tetrahedral mesh for needle insertion",
+      "doi": "",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_3feb1050844aac22ef28",
+      "title": "DeepCrysTet: A Deep Learning Approach Using Tetrahedral Mesh for Predicting Properties of Crystalline Materials",
+      "doi": "10.1109/icmla58977.2023.00029",
+      "arxiv_id": "2310.06852",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_001a3beb13d83189ee4f",
+      "title": "Adaptive Mesh Generation",
+      "doi": "10.1007/978-3-662-05189-4_1",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_e1e226832133a36eefb0",
+      "title": "A probabilistic atlas of the human thalamic nuclei combining ex vivo MRI and histology",
+      "doi": "10.1016/j.neuroimage.2018.08.012",
+      "arxiv_id": "1806.08634",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_3fcb82e918ff72ed79ec",
+      "title": "EIT-MESHER – Segmented FEM Mesh Generation and Refinement",
+      "doi": "10.5334/jors.321",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_db10bd8bee01c7f64db3",
+      "title": "Automated conformal mesh generation chain for woven composites based on CT-scan images with low contrasts",
+      "doi": "10.1016/j.compstruct.2023.116673",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_5bff5d74c6f36297697f",
+      "title": "Streaming Mesh Optimization for CAD",
+      "doi": "10.1007/978-3-540-89646-3_102",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_ecaf5e9d94e94f516e82",
+      "title": "A publicly available virtual cohort of four-chamber heart meshes for cardiac electro-mechanics simulations",
+      "doi": "10.1371/journal.pone.0235145",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_76862c3dcf910dd8f832",
+      "title": "DDSL: Deep Differentiable Simplex Layer for Learning Geometric Signals",
+      "doi": "10.1109/iccv.2019.00886",
+      "arxiv_id": "1901.11082",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_25909f760d72994985fb",
+      "title": "Skinning a Parameterization of Three‐Dimensional Space for Neural Network Cloth",
+      "doi": "10.1111/cgf.70556",
+      "arxiv_id": "2006.04874",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_e93ef62bc0065d7d6e83",
+      "title": "LatticeGraphNet: a two-scale graph neural operator for simulating lattice structures",
+      "doi": "10.1007/s00366-024-02034-7",
+      "arxiv_id": "2402.01045",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_28a0aba0c5adc1cf067a",
+      "title": "Delaunay-Based Vector Segmentation of Volumetric Medical Images",
+      "doi": "10.1007/978-3-540-74272-2_33",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_321461f0ba03b3699fc2",
+      "title": "Statistical Atlases of Bone Anatomy: Construction, Iterative Improvement and Validation",
+      "doi": "10.1007/978-3-540-75757-3_61",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_f5f714e7d2bacc34ce13",
+      "title": "Quality Tetrahedral Mesh Generation for Macromolecules",
+      "doi": "10.1007/11940128_22",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_b6dd623ac61320f92bef",
+      "title": "NeurFrame: Learning Continuous Frame Fields for Structured Mesh Generation",
+      "doi": "10.48550/arxiv.2603.12820",
+      "arxiv_id": "2603.12820",
+      "verified": true,
+      "access_status": "abstract_only",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_0d46ea9e2c5706b4ea01",
+      "title": "Watertight conforming mesh generation of continuous fiber-reinforced composites from μ-CT images via deep learning and boolean repair",
+      "doi": "10.1177/00219983261420534",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "abstract_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_ab6c2d508959148ff9ba",
+      "title": "MeshDiffusion: Score-based Generative 3D Mesh Modeling",
+      "doi": "10.48550/arxiv.2303.08133",
+      "arxiv_id": "2303.08133",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_c10711492d6e9ce59359",
+      "title": "Phys4DRT: Physics-based 4D Generation for Real-Time Interaction with Time-Frequency Supervision",
+      "doi": "10.1145/3746027.3754827",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "abstract_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_62ef04d95507b7a596fc",
+      "title": "TetSphere Splatting: Representing High-Quality Geometry with Lagrangian Volumetric Meshes",
+      "doi": "10.48550/arxiv.2405.20283",
+      "arxiv_id": "2405.20283",
+      "verified": false,
+      "access_status": "abstract_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_dcf852dd21e2150d58f5",
+      "title": "Electric field simulations of transcranial direct current stimulation in children with perinatal stroke",
+      "doi": "10.3389/fnhum.2023.1075741",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_44763df5d61b8bb584e6",
+      "title": "Automatic Tetrahedral Mesh Generation Directly from Porous Media",
+      "doi": "10.1088/1742-6596/3109/1/012009",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_7bfe6c254a7f3d121e13",
+      "title": "CPAFT: A Consistent Parallel Advancing Front Technique for Unstructured Triangular/Tetrahedral Mesh Generation",
+      "doi": "10.48550/arxiv.2405.20618",
+      "arxiv_id": "2405.20618",
+      "verified": false,
+      "access_status": "abstract_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_e1b89251ea9feb2fca68",
+      "title": "Voronoi-based high-quality mesh refinement for tetrahedral mesh generation",
+      "doi": "10.1016/j.compstruc.2026.108114",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_25582c41ef3013fc0085",
+      "title": "Faster and efficient tetrahedral mesh generation using generator neural networks for 2D and 3D geometries",
+      "doi": "10.1007/s00521-023-09119-2",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_942bde322abe27ebd8ff",
+      "title": "DL-Polycube: deep learning enhanced generalized polycube method for high-quality hexahedral mesh generation and volumetric spline construction",
+      "doi": "10.1007/s00366-025-02161-9",
+      "arxiv_id": "",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_ddc528a9523b7af9ebb3",
+      "title": "A MATLAB-Based Toolbox to Simulate Transcranial Direct-Current Stimulation Using Flexible, Fast, and High Quality Tetrahedral Mesh Generation",
+      "doi": "10.1109/access.2022.3190410",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_7d0edf35c6c3ba644d87",
+      "title": "Learning Conjugate Direction Fields for Planar Quadrilateral Mesh Generation",
+      "doi": "10.48550/arxiv.2511.11865",
+      "arxiv_id": "2511.11865",
+      "verified": false,
+      "access_status": "abstract_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_cdbe78260e7bc050c15a",
+      "title": "A New Smoothing Algorithm for Quadrilateral and Hexahedral Meshes",
+      "doi": "10.1007/11758525_32",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_1597fdad3a19146d5d77",
+      "title": "An Intelligent Hexahedral Mesh Smoothing Method Based on Deep Learning",
+      "doi": "10.2139/ssrn.4554459",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_8574b3b912a2984148bc",
+      "title": "A New Set of Hexahedral Meshes Local Transformations",
+      "doi": "10.1007/978-3-540-87921-3_27",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_0c1c5c0239d66e8b3525",
+      "title": "Reinforcement learning based automatic block decomposition of solid models for hexahedral meshing",
+      "doi": "10.1016/j.cad.2025.103850",
+      "arxiv_id": "",
+      "verified": true,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_86ea98acb9425652c9fc",
+      "title": "Reinforcement Learning Based Automatic Block Decomposition of Solid Models for Hexahedral Meshing",
+      "doi": "10.2139/ssrn.4953133",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_7ae1874a5012783f9aa8",
+      "title": "Reinforcement Learning Based Automatic Block Decomposition of Solid Models for Hexahedral Meshing",
+      "doi": "10.2139/ssrn.4947138",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_6d9d6526e1da35240276",
+      "title": "HexBox: Interactive Box Modeling of Hexahedral Meshes",
+      "doi": "10.1111/cgf.14899",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_73ffbfecaefdc0210a5e",
+      "title": "Quality Improvement of Segmented Hexahedral Meshes Using Geometric Flows",
+      "doi": "10.1007/978-94-007-4255-0_11",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_f28aa2ef42aab4b4e844",
+      "title": "Automated Structured All-Quadrilateral and Hexahedral Meshing of Tubular Surfaces",
+      "doi": "10.1007/978-3-642-33573-0_7",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_451c17d38df80b9bdc21",
+      "title": "New Strategies for Unstructured All-Hexahedral Mesh Generation.",
+      "doi": "",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_c7e0d6d821a3fc159214",
+      "title": "Development of Discontinuous Galerkin Method for RANS Equations on Multibloc Hexahedral Meshes",
+      "doi": "10.1007/978-3-642-03707-8_8",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_ac2b50d2ecf9d5c2811c",
+      "title": "Decomposing complex thin-walled CAD models for hexahedral-dominant meshing",
+      "doi": "10.1016/j.cad.2017.11.004",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_722a02ef99f3a657ace4",
+      "title": "A Modified Grid-based Algorithm for Feature Constraints Hexahedral Mesh Generation",
+      "doi": "",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "abstract_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_a6eb5b28137cc78f5142",
+      "title": "3D Mesh Generation in Geocomputing",
+      "doi": "10.1007/978-3-540-85879-9_2",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_003b339beb67c3c8a7a6",
+      "title": "L0-Regularization based Material Design for Hexahedral Mesh Models",
+      "doi": "10.14733/cadaps.2022.1171-1183",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_a4b6ec3988a48757ef89",
+      "title": "PolycubeNet: A Dual-latent Diffusion Model for Polycube-Based Hexahedral Mesh Generation",
+      "doi": "",
+      "arxiv_id": "2605.20274",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_fcc710ac6b719f2938d4",
+      "title": "DL-Polycube: Deep learning enhanced polycube method for high-quality hexahedral mesh generation and volumetric spline construction",
+      "doi": "10.48550/arxiv.2410.18852",
+      "arxiv_id": "2410.18852",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_fab4823c942d9b72e946",
+      "title": "DDPM-Polycube: A Denoising Diffusion Probabilistic Model for Polycube-Based Hexahedral Mesh Generation and Volumetric Spline Construction",
+      "doi": "",
+      "arxiv_id": "2503.13541",
+      "verified": true,
+      "access_status": "fulltext_extracted",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_2db1a17033de7dde75f4",
+      "title": "Scalable DDPM-Polycube: An Extended Diffusion-Based Method for Hexahedral Mesh and Volumetric Spline Construction",
+      "doi": "10.48550/arxiv.2604.17266",
+      "arxiv_id": "2604.17266",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_bbbc8737f1e0af3aefd1",
+      "title": "3DMeshNet: A Three-Dimensional Differential Neural Network for Structured Mesh Generation",
+      "doi": "",
+      "arxiv_id": "2407.01560",
+      "verified": true,
+      "access_status": "extraction_failed",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_2b3db3990e3edc2916eb",
+      "title": "SynthAorta: A 3D Mesh Dataset of Parametrized Physiological Healthy Aortas",
+      "doi": "10.1109/tmi.2025.3599937",
+      "arxiv_id": "2409.08635",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_2b9644b042e5baea8628",
+      "title": "DVasMesh: Deep Structured Mesh Reconstruction from Vascular Images for Dynamics Modeling of Vessels",
+      "doi": "10.48550/arxiv.2412.00840",
+      "arxiv_id": "2412.00840",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_6546ad4286828223bf33",
+      "title": "Personalizing the meshed SPL/NAC Brain Atlas for patient-specific scientific computing using SynthMorph",
+      "doi": "10.48550/arxiv.2503.00931",
+      "arxiv_id": "2503.00931",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_56a90d3f85a6295ef4cf",
+      "title": "NeuPhysics: Editable Neural Geometry and Physics from Monocular Videos",
+      "doi": "",
+      "arxiv_id": "2210.12352",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_1d1fdc1218305e2dc9c8",
+      "title": "Reinforcement Learning for Block Decomposition of CAD Models",
+      "doi": "10.48550/arxiv.2302.11066",
+      "arxiv_id": "2302.11066",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_c6e1da58368f6d253d9c",
+      "title": "A Computational Pipeline for Patient-Specific Modeling of Thoracic Aortic Aneurysm: From Medical Image to Finite Element Analysis",
+      "doi": "",
+      "arxiv_id": "2509.12596",
+      "verified": true,
+      "access_status": "fulltext_available",
+      "publisher_access": "open_access",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_7343e4f0cf5a62497734",
+      "title": "DDPM-Polycube: a denoising diffusion probabilistic model for polycube-based hexahedral mesh generation and volumetric spline construction",
+      "doi": "10.1007/s00366-025-02248-3",
+      "arxiv_id": "2503.13541",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_7276f0c077150b139778",
+      "title": "A Modified Grid-based Algorithm for Feature Constraints Hexahedral Mesh Generation",
+      "doi": "",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_d52fb934a1b21d3e81e2",
+      "title": "Mitigating Mesh-Induced Errors in Time-Domain Simulation of Medical Microwave Imaging",
+      "doi": "10.1109/jerm.2025.3611942",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "abstract_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_338ad36690de8c160686",
+      "title": "Reinforcement learning for block decomposition of planar CAD models",
+      "doi": "10.1007/s00366-023-01940-6",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_354332b4ab8419668f99",
+      "title": "Finite Element Mesh Smoothing Using Cohort Intelligence",
+      "doi": "10.1007/978-981-13-1610-4_48",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_af4fedefe55326137a9b",
+      "title": "Subdomain Epoch % Improvement Subdomain Epoch % Improvement Substructure Generation in the 2-d Nite Element Mesh Shown in Fig. 2 Using Competitive Learning. Subdomain Epoch % Improvement Subdomain Epoch % Improvement",
+      "doi": "",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_9706448fdee2a4bcd402",
+      "title": "A Comprehensive Database of Simulations and Meshes of Coronary Arteries from the Fame 2 Trial",
+      "doi": "10.64898/2026.07.30.741868",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "fulltext_available",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    },
+    {
+      "id": "paper_e1ff44c32ddc3f14f151",
+      "title": "Benchmarking of Unstructured Hexahedral Meshes Computations on the DLR-F4 Wing-Body Configurations",
+      "doi": "",
+      "arxiv_id": "",
+      "verified": false,
+      "access_status": "metadata_only",
+      "publisher_access": "unknown",
+      "analysis_basis": null,
+      "selected": false
+    }
+  ],
+  "used_sources": [
+    {
+      "url": "https://arxiv.org/abs/2407.01560",
+      "title": "3DMeshNet: A Three-Dimensional Differential Neural Network for Structured Mesh Generation",
+      "cited": true,
+      "source_kind": "recommended_publication"
+    },
+    {
+      "url": "https://arxiv.org/abs/2505.20457",
+      "title": "Learned Adaptive Mesh Generation",
+      "cited": true,
+      "source_kind": "recommended_publication"
+    },
+    {
+      "url": "https://arxiv.org/abs/2503.13541",
+      "title": "DDPM-Polycube: A Denoising Diffusion Probabilistic Model for Polycube-Based Hexahedral Mesh Generation and Volumetric Spline Construction",
+      "cited": true,
+      "source_kind": "recommended_publication"
+    },
+    {
+      "url": "https://doi.org/10.1007/s00366-025-02161-9",
+      "title": "DL-Polycube: deep learning enhanced generalized polycube method for high-quality hexahedral mesh generation and volumetric spline construction",
+      "cited": true,
+      "source_kind": "recommended_publication"
+    },
+    {
+      "url": "https://doi.org/10.48550/arxiv.2210.05735",
+      "title": "TetGAN: A Convolutional Neural Network for Tetrahedral Mesh Generation",
+      "cited": true,
+      "source_kind": "recommended_publication"
+    },
+    {
+      "url": "https://arxiv.org/abs/2605.20274",
+      "title": "PolycubeNet: A Dual-latent Diffusion Model for Polycube-Based Hexahedral Mesh Generation",
+      "cited": true,
+      "source_kind": "recommended_publication"
+    },
+    {
+      "url": "https://doi.org/10.1016/j.cad.2025.103850",
+      "title": "Reinforcement learning based automatic block decomposition of solid models for hexahedral meshing",
+      "cited": true,
+      "source_kind": "recommended_publication"
+    }
+  ],
+  "stored_discovered_url_count": 62,
+  "regression": {
+    "usage": {
+      "model": "gpt-6.1-sol",
+      "input_tokens": 13682,
+      "output_tokens": 1230,
+      "estimated_cost_usd": 0.039664,
+      "unreported_reserved_cost_usd": 0.0
+    },
+    "duration_seconds": 43.282,
+    "tool_counts": {
+      "web_search": 0,
+      "update_research_state": 1,
+      "search_scientific": 1,
+      "finalize_response": 1
+    },
+    "exploration_stop_reason": "context_budget",
+    "primary_article_ids": [
+      "paper_bbbc8737f1e0af3aefd1"
+    ],
+    "coverage_sufficient": false
+  },
+  "transmission_trace": [
+    {
+      "round": 1,
+      "phase": "exploration",
+      "input_chars": 997,
+      "offered_article_ids": [],
+      "offered_abstract_ids": []
+    },
+    {
+      "round": 2,
+      "phase": "exploration",
+      "input_chars": 44874,
+      "offered_article_ids": [
+        "paper_f298a95c1297f15e123a",
+        "paper_69b301b8a92d98cb103b",
+        "paper_10d82fa8fce2f2008296",
+        "paper_8a053517b056ca70a240",
+        "paper_45c5deb120e772d7e684",
+        "paper_4d271b1d95a5384471cf",
+        "paper_e34ef8977c5390b41f4d",
+        "paper_061b19baed4cb81bce91",
+        "paper_cdbe78260e7bc050c15a",
+        "paper_1597fdad3a19146d5d77",
+        "paper_8574b3b912a2984148bc",
+        "paper_0c1c5c0239d66e8b3525",
+        "paper_86ea98acb9425652c9fc",
+        "paper_7ae1874a5012783f9aa8",
+        "paper_6d9d6526e1da35240276",
+        "paper_73ffbfecaefdc0210a5e"
+      ],
+      "offered_abstract_ids": [
+        "paper_f298a95c1297f15e123a",
+        "paper_69b301b8a92d98cb103b",
+        "paper_10d82fa8fce2f2008296",
+        "paper_8a053517b056ca70a240",
+        "paper_45c5deb120e772d7e684",
+        "paper_4d271b1d95a5384471cf",
+        "paper_e34ef8977c5390b41f4d",
+        "paper_061b19baed4cb81bce91",
+        "paper_6d9d6526e1da35240276"
+      ]
+    },
+    {
+      "round": 3,
+      "phase": "exploration",
+      "input_chars": 39618,
+      "offered_article_ids": [
+        "paper_f298a95c1297f15e123a",
+        "paper_8a053517b056ca70a240",
+        "paper_942bde322abe27ebd8ff",
+        "paper_a4b6ec3988a48757ef89",
+        "paper_fab4823c942d9b72e946",
+        "paper_bbbc8737f1e0af3aefd1",
+        "paper_0c1c5c0239d66e8b3525",
+        "paper_25582c41ef3013fc0085",
+        "paper_0c17641b0799e333aa5d",
+        "paper_ca9b4e88c5bce4e74ad0",
+        "paper_3feb1050844aac22ef28",
+        "paper_001a3beb13d83189ee4f",
+        "paper_e1e226832133a36eefb0",
+        "paper_3fcb82e918ff72ed79ec",
+        "paper_db10bd8bee01c7f64db3",
+        "paper_5bff5d74c6f36297697f"
+      ],
+      "offered_abstract_ids": [
+        "paper_f298a95c1297f15e123a",
+        "paper_8a053517b056ca70a240",
+        "paper_942bde322abe27ebd8ff",
+        "paper_a4b6ec3988a48757ef89",
+        "paper_fab4823c942d9b72e946",
+        "paper_bbbc8737f1e0af3aefd1",
+        "paper_ca9b4e88c5bce4e74ad0",
+        "paper_3feb1050844aac22ef28",
+        "paper_e1e226832133a36eefb0",
+        "paper_3fcb82e918ff72ed79ec"
+      ]
+    },
+    {
+      "round": 4,
+      "phase": "exploration",
+      "input_chars": 30053,
+      "offered_article_ids": [],
+      "offered_abstract_ids": []
+    },
+    {
+      "round": 5,
+      "phase": "exploration",
+      "input_chars": 54524,
+      "offered_article_ids": [
+        "paper_bbbc8737f1e0af3aefd1",
+        "paper_f298a95c1297f15e123a",
+        "paper_fab4823c942d9b72e946",
+        "paper_942bde322abe27ebd8ff",
+        "paper_a4b6ec3988a48757ef89",
+        "paper_8a053517b056ca70a240",
+        "paper_0c1c5c0239d66e8b3525",
+        "paper_25582c41ef3013fc0085"
+      ],
+      "offered_abstract_ids": [
+        "paper_bbbc8737f1e0af3aefd1",
+        "paper_f298a95c1297f15e123a",
+        "paper_fab4823c942d9b72e946",
+        "paper_942bde322abe27ebd8ff",
+        "paper_a4b6ec3988a48757ef89",
+        "paper_8a053517b056ca70a240"
+      ]
+    },
+    {
+      "round": 6,
+      "phase": "exploration",
+      "input_chars": 34142,
+      "offered_article_ids": [],
+      "offered_abstract_ids": []
+    },
+    {
+      "round": 7,
+      "phase": "finalization",
+      "input_chars": 26877,
+      "offered_article_ids": [],
+      "offered_abstract_ids": []
+    },
+    {
+      "round": 8,
+      "phase": "finalization",
+      "input_chars": 29416,
+      "offered_article_ids": [],
+      "offered_abstract_ids": []
+    }
+  ]
+}

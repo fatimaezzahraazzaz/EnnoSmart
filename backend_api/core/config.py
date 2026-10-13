@@ -1,0 +1,134 @@
+from functools import lru_cache
+from pathlib import Path
+from typing import List
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from modules.common.runtime_paths import (
+    audit_root,
+    code_root,
+    data_root,
+    experience_memory_root,
+    organism_memory_root,
+    outputs_root,
+    storage_root,
+    uploads_root,
+)
+
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = BACKEND_DIR.parent
+ENV_FILES = (PROJECT_ROOT / ".env", BACKEND_DIR / ".env")
+
+
+class Settings(BaseSettings):
+    APP_NAME: str = "EnnoSmart Backend API"
+    ENV: str = "dev"
+
+    SECRET_KEY: str = "CHANGE_ME_WITH_A_LONG_RANDOM_SECRET_KEY"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    PASSWORD_RESET_EXPIRE_MINUTES: int = 30
+    FRONTEND_URL: str = "http://127.0.0.1:3000"
+
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_FROM: str = "no-reply@ennoma.app"
+    SMTP_USE_TLS: bool = True
+
+    DATABASE_URL: str = "sqlite:///./ennosmart_dev.db"
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_TIMEOUT_SECONDS: int = 30
+    DB_POOL_RECYCLE_SECONDS: int = 1800
+    WEB_THREAD_LIMIT: int = 80
+    SESSION_LOCK_DISTRIBUTED: bool = True
+    SESSION_LOCK_REDIS_URL: str = "redis://127.0.0.1:6379/0"
+    SESSION_LOCK_TTL_SECONDS: int = 3900
+    CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+
+    ENNOSMART_ROOT: str = str(code_root())
+    ENNOSMART_DATA_ROOT: str = str(data_root())
+    ENNOSMART_STORAGE_ROOT: str = str(storage_root())
+    UPLOAD_ROOT: str = str(uploads_root())
+    AI_OUTPUT_ROOT: str = str(outputs_root())
+
+    # Storage V2 — S3 générique (OVH est configuré uniquement par endpoint).
+    ENNOSMART_STORAGE_V2_ENABLED: bool = False
+    ENNOSMART_OBJECT_STORAGE_PROVIDER: str = "local"
+    ENNOSMART_STORAGE_V2_LOCAL_ROOT: str = str(storage_root() / "object_storage_v2")
+    ENNOSMART_S3_ENDPOINT: str = ""
+    ENNOSMART_S3_REGION: str = ""
+    ENNOSMART_S3_BUCKET: str = ""
+    ENNOSMART_S3_ACCESS_KEY: str = ""
+    ENNOSMART_S3_SECRET_KEY: str = ""
+    ENNOSMART_S3_SECURE: bool = True
+
+    MAX_UPLOAD_SIZE_MB: int = 50
+    ALLOWED_EXTENSIONS: str = ".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.txt,.png,.jpg,.jpeg,.msg"
+
+    ENNODIAGNOSTIC_SCRIPT: str | None = None
+    ENNOSCHOLAR_SCRIPT: str | None = None
+    AI_RUN_TIMEOUT_SECONDS: int = 3600
+
+    # Bibliothèque professionnelle synchronisée, parcourue strictement en lecture seule.
+    POWER_AUTOMATE_IMPORT_ROOT: str = ""
+    POWER_AUTOMATE_FAKE_ROOT: str = ""
+    POWER_AUTOMATE_AUDIT_ROOT: str = str(audit_root())
+    ENNOSMART_EXPERIENCE_MEMORY_V2_DIR: str = str(experience_memory_root())
+    ENNOSMART_MEMORY_V2_ROOT: str = str(organism_memory_root())
+    POWER_AUTOMATE_MAX_FILE_MB: int = 100
+    # Optionnel : requis uniquement pour convertir les anciens Word .doc.
+    # La conversion est exécutée sur une copie locale placée dans l'audit root.
+    LIBREOFFICE_BIN: str = ""
+
+    # IMPORTANT :
+    # extra="ignore" évite que Pydantic bloque les variables IA/LLM/EnnoScholar
+    # comme GEMINI_API_KEY, ENNOSCHOLAR_ENABLE_BGE_RERANKER, OLLAMA_MODEL, etc.
+    model_config = SettingsConfigDict(
+        # Un seul .env racine suffit en production. Un éventuel
+        # backend_api/.env reste accepté pour la compatibilité locale.
+        env_file=tuple(str(path) for path in ENV_FILES),
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+    )
+
+    @property
+    def cors_origins_list(self) -> List[str]:
+        return [
+            origin.strip()
+            for origin in self.CORS_ORIGINS.split(",")
+            if origin.strip()
+        ]
+
+    @property
+    def allowed_extensions_set(self) -> set[str]:
+        return {
+            ext.strip().lower()
+            for ext in self.ALLOWED_EXTENSIONS.split(",")
+            if ext.strip()
+        }
+
+    @property
+    def upload_root_path(self) -> Path:
+        return Path(self.UPLOAD_ROOT)
+
+    @property
+    def ai_output_root_path(self) -> Path:
+        return Path(self.AI_OUTPUT_ROOT)
+
+    @property
+    def storage_v2_local_root_path(self) -> Path:
+        return Path(self.ENNOSMART_STORAGE_V2_LOCAL_ROOT)
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()

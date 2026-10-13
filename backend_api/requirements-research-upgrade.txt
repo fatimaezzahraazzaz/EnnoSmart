@@ -1,0 +1,2 @@
+# Conservé comme alias pour les anciens scripts d'installation.
+-r ../requirements.txt
