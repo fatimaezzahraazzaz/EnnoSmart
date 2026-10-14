@@ -90,6 +90,15 @@ def publish(toolkit, args, deadline):
             allowed.update(url_key(u) for u in [article_url(a), a.url, a.pdf_url, a.fulltext_source,
                 *a.work_urls, *a.verification_sources] if u)
         allowed.update(url_key(toolkit.evidence[eid]["source_url"]) for eid in args.evidence_ids)
+        # A verified consulted preprint can have a DOI different from the work's
+        # journal notice. Only exact, already-shown document evidence can admit it.
+        source_dois = {}
+        for eid in args.evidence_ids:
+            e = toolkit.evidence[eid]
+            doi = normalize_doi(e.get("source_identifiers", {}).get("doi", ""))
+            if doi and e.get("version_status") == "document_identified":
+                source_dois[doi] = toolkit.store.article(e["article_id"])
+                allowed.add("doi:"+doi)
         text = args.answer
         links = re.findall(r"\[([^\]]+)\]\((https?://[^\s)]+)\)", text)
         # GFM also renders bare URLs. Apply the same allowlist to those links.
@@ -105,12 +114,14 @@ def publish(toolkit, args, deadline):
                 return reject("unknown_url", "Lien non obtenu par les outils : utiliser les marqueurs d'articles ou les URL enregistrées.")
             if url_key(url).startswith("doi:"):
                 article = next((toolkit.store.article(aid) for aid in ids if "doi:"+toolkit.store.article(aid).doi == url_key(url)), None)
+                article = article or source_dois.get(url_key(url).removeprefix("doi:"))
                 if not article or not label_matches(label, article):
                     return reject("doi_label_mismatch", "Le libellé ne correspond pas à cette publication : utiliser son titre, un titre abrégé identifiable ou son marqueur paper_.")
         markers = re.findall(r"\[(paper_[\w]+|ev_[\w]+)\]", text)
         if any(marker not in ids and marker not in args.evidence_ids for marker in markers):
             return reject("unknown_marker", "Référence ou preuve non déclarée dans la réponse.")
         known_dois = {toolkit.store.article(aid).doi for aid in ids if toolkit.store.article(aid).doi}
+        known_dois.update(source_dois)
         detected = re.findall(r"10\.\d{4,9}/[^\s<>\[\]|`*]+", unquote(text))
         if any(normalize_doi(doi.rstrip(".,;:)")) not in known_dois and normalize_doi(doi.rstrip(".,;:")) not in known_dois for doi in detected):
             return reject("unknown_doi", "La réponse contient un DOI non déclaré ou non vérifié.")
@@ -133,6 +144,8 @@ def publish(toolkit, args, deadline):
             label = e["section"] or "Passage source"
             if e["page_number"] is not None:
                 label += f", page PDF {e['page_number']}"
+                if e.get("printed_page") and e.get("page_verification") == "margin_text":
+                    label += f", page imprimée {e['printed_page']}"
             text = text.replace("["+eid+"]", f"[{escaped(label)}]({e['source_url']})" if public_link(e["source_url"]) else escaped(label))
             cite(e["source_url"], label, "evidence")
         if args.remaining_uncertainties:

@@ -31,6 +31,7 @@ class ScholarV4Config:
     max_extracted_chars: int = 1000000
     max_pdf_pages: int = 500
     max_download_seconds: float = 45
+    max_pdf_download_seconds: float = 90
     max_download_attempts: int = 8
     max_retry_attempts: int = 2
     workers: int = 4
@@ -83,7 +84,7 @@ class ScholarV4Config:
             raise ConfigurationError("Configurez ENNOSCHOLAR_V4_MODEL avec un modèle Responses compatible Web Search.")
         if self.reasoning_effort not in {"low", "medium", "high", "xhigh", "max"}:
             raise ConfigurationError("ENNOSCHOLAR_V4_REASONING_EFFORT doit être low, medium, high ou xhigh.")
-        for name in ("max_tool_calls", "max_research_rounds", "max_tool_rounds", "max_finalization_attempts", "finalization_reserved_seconds", "finalization_reserved_tokens", "finalization_reserved_cost_usd", "finalization_context_chars", "max_search_results", "max_deep_analysis", "max_web_calls", "max_tokens", "max_pdf_bytes", "max_extracted_chars", "max_pdf_pages", "max_download_seconds", "max_download_attempts", "max_retry_attempts", "workers", "timeout_seconds", "max_cost_usd",
+        for name in ("max_tool_calls", "max_research_rounds", "max_tool_rounds", "max_finalization_attempts", "finalization_reserved_seconds", "finalization_reserved_tokens", "finalization_reserved_cost_usd", "finalization_context_chars", "max_search_results", "max_deep_analysis", "max_web_calls", "max_tokens", "max_pdf_bytes", "max_extracted_chars", "max_pdf_pages", "max_download_seconds", "max_pdf_download_seconds", "max_download_attempts", "max_retry_attempts", "workers", "timeout_seconds", "max_cost_usd",
                      "max_output_tokens", "max_context_chars", "recent_messages", "max_message_context_chars", "max_articles",
                      "input_price", "output_price", "web_call_price", "web_token_reserve", "request_timeout_seconds"):
             if getattr(self, name) <= 0:

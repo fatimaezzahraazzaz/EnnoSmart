@@ -25,6 +25,7 @@ class V4ScientificSearch(ScientificSearch):
         self.retries = retries
         self.publisher_access = {}
         self.bibliographic_details = {}
+        self.document_locations = {}
 
     def _get(self, url, *, params=None, headers=None, deadline=None):
         if params and getattr(self, "search_offset", 0):
@@ -62,6 +63,12 @@ class V4ScientificSearch(ScientificSearch):
 
     def _openalex(self, data):
         row = super()._openalex(data)
+        self.document_locations[normalize_doi(row.doi) or title_key(row.title)] = [
+            {"url": url, "version": loc.get("version", ""), "is_oa": loc.get("is_oa"),
+             "provider": "openalex", "format": kind}
+            for loc in (data.get("locations") or [])
+            for kind, url in (("pdf", loc.get("pdf_url")), ("landing", loc.get("landing_page_url")))
+            if url and loc.get("is_oa")]
         primary_source = (data.get("primary_location") or {}).get("source") or {}
         self.bibliographic_details[normalize_doi(row.doi) or title_key(row.title)] = {
             "journal": primary_source.get("display_name") or "", "publisher": primary_source.get("host_organization_name") or "",
@@ -86,6 +93,9 @@ class ScientificSources:
     def normalize(self, row, query=""):
         data = row.model_dump() if hasattr(row, "model_dump") else row
         article = Article.model_validate(data)
+        candidates = getattr(self.client, "document_locations", {}).get(normalize_doi(article.doi) or title_key(article.title), [])
+        article.document_candidates = [*article.document_candidates, *candidates]
+        article.work_urls = list(dict.fromkeys([*article.work_urls, *[c["url"] for c in candidates]]))
         details = getattr(self.client, "bibliographic_details", {}).get(normalize_doi(article.doi) or title_key(article.title), {})
         for name, value in details.items():
             setattr(article, name, value)
@@ -172,6 +182,13 @@ class ScientificSources:
 
     def metadata(self, identifier, deadline, check=lambda: None):
         identifier = identifier.strip()
+        pmcid = re.fullmatch(r"(?:pmcid:)?(PMC\d+)", identifier, re.I)
+        if pmcid:
+            identifier = "https://www.ebi.ac.uk/europepmc/webservices/rest/" + pmcid.group(1).upper() + "/fullTextXML"
+            from .tools.extraction import xml_document
+            data, _, url = fetch_public(identifier, deadline, check)
+            raw, chunks, _ = xml_document(data, url, self.config)
+            return [self.verify(self.normalize(raw), deadline)] if chunks else []
         doi = normalize_doi(unquote(identifier))
         if doi:
             # Reserve registry time before slower providers; their outages must not poison DOI verification.

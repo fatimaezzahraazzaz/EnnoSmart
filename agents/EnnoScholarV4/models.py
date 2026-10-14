@@ -16,6 +16,7 @@ class Article(BaseModel):
     url: str = ""
     pdf_url: str = ""
     work_urls: list[str] = Field(default_factory=list)
+    document_candidates: list[dict] = Field(default_factory=list)
     abstract: str = ""
     journal: str = ""
     publisher: str = ""
@@ -35,6 +36,7 @@ class Article(BaseModel):
     selected: bool = False
     analysis: dict = Field(default_factory=dict)
     fulltext: dict = Field(default_factory=dict, exclude=True)
+    documents: dict = Field(default_factory=dict, exclude=True)
     canonical_work_id: str = ""
     provider_notices: list[dict] = Field(default_factory=list)
     related_article_ids: list[str] = Field(default_factory=list)
@@ -43,7 +45,7 @@ class Article(BaseModel):
     source_version: str = ""
 
     def durable(self):
-        return {**self.model_dump(), "fulltext": self.fulltext}
+        return {**self.model_dump(), "fulltext": self.fulltext, "documents": self.documents}
 
     def compact(self):
         row = self.model_dump()

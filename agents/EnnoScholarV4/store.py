@@ -82,7 +82,7 @@ class ArticleStore:
                 for name in ("abstract", "doi", "arxiv_id", "url", "pdf_url", "authors", "year", "journal", "publisher", "publication_date"):
                     if not getattr(match, name) and getattr(row, name):
                         setattr(match, name, getattr(row, name))
-                for name in ("sources", "matched_queries", "work_urls", "verification_sources", "provider_notices"):
+                for name in ("sources", "matched_queries", "work_urls", "document_candidates", "verification_sources", "provider_notices"):
                     values = getattr(match, name)
                     for value in getattr(row, name):
                         if value not in values:

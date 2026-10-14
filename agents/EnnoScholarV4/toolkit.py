@@ -84,6 +84,8 @@ class AnalyzeArgs(Args):
     passages_per_article: int = Field(ge=1, le=8)
     analysis: Analysis | None
     revisit: bool = False
+    table_number: str | None = Field(default=None, max_length=40,
+        description="Optional exact table number to read structured scientific rows without unrelated prose.")
 
 
 class SimilarArgs(Args):
@@ -411,31 +413,61 @@ class ScholarTools:
             if article.id not in self.deep_analysis_ids and len(self.deep_analysis_ids) >= self.config.max_deep_analysis:
                 return {"warning": "Limite des lectures approfondies atteinte."}
             self.deep_analysis_ids.add(article.id)
-            if not article.fulltext.get("text"):
-                future = _reading_pool.submit(get_fulltext, article.model_copy(deep=True), self.sources, deadline, self.check, args.candidate_urls, self.config)
+            # First recover an accessible scientific document, even when a page
+            # was requested. A subsequent page request can complement saved HTML
+            # with a PDF; it must not exclude HTML on the initial recovery.
+            pdf_needed = args.page_start is not None and bool(article.fulltext.get("text")) and not article.fulltext.get("pdf_file")
+            if not article.fulltext.get("text") or pdf_needed:
+                from agents.EnnoScholarV2.tools.article_reader import matches_article
+                from agents.EnnoScholarV2.models import Article as LegacyArticle
+                candidates = list(args.candidate_urls or [])
+                candidates.extend(s["url"] for s in self.state.get("web_sources", []) if s.get("url") and
+                    matches_article(LegacyArticle(title=article.title), s.get("title", "")))
+                future = _reading_pool.submit(get_fulltext, article.model_copy(deep=True), self.sources, deadline, self.check, candidates, self.config, pdf_only=pdf_needed)
                 try:
-                    result = future.result(timeout=max(.001, min(48, deadline-time.monotonic())))
+                    wait = self.config.max_pdf_download_seconds+3 if pdf_needed else self.config.max_download_seconds+3
+                    result = future.result(timeout=max(.001, min(wait, deadline-time.monotonic())))
                 except FutureTimeout:
                     future.cancel(); self.check()
                     return {"article_id": article.id, "available": None, "warning": "Lecture interrompue ; accès intégral inconnu."}
                 self.check()
+                if pdf_needed and not result.get("text") and article.fulltext.get("text"):
+                    article.fulltext.setdefault("attempts", []).extend(result.get("attempts", []))
+                    self.save()
+                    return {"article_id": article.id, "warning": "PDF complémentaire non récupéré ; source HTML conservée, pagination non vérifiable.", "attempts": result.get("attempts", [])}
+                if pdf_needed:
+                    old_version = article.fulltext.get("document_version", {}).get("version_id")
+                    if old_version:
+                        article.documents[old_version] = copy.deepcopy(article.fulltext)
+                result["attempts"] = [*article.fulltext.get("attempts", []), *result.get("attempts", [])][-100:]
                 article.fulltext = result
                 article.access_level = result["access_level"]
                 article.access_status = result["access_status"]
                 if result.get("text"):
                     article.fulltext_available, article.fulltext_source = True, result["url"]
+                    version = result.get("document_version")
+                    if version:
+                        article.source_version = version["label"]
+                        article.documents[version["version_id"]] = copy.deepcopy(result)
             if args.page_start is not None:
                 from .pdf_store import extract_pages
                 if not article.fulltext.get("pdf_file"):
-                    return {"warning": "Cette source n'est pas un PDF conservé ; pas de pagination disponible."}
+                    self.save()
+                    return {"article_id": article.id,
+                        **{k: v for k, v in article.fulltext.items() if k not in {"text", "chunks"}},
+                        "warning": "Texte scientifique conservé ; pagination non vérifiable sans PDF complémentaire.",
+                        "guidance": "analyze_article(action=read) peut lire ce texte ; un nouvel appel get_fulltext avec page_start peut rechercher un PDF complémentaire."}
                 chunks, page_count = extract_pages(article.fulltext["pdf_file"], args.page_start, args.page_limit or 5)
-                by_page = {chunk["page"]: chunk for chunk in article.fulltext.get("chunks", []) if chunk.get("page")}
-                by_page.update({chunk["page"]: chunk for chunk in chunks})
-                article.fulltext["chunks"] = [by_page[page] for page in sorted(by_page)]
+                replaced_pages = {c["page"] for c in chunks}
+                retained = [c for c in article.fulltext.get("chunks", []) if c.get("page") not in replaced_pages]
+                article.fulltext["chunks"] = sorted([*retained, *chunks], key=lambda c: c.get("page") or 0)
                 article.fulltext["text"] = "\n\n".join(chunk["text"] for chunk in article.fulltext["chunks"])
                 article.fulltext["page_count"] = page_count
                 # Page presence alone does not mean every page was read by GPT.
-                article.fulltext["truncated"] = len(by_page) < page_count
+                article.fulltext["truncated"] = len({c.get("page") for c in article.fulltext["chunks"]}) < page_count
+                version = article.fulltext.get("document_version")
+                if version:
+                    article.documents[version["version_id"]] = copy.deepcopy(article.fulltext)
             self.save()
             return {"article_id": article.id, **{k: v for k, v in article.fulltext.items() if k not in {"text", "chunks"}},
                 "analysis_basis": article.analysis_basis, "guidance": "analyze_article(action=read) présente les passages ; tu produis ensuite l'analyse avec action=save."}
@@ -454,6 +486,8 @@ class ScholarTools:
             for aid in args.article_ids:
                 a = self.store.article(aid)
                 all_rows = passages(a)
+                if args.table_number is not None:
+                    all_rows = [r for r in all_rows if str(r.get("table", {}).get("number")) == args.table_number]
                 source = snapshot(a)
                 self.snapshots[source["fingerprint"]] = source
                 chosen = choose_passages(all_rows, args.passage_query, args.passage_offset, args.passages_per_article)

@@ -26,8 +26,12 @@ def analysis_projection(analysis, *, claims=None, statement_chars=None):
 
 
 def evidence_projection(evidence):
-    return {name: evidence.get(name) for name in ("evidence_id", "article_id", "exact_quote", "section",
-        "page_number", "source_url", "source_version", "basis")}
+    row = {name: evidence.get(name) for name in ("evidence_id", "article_id", "exact_quote", "section",
+        "page_number", "source_url", "source_version", "basis", "document_version_id", "document_sha256",
+        "source_identifiers", "version_status", "printed_page", "pdf_page_label", "page_verification", "table", "table_structure_status")}
+    if not row["version_status"]:
+        row["source_version"], row["version_status"] = "legacy_unverified", "legacy_unverified"
+    return row
 
 
 def article_projection(article, abstract_limit=800, *, summary=False):

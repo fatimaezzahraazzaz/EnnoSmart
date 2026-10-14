@@ -1,0 +1,148 @@
+"""Literal table structure; ambiguous layouts never assert column associations."""
+import re
+
+
+def structure(headers, rows, caption="", number=None, *, ambiguous=False, raw_rows=None):
+    width = len(headers)
+    reliable = bool(rows and width > 1 and len(set(headers)) == width and all(h.strip() for h in headers)
+                    and all(len(r) == width and all(c is not None for c in r) for r in rows)
+                    and not ambiguous)
+    dataset = re.search(r"\bon\s+([\w-]+)\s+dataset\b", caption, re.I)
+    return {"number": number, "caption": caption, "headers": headers, "rows": rows,
+        "raw_rows": raw_rows if raw_rows is not None else rows,
+        "structure_status": "verified_cells" if reliable else "ambiguous",
+        "dataset": dataset.group(1) if dataset else None,
+        "metric_labels": re.findall(r"\b(?:AUROC|PRO|AUC|F1|Dice|mIoU|AP)\b", caption),
+        "unit": "%" if "%" in caption else None,
+        "conditions": headers[1:] if reliable else [],
+        "uncertainty": "" if reliable else "Cell/column association is not verified; do not assign numerical results."}
+
+
+def html_table(table):
+    figure = table.find_parent(["figure", "table-wrap"])
+    caption_node = figure.find(["figcaption", "caption"]) if figure else table.find("caption")
+    caption = caption_node.get_text(" ", strip=True) if caption_node else ""
+    match = re.search(r"\bTable\s+(\d+|[IVXLCDM]+)\b", caption, re.I)
+    headers, rows, raw, ambiguous = [], [], [], bool(table.find("table"))
+    for tr in table.find_all("tr"):
+        cells = tr.find_all(["th", "td"], recursive=False)
+        if not cells:
+            continue
+        values = [c.get_text(" ", strip=True) for c in cells]
+        raw.append(values)
+        if any(str(c.get("rowspan", "1")) != "1" or str(c.get("colspan", "1")) != "1" for c in cells):
+            ambiguous = True
+        if not rows and any(c.name == "th" for c in cells):
+            if headers:
+                ambiguous = True
+            headers = values
+        else:
+            rows.append(values)
+    result = structure(headers, rows, caption, match.group(1) if match else None, ambiguous=ambiguous, raw_rows=raw)
+    result["source_format"] = "html"
+    result["element_id"] = figure.get("id", "") if figure else table.get("id", "")
+    return result
+
+
+def table_text(table):
+    lines = [table.get("caption") or "Table (caption unavailable)"]
+    if table["headers"]:
+        lines.append(" | ".join(table["headers"]))
+    if table["structure_status"] == "ambiguous":
+        lines.append("UNCERTAIN STRUCTURE: " + table["uncertainty"])
+    lines.extend(" | ".join("" if c is None else str(c) for c in row) for row in table["rows"])
+    return "\n".join(lines)
+
+
+def pdf_tables(page):
+    if not hasattr(page, "find_tables"):
+        return []
+    try:
+        found = page.find_tables()
+    except Exception:
+        return []
+    result = []
+    blocks = page.get_text("blocks")
+    for table in found.tables:
+        raw = table.extract()
+        if not raw:
+            continue
+        headers = list(table.header.names or [])
+        headers = [h or "" for h in headers]
+        rows = raw if table.header.external else raw[1:]
+        nearby = [b for b in blocks if 0 <= table.bbox[1]-b[3] < 100 and re.search(r"\bTable\s+(?:\d+|[IVXLCDM]+)\b", b[4], re.I)]
+        caption = nearby[-1][4].strip() if nearby else ""
+        match = re.search(r"\bTable\s+(\d+|[IVXLCDM]+)\b", caption, re.I)
+        ambiguous = any(not re.search(r"[A-Za-z]", h) for h in headers)
+        item = structure(headers, rows, caption, match.group(1) if match else None, ambiguous=ambiguous, raw_rows=raw)
+        item.update(source_format="pdf", bbox=list(table.bbox))
+        result.append(item)
+    result.extend(horizontal_rule_tables(page, result))
+    return result
+
+
+def horizontal_rule_tables(page, existing=()):
+    """Conservative fallback for tables with horizontal rules but no vertical grid.
+
+    Require an explicit caption, a ruled header and equal, non-overlapping cell
+    columns on every baseline. Never split a prose line into invented cells.
+    """
+    blocks = [b for b in page.get_text("dict").get("blocks", []) if b.get("type") == 0]
+    captions = []
+    for block in blocks:
+        text = " ".join("".join(s["text"] for s in line["spans"]) for line in block["lines"])
+        match = re.match(r"Table\s+(\d+|[IVXLCDM]+)[.\s:]", text, re.I)
+        if match:
+            captions.append((block["bbox"], text, match.group(1)))
+    captions.sort(key=lambda c: c[0][1])
+    rules = []
+    for drawing in page.get_drawings():
+        for item in drawing["items"]:
+            if item[0] == "l":
+                a, b = item[1:3]
+                if abs(a.y-b.y) < 1 and abs(a.x-b.x) > 80:
+                    rules.append((min(a.x, b.x), max(a.x, b.x), (a.y+b.y)/2))
+    lines = [line for block in blocks for line in block["lines"]]
+    result = []
+    for index, (caption_box, caption, number) in enumerate(captions):
+        next_caption = captions[index+1][0][1] if index+1 < len(captions) else page.rect.height
+        candidates = sorted((r for r in rules if 0 <= r[2]-caption_box[3] < 60), key=lambda r: r[2])
+        if not candidates:
+            continue
+        left, right, top = candidates[0]
+        levels = sorted(set(r[2] for r in rules if abs(r[0]-left) < 2 and abs(r[1]-right) < 2
+                            and top <= r[2] < min(next_caption, top+450)))
+        if len(levels) < 3:
+            continue
+        bottom = levels[-1]
+        bbox = [left, top, right, bottom]
+        if any(e["bbox"][0] <= (left+right)/2 <= e["bbox"][2]
+               and e["bbox"][1] <= (top+bottom)/2 <= e["bbox"][3] for e in existing):
+            continue
+        cells = sorted((line for line in lines if top-1 <= line["bbox"][1] and line["bbox"][3] <= bottom+1
+                        and left-1 <= line["bbox"][0] and line["bbox"][2] <= right+1),
+                       key=lambda line: ((line["bbox"][1]+line["bbox"][3])/2, line["bbox"][0]))
+        baselines = []
+        for cell in cells:
+            center = (cell["bbox"][1]+cell["bbox"][3])/2
+            if not baselines or abs(center-baselines[-1][0]) > 2:
+                baselines.append((center, []))
+            baselines[-1][1].append(cell)
+        if len(baselines) < 3 or baselines[0][0] >= levels[1] or baselines[1][0] <= levels[1]:
+            continue
+        grid = [sorted(row, key=lambda cell: cell["bbox"][0]) for _, row in baselines]
+        raw = [["".join(s["text"] for s in cell["spans"]).strip() for cell in row] for row in grid]
+        headers = raw[0]
+        width = len(headers)
+        clipped = any(top-1 <= line["bbox"][1] and line["bbox"][3] <= bottom+1
+                      and line["bbox"][0] < right and line["bbox"][2] > left
+                      and (line["bbox"][0] < left-1 or line["bbox"][2] > right+1) for line in lines)
+        ambiguous = clipped or width < 2 or any(len(row) != width for row in grid) or any(not re.search(r"[A-Za-z]", h) for h in headers)
+        if not ambiguous:
+            # A shared gap must separate each pair of columns across ALL rows.
+            ambiguous = any(max(row[j]["bbox"][2] for row in grid) >= min(row[j+1]["bbox"][0] for row in grid)
+                            for j in range(width-1))
+        item = structure(headers, raw[1:], caption, number, ambiguous=ambiguous, raw_rows=raw)
+        item.update(source_format="pdf", bbox=bbox, geometry_method="horizontal_rules_and_aligned_text_cells")
+        result.append(item)
+    return result

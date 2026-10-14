@@ -35,19 +35,11 @@ def pdf_path(filename):
 
 def extract_pages(filename, page_start, page_limit):
     import fitz
-    chunks, used = [], 0
-    with fitz.open(pdf_path(filename)) as document:
-        if document.needs_pass:
-            raise ValueError("PDF protégé par mot de passe.")
-        if not 1 <= page_start <= len(document):
-            raise ValueError("Page PDF hors du document.")
-        for index in range(page_start-1, min(len(document), page_start-1+page_limit)):
-            text = document[index].get_text()[:100000-used]
-            from agents.EnnoScholarV2.tools.article_reader import SECTION
-            section = next((line.strip() for line in text.splitlines() if SECTION.match(line.strip())), "")
-            if text.strip():
-                chunks.append({"page": index+1, "section": section, "text": text.strip()})
-            used += len(text)
-            if used >= 100000:
-                break
-        return chunks, len(document)
+    from dataclasses import replace
+    from .config import ScholarV4Config
+    from .tools.extraction import pdf_chunks
+    data = pdf_path(filename).read_bytes()
+    with fitz.open(stream=data, filetype="pdf") as document:
+        count = len(document)
+    chunks, _ = pdf_chunks(data, replace(ScholarV4Config.from_env(), max_extracted_chars=100000), page_start, page_limit)
+    return [c.model_dump() for c in chunks], count
