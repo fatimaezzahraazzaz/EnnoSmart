@@ -178,6 +178,7 @@ class ArticleStore:
     def summary(self):
         finalists = self.state.get("evaluation", {}).get("recommended_article_ids", [])
         pinned = list(dict.fromkeys([*finalists, *[a.id for a in self.registry.values() if a.selected]]))
+        pinned = [aid for aid in pinned if aid in self.registry and self.registry[aid].selection_override is not False]
         return {"articles_total": len(self.registry), "presented_total": len(self.exposed), "examined_total": len(self.examined),
             "finalists": [compact(self.registry[aid], 300) for aid in pinned[:30] if aid in self.registry],
             "pinned_total": len(pinned),

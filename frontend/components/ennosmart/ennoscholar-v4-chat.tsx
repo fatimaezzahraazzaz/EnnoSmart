@@ -1,11 +1,14 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { ArrowUp, BookOpen, Check, Copy, Loader2, Paperclip, Plus, Square } from "lucide-react"
+import { ArrowUp, BookOpen, Check, Copy, FileText, Loader2, Menu, Paperclip, Plus, Square, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { cancelRun, createSession, getArticlePage, getRun, getSession, isRunning, listSessions, safeUrl, sendMessage, uploadDocument, type Article, type Message, type Run, type Session, type SessionSummary } from "@/lib/scholar-v4"
+import { cancelRun, changeDocument, createSession, getArticlePage, getDocument, getRun, getSession, isRunning, listSessions, safeUrl, sendMessage, uploadDocument, type Article, type Message, type Run, type ScientificDocument, type Session, type SessionSummary } from "@/lib/scholar-v4"
+
+const ScholarV4Workspace = dynamic(() => import("./scholar-v4-workspace"), { loading: () => <p role="status">Chargement de l’espace de rédaction…</p> })
 
 const activityLabels: Record<string, string> = {
   search_scientific: "Recherche scientifique en cours…", web_search: "Recherche sur le Web…",
@@ -13,6 +16,7 @@ const activityLabels: Record<string, string> = {
   analyze_article: "Analyse des passages consultés…", compare_articles: "Comparaison des travaux…",
   manage_outline: "Mise à jour du plan…", search_for_section: "Recherche pour cette section…",
   write_section: "Préparation de la rédaction…", finalize_response: "Vérification des sources…",
+  review_literature_coverage: "Vérification de la couverture scientifique…", review_document: "Revue scientifique du document…", create_scientific_visual: "Préparation d’une figure scientifique…",
 }
 
 const visibleResponse = (content: string) => content.replace(/ ?cite[^]*/g, "")
@@ -82,18 +86,16 @@ function Response({ message, sessionId, onExplore }: { message: Message; session
   const [copyError, setCopyError] = useState(false)
   if (message.role === "user") return <div className="ml-auto max-w-[90%] rounded-2xl bg-primary/10 px-5 py-3 whitespace-pre-wrap break-words text-sm sm:max-w-[80%]">{message.content}</div>
   return <article className="min-w-0 text-sm sm:text-base" aria-label="Réponse EnnoScholar">
-    {message.research_status === "incomplete" && <p className="mb-3 rounded-lg bg-muted px-3 py-2 text-sm">{message.fallback ? "Synthèse de secours" : "Réponse publiée"} · Couverture scientifique à compléter</p>}
-    {message.research_status === "sufficient" && <p className="mb-3 text-xs text-muted-foreground">Couverture jugée suffisante par l’assistant pour cette demande ; les limites restent précisées dans la réponse.</p>}
     <Markdown content={message.content} />
+    {message.research_status === "incomplete" && <p className="my-3 text-xs text-muted-foreground">La couverture scientifique reste à compléter ; les limites sont précisées dans la réponse.</p>}
     {message.citations?.some(c => c.cited) && <details className="my-3 text-sm"><summary className="cursor-pointer text-muted-foreground">Sources utilisées dans cette réponse ({message.citations.filter(c => c.cited).length})</summary><ul className="mt-2 space-y-2">{message.citations.filter(c => c.cited).map((c, i) => safeUrl(c.url) && <li key={`${c.url}-${i}`}><a href={safeUrl(c.url)} target="_blank" rel="noopener noreferrer" className="text-primary underline break-words">{c.title || c.url}</a></li>)}</ul></details>}
-    {message.library_counts ? ["retained_complementary", "unexamined", "examined_pending", "rejected"].map(category => Boolean(message.library_counts![category]) && <LibraryPublications key={category} sessionId={sessionId} excludeIds={message.primary_article_ids || []} count={message.library_counts![category]} category={category} onExplore={onExplore} />) : Boolean(message.complementary_count) && <LibraryPublications sessionId={sessionId} excludeIds={message.primary_article_ids || []} count={message.complementary_count!} category="all" onExplore={onExplore} />}
-    {Boolean(message.discovered_sources_count) && <p className="my-2 text-xs text-muted-foreground">Les URL repérées pendant l’exploration restent dans la traçabilité ; elles ne sont pas toutes des sources consultées.</p>}
+    {(message.library_counts && Object.values(message.library_counts).some(Boolean) || Boolean(message.complementary_count)) && <details className="my-3 text-sm"><summary className="cursor-pointer text-muted-foreground">Bibliothèque et autres notices</summary><div className="mt-2">{message.library_counts ? ["retained_complementary", "unexamined", "examined_pending", "rejected"].map(category => Boolean(message.library_counts![category]) && <LibraryPublications key={category} sessionId={sessionId} excludeIds={message.primary_article_ids || []} count={message.library_counts![category]} category={category} onExplore={onExplore} />) : <LibraryPublications sessionId={sessionId} excludeIds={message.primary_article_ids || []} count={message.complementary_count!} category="all" onExplore={onExplore} />}</div></details>}
     <Button variant="ghost" size="sm" aria-label="Copier la réponse" onClick={async () => { try { await navigator.clipboard.writeText(visibleResponse(message.content)); setCopied(true); setCopyError(false); setTimeout(() => setCopied(false), 2000) } catch { setCopyError(true) } }}>{copied ? <Check aria-hidden="true" className="size-4" /> : <Copy aria-hidden="true" className="size-4" />} {copied ? "Copié" : "Copier"}</Button>
     {copyError && <span role="alert" className="text-sm text-destructive">Copie indisponible dans ce navigateur.</span>}
   </article>
 }
 
-export default function EnnoScholarV4Chat({ userId }: { userId: number }) {
+export default function EnnoScholarV4Chat({ userId, onOpenAppMenu }: { userId: number; onOpenAppMenu: () => void }) {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [session, setSession] = useState<Session | null>(null)
   const [run, setRun] = useState<Run | null>(null)
@@ -102,7 +104,11 @@ export default function EnnoScholarV4Chat({ userId }: { userId: number }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [pollRetry, setPollRetry] = useState(0)
+  const [workspaceOpen, setWorkspaceOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [documentSummary, setDocumentSummary] = useState<ScientificDocument | null>(null)
   const viewport = useRef<HTMLDivElement>(null)
+  const textarea = useRef<HTMLTextAreaElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const requestEpoch = useRef(0)
   const storageKey = `ennoscholar-v4-session:${userId}`
@@ -166,6 +172,31 @@ export default function EnnoScholarV4Chat({ userId }: { userId: number }) {
     return () => { controller.abort(); clearTimeout(timer) }
   }, [run?.id, running, pollRetry])
 
+  useEffect(() => {
+    if (!session) { setDocumentSummary(null); return }
+    const controller = new AbortController()
+    getDocument(session.id, controller.signal).then(document => {
+      if (controller.signal.aborted) return
+      setDocumentSummary(document)
+    }).catch(() => { if (!controller.signal.aborted) setDocumentSummary(null) })
+    return () => controller.abort()
+  }, [session?.id, session?.updated_at])
+
+  useLayoutEffect(() => {
+    const field = textarea.current
+    if (!field) return
+    field.style.height = "0px"
+    field.style.height = `${Math.min(field.scrollHeight, 180)}px`
+    field.style.overflowY = field.scrollHeight > 180 ? "auto" : "hidden"
+  }, [draft])
+
+  useEffect(() => {
+    if (!historyOpen) return
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setHistoryOpen(false) }
+    window.addEventListener("keydown", close)
+    return () => window.removeEventListener("keydown", close)
+  }, [historyOpen])
+
   useEffect(() => { viewport.current?.scrollTo({ top: viewport.current.scrollHeight, behavior: "instant" }) }, [session?.messages.length, running])
 
   async function newConversation() {
@@ -173,6 +204,7 @@ export default function EnnoScholarV4Chat({ userId }: { userId: number }) {
     try {
       const current = await createSession()
       requestEpoch.current++; setSession(current); setRun(null); setDraft("")
+      setHistoryOpen(false)
       localStorage.setItem(storageKey, current.id); setSessions(await listSessions())
     } catch (e) { setError(e instanceof Error ? e.message : "Création impossible.") }
     finally { setBusy(false) }
@@ -205,24 +237,46 @@ export default function EnnoScholarV4Chat({ userId }: { userId: number }) {
     finally { setBusy(false); if (fileInput.current) fileInput.current.value = "" }
   }
 
+  async function approvePlan() {
+    if (!session || !documentSummary || busy || running) return
+    setBusy(true); setError("")
+    try {
+      await changeDocument(session.id, {action: "approve_outline", expected_version: documentSummary.outline.version || 0})
+      const [updated, document] = await Promise.all([getSession(session.id), getDocument(session.id)])
+      setSession(updated); setDocumentSummary(document)
+    } catch (e) { setError(e instanceof Error ? e.message : "Validation du plan indisponible.") }
+    finally { setBusy(false) }
+  }
+
   const activity = run?.activity?.filter(e => e.status === "running").at(-1)
-  return <div className="mx-auto flex h-[calc(100dvh-10rem)] min-h-[420px] max-w-5xl flex-col rounded-2xl border bg-background shadow-sm">
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-6">
-      <div className="flex items-center gap-3"><span className="rounded-xl bg-primary/10 p-2 text-primary"><BookOpen aria-hidden="true" className="size-5" /></span><div><h1 className="font-semibold">EnnoScholar V4</h1><p className="text-xs text-muted-foreground">Votre recherche scientifique, en conversation</p></div></div>
-      <Button variant="outline" size="sm" onClick={newConversation} disabled={busy || loading}><Plus aria-hidden="true" className="size-4" />Nouvelle conversation</Button>
-      <div className="w-full"><label htmlFor="scholar-v4-history" className="sr-only">Historique des conversations</label><select id="scholar-v4-history" className="max-w-full rounded-lg border bg-background px-3 py-2 text-sm focus-visible:outline-primary" value={session?.id || ""} disabled={busy || loading} onChange={e => openSession(e.target.value)}><option value="" disabled>Historique des conversations</option>{sessions.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</select></div>
+  const savedSections = documentSummary?.outline.sections?.filter(section => section.drafts.length).length || 0
+  return <div className="relative flex h-full min-h-0 w-full flex-col bg-background">
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3 sm:px-4">
+      <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0" aria-label="Ouvrir l’historique" aria-expanded={historyOpen} onClick={() => setHistoryOpen(value => !value)}><Menu aria-hidden="true" className="size-4" /></Button>
+      <h1 className="min-w-0 flex-1 truncate text-sm font-semibold">EnnoScholar</h1>
+      <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 px-2" onClick={newConversation} disabled={busy || loading} aria-label="Nouvelle conversation"><Plus aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Nouvelle conversation</span></Button>
+      {savedSections > 0 && <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0" aria-label={workspaceOpen ? "Masquer le document" : "Afficher le document"} aria-pressed={workspaceOpen} onClick={() => setWorkspaceOpen(value => !value)}><FileText aria-hidden="true" className="size-4" /></Button>}
     </header>
-    <div ref={viewport} className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8" aria-busy={running || loading}>
-      {loading ? <p role="status" className="py-16 text-center text-muted-foreground">Chargement de votre conversation…</p> : session?.messages.length ? <div className="mx-auto max-w-3xl space-y-8">{session.messages.map(message => <Response key={message.id} message={message} sessionId={session.id} onExplore={article => setDraft(`Approfondis la publication « ${article.title} » (identifiant ${article.id}) à partir des sources enregistrées, puis cherche son texte si nécessaire.`)} />)}</div> : <div className="mx-auto grid max-w-xl place-items-center py-10 text-center sm:py-16"><BookOpen aria-hidden="true" className="mb-5 size-9 text-primary/70" /><h2 className="text-2xl font-semibold">Quel problème scientifique explorez-vous ?</h2><p className="mt-3 leading-7 text-muted-foreground">Décrivez votre sujet, partagez un article ou proposez un plan. Nous avancerons à partir de sources vérifiables.</p><button className="mt-7 rounded-xl border p-4 text-left text-sm leading-6 hover:bg-muted focus-visible:outline-primary" onClick={() => setDraft("Je travaille sur la génération automatique de maillages volumiques 3D à l’aide de modèles entraînés pour la mécanique. Recherche les articles scientifiques les plus pertinents, y compris payants. Explique leurs contributions, leurs limites et ce que tu as réellement pu consulter.")}>Trouver des publications sur la génération de maillages volumiques 3D par apprentissage <span aria-hidden="true">→</span></button></div>}
+    {historyOpen && <div className="absolute inset-0 z-50 flex" role="presentation"><button type="button" className="absolute inset-0 bg-foreground/20" aria-label="Fermer l’historique" onClick={() => setHistoryOpen(false)} /><aside className="relative flex h-full w-[min(85vw,320px)] flex-col border-r bg-background shadow-xl" aria-label="Historique des conversations"><div className="flex h-12 shrink-0 items-center justify-between border-b px-3"><strong className="text-sm">Historique</strong><Button type="button" size="icon" variant="ghost" className="size-8" aria-label="Fermer l’historique" onClick={() => setHistoryOpen(false)}><X aria-hidden="true" className="size-4" /></Button></div><div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">{sessions.map(item => <button key={item.id} type="button" aria-current={item.id === session?.id ? "page" : undefined} className={`block w-full truncate rounded-lg px-3 py-2 text-left text-sm hover:bg-muted ${item.id === session?.id ? "bg-muted font-medium" : ""}`} onClick={() => {setHistoryOpen(false);openSession(item.id)}}>{item.title}</button>)}{!sessions.length && <p className="p-3 text-sm text-muted-foreground">Aucune conversation enregistrée.</p>}</div><div className="border-t p-2"><Button type="button" variant="ghost" className="w-full justify-start" onClick={() => {setHistoryOpen(false);onOpenAppMenu()}}>Menu EnnoSmart</Button></div></aside></div>}
+    <div className="flex min-h-0 flex-1 flex-col-reverse md:flex-row">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div ref={viewport} className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-5" aria-busy={running || loading}>
+      {loading ? <p role="status" className="py-12 text-center text-muted-foreground">Chargement de votre conversation…</p> : session?.messages.length ? <div className="mx-auto max-w-3xl space-y-5 sm:space-y-6">{session.messages.map(message => <Response key={message.id} message={message} sessionId={session.id} onExplore={article => setDraft(`Approfondis la publication « ${article.title} » (identifiant ${article.id}) à partir des sources enregistrées, puis cherche son texte si nécessaire.`)} />)}</div> : <div className="mx-auto grid max-w-xl place-items-center py-10 text-center"><BookOpen aria-hidden="true" className="mb-5 size-9 text-primary/70" /><h2 className="text-2xl font-semibold">Quel problème scientifique explorez-vous ?</h2><p className="mt-3 leading-7 text-muted-foreground">Décrivez votre sujet, partagez un article ou proposez un plan. Nous avancerons à partir de sources vérifiables.</p><button className="mt-7 rounded-xl border p-4 text-left text-sm leading-6 hover:bg-muted focus-visible:outline-primary" onClick={() => setDraft("Je travaille sur la génération automatique de maillages volumiques 3D à l’aide de modèles entraînés pour la mécanique. Recherche les articles scientifiques les plus pertinents, y compris payants. Explique leurs contributions, leurs limites et ce que tu as réellement pu consulter.")}>Trouver des publications sur la génération de maillages volumiques 3D par apprentissage <span aria-hidden="true">→</span></button></div>}
+      {documentSummary?.outline.sections?.length ? <section className="mx-auto mt-5 flex max-w-3xl flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-sm" aria-label="Plan et rédaction"><FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /><strong className="min-w-0 flex-1 truncate">{documentSummary.outline.title || "État de l’art"}</strong><span className="text-xs text-muted-foreground">{savedSections ? `${savedSections}/${documentSummary.outline.sections.length} sections enregistrées` : "Plan proposé"}</span>{savedSections > 0 && <Button type="button" size="sm" variant="ghost" onClick={() => setWorkspaceOpen(true)}>Lire le manuscrit</Button>}{documentSummary.outline.status !== "approved" && <Button type="button" size="sm" variant="outline" disabled={busy || running} onClick={approvePlan}>Valider le plan</Button>}{session?.writing_progress && session.writing_progress.status !== "draft_complete" && <Button type="button" variant="ghost" size="sm" onClick={() => setDraft("Continue la rédaction des sections restantes.")}>Reprendre</Button>}</section> : null}
       {running && <p role="status" aria-live="polite" className="mx-auto mt-6 flex max-w-3xl items-center gap-2 text-sm text-muted-foreground"><Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />{run?.cancel_requested ? "Arrêt demandé…" : activityLabels[activity?.tool || ""] || "EnnoScholar prépare sa réponse…"}</p>}
     </div>
     {error && <div role="alert" className="mx-4 mb-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}{running && <button className="ml-3 underline" onClick={() => setPollRetry(n => n + 1)}>Réessayer la connexion</button>}</div>}
-    <form onSubmit={e => { e.preventDefault(); send() }} className="border-t p-3 sm:p-5">
+    <form onSubmit={e => { e.preventDefault(); send() }} className="shrink-0 bg-background px-3 pb-3 pt-2 sm:px-5">
       <label htmlFor="scholar-v4-message" className="sr-only">Votre message scientifique</label>
-      <div className="rounded-2xl border bg-muted/20 p-2 focus-within:border-primary/60">
-        <textarea id="scholar-v4-message" rows={3} maxLength={30000} className="block w-full resize-none bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground" placeholder="Décrivez votre recherche, ou poursuivez la conversation…" value={draft} onChange={e => setDraft(e.target.value)} disabled={busy || loading} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send() } }} />
-        <div className="flex items-center justify-between px-1"><input ref={fileInput} type="file" accept=".pdf,.txt,.md,.docx" className="hidden" aria-label="Importer un document" onChange={e => { const file = e.target.files?.[0]; if (file) upload(file) }} /><Button type="button" variant="ghost" size="sm" disabled={busy || running || loading} onClick={() => fileInput.current?.click()}><Paperclip aria-hidden="true" className="size-4" />Document</Button>{running ? <Button type="button" variant="outline" size="sm" disabled={run?.cancel_requested} onClick={async () => { try { setRun(await cancelRun(run!.id)) } catch (e) { setError(e instanceof Error ? e.message : "Arrêt indisponible.") } }}><Square aria-hidden="true" className="size-3" />Arrêter</Button> : <Button type="submit" size="icon" aria-label="Envoyer le message" disabled={!draft.trim() || busy || loading} className="size-10 rounded-xl">{busy ? <Loader2 aria-hidden="true" className="size-4 animate-spin" /> : <ArrowUp aria-hidden="true" className="size-5" />}</Button>}</div>
-      </div><p className="mt-2 text-center text-xs text-muted-foreground">Entrée pour envoyer · Maj + Entrée pour une nouvelle ligne · PDF, Word et texte</p>
+      <div className="mx-auto flex max-w-3xl items-end gap-1 rounded-[26px] border bg-muted/20 px-2 py-1.5 shadow-sm focus-within:border-primary/60">
+        <input ref={fileInput} type="file" accept=".pdf,.txt,.md,.docx" className="hidden" aria-label="Importer un document" onChange={e => { const file = e.target.files?.[0]; if (file) upload(file) }} />
+        <Button type="button" variant="ghost" size="icon" className="size-9 shrink-0 rounded-full" aria-label="Ajouter un document" disabled={busy || running || loading} onClick={() => fileInput.current?.click()}><Paperclip aria-hidden="true" className="size-4" /></Button>
+        <textarea ref={textarea} id="scholar-v4-message" rows={1} maxLength={30000} className="min-h-10 min-w-0 flex-1 resize-none overflow-y-hidden bg-transparent px-2 py-2.5 text-sm leading-5 outline-none placeholder:text-muted-foreground" placeholder="Demandez à EnnoScholar…" value={draft} onChange={e => setDraft(e.target.value)} disabled={busy || loading} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send() } }} aria-describedby="scholar-v4-input-hint" />
+        {running ? <Button type="button" variant="outline" size="icon" className="size-9 shrink-0 rounded-full" aria-label="Arrêter la réponse" disabled={run?.cancel_requested} onClick={async () => { try { setRun(await cancelRun(run!.id)) } catch (e) { setError(e instanceof Error ? e.message : "Arrêt indisponible.") } }}><Square aria-hidden="true" className="size-3" /></Button> : <Button type="submit" size="icon" aria-label="Envoyer le message" disabled={!draft.trim() || busy || loading} className="size-9 shrink-0 rounded-full">{busy ? <Loader2 aria-hidden="true" className="size-4 animate-spin" /> : <ArrowUp aria-hidden="true" className="size-4" />}</Button>}
+      </div><p id="scholar-v4-input-hint" className="sr-only">Entrée pour envoyer ; Maj et Entrée pour un saut de ligne.</p>
     </form>
+    </div>
+    {workspaceOpen && savedSections > 0 && session && <aside aria-label="Artefact documentaire" className="h-[45%] min-h-0 w-full overflow-y-auto border-b bg-background px-4 py-4 md:h-auto md:w-[42%] md:border-b-0 md:border-l lg:px-6"><ScholarV4Workspace sid={session.id} updatedAt={session.updated_at} running={running || busy} ask={text => {setDraft(text);textarea.current?.focus()}} onChanged={async () => {const epoch=requestEpoch.current;const updated=await getSession(session.id);if(epoch===requestEpoch.current)setSession(updated)}} /></aside>}
+    </div>
   </div>
 }

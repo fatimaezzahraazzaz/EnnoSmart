@@ -36,7 +36,19 @@ def label_matches(label, article):
 
 
 def article_url(article):
-    return "https://doi.org/"+article.doi if article.doi else "https://arxiv.org/abs/"+article.arxiv_id if article.arxiv_id else article.url
+    if article.doi:
+        return "https://doi.org/"+article.doi
+    if article.arxiv_id:
+        return "https://arxiv.org/abs/"+article.arxiv_id
+    return article.url if "cookies_not_supported" not in article.url.casefold() else ""
+
+
+def readable_source_url(url, article):
+    """Keep the exact source in storage; cite a stable landing page for expired PDF URLs."""
+    if "cookies_not_supported" in url.casefold():
+        stable = article_url(article)
+        return stable if stable != url and public_link(stable) else ""
+    return url if public_link(url) else ""
 
 
 def escaped(value):
@@ -117,6 +129,14 @@ def publish(toolkit, args, deadline):
                 article = article or source_dois.get(url_key(url).removeprefix("doi:"))
                 if not article or not label_matches(label, article):
                     return reject("doi_label_mismatch", "Le libellé ne correspond pas à cette publication : utiliser son titre, un titre abrégé identifiable ou son marqueur paper_.")
+        for url in used_urls:
+            if "cookies_not_supported" not in url.casefold():
+                continue
+            article = next((toolkit.store.article(aid) for aid in ids if any(
+                url == toolkit.evidence[eid]["source_url"] for eid in args.evidence_ids
+                if toolkit.evidence[eid]["article_id"] == aid)), None)
+            stable = readable_source_url(url, article) if article else ""
+            text = text.replace(url, stable or "Source accessible via la référence bibliographique")
         markers = re.findall(r"\[(paper_[\w]+|ev_[\w]+)\]", text)
         if any(marker not in ids and marker not in args.evidence_ids for marker in markers):
             return reject("unknown_marker", "Référence ou preuve non déclarée dans la réponse.")
@@ -130,7 +150,8 @@ def publish(toolkit, args, deadline):
             if public_link(url):
                 used[url_key(url)] = {"url": url, "title": title, "cited": True, "source_kind": source_kind}
         for url in used_urls:
-            cite(url, "Source utilisée", "response_link")
+            if "cookies_not_supported" not in url.casefold():
+                cite(url, "Source utilisée", "response_link")
         for aid in ids:
             a = toolkit.store.article(aid)
             url, title = article_url(a), escaped(a.title)
@@ -146,8 +167,9 @@ def publish(toolkit, args, deadline):
                 label += f", page PDF {e['page_number']}"
                 if e.get("printed_page") and e.get("page_verification") == "margin_text":
                     label += f", page imprimée {e['printed_page']}"
-            text = text.replace("["+eid+"]", f"[{escaped(label)}]({e['source_url']})" if public_link(e["source_url"]) else escaped(label))
-            cite(e["source_url"], label, "evidence")
+            source_url = readable_source_url(e["source_url"], toolkit.store.article(e["article_id"]))
+            text = text.replace("["+eid+"]", f"[{escaped(label)}]({source_url})" if source_url else escaped(label))
+            cite(source_url, label, "evidence")
         if args.remaining_uncertainties:
             text += "\n\nLimites de cette réponse : " + " ; ".join(args.remaining_uncertainties)
         # Native Web annotation IDs are not Markdown URLs. The verified article
@@ -178,9 +200,11 @@ def publish(toolkit, args, deadline):
 def fallback(toolkit, reason):
     """No model or provider call: only validated metadata and exact saved claims."""
     toolkit.finalization_only = True
-    proposed = toolkit.state.get("evaluation", {}).get("recommended_article_ids", [])
+    proposed = [aid for aid in toolkit.state.get("evaluation", {}).get("recommended_article_ids", [])
+        if aid in toolkit.registry and toolkit.registry[aid].selection_override is not False]
     if not proposed:
-        proposed = [a.id for a in toolkit.registry.values() if a.assessment.get("decision") == "retain"]
+        proposed = [a.id for a in toolkit.registry.values() if a.assessment.get("decision") == "retain"
+            and a.selection_override is not False]
     no_scientific_selection = not proposed
     if no_scientific_selection:
         # Available abstracts can still be shown verbatim without inventing a

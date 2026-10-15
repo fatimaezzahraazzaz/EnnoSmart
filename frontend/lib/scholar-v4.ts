@@ -1,6 +1,6 @@
 "use client"
 
-import { scholarV4Request } from "@/lib/api"
+import { scholarV4Request, scholarV4Blob } from "@/lib/api"
 import type { ScholarV2Citation } from "@/lib/scholar-v2"
 
 export type Citation = ScholarV2Citation
@@ -23,7 +23,7 @@ export type Message = { id: string; role: "user" | "assistant"; content: string;
   primary_article_ids?: string[] | null; displayed_article_ids?: string[] | null; complementary_count?: number | null; discovered_sources_count?: number | null; fallback?: boolean
   library_counts?: Record<string, number> | null; coverage_sufficient?: boolean | null; publication_accepted?: boolean | null; research_status?: "sufficient" | "incomplete" | "not_assessed" | null }
 export type SessionSummary = { id: string; title: string; created_at: string; updated_at: string; active_run_id: string | null; articles_total: number; selected_count: number }
-export type Session = SessionSummary & { messages: Message[]; articles: Article[]; recommended_article_ids: string[]; research_state: Record<string, unknown>; summary: string }
+export type Session = SessionSummary & { messages: Message[]; articles: Article[]; recommended_article_ids: string[]; research_state: Record<string, unknown>; summary: string; writing_progress?: WritingProgress }
 export type ArticlePage = { total: number; articles: Article[] }
 export type Activity = { tool: string; status: string; at: string; query?: string; article_id?: string; family?: string; found?: number; reason?: string }
 export type Run = { id: string; session_id: string; status: "queued" | "running" | "completed" | "partial" | "failed" | "cancelled"
@@ -49,6 +49,27 @@ export const uploadDocument = (sid: string, file: File) => {
   return scholarV4Request<Article>(`/sessions/${encodeURIComponent(sid)}/documents`, { method: "POST", body })
 }
 export const isRunning = (run: Run | null) => Boolean(run && ["queued", "running"].includes(run.status))
+export type ScientificScope = { topic?: string; scientific_question?: string; technical_context?: string; objectives?: string[]; uncertainties?: string[]; experimental_conditions?: string[]; constraints?: string[]; unconfirmed_assumptions?: string[]; cir_year?: number | null; start_date?: string | null; reference_date?: string | null; work_type?: "exploration" | "plan" | "state_of_art" | "revision" }
+export type WritingProgress = { status?: "awaiting_plan" | "running" | "plan_changed" | "draft_complete"; mode?: "full" | "section"; target_ids?: string[]; saved_draft_ids?: Record<string, string>; section_status?: Record<string, "pending" | "running" | "saved" | "failed">; approval_required?: boolean; errors?: {section_id: string; message: string}[] }
+export type Draft = { id: string; text: string; raw_text?: string; article_ids: string[]; evidence_ids: string[]; paragraphs?: {id: string; text: string}[]; instructions: string }
+export type ScientificSection = { id: string; title: string; description: string; article_ids: string[]; scientific_objective?: string; questions?: string[]; article_roles?: {article_id: string; role: string}[]; relation_ids?: string[]; experimental_results?: string[]; limitations?: string[]; evidence_ids?: string[]; missing_information?: string[]; project_connection?: string; figure_suggestions?: string[]; drafts: Draft[] }
+export type ScientificFigure = { id: string; section_id: string; kind: "diagram" | "chart" | "original"; title: string; caption: string; origin: string; scientific_argument: string; recipe: Record<string, unknown>; evidence_ids: string[]; license_url?: string; source_url?: string }
+export type ScientificDocument = {
+  outline: { title?: string; version?: number; plan_revision?: number; status?: string; sections?: ScientificSection[]; approval?: {owner_id: number; origin: string} }
+  document: { version_id?: string; revision?: number; review_stale?: boolean; approval?: {version_id: string}; writing_progress?: WritingProgress }
+  scientific_scope: ScientificScope
+  coverage: { scope: {knowledge_cutoff?: string; reference_date_confirmed?: boolean}; coverage_sufficient: boolean; articles: {article_id: string; title: string; temporal_status: string; first_verified_availability?: string; year?: number}[] }
+  relations: {id: string; article_ids: string[]; kind: string; statement: string; conditions: string; uncertainties: string[]; origin: string}[]
+  figures: ScientificFigure[]
+  review: { integrity_passed?: boolean; scientific_assessment_current?: boolean; issues?: {code: string; message: string; section_id?: string}[]; scientific?: {conclusion: string; reasoning: string; all_current_text_examined?: boolean; issues: {statement: string; severity: string}[]} }
+  versions: {id: string; revision: number; created_at: string; approval?: {origin: string}}[]
+  articles: Article[]
+  evidence: Record<string, {evidence_id: string; article_id: string; exact_quote: string; source_url: string; source_version?: string; version_status?: string; page_number?: number; printed_page?: string; section?: string; table?: {number?: string; unit?: string; dataset?: string; headers?: string[]; row?: string[]}}>
+}
+export const getDocument = (sid: string, signal?: AbortSignal) => scholarV4Request<ScientificDocument>(`/sessions/${encodeURIComponent(sid)}/document`, {signal})
+export const changeDocument = (sid: string, payload: Record<string, unknown>) => scholarV4Request<Session>(`/sessions/${encodeURIComponent(sid)}/document`, json(payload))
+export const getFigure = (sid: string, fid: string) => scholarV4Blob(`/sessions/${encodeURIComponent(sid)}/document/figures/${encodeURIComponent(fid)}`)
+export const exportDocument = (sid: string, version: string, format: "docx" | "pdf") => scholarV4Blob(`/sessions/${encodeURIComponent(sid)}/document/export/${format}?version_id=${encodeURIComponent(version)}`)
 export function safeUrl(value: string) {
-  try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password ? url.href : "" } catch { return "" }
+  try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !value.includes("cookies_not_supported") ? url.href : "" } catch { return "" }
 }

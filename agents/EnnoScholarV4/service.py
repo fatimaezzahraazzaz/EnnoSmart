@@ -4,6 +4,7 @@ import copy
 import logging
 import threading
 import uuid
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
@@ -67,6 +68,18 @@ class ScholarV4Service:
             result["research_gaps"] = row.data.get("research_gaps", [])
             result["comparisons"] = row.data.get("comparisons", [])
             result["outline"] = row.data.get("outline", {})
+            result["scientific_reading"] = row.data.get("scientific_reading", {})
+            result["project_facts"] = row.data.get("project_facts", [])
+            result["argument_blueprint"] = row.data.get("argument_blueprint", {})
+            result["writing_progress"] = row.data.get("document", {}).get("writing_progress", {})
+            from .argumentation import blueprint_status
+            status_ids = set(row.data.get("evaluation", {}).get("recommended_article_ids", []))
+            status_ids.update(aid for aid, article in stored.items() if article.get("selected") or
+                article.get("assessment", {}).get("decision") == "retain")
+            status_ids.update(fact["source_id"] for fact in row.data.get("project_facts", [])
+                if fact.get("source_type") == "uploaded_project_document")
+            result["argument_blueprint_status"] = blueprint_status(row.data,
+                {aid: Article.model_validate(article) for aid, article in stored.items() if aid in status_ids})
             result["displayed_article_ids"] = row.data.get("displayed_article_ids", [])
         return result
 
@@ -75,6 +88,129 @@ class ScholarV4Service:
             rows = db.scalars(select(ScholarV4Session).where(ScholarV4Session.owner_id == owner)
                 .order_by(ScholarV4Session.updated_at.desc()).limit(100)).all()
             return [self.session_read(row, False) for row in rows]
+
+    def document_action(self, owner, sid, payload):
+        import copy
+        from .manuscript import approve_outline, save_document_revision
+        from .toolkit import ScholarTools
+        with self.session_factory() as db:
+            row = self.owned(db, owner, sid)
+            if row.active_run_id:
+                raise SessionBusy("Attendre la fin du tour avant de modifier le document.")
+            data = copy.deepcopy(row.data)
+            if payload.expected_version != data.get("outline", {}).get("version", 0):
+                raise SessionBusy("Le document a changé. Rechargez sa dernière version.")
+            from .sources import ScientificSources
+            t = ScholarTools(data, ScientificSources(config=self.config), self.config)
+            if payload.action == "approve_outline":
+                approve_outline(data, owner)
+                from .writing_progress import refresh_writing
+                refresh_writing(data)
+            elif payload.action == "outline_edit":
+                if payload.outline is None:
+                    raise ValueError("Modification du plan manquante.")
+                t.execute("manage_outline", payload.outline.model_dump(), time.monotonic()+30)
+            elif payload.action == "set_scope":
+                if payload.scope is None:
+                    raise ValueError("Cadrage manquant.")
+                data["scientific_scope"] = payload.scope.model_dump(mode="json")
+                data.pop("literature_coverage_review", None)
+                if data.get("outline"):
+                    data["outline"].pop("approval", None)
+                    data["outline"]["status"] = "modified"
+                    data["outline"]["plan_revision"] = data["outline"].get("plan_revision", 0)+1
+            elif payload.action == "edit_draft":
+                from .tools.outline import resolve_section
+                section = resolve_section(data, payload.section_id)
+                if not section.get("drafts") or not payload.text:
+                    raise ValueError("Brouillon ou texte de modification manquant.")
+                draft = section["drafts"][-1]
+                t.human_edit = True
+                saved = t.execute("write_section", {"section_id": section["id"],"action":"save","instructions":"Révision humaine",
+                    "text":payload.text,"paragraph_id":payload.paragraph_id,"article_ids":draft["article_ids"],"evidence_ids":draft["evidence_ids"],
+                    "claims":[c for c in draft.get("claims",[]) if c["statement"] in payload.text],
+                    "numeric_claims":[{k:f[k] for k in ("evidence_id","column","value","unit","metric")}
+                        for f in draft.get("numeric_claims",[]) if f["value"] in payload.text]},time.monotonic()+30)
+                if not saved.get("saved"):
+                    raise ValueError(saved.get("error", "La révision n'a pas passé les contrôles de traçabilité."))
+            elif payload.action == "restore_draft":
+                from .tools.outline import resolve_section
+                section = resolve_section(data,payload.section_id)
+                draft = next((d for d in section.get("drafts",[]) if d["id"]==payload.draft_id),None)
+                if not draft:
+                    raise ValueError("Version de section introuvable.")
+                t.claim_union([{"evidence_ids":draft["evidence_ids"]}],draft["article_ids"])
+                section["drafts"].append({**copy.deepcopy(draft),"id":uuid.uuid4().hex,"restored_from":draft["id"]})
+            elif payload.action == "approve_document":
+                from .scientific_review import deterministic_review
+                if data.get("outline",{}).get("status") != "approved" or not all(s.get("drafts") for s in data["outline"]["sections"]):
+                    raise ValueError("Valider le plan et rédiger toutes les sections avant l'approbation du document.")
+                if not deterministic_review(data,t)["integrity_passed"]:
+                    raise ValueError("Corriger les problèmes de traçabilité avant l'approbation humaine du document.")
+            elif payload.action == "update_figure":
+                if not payload.figure:
+                    raise ValueError("Recette scientifique manquante.")
+                t.execute("create_scientific_visual",payload.figure.model_dump(),time.monotonic()+30)
+            elif payload.action == "remove_figure":
+                figures=data.get("scientific_figures",[])
+                old=next((f for f in figures if f["id"]==payload.figure_id),None)
+                if old is None:
+                    raise ValueError("Figure introuvable.")
+                data.setdefault("figure_versions",[]).append(copy.deepcopy(old))
+                figures.remove(old)
+            else:
+                raise ValueError("Action documentaire non disponible.")
+            if payload.action not in {"outline_edit","edit_draft","update_figure"}:
+                data.setdefault("outline", {"title": "État de l'art", "sections": []})["version"] = payload.expected_version+1
+            if payload.action not in {"edit_draft","update_figure","outline_edit"}:
+                revision = save_document_revision(data)
+            if payload.action == "approve_document":
+                data["document"]["approval"] = {"version_id":revision["id"],"owner_id":owner,"origin":"authenticated_human","at":iso(datetime.utcnow())}
+                revision["approval"] = copy.deepcopy(data["document"]["approval"])
+            t.save()
+            changed = db.execute(update(ScholarV4Session).where(ScholarV4Session.id == sid,
+                ScholarV4Session.owner_id == owner, ScholarV4Session.active_run_id.is_(None),
+                ScholarV4Session.updated_at == row.updated_at).values(data=data, updated_at=datetime.utcnow()))
+            if changed.rowcount != 1:
+                raise SessionBusy("Une modification concurrente exige de recharger le document.")
+            row.data = data
+            sync_records(db, row)
+            db.commit()
+            return self.read(owner, sid)
+
+    def document_read(self, owner, sid):
+        from .scientific_scope import literature_coverage
+        from .scientific_review import deterministic_review
+        from .toolkit import ScholarTools
+        with self.session_factory() as db:
+            data = self.owned(db, owner, sid).data
+            registry = {aid: Article.model_validate(a) for aid, a in data.get("articles", {}).items()}
+            used = set(eid for s in data.get("outline", {}).get("sections", [])
+                for eid in [*s.get("evidence_ids", []), *[e for d in s.get("drafts", []) for e in d.get("evidence_ids", [])]])
+            used.update(e for r in data.get("scientific_relations", []) for e in r["evidence_ids"])
+            used.update(e for f in data.get("scientific_figures", []) for e in f["evidence_ids"])
+            return {"outline": data.get("outline", {}), "document": data.get("document", {}),
+                "scientific_scope": data.get("scientific_scope", {}), "coverage": literature_coverage(data, registry),
+                "relations": data.get("scientific_relations", []), "figures": data.get("scientific_figures", []),
+                "review": deterministic_review(copy.deepcopy(data), ScholarTools(copy.deepcopy(data), None, self.config)),
+                "versions": [{k:v for k,v in r.items() if k not in {"outline", "figures", "article_metadata"}} for r in data.get("document_versions", [])],
+                "articles": [a.compact() for a in registry.values()],
+                "evidence": {eid:data["evidence"][eid] for eid in used if eid in data.get("evidence", {})}}
+
+    def export_document(self,owner,sid,version_id,fmt):
+        from .document_export import export_document
+        with self.session_factory() as db:
+            state=copy.deepcopy(self.owned(db,owner,sid).data)
+        return export_document(state,version_id,fmt)
+
+    def document_figure(self,owner,sid,figure_id):
+        from .scientific_visuals import figure_png
+        with self.session_factory() as db:
+            state=self.owned(db,owner,sid).data
+            figure=next((f for f in state.get("scientific_figures",[]) if f["id"]==figure_id),None)
+            if figure is None:
+                raise SessionNotFound("Figure introuvable.")
+            return figure_png(figure)
 
     def read(self, owner, sid):
         self.recover_expired(owner, sid)
@@ -111,7 +247,8 @@ class ScholarV4Service:
             data = self.owned(db, owner, sid).data
             return {key: data.get(key, []) for key in ("candidate_windows", "exposed_article_ids",
                 "examined_article_ids", "candidate_decisions", "comparisons", "research_gaps", "memory_history",
-                "displayed_article_ids", "web_sources", "finalization_attempts")}
+                "displayed_article_ids", "web_sources", "finalization_attempts", "scientific_reading",
+                "project_facts", "argument_blueprint", "argument_blueprint_versions", "scientific_relations")}
 
     def import_pdf(self, owner, sid, content, filename, title="", article_id=""):
         import hashlib
@@ -175,13 +312,70 @@ class ScholarV4Service:
             row = db.scalar(select(ScholarV4Session).where(ScholarV4Session.id == sid, ScholarV4Session.owner_id == owner).with_for_update())
             if row is None:
                 raise SessionNotFound("Conversation introuvable.")
+            if row.active_run_id:
+                raise SessionBusy("Attendre la fin du tour avant de modifier la sélection.")
             data = copy.deepcopy(row.data)
             if aid not in data.get("articles", {}):
                 raise SessionNotFound("Article introuvable.")
-            if not data["articles"][aid].get("verified"):
+            if selected and not data["articles"][aid].get("verified"):
                 raise ValueError("Référence non vérifiée ; conservation impossible.")
             data["articles"][aid]["selected"] = selected
+            data["articles"][aid]["selection_override"] = selected
             data.setdefault("selection_decisions", []).append({"article_id": aid, "selected": selected, "at": iso(datetime.utcnow())})
+            evaluation = data.get("evaluation", {})
+            if not selected and aid in evaluation.get("recommended_article_ids", []):
+                data.setdefault("evaluation_history", []).append(copy.deepcopy(evaluation))
+                evaluation["recommended_article_ids"] = [item for item in evaluation["recommended_article_ids"] if item != aid]
+            outline = data.get("outline", {})
+            if outline.get("sections"):
+                from .manuscript import save_document_revision
+                changed = False
+                if not selected:
+                    memberships = []
+                    for section in outline["sections"]:
+                        if aid not in section.get("article_ids", []):
+                            continue
+                        memberships.append({"section_id": section["id"], "roles": [copy.deepcopy(role)
+                            for role in section.get("article_roles", []) if role["article_id"] == aid],
+                            "evidence_ids": [eid for eid in section.get("evidence_ids", [])
+                                if data.get("evidence", {}).get(eid, {}).get("article_id") == aid],
+                            "relation_ids": [rid for rid in section.get("relation_ids", []) if
+                                any(rel.get("id") == rid and aid in rel.get("article_ids", [])
+                                    for rel in data.get("scientific_relations", []))]})
+                        section["article_ids"] = [item for item in section["article_ids"] if item != aid]
+                        section["article_roles"] = [role for role in section.get("article_roles", []) if role["article_id"] != aid]
+                        section["evidence_ids"] = [eid for eid in section.get("evidence_ids", [])
+                            if data.get("evidence", {}).get(eid, {}).get("article_id") != aid]
+                        section["relation_ids"] = [rid for rid in section.get("relation_ids", []) if
+                            not any(rel.get("id") == rid and aid in rel.get("article_ids", [])
+                                for rel in data.get("scientific_relations", []))]
+                        changed = True
+                    if memberships:
+                        data.setdefault("selection_memberships", {})[aid] = {
+                            "sections": memberships, "removed_at_plan_revision": outline.get("plan_revision", outline["version"])}
+                else:
+                    membership = data.get("selection_memberships", {}).get(aid, {})
+                    if membership.get("removed_at_plan_revision") == outline.get("plan_revision", outline["version"]):
+                        for saved in membership.get("sections", []):
+                            section = next((s for s in outline["sections"] if s["id"] == saved["section_id"]), None)
+                            if section is not None and aid not in section["article_ids"]:
+                                section["article_ids"].append(aid)
+                                section["article_roles"] = [*section.get("article_roles", []), *saved["roles"]]
+                                section["evidence_ids"] = list(dict.fromkeys([
+                                    *section.get("evidence_ids", []), *saved.get("evidence_ids", [])]))
+                                section["relation_ids"] = list(dict.fromkeys([
+                                    *section.get("relation_ids", []), *saved.get("relation_ids", [])]))
+                                changed = True
+                if changed:
+                    data.setdefault("outline_versions", []).append(copy.deepcopy(row.data["outline"]))
+                    next_revision = outline.get("plan_revision", outline["version"]) + 1
+                    outline["version"] += 1
+                    if not selected:
+                        data["selection_memberships"][aid]["removed_at_plan_revision"] = next_revision
+                    outline["plan_revision"] = next_revision
+                    outline["status"] = "modified"
+                    outline.pop("approval", None)
+                    save_document_revision(data)
             row.data, row.updated_at = data, datetime.utcnow()
             sync_records(db, row)
             db.commit()
@@ -344,7 +538,10 @@ class ScholarV4Service:
                     if event.get("status") in {"completed", "rejected"} and event.get("tool") in {
                             "responses", "search_scientific", "search_collected_articles", "get_article", "get_fulltext",
                             "analyze_article", "record_candidate_decisions", "verify_bibliography", "update_research_state",
-                            "find_similar_articles", "compare_articles", "identify_research_gaps", "finalize_response"}:
+                            "find_similar_articles", "compare_articles", "identify_research_gaps", "finalize_response",
+                            "write_section", "manage_outline", "create_scientific_visual", "review_document",
+                            "review_literature_coverage", "scientific_reading", "record_project_facts",
+                            "build_argument_blueprint", "argumentation", "writing_progress"}:
                         session = db.scalar(select(ScholarV4Session).where(ScholarV4Session.id == sid,
                             ScholarV4Session.owner_id == owner).with_for_update())
                         if session.active_run_id == rid:

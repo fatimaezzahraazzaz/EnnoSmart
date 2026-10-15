@@ -11,17 +11,38 @@ class SectionInput(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     description: str = Field(max_length=4000)
     article_ids: list[str] = Field(max_length=80)
+    scientific_objective: str = Field(default="", max_length=3000)
+    questions: list[str] = Field(default_factory=list, max_length=30)
+    article_roles: list["ArticleRole"] = Field(default_factory=list, max_length=80)
+    relation_ids: list[str] = Field(default_factory=list, max_length=80)
+    experimental_results: list[str] = Field(default_factory=list, max_length=30)
+    limitations: list[str] = Field(default_factory=list, max_length=30)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=80)
+    missing_information: list[str] = Field(default_factory=list, max_length=30)
+    project_connection: str = Field(default="", max_length=3000)
+    figure_suggestions: list[str] = Field(default_factory=list, max_length=20)
+
+
+class ArticleRole(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    article_id: str
+    role: str = Field(min_length=1, max_length=2500)
+
+
+SectionInput.model_rebuild()
 
 
 class OutlineArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    action: Literal["read", "create", "rename", "add", "delete", "move", "merge", "associate"]
+    action: Literal["read", "create", "rename", "add", "delete", "move", "merge", "associate", "update", "dissociate"]
     title: str | None = Field(max_length=500)
     section_id: str | None
     target_section_id: str | None
     position: int | None = Field(ge=1, le=100)
     sections: list[SectionInput] | None = Field(max_length=100)
     article_ids: list[str] | None = Field(max_length=80)
+    offset: int = Field(default=0,ge=0)
+    limit: int = Field(default=8,ge=1,le=20)
 
 
 def resolve_section(state, identifier):
@@ -38,7 +59,11 @@ def resolve_section(state, identifier):
 def manage_outline(state, args, registry):
     current = state.get("outline", {"title": "État de l’art", "version": 0, "sections": []})
     if args.action == "read":
-        return {"outline": current, "focus": state.get("focus", {})}
+        from ..writing_context import section_projection
+        return {"outline":{**{k:v for k,v in current.items() if k!="sections"},
+            "sections":[section_projection(s,800,compact=True) for s in current["sections"][args.offset:args.offset+args.limit]]},
+            "sections_total":len(current["sections"]), "next_offset":args.offset+args.limit,
+            "focus": state.get("focus", {}),"guidance":"Plan complet conservé. Lire les autres sections avec offset ; write_section/read et review_document donnent les brouillons ciblés."}
     proposed = copy.deepcopy(current)
     sections = proposed["sections"]
     if args.action == "create":
@@ -78,11 +103,34 @@ def manage_outline(state, args, registry):
             section = target
         elif args.action == "associate":
             section["article_ids"] = list(dict.fromkeys(section["article_ids"] + (args.article_ids or [])))
+        elif args.action == "dissociate":
+            removed = set(args.article_ids or [])
+            section["article_ids"] = [aid for aid in section["article_ids"] if aid not in removed]
+            section["article_roles"] = [r for r in section.get("article_roles", []) if r["article_id"] not in removed]
+        elif args.action == "update":
+            if not args.sections or len(args.sections) != 1:
+                raise ValueError("update exige exactement une section argumentée, sans modifier son identité ou ses brouillons.")
+            section.update(args.sections[0].model_dump())
         state.setdefault("focus", {})["section_id"] = section["id"] if section in sections else ""
     for section in proposed["sections"]:
         if any(aid not in registry for aid in section["article_ids"]):
             raise ValueError("Association avec un article inconnu interdite.")
+        if any(r["article_id"] not in section["article_ids"] for r in section.get("article_roles", [])):
+            raise ValueError("Le rôle d'une publication exige son association à la section.")
+        relations = {r["id"] for r in state.get("scientific_relations", [])}
+        if not set(section.get("relation_ids", [])) <= relations:
+            raise ValueError("Relation scientifique inconnue.")
+        for eid in section.get("evidence_ids", []):
+            proof = state.get("evidence", {}).get(eid)
+            if not proof or proof["article_id"] not in section["article_ids"]:
+                raise ValueError("Preuve inconnue ou hors de la section.")
     state.setdefault("outline_versions", []).append(copy.deepcopy(current))
     proposed["version"] = current["version"] + 1
+    proposed["plan_revision"] = current.get("plan_revision", current["version"]) + 1
+    proposed["status"] = "proposed" if args.action == "create" else "modified"
+    proposed.pop("approval", None)
     state["outline"] = proposed
+    state.setdefault("document", {})["review_stale"] = True
+    from ..manuscript import save_document_revision
+    save_document_revision(state)
     return {"saved": True, "outline": proposed}

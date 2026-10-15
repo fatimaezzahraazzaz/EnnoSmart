@@ -1,4 +1,5 @@
 import time
+import copy
 from types import SimpleNamespace as NS
 from datetime import datetime, timedelta
 
@@ -66,6 +67,25 @@ def test_all_session_routes_require_auth_and_are_owner_scoped(setup):
     auth(app, 2)
     assert client.get("/scholar-v4/sessions").json() == []
     assert client.get("/scholar-v4/sessions/" + sid).status_code == 404
+
+
+def test_document_human_approval_requires_owner_and_current_version(setup):
+    app,client,service,factory=setup
+    auth(app)
+    sid=client.post("/scholar-v4/sessions",json={}).json()["id"]
+    path=f"/scholar-v4/sessions/{sid}/document"
+    plan={"action":"create","title":"SAR","section_id":None,"target_section_id":None,"position":None,
+        "article_ids":None,"sections":[{"title":"Methods","description":"Questions and conditions","article_ids":[]}]}
+    assert client.post(path,json={"action":"outline_edit","expected_version":0,"outline":plan}).status_code==200
+    assert client.post(path,json={"action":"approve_outline","expected_version":0}).status_code==409
+    approved=client.post(path,json={"action":"approve_outline","expected_version":1})
+    assert approved.status_code==200
+    data=client.get(path).json()
+    assert data["outline"]["approval"]["owner_id"]==1
+    assert data["outline"]["status"]=="approved"
+    auth(app,2)
+    assert client.get(path).status_code==404
+    assert client.post(path,json={"action":"approve_outline","expected_version":2}).status_code==404
     assert client.post("/scholar-v4/chat", json={"session_id": sid, "message": "Lire"}).status_code == 404
 
 
@@ -115,6 +135,83 @@ def test_new_discoveries_survive_a_worker_failure(setup):
     snapshot = client.get("/scholar-v4/sessions/" + sid).json()
     assert snapshot["articles"][0]["id"] == "paper_checkpoint"
     assert len(snapshot["messages"]) == 2
+
+
+def test_article_removal_and_readdition_preserve_card_and_document_history(setup):
+    from agents.EnnoScholarV4.writing_context import active_article_ids
+    app, client, _, factory = setup
+    auth(app)
+    sid = client.post("/scholar-v4/sessions", json={}).json()["id"]
+    rid = client.post("/scholar-v4/chat", json={"session_id": sid, "message": "Recherche"}).json()["id"]
+    assert wait_run(client, rid)["status"] == "completed"
+    aid = "paper_12345678"
+    plan = {"action": "create", "title": "Scientific review", "section_id": None,
+        "target_section_id": None, "position": None, "article_ids": None,
+        "sections": [{"title": "Methods", "description": "Evidence", "article_ids": [aid],
+            "article_roles": [{"article_id": aid, "role": "Source method"}]}]}
+    path = f"/scholar-v4/sessions/{sid}/document"
+    assert client.post(path, json={"action": "outline_edit", "expected_version": 0, "outline": plan}).status_code == 200
+    assert client.post(path, json={"action": "approve_outline", "expected_version": 1}).status_code == 200
+    with factory() as db:
+        row = db.get(ScholarV4Session, sid)
+        data = copy.deepcopy(row.data)
+        data["articles"][aid]["analysis"] = {"results": [{"statement": "Established result", "evidence_ids": ["ev_saved"]}]}
+        data["articles"][aid]["documents"] = {"version_saved": {"text": "Source text"}}
+        data["evidence"] = {"ev_saved": {"article_id": aid}}
+        data["scientific_relations"] = [{"id": "relation_saved", "article_ids": [aid]}]
+        data["outline"]["sections"][0]["evidence_ids"] = ["ev_saved"]
+        data["outline"]["sections"][0]["relation_ids"] = ["relation_saved"]
+        row.data = data
+        db.commit()
+    assert client.patch(f"/scholar-v4/sessions/{sid}/articles/{aid}", json={"selected": False}).status_code == 200
+    with factory() as db:
+        data = db.get(ScholarV4Session, sid).data
+        article = data["articles"][aid]
+        assert article["selection_override"] is False
+        assert article["analysis"]["results"][0]["statement"] == "Established result"
+        assert "version_saved" in article["documents"]
+        assert aid not in data["outline"]["sections"][0]["article_ids"]
+        assert not data["outline"]["sections"][0]["evidence_ids"]
+        assert not data["outline"]["sections"][0]["relation_ids"]
+        assert "approval" not in data["outline"]
+        assert aid not in active_article_ids(data, {aid: Article.model_validate(article)})
+        prior_versions = len(data["document_versions"])
+    assert client.patch(f"/scholar-v4/sessions/{sid}/articles/{aid}", json={"selected": True}).status_code == 200
+    with factory() as db:
+        data = db.get(ScholarV4Session, sid).data
+        assert aid in data["outline"]["sections"][0]["article_ids"]
+        assert data["outline"]["sections"][0]["evidence_ids"] == ["ev_saved"]
+        assert data["outline"]["sections"][0]["relation_ids"] == ["relation_saved"]
+        assert len(data["document_versions"]) == prior_versions + 1
+        assert data["articles"][aid]["analysis"]["results"][0]["statement"] == "Established result"
+
+
+def test_document_tool_checkpoint_is_committed_before_worker_failure(setup):
+    from agents.EnnoScholarV4.manuscript import save_document_revision
+    app, client, service, factory = setup
+    auth(app)
+    sid = client.post("/scholar-v4/sessions", json={}).json()["id"]
+    class FailingDraftAgent:
+        def run(self, data, emit, cancelled):
+            data["outline"] = {"title": "Review", "version": 1, "plan_revision": 1,
+                "status": "proposed", "sections": [{"id": "section_one", "title": "Methods",
+                    "description": "Methods", "article_ids": [], "drafts": []}]}
+            save_document_revision(data)
+            emit({"tool": "manage_outline", "status": "completed"})
+            data["outline"]["sections"][0]["drafts"].append({"id": "draft_one", "text": "Saved text",
+                "article_ids": [], "evidence_ids": []})
+            save_document_revision(data)
+            emit({"tool": "write_section", "status": "completed"})
+            with factory() as db:
+                persisted = db.get(ScholarV4Session, sid).data
+                assert persisted["outline"]["sections"][0]["drafts"][-1]["text"] == "Saved text"
+                assert len(persisted["document_versions"]) == 2
+            raise RuntimeError("Disconnected after durable checkpoint")
+    service.agent_factory = FailingDraftAgent
+    rid = client.post("/scholar-v4/chat", json={"session_id": sid, "message": "Rédige"}).json()["id"]
+    assert wait_run(client, rid)["status"] == "failed"
+    with factory() as db:
+        assert db.get(ScholarV4Session, sid).data["outline"]["sections"][0]["drafts"][-1]["text"] == "Saved text"
 
 
 def test_database_lease_rejects_concurrent_turn_and_recovers_worker_restart(setup):

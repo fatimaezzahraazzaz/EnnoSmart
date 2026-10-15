@@ -938,7 +938,7 @@ export default function AppShell({
         return <EnnoScholarV2Chat userId={user.id} />
 
       case "scholar-v4":
-        return <EnnoScholarV4Chat userId={user.id} />
+        return <EnnoScholarV4Chat userId={user.id} onOpenAppMenu={() => setSidebarOpen(true)} />
       case "scholar-v3-1":
         return <EnnoScholarV31Chat userId={user.id} />
       case "scholar-v3":
@@ -1143,13 +1143,14 @@ export default function AppShell({
 
           <button
             type="button"
-            onClick={() =>
-              setSidebarCollapsed(
-                (current) =>
-                  !current,
-              )
-            }
-            className="
+            onClick={() => {
+              if (activePage === "scholar-v4") {
+                setSidebarOpen(false)
+              } else {
+                setSidebarCollapsed((current) => !current)
+              }
+            }}
+            className={cn(`
               absolute
               -right-3.5
               top-[30px]
@@ -1169,15 +1170,14 @@ export default function AppShell({
               hover:border-brand/30
               hover:text-brand
               hover:shadow-md
-              xl:inline-flex
-            "
+            `, activePage === "scholar-v4" ? "inline-flex" : "xl:inline-flex")}
             title={
-              collapsed
+              activePage === "scholar-v4" ? "Fermer le menu" : collapsed
                 ? "Ouvrir le menu"
                 : "Réduire le menu"
             }
             aria-label={
-              collapsed
+              activePage === "scholar-v4" ? "Fermer le menu" : collapsed
                 ? "Ouvrir le menu"
                 : "Réduire le menu"
             }
@@ -1692,6 +1692,8 @@ export default function AppShell({
     ] ??
     "Ennoma"
 
+  const scholarV4Fullscreen = activePage === "scholar-v4"
+
 
   const projectLabel =
     currentProject
@@ -1735,7 +1737,7 @@ export default function AppShell({
       {/* Sidebar desktop                                                   */}
       {/* ------------------------------------------------------------------ */}
 
-      <aside
+      {activePage !== "scholar-v4" && <aside
         className={cn(
           `
             relative
@@ -1777,7 +1779,7 @@ export default function AppShell({
           }
         />
 
-      </aside>
+      </aside>}
 
 
       {/* ------------------------------------------------------------------ */}
@@ -1786,7 +1788,7 @@ export default function AppShell({
 
       {sidebarOpen && (
 
-        <div className="fixed inset-0 z-50 xl:hidden">
+        <div className={cn("fixed inset-0 z-50", !scholarV4Fullscreen && "xl:hidden")}>
 
           <div
             className="absolute inset-0 bg-slate-950/35 backdrop-blur-[2px]"
@@ -1851,6 +1853,7 @@ export default function AppShell({
               lg:px-8
             `,
             activePage === "diagnosis" && "h-auto min-h-[76px] py-2.5",
+            scholarV4Fullscreen && "hidden",
             workspaceImmersive &&
               "lg:hidden",
           )}
@@ -1861,7 +1864,8 @@ export default function AppShell({
           <Button
             variant="outline"
             size="sm"
-            className="size-10 rounded-xl p-0 xl:hidden"
+            className={cn("size-10 rounded-xl p-0", !scholarV4Fullscreen && "xl:hidden")}
+            aria-expanded={sidebarOpen}
             onClick={() =>
               setSidebarOpen(true)
             }
@@ -2082,7 +2086,7 @@ export default function AppShell({
               flex-1
               bg-background
             `,
-            workspaceImmersive
+            (workspaceImmersive || scholarV4Fullscreen)
               ? "overflow-hidden"
               : "overflow-y-auto",
           )}
@@ -2096,7 +2100,7 @@ export default function AppShell({
                 min-w-0
                 animate-fadeIn
               `,
-              workspaceImmersive
+              (workspaceImmersive || scholarV4Fullscreen)
                 ? "h-full min-h-0 overflow-hidden"
                 : "min-h-full",
             )}

@@ -34,6 +34,7 @@ class Article(BaseModel):
     analysis_basis: Literal["metadata", "abstract", "fulltext"] | None = None
     fulltext_source: str = ""
     selected: bool = False
+    selection_override: bool | None = None
     analysis: dict = Field(default_factory=dict)
     fulltext: dict = Field(default_factory=dict, exclude=True)
     documents: dict = Field(default_factory=dict, exclude=True)

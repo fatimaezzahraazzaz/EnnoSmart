@@ -120,6 +120,34 @@ def test_fulltext_analyzed_only_after_saving_verified_analysis():
     assert a.analysis["evidence"][0]["page_number"] == 3
 
 
+def test_targeted_fulltext_read_enriches_abstract_card_without_losing_proofs():
+    t = toolkit(); aid = next(iter(t.registry)); a = t.registry[aid]
+    first = read(t, aid); expose(t)
+    abstract_eid = first["reading"][0]["passages"][0]["evidence_id"]
+    execute(t, "analyze_article", article_ids=[aid], action="save", research_context="meshing",
+        passage_query="", passage_offset=0, passages_per_article=8, analysis=analysis(abstract_eid))
+    a.fulltext = {"text": "The measured accuracy is 84.7 percent on the held-out set.",
+        "chunks": [{"text": "The measured accuracy is 84.7 percent on the held-out set.",
+            "page": 5, "section": "Results"}], "url": a.url}
+    second = read(t, aid); expose(t)
+    result_eid = second["reading"][0]["passages"][0]["evidence_id"]
+    deeper = analysis(result_eid)
+    deeper["method"] = []
+    deeper["results"] = [{"statement": "Accuracy was 84.7 percent on the held-out set",
+        "evidence_ids": [result_eid], "origin": "source_statement"}]
+    execute(t, "analyze_article", article_ids=[aid], action="save", research_context="meshing",
+        passage_query="", passage_offset=0, passages_per_article=8, analysis=deeper)
+    assert a.analysis["method"][0]["evidence_ids"] == [abstract_eid]
+    assert a.analysis["results"][0]["evidence_ids"] == [result_eid]
+    assert {e["evidence_id"] for e in a.analysis["evidence"]} == {abstract_eid, result_eid}
+    assert a.analysis_basis == "abstract"  # The cumulative card includes abstract-only claims.
+    assert a.access_status == "fulltext_analyzed"
+    assert a.analysis["reading_coverage"] == "targeted_passages"
+    execute(t, "analyze_article", article_ids=[aid], action="save", research_context="meshing",
+        passage_query="", passage_offset=0, passages_per_article=8, analysis=deeper)
+    assert len(a.analysis["results"]) == 1
+
+
 @pytest.mark.parametrize("status", [403, 404, 429])
 def test_http_failure_never_claims_fulltext(monkeypatch, status):
     t = toolkit(); a = next(iter(t.registry.values()))

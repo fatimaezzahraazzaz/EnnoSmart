@@ -9,6 +9,8 @@ from core.deps import get_current_user
 from agents.EnnoScholarV4.config import ConfigurationError
 from agents.EnnoScholarV4.models import ChatRequest, SessionCreate, SelectionRequest
 from agents.EnnoScholarV4.service import get_service, SessionNotFound, SessionBusy
+from agents.EnnoScholarV4.manuscript import DocumentAction
+from fastapi.responses import Response
 
 router = APIRouter(prefix="/scholar-v4", tags=["ennoscholar-v4"])
 logger = logging.getLogger(__name__)
@@ -70,6 +72,29 @@ def article(session_id: str = identifier(), article_id: str = identifier(), user
 @router.get("/sessions/{session_id}/memory")
 def memory(session_id: str = identifier(), user=Depends(get_current_user)):
     return invoke(lambda: get_service().memory(int(user.id), session_id))
+
+
+@router.get("/sessions/{session_id}/document")
+def document(session_id: str = identifier(), user=Depends(get_current_user)):
+    return invoke(lambda: get_service().document_read(int(user.id), session_id))
+
+
+@router.post("/sessions/{session_id}/document")
+def edit_document(payload: DocumentAction, session_id: str = identifier(), user=Depends(get_current_user)):
+    return invoke(lambda: get_service().document_action(int(user.id), session_id, payload))
+
+
+@router.get("/sessions/{session_id}/document/export/{format}")
+def export_document(format: Literal["docx","pdf"], version_id: str = Query(min_length=8,max_length=80,pattern=r"^[a-zA-Z0-9_-]+$"), session_id: str = identifier(), user=Depends(get_current_user)):
+    data=invoke(lambda:get_service().export_document(int(user.id),session_id,version_id,format))
+    media="application/pdf" if format=="pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    return Response(data,media_type=media,headers={"Content-Disposition":f'attachment; filename="EnnoScholar-V4-{version_id}.{format}"',"Cache-Control":"no-store"})
+
+
+@router.get("/sessions/{session_id}/document/figures/{figure_id}")
+def document_figure(session_id: str = identifier(),figure_id: str = identifier(),user=Depends(get_current_user)):
+    data=invoke(lambda:get_service().document_figure(int(user.id),session_id,figure_id))
+    return Response(data,media_type="image/png",headers={"Cache-Control":"no-store"})
 
 
 @router.post("/sessions/{session_id}/pdf", status_code=201)

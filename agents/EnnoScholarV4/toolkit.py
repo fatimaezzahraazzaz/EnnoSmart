@@ -18,6 +18,8 @@ from .models import Article, normalize_doi, public_link
 from .store import ArticleStore, compact
 from .tools.outline import OutlineArgs, manage_outline, resolve_section
 from .context import evidence_projection
+from .scientific_scope import ScientificScope, temporal_scope, literature_coverage
+from .scientific_visuals import VisualArgs, create_visual
 
 _reading_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="scholar-v4-reading")
 
@@ -61,13 +63,20 @@ class Claim(Args):
 class Analysis(Args):
     problem: list[Claim] = Field(max_length=8)
     technical_mechanism: list[Claim] = Field(max_length=8)
+    equations: list[Claim] = Field(default_factory=list, max_length=8)
+    parameters: list[Claim] = Field(default_factory=list, max_length=8)
     experimental_setup: list[Claim] = Field(max_length=8)
+    validation_protocol: list[Claim] = Field(default_factory=list, max_length=8)
+    datasets_materials: list[Claim] = Field(default_factory=list, max_length=8)
     objective: list[Claim] = Field(max_length=8)
     method: list[Claim] = Field(max_length=8)
     contribution: list[Claim] = Field(max_length=8)
     hypotheses: list[Claim] = Field(max_length=8)
     results: list[Claim] = Field(max_length=8)
+    tables_figures: list[Claim] = Field(default_factory=list, max_length=8)
+    comparisons: list[Claim] = Field(default_factory=list, max_length=8)
     limitations: list[Claim] = Field(max_length=8)
+    conditions_of_validity: list[Claim] = Field(default_factory=list, max_length=8)
     generalization: list[Claim] = Field(max_length=8)
     open_questions: list[Claim] = Field(max_length=8)
     relevance: list[Claim] = Field(max_length=8)
@@ -95,10 +104,65 @@ class SimilarArgs(Args):
     family: str = Field(max_length=160)
 
 
+class ScientificRelation(Args):
+    article_ids: list[str] = Field(min_length=2, max_length=8)
+    kind: Literal["improvement", "partial_resolution", "alternative", "contradiction", "complementarity", "conditional_superiority", "historical_resolution"]
+    statement: str = Field(min_length=1, max_length=2500)
+    origin: Literal["source_statement", "comparative_inference"]
+    conditions: str = Field(min_length=1, max_length=3000)
+    experimental_results: list[Claim] = Field(default_factory=list, max_length=12)
+    evidence_ids: list[str] = Field(min_length=2, max_length=30)
+    comparable_protocols: bool | None = None
+    uncertainties: list[str] = Field(default_factory=list, max_length=20)
+
+
 class CompareArgs(Args):
     article_ids: list[str] = Field(min_length=2, max_length=8)
     research_context: str = Field(max_length=5000)
     conclusions: list[Claim] | None = Field(max_length=20)
+    relations: list[ScientificRelation] | None = Field(default=None, max_length=20)
+
+
+class ProjectFactInput(Args):
+    category: Literal["objective", "method", "parameter", "experimental_setup", "dataset", "result", "difficulty", "condition", "constraint", "uncertainty"]
+    statement: str = Field(min_length=1, max_length=2500)
+    exact_quote: str = Field(min_length=1, max_length=2500)
+    source_type: Literal["consultant_message", "uploaded_project_document"]
+    source_id: str
+    value: str | None = None
+    unit: str | None = None
+
+
+class ProjectFactsArgs(Args):
+    facts: list[ProjectFactInput] = Field(min_length=1, max_length=30)
+
+
+class ArgumentStep(Args):
+    kind: Literal["problem", "method", "mechanism", "experimental_result", "comparison", "limitation", "partial_resolution", "project_confrontation", "open_question"]
+    statement: str = Field(min_length=1, max_length=2500)
+    article_ids: list[str] = Field(default_factory=list, max_length=8)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=20)
+    relation_ids: list[str] = Field(default_factory=list, max_length=8)
+    project_fact_ids: list[str] = Field(default_factory=list, max_length=8)
+    conditions: str = Field(default="", max_length=2500)
+    uncertainty: str = Field(default="", max_length=2500)
+
+
+class ArgumentAxis(Args):
+    axis: str = Field(min_length=1, max_length=300)
+    scientific_problem: str = Field(min_length=1, max_length=2500)
+    section_id: str | None = None
+    steps: list[ArgumentStep] = Field(min_length=1, max_length=20)
+    transition: str = Field(default="", max_length=2500)
+
+
+class BlueprintArgs(Args):
+    action: Literal["read", "save"]
+    merge: bool = False
+    global_question: str = Field(default="", max_length=3000)
+    narrative_logic: str = Field(default="", max_length=5000)
+    axes: list[ArgumentAxis] = Field(default_factory=list, max_length=20)
+    remaining_questions: list[str] = Field(default_factory=list, max_length=30)
 
 
 class Gap(Args):
@@ -147,6 +211,26 @@ class MemoryArgs(Args):
     constraints: list[str] | None = Field(default=None, max_length=30)
     exclusions: list[str] | None = Field(default=None, max_length=30)
     clarifications: list[str] | None = Field(default=None, max_length=30)
+    scientific_scope: ScientificScope | None = None
+
+
+class Availability(Args):
+    article_id: str
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    kind: Literal["publisher", "preprint"]
+    source_url: str
+    evidence_id: str
+
+
+class CoverageArgs(Args):
+    action: Literal["read", "save"]
+    available_dates: list[Availability] = Field(default_factory=list, max_length=30)
+    recent_axes_checked: list[str] = Field(default_factory=list, max_length=30)
+    foundational_article_ids: list[str] = Field(default_factory=list, max_length=30)
+    possible_resolutions_checked: list[str] = Field(default_factory=list, max_length=30)
+    missing_axes: list[str] = Field(default_factory=list, max_length=30)
+    uncertainties: list[str] = Field(default_factory=list, max_length=30)
+    sufficient: bool = False
 
 
 class AnalysisSave(Args):
@@ -156,7 +240,7 @@ class AnalysisSave(Args):
 
 class FinalArgs(Args):
     answer: str = Field(min_length=1, max_length=30000)
-    article_ids: list[str] = Field(max_length=20)
+    article_ids: list[str] = Field(max_length=80)
     evidence_ids: list[str] = Field(max_length=80)
     coverage_sufficient: bool
     remaining_uncertainties: list[str] = Field(max_length=30)
@@ -177,6 +261,46 @@ class WriteArgs(Args):
     text: str | None = Field(max_length=30000)
     article_ids: list[str] = Field(max_length=80)
     evidence_ids: list[str] = Field(max_length=80)
+    paragraph_id: str | None = None
+    claims: list[Claim] = Field(default_factory=list, max_length=80)
+    numeric_claims: list["NumericClaim"] = Field(default_factory=list, max_length=80)
+    calculations: list["Calculation"] = Field(default_factory=list, max_length=40)
+
+
+class NumericClaim(Args):
+    evidence_id: str
+    column: str
+    value: str
+    unit: str
+    metric: str
+
+
+class Calculation(Args):
+    left: NumericClaim
+    right: NumericClaim
+    operation: Literal["difference", "relative_percent"]
+    result: str
+    rounding_digits: int = Field(default=2,ge=0,le=6)
+    unit: str
+
+
+WriteArgs.model_rebuild()
+
+
+class ReviewIssue(Args):
+    section_id: str | None
+    statement: str = Field(max_length=3000)
+    severity: Literal["blocking", "warning", "information"]
+    evidence_ids: list[str] = Field(max_length=30)
+
+
+class ReviewArgs(Args):
+    action: Literal["read", "save"]
+    section_id: str | None = None
+    text_offset: int = Field(default=0, ge=0)
+    issues: list[ReviewIssue] = Field(default_factory=list, max_length=60)
+    conclusion: Literal["unassessed", "insufficient_evidence", "known_solution", "uncertainty_supported"] = "unassessed"
+    reasoning: str = Field(default="", max_length=5000)
 
 
 class HistoryArgs(Args):
@@ -185,6 +309,11 @@ class HistoryArgs(Args):
 
 
 TOOLS = {
+    "record_project_facts": (ProjectFactsArgs, "Enregistrer les faits exacts du projet depuis un message du consultant ou un document projet importé ; garder cette provenance distincte des publications."),
+    "build_argument_blueprint": (BlueprintArgs, "read expose analyses, comparaisons et faits projet ; save enregistre une histoire scientifique par axe, reliée aux preuves et relations réellement lues. Ne conclut jamais à un verrou CIR."),
+    "create_scientific_visual": (VisualArgs, "Créer ou régénérer une figure liée à une section et à son argument : schéma de synthèse étayé, graphique de cellules vérifiées d'un même protocole, ou figure PDF originale avec permission exacte. Recette éditable et provenance conservées."),
+    "review_document": (ReviewArgs, "read fournit contrôles déterministes et une fenêtre du texte enregistré (section_id, text_offset). save consigne ta revue sémantique, expérimentale et globale, distincte de l'intégrité technique et sans approbation humaine."),
+    "review_literature_coverage": (CoverageArgs, "Lire la disponibilité temporelle ; save consigne ta revue scientifique de couverture et les dates prouvées. Ne change aucun classement ni moteur. sufficient reste une appréciation du modèle, jamais une preuve d'éligibilité CIR."),
     "manage_outline": (OutlineArgs, "Créer/lire/modifier le plan avec identifiants stables et versions. rename modifie seulement un titre, sans recherche. section_id accepte aussi sa position 1, 2..."),
     "search_for_section": (SectionSearchArgs, "Rechercher pour une section du plan. Formule query selon sujet, section, autres sections et références existantes. section_id null utilise la dernière section ciblée."),
     "write_section": (WriteArgs, "read fournit les analyses et preuves d'une section ; save enregistre TA rédaction avec les preuves réellement consultées. Aucune génération simulée."),
@@ -204,7 +333,7 @@ TOOLS = {
 }
 
 
-def definitions():
+def definitions(include_document_tools=True):
     def strict_schema(value):
         if isinstance(value, dict):
             value.pop("default", None)
@@ -218,7 +347,9 @@ def definitions():
                 strict_schema(item)
         return value
     return [{"type": "function", "name": name, "description": description, "strict": True,
-        "parameters": strict_schema(model.model_json_schema())} for name, (model, description) in TOOLS.items()]
+        "parameters": strict_schema(model.model_json_schema())} for name, (model, description) in TOOLS.items()
+        if include_document_tools or name not in {"create_scientific_visual","review_document","review_literature_coverage",
+            "record_project_facts", "build_argument_blueprint"}]
 
 
 class ScholarTools:
@@ -249,6 +380,12 @@ class ScholarTools:
                 for eid in window["evidence_ids"]:
                     if eid not in self.shown_evidence:
                         self.shown_evidence.append(eid)
+                    article_id = self.evidence.get(eid, {}).get("article_id")
+                    if article_id and article_id not in self.store.exposed:
+                        self.store.exposed.append(article_id)
+        for window in self.state.get("document_reading_windows", []):
+            if window["window_id"] in window_ids:
+                window["status"] = "presented"
 
     def search(self, args, deadline):
         if self.search_count >= self.config.max_research_rounds:
@@ -331,9 +468,24 @@ class ScholarTools:
         if name not in TOOLS:
             raise ValueError("Outil inconnu.")
         args = TOOLS[name][0].model_validate(raw)
+        if name == "create_scientific_visual":
+            return create_visual(self,args)
+        if name in {"analyze_article", "compare_articles", "verify_bibliography"}:
+            self.state["current_turn_article_ids"] = list(dict.fromkeys([
+                *self.state.get("current_turn_article_ids", []), *args.article_ids]))
         if name == "read_conversation":
             messages = self.state.get("messages", [])
             return {"messages": messages[args.offset:args.offset+args.limit], "total": len(messages)}
+        if name == "record_project_facts":
+            from .argumentation import save_project_facts
+            return save_project_facts(self.state, args.facts)
+        if name == "build_argument_blueprint":
+            from .argumentation import argument_packet, blueprint_status, save_blueprint
+            if args.action == "read":
+                return {"packet": argument_packet(self.state, self),
+                    "blueprint": self.state.get("argument_blueprint", {}),
+                    "status": blueprint_status(self.state, self.registry)}
+            return save_blueprint(self.state, self, args)
         if name == "manage_outline":
             return manage_outline(self.state, args, self.registry)
         if name == "search_for_section":
@@ -345,12 +497,46 @@ class ScholarTools:
         if name == "write_section":
             section = resolve_section(self.state, args.section_id)
             self.state.setdefault("focus", {})["section_id"] = section["id"]
+            self.state.setdefault("document", {})["active_section_id"] = section["id"]
             if args.action == "read":
+                from .writing_context import writing_context, section_projection
                 ids = list(dict.fromkeys(section["article_ids"] + args.article_ids))
-                return {"section": section, "articles": [compact(self.store.article(aid), 1200) for aid in ids],
+                return {"section": section_projection(section), "writing_context": writing_context(self.state, self, {**section, "article_ids": ids}, budget=14000),
                     "guidance": "Lis les analyses et leurs passages avec analyze_article. Signale les sources insuffisantes et les limites de comparabilité."}
             if not args.text or not args.article_ids or not args.evidence_ids:
                 raise ValueError("La rédaction sauvegardée exige du texte, des articles et des preuves consultées.")
+            # A scientific draft may be prepared before human approval. Only the
+            # authenticated document action can approve the plan or manuscript.
+            approval_required = not bool(self.state.get("outline", {}).get("approval"))
+            from .scientific_review import validate_number, validate_calculation
+            claims = [c.model_dump() for c in args.claims]
+            self.claim_union(claims, args.article_ids)
+            if any(c["statement"] not in args.text for c in claims):
+                raise ValueError("Chaque affirmation déclarée doit figurer exactement dans le texte rédigé.")
+            facts = [validate_number(f.model_dump(), self) for f in args.numeric_claims]
+            calculations = [validate_calculation(c.model_dump(),self) for c in args.calculations]
+            if any(f["evidence_id"] not in args.evidence_ids or f["article_id"] not in args.article_ids for f in facts):
+                raise ValueError("Résultat numérique hors des références du brouillon.")
+            if any(eid not in args.evidence_ids for c in calculations for eid in c["evidence_ids"]):
+                raise ValueError("Calcul hors des preuves du brouillon.")
+            paragraphs = [{"id":"paragraph_"+uuid.uuid4().hex,"text":p} for p in re.split(r"\n\s*\n",args.text) if p.strip()]
+            raw_text = args.text
+            if args.paragraph_id:
+                if not section.get("drafts"):
+                    raise ValueError("Aucun brouillon à réviser localement.")
+                old = section["drafts"][-1]
+                paragraphs = copy.deepcopy(old.get("paragraphs", []))
+                target = next((p for p in paragraphs if p["id"]==args.paragraph_id),None)
+                if target is None:
+                    raise ValueError("Paragraphe inconnu ; relire le brouillon.")
+                old_text = target["text"]
+                target["text"] = args.text
+                raw_text = "\n\n".join(p["text"] for p in paragraphs)
+                claims = [c for c in old.get("claims",[]) if c["statement"] not in old_text]+claims
+                facts = [f for f in old.get("numeric_claims",[]) if f["value"] not in old_text]+facts
+                calculations = [c for c in old.get("calculations",[]) if c["result"] not in old_text]+calculations
+                args.article_ids = list(dict.fromkeys([*old["article_ids"],*args.article_ids]))
+                args.evidence_ids = list(dict.fromkeys([*old["evidence_ids"],*args.evidence_ids]))
             self.claim_union([{"evidence_ids": args.evidence_ids}], args.article_ids)
             if any(not self.store.article(aid).analysis for aid in args.article_ids):
                 raise ValueError("Analyser les sources avant de sauvegarder une section scientifique.")
@@ -358,8 +544,14 @@ class ScholarTools:
             previous = self.finished
             previous_response = self.state.get("last_response")
             previous_history_length = len(self.state.get("response_history", []))
-            checked = self.finalize(FinalArgs(answer=args.text, article_ids=args.article_ids, evidence_ids=args.evidence_ids,
-                coverage_sufficient=False, remaining_uncertainties=[]), deadline)
+            # Editing known evidence requires no provider requests.
+            was_final_only = self.finalization_only
+            self.finalization_only = True
+            try:
+                checked = self.finalize(FinalArgs(answer=raw_text, article_ids=args.article_ids, evidence_ids=args.evidence_ids,
+                    coverage_sufficient=False, remaining_uncertainties=[]), deadline)
+            finally:
+                self.finalization_only = was_final_only
             if not checked.get("published"):
                 return checked
             rendered = self.finished["answer"]
@@ -370,11 +562,65 @@ class ScholarTools:
                 self.state["last_response"] = previous_response
             del self.state["response_history"][previous_history_length:]
             old_outline = copy.deepcopy(self.state["outline"])
-            section.setdefault("drafts", []).append({"id": uuid.uuid4().hex, "text": rendered,
-                "instructions": args.instructions, "article_ids": args.article_ids, "evidence_ids": args.evidence_ids})
-            self.state.setdefault("outline_versions", []).append(old_outline)
-            self.state["outline"]["version"] += 1
-            return {"saved": True, "section_id": section["id"], "text": rendered}
+            old_document = copy.deepcopy(self.state.get("document", {}))
+            outline_versions = len(self.state.get("outline_versions", []))
+            document_versions = len(self.state.get("document_versions", []))
+            draft_id = uuid.uuid4().hex
+            try:
+                section.setdefault("drafts", []).append({"id": draft_id, "text": rendered,
+                    "raw_text":raw_text,"paragraphs":paragraphs,"claims":claims,"numeric_claims":facts,"calculations":calculations,
+                    "instructions": args.instructions, "article_ids": args.article_ids, "evidence_ids": args.evidence_ids})
+                self.state.setdefault("outline_versions", []).append(old_outline)
+                self.state["outline"]["version"] += 1
+                from .manuscript import save_document_revision
+                revision = save_document_revision(self.state)
+            except Exception:
+                self.state["outline"] = old_outline
+                self.state["document"] = old_document
+                del self.state.setdefault("outline_versions", [])[outline_versions:]
+                del self.state.setdefault("document_versions", [])[document_versions:]
+                raise
+            return {"saved": True, "section_id": section["id"], "draft_id": draft_id,
+                "document_version_id": revision["id"], "text": rendered,
+                "approval_required": approval_required}
+        if name == "review_document":
+            from .scientific_review import deterministic_review
+            review = deterministic_review(self.state, self)
+            if args.action == "read":
+                sections = self.state.get("outline",{}).get("sections",[])
+                section = resolve_section(self.state,args.section_id) if args.section_id else next((s for s in sections if s.get("drafts")), None)
+                if section:
+                    if not section.get("drafts"):
+                        raise ValueError("Cette section n'est pas encore rédigée ; choisir un brouillon existant pour la revue.")
+                    draft = section["drafts"][-1]
+                    text = draft.get("raw_text",draft["text"])
+                    wid = "document_read_"+uuid.uuid4().hex
+                    end = min(len(text),args.text_offset+7000)
+                    self.state.setdefault("document_reading_windows",[]).append({"window_id":wid,"status":"queued",
+                        "draft_id":draft["id"],"section_id":section["id"],"start":args.text_offset,"end":end})
+                    review.update(window_id=wid,section_id=section["id"],text=text[args.text_offset:end],next_offset=end,text_total=len(text))
+                review["sections"] = [{"id":s["id"],"title":s["title"],"draft_id":(s.get("drafts") or [{}])[-1].get("id")} for s in sections]
+                return review
+            for issue in args.issues:
+                if issue.evidence_ids:
+                    self.claim_union([{"evidence_ids":issue.evidence_ids}],list(self.registry))
+            complete = True
+            for s in self.state.get("outline",{}).get("sections",[]):
+                if not s.get("drafts"):
+                    complete = False
+                    continue
+                d=s["drafts"][-1]; cursor=0
+                ranges=sorted((w["start"],w["end"]) for w in self.state.get("document_reading_windows",[])
+                    if w["status"]=="presented" and w["draft_id"]==d["id"])
+                for start,end in ranges:
+                    if start<=cursor:
+                        cursor=max(cursor,end)
+                complete = complete and cursor>=len(d.get("raw_text",d["text"]))
+            review["scientific"] = {"issues":[i.model_dump() for i in args.issues],"conclusion":args.conclusion,
+                "reasoning":args.reasoning,"origin":"conversation_model_assessment","all_current_text_examined":complete}
+            self.state["scientific_review"]=review
+            self.state.setdefault("document",{})["review_stale"]=False
+            return {"saved":True,"review":review}
         if name == "search_scientific":
             return self.search(args, deadline)
         if name == "search_collected_articles":
@@ -523,11 +769,24 @@ class ScholarTools:
             return self.search(SearchArgs(query=args.conceptual_query, sources=None, limit_per_source=30, offset=0, family=args.family), deadline)
         if name == "compare_articles":
             ids = list(dict.fromkeys(args.article_ids))
+            pending = []
+            for relation in args.relations or []:
+                row = relation.model_dump()
+                if not set(row["article_ids"]) <= set(ids):
+                    raise ValueError("Relation hors du périmètre comparé.")
+                self.claim_union([{"evidence_ids": row["evidence_ids"]}, *row["experimental_results"]], row["article_ids"])
+                if {self.evidence[eid]["article_id"] for eid in row["evidence_ids"]} != set(row["article_ids"]):
+                    raise ValueError("Une relation exige des preuves de chaque publication.")
+                if row["kind"] == "conditional_superiority" and row["comparable_protocols"] is not True:
+                    raise ValueError("Une supériorité expérimentale exige des protocoles comparables explicitement examinés.")
+                pending.append({"id": "relation_"+uuid.uuid4().hex, **row})
             if args.conclusions is not None:
                 claims = [c.model_dump() for c in args.conclusions]
                 self.claim_union(claims, ids)
                 self.state.setdefault("comparisons", []).append({"article_ids": ids, "context": args.research_context, "conclusions": claims})
+            self.state.setdefault("scientific_relations", []).extend(pending)
             return {"matrix": [compact(self.store.article(aid), 900) for aid in ids], "research_context": args.research_context,
+                "scientific_relations": [r for r in self.state.get("scientific_relations", []) if set(r["article_ids"]) <= set(ids)],
                 "guidance": "Compare toi-même problème, objectif, méthode, contribution, résultats, limites, généralisation et niveau de preuve. Aucun résultat absent ne doit être inventé."}
         if name == "identify_research_gaps":
             ids = list(dict.fromkeys(args.article_ids))
@@ -556,6 +815,8 @@ class ScholarTools:
             if args.finalist_ids is not None:
                 for aid in args.finalist_ids:
                     a = self.store.article(aid)
+                    if a.selection_override is False:
+                        raise ValueError("Un article retiré par le consultant ne peut pas être finaliste actif.")
                     if aid not in self.store.examined or a.assessment.get("decision") == "reject":
                         raise ValueError("Un finaliste doit avoir été effectivement examiné et non rejeté.")
                 self.state["evaluation"] = {"recommended_article_ids": list(dict.fromkeys(args.finalist_ids)),
@@ -565,12 +826,49 @@ class ScholarTools:
             return {"saved": True, "evaluation": self.state.get("evaluation", {}), "examined_total": len(self.store.examined)}
         if name == "update_research_state":
             memory = args.model_dump(exclude_none=True)
+            scope = memory.pop("scientific_scope", None)
+            if scope is not None:
+                scope = ScientificScope.model_validate(scope).model_dump(mode="json")
+                if scope != self.state.get("scientific_scope"):
+                    previous_scope=self.state.get("scientific_scope",{})
+                    material_change={k:v for k,v in scope.items() if k!="work_type"}!={k:v for k,v in previous_scope.items() if k!="work_type"}
+                    self.state.setdefault("scope_history", []).append(copy.deepcopy(self.state.get("scientific_scope", {})))
+                    self.state["scientific_scope"] = scope
+                    if material_change:
+                        self.state.pop("literature_coverage_review", None)
+                        self.state.setdefault("document", {})["review_stale"] = True
+                    if material_change and self.state.get("outline",{}).get("sections"):
+                        plan=self.state["outline"]
+                        plan.pop("approval",None); plan["status"]="modified"
+                        plan["plan_revision"]=plan.get("plan_revision",plan["version"])+1
+                        plan["version"]+=1
+                        from .manuscript import save_document_revision
+                        save_document_revision(self.state)
             if any(len(s) > 2500 for value in memory.values() if isinstance(value, list) for s in value):
                 raise ValueError("Élément de mémoire trop long.")
             self.state.setdefault("memory_history", []).append(self.state.get("research_state", {}))
             self.state["research_state"] = {**self.state.get("research_state", {}), **memory, "origin": "conversation_model", "cir_eligibility": "not_established"}
             self.state["summary"] = ("Sujet : " + memory["topic"] + "\nDécisions : " + "; ".join(memory["consultant_decisions"]))[:6000]
             return {"saved": True}
+        if name == "review_literature_coverage":
+            if args.action == "save":
+                from datetime import date
+                records = copy.deepcopy(self.state.get("availability_records", {}))
+                for record in args.available_dates:
+                    date.fromisoformat(record.date)
+                    self.claim_union([{"evidence_ids": [record.evidence_id]}], [record.article_id])
+                    proof = self.evidence[record.evidence_id]
+                    if record.source_url != proof["source_url"] or record.date not in proof["exact_quote"]:
+                        raise ValueError("La date exacte et sa provenance doivent figurer dans la preuve consultée.")
+                    row = record.model_dump()
+                    if row not in records.setdefault(record.article_id, []):
+                        records[record.article_id].append(row)
+                for aid in args.foundational_article_ids:
+                    self.store.article(aid)
+                self.state["availability_records"] = records
+                self.state["literature_coverage_review"] = {**args.model_dump(exclude={"available_dates", "action"}),
+                    "scope": temporal_scope(self.state), "origin": "conversation_model_scientific_assessment"}
+            return literature_coverage(self.state, self.registry)
         if name == "finalize_response":
             return self.finalize(args, deadline)
         raise ValueError("Outil inconnu.")
