@@ -78,6 +78,18 @@ def publish(toolkit, args, deadline):
             article = toolkit.store.article(item.article_id).model_copy(deep=True)
             ArticleAnalyzer.save(article, item.analysis, toolkit.evidence, toolkit.shown_evidence, toolkit.snapshots)
             pending[article.id] = article
+        if toolkit.finalization_only and getattr(toolkit, "final_verification_allowed", False):
+            # Publication phase: a cited work actually presented to the model but
+            # never checked gets one bounded registry verification (DOI/arXiv
+            # identity only, no scientific search), instead of rejecting every
+            # reference of a turn that ended before the reading pipeline.
+            unchecked = [aid for aid in ids if aid not in toolkit.checked_ids and not toolkit.registry[aid].verified
+                and aid in toolkit.store.exposed
+                and aid not in toolkit.final_verification_attempted
+                and (toolkit.registry[aid].doi or toolkit.registry[aid].arxiv_id)][:6]
+            if unchecked:
+                toolkit.final_verification_attempted.update(unchecked)
+                toolkit.verify(unchecked, deadline)
         checked = toolkit.verify(ids, deadline, local_only=toolkit.finalization_only)
         if not checked["valid"]:
             return reject("invalid_bibliography", "Bibliographie non validée : retirer les références incertaines de la réponse principale et les conserver dans la bibliothèque.",

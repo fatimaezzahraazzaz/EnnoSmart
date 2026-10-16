@@ -12,7 +12,11 @@ def active_article_ids(state, registry):
         *section.get("article_ids", []), *[aid for aid, article in registry.items() if article.selected],
         *state.get("evaluation", {}).get("recommended_article_ids", []),
         *(state.get("displayed_article_ids") or state.get("last_response", {}).get("cited_article_ids", []))]
-    return list(dict.fromkeys(aid for aid in ids if aid in registry and registry[aid].selection_override is not False))
+    # Works put on hold by the consultant wait unless named, focused or in this section.
+    held = set(state.get("held_article_ids", [])) - {*state.get("current_turn_article_ids", []), focused,
+        *section.get("article_ids", [])}
+    return list(dict.fromkeys(aid for aid in ids if aid in registry and aid not in held
+        and registry[aid].selection_override is not False))
 
 
 def section_article_ids(state, registry, section):
@@ -63,7 +67,10 @@ def writing_context(state, toolkit, section=None, budget=7000):
             for r in state.get("scientific_relations", []) if set(r["article_ids"]) <= set(ids)],
         "figures": [{k:f[k] for k in ("id","kind","title","section_id","evidence_ids")} for f in state.get("scientific_figures",[]) if f["section_id"]==section.get("id")],
         "evidence": [], "evidence_available": 0,
-        "guidance": "Contexte borné ; sources, anciennes versions et preuves exactes restent en stockage. Relire passages/tableaux ciblés si nécessaire. Le plan doit être validé par le consultant ; aucune approbation du modèle."}
+        "guidance": "Contexte borné ; sources, anciennes versions et preuves exactes restent en stockage. Relire passages/tableaux ciblés si nécessaire. "
+            "analysis_available indique toutes les affirmations sauvegardées de chaque fiche (paramètres, équations, protocoles, résultats, limites) : "
+            "get_article(ID) transmet la fiche complète et analyze_article(read, evidence_ids) ses preuves exactes, sans nouvelle recherche. "
+            "Le plan doit être validé par le consultant ; aucune approbation du modèle."}
     from .argumentation import blueprint_status
     blueprint = state.get("argument_blueprint", {})
     status = blueprint_status(state, toolkit.registry)

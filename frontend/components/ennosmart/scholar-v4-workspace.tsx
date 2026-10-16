@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Button } from "@/components/ui/button"
-import { changeDocument, exportDocument, getDocument, getFigure, safeUrl, type ScientificDocument, type ScientificFigure, type ScientificSection } from "@/lib/scholar-v4"
+import { changeDocument, exportDocument, getDocument, getFigure, outlineEdit, safeUrl, type ScientificDocument, type ScientificFigure, type ScientificSection } from "@/lib/scholar-v4"
 
 const field = "w-full rounded-lg border bg-background px-3 py-2 text-sm focus-visible:outline-primary"
 
@@ -35,6 +35,37 @@ function Figure({ sid, figure }: { sid: string; figure: ScientificFigure }) {
 }
 
 type Action = (payload: Record<string, unknown>) => Promise<void>
+
+/** Direct plan edits through the existing outline_edit action (versioned, unapproved until validated). */
+function PlanEditor({ sections, disabled, act, ask }: { sections: ScientificSection[]; disabled: boolean; act: Action; ask: (text: string) => void }) {
+  const [titles, setTitles] = useState<Record<string, string>>({})
+  const [newTitle, setNewTitle] = useState("")
+  const [newDescription, setNewDescription] = useState("")
+  useEffect(() => { setTitles(Object.fromEntries(sections.map(s => [s.id, s.title]))) }, [sections])
+  return <details className="mb-6 rounded-xl border p-3 text-sm" open={!sections.some(s => s.drafts.length)}>
+    <summary className="cursor-pointer font-medium">Plan de l’état de l’art ({sections.length} sections)</summary>
+    <p className="mt-2 text-muted-foreground">Modifiez le plan ici ou dans le chat (« ajoute une partie sur les GNN », « fusionne les sections 2 et 3 »). Les brouillons existants sont conservés.</p>
+    <ol className="mt-3 space-y-3">{sections.map((section, index) => <li key={section.id} className="border-t pt-3">
+      <label className="block text-xs text-muted-foreground" htmlFor={`plan-title-${section.id}`}>Section {index + 1}{section.drafts.length ? " · rédigée" : ""}</label>
+      <div className="mt-1 flex flex-wrap gap-1">
+        <input id={`plan-title-${section.id}`} className={`${field} min-w-0 flex-1`} value={titles[section.id] ?? section.title} disabled={disabled} onChange={e => setTitles(current => ({ ...current, [section.id]: e.target.value }))} />
+        <Button type="button" size="sm" variant="outline" disabled={disabled || !(titles[section.id] || "").trim() || titles[section.id] === section.title} onClick={() => act(outlineEdit("rename", { section_id: section.id, title: titles[section.id] }))}>Renommer</Button>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-1">
+        <Button type="button" size="sm" variant="ghost" disabled={disabled || index === 0} onClick={() => act(outlineEdit("move", { section_id: section.id, position: index }))}>Monter</Button>
+        <Button type="button" size="sm" variant="ghost" disabled={disabled || index === sections.length - 1} onClick={() => act(outlineEdit("move", { section_id: section.id, position: index + 2 }))}>Descendre</Button>
+        {index < sections.length - 1 && <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={() => act(outlineEdit("merge", { section_id: sections[index + 1].id, target_section_id: section.id }))}>Fusionner avec la suivante</Button>}
+        <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={() => { if (window.confirm(`Retirer la section « ${section.title} » du plan ? Les versions précédentes du plan restent conservées.`)) act(outlineEdit("delete", { section_id: section.id })) }}>Retirer</Button>
+        <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={() => ask(`Rédige la section ${index + 1} « ${section.title} » à partir des fiches et preuves enregistrées, avec tableaux comparatifs et figures seulement s’ils sont justifiés.`)}>{section.drafts.length ? "Réviser dans le chat" : "Rédiger dans le chat"}</Button>
+      </div>
+    </li>)}</ol>
+    <div className="mt-4 space-y-2 border-t pt-3">
+      <label className="block">Nouvelle section<input className={field} value={newTitle} disabled={disabled} onChange={e => setNewTitle(e.target.value)} /></label>
+      <label className="block">Objet scientifique<textarea className={`${field} min-h-16`} value={newDescription} disabled={disabled} onChange={e => setNewDescription(e.target.value)} /></label>
+      <Button type="button" size="sm" disabled={disabled || !newTitle.trim()} onClick={async () => { await act(outlineEdit("add", { sections: [{ title: newTitle.trim(), description: newDescription.trim(), article_ids: [] }] })); setNewTitle(""); setNewDescription("") }}>Ajouter la section</Button>
+    </div>
+  </details>
+}
 
 function ManuscriptSection({ section, number, data, sid, disabled, act, ask }: {
   section: ScientificSection; number: number; data: ScientificDocument; sid: string;
@@ -118,7 +149,8 @@ export default function ScholarV4Workspace({ sid, updatedAt, running, ask, onCha
   }
   if (!data) return <div>{error ? <p role="alert" className="text-destructive">{error}</p> : <p role="status">Chargement du manuscrit…</p>}</div>
   const saved = (data.outline.sections || []).map((section, index) => ({ section, number: index + 1 })).filter(row => row.section.drafts.length > 0)
-  if (!saved.length) return null
+  const sections = data.outline.sections || []
+  if (!sections.length) return null
   const disabled = busy || running
   const articleIds = [...new Set([
     ...saved.flatMap(({ section }) => section.drafts.at(-1)?.article_ids || []),
@@ -127,6 +159,8 @@ export default function ScholarV4Workspace({ sid, updatedAt, running, ask, onCha
   ])]
   return <section className="mx-auto max-w-3xl" aria-label="Manuscrit de l’état de l’art" aria-busy={busy}>
     <h2 className="mb-3 text-xl font-semibold">{data.outline.title || "État de l’art scientifique"}</h2>
+    <PlanEditor sections={sections} disabled={disabled} act={act} ask={ask} />
+    {!saved.length && <p className="mb-5 text-sm text-muted-foreground">Aucune section n’est encore rédigée. Demandez « Maintenant rédige » ou rédigez une section depuis le plan.</p>}
     <nav aria-label="Sections rédigées" className="mb-5 flex flex-wrap gap-2">{saved.map(({ section, number }) => <a key={section.id} href={`#scholar-section-${section.id}`} className="rounded-full border px-3 py-1 text-xs hover:bg-muted">{number}. {section.title}</a>)}</nav>
     {error && <p role="alert" className="mb-3 text-destructive">{error}</p>}
     {saved.map(({ section, number }) => <ManuscriptSection key={section.id} section={section} number={number} data={data} sid={sid} disabled={disabled} act={act} ask={ask} />)}

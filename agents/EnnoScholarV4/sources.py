@@ -14,6 +14,28 @@ from .models import Article, normalize_doi, public_link
 from .network import fetch_public
 
 
+BOOLEAN_SYNTAX = re.compile(r'\b(?:OR|AND|NOT)\b|[()"]')
+
+
+def provider_query(provider, query):
+    """Keyword form for providers without boolean search, the model's query otherwise.
+
+    Semantic Scholar's relevance search returns nothing for OR/parenthesis
+    expressions, and arXiv turns OR groups into broad disjunctions (generic
+    "neural network" papers). OpenAlex supports the boolean syntax unchanged.
+    The model's concepts and their order are kept; only operators are removed.
+    """
+    if provider == "openalex" or not BOOLEAN_SYNTAX.search(query):
+        return query
+    words = re.sub(r'\b(?:OR|AND|NOT)\b|[()"]', " ", query).split()
+    seen, kept = set(), []
+    for word in words:
+        if word.casefold() not in seen:
+            seen.add(word.casefold())
+            kept.append(word)
+    return " ".join(kept) or query
+
+
 def title_key(value):
     return " ".join(re.sub(r"[^\w\s]", " ", unicodedata.normalize("NFKC", value).casefold()).split())
 
@@ -166,14 +188,18 @@ class ScientificSources:
         if not 1 <= len(chosen) <= 3 or any(name not in providers for name in chosen):
             raise ValueError("Sources : semantic_scholar, openalex, arxiv.")
         articles, warnings = [], []
+        sent = {name: provider_query(name, query) for name in set(chosen)}
+        self.last_provider_stats = {name: {"query_sent": q, "returned": None} for name, q in sent.items()}
         self.client.search_offset = offset
         # Providers run concurrently, each with a deadline and independent rate limits.
         with self.client.turn_cache(), ThreadPoolExecutor(max_workers=3) as pool:
-            futures = {pool.submit(providers[name], query, limit, deadline=deadline): name for name in set(chosen)}
+            futures = {pool.submit(providers[name], sent[name], limit, deadline=deadline): name for name in set(chosen)}
             for future in as_completed(futures):
                 check()
                 try:
-                    articles.extend(self.normalize(row, query) for row in future.result())
+                    rows = [self.normalize(row, query) for row in future.result()]
+                    articles.extend(rows)
+                    self.last_provider_stats[futures[future]]["returned"] = len(rows)
                 except Exception as exc:
                     warnings.append({"source": futures[future], "error": type(exc).__name__, "http_status": getattr(getattr(exc, "response", None), "status_code", None)})
         self.client.search_offset = 0

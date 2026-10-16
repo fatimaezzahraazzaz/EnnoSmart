@@ -21,6 +21,26 @@ def tokens(text):
     return re.findall(r"[a-z0-9]+", "".join(c for c in text if not unicodedata.combining(c)))
 
 
+STOPWORDS = {"and", "or", "not", "the", "for", "with", "from", "into", "using", "based", "les", "des", "une",
+    "pour", "dans", "avec", "sur", "par", "aux", "est", "via"}
+
+
+def query_terms(query):
+    return {t for t in tokens(query) if len(t) >= 3 and t not in STOPWORDS}
+
+
+def interleave_by_provider(rows):
+    """Alternate providers by their own rank; completion order is not a relevance order."""
+    groups = defaultdict(list)
+    for row in rows:
+        names = getattr(row, "sources", None) or (row.get("sources") if isinstance(row, dict) else None) or ["academic"]
+        groups[names[0]].append(row)
+    ordered = []
+    for rank in range(max((len(g) for g in groups.values()), default=0)):
+        ordered.extend(g[rank] for g in groups.values() if rank < len(g))
+    return ordered
+
+
 def legacy(article):
     return LegacyArticle.model_validate(article.model_dump())
 
@@ -59,8 +79,10 @@ class ArticleStore:
             raise ValueError("Article inconnu : utilisez un identifiant retourné par les outils.")
         return self.registry[aid]
 
-    def insert(self, incoming, family=""):
+    def insert(self, incoming, family="", max_new=None):
+        """max_new bounds NEW records only; notices of known works always merge."""
         ids, dropped = [], 0
+        self.last_new_count = 0
         for raw in incoming:
             row = Article.model_validate(raw.durable() if hasattr(raw, "durable") else raw.model_dump() if hasattr(raw, "model_dump") else raw)
             row.doi = normalize_doi(row.doi)
@@ -93,9 +115,10 @@ class ArticleStore:
                 match.citation_count = max(match.citation_count, row.citation_count)
                 row = match
             else:
-                if len(self.registry) >= self.maximum:
+                if len(self.registry) >= self.maximum or (max_new is not None and self.last_new_count >= max_new):
                     dropped += 1
                     continue
+                self.last_new_count += 1
                 stable = row.doi or row.arxiv_id or "|".join([row.title, str(row.year), *row.authors, row.url])
                 row.id = "paper_" + hashlib.sha256(stable.encode()).hexdigest()[:20]
                 row.canonical_work_id = row.id
@@ -131,8 +154,15 @@ class ArticleStore:
         blocked.update(aid for window in self.windows if window["status"] == "queued" for aid in window["article_ids"])
         if exclude_presented:
             candidates = [a for a in candidates if a.id not in blocked and a.id not in self.examined]
+        family_ignored = False
         if family:
-            candidates = [a for a in candidates if any(family.casefold() in f.casefold() for f in a.scientific_families)]
+            matching = [a for a in candidates if any(family.casefold() in f.casefold() for f in a.scientific_families)]
+            # An unknown label must not silently empty the window: the query
+            # still orders the stored notices and the caller is told.
+            if matching:
+                candidates = matching
+            else:
+                family_ignored = True
         if ids is not None:
             candidates = [a for a in candidates if a.id in ids]
         if not candidates:
@@ -142,8 +172,27 @@ class ArticleStore:
         exact = [a for a in candidates if normalized and normalized in
                  [a.id.casefold(), a.doi.casefold(), a.arxiv_id.casefold(), a.title.casefold()]]
         remaining = [a for a in candidates if a not in exact]
-        return (exact + remaining)[:limit], {"method": "stored_candidates", "matched": len(candidates),
-            "scores_are_scientific_ranking": False}
+        terms = query_terms(query)
+        if terms and len(remaining) >= 5:
+            # Words present in most stored notices ("deep", "learning", "neural")
+            # cannot order the window; the distinctive concepts of the query do.
+            frequency = {t: sum(t in set(tokens(a.title + " " + a.abstract)) for a in remaining) for t in terms}
+            distinctive = {t for t in terms if frequency[t] <= .4*len(remaining)}
+            terms = distinctive or terms
+        matched = []
+        if terms:
+            # Lexical overlap only orders the presentation window so that the
+            # model's own query reaches the corresponding stored notices.
+            def overlap(article):
+                title = set(tokens(article.title))
+                return 2*len(terms & title) + len(terms & (set(tokens(article.abstract)) - title))
+            scored = [(overlap(a), i, a) for i, a in enumerate(remaining)]
+            matched = [a for score, _, a in sorted((s for s in scored if s[0]), key=lambda s: (-s[0], s[1]))]
+            remaining = matched + [a for score, _, a in scored if not score]
+        return (exact + remaining)[:limit], {"method": "stored_candidates_lexical_order" if terms else "stored_candidates",
+            "matched": len(candidates), "query_term_matches": len(matched), "scores_are_scientific_ranking": False,
+            **({"family_filter_ignored": family, "known_families": sorted({f for a in self.registry.values() for f in a.scientific_families})[:20]}
+                if family_ignored else {})}
 
     def window(self, rows, query, purpose="retrieval"):
         # Bound transmission, not collection or scientific ranking. Omitted records
@@ -157,9 +206,18 @@ class ArticleStore:
         window = {"window_id": "window_" + uuid.uuid4().hex, "query": query, "purpose": purpose,
             "article_ids": [a["id"] for a in offered], "status": "queued"}
         self.windows.append(window)
-        return {"window_id": window["window_id"], "articles": offered,
+        result = {"window_id": window["window_id"], "articles": offered,
             "delivery": {"offered": len(offered), "batch_total": len(rows), "remaining_in_batch": len(rows)-len(offered),
                 "guidance": "Toutes les notices et abstracts sont conservés. Pour les fenêtres suivantes : search_collected_articles(exclude_presented=true), ou get_article par ID/titre. Les fenêtres ne constituent pas un classement scientifique."}}
+        unseen = [a for a in rows[len(offered):] if a.id not in self.examined]
+        if unseen:
+            # Titles only: the model can request any of these notices by ID. They
+            # are not presented abstracts and do not count as examined.
+            result["batch_index"] = [{"id": a.id, "title": a.title[:140], "year": a.year} for a in unseen[:40]]
+            result["batch_index_total"] = len(unseen)
+            result["delivery"]["batch_index_guidance"] = ("Titres non encore présentés de ce lot : get_article(identifiers=[ID]) "
+                "ou search_collected_articles(query) fournit leurs abstracts avant toute décision.")
+        return result
 
     def delivered(self, window_ids):
         for window in self.windows:

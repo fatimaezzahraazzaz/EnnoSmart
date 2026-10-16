@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, File, Form, 
 
 from core.deps import get_current_user
 from agents.EnnoScholarV4.config import ConfigurationError
-from agents.EnnoScholarV4.models import ChatRequest, SessionCreate, SelectionRequest
+from agents.EnnoScholarV4.models import ChatRequest, SessionCreate, SelectionRequest, OrderRequest
 from agents.EnnoScholarV4.service import get_service, SessionNotFound, SessionBusy
 from agents.EnnoScholarV4.manuscript import DocumentAction
 from fastapi.responses import Response
@@ -58,7 +58,7 @@ def session(session_id: str = identifier(), user=Depends(get_current_user)):
 
 
 @router.get("/sessions/{session_id}/articles")
-def articles(session_id: str = identifier(), offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100), query: str = Query("", max_length=1500), exclude_ids: list[str] = Query(default=[], max_length=20), category: Literal["all", "relevant", "retained_complementary", "unexamined", "examined_pending", "rejected"] = "all", user=Depends(get_current_user)):
+def articles(session_id: str = identifier(), offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100), query: str = Query("", max_length=1500), exclude_ids: list[str] = Query(default=[], max_length=20), category: Literal["all", "relevant", "retained_complementary", "unexamined", "examined_pending", "rejected", "on_hold"] = "all", user=Depends(get_current_user)):
     if any(not re.fullmatch(r"[a-zA-Z0-9_-]{8,80}", value) for value in exclude_ids):
         raise HTTPException(422, "Identifiant de publication invalide.")
     return invoke(lambda: get_service().articles(int(user.id), session_id, offset, limit, query, exclude_ids, category))
@@ -122,7 +122,12 @@ def import_document(session_id: str = identifier(), file: UploadFile = File(...)
 
 @router.patch("/sessions/{session_id}/articles/{article_id}")
 def select_article(payload: SelectionRequest, session_id: str = identifier(), article_id: str = identifier(), user=Depends(get_current_user)):
-    return invoke(lambda: get_service().select_article(int(user.id), session_id, article_id, payload.selected))
+    return invoke(lambda: get_service().select_article(int(user.id), session_id, article_id, payload.selected, payload.decision))
+
+
+@router.post("/sessions/{session_id}/articles/order")
+def order_articles(payload: OrderRequest, session_id: str = identifier(), user=Depends(get_current_user)):
+    return invoke(lambda: get_service().order_articles(int(user.id), session_id, payload.article_ids))
 
 
 @router.get("/runs/{run_id}")

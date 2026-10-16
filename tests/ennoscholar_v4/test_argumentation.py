@@ -15,6 +15,7 @@ from agents.EnnoScholarV4.toolkit import ScholarTools
 from agents.EnnoScholarV4.writing_context import writing_context
 from tests.ennoscholar_v4.test_finalization import Client, call
 from tests.ennoscholar_v4.test_scientific_reading import article, analysis_from_packet
+from tests.ennoscholar_v4.test_tools import tool_inputs
 
 
 def prepared_project(count=2):
@@ -33,7 +34,7 @@ def prepared_project(count=2):
         reading = toolkit.execute("analyze_article", {"article_ids": [paper.id], "action": "read",
             "research_context": "mechanisms", "passage_query": "", "passage_offset": 0,
             "passages_per_article": 8, "analysis": None}, deadline)["reading"][0]
-        toolkit.delivered({reading["reading_window_id"]})
+        toolkit.delivered({reading["reading_window_id"]}, inputs=tool_inputs({"reading": [reading]}))
         packet = {"passages": reading["passages"]}
         toolkit.execute("analyze_article", {"article_ids": [paper.id], "action": "save",
             "research_context": "mechanisms", "passage_query": "", "passage_offset": 0,

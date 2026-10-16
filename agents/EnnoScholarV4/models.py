@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Article(BaseModel):
@@ -73,8 +73,21 @@ class SessionCreate(BaseModel):
 
 
 class SelectionRequest(BaseModel):
+    """selected keeps the original contract; decision adds hold and restore."""
     model_config = ConfigDict(extra="forbid")
-    selected: bool
+    selected: bool | None = None
+    decision: Literal["accept", "reject", "hold", "restore"] | None = None
+
+    @model_validator(mode="after")
+    def one_choice(self):
+        if self.decision is None and self.selected is None:
+            raise ValueError("selected ou decision est nécessaire.")
+        return self
+
+
+class OrderRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    article_ids: list[str] = Field(min_length=1, max_length=50)
 
 
 def public_link(value: str) -> bool:

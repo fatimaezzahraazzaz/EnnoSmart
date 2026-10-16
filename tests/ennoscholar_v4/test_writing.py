@@ -8,6 +8,7 @@ from agents.EnnoScholarV4.models import Article
 from agents.EnnoScholarV4.config import ScholarV4Config
 from agents.EnnoScholarV4.toolkit import ScholarTools
 from agents.EnnoScholarV4.scientific_scope import literature_coverage, temporal_scope
+from tests.ennoscholar_v4.test_tools import tool_inputs
 
 
 def tools():
@@ -53,7 +54,7 @@ def read_tables(t):
     t.state["evaluation"]={"recommended_article_ids":[ids[0]]}
     for number in ["2","3","3"]:
         result=call(t,"analyze_article",article_ids=[aid],action="read",research_context="MMR",passage_query="",passage_offset=0,passages_per_article=8,analysis=None,table_number=number,revisit=True)
-        t.delivered([w["window_id"] for w in [*t.store.windows,*t.reading_windows] if w["status"]=="queued"])
+        t.delivered([w["window_id"] for w in [*t.store.windows,*t.reading_windows] if w["status"]=="queued"], inputs=tool_inputs(result))
     return ids
 
 
@@ -88,8 +89,8 @@ def test_argumented_plan_edits_keep_ids_and_human_approval_is_invalidated():
 
 def test_comparative_relation_requires_both_sources_and_comparable_protocols():
     t=tools(); ids=read_tables(t); aids=ids
-    call(t,"analyze_article",article_ids=[ids[0]],action="read",research_context="comparison",passage_query="",passage_offset=0,passages_per_article=8,analysis=None)
-    t.delivered([w["window_id"] for w in [*t.store.windows,*t.reading_windows] if w["status"]=="queued"])
+    reading=call(t,"analyze_article",article_ids=[ids[0]],action="read",research_context="comparison",passage_query="",passage_offset=0,passages_per_article=8,analysis=None)
+    t.delivered([w["window_id"] for w in [*t.store.windows,*t.reading_windows] if w["status"]=="queued"], inputs=tool_inputs(reading))
     refs=[next(e for e in t.shown_evidence if t.evidence[e]["article_id"]==aid) for aid in ids]
     relation={"article_ids":ids,"kind":"conditional_superiority","statement":"Better within a shared protocol","origin":"comparative_inference","conditions":"Same dataset and metric","evidence_ids":refs,"comparable_protocols":False}
     with pytest.raises(ValueError):
@@ -112,8 +113,8 @@ def drafted_document():
     t=tools(); ids=read_tables(t)
     for aid in ids:
         t.registry[aid].verified=True; t.registry[aid].authors=["Author"]; t.registry[aid].year=2023
-    call(t,"analyze_article",article_ids=[ids[0]],action="read",research_context="comparison",passage_query="",passage_offset=0,passages_per_article=8,analysis=None)
-    t.delivered([w["window_id"] for w in [*t.store.windows,*t.reading_windows] if w["status"]=="queued"])
+    reading=call(t,"analyze_article",article_ids=[ids[0]],action="read",research_context="comparison",passage_query="",passage_offset=0,passages_per_article=8,analysis=None)
+    t.delivered([w["window_id"] for w in [*t.store.windows,*t.reading_windows] if w["status"]=="queued"], inputs=tool_inputs(reading))
     for aid in ids:
         save_analysis(t,aid)
     call(t,"manage_outline",**outline_args("create",sections=[{"title":title,"description":"Scientific argument","article_ids":ids} for title in ["Comparison","Limits"]]))

@@ -29,8 +29,13 @@ def execute(t, name, **args):
     return t.execute(name, args, time.monotonic()+30)
 
 
-def expose(t):
-    t.delivered([w["window_id"] for w in [*t.store.windows, *t.reading_windows] if w["status"] == "queued"])
+def tool_inputs(result):
+    return [{"type": "function_call_output", "output": json.dumps(result)}]
+
+
+def expose(t, result):
+    t.delivered([w["window_id"] for w in [*t.store.windows, *t.reading_windows] if w["status"] == "queued"],
+        inputs=tool_inputs(result))
 
 
 def outline(t, action, **kw):
@@ -99,7 +104,7 @@ def test_analysis_cannot_be_saved_without_read_evidence():
     with pytest.raises(ValueError):
         execute(t, "analyze_article", article_ids=[aid], action="save", research_context="meshing", passage_query="",
             passage_offset=0, passages_per_article=8, analysis=analysis(eid))
-    expose(t)
+    expose(t, result)
     execute(t, "analyze_article", article_ids=[aid], action="save", research_context="meshing", passage_query="",
         passage_offset=0, passages_per_article=8, analysis=analysis(eid))
     assert t.registry[aid].analysis_basis == "abstract"
@@ -111,7 +116,7 @@ def test_fulltext_analyzed_only_after_saving_verified_analysis():
     t = toolkit(); aid = next(iter(t.registry)); a = t.registry[aid]
     a.fulltext = {"text": a.abstract, "chunks": [{"text": a.abstract, "page": 3, "section": "Method"}], "url": a.url}
     a.access_status = "fulltext_extracted"
-    result = read(t, aid); expose(t)
+    result = read(t, aid); expose(t, result)
     eid = result["reading"][0]["passages"][0]["evidence_id"]
     assert a.access_status == "fulltext_extracted"
     execute(t, "analyze_article", article_ids=[aid], action="save", research_context="meshing", passage_query="",
@@ -122,14 +127,14 @@ def test_fulltext_analyzed_only_after_saving_verified_analysis():
 
 def test_targeted_fulltext_read_enriches_abstract_card_without_losing_proofs():
     t = toolkit(); aid = next(iter(t.registry)); a = t.registry[aid]
-    first = read(t, aid); expose(t)
+    first = read(t, aid); expose(t, first)
     abstract_eid = first["reading"][0]["passages"][0]["evidence_id"]
     execute(t, "analyze_article", article_ids=[aid], action="save", research_context="meshing",
         passage_query="", passage_offset=0, passages_per_article=8, analysis=analysis(abstract_eid))
     a.fulltext = {"text": "The measured accuracy is 84.7 percent on the held-out set.",
         "chunks": [{"text": "The measured accuracy is 84.7 percent on the held-out set.",
             "page": 5, "section": "Results"}], "url": a.url}
-    second = read(t, aid); expose(t)
+    second = read(t, aid); expose(t, second)
     result_eid = second["reading"][0]["passages"][0]["evidence_id"]
     deeper = analysis(result_eid)
     deeper["method"] = []
@@ -246,7 +251,7 @@ def test_final_synthesis_can_save_model_analysis_with_exact_evidence():
     a = t.registry[aid]
     a.fulltext = {"text": a.abstract, "chunks": [{"text": a.abstract, "page": 2, "section": "Method"}], "url": a.url}
     a.access_status = "fulltext_extracted"
-    result = read(t, aid); expose(t)
+    result = read(t, aid); expose(t, result)
     eid = result["reading"][0]["passages"][0]["evidence_id"]
     result = execute(t, "finalize_response", answer=f"Méthode étudiée [{aid}] [{eid}]", article_ids=[aid], evidence_ids=[eid],
         coverage_sufficient=False, remaining_uncertainties=[], analyses=[{"article_id": aid, "analysis": analysis(eid)}])
@@ -273,7 +278,7 @@ def test_extraction_keeps_late_method_pages_and_html_has_no_fictional_pages():
 def test_writing_section_uses_saved_analysis_and_versioned_provenance():
     t = toolkit(); create_outline(t); aid = next(iter(t.registry))
     outline(t, "associate", section_id="2", article_ids=[aid])
-    result = read(t, aid); expose(t)
+    result = read(t, aid); expose(t, result)
     eid = result["reading"][0]["passages"][0]["evidence_id"]
     execute(t, "analyze_article", article_ids=[aid], action="save", research_context="meshing", passage_query="",
         passage_offset=0, passages_per_article=8, analysis=analysis(eid))

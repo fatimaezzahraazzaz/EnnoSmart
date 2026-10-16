@@ -12,6 +12,7 @@ from agents.EnnoScholarV4.store import ArticleStore
 from agents.EnnoScholarV4.toolkit import ScholarTools
 from agents.EnnoScholarV4.tools import fulltext
 from agents.EnnoScholarV4.tools.extraction import html_document, xml_document
+from tests.ennoscholar_v4.test_tools import tool_inputs
 
 
 TITLE = "Verified scientific study of cellular segmentation"
@@ -359,8 +360,8 @@ def test_publication_admits_actual_document_doi_only_with_verified_shown_evidenc
     data=scientific_html().replace(b'</head>',b'<meta name="citation_doi" content="10.1234/preprint"></head>')
     monkeypatch.setattr(fulltext,'fetch_public',lambda *a,**k:(data,'text/html','https://example.org/preprint'))
     t.execute('get_fulltext',{'article_id':ids[0],'candidate_urls':None,'page_start':None,'page_limit':None},time.monotonic()+10)
-    t.execute('analyze_article',{'article_ids':ids,'action':'read','research_context':'scientific limit','passage_query':'Discussion','passage_offset':0,'passages_per_article':8,'analysis':None},time.monotonic()+10)
-    t.delivered([*[w['window_id'] for w in t.store.windows],*[w['window_id'] for w in t.reading_windows]])
+    reading=t.execute('analyze_article',{'article_ids':ids,'action':'read','research_context':'scientific limit','passage_query':'Discussion','passage_offset':0,'passages_per_article':8,'analysis':None},time.monotonic()+10)
+    t.delivered([*[w['window_id'] for w in t.store.windows],*[w['window_id'] for w in t.reading_windows]], inputs=tool_inputs(reading))
     eid=next(iter(t.evidence))
     args={'answer':f'Version consultÃ©e DOI 10.1234/preprint [{ids[0]}] [{eid}]','article_ids':ids,'evidence_ids':[eid],'coverage_sufficient':False,'remaining_uncertainties':[]}
     assert t.execute('finalize_response',args,time.monotonic()+10)['published']

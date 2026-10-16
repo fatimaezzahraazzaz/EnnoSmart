@@ -15,6 +15,8 @@ PLAN_BEFORE_WRITING = re.compile(r"\bplan\b.{0,100}\bavant\s+de\s+(?:rédig|redi
 SECTION_REQUEST = re.compile(
     r"(?:rédig|redig|approfond|développ|developp|révis|revis|amélior|amelior).{0,45}"
     r"(?:la\s+)?section\s+(\d+|section_[a-f0-9]+)", re.I)
+SHORT_GO_AHEAD = re.compile(r"^\W*(?:(?:maintenant|ok|okay|bien|parfait|d['’]accord|c['’]est\s+bon|vas-y|allez)\W+)*"
+    r"(?:tu\s+peux\s+|on\s+peut\s+|peux-tu\s+)?(?:rédig|redig)\w*(?:\s+(?:le|l['’]|tout|maintenant|le\s+document|l['’]état\s+de\s+l['’]art))*\W*$", re.I)
 RESUME_REQUEST = re.compile(r"\b(?:reprends|reprendre|poursuis|poursuivre|continue|continuer)\b"
     r".{0,50}(?:rédaction|redaction|sections?|état\s+de\s+l[’']art)", re.I)
 
@@ -25,6 +27,10 @@ def begin_writing(state, request):
     prior = document.get("writing_progress", {})
     section_match = SECTION_REQUEST.search(request)
     full = bool(FULL_REQUEST.search(request)) and not bool(PLAN_BEFORE_WRITING.search(request))
+    # A short go-ahead (« Maintenant rédige », « OK, tu peux rédiger ») once a plan
+    # exists starts drafting from the saved cards, without another validation.
+    full = full or bool(state.get("outline", {}).get("sections") and len(request) <= 160 and
+        SHORT_GO_AHEAD.search(request) and not PLAN_BEFORE_WRITING.search(request) and not section_match)
     resume = bool(RESUME_REQUEST.search(request) and prior and prior.get("status") != "draft_complete")
     if not (section_match or full or resume):
         return None

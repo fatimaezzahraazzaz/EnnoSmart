@@ -12,7 +12,7 @@ from agents.EnnoScholarV4.config import ScholarV4Config
 from agents.EnnoScholarV4.models import Article
 from agents.EnnoScholarV4.publication import fallback
 from agents.EnnoScholarV4.toolkit import ScholarTools, FinalArgs
-from tests.ennoscholar_v4.test_tools import analysis
+from tests.ennoscholar_v4.test_tools import analysis, tool_inputs
 
 
 class Stream:
@@ -147,7 +147,7 @@ def test_read_payload_is_deduplicated_but_durable_evidence_remains_exact():
     e = first["reading"][0]["passages"][0]
     assert "text" not in e and e["exact_quote"]
     assert t.evidence[e["evidence_id"]]["text"] == e["exact_quote"]
-    t.delivered([w["window_id"] for w in [*t.store.windows, *t.reading_windows]])
+    t.delivered([w["window_id"] for w in [*t.store.windows, *t.reading_windows]], inputs=tool_inputs(first))
     repeated = t.execute("analyze_article", args, float("inf"))
     assert not repeated["reading"][0]["passages"]
     assert repeated["reading"][0]["already_provided_evidence_ids"] == [e["evidence_id"]]
@@ -161,7 +161,7 @@ def test_failed_publication_does_not_commit_its_pending_analysis():
     result = t.execute("analyze_article", {"article_ids": ["paper_verified"], "action": "read", "research_context": "",
         "passage_query": "", "passage_offset": 0, "passages_per_article": 8, "analysis": None}, float("inf"))
     eid = result["reading"][0]["passages"][0]["evidence_id"]
-    t.delivered([w["window_id"] for w in [*t.store.windows, *t.reading_windows]])
+    t.delivered([w["window_id"] for w in [*t.store.windows, *t.reading_windows]], inputs=tool_inputs(result))
     t.finalization_only = True
     payload = {**final("[wrong](https://unknown.invalid)"), "analyses": [{"article_id": "paper_verified", "analysis": analysis(eid)}]}
     rejected = t.finalize(FinalArgs.model_validate(payload), float("inf"))
@@ -232,9 +232,10 @@ def test_active_question_survives_oversized_scientific_memory():
 
 
 def seventy_notices():
-    names = {35: ("DL-Polycube", "Deep learning identifies polycube structures and generates hexahedral meshes."),
-        44: ("DDPM-Polycube", "A diffusion model constructs polycubes for volumetric hexahedral mesh generation."),
-        65: ("3DMeshNet", "A neural mapping generates structured three-dimensional hexahedral cells.")}
+    # Beyond the first window of 8 but within one search's share of the new-candidate limit.
+    names = {12: ("DL-Polycube", "Deep learning identifies polycube structures and generates hexahedral meshes."),
+        19: ("DDPM-Polycube", "A diffusion model constructs polycubes for volumetric hexahedral mesh generation."),
+        25: ("3DMeshNet", "A neural mapping generates structured three-dimensional hexahedral cells.")}
     return [Article(title=names.get(i, (f"Fixture unrelated classifier {i}", "This fixture predicts labels, without generating volumetric meshes."))[0],
         abstract=names.get(i, ("", "This fixture predicts labels, without generating volumetric meshes. "*18))[1] if i < 68 else "",
         authors=["Fixture Author"], year=2025, doi=f"10.1234/fixture{i}", verified=True) for i in range(70)]
@@ -288,7 +289,8 @@ def test_seventy_notices_68_abstracts_without_finalists_reach_model_and_support_
     result = ScholarChatAgent(ScholarV4Config(api_key="mock", web_search_enabled=False, max_tool_rounds=3), client=client, sources=source).run(data)
     assert not result["partial"] and not result["fallback"]
     assert result["exploration_stop_reason"] != "context_budget"
-    assert len(data["articles"]) == 70 and sum(bool(a["abstract"]) for a in data["articles"].values()) == 68
+    # One broad search keeps a third of the unchanged 80-candidate limit (27), never the whole provider page.
+    assert len(data["articles"]) == 27 and all(a["abstract"] for a in data["articles"].values())
     assert len(result["primary_article_ids"]) == 3 and all(name in result["answer"] for name in chosen)
     assert all(data["articles"][aid]["analysis_basis"] == "abstract" for aid in result["primary_article_ids"])
     assert all(len(json.dumps(kw["input"], ensure_ascii=False)) <= 85000 for kw in client.calls)
@@ -347,7 +349,8 @@ def test_synthesis_balances_already_read_body_proofs_without_claiming_saved_anal
             "chunks": [{"text": "Documented source body. "*700, "section": "Method", "page": 2}], "url": article.url}
     result = t.execute("analyze_article", {"article_ids": list(t.registry), "action": "read", "research_context": "",
         "passage_query": "", "passage_offset": 0, "passages_per_article": 8, "analysis": None, "revisit": False}, float("inf"))
-    t.delivered([identifier for row in result["reading"] for identifier in [row["window_id"], row["reading_window_id"]]])
+    t.delivered([identifier for row in result["reading"] for identifier in [row["window_id"], row["reading_window_id"]]],
+        inputs=tool_inputs(result))
     context = model_context(data, t, 9000, final=True)
     memory = json.loads(context[0]["content"].split(" : ", 1)[1])
     assert {row["article_id"] for row in memory["evidence"]} == set(t.registry)

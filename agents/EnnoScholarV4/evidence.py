@@ -114,9 +114,14 @@ def passages(article):
 
 
 def choose_passages(rows, query, offset=0, limit=8):
+    # Stable source order and stable offsets, independently of delivery receipts.
+    rows = list({row["evidence_id"]: row for row in rows}.values())
     if query:
         terms = set(re.findall(r"\w+", query.casefold()))
-        rows = sorted(rows, key=lambda r: (-sum(term in (r["section"] + " " + r["text"] + " " + json.dumps(r.get("table", {}))).casefold() for term in terms), r["chunk_index"], r["char_offset"]))
+        def score(row):
+            return sum(term in (row["section"] + " " + row["text"] + " " + json.dumps(row.get("table", {}))).casefold() for term in terms)
+        matched = [row for row in rows if score(row)]
+        rows = sorted(matched or rows, key=lambda r: (-score(r), r["chunk_index"], r["char_offset"], r["evidence_id"]))
     return rows[offset:offset + limit]
 
 

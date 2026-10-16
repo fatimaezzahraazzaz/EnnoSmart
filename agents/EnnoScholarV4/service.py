@@ -59,7 +59,8 @@ class ScholarV4Service:
         if detailed:
             stored = row.data.get("articles", {})
             pinned = list(dict.fromkeys([*row.data.get("evaluation", {}).get("recommended_article_ids", []),
-                *[aid for aid, a in stored.items() if a.get("selected")], *list(stored)[-24:]]))
+                *[aid for aid, a in stored.items() if a.get("selected")], *row.data.get("held_article_ids", []),
+                *list(stored)[-24:]]))
             result.update(messages=row.data.get("messages", []), articles=[Article.model_validate(stored[aid]).compact()
                 for aid in pinned if aid in stored], research_state=row.data.get("research_state", {}),
                 recommended_article_ids=row.data.get("evaluation", {}).get("recommended_article_ids", []), summary=row.data.get("summary", ""))
@@ -81,6 +82,8 @@ class ScholarV4Service:
             result["argument_blueprint_status"] = blueprint_status(row.data,
                 {aid: Article.model_validate(article) for aid, article in stored.items() if aid in status_ids})
             result["displayed_article_ids"] = row.data.get("displayed_article_ids", [])
+            result["held_article_ids"] = row.data.get("held_article_ids", [])
+            result["consultant_decisions"] = row.data.get("consultant_decisions", [])[-30:]
         return result
 
     def sessions(self, owner):
@@ -307,7 +310,31 @@ class ScholarV4Service:
             db.commit()
         return article.compact()
 
-    def select_article(self, owner, sid, aid, selected):
+    def order_articles(self, owner, sid, article_ids):
+        from .decisions import apply_order
+        with self.session_factory() as db:
+            row = db.scalar(select(ScholarV4Session).where(ScholarV4Session.id == sid, ScholarV4Session.owner_id == owner).with_for_update())
+            if row is None:
+                raise SessionNotFound("Conversation introuvable.")
+            if row.active_run_id:
+                raise SessionBusy("Attendre la fin du tour avant de modifier la sélection.")
+            data = copy.deepcopy(row.data)
+            articles = data.get("articles", {})
+            if any(aid not in articles for aid in article_ids):
+                raise SessionNotFound("Article introuvable.")
+            if any(articles[aid].get("selection_override") is False for aid in article_ids):
+                raise ValueError("Un article écarté ne peut pas être ordonné ; le rétablir d'abord.")
+            order = apply_order(data, article_ids, origin="consultant_interface")
+            row.data, row.updated_at = data, datetime.utcnow()
+            sync_records(db, row)
+            db.commit()
+            return {"recommended_article_ids": order}
+
+    def select_article(self, owner, sid, aid, selected, decision=None):
+        """selected=True/False keeps the original API; decision adds hold/restore."""
+        from .decisions import apply_decision
+        if decision is not None:
+            selected = decision == "accept"
         with self.session_factory() as db:
             row = db.scalar(select(ScholarV4Session).where(ScholarV4Session.id == sid, ScholarV4Session.owner_id == owner).with_for_update())
             if row is None:
@@ -326,8 +353,13 @@ class ScholarV4Service:
             if not selected and aid in evaluation.get("recommended_article_ids", []):
                 data.setdefault("evaluation_history", []).append(copy.deepcopy(evaluation))
                 evaluation["recommended_article_ids"] = [item for item in evaluation["recommended_article_ids"] if item != aid]
+            if decision is not None:
+                apply_decision(data, aid, decision,
+                    lambda a, sel, override: data["articles"][a].update(selected=sel, selection_override=override),
+                    verified=bool(data["articles"][aid].get("verified")), origin="consultant_interface")
             outline = data.get("outline", {})
-            if outline.get("sections"):
+            # A pause (hold) or a return to the model's judgment keeps plan memberships.
+            if outline.get("sections") and decision not in {"hold", "restore"}:
                 from .manuscript import save_document_revision
                 changed = False
                 if not selected:

@@ -13,7 +13,7 @@ import re
 import uuid
 
 from .context import analysis_projection, evidence_projection
-from .evidence import exact_source_valid
+from .evidence import exact_source_valid, snapshot
 
 
 def project_observation_source(state):
@@ -69,12 +69,89 @@ def active_articles(state, registry, *, include_current=True):
         *state.get("evaluation", {}).get("recommended_article_ids", []),
         *[aid for aid, article in registry.items() if article.selected],
         *[aid for aid, article in registry.items() if article.assessment.get("decision") == "retain"]]
-    return list(dict.fromkeys(aid for aid in ids if aid in registry and
+    # Works put on hold by the consultant wait unless named in this message.
+    held = set(state.get("held_article_ids", [])) - set(state.get("current_turn_article_ids", []) if include_current else [])
+    return list(dict.fromkeys(aid for aid in ids if aid in registry and aid not in held and
         registry[aid].selection_override is not False and registry[aid].analysis))
 
 
+def claim_entries(analysis):
+    # Interleave categories so bounded windows retain results and limits as well
+    # as methods. The model's statements/conditions/IDs are never shortened.
+    fields = [(f, value) for f, value in analysis.items() if isinstance(value, list) and
+        value and isinstance(value[0], dict) and "statement" in value[0] and "evidence_ids" in value[0]]
+    core = {"method", "technical_mechanism", "results", "limitations"}
+    for index in range(2):
+        for field, claims in fields:
+            if field in core and index < len(claims):
+                yield field, claims[index]
+    for index in range(max((len(v) for _, v in fields), default=0)):
+        for field, claims in fields:
+            if index < len(claims) and not (field in core and index < 2):
+                yield field, claims[index]
+
+
+def packet_claims(paper):
+    if "claim_order" not in paper:
+        yield from claim_entries(paper["analysis"])
+        return
+    offsets = {}
+    for field in paper["claim_order"]:
+        index = offsets.get(field, 0)
+        yield field, paper["analysis"][field][index]
+        offsets[field] = index+1
+
+
+def article_reading_status(state, article):
+    task = next((t for t in state.get("scientific_reading", {}).get("tasks", []) if t["article_id"] == article.id), {})
+    basis = article.analysis_basis or article.analysis.get("analysis_basis") or "metadata"
+    return {"basis": basis, "coverage_sufficient": bool(task.get("coverage_sufficient")),
+        "partial": not bool(task.get("coverage_sufficient")),
+        "remaining_passages": task.get("remaining_passages"),
+        "text_unavailable": not bool(article.fulltext.get("text")),
+        "status": task.get("status", "legacy_targeted_analysis"),
+        "field_status": task.get("field_status", {}),
+        "scope": "targeted_scientific_sections; never an exhaustive whole-document assertion"}
+
+
+def comparison_source_signature(registry, ids):
+    data = [{"id": aid, "source_version": registry[aid].source_version,
+        "fingerprint": snapshot(registry[aid])["fingerprint"], "analysis": registry[aid].analysis}
+        for aid in sorted(set(ids)) if aid in registry]
+    return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def relation_current(toolkit, relation):
+    if relation.get("stale"):
+        return False
+    ids = relation["article_ids"]
+    if any(aid not in toolkit.registry for aid in ids):
+        return False
+    proofs = [toolkit.evidence.get(eid) for eid in relation["evidence_ids"]]
+    if not proofs or any(not e or not exact_source_valid(e, toolkit.snapshots) for e in proofs):
+        return False
+    signature = relation.get("source_signature")
+    if signature:
+        return signature == comparison_source_signature(toolkit.registry, ids)
+    return all(e["source_fingerprint"] == snapshot(toolkit.registry[e["article_id"]])["fingerprint"] for e in proofs)
+
+
+def refresh_relations(toolkit):
+    for row in toolkit.state.get("scientific_relations", []):
+        if not relation_current(toolkit, row):
+            row["stale"] = True
+            row["stale_reason"] = "Source, scientific claims or exact evidence changed; comparison must be reviewed."
+
+
 def comparison_batches(state, registry):
-    ids = active_articles(state, registry)
+    from .scientific_reading import comparison_ready
+    ledger = state.get("scientific_reading", {})
+    tasks = {t["article_id"]: t for t in ledger.get("tasks", [])}
+    # Comparable once core dimensions are documented (partial, flagged as such),
+    # not only after an exhaustive traversal that a bounded turn rarely reaches.
+    current = set(ledger.get("active_article_ids") or []) | set(state.get("current_turn_article_ids", []))
+    ids = [aid for aid in active_articles(state, registry) if registry[aid].verified and
+        (not current or aid in current) and (not tasks.get(aid) or comparison_ready(tasks[aid]))]
     if len(ids) < 2:
         return []
     # Windows bound model context, never the full selection or durable corpus.
@@ -82,105 +159,165 @@ def comparison_batches(state, registry):
         if len(ids[offset:offset+4]) >= 2]
 
 
-def argument_packet(state, toolkit, ids=None):
-    ids = ids or active_articles(state, toolkit.registry)
-    ids = [aid for aid in ids if aid in toolkit.registry and
-        toolkit.registry[aid].selection_override is not False]
+def argument_packet(state, toolkit, ids=None, *, claim_offsets=None):
+    ids = active_articles(state, toolkit.registry) if ids is None else ids
+    ids = list(dict.fromkeys(aid for aid in ids if aid in toolkit.registry and
+        toolkit.registry[aid].selection_override is not False))
+    claim_offsets = claim_offsets or {}
     papers = []
-    for aid in ids[:4]:
+    for aid in ids:
         article = toolkit.registry[aid]
-        projection = analysis_projection(article.analysis, claims=1, statement_chars=260)
-        claims = {key: value for key, value in projection.items() if key in {"problem", "method", "technical_mechanism",
-            "equations", "parameters", "experimental_setup", "validation_protocol", "results", "tables_figures",
-            "contribution", "limitations", "conditions_of_validity", "analysis_basis", "analysis_limit"}}
-        proof_fields = ("method", "results", "limitations", "technical_mechanism", "experimental_setup", "equations", "parameters")
-        proof_ids = list(dict.fromkeys(eid for field in proof_fields for claim in claims.get(field, [])
-            if isinstance(claim, dict) for eid in claim.get("evidence_ids", [])))
+        projection = analysis_projection(article.analysis)
+        all_claims = list(claim_entries(projection))
+        start = max(0, min(claim_offsets.get(aid, 0), len(all_claims)))
+        analysis = {k: v for k, v in projection.items() if not isinstance(v, list) or not v or not isinstance(v[0], dict)}
+        proof_ids, order, unavailable = [], [], 0
+        for field, claim in all_claims[start:]:
+            if not all(eid in toolkit.evidence and eid in toolkit.shown_evidence and
+                    exact_source_valid(toolkit.evidence[eid], toolkit.snapshots) for eid in claim["evidence_ids"]):
+                unavailable += 1
+                continue
+            analysis.setdefault(field, []).append(copy.deepcopy(claim))
+            order.append(field)
+            proof_ids.extend(claim["evidence_ids"])
         proofs = []
-        for eid in proof_ids[:3]:
-            if eid in toolkit.evidence and exact_source_valid(toolkit.evidence[eid], toolkit.snapshots):
-                proof = evidence_projection(toolkit.evidence[eid])
-                proof["quote_truncated"] = len(proof["exact_quote"]) > 750
-                proof["exact_quote"] = proof["exact_quote"][:750]
-                proofs.append(proof)
+        for eid in dict.fromkeys(proof_ids):
+            # Omit null metadata only; exact quotes, known provenance and table
+            # conditions stay intact. Original receipts remain in the source store.
+            proofs.append({k: v for k, v in evidence_projection(toolkit.evidence[eid]).items() if v is not None and v != {}})
+        if not proofs:
+            anchor = next((e for e in article.analysis.get("evidence", []) if e["evidence_id"] in toolkit.shown_evidence and exact_source_valid(e, toolkit.snapshots)), None)
+            if anchor:
+                proofs.append({k: v for k, v in evidence_projection(anchor).items() if v is not None and v != {}})
         papers.append({"id": aid, "title": article.title, "year": article.year, "doi": article.doi,
             "source_version": article.source_version, "scientific_families": article.scientific_families,
-            "analysis": claims, "analysis_available": {key: len(value) for key, value in article.analysis.items()
-                if isinstance(value, list) and value and key != "evidence"}, "proofs": proofs})
+            "reading_status": article_reading_status(state, article), "analysis": analysis,
+            "analysis_available": {k: len(v) for k, v in projection.items() if isinstance(v, list) and v and isinstance(v[0], dict)},
+            "proofs": proofs, "claim_order": order, "claim_offset": start,
+            "claim_total": len(all_claims), "unavailable_claims": unavailable})
     all_active = active_articles(state, toolkit.registry)
     return {"scientific_question": state.get("scientific_scope", {}).get("scientific_question") or
             state.get("research_state", {}).get("scientific_question", ""),
         "papers": papers,
         "active_paper_index": [{"id": aid, "title": toolkit.registry[aid].title[:180],
             "axes": toolkit.registry[aid].scientific_families,
-            "analysis_basis": toolkit.registry[aid].analysis_basis} for aid in all_active[:30]],
-        "active_paper_total": len(all_active),
-        "window_partial": len(all_active) > len(papers),
-        "relations": [{"id": row["id"], "article_ids": row["article_ids"], "kind": row["kind"],
-            "statement": row["statement"][:500], "conditions": row["conditions"][:500],
-            "evidence_ids": row["evidence_ids"], "origin": row["origin"],
-            "comparable_protocols": row.get("comparable_protocols"), "uncertainties": row.get("uncertainties", [])[:3],
-            "experimental_results": row.get("experimental_results", [])[:2]}
-            for row in state.get("scientific_relations", []) if set(row["article_ids"]) <= set(ids)],
-        "research_gaps": [{"article_ids": row["article_ids"], "gaps": [
-            {**gap, "statement": gap["statement"][:450], "scope": gap["scope"][:350]}
-            for gap in row["gaps"][:4]]} for row in state.get("research_gaps", []) if
-            set(row["article_ids"]) <= set(ids)],
+            "analysis_basis": toolkit.registry[aid].analysis_basis} for aid in all_active],
+        "active_paper_total": len(all_active), "window_partial": len(all_active) > len(papers),
+        "relations": [copy.deepcopy(row) for row in state.get("scientific_relations", []) if
+            set(row["article_ids"]) <= set(ids) and relation_current(toolkit, row)],
+        "research_gaps": [copy.deepcopy(row) for row in state.get("research_gaps", []) if set(row["article_ids"]) <= set(ids)],
         "project_facts": [{**fact, "source_current": project_fact_valid(state, toolkit.registry, fact)}
-            for fact in state.get("project_facts", [])[-30:]],
+            for fact in state.get("project_facts", [])],
         "existing_blueprint": {"id": state.get("argument_blueprint", {}).get("id"),
             "axes": [{"axis": axis["axis"], "article_ids": list(dict.fromkeys(
                 aid for step in axis["steps"] for aid in step["article_ids"]))}
                 for axis in state.get("argument_blueprint", {}).get("axes", [])]},
-        "outline_sections": [{"id": s["id"], "title": s["title"], "article_ids": s["article_ids"]}
-            for s in state.get("outline", {}).get("sections", [])],
-        "guidance": "Comparer mécanismes, protocoles, résultats et conditions. Une année seule ne prouve ni progrès ni supériorité. Les faits projet sont distincts des travaux publiés. Aucune difficulté ne devient automatiquement un verrou CIR."}
+        "outline_sections": [{"id": sec["id"], "title": sec["title"], "article_ids": sec["article_ids"]}
+            for sec in state.get("outline", {}).get("sections", [])],
+        "guidance": "Comparer les affirmations et leurs conditions exactes, pas une liste de titres. Distinguer source_statement, inference et comparative_inference, les incertitudes, les textes intégraux et les abstracts. Aucune supériorité entre protocoles incompatibles. Les faits projet restent distincts des publications ; aucun verrou CIR n’est présumé."}
 
 
 def bounded_argument_packet(packet, limit=10000):
-    """Fit the conversational window; retain IDs and availability in durable storage."""
-    packet = copy.deepcopy(packet)
-    packet["transmission_partial"] = False
-    if len(json.dumps(packet, ensure_ascii=False)) <= limit:
-        return packet
-    packet["transmission_partial"] = True
-    packet["relations_total"] = len(packet["relations"])
-    packet["research_gaps_total"] = len(packet["research_gaps"])
-    packet["relations"] = packet["relations"][-8:]
-    packet["research_gaps"] = packet["research_gaps"][-8:]
-    packet["project_facts"] = packet["project_facts"][-8:]
-    for fact in packet["project_facts"]:
-        fact["exact_quote"] = fact["exact_quote"][:400]
-    for paper in packet["papers"]:
-        for proof in paper["proofs"]:
-            proof["quote_truncated"] = proof.get("quote_truncated", False) or len(proof["exact_quote"]) > 400
-            proof["exact_quote"] = proof["exact_quote"][:400]
-        for value in paper["analysis"].values():
-            if isinstance(value, list):
-                for claim in value:
-                    if isinstance(claim, dict):
-                        claim["statement"] = claim["statement"][:180]
-    for field in ("conditions_of_validity", "parameters", "equations", "tables_figures", "validation_protocol",
-            "contribution", "experimental_setup", "technical_mechanism", "problem"):
-        if len(json.dumps(packet, ensure_ascii=False)) <= limit:
+    """Balanced, lossless claim windows with stable resumable per-paper offsets."""
+    original = copy.deepcopy(packet)
+    size = lambda obj: len(json.dumps(obj, ensure_ascii=False))
+    result = {k: v for k, v in original.items() if k != "papers"}
+    result.update(papers=[], next_claim_offsets={}, omitted_claims={}, transmission_partial=False,
+        omitted_article_ids=[], deferred_information={}, other_information_partial=False, blocked_by_context=False)
+    result["reading_scope"] = "Targeted scientific sections; never an exhaustive whole-document assertion."
+    # Whole optional records are deferred, never clipped into misleading claims.
+    for key in ("existing_blueprint", "outline_sections", "active_paper_index", "project_facts", "research_gaps", "relations"):
+        if size(result) <= limit*.20:
             break
-        for paper in packet["papers"]:
-            paper["analysis"].pop(field, None)
-    while len(json.dumps(packet, ensure_ascii=False)) > limit and any(len(p["proofs"]) > 1 for p in packet["papers"]):
-        for paper in packet["papers"]:
-            if len(paper["proofs"]) > 1:
-                paper["proofs"].pop()
-    while len(json.dumps(packet, ensure_ascii=False)) > limit and packet["active_paper_index"]:
-        packet["active_paper_index"].pop()
-    for key in ("research_gaps", "relations", "project_facts"):
-        while len(json.dumps(packet, ensure_ascii=False)) > limit and len(packet[key]) > 1:
-            packet[key].pop(0)
-    if len(json.dumps(packet, ensure_ascii=False)) > limit:
-        for paper in packet["papers"]:
-            for proof in paper["proofs"]:
-                proof["quote_truncated"] = True
-                proof["exact_quote"] = proof["exact_quote"][:180]
-    return packet
+        value = result.get(key)
+        if value:
+            result["deferred_information"][key] = len(value) if isinstance(value, list) else 1
+            result[key] = [] if isinstance(value, list) else {}
+    streams, proofs, taken = {}, {}, {}
+    def add_proof(paper, evidence):
+        source_keys = {"source_url", "source_version", "document_version_id", "document_sha256", "source_identifiers", "version_status"}
+        source = {k: v for k, v in evidence.items() if k in source_keys}
+        key = "source_"+hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12]
+        paper.setdefault("sources", {})[key] = source
+        paper["proofs"].append({**{k: v for k, v in evidence.items() if k not in source_keys}, "source_ref": key})
+    # Unseen works get a window before works already covered in an earlier one.
+    papers = sorted(original["papers"], key=lambda p: (p["claim_offset"] >= p["claim_total"], p["claim_offset"] > 0))
+    for paper in papers:
+        aid = paper["id"]
+        result["next_claim_offsets"][aid] = paper["claim_offset"]
+        result["omitted_claims"][aid] = max(0, paper["claim_total"]-paper["claim_offset"])
+        header = {k: v for k, v in paper.items() if k not in {"analysis", "proofs", "claim_order"}}
+        header["analysis"] = {k: v for k, v in paper["analysis"].items() if not isinstance(v, list)}
+        header["proofs"] = []
+        header["sources"] = {}
+        if paper["proofs"]:
+            add_proof(header, paper["proofs"][0])
+        # Detailed field status stays recoverable in the reading ledger.
+        header["reading_status"] = {k: v for k, v in header["reading_status"].items() if k not in {"field_status", "scope"}}
+        result["papers"].append(header)
+        if size(result) > limit*.75 and len(result["papers"]) > 1:
+            result["papers"].pop()
+            result["omitted_article_ids"].append(aid)
+            continue
+        streams[aid] = list(packet_claims(paper))
+        proofs[aid] = {e["evidence_id"]: e for e in paper["proofs"]}
+        taken[aid] = 0
+    if not result["omitted_article_ids"] and len(result["papers"]) >= result.get("active_paper_total", 0):
+        result["active_paper_index"] = []
+    blocked = set()
+    while True:
+        progress = False
+        for paper in result["papers"]:
+            aid = paper["id"]
+            if aid in blocked or taken[aid] >= len(streams[aid]):
+                continue
+            field, claim = streams[aid][taken[aid]]
+            old_proofs = list(paper["proofs"])
+            old_sources = dict(paper["sources"])
+            previous_offset = result["next_claim_offsets"][aid]
+            previous_omitted = result["omitted_claims"][aid]
+            paper["analysis"].setdefault(field, []).append(claim)
+            present = {e["evidence_id"] for e in old_proofs}
+            for eid in claim["evidence_ids"]:
+                if eid not in present:
+                    add_proof(paper, proofs[aid][eid])
+                    present.add(eid)
+            result["next_claim_offsets"][aid] += 1
+            result["omitted_claims"][aid] = max(0, previous_omitted-1)
+            if size(result) > limit:
+                paper["analysis"][field].pop()
+                if not paper["analysis"][field]:
+                    paper["analysis"].pop(field)
+                paper["proofs"] = old_proofs
+                paper["sources"] = old_sources
+                result["next_claim_offsets"][aid] = previous_offset
+                result["omitted_claims"][aid] = previous_omitted
+                blocked.add(aid)
+                continue
+            taken[aid] += 1
+            progress = True
+        if not progress:
+            break
+    result["transmission_partial"] = any(result["omitted_claims"].values())
+    result["other_information_partial"] = bool(result["deferred_information"])
+    result["window_partial"] = original.get("window_partial", False) or result["transmission_partial"]
+    while size(result) > limit and result["papers"]:
+        paper = result["papers"].pop()
+        aid = paper["id"]
+        source = next(p for p in original["papers"] if p["id"] == aid)
+        result["omitted_article_ids"].append(aid)
+        result["next_claim_offsets"][aid] = source["claim_offset"]
+        result["omitted_claims"][aid] = source["claim_total"]-source["claim_offset"]
+        result["transmission_partial"] = True
+    result["blocked_by_context"] = bool(result["transmission_partial"] and not any(taken.values()))
+    if size(result) > limit:
+        # Even the index can exceed a tiny caller budget. Return a recoverable
+        # refusal, never silently clip a scientific claim or exact quotation.
+        result = {"papers": [], "transmission_partial": True, "blocked_by_context": True,
+            "active_paper_total": original.get("active_paper_total", len(original["papers"])),
+            "next_claim_offsets": {}, "omitted_claims": {},
+            "guidance": "Scientific packet cannot fit: request a smaller article batch. Durable claims and exact evidence are unchanged."}
+    return result
 
 
 def source_signature(state, registry):
@@ -188,7 +325,7 @@ def source_signature(state, registry):
     # saved blueprint or alter its durable source signature.
     ids = active_articles(state, registry, include_current=False)
     payload = {"articles": [{"id": aid, "source_version": registry[aid].source_version,
-        "analysis": registry[aid].analysis} for aid in ids],
+        "analysis": registry[aid].analysis, "source_fingerprint": snapshot(registry[aid])["fingerprint"]} for aid in ids],
         "relations": state.get("scientific_relations", []), "gaps": state.get("research_gaps", []),
         "project_facts": state.get("project_facts", []),
         "project_source_versions": [{"source_id": fact["source_id"],
@@ -227,12 +364,13 @@ def save_blueprint(state, toolkit, args):
     if not args.axes:
         raise ValueError("Le blueprint scientifique exige au moins un axe argumentatif.")
     active = set(active_articles(state, toolkit.registry))
-    relations = {row["id"]: row for row in state.get("scientific_relations", [])}
+    relations = {row["id"]: row for row in state.get("scientific_relations", []) if relation_current(toolkit, row)}
     project = {row["id"]: row for row in state.get("project_facts", [])}
     sections = {row["id"] for row in state.get("outline", {}).get("sections", [])}
     saved = args.model_dump()
     saved.pop("action", None)
     saved.pop("merge", None)
+    saved.pop("claim_offsets", None)
     for axis in saved["axes"]:
         if axis["section_id"] and axis["section_id"] not in sections:
             raise ValueError("Section du blueprint absente du plan actuel.")
