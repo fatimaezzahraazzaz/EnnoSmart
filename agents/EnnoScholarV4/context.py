@@ -17,6 +17,96 @@ class ActiveReadingContextError(ValueError):
     """The active source packet cannot be transmitted intact; keep it resumable."""
 
 
+# Each request serves one task. The durable memory (articles, analyses, evidence,
+# relations, plan, drafts, decisions) is never reduced; only what is transmitted
+# for the current task is chosen here, everything else stays retrievable by tools.
+COMMON_KEYS = {"topic", "summary", "focus", "outline", "corpus_total", "guidance", "writing_progress", "scientific_scope",
+    "consultant_instructions", "context_task", "retrieval", "argument_blueprint_status", "selected_articles"}
+TASK_KEYS = {
+    "reading": COMMON_KEYS | {"automatic_scientific_reading", "scientific_reading_status"},
+    "argumentation": COMMON_KEYS | {"argumentation_focus", "user_message_sources", "project_facts", "scientific_reading_status"},
+    "section": COMMON_KEYS | {"section_drafting", "section_sources_status"},
+    "planning": COMMON_KEYS | {"conversation_science", "conversation_guidance", "argument_blueprint", "project_facts",
+        "scientific_reading_status", "coverage_review", "displayed_article_order"},
+    "selection": COMMON_KEYS | {"selection_candidates", "selection_candidates_total", "recent_searches", "coverage_review",
+        "displayed_article_order", "candidate_index", "candidate_index_total"},
+    "recovery": COMMON_KEYS | {"scientific_reading_recovery", "scientific_reading_status", "candidate_index",
+        "candidate_index_total", "candidate_articles", "candidate_guidance", "recent_searches", "displayed_article_order"},
+}
+# Optional, recoverable views removed first when a focused request is too large;
+# the task's own packet is reduced last, by rebuilding it smaller (never clipped).
+OPTIONAL_ORDER = ("recent_searches", "candidate_index", "coverage_review", "displayed_article_order", "argument_blueprint",
+    "project_facts", "scientific_reading_status", "section_sources_status", "summary", "focus", "candidate_articles",
+    "selected_articles", "scientific_scope", "outline")
+TASK_PACKET = {"section": "section_drafting", "argumentation": "argumentation_focus", "reading": "automatic_scientific_reading",
+    "planning": "conversation_science", "selection": "selection_candidates", "recovery": "scientific_reading_recovery"}
+READING_ROWS = 12
+
+
+def context_task(state, final=False):
+    """The task this request serves, in the orchestrator's focus precedence."""
+    if final:
+        return "final"
+    for key, task in (("automatic_reading_focus", "reading"), ("argumentation_focus", "argumentation"),
+            ("writing_focus", "section"), ("writing_planning", "planning"), ("selection_focus", "selection"),
+            ("reading_recovery_focus", "recovery")):
+        if state.get(key):
+            return task
+    return "conversation"
+
+
+def reading_digest(state, article_ids):
+    """Per-work reading state for the works of one task; the full ledger stays stored."""
+    rows = []
+    for task in state.get("scientific_reading", {}).get("tasks", []):
+        if task["article_id"] in article_ids:
+            rows.append({"article_id": task["article_id"], "status": task.get("status"), "basis": task.get("basis"),
+                "core_covered": task.get("core_covered"), "coverage_sufficient": task.get("coverage_sufficient"),
+                "undocumented": [name for name, row in (task.get("dimensions") or {}).items() if row.get("status") != "documented"]})
+    return rows
+
+
+def fit_focused(memory, messages, budget, task, state, toolkit, section=None, keep=()):
+    """Bound a focused request: optional views go first, then the task packet is
+    rebuilt smaller. Claims stay whole (fewer of them, with resumable offsets);
+    durable records are untouched."""
+    def size():
+        return len(json.dumps(memory, ensure_ascii=False)) + sum(len(m["content"]) for m in messages)
+    if size() <= budget:
+        return memory, messages
+    messages = messages[-1:]
+    packet_key = TASK_PACKET.get(task)
+    for key in OPTIONAL_ORDER:
+        if size() <= budget:
+            break
+        if key != packet_key and key not in keep and key in memory:
+            memory.pop(key)
+    factor = .8
+    while size() > budget and factor > .1:
+        excess = size()-budget
+        if task == "section" and section is not None:
+            from .writing_context import writing_context
+            current = len(json.dumps(memory["section_drafting"]["packet"], ensure_ascii=False))
+            memory["section_drafting"]["packet"] = writing_context(state, toolkit, section,
+                budget=max(2000, current-excess-256 if memory["section_drafting"]["packet"].get("revision")
+                    else min(int(current*factor), current-excess-256)))
+        elif task == "argumentation":
+            from .argumentation import argument_packet, bounded_argument_packet
+            focus = state["argumentation_focus"]
+            current = len(json.dumps(memory["argumentation_focus"]["packet"], ensure_ascii=False))
+            memory["argumentation_focus"]["packet"] = bounded_argument_packet(argument_packet(state, toolkit,
+                focus.get("article_ids"), claim_offsets=focus.get("claim_offsets")), max(1500, min(int(current*factor), current-excess-256)),
+                proof_mode="reference")
+        elif task == "selection" and "selection_candidates" not in keep and len(memory.get("selection_candidates", [])) > 3:
+            memory["selection_candidates"] = memory["selection_candidates"][:max(3, int(len(memory["selection_candidates"])*factor))]
+        else:
+            break
+        factor -= .2
+    if size() > budget and memory.get("consultant_instructions"):
+        memory["consultant_instructions"]["items"] = memory["consultant_instructions"]["items"][-5:]
+    return memory, messages
+
+
 def transmitted_evidence_ids(items, evidence):
     """Recognize complete source projections in model inputs, never ID references alone."""
     received = set()
@@ -49,7 +139,11 @@ def transmitted_evidence_ids(items, evidence):
     return received
 
 
-def analysis_projection(analysis, *, claims=None, statement_chars=None):
+def analysis_projection(analysis, *, claims=None, statement_chars=None, evidence=None):
+    """Model view of a card. With the evidence store, claims backed only by
+    related-work passages are tagged subject="background" (a prior work described
+    by this publication, not its own contribution)."""
+    from .attribution import claim_subject
     result = {}
     for name in ANALYSIS_FIELDS:
         value = analysis.get(name)
@@ -58,9 +152,12 @@ def analysis_projection(analysis, *, claims=None, statement_chars=None):
         if isinstance(value, list) and value and isinstance(value[0], dict):
             result[name] = [{"statement": item["statement"][:statement_chars] if statement_chars else item["statement"],
                 "evidence_ids": item["evidence_ids"], "origin": item.get("origin", "source_statement"),
-                "basis": item.get("basis", analysis.get("analysis_basis"))} for item in (value[:claims] if claims else value)]
+                "basis": item.get("basis", analysis.get("analysis_basis")),
+                **({"subject": "background"} if evidence is not None and claim_subject(item, evidence) == "background" else {})}
+                for item in (value[:claims] if claims else value)]
         elif isinstance(value, list):
-            result[name] = value[:claims] if claims else value
+            # Always a copy: a bounded view is trimmed in place, the card never.
+            result[name] = list(value[:claims] if claims else value)
         else:
             result[name] = value
     return result
@@ -98,6 +195,7 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
     """A fresh bounded context, never the accumulating full tool transcript."""
     active_reading = None
     science_packet = None
+    task = context_task(state, final)
     order = state.get("displayed_article_ids") or state.get("last_response", {}).get("cited_article_ids", [])
     from .writing_context import active_article_ids, section_projection, writing_context
     selected = active_article_ids(state, toolkit.registry)
@@ -139,18 +237,33 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
         memory["scientific_scope"]={k:([str(x)[:200] for x in v[:5]] if isinstance(v,list) else v[:750] if isinstance(v,str) else v) for k,v in memory["scientific_scope"].items()}
         review=state.get("literature_coverage_review", {})
         memory["coverage_review"]={k:([str(x)[:250] for x in v[:5]] if isinstance(v,list) else v) for k,v in review.items() if k in {"sufficient","missing_axes","uncertainties","origin"}}
-    if state.get("document", {}).get("active_section_id") and not state.get("automatic_reading_focus"):
+    # The last section touched is useful to a conversation about the document,
+    # not to a reading, comparison or another section's drafting.
+    if state.get("document", {}).get("active_section_id") and task in {"conversation", "final"}:
         memory["writing_context"] = writing_context(state, toolkit, budget=min(6500, budget//3))
     progress = state.get("document", {}).get("writing_progress")
     if progress:
         memory["writing_progress"] = {k: progress.get(k) for k in
             ("id", "mode", "target_ids", "saved_draft_ids", "status", "approval_required", "errors")}
-    if not final and state.get("writing_focus"):
+    section = None
+    if task == "section":
         from .tools.outline import resolve_section
         section = resolve_section(state, state["writing_focus"]["section_id"])
         memory["section_drafting"] = {"focus": state["writing_focus"],
-            "packet": writing_context(state, toolkit, section, budget=min(14000, int(budget*.72)))}
+            "packet": writing_context(state, toolkit, section,
+                budget=max(2000, budget-1800) if progress and progress.get("mode") == "section" and section.get("drafts")
+                else min(14000, int(budget*.72)))}
+        memory["section_sources_status"] = reading_digest(state, state["writing_focus"].get("article_ids", []))
+        memory["retrieval"] = ("Le paquet est une vue bornée de la mémoire permanente. analysis_available donne le nombre "
+            "d'affirmations sauvegardées par champ : get_analysis_claims(article_id, fields, offset) les transmet toutes, avec "
+            "leurs preuves exactes ; analyze_article(read, evidence_ids) relit des passages connus, analyze_article(read, "
+            "passage_query) cherche dans le texte conservé. Aucune nouvelle recherche bibliographique.")
         memory.pop("writing_context", None)
+    from .instructions import instruction_packet
+    instructions = instruction_packet(state, task, section_id=section["id"] if section else None,
+        article_ids=(state.get("writing_focus") or state.get("argumentation_focus") or {}).get("article_ids", ()))
+    if instructions:
+        memory["consultant_instructions"] = instructions
     if not final and state.get("automatic_reading_focus"):
         from .scientific_reading import reading_context
         active_reading = reading_context(state, toolkit)
@@ -169,28 +282,40 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
                     "article_ids": step["article_ids"], "evidence_ids": step["evidence_ids"],
                     "relation_ids": step["relation_ids"], "project_fact_ids": step["project_fact_ids"]}
                     for step in axis["steps"][:5]]} for axis in blueprint["axes"][:6]]}
-    if not final and state.get("argumentation_focus"):
+    if task == "argumentation":
         from .argumentation import argument_packet, bounded_argument_packet
         focus = state["argumentation_focus"]
         memory["argumentation_focus"] = {**focus,
             "packet": bounded_argument_packet(argument_packet(state, toolkit, focus.get("article_ids"), claim_offsets=focus.get("claim_offsets")),
-                int(budget*.72))}
-        memory["user_message_sources"] = [{"id": m["id"], "content": m["content"][:3000]}
-            for m in state.get("messages", [])[-8:] if m.get("role") == "user" and m.get("id")]
+                int(budget*.72), proof_mode="reference")}
+        if focus["stage"] == "project_facts":
+            # Exact consultant words are needed only to record project facts.
+            memory["user_message_sources"] = [{"id": m["id"], "content": m["content"][:3000]}
+                for m in state.get("messages", [])[-8:] if m.get("role") == "user" and m.get("id")]
     if state.get("scientific_reading"):
         reading = state["scientific_reading"]
         memory["scientific_reading_status"] = {"tasks": [{k: task.get(k) for k in
             ("article_id", "axes", "status", "basis", "coverage_sufficient", "remaining_passages", "exhausted", "field_status")} for task in reading.get("tasks", [])],
             "remaining_article_ids": reading.get("remaining_article_ids", []), "blocked_reason": reading.get("blocked_reason"),
             "coverage_by_axis": reading.get("coverage_by_axis", {})}
+        rows = memory["scientific_reading_status"]["tasks"]
+        if len(rows) > READING_ROWS and task != "final":
+            # A large corpus keeps every task in the ledger; the request carries the
+            # active works first and the count of the others.
+            active = set(reading.get("active_article_ids") or []) | set(
+                (state.get("automatic_reading_focus") or state.get("argumentation_focus") or {}).get("article_ids", []))
+            rows.sort(key=lambda row: row["article_id"] not in active)
+            memory["scientific_reading_status"]["tasks"] = rows[:READING_ROWS]
+            memory["scientific_reading_status"]["tasks_total"] = len(rows)
+            memory["scientific_reading_status"].pop("coverage_by_axis", None)
         if final:
             # The synthesis room goes to saved claims; per-axis lists repeat the
             # task rows and stay in the durable ledger.
             memory["scientific_reading_status"].pop("coverage_by_axis", None)
-            for task in memory["scientific_reading_status"]["tasks"]:
-                statuses = task.pop("field_status", {})
-                task.pop("axes", None)
-                task["undocumented_fields"] = [f for f, status in (statuses or {}).items() if status != "documented"]
+            for row in memory["scientific_reading_status"]["tasks"]:
+                statuses = row.pop("field_status", {})
+                row.pop("axes", None)
+                row["undocumented_fields"] = [f for f, status in (statuses or {}).items() if status != "documented"]
     if not final and state.get("selection_focus"):
         # Selection checkpoint: the presented candidates with their abstracts, so
         # the model judges them from the notices themselves, not from titles.
@@ -236,8 +361,7 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
             for row in memory["selected_articles"]]
         memory.pop("candidate_index", None)
         memory.pop("candidate_articles", None)
-    if (not final and not any(memory.get(key) for key in
-            ("automatic_scientific_reading", "argumentation_focus", "section_drafting"))):
+    if task in {"conversation", "planning"}:
         analyzed = [aid for aid in selected if aid in toolkit.registry and toolkit.registry[aid].analysis]
         if analyzed:
             from .argumentation import argument_packet, bounded_argument_packet
@@ -294,10 +418,19 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
             saved_articles = {p["id"] for p in science_packet["papers"]}
             memory["source_material"] = [row for row in memory["source_material"] if row["article_id"] not in saved_articles]
             memory["source_guidance"] = "Les preuves des fiches structurées sont transmises dans conversation_science ; les autres passages restent récupérables dans les outils."
+    if task in TASK_KEYS:
+        # A focused task receives its own packet and the shared essentials only;
+        # stale packets of other tasks (an interrupted comparison, the last section
+        # touched, the corpus index) stay in storage.
+        memory = {key: value for key, value in memory.items() if key in TASK_KEYS[task]}
+        memory["context_task"] = task
     # Always retain the active question before fitting optional scientific memory.
     latest = state.get("messages", [])[-1:]
     messages = [{"role": m["role"], "content": m["content"]} for m in latest]
-    for message in reversed(state.get("messages", [])[-toolkit.config.recent_messages:-1]):
+    # A section or comparison works from durable records and the captured
+    # consultant instructions, not from older chat turns.
+    history = [] if task in {"section", "argumentation"} else state.get("messages", [])[-toolkit.config.recent_messages:-1]
+    for message in reversed(history):
         text = message["content"]
         if message["role"] != "user":
             text = text[:min(toolkit.config.max_message_context_chars, 1800 if final else 3000)]
@@ -306,7 +439,7 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
             messages.pop(0)
             break
     # Remove optional historical data first. Scientific records are never changed.
-    while len(json.dumps(memory, ensure_ascii=False)) + sum(len(m["content"]) for m in messages) > budget and memory["recent_searches"]:
+    while len(json.dumps(memory, ensure_ascii=False)) + sum(len(m["content"]) for m in messages) > budget and memory.get("recent_searches"):
         memory["recent_searches"].pop(0)
     while len(json.dumps(memory, ensure_ascii=False)) + sum(len(m["content"]) for m in messages) > budget and memory.get("evidence"):
         memory["evidence"].pop()
@@ -323,10 +456,17 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
         memory["candidate_index"].pop()
     while len(json.dumps(memory, ensure_ascii=False)) + sum(len(m["content"]) for m in messages) > budget and len(memory.get("selection_candidates", [])) > 6:
         memory["selection_candidates"].pop()
+    if task in TASK_KEYS and task != "reading":
+        if task == "section" and memory.get("section_drafting", {}).get("packet", {}).get("revision"):
+            # The old draft, all source identities and current instructions take
+            # the same memory share; unrelated document previews are recoverable.
+            memory = {k: v for k, v in memory.items() if k in {
+                "section_drafting", "consultant_instructions", "context_task"}}
+        memory, messages = fit_focused(memory, messages, budget, task, state, toolkit, section)
     if len(json.dumps(memory, ensure_ascii=False)) + sum(len(m["content"]) for m in messages) > budget:
         memory["outline"] = {"title": state.get("outline", {}).get("title"), "sections": [
             {k: s[k] for k in ("id", "title")} for s in state.get("outline", {}).get("sections", [])]}
-        for row in [*memory["selected_articles"], *memory.get("candidate_articles", [])]:
+        for row in [*memory.get("selected_articles", []), *memory.get("candidate_articles", [])]:
             if row.get("abstract"):
                 row["abstract"] = row["abstract"][:600]
                 row["abstract_truncated"] = True
@@ -334,7 +474,7 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
                 if isinstance(value, list):
                     for claim in value:
                         claim["statement"] = claim["statement"][:250 if final else 160]
-    if len(json.dumps(memory, ensure_ascii=False)) + sum(len(m["content"]) for m in messages) > budget:
+    if task not in TASK_KEYS and len(json.dumps(memory, ensure_ascii=False)) + sum(len(m["content"]) for m in messages) > budget:
         # An exceptional oversized object is referenced, not silently reintroduced.
         memory = {"topic": state.get("research_state", {}).get("topic", "")[:1000],
             "selected_articles": [{k: row[k] for k in ("id", "title", "doi", "arxiv_id", "abstract", "abstract_truncated", "access_status", "analysis_basis") if k in row} for row in memory["selected_articles"]],
@@ -374,6 +514,13 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
                 not required <= transmitted_evidence_ids(inputs, toolkit.evidence)):
             raise ActiveReadingContextError("Les preuves du focus actif ne peuvent pas être transmises intégralement dans le contexte disponible.")
         return inputs
+    if memory.get("selection_candidates"):
+        # Abstracts submitted for judgment become "presented" only once this
+        # request is actually delivered (same receipt as candidate windows).
+        window = {"window_id": "window_selection_" + uuid.uuid4().hex, "query": "selection_checkpoint",
+            "purpose": "selection_checkpoint", "article_ids": [row["id"] for row in memory["selection_candidates"]], "status": "queued"}
+        toolkit.store.windows.append(window)
+        memory["selection_window"] = {"window_id": window["window_id"]}
     candidates = memory.get("candidate_articles", [])
     if candidates:
         window = {"window_id": "window_context_" + uuid.uuid4().hex,
@@ -389,11 +536,20 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
         excess = len(json.dumps(packed_inputs(), ensure_ascii=False))-budget
         if excess <= 0:
             break
-        if science_packet is not None:
+        if science_packet is not None and memory.get("conversation_science"):
             current = len(json.dumps(memory["conversation_science"], ensure_ascii=False))
-            memory["conversation_science"] = bounded_argument_packet(science_packet, max(800, current-excess-128))
-        elif len(messages) > 1:
+            if current > 900:
+                memory["conversation_science"] = bounded_argument_packet(science_packet, max(800, current-excess-128))
+                continue
+        if len(messages) > 1:
             messages.pop(0)
+        elif task != "final":
+            # Escaping inside the request (JSON in JSON) is counted here: the same
+            # bounded reduction applies to the exact size actually sent.
+            current = len(json.dumps(memory, ensure_ascii=False)) + sum(len(m["content"]) for m in messages)
+            # Candidate windows are already registered: their notices stay in place.
+            memory, messages = fit_focused(memory, messages, max(1000, current-excess-256), task, state, toolkit, section,
+                keep=("candidate_articles", "selection_candidates", "window_id", "selection_window"))
         else:
             break
     return packed_inputs()
@@ -455,5 +611,23 @@ def compact_exchange(exchange, toolkit, budget):
             return compacted
     # An oversized old call argument (e.g. a draft) can be excluded in stateless
     # Responses, while its useful results and exact passages still reach the model.
-    return [{"role": "developer", "content": json.dumps({"tool_results": results,
-        "guidance": "Résultats d'outils conservés, transmission partielle. Utiliser les outils locaux pour la suite des fenêtres et les objets complets. Aucune conclusion scientifique n'a été ajoutée."}, ensure_ascii=False)}]
+    data = {"tool_results": results,
+        "guidance": "Résultats d'outils conservés, transmission partielle. Utiliser les outils locaux pour la suite des fenêtres et les objets complets. Aucune conclusion scientifique n'a été ajoutée."}
+    packed = lambda: [{"role": "developer", "content": json.dumps(data, ensure_ascii=False)}]
+    # Large objects are durable elsewhere (comparison packets in argumentation
+    # memory, analyses and passages in the store): reference them rather than
+    # exceeding the request budget and stopping the whole turn.
+    for key in ("packet", "matrix", "scientific_relations", "batch_index", "reading", "articles", "writing_context", "messages"):
+        if len(json.dumps(packed(), ensure_ascii=False)) <= budget:
+            break
+        for result in results:
+            if isinstance(result, dict) and result.get(key):
+                value = result[key]
+                result[key] = {"omitted_from_context": True, "items": len(value) if isinstance(value, (list, dict)) else 1,
+                    "recovery": "Objet conservé : relire avec l'outil correspondant ou la mémoire argumentation_focus."}
+    while len(json.dumps(packed(), ensure_ascii=False)) > budget and len(results) > 1:
+        results.pop(0)
+    if len(json.dumps(packed(), ensure_ascii=False)) > budget:
+        data = {"tool_results": [{k: v for k, v in r.items() if k in {"saved", "published", "error", "rejection_code", "window_id"}}
+            for r in results if isinstance(r, dict)], "guidance": data["guidance"]}
+    return packed()

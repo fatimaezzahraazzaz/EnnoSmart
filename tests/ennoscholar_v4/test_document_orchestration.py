@@ -114,7 +114,9 @@ def test_failed_save_cannot_be_reported_as_complete():
     result = agent(Client(invalid)).run(state)
     assert result["partial"] and result["reason"] == "section_save_failed"
     assert not any(section["drafts"] for section in state["outline"]["sections"])
-    assert result["writing_progress"]["section_status"]["section_test_1"] == "failed"
+    # Set aside with its cause (then the run stops: two sections refused in a row).
+    assert result["writing_progress"]["section_status"]["section_test_1"] == "blocked"
+    assert "Brouillon complet" not in result["answer"]
 
 
 def test_one_section_revision_preserves_other_sections():

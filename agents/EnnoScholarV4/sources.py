@@ -17,23 +17,81 @@ from .network import fetch_public
 BOOLEAN_SYNTAX = re.compile(r'\b(?:OR|AND|NOT)\b|[()"]')
 
 
-def provider_query(provider, query):
-    """Keyword form for providers without boolean search, the model's query otherwise.
+TOKEN = re.compile(r'"[^"]*"|\(|\)|[^\s()"]+')
 
-    Semantic Scholar's relevance search returns nothing for OR/parenthesis
-    expressions, and arXiv turns OR groups into broad disjunctions (generic
-    "neural network" papers). OpenAlex supports the boolean syntax unchanged.
-    The model's concepts and their order are kept; only operators are removed.
-    """
-    if provider == "openalex" or not BOOLEAN_SYNTAX.search(query):
-        return query
-    words = re.sub(r'\b(?:OR|AND|NOT)\b|[()"]', " ", query).split()
+
+def _parse(tokens, position=0):
+    """Boolean expression -> ("OR", [("AND", [item, ...]), ...]); adjacency is AND."""
+    alternatives, current = [], []
+    while position < len(tokens):
+        token = tokens[position]
+        if token == ")":
+            break
+        if token == "(":
+            group, position = _parse(tokens, position+1)
+            current.append(group)
+        elif token == "OR":
+            alternatives.append(current)
+            current = []
+        elif token == "NOT":
+            current.append("NOT")
+        elif token != "AND":
+            current.append(token)
+        position += 1
+    alternatives.append(current)
+    return ("OR", [("AND", items) for items in alternatives if items]), position
+
+
+def _arxiv(node, alternative=False):
+    kind, children = node
+    if kind == "OR":
+        parts = [_arxiv(child, len(children) > 1) for child in children]
+        parts = [p for p in parts if p]
+        return parts[0] if len(parts) == 1 else "(" + " OR ".join(parts) + ")"
+    words = [c for c in children if isinstance(c, str) and c != "NOT" and not c.startswith('"')]
+    if alternative and words and len(words) == len(children):
+        # "deep learning OR neural network": each alternative is one concept.
+        return '"' + " ".join(words) + '"'
+    out = []
+    for child in children:
+        if child == "NOT":
+            out.append("ANDNOT")
+            continue
+        text = _arxiv(child) if isinstance(child, tuple) else child
+        if text:
+            out.append(text if not out or out[-1] == "ANDNOT" else "AND " + text)
+    return " ".join(out)
+
+
+def _keywords(query):
+    # An excluded concept must not become a searched keyword.
+    query = re.sub(r'\bNOT\s+(?:"[^"]*"|\([^)]*\)|\S+)', " ", query)
+    words = re.sub(r'\b(?:OR|AND|NOT)\b|[()"]', " ", query).replace("-", " ").split()
     seen, kept = set(), []
     for word in words:
         if word.casefold() not in seen:
             seen.add(word.casefold())
             kept.append(word)
     return " ".join(kept) or query
+
+
+def provider_query(provider, query):
+    """Translate the model's query to what each provider actually supports.
+
+    OpenAlex: boolean search supported, query unchanged. arXiv: explicit boolean
+    with AND between concepts and OR between quoted alternatives (implicit
+    adjacency would turn OR groups into broad disjunctions, and the plain-query
+    rewrite requires every word). Semantic Scholar: plain ranked relevance search
+    without boolean syntax, where hyphenated terms match nothing: keywords only.
+    """
+    if provider == "openalex":
+        return query
+    if provider == "semantic_scholar":
+        return _keywords(query) if BOOLEAN_SYNTAX.search(query) or "-" in query else query
+    if not BOOLEAN_SYNTAX.search(query):
+        return query
+    tree, _ = _parse(TOKEN.findall(query))
+    return _arxiv(tree) or query
 
 
 def title_key(value):
@@ -49,7 +107,23 @@ class V4ScientificSearch(ScientificSearch):
         self.bibliographic_details = {}
         self.document_locations = {}
 
+    # Semantic Scholar answers 429 to concurrent calls (seen in run 80a58dae):
+    # one request at a time, about one per second, like the arXiv lock.
+    _semantic_lock = __import__("threading").Lock()
+    _semantic_next_request = 0.0
+
     def _get(self, url, *, params=None, headers=None, deadline=None):
+        if "api.semanticscholar.org" in url:
+            with V4ScientificSearch._semantic_lock:
+                delay = max(0, V4ScientificSearch._semantic_next_request-time.monotonic())
+                if deadline is not None and time.monotonic()+delay >= deadline:
+                    raise TimeoutError("Délai de collecte atteint avant disponibilité Semantic Scholar.")
+                time.sleep(delay)
+                V4ScientificSearch._semantic_next_request = time.monotonic()+1.1
+                return self._get_paced(url, params=params, headers=headers, deadline=deadline)
+        return self._get_paced(url, params=params, headers=headers, deadline=deadline)
+
+    def _get_paced(self, url, *, params=None, headers=None, deadline=None):
         if params and getattr(self, "search_offset", 0):
             offset = self.search_offset
             if url.endswith("/paper/search"):

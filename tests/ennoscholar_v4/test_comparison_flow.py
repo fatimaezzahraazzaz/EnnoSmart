@@ -25,7 +25,7 @@ def test_core_covered_works_are_batched_for_comparison_before_exhaustion():
 
 def test_compare_guard_still_rejects_an_unread_work():
     state, toolkit = corpus(2)
-    read_windows(state, toolkit, 2)  # one window each: core not yet covered
+    read_windows(state, toolkit, 1)  # the second work is still unread
     with pytest.raises(ValueError, match="Lectures scientifiques prioritaires"):
         toolkit.execute("compare_articles", {"article_ids": list(toolkit.registry), "research_context": "x",
             "conclusions": None, "relations": None}, time.monotonic()+30)

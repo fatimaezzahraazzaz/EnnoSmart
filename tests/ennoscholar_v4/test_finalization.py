@@ -289,8 +289,8 @@ def test_seventy_notices_68_abstracts_without_finalists_reach_model_and_support_
     result = ScholarChatAgent(ScholarV4Config(api_key="mock", web_search_enabled=False, max_tool_rounds=3), client=client, sources=source).run(data)
     assert not result["partial"] and not result["fallback"]
     assert result["exploration_stop_reason"] != "context_budget"
-    # One broad search keeps a third of the unchanged 80-candidate limit (27), never the whole provider page.
-    assert len(data["articles"]) == 27 and all(a["abstract"] for a in data["articles"].values())
+    # One broad search keeps half of the unchanged 80-candidate limit (40); the rest is reported as not stored.
+    assert len(data["articles"]) == 40 and all(a["abstract"] for a in data["articles"].values())
     assert len(result["primary_article_ids"]) == 3 and all(name in result["answer"] for name in chosen)
     assert all(data["articles"][aid]["analysis_basis"] == "abstract" for aid in result["primary_article_ids"])
     assert all(len(json.dumps(kw["input"], ensure_ascii=False)) <= 85000 for kw in client.calls)

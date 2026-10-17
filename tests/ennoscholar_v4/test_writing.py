@@ -128,7 +128,8 @@ def write(t,section,text,ids,eids,**extra):
 
 def test_multisection_local_revision_preserves_other_paragraphs_and_evidence():
     t,ids=drafted_document(); eids=t.shown_evidence
-    text=f"The two approaches differ in their assumptions [paper_{ids[0].removeprefix('paper_')}].\n\nMMR results require the AeBAD-S protocol [{ids[1]}]."
+    protocol_proof=next(e for e in eids if "AeBAD-S" in t.evidence[e].get("table",{}).get("caption",""))
+    text=f"The two approaches differ in their assumptions [paper_{ids[0].removeprefix('paper_')}].\n\nMMR results require the AeBAD-S protocol [{ids[1]}] [{protocol_proof}]."
     assert write(t,"1",text,ids,eids)["saved"]
     assert write(t,"2",f"These conclusions remain conditional [{ids[1]}].",ids,eids)["saved"]
     other=copy.deepcopy(t.state["outline"]["sections"][1])
@@ -239,7 +240,8 @@ def test_exports_are_saved_version_based_with_figures_tables_and_reference_numbe
     import io,zipfile,fitz
     from agents.EnnoScholarV4.document_export import export_document
     t,ids=drafted_document()
-    write(t,"1",f"Scientific comparison [{ids[1]}].\n\n| Method | AUROC |\n| --- | --- |\n| PatchCore | 71.0 % |\n| MMR | 84.7 % |",ids,t.shown_evidence)
+    proofs={t.evidence[e].get("table",{}).get("row",[""])[0]:e for e in t.shown_evidence if t.evidence[e].get("table",{}).get("number")=="2"}
+    write(t,"1",f"Scientific comparison [{ids[1]}].\n\n| Method | AUROC |\n| --- | --- |\n| PatchCore | 71.0 % [{proofs['PatchCore']}] |\n| MMR | 84.7 % [{proofs['MMR']}] |",ids,t.shown_evidence)
     figures(t,ids)
     version=t.state["document"]["version_id"]
     t.state["messages"].append({"role":"assistant","content":"THIS CHAT IS NOT THE DOCUMENT"})

@@ -17,7 +17,7 @@ from .tools.fulltext import get_fulltext
 from .models import Article, normalize_doi, public_link
 from .store import ArticleStore, compact, interleave_by_provider
 from .tools.outline import OutlineArgs, manage_outline, resolve_section
-from .context import evidence_projection, transmitted_evidence_ids
+from .context import article_projection, evidence_projection, transmitted_evidence_ids
 from .scientific_scope import ScientificScope, temporal_scope, literature_coverage
 from .scientific_visuals import VisualArgs, create_visual
 
@@ -45,6 +45,18 @@ class CollectedArgs(Args):
 
 class ArticlesArgs(Args):
     identifiers: list[str] = Field(min_length=1, max_length=8)
+
+
+CLAIM_FIELDS = Literal["problem", "objective", "method", "technical_mechanism", "equations", "parameters",
+    "experimental_setup", "validation_protocol", "datasets_materials", "contribution", "hypotheses", "results", "metrics",
+    "tables_figures", "comparisons", "limitations", "conditions_of_validity", "generalization", "open_questions", "relevance"]
+
+
+class ClaimsArgs(Args):
+    article_id: str
+    fields: list[CLAIM_FIELDS] | None = Field(max_length=20,
+        description="Champs de la fiche à transmettre en entier ; null = tous les champs.")
+    offset: int = Field(ge=0, description="0, puis next_offset tant que complete=false.")
 
 
 class FulltextArgs(Args):
@@ -303,11 +315,11 @@ class WriteArgs(Args):
 
 
 class NumericClaim(Args):
-    evidence_id: str
-    column: str
-    value: str
-    unit: str
-    metric: str
+    evidence_id: str = Field(description="Preuve d'une ligne de tableau aux cellules vérifiées (table_evidence_index).")
+    column: str = Field(description="En-tête exact de la colonne de la cellule.")
+    value: str = Field(description="Nombre écrit exactement comme dans la cellule (l'unité imprimée dans la cellule peut être omise).")
+    unit: str = Field(description="Unité de la source : imprimée dans la cellule, l'en-tête ou la légende ; \"\" si aucune.")
+    metric: str = Field(description="Libellé exact de la source : en-tête de colonne, libellé de ligne, ou terme de la légende.")
 
 
 class Calculation(Args):
@@ -369,6 +381,7 @@ TOOLS = {
     "search_scientific": (SearchArgs, "Collecter dans les index scientifiques, paginables. Tout est conservé côté backend, une petite fenêtre est proposée par recherche locale."),
     "search_collected_articles": (CollectedArgs, "Parcourir les candidats conservés sans classement scientifique numérique. Exclure les candidats déjà présentés pour des fenêtres complémentaires."),
     "get_article": (ArticlesArgs, "Lire/résoudre des articles par ID, DOI, arXiv, URL ou titre exact. Les notices complètes restent accessibles, finalistes compris."),
+    "get_analysis_claims": (ClaimsArgs, "Relire sans perte la fiche scientifique sauvegardée d'un article : toutes les affirmations des champs demandés (méthodes, paramètres, équations, protocoles, résultats chiffrés, limites…) avec leurs preuves exactes, par pages et sans recherche."),
     "get_fulltext": (FulltextArgs, "Récupérer légalement PDF/HTML paginés, sans confondre disponibilité, extraction et analyse."),
     "analyze_article": (AnalyzeArgs, "read : présenter des passages exacts ciblés. save : enregistrer l'analyse scientifique que TU as produite avec ces preuves. Aucun appel LLM supplémentaire."),
     "find_similar_articles": (SimilarArgs, "Explorer références/citations ou requêtes conceptuelles après compréhension de la contribution du travail source."),
@@ -379,6 +392,98 @@ TOOLS = {
     "update_research_state": (MemoryArgs, "Mémoriser sujet, objectifs, hypothèses, verrous, axes, décisions et plan de la conversation."),
     "finalize_response": (FinalArgs, "Valider et publier TA réponse après contrôle bibliographique. Utiliser [paper_ID] et [ev_ID] pour des liens exacts. Les incertitudes sont conservées."),
 }
+
+
+CITATION_MARKER = re.compile(r"\[(?:paper|ev)_[\w-]+\]")
+TYPOGRAPHY = {"’": "'", "‘": "'", "ʼ": "'", "“": '"', "”": '"', "«": '"', "»": '"', " ": " ", " ": " ", " ": " "}
+
+
+def _comparable(text):
+    """Text without citation markers, emphasis, typographic variants or repeated
+    spaces, with the index of each kept character in the original text."""
+    chars, positions, i = [], [], 0
+    while i < len(text):
+        marker = CITATION_MARKER.match(text, i)
+        if marker:
+            i = marker.end()
+            continue
+        char = TYPOGRAPHY.get(text[i], text[i])
+        if char == "*":
+            i += 1
+            continue
+        if char.isspace():
+            if chars and chars[-1] != " ":
+                chars.append(" ")
+                positions.append(i)
+        else:
+            if chars and chars[-1] == " " and char in ".,;:)":
+                chars.pop(); positions.pop()
+            chars.append(char)
+            positions.append(i)
+        i += 1
+    return "".join(chars), positions
+
+
+def anchor_in_text(statement, text):
+    """Exact span of `text` expressing `statement` up to formatting, else None."""
+    target = _comparable(statement)[0].strip().rstrip(".;:,").strip()
+    if len(target) < 12:
+        return None
+    haystack, positions = _comparable(text)
+    found = haystack.find(target)
+    if found < 0:
+        return None
+    return text[positions[found]:positions[found+len(target)-1]+1]
+
+
+def axes_status(state):
+    """The model's own declared axes next to the families it actually searched.
+
+    A plain lexical overlap between an axis and the searched families/queries;
+    it reports coverage gaps, it never decides relevance.
+    """
+    from .store import query_terms
+    searched = state.get("recent_searches", [])
+    rows = []
+    for axis in state.get("research_state", {}).get("search_axes", [])[:12]:
+        terms = query_terms(axis)
+        hits = [s.get("family") or s.get("query") for s in searched
+            if terms and len(terms & query_terms((s.get("family") or "") + " " + (s.get("query") or ""))) >= max(1, len(terms)//3)]
+        rows.append({"axis": axis[:200], "lexical_match": bool(hits), "families": list(dict.fromkeys(hits))[:3]})
+    return {"axes": rows, "searched_families": list(dict.fromkeys(s.get("family") for s in searched if s.get("family")))[:20],
+        "guidance": "Correspondance lexicale indicative (axes et requêtes peuvent être dans des langues différentes) : "
+            "juge toi-même quels axes restent sans recherche dédiée avant de sélectionner."}
+
+
+def unstored_report(rows, dropped, offset):
+    """Results returned by a provider but not stored: never presented as collected.
+
+    Each provider's next_offset resumes exactly after its last stored rank, so a
+    paginated search_scientific(sources=[provider], offset=next_offset) retrieves them.
+    """
+    if not dropped:
+        return {}
+    ranks, by_provider = {}, {}
+    for row in rows:
+        name = (getattr(row, "sources", None) or ["academic"])[0]
+        ranks[id(row)] = (name, len(by_provider.setdefault(name, [])))
+        by_provider[name].append(row)
+    lost = {}
+    titles = []
+    for row in dropped:
+        # Inserted rows are revalidated copies: match them back by identifiers.
+        key = normalize_doi(row.doi) or row.arxiv_id or row.title
+        original = next((r for r in rows if (normalize_doi(r.doi) or r.arxiv_id or r.title) == key), None)
+        if original is None or id(original) not in ranks:
+            continue
+        name, index = ranks[id(original)]
+        lost[name] = min(lost.get(name, index), index)
+        titles.append({"title": row.title[:160], "year": row.year, "provider": name, "provider_rank": offset+index+1})
+    return {"total": len(dropped), "stored": False,
+        "by_provider": {name: {"from_rank": offset+index+1, "next_offset": offset+index} for name, index in lost.items()},
+        "titles": titles[:15],
+        "guidance": "Résultats renvoyés par les fournisseurs mais NON enregistrés (part du plafond de nouveaux candidats). "
+            "Pour les obtenir : search_scientific(sources=[fournisseur], offset=next_offset) ou une requête plus ciblée."}
 
 
 def definitions(include_document_tools=True):
@@ -424,6 +529,33 @@ class ScholarTools:
 
     def save(self):
         self.store.save()
+
+    def analysis_claims(self, args, page_chars=12000):
+        """Deterministic, lossless pages of a stored card: whole claims with exact proof
+        locators (quotes stay stored and are re-read by evidence_ids when needed)."""
+        from .context import analysis_projection
+        from .argumentation import proof_reference
+        article = self.store.article(args.article_id)
+        projection = analysis_projection(article.analysis, evidence=self.evidence)
+        rows = [{"field": field, "index": i, **claim} for field, value in projection.items()
+            if isinstance(value, list) and value and isinstance(value[0], dict) and (not args.fields or field in args.fields)
+            for i, claim in enumerate(value)]
+        page, proofs, cursor = [], {}, args.offset
+        while cursor < len(rows):
+            row = rows[cursor]
+            extra = {eid: proof_reference(self.evidence[eid]) for eid in row["evidence_ids"]
+                if eid in self.evidence and eid not in proofs and exact_source_valid(self.evidence[eid], self.snapshots)}
+            if page and len(json.dumps([page, proofs, row, extra], ensure_ascii=False)) > page_chars:
+                break
+            page.append(row)
+            proofs.update(extra)
+            cursor += 1
+        return {"article_id": article.id, "title": article.title, "claims": page, "evidence": list(proofs.values()),
+            "offset": args.offset, "next_offset": cursor, "total": len(rows), "complete": cursor >= len(rows),
+            "fields_available": {k: len(v) for k, v in projection.items() if isinstance(v, list) and v and isinstance(v[0], dict)},
+            "guidance": "Fiche permanente complète, transmise par pages ; rien n'est résumé. Citer les evidence_ids des affirmations "
+                "utilisées ; analyze_article(read, evidence_ids) relit une citation exacte. subject=background : travail antérieur "
+                "décrit par cette publication, pas sa contribution."}
 
     def delivered(self, window_ids, *, inputs=()):
         """Acknowledge a completed model request using its actual source payload."""
@@ -471,17 +603,20 @@ class ScholarTools:
         empty = [name for name, row in provider_stats.items() if row.get("returned") == 0]
         # Only works absent from the corpus consume the new-candidate limit;
         # rediscovered or cross-provider duplicates merge into existing records.
-        # Share the unchanged limit: one broad query keeps at most a third of the
-        # remaining room (at least 10), so later targeted axes are not refused.
-        # Interleaving keeps each provider's best-ranked notices within the share.
+        # Share the unchanged limit: one query keeps at most half of the remaining
+        # room (at least 10), so later targeted axes are not refused. Interleaving
+        # keeps each provider's best-ranked notices within the share; the rest is
+        # reported below as NOT stored, with its provider pagination.
         remaining = self.config.max_search_results-self.new_candidates
-        share = min(remaining, max(10, -(-remaining//3)))
+        share = min(remaining, max(10, -(-remaining//2)))
         ids, dropped = self.store.insert(interleave_by_provider(rows), args.family, max_new=share)
         new = self.store.last_new_count
         self.new_candidates += new
         self.turn_article_ids.extend(aid for aid in ids if aid not in self.turn_article_ids)
+        not_stored = unstored_report(rows, self.store.last_dropped, args.offset)
         searches.append({"key": key, "query": args.query, "family": args.family, "article_ids": ids, "warnings": warnings,
-            "new_candidates": new, "limit_dropped": dropped, "providers": provider_stats})
+            "new_candidates": new, "limit_dropped": dropped, "providers": provider_stats,
+            **({"not_stored": {k: v for k, v in not_stored.items() if k != "titles"}} if not_stored else {})})
         proposed = [self.registry[aid] for aid in ids]
         info = {"method": "all_new_candidates", "scores_are_scientific_ranking": False}
         return {**self.store.window(proposed, args.query), "collected": len(ids), "new_candidates": new,
@@ -490,6 +625,8 @@ class ScholarTools:
             "warnings": warnings, "capacity_dropped": dropped, "retrieval": info,
             **({"providers": {name: row.get("returned") for name, row in provider_stats.items()}} if provider_stats else {}),
             **({"empty_providers": empty, "empty_guidance": "Aucun résultat chez ces fournisseurs : reformuler en 4 à 8 mots-clés précis du problème, sans OR ni parenthèses."} if empty else {}),
+            **({"not_stored": not_stored} if not_stored else {}),
+            **({"search_axes_status": axes_status(self.state)} if self.state.get("research_state", {}).get("search_axes") else {}),
             "guidance": "Les articles non présentés restent recherchables. Réorientez les concepts, explorez les voisins ou utilisez offset pour les pages fournisseurs suivantes. Le plafond de nouveaux candidats est partagé par toutes les recherches du message : un limit_per_source modéré préserve les axes suivants."}
 
     def verify(self, ids, deadline, local_only=False):
@@ -584,6 +721,9 @@ class ScholarTools:
                 from .writing_context import writing_context, section_projection
                 ids = list(dict.fromkeys(section["article_ids"] + args.article_ids))
                 return {"section": section_projection(section), "writing_context": writing_context(self.state, self, {**section, "article_ids": ids}, budget=14000),
+                    "current_draft": ({"draft_id": section["drafts"][-1]["id"],
+                        "raw_text": section["drafts"][-1].get("raw_text", section["drafts"][-1]["text"]),
+                        "text_truncated": False} if section.get("drafts") else None),
                     "guidance": "Lis les analyses et leurs passages avec analyze_article. Signale les sources insuffisantes et les limites de comparabilité."}
             if not args.text or not args.article_ids or not args.evidence_ids:
                 raise ValueError("La rédaction sauvegardée exige du texte, des articles et des preuves consultées.")
@@ -593,8 +733,38 @@ class ScholarTools:
             from .scientific_review import validate_number, validate_calculation
             claims = [c.model_dump() for c in args.claims]
             self.claim_union(claims, args.article_ids)
-            if any(c["statement"] not in args.text for c in claims):
-                raise ValueError("Chaque affirmation déclarée doit figurer exactement dans le texte rédigé.")
+            if any(not set(c["evidence_ids"]) <= set(args.evidence_ids) for c in claims):
+                raise ValueError("Chaque affirmation doit utiliser les preuves déclarées du brouillon.")
+            kept, dropped = [], []
+            for claim in claims:
+                if claim["statement"] not in args.text:
+                    # Same sentence, formatted differently: store the exact span of the text.
+                    exact = anchor_in_text(claim["statement"], args.text)
+                    if not exact:
+                        # A citation mapping cannot replace a missing scientific claim:
+                        # require the writer to reconcile the text and the declaration.
+                        dropped.append(claim)
+                        continue
+                    claim["statement"] = exact
+                kept.append(claim)
+            claims = kept
+            if dropped:
+                return {"saved": False, "section_id": section["id"],
+                    "error": "Affirmations déclarées absentes du texte : corriger claims en recopiant les phrases exactes "
+                        "du texte, ou rétablir dans le texte les informations étayées manquantes. "
+                        "Aucun brouillon n'a été remplacé ; aucune affirmation n'est écartée automatiquement.",
+                    "claims_not_in_text": [c["statement"] for c in dropped], "rejected_claims": dropped}
+            from .attribution import MARKER, sentences, check_attribution, attribution_error
+            # Every sentence citing exact evidence becomes a stored claim with those proofs.
+            declared = {c["statement"] for c in claims}
+            for sentence in sentences(args.text):
+                eids = [eid for eid in dict.fromkeys(MARKER.findall(sentence)) if eid in args.evidence_ids]
+                if eids and sentence not in declared and not any(sentence in c["statement"] or c["statement"] in sentence for c in claims):
+                    claims.append({"statement": sentence, "evidence_ids": eids, "origin": "citation_mapping"})
+            self.claim_union(claims, args.article_ids)
+            issues = check_attribution(args.text, args.article_ids, self)
+            if issues:
+                raise ValueError(attribution_error(issues))
             facts = [validate_number(f.model_dump(), self) for f in args.numeric_claims]
             calculations = [validate_calculation(c.model_dump(),self) for c in args.calculations]
             if any(f["evidence_id"] not in args.evidence_ids or f["article_id"] not in args.article_ids for f in facts):
@@ -735,6 +905,8 @@ class ScholarTools:
                      "already_provided": True, "guidance": "Notice et analyses conservées ; lire les preuves avec analyze_article si nécessaire."})
                 self.metadata_detail_ids.add(aid)
             return result
+        if name == "get_analysis_claims":
+            return self.analysis_claims(args)
         if name == "get_fulltext":
             article = self.store.article(args.article_id)
             self.state.setdefault("focus", {})["article_id"] = article.id
@@ -920,7 +1092,16 @@ class ScholarTools:
                 self.claim_union(claims, ids)
                 self.state.setdefault("comparisons", []).append({"article_ids": ids, "context": args.research_context, "conclusions": claims})
             self.state.setdefault("scientific_relations", []).extend(pending)
-            return {"matrix": [{**compact(self.store.article(aid), 900), "reading_status": article_reading_status(self.state, self.registry[aid])} for aid in ids], "research_context": args.research_context,
+            if args.relations is not None:
+                # Saving: the compared window was already transmitted (focus packet or
+                # a previous read); repeating it would double the next request.
+                return {"saved": True, "matrix": [{"id": aid, "title": self.registry[aid].title,
+                        "reading_status": article_reading_status(self.state, self.registry[aid])} for aid in ids],
+                    "research_context": args.research_context,
+                    "comparison_partial": any(article_reading_status(self.state, self.registry[aid])["partial"] for aid in ids),
+                    "scientific_relations": [r for r in self.state.get("scientific_relations", []) if set(r["article_ids"]) <= set(ids) and relation_current(self, r)],
+                    "guidance": "Relations enregistrées. La fenêtre suivante de la comparaison, s'il y en a une, est transmise dans la mémoire."}
+            return {"matrix": [{**article_projection(self.store.article(aid), 900, summary=True), "reading_status": article_reading_status(self.state, self.registry[aid])} for aid in ids], "research_context": args.research_context,
                 "comparison_partial": any(article_reading_status(self.state, self.registry[aid])["partial"] for aid in ids),
                 "packet": bounded_argument_packet(argument_packet(self.state, self, ids, claim_offsets=args.claim_offset_map), min(14000, self.config.max_context_chars//3)),
                 "scientific_relations": [r for r in self.state.get("scientific_relations", []) if set(r["article_ids"]) <= set(ids) and relation_current(self, r)],

@@ -51,14 +51,15 @@ def test_windows_rotate_across_selected_works_instead_of_draining_the_first():
     assert set(counts.values()) == {2}
 
 
-def test_second_window_targets_the_missing_results_and_limits():
+def test_first_window_is_balanced_across_core_dimensions():
+    # Method-heavy prose comes first in the paper; the first window still
+    # brings protocol, numeric results and limits (a work read once is usable).
     state, toolkit = corpus(1)
     order = read_windows(state, toolkit, 2)
-    first, second = order[0][1], order[1][1]
-    assert set(first) == {"Methods"}
-    assert {"Results", "Limitations"} & set(second) or {"Experiments"} & set(second)
+    first = order[0][1]
+    assert {"Methods", "Experiments", "Results", "Limitations"} <= set(first)
     task = state["scientific_reading"]["tasks"][0]
-    assert task["gap_attempted"] and task["windows_read"] == 2
+    assert task["windows_read"] == 2
     order += read_windows(state, toolkit, 2)
     sections = {s for _, window in order for s in window}
     assert {"Methods", "Experiments", "Results", "Limitations"} <= sections

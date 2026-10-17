@@ -167,7 +167,7 @@ def argument_packet(state, toolkit, ids=None, *, claim_offsets=None):
     papers = []
     for aid in ids:
         article = toolkit.registry[aid]
-        projection = analysis_projection(article.analysis)
+        projection = analysis_projection(article.analysis, evidence=toolkit.evidence)
         all_claims = list(claim_entries(projection))
         start = max(0, min(claim_offsets.get(aid, 0), len(all_claims)))
         analysis = {k: v for k, v in projection.items() if not isinstance(v, list) or not v or not isinstance(v[0], dict)}
@@ -217,14 +217,33 @@ def argument_packet(state, toolkit, ids=None, *, claim_offsets=None):
         "guidance": "Comparer les affirmations et leurs conditions exactes, pas une liste de titres. Distinguer source_statement, inference et comparative_inference, les incertitudes, les textes intégraux et les abstracts. Aucune supériorité entre protocoles incompatibles. Les faits projet restent distincts des publications ; aucun verrou CIR n’est présumé."}
 
 
-def bounded_argument_packet(packet, limit=10000):
-    """Balanced, lossless claim windows with stable resumable per-paper offsets."""
+# Exact-proof locators for comparison/blueprint windows: the quotation stays in the
+# evidence store (already validated against each saved claim, and re-checked when a
+# relation is saved); the window carries whole claims and where their proofs are.
+PROOF_REFERENCE_KEYS = ("evidence_id", "article_id", "section", "page_number", "printed_page", "basis", "table_structure_status")
+
+
+def proof_reference(evidence):
+    row = {k: evidence.get(k) for k in PROOF_REFERENCE_KEYS if evidence.get(k) not in (None, "", {})}
+    if isinstance(evidence.get("table"), dict):
+        row["table"] = {k: evidence["table"].get(k) for k in ("number", "caption") if evidence["table"].get(k)}
+    row["exact_quote_stored"] = True
+    return row
+
+
+def bounded_argument_packet(packet, limit=10000, *, proof_mode="exact"):
+    """Balanced, lossless claim windows with stable resumable per-paper offsets.
+    proof_mode="reference" transmits proof locators instead of full quotations."""
     original = copy.deepcopy(packet)
     size = lambda obj: len(json.dumps(obj, ensure_ascii=False))
     result = {k: v for k, v in original.items() if k != "papers"}
     result.update(papers=[], next_claim_offsets={}, omitted_claims={}, transmission_partial=False,
         omitted_article_ids=[], deferred_information={}, other_information_partial=False, blocked_by_context=False)
     result["reading_scope"] = "Targeted scientific sections; never an exhaustive whole-document assertion."
+    if proof_mode == "reference":
+        # Counted before the claims are fitted, so the window limit stays exact.
+        result["proof_mode"] = ("references : citations exactes conservées et déjà validées pour chaque affirmation ; "
+            "citer les evidence_ids, les chiffres sont revérifiés à l'enregistrement")
     # Whole optional records are deferred, never clipped into misleading claims.
     for key in ("existing_blueprint", "outline_sections", "active_paper_index", "project_facts", "research_gaps", "relations"):
         if size(result) <= limit*.20:
@@ -235,6 +254,9 @@ def bounded_argument_packet(packet, limit=10000):
             result[key] = [] if isinstance(value, list) else {}
     streams, proofs, taken = {}, {}, {}
     def add_proof(paper, evidence):
+        if proof_mode == "reference":
+            paper["proofs"].append(proof_reference(evidence))
+            return
         source_keys = {"source_url", "source_version", "document_version_id", "document_sha256", "source_identifiers", "version_status"}
         source = {k: v for k, v in evidence.items() if k in source_keys}
         key = "source_"+hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12]
@@ -250,7 +272,7 @@ def bounded_argument_packet(packet, limit=10000):
         header["analysis"] = {k: v for k, v in paper["analysis"].items() if not isinstance(v, list)}
         header["proofs"] = []
         header["sources"] = {}
-        if paper["proofs"]:
+        if paper["proofs"] and proof_mode == "exact":
             add_proof(header, paper["proofs"][0])
         # Detailed field status stays recoverable in the reading ledger.
         header["reading_status"] = {k: v for k, v in header["reading_status"].items() if k not in {"field_status", "scope"}}

@@ -40,7 +40,13 @@ def source_rows(article):
     # Bootstrap retrieval only, never a claim/relevance classifier. The model can
     # still request any exact passage, query, table or source offset itself.
     rows = passages(article)
-    return choose_passages(rows, " ".join(READING_QUERIES), 0, len(rows))
+    ordered = choose_passages(rows, " ".join(READING_QUERIES), 0, len(rows))
+    # Same reading universe, interleaved by core dimension (methods, protocol,
+    # results/tables, limits): every contiguous window, the first included,
+    # brings results and limits instead of a run of method passages.
+    balanced = gap_passages(ordered, list(DIMENSION_QUERIES), limit=len(ordered))
+    by_id = {r["evidence_id"]: r for r in ordered}
+    return [by_id[eid] for eid in balanced] + [r for r in ordered if r["evidence_id"] not in set(balanced)]
 
 
 def gap_passages(rows, dimensions, limit=6):
@@ -179,7 +185,7 @@ def comparison_ready(task):
         task.get("status") in {"source_unavailable", "needs_review"})
 
 
-def next_task(state, registry, priority_ids=(), required_fields=(), core_only=False):
+def next_task(state, registry, priority_ids=(), required_fields=(), core_only=False, skip_depth_ids=()):
     tasks = state.get("scientific_reading", {}).get("tasks", [])
     active = state.get("scientific_reading", {}).get("active_article_ids")
     # Rotate across the selected works: the next window goes to the work with the
@@ -203,6 +209,9 @@ def next_task(state, registry, priority_ids=(), required_fields=(), core_only=Fa
                 (not article.fulltext.get("text") and not task.get("access_attempted") and
                     (not article.analysis or article.id in priority_ids))):
             eligible.append(task)
+    # Works whose cards covered their core dimensions before this request are not
+    # deepened again unless the consultant asks for a new reading.
+    eligible = [t for t in eligible if not (t.get("core_covered") and t["article_id"] in skip_depth_ids)]
     # core_only: a comparison/state-of-the-art request compares once core
     # dimensions are documented, instead of spending the turn on extra depth.
     return next((t for t in eligible if not t.get("core_covered")),

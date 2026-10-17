@@ -12,12 +12,15 @@ OBSERVED = ('("3D mesh generation" OR "volumetric mesh generation" OR "tetrahedr
     '(deep learning OR neural network OR generative model) finite element mechanical simulation')
 
 
-def test_boolean_query_becomes_keywords_for_semantic_scholar_and_arxiv_only():
+def test_boolean_query_is_translated_per_provider_capability():
     keywords = provider_query("semantic_scholar", OBSERVED)
     assert " OR " not in keywords and "(" not in keywords and '"' not in keywords
     assert keywords.split()[:4] == ["3D", "mesh", "generation", "volumetric"]
     assert keywords.split().count("mesh") == 1 and "tetrahedral" in keywords and "finite" in keywords
-    assert provider_query("arxiv", OBSERVED) == keywords
+    # arXiv keeps the alternatives as alternatives, with explicit AND between concepts.
+    arxiv = provider_query("arxiv", OBSERVED)
+    assert '("3D mesh generation" OR "volumetric mesh generation" OR "tetrahedral mesh generation")' in arxiv
+    assert '("deep learning" OR "neural network" OR "generative model")' in arxiv and " AND " in arxiv
     assert provider_query("openalex", OBSERVED) == OBSERVED
     plain = "learning hexahedral mesh generation polycube"
     assert all(provider_query(p, plain) == plain for p in ("semantic_scholar", "arxiv", "openalex"))
@@ -60,3 +63,20 @@ def test_mocked_sources_without_provider_stats_keep_working():
     result = t.execute("search_scientific", {"query": "mesh", "sources": None, "limit_per_source": 10,
         "offset": 0, "family": "x"}, time.monotonic()+30)
     assert "empty_providers" not in result and result["collected"] == 0
+
+
+def test_semantic_scholar_calls_are_serialized_and_paced(monkeypatch):
+    from agents.EnnoScholarV2.tools.scientific_search import ScientificSearch
+    from agents.EnnoScholarV4 import sources as sources_module
+    client = sources_module.V4ScientificSearch.__new__(sources_module.V4ScientificSearch)
+    client.retries, client.search_offset = 1, 0
+    calls, sleeps = [], []
+    monkeypatch.setattr(ScientificSearch, "_get", lambda self, url, **kw: calls.append(url) or "ok")
+    monkeypatch.setattr(sources_module.time, "sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(sources_module.V4ScientificSearch, "_semantic_next_request", 0.0)
+    url = "https://api.semanticscholar.org/graph/v1/paper/search"
+    assert client._get(url, params={"query": "mesh"}) == "ok"
+    assert client._get(url, params={"query": "mesh"}) == "ok"
+    assert len(calls) == 2 and sleeps and sleeps[-1] > 0.9
+    client._get("https://api.openalex.org/works", params={"search": "mesh"})
+    assert len(sleeps) == 2  # other providers are not paced by this lock

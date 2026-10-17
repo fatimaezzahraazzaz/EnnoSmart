@@ -62,13 +62,11 @@ def test_discovery_request_reviews_unseen_candidates_before_reading_new_finalist
                 "justification": "Surface remeshing only partly related."} for aid in shown[:2]],
                 "finalist_ids": shown[:2], "covered_families": [], "remaining_axes": []}, n)
         if n == 3:
-            assert "Selection review" in kw["instructions"]
-            assert kw["tool_choice"] == "auto" and "automatic_scientific_reading" not in memory
-            decisions = json.loads(kw["input"][-1]["output"])
-            assert set(ids) <= {row["id"] for row in decisions["unreviewed_turn_candidates"]}
-            return call("get_article", {"identifiers": ids[:2]}, n)
-        if n == 4:
-            assert {ids[0], ids[1]} <= set(seen)
+            # Review round: the unseen candidates arrive WITH their abstracts.
+            assert kw["tool_choice"] == {"type": "function", "name": "record_candidate_decisions"}
+            assert "automatic_scientific_reading" not in memory
+            submitted = {row["id"]: row for row in memory["selection_candidates"]}
+            assert set(ids[:3]) <= set(submitted) and all(submitted[aid].get("abstract") for aid in ids[:3])
             return call("record_candidate_decisions", {"decisions": [{"article_id": aid, "decision": "retain",
                 "justification": "Generates volumetric meshes."} for aid in ids[:2]],
                 "finalist_ids": ids[:2], "covered_families": ["volumetric"], "remaining_axes": []}, n)
@@ -82,8 +80,9 @@ def test_discovery_request_reviews_unseen_candidates_before_reading_new_finalist
     assert read and set(read) <= {ids[0], ids[1]}
     assert ids[0] in read and ids[1] in read
     assert ids[3] not in read
-    # Inspect (round 3) then confirm (round 4); the revised decision ends the review.
-    assert [n for n, text in hints.items() if "Selection review" in text] == [3, 4]
+    # One review decision round, no extra get_article round trip.
+    assert result["tool_counts"].get("get_article", 0) == 0
+    assert result["tool_counts"]["record_candidate_decisions"] == 2
 
 
 def test_older_retained_works_are_not_deepened_for_a_new_selection():

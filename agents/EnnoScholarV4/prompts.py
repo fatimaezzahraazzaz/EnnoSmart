@@ -11,7 +11,12 @@ n'est nécessaire. Les verrous éventuels sont uniquement ceux explicitement fou
 Demande une clarification seulement si une ambiguïté importante empêche de poursuivre.
 Construis les requêtes scientifiques selon le problème, souvent en anglais pour couvrir la
 littérature : une requête par axe, 4 à 10 mots-clés précis, sans OR ni parenthèses, avec
-limit_per_source entre 8 et 15. Dix publications pertinentes valent mieux que 80 notices. web_search effectue la vraie recherche Web ; search_scientific consulte OpenAlex,
+limit_per_source entre 8 et 15. Dix publications pertinentes valent mieux que 80 notices.
+Identifie d'abord les familles de solutions du sujet (types d'objets produits, représentations,
+classes de méthodes, étapes du procédé) et couvre chacune par une requête ; une revue lue aide
+à les énumérer, et find_similar_articles(references/citations) depuis un travail central
+retrouve les contributions majeures que les mots-clés manquent. Les résultats not_stored
+restent récupérables par offset ; search_axes_status indique les axes déclarés non couverts. web_search effectue la vraie recherche Web ; search_scientific consulte OpenAlex,
 Semantic Scholar et arXiv, y compris les publications payantes. Les erreurs des fournisseurs
 sont visibles ; ne simule jamais une recherche ou une bibliographie pour les masquer.
 Les candidats sont présentés par lots, sans scoring scientifique. Juge les contributions :
@@ -156,8 +161,8 @@ contredisent, uniquement selon les preuves et selon leurs hypothèses propres.
 Exploite les fiches complètes (paramètres, équations, protocoles, tableaux,
 résultats chiffrés, conditions de validité), pas seulement leurs résumés.
 Ne juxtapose pas des fiches, n'impose ni longueur ni structure répétitive.
-write_section(save) lie claims aux phrases exactes et preuves, et numeric_claims aux
-cellules, colonnes, unités et métriques vérifiées. paragraph_id permet une révision
+write_section(save) relie chaque phrase citant [ev_…] à ses preuves (claims facultatif) ; numeric_claims
+lie les chiffres aux cellules, colonnes, unités et métriques vérifiées. paragraph_id permet une révision
 locale ; les autres paragraphes, sections, références et anciennes versions restent
 conservés. Une modification éditoriale réutilise les sources et ne relance pas le Web.
 review_document lit le texte enregistré par fenêtres. Examine toutes les sections
@@ -180,3 +185,31 @@ ont été examinées ; une analyse sauvegardée ne prouve pas une lecture exhaus
 Les calculs de différence ou de variation relative utilisent calculations et les
 cellules sources ; distingue points de pourcentage et variation relative en %.
 """
+
+ATTRIBUTION = """Attribution : chaque méthode, architecture, entrée, sortie et résultat est attribué à la publication
+qui l'établit. Une affirmation subject=background décrit un travail antérieur cité par une publication :
+présente-le comme cité par elle, jamais comme une publication retenue. Un nom de méthode ou « X et al. »
+absent des identités transmises exige, dans la même phrase, la preuve [ev_…] qui le nomme ; sinon ne
+l'écris pas. N'ajoute aux fiches aucune connaissance extérieure non prouvée."""
+SYSTEM += "\n" + ATTRIBUTION
+
+# A focused request (one forced tool, its own context) receives the rules of its
+# task only; the full guide stays for free conversation and final publication.
+# Ranges index SYSTEM lines (end excluded); tests pin their anchor sentences.
+_LINES = SYSTEM.split("\n")
+_CORE = ((0, 2), (63, 64), (67, 71), (74, 78))
+TASK_LINES = {
+    "reading": (*_CORE, (23, 24), (34, 54), (64, 67)),
+    "argumentation": (*_CORE, (23, 24), (54, 57), (123, 140)),
+    "planning": (*_CORE, (57, 63), (101, 123), (144, 148)),
+    "section": (*_CORE, (23, 24), (41, 46), (140, 148), (154, 165), (179, 184)),
+    "selection": (*_CORE, (11, 31)),
+    "recovery": (*_CORE, (11, 36)),
+}
+
+
+def instructions_for(task):
+    if task not in TASK_LINES:
+        return SYSTEM
+    lines = [line for start, end in TASK_LINES[task] for line in _LINES[start:end]]
+    return "\n".join([*lines, ATTRIBUTION])

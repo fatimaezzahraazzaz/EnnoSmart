@@ -11,10 +11,16 @@ from openai import OpenAI
 
 from .config import ScholarV4Config
 from .models import public_link
-from .prompts import SYSTEM
+from .prompts import SYSTEM, instructions_for
 from .sources import ScientificSources
 from .toolkit import ScholarTools, definitions
 
+# Comparison and blueprint windows per article batch (claims prioritized: methods,
+# mechanisms, results, limits). Not a budget: rounds, tools and costs are unchanged.
+ARGUMENT_WINDOWS = 3
+# Repeated identical successful get_analysis_claims reads per section. Distinct
+# articles, fields and continuation pages remain available within the run budgets.
+CLAIM_READS_PER_SECTION = 4
 
 class StopResearch(RuntimeError):
     def __init__(self, reason):
@@ -103,6 +109,7 @@ class ScholarChatAgent:
         from .argumentation import active_articles, comparison_batches, blueprint_status, project_observation_source, comparison_source_signature
         from .writing_progress import begin_writing, refresh_writing, next_section, confirmed_save, writing_answer
         from .writing_context import section_article_ids
+        from .tools.outline import resolve_section
         self.config.validate()
         config = self.config
         state["current_turn_article_ids"] = []
@@ -130,13 +137,24 @@ class ScholarChatAgent:
 
         toolkit = ScholarTools(state, self.sources or ScientificSources(config=config), config, check, activity)
         request_text = state.get("messages", [{}])[-1].get("content", "")
+        from .instructions import capture_instructions
+        capture_instructions(state, (state.get("messages") or [{}])[-1], toolkit.registry)
+        # Task foci are recomputed from durable receipts (comparison offsets,
+        # saved drafts, writing progress); a focus left by an interrupted run must
+        # not be resent with the next request's context.
+        for stale in ("argumentation_focus", "writing_focus", "writing_planning"):
+            state.pop(stale, None)
         writing = begin_writing(state, request_text)
         named_articles = [aid for aid, article in toolkit.registry.items()
             if len(article.title.split(":", 1)[0].strip()) >= 5 and
             article.title.split(":", 1)[0].strip().casefold() in request_text.casefold()]
         focus_id = state.get("focus", {}).get("article_id")
-        if re.search(r"état\s+de\s+l[’']art|state\s+of\s+(?:the\s+)?art|\barticles\b|\bpublications\b|\bapproches\b", request_text, re.I):
-            # A previous download focus is not a new explicit single-work request.
+        # A previous download/reading focus is a priority only when this message
+        # refers to it ("cet article", "cette méthode", "celui-ci"); a multi-work
+        # request, even misspelled, must not deepen one stale focus alone.
+        if not re.search(r"\b(?:cet|cette|ce)\s+(?:article|publication|papier|travail|étude|etude|méthode|methode|approche|modèle|modele)\b|"
+                r"\bcel(?:ui|le)[- ]ci\b|\bthis\s+(?:paper|article|work|study|method)\b|\bl['’](?:article|étude|etude)\s+(?:actuel|en\s+cours)\b",
+                request_text, re.I):
             focus_id = None
         priority_ids = tuple(dict.fromkeys([*named_articles, *([focus_id] if focus_id else [])]))
         state["current_turn_article_ids"] = list(priority_ids)
@@ -158,11 +176,20 @@ class ScholarChatAgent:
             (detail_request and bool(toolkit.registry)))
         if writing and writing["mode"] == "section":
             automatic_reading = False
+            # A targeted revision owns this run; stale recovery/reading tasks from
+            # an earlier request must not preempt the existing draft and sources.
+            state.pop("automatic_reading_focus", None)
+            state.pop("reading_recovery_focus", None)
+        # Drafting from a saved plan reuses the stored cards: only works whose core
+        # dimensions were never read are read now; depth stays available on demand
+        # (get_analysis_claims, analyze_article) inside each section's own context.
+        writing_continuation = bool(writing and state.get("outline", {}).get("sections"))
         argumentation_requested = automatic_reading and bool(writing or re.search(
             r"état\s+de\s+l[’']art|compar|plan|rédig|redig|rédac", request_text, re.I))
         analysis_round_allowance = 0
         argument_round_allowance = 0
         compared_batches = set()
+        blueprint_windows = [0]
         project_capture_attempted = False
         argumentation_failed = False
         argumentation_attempts = 0
@@ -200,12 +227,39 @@ class ScholarChatAgent:
 
         reading_stopped = False
 
+        def selection_candidates(extra=()):
+            """This message's candidates that can be judged on their abstract:
+            presented ones first, then stored but never presented ones (batch
+            index), in provider order. Consultant-rejected or held works and
+            notices without abstract are not submitted; nothing here is rejected."""
+            held = set(state.get("held_article_ids", []))
+            presented = [aid for aid in toolkit.store.exposed if aid not in exposed_before]
+            ids = list(dict.fromkeys([*extra, *presented, *toolkit.turn_article_ids]))
+            return [aid for aid in ids if aid in toolkit.registry and toolkit.registry[aid].abstract
+                and (aid in extra or aid not in toolkit.store.examined) and aid not in held
+                and toolkit.registry[aid].selection_override is not False]
+
+        def argument_tool_reserve():
+            """Tools kept for comparison and blueprint when the request needs them,
+            so reading cannot spend the whole unchanged tool limit."""
+            return 2 if argumentation_requested and not priority_ids and not writing else 0
+
+        # A question about works whose cards already cover methods, protocol,
+        # results and limits is answered from those cards (and targeted claim
+        # retrieval); deeper reading of their sources needs an explicit request.
+        reuse_cards = not re.search(r"\b(?:relis|relire|relise|approfondi\w*|lis\s+(?:le|la|les|tout)|lire\s+(?:le|la|les|tout)|"
+            r"texte\s+int[ée]gral|nouvelle\s+lecture|re-?read|read\s+(?:the\s+)?full|deeper)\b", request_text, re.I)
+        # Only cards complete before this request are reused this way; works selected
+        # in this request are still read and deepened as before.
+        reused_cards = frozenset(task["article_id"] for task in state.get("scientific_reading", {}).get("tasks", [])
+            if task.get("core_covered")) if reuse_cards else frozenset()
+
         def core_only_now():
             """Depth beyond core dimensions only while the reading allowance and
             the time/token budgets leave room for the requested comparisons."""
             if not argumentation_requested or priority_ids:
                 return False
-            if reading_stopped:
+            if reading_stopped or writing_continuation:
                 return True
             reading_left = config.max_tool_rounds+analysis_round_allowance-exploration_rounds
             used = usage["input_tokens"]+usage["output_tokens"]
@@ -240,15 +294,35 @@ class ScholarChatAgent:
                 toolkit.final_verification_allowed = True
                 activity("research", "finalizing", reason=reason)
 
+        section_failures = {}
+        claim_reads = {}
+        claim_receipts = {}
+        blocked_since_save = [0]
+
         def writing_failure(section_id, message):
+            # Counted per section: the refusal (with what to fix) reaches the model,
+            # which corrects and retries. A section still refused after three
+            # attempts is set aside with its cause; the following sections are
+            # drafted in the same run and the document is never reported complete.
             nonlocal writing_attempts
             writing_attempts += 1
+            section_failures[section_id] = section_failures.get(section_id, 0)+1
             state["document"]["writing_progress"].setdefault("errors", []).append(
                 {"section_id": section_id, "message": message[:500]})
             refresh_writing(state)
-            activity("writing_progress", "failed", section_id=section_id, error=message[:500])
-            if writing_attempts >= 2:
-                raise StopResearch("section_save_failed")
+            activity("writing_progress", "failed", section_id=section_id, error=message[:500],
+                attempt=section_failures[section_id])
+            if section_failures[section_id] >= 3:
+                state["document"]["writing_progress"].setdefault("blocked", {})[section_id] = message[:500]
+                state.pop("writing_focus", None)
+                refresh_writing(state)
+                activity("writing_progress", "blocked", section_id=section_id, error=message[:500])
+                blocked_since_save[0] += 1
+                if blocked_since_save[0] >= 2:
+                    # Two sections in a row refused without any save: a systemic
+                    # cause, not a section-specific one; stop instead of spending
+                    # the budget on every remaining section.
+                    raise StopResearch("section_save_failed")
 
         def request_inputs():
             nonlocal exchange
@@ -257,13 +331,19 @@ class ScholarChatAgent:
             memory_room = max(latest_question_chars+3000, config.finalization_context_chars if phase == "finalization" else 18000)
             exchange = compact_exchange(exchange, toolkit, max(1800, config.max_context_chars-memory_room-512))
             room = config.max_context_chars-len(json.dumps(exchange, ensure_ascii=False))-512
-            budget = min(room, max(latest_question_chars+3000,
-                config.finalization_context_chars if phase == "finalization" else 18000))
+            # The task's memory keeps its own share; the previous protocol exchange
+            # (already stored results) is compacted into what remains, so the same
+            # request limit holds without stopping the turn.
+            budget = min(memory_room, config.max_context_chars-2300)
             supplied = {aid for w in toolkit.store.windows if w["window_id"] in window_ids(exchange) for aid in w["article_ids"]}
             if phase != "finalization":
-                fit_reading_focus(state, toolkit, budget)
+                fit_reading_focus(state, toolkit, min(budget, max(room, 1800)) if state.get("automatic_reading_focus") else budget)
                 exchange = focused_reading_exchange(exchange, state)
-            inputs = model_context(state, toolkit, budget, final=phase == "finalization", supplied_article_ids=supplied) + exchange
+            context = model_context(state, toolkit, budget, final=phase == "finalization", supplied_article_ids=supplied)
+            room = config.max_context_chars-len(json.dumps(context, ensure_ascii=False))-512
+            if len(json.dumps(exchange, ensure_ascii=False)) > room:
+                exchange = compact_exchange(exchange, toolkit, max(1800, room))
+            inputs = context + exchange
             if len(json.dumps(inputs, ensure_ascii=False)) > config.max_context_chars:
                 raise StopResearch("context_budget")
             return inputs
@@ -275,8 +355,8 @@ class ScholarChatAgent:
                 # before long readings; reading then resumes automatically.
                 holding = review_rounds > 0
                 review_rounds = max(0, review_rounds-1)
-                if phase == "exploration" and automatic_reading and selection_ready and not holding and not reading_stopped and not state.get("automatic_reading_focus"):
-                    task = next_task(state, toolkit.registry, priority_ids, requested_fields, core_only=core_only_now())
+                if phase == "exploration" and automatic_reading and selection_ready and not holding and not reading_stopped and not state.get("selection_focus") and not state.get("automatic_reading_focus"):
+                    task = next_task(state, toolkit.registry, priority_ids, requested_fields, core_only=core_only_now(), skip_depth_ids=reused_cards)
                     if task:
                         aid = task["article_id"]
                         article = toolkit.registry[aid]
@@ -285,14 +365,15 @@ class ScholarChatAgent:
                         spent = usage["estimated_cost_usd"]+usage["unreported_reserved_cost_usd"]
                         reason = ("exploration_round_budget" if exploration_rounds >= config.max_tool_rounds+analysis_round_allowance else
                             "deep_analysis_budget" if aid not in prepared_articles and len(prepared_articles) >= config.max_deep_analysis else
-                            "exploration_tool_budget" if total_tools+required_tools > config.max_tool_calls-config.max_finalization_attempts else
+                            "exploration_tool_budget" if total_tools+required_tools > config.max_tool_calls-config.max_finalization_attempts-argument_tool_reserve() else
                             "exploration_time_budget" if deadline-time.monotonic() <= min(config.finalization_reserved_seconds, config.timeout_seconds*.4) else
                             "exploration_token_budget" if used_tokens >= max(0,config.max_tokens-config.finalization_reserved_tokens) else
                             "exploration_cost_budget" if spent >= max(0,config.max_cost_usd-config.finalization_reserved_cost_usd) else None)
                         if reason:
                             reading_budget_reason = reason
                             state["scientific_reading"]["blocked_reason"] = reason
-                            if argumentation_requested and reason in {"exploration_round_budget", "deep_analysis_budget"}:
+                            if argumentation_requested and (reason in {"exploration_round_budget", "deep_analysis_budget"} or
+                                    (reason == "exploration_tool_budget" and comparison_batches(state, toolkit.registry))):
                                 # Reading allowance spent: compare what is already
                                 # documented (partial) instead of skipping comparison.
                                 reading_stopped = True
@@ -302,7 +383,10 @@ class ScholarChatAgent:
                                 finalize(reason)
                         else:
                             if aid not in toolkit.checked_ids and aid not in verification_attempted:
-                                internal_tool("verify_bibliography", {"article_ids": [aid]})
+                                # One registry check for every finalist still unchecked (same tool, fewer calls).
+                                batch = [x for x in dict.fromkeys([aid, *state.get("scientific_reading", {}).get("active_article_ids", [])])
+                                    if x in toolkit.registry and x not in toolkit.checked_ids and x not in verification_attempted][:8]
+                                internal_tool("verify_bibliography", {"article_ids": batch})
                             prepared_articles.add(aid)
                             prepare_reading(state, toolkit, task, internal_tool)
                             activity("scientific_reading", "completed", article_id=aid,
@@ -316,18 +400,21 @@ class ScholarChatAgent:
                             if unchecked:
                                 internal_tool("verify_bibliography", {"article_ids": unchecked[:8]})
                             state["reading_recovery_focus"] = True
-                if (phase == "exploration" and argumentation_requested and not state.get("automatic_reading_focus")
+                if (phase == "exploration" and argumentation_requested and not state.get("automatic_reading_focus") and not state.get("selection_focus")
                         and not state.get("argumentation_focus") and not state.get("reading_recovery_focus") and not argumentation_failed
                         and active_articles(state, toolkit.registry)
                         and (not blueprint_status(state, toolkit.registry)["exists"] or
                             blueprint_status(state, toolkit.registry)["stale"] or
                             not blueprint_status(state, toolkit.registry)["complete"])
-                        and (reading_stopped or next_task(state, toolkit.registry, priority_ids, requested_fields, core_only=core_only_now()) is None)):
+                        and (reading_stopped or next_task(state, toolkit.registry, priority_ids, requested_fields, core_only=core_only_now(), skip_depth_ids=reused_cards) is None)):
                     batches = comparison_batches(state, toolkit.registry)
                     source_id = project_observation_source(state) if not project_capture_attempted else None
                     argument_round_allowance = max(argument_round_allowance, len(batches)*2+bool(source_id))
+                    # A batch already compared on its prioritized windows (same sources)
+                    # is not compared again; its offsets are kept for a deeper request.
                     pending = next((batch for batch in batches if tuple(batch) not in compared_batches and not (
-                        state.get("comparison_reading", {}).get("|".join(batch), {}).get("complete") and
+                        (state.get("comparison_reading", {}).get("|".join(batch), {}).get("complete") or
+                            state.get("comparison_reading", {}).get("|".join(batch), {}).get("windows", 0) >= ARGUMENT_WINDOWS) and
                         state["comparison_reading"]["|".join(batch)].get("source_signature") == comparison_source_signature(toolkit.registry, batch))), None)
                     if source_id:
                         state["argumentation_focus"] = {"stage": "project_facts", "article_ids": [], "source_id": source_id}
@@ -351,7 +438,7 @@ class ScholarChatAgent:
                                 "merge": status["exists"] and not status["stale"]}
                     if state.get("argumentation_focus"):
                         activity("argumentation", "running", stage=state["argumentation_focus"]["stage"])
-                if writing and not holding and not state.get("automatic_reading_focus") and not state.get("argumentation_focus") and not state.get("reading_recovery_focus"):
+                if writing and not holding and not state.get("selection_focus") and not state.get("automatic_reading_focus") and not state.get("argumentation_focus") and not state.get("reading_recovery_focus"):
                     progress = refresh_writing(state)
                     if progress["status"] == "draft_complete":
                         answer = writing_answer(state)
@@ -363,9 +450,13 @@ class ScholarChatAgent:
                         state["writing_planning"] = True
                     elif state.get("outline", {}).get("sections"):
                         section = next_section(state)
+                        if not section and progress.get("blocked"):
+                            # Every other section is saved; only set-aside ones remain.
+                            raise StopResearch("section_blocked")
                         if section:
                             state["writing_focus"] = {"section_id": section["id"],
-                                "article_ids": section_article_ids(state, toolkit.registry, section)}
+                                "article_ids": section_article_ids(state, toolkit.registry, section),
+                                "retrieval_progress": list(claim_receipts.get(section["id"], {}).values())[-8:]}
                             refresh_writing(state)
                             writing_round_allowance = max(writing_round_allowance,
                                 len(writing["target_ids"])*3+4)
@@ -373,14 +464,13 @@ class ScholarChatAgent:
                         and not state.get("selection_focus") and not state.get("automatic_reading_focus")
                         and not state.get("argumentation_focus") and not state.get("writing_focus") and not state.get("writing_planning")
                         and config.max_tool_rounds+analysis_round_allowance+argument_round_allowance+writing_round_allowance-exploration_rounds <= 1):
-                    presented = [aid for aid in toolkit.store.exposed if aid not in exposed_before and aid in toolkit.registry
-                        and aid not in toolkit.store.examined and toolkit.registry[aid].selection_override is not False]
-                    if presented:
+                    candidates = selection_candidates()
+                    if candidates:
                         # The model still judges relevance; the orchestrator only
                         # makes sure the judgment happens while reading is possible.
-                        state["selection_focus"] = {"candidate_ids": presented[:24], "presented_total": len(presented)}
+                        state["selection_focus"] = {"candidate_ids": candidates[:24], "presented_total": len(candidates)}
                         selection_checkpoints += 1
-                        activity("selection_checkpoint", "running", candidates=len(presented))
+                        activity("selection_checkpoint", "running", candidates=len(candidates))
                 used_tokens = usage["input_tokens"]+usage["output_tokens"]
                 spent = usage["estimated_cost_usd"]+usage["unreported_reserved_cost_usd"]
                 if phase == "exploration":
@@ -409,6 +499,8 @@ class ScholarChatAgent:
                     raise ActiveReadingContextError("Le contexte transmis ne contient pas toutes les preuves du focus actif.")
                 focused_argument = state.get("argumentation_focus") if not finalizing and not focused_reading else None
                 focused_section = state.get("writing_focus") if not finalizing and not focused_reading and not focused_argument else None
+                revision_save_due = bool(focused_section and writing["mode"] == "section" and
+                    exploration_rounds+1 >= config.max_tool_rounds+analysis_round_allowance+argument_round_allowance+writing_round_allowance)
                 focused_plan = bool(state.get("writing_planning") and not focused_section and not finalizing)
                 focused_selection = (state.get("selection_focus") if not finalizing and not focused_reading and not focused_argument
                     and not focused_section and not focused_plan else None)
@@ -418,12 +510,21 @@ class ScholarChatAgent:
                     [t for t in definitions() if t["name"] == "analyze_article"] if focused_reading else
                     [t for t in definitions() if t["name"] == argument_tool]
                     if focused_argument else [t for t in definitions() if t["name"] == "manage_outline"]
-                    if focused_plan else [t for t in definitions() if t["name"] in {"write_section", "get_fulltext", "analyze_article"}]
+                    if focused_plan else [t for t in definitions() if t["name"] in {"write_section", "get_fulltext", "analyze_article", "get_analysis_claims"}]
                     if focused_section else [t for t in definitions() if t["name"] == "record_candidate_decisions"]
                     if focused_selection else definitions(document_tools))
+                if revision_save_due:
+                    # Use the final existing round for the requested action. The
+                    # saved draft still passes every ordinary scientific check.
+                    tool_defs = [t for t in tool_defs if t["name"] == "write_section"]
+                    tool_defs[0]["parameters"]["properties"]["action"] = {"type": "string", "enum": ["save"]}
                 if not finalizing and not state.get("reading_recovery_focus") and not focused_reading and not focused_argument and not focused_plan and not focused_section and not focused_selection and config.web_search_enabled and native_calls < config.max_web_calls:
                     tool_defs = [{"type": "web_search", "search_context_size": "low"}, *tool_defs]
-                input_bound = len(json.dumps(inputs, ensure_ascii=False).encode())+len(SYSTEM.encode())+len(json.dumps(tool_defs).encode())
+                # Task-scoped rules: a focused request carries only its task's guide.
+                task_instructions = instructions_for("final" if finalizing else "reading" if focused_reading else
+                    "argumentation" if focused_argument else "section" if focused_section else "planning" if focused_plan else
+                    "selection" if focused_selection else "recovery" if state.get("reading_recovery_focus") else "conversation")
+                input_bound = len(json.dumps(inputs, ensure_ascii=False).encode())+len(task_instructions.encode())+len(json.dumps(tool_defs).encode())
                 reserve = (input_bound*config.input_price+config.max_output_tokens*config.output_price)/1_000_000
                 if tool_defs[0].get("type") == "web_search":
                     reserve += config.web_call_price+config.web_token_reserve*config.input_price/1_000_000
@@ -461,12 +562,14 @@ class ScholarChatAgent:
                         if focused_plan else
                     (f"Rédiger maintenant uniquement la section {focused_section['section_id']} et enregistrer le texte avec write_section(save). "
                         "Exploiter section_drafting.packet : analyses approfondies, blueprint, relations, faits du projet distincts, preuves et transitions. "
-                        "Citer seulement les résultats soutenus par les preuves exactes ; si une preuve essentielle manque, lire le passage ciblé. "
+                        "Citer seulement les résultats soutenus par les preuves exactes ; si un détail de fiche ou une preuve essentielle manque, "
+                        "le récupérer avec get_analysis_claims ou lire le passage ciblé. Appliquer consultant_instructions (consignes, pas des faits). "
                         "Ne pas annoncer la réussite avant le résultat saved=true."
                         if focused_section else
                     (f"Record the consultant's exact project observations from user message {focused_argument['source_id']} with record_project_facts. Use exact_quote verbatim, keep project measurements distinct from publication results, and infer no CIR lock."
                         if focused_argument["stage"] == "project_facts" else
-                        f"Compare articles {focused_argument['article_ids']} using compare_articles. Save only relations supported by exact evidence from both works; pass an empty relations list if no reliable relation can be established."
+                        f"Compare articles {focused_argument['article_ids']} using compare_articles. Save only relations supported by exact evidence from both works; pass an empty relations list if no reliable relation can be established. "
+                        "Compare concretely: methods and mechanisms, protocols and datasets, and results. When both works report values on a comparable metric, put them in experimental_results (value, metric, dataset, conditions); otherwise set comparable_protocols=false and say what differs. A demonstrated result is never merged with a comparative inference."
                         if focused_argument["stage"] == "comparison" else
                         f"Build and save the evidence-linked argument blueprint for articles {focused_argument['article_ids']} now. Set merge={str(focused_argument['merge']).lower()}. Cover each of these analyzed articles through its supported role, and connect registered relations across the overlap. Keep project facts separate and do not invent a CIR lock.")
                     if focused_argument else
@@ -486,11 +589,18 @@ class ScholarChatAgent:
                     input_chars=len(json.dumps(inputs, ensure_ascii=False)),
                     offered_article_ids=list(dict.fromkeys(aid for w in toolkit.store.windows if w["window_id"] in window_ids(inputs) for aid in w["article_ids"])),
                     offered_abstract_ids=list(abstract_deliveries(inputs)), abstract_deliveries=abstract_deliveries(inputs))
+                if revision_save_due:
+                    hint += " Dernier tour disponible : sauvegarder maintenant la section révisée avec write_section(save). " \
+                        "N'inventer aucun détail manquant ; signaler les points encore non vérifiés dans le texte."
+                if focused_section and writing["mode"] == "section":
+                    hint += " Réviser le texte exact de section_drafting.packet.revision.raw_text lorsqu'il existe, " \
+                        "en conservant ses informations étayées. retrieval_progress indique les pages déjà reçues : " \
+                        "ne pas recommencer une lecture complète des fiches. Les alertes des autres sections sont hors de cette révision."
                 stream, response, upstream_started = None, None, False
                 try:
                     upstream_started = True
                     stream = client.with_options(timeout=min(config.request_timeout_seconds, remaining)).responses.create(
-                        model=config.model, instructions=SYSTEM+"\n"+hint,
+                        model=config.model, instructions=task_instructions+"\n"+hint,
                         input=json.loads(json.dumps(inputs)), tools=tool_defs, store=False, stream=True,
                         reasoning={"effort": config.reasoning_effort}, max_output_tokens=config.max_output_tokens,
                         max_tool_calls=1, tool_choice={"type": "function", "name": "finalize_response"} if finalizing else
@@ -498,7 +608,8 @@ class ScholarChatAgent:
                             {"type": "function", "name": argument_tool}
                                 if focused_argument else {"type": "function", "name": "manage_outline"}
                                 if focused_plan else {"type": "function", "name": "record_candidate_decisions"}
-                                if focused_selection else "auto",
+                                if focused_selection else {"type": "function", "name": "write_section"}
+                                if revision_save_due else "auto",
                         parallel_tool_calls=not (finalizing or focused_reading or focused_argument or focused_selection),
                         include=["reasoning.encrypted_content", "web_search_call.action.sources"])
                     for event in stream:
@@ -522,6 +633,11 @@ class ScholarChatAgent:
                 raw = dump(response.usage) if getattr(response, "usage", None) else {}
                 inp, out = raw.get("input_tokens", 0), raw.get("output_tokens", 0)
                 usage["input_tokens"] += inp; usage["output_tokens"] += out
+                # Measured only (no price change): provider-cached input and reasoning tokens.
+                cached = (raw.get("input_tokens_details") or {}).get("cached_tokens", 0) or 0
+                reasoning = (raw.get("output_tokens_details") or {}).get("reasoning_tokens", 0) or 0
+                usage["cached_input_tokens"] = usage.get("cached_input_tokens", 0)+cached
+                usage["reasoning_tokens"] = usage.get("reasoning_tokens", 0)+reasoning
                 outputs = [dump(item) for item in response.output]
                 web_count = sum(item.get("type") == "web_search_call" for item in outputs)
                 native_calls += web_count; total_tools += web_count
@@ -538,7 +654,8 @@ class ScholarChatAgent:
                     raise RuntimeError("ResponsesFailed")
                 toolkit.delivered(window_ids(inputs), inputs=inputs)
                 activity("responses", "completed", phase=phase, input_tokens=inp, output_tokens=out,
-                    estimated_cost_usd=usage["estimated_cost_usd"])
+                    cached_input_tokens=cached, reasoning_tokens=reasoning, instructions_chars=len(task_instructions),
+                    tools_chars=len(json.dumps(tool_defs)), estimated_cost_usd=usage["estimated_cost_usd"])
                 message_citations = []
                 discovered = []
                 for item in outputs:
@@ -612,7 +729,7 @@ class ScholarChatAgent:
                         finalize("exploration_tool_budget")
                     elif name == "finalize_response" and attempts >= config.max_finalization_attempts:
                         result = {"published": False, "rejection_code": "attempt_budget", "error": "Finalization attempts exhausted."}
-                    elif name in {"finalize_response", "compare_articles", "build_argument_blueprint"} and not finalizing and not focused_argument and automatic_reading and selection_ready and not reading_stopped and next_task(state, toolkit.registry, priority_ids, requested_fields, core_only=core_only_now()) is not None:
+                    elif name in {"finalize_response", "compare_articles", "build_argument_blueprint"} and not finalizing and not focused_argument and automatic_reading and selection_ready and not reading_stopped and next_task(state, toolkit.registry, priority_ids, requested_fields, core_only=core_only_now(), skip_depth_ids=reused_cards) is not None:
                         # Covers parallel selection+publication calls in the same
                         # response, before the next scheduling loop can run.
                         total_tools += 1
@@ -623,6 +740,7 @@ class ScholarChatAgent:
                         total_tools += 1
                         counts[name] = counts.get(name, 0)+1
                         if name == "finalize_response": attempts += 1
+                        arguments = {}
                         try:
                             arguments = json.loads(call["arguments"])
                             if focused_reading and (name != "analyze_article" or arguments.get("action") not in {"read", "save"} or
@@ -641,12 +759,36 @@ class ScholarChatAgent:
                                 raise ValueError("Créer et sauvegarder le plan avant la rédaction.")
                             if focused_selection and state.get("selection_focus") and name != "record_candidate_decisions":
                                 raise ValueError("Enregistrer maintenant la sélection des candidats présentés.")
-                            if focused_section and (name not in {"write_section", "get_fulltext", "analyze_article"} or
-                                    (name == "write_section" and (arguments.get("action") != "save" or
+                            if focused_section and name == "write_section" and arguments.get("section_id"):
+                                # "2" or the title designate the same section as its stable id.
+                                try:
+                                    arguments["section_id"] = resolve_section(state, arguments["section_id"])["id"]
+                                except ValueError:
+                                    pass
+                            if focused_section and name == "get_analysis_claims":
+                                from .toolkit import ClaimsArgs
+                                claim_args = ClaimsArgs.model_validate(arguments)
+                                claim_key = (focused_section["section_id"], toolkit.store.article(claim_args.article_id).id,
+                                    tuple(sorted(set(claim_args.fields or []))), claim_args.offset)
+                                if claim_reads.get(claim_key, 0) >= CLAIM_READS_PER_SECTION:
+                                    raise ValueError("Cette page de fiche a déjà été relue pour cette section : utiliser next_offset, "
+                                        "d'autres champs ou un autre article pour récupérer les preuves manquantes, "
+                                        "ou rédiger avec les affirmations reçues.")
+                            if focused_section and (name not in {"write_section", "get_fulltext", "analyze_article", "get_analysis_claims"} or
+                                    (name == "write_section" and (arguments.get("action") not in {"read", "save"} or
                                     arguments.get("section_id") != focused_section["section_id"]))):
                                 raise ValueError("Sauvegarder uniquement la section en cours ou lire sa source ciblée.")
-                            activity(name, "running", action=arguments.get("action"), query=arguments.get("query"), family=arguments.get("family"))
+                            activity(name, "running", action=arguments.get("action"), query=arguments.get("query"), family=arguments.get("family"),
+                                **({"article_id": arguments.get("article_id"), "fields": arguments.get("fields"),
+                                    "offset": arguments.get("offset"), "section_id": focused_section["section_id"] if focused_section else None}
+                                    if name == "get_analysis_claims" else {}))
                             result = toolkit.execute(name, arguments, deadline)
+                            if focused_section and name == "get_analysis_claims":
+                                claim_reads[claim_key] = claim_reads.get(claim_key, 0)+1
+                                claim_receipts.setdefault(focused_section["section_id"], {})[claim_key] = {
+                                    "article_id": result["article_id"], "fields": claim_args.fields,
+                                    "offset": result["offset"], "next_offset": result["next_offset"],
+                                    "complete": result["complete"], "claims_received": len(result["claims"])}
                             if focused_reading and arguments.get("action") == "read":
                                 fresh = extend_reading_focus(state, toolkit, result.get("reading", []))
                                 task = next(t for t in state["scientific_reading"]["tasks"] if t["article_id"] == focused_reading["article_id"])
@@ -661,13 +803,14 @@ class ScholarChatAgent:
                                 refresh_writing(state)
                                 planning_attempts = 0
                                 activity("writing_progress", "completed", stage="plan", approval_required=True)
-                            if focused_section and name == "write_section":
+                            if focused_section and name == "write_section" and arguments.get("action") == "save":
                                 if not result.get("saved"):
                                     writing_failure(focused_section["section_id"], result.get("error", "Sauvegarde refusée."))
                                 else:
                                     confirmed_save(state, focused_section["section_id"], result["draft_id"], result["text"])
                                     state.pop("writing_focus", None)
                                     writing_attempts = 0
+                                    blocked_since_save[0] = 0
                                     activity("writing_progress", "completed", section_id=focused_section["section_id"],
                                         draft_id=result["draft_id"], document_version_id=result["document_version_id"])
                             if name == "get_fulltext" and automatic_reading:
@@ -690,8 +833,16 @@ class ScholarChatAgent:
                                     review_rounds = 0
                                 elif result.get("selection_guidance"):
                                     selection_reviewed = True
-                                    # Inspect notices, then confirm: at most two rounds.
-                                    review_rounds = 2
+                                    finalists = result.get("evaluation", {}).get("recommended_article_ids", [])
+                                    unseen = [aid for aid in selection_candidates() if aid not in finalists]
+                                    if unseen:
+                                        # Review with the abstracts in hand: one decision round,
+                                        # no title-only list that needs extra get_article calls.
+                                        state["selection_focus"] = {"candidate_ids": [*finalists, *unseen][:24],
+                                            "presented_total": len(finalists)+len(unseen), "review": True}
+                                    else:
+                                        # Only access questions remain: inspect, then confirm.
+                                        review_rounds = 2
                                     activity("selection_review", "running",
                                         unreviewed=result.get("unreviewed_turn_candidates_total", 0),
                                         without_fulltext=len(result.get("finalists_without_known_fulltext", [])))
@@ -713,14 +864,26 @@ class ScholarChatAgent:
                                 more = bool(delivered_packet.get("transmission_partial"))
                                 offsets = delivered_packet.get("next_claim_offsets", {})
                                 advanced = offsets != focused_argument.get("claim_offsets", {}) and not delivered_packet.get("blocked_by_context")
+                                windows_done = False
                                 if focused_argument["stage"] == "comparison":
                                     key = "|".join(focused_argument["article_ids"])
-                                    state["comparison_reading"][key].update(claim_offsets=offsets, complete=not more)
-                                    if not more:
+                                    receipt = state["comparison_reading"][key]
+                                    receipt.update(claim_offsets=offsets, complete=not more, windows=receipt.get("windows", 0)+1)
+                                    # Windows put methods, mechanisms, results and limits first; the
+                                    # rest of each card stays retrievable (get_analysis_claims) and
+                                    # resumable from these offsets, instead of one round per few claims.
+                                    windows_done = more and receipt["windows"] >= ARGUMENT_WINDOWS
+                                    if windows_done:
+                                        receipt["coverage"] = "prioritized_windows"
+                                    if not more or windows_done:
                                         compared_batches.add(tuple(focused_argument["article_ids"]))
                                 elif result.get("saved"):
                                     activity("argumentation", "completed", stage="blueprint", version=result.get("version"))
-                                if more and advanced:
+                                    blueprint_windows[0] += 1
+                                    windows_done = more and blueprint_windows[0] >= ARGUMENT_WINDOWS
+                                if windows_done:
+                                    state.pop("argumentation_focus", None)
+                                elif more and advanced:
                                     focused_argument["claim_offsets"] = offsets
                                     if focused_argument["stage"] == "blueprint":
                                         focused_argument["merge"] = True
@@ -735,7 +898,9 @@ class ScholarChatAgent:
                                 finalize("publication_refused")
                             else:
                                 activity(name, "completed", found=result.get("collected", len(result["articles"]) if isinstance(result.get("articles"), list) else None),
-                                    article_id=arguments.get("article_id"), refused=result.get("refused"), empty_providers=result.get("empty_providers"))
+                                    article_id=arguments.get("article_id"), refused=result.get("refused"), empty_providers=result.get("empty_providers"),
+                                    **({"offset": result["offset"], "next_offset": result["next_offset"], "complete": result["complete"],
+                                        "claims_returned": len(result["claims"])} if name == "get_analysis_claims" else {}))
                                 if focused_reading and result.get("saved"):
                                     activity("scientific_reading", "completed", article_id=focused_reading["article_id"],
                                         reading_status=next((t["status"] for t in state["scientific_reading"]["tasks"] if t["article_id"] == focused_reading["article_id"]), "partial"))
@@ -765,7 +930,7 @@ class ScholarChatAgent:
                             if name == "finalize_response":
                                 state.setdefault("finalization_attempts", []).append({"published": False, "rejection_code": "validation_arguments", "error": message})
                                 finalize("publication_refused")
-                            if focused_section and name == "write_section":
+                            if focused_section and name == "write_section" and arguments.get("action") != "read":
                                 writing_failure(focused_section["section_id"], message)
                             if focused_plan:
                                 planning_attempts += 1
@@ -798,7 +963,19 @@ class ScholarChatAgent:
             partial = True
         toolkit.save()
         if writing:
-            answer = writing_answer(state)
+            answer = writing_answer(state, stop_reason)
+            # Transversal attribution audit of every saved section (deterministic, no
+            # model call): earlier drafts are reported, never rewritten automatically.
+            from .attribution import audit_document
+            audit = audit_document(state, toolkit)
+            state["document"]["attribution_audit"] = audit
+            if audit:
+                titles = list(dict.fromkeys(issue["section_title"] for issue in audit))
+                answer += (f"\n\nContrôle d’attribution : {len(audit)} phrase(s) à vérifier dans "
+                    + ", ".join(f"« {title} »" for title in titles[:4]) + " — "
+                    + "; ".join(f"{', '.join(issue['names'])}" for issue in audit[:4])
+                    + ". Ces noms n’identifient aucune publication de la section et ne figurent dans aucune preuve citée "
+                    "dans la phrase. Demandez « révise la section … » pour les corriger.")
             partial = refresh_writing(state)["status"] != "draft_complete"
             final_result = {"answer": answer, "coverage_sufficient": False, "fallback": partial}
         if not answer:

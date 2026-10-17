@@ -13,7 +13,8 @@ REQUEST = "Quels sont les travaux les plus pertinents sur la génération de mai
 
 
 def scenario():
-    papers = [long_paper(i).model_copy(update={"id": "", "selected": False}) for i in range(3)]
+    papers = [long_paper(i).model_copy(update={"id": "", "selected": False,
+        "abstract": f"Learned volumetric mesh generator {i} with experiments."}) for i in range(3)]
     sources = Mock()
     sources.search.return_value = (papers, [])
     sources.verify.side_effect = lambda p, deadline: p.model_copy(update={"verified": True})

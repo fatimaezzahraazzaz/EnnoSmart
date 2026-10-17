@@ -109,7 +109,8 @@ def test_failed_priorities_trigger_local_candidate_review_before_deep_comparison
     assert result["publication_accepted"], (result["reason"], result["tool_counts"], result["finalization_refusals"])
     assert len(recoveries) == 2 and comparisons
     assert set(read) == set(ids)
-    assert result["tool_counts"]["verify_bibliography"] == 4
+    # Finalists are verified in grouped calls: fewer tools, every work still checked.
+    assert result["tool_counts"]["verify_bibliography"] <= 4 and toolkit.sources.verify.call_count >= 4
     first_verify = next(i for i,e in enumerate(events) if e["tool"] == "verify_bibliography" and e["status"] == "completed")
     first_read = next(i for i,e in enumerate(events) if e["tool"] == "get_fulltext")
     assert first_verify < first_read

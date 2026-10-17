@@ -83,6 +83,7 @@ class ArticleStore:
         """max_new bounds NEW records only; notices of known works always merge."""
         ids, dropped = [], 0
         self.last_new_count = 0
+        self.last_dropped = []
         for raw in incoming:
             row = Article.model_validate(raw.durable() if hasattr(raw, "durable") else raw.model_dump() if hasattr(raw, "model_dump") else raw)
             row.doi = normalize_doi(row.doi)
@@ -117,6 +118,7 @@ class ArticleStore:
             else:
                 if len(self.registry) >= self.maximum or (max_new is not None and self.last_new_count >= max_new):
                     dropped += 1
+                    self.last_dropped.append(row)
                     continue
                 self.last_new_count += 1
                 stable = row.doi or row.arxiv_id or "|".join([row.title, str(row.year), *row.authors, row.url])

@@ -25,7 +25,7 @@ def test_broad_queries_cannot_starve_the_hexahedral_axis():
     t = tools()
     t.sources.search.side_effect = [(rows("a", 40), []), (rows("b", 40), []), (rows("c", 10), []), (rows("hex", 12), [])]
     counts = [search(t, q)["new_candidates"] for q in ("broad one", "broad two", "quality", "hexahedral polycube")]
-    assert counts[0] == 27 and counts[1] == 18
+    assert counts[0] == 40 and counts[1] == 20
     assert counts[3] > 0 and t.new_candidates <= t.config.max_search_results == 80
     assert not t.state.get("refused_searches")
 

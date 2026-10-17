@@ -55,8 +55,8 @@ def test_titles_beyond_the_window_are_indexed_not_presented():
     ids = ids_by_title(t)
     indexed = {row["id"] for row in result["batch_index"]}
     assert {ids["DL-Polycube"], ids["DDPM-Polycube"]} <= indexed
-    # The broad search keeps its share (27 of 29) of the new-candidate limit.
-    assert result["batch_index_total"] == 27-len(result["articles"])
+    # 29 results fit in one search's share (half of the remaining limit).
+    assert result["batch_index_total"] == 29-len(result["articles"])
     assert all("abstract" not in row for row in result["batch_index"])
     t.delivered([result["window_id"]])
     assert ids["DL-Polycube"] not in t.store.exposed
