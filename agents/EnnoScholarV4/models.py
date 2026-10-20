@@ -70,6 +70,31 @@ class ChatRequest(BaseModel):
 class SessionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str = Field(default="Nouvelle conversation", min_length=1, max_length=160)
+    mode: Literal["express", "diagnostic_linked"] = "express"
+    project_id: int | None = Field(default=None, gt=0)
+    diagnostic_id: int | None = Field(default=None, gt=0)
+    source_version: str | None = Field(default=None, max_length=64)
+    selected_lock_ids: list[str] = Field(default_factory=list, max_length=100)
+    confirmed: bool = False
+    allow_unkept: bool = False
+
+    @model_validator(mode="after")
+    def linked_selection(self):
+        if self.mode == "diagnostic_linked" and not (self.project_id and self.diagnostic_id and self.source_version and self.selected_lock_ids and self.confirmed):
+            raise ValueError("Confirmer le projet, la version du diagnostic et les verrous avant création.")
+        if self.mode == "express" and (self.project_id or self.diagnostic_id or self.selected_lock_ids):
+            raise ValueError("Une conversation Express ne possède pas de diagnostic lié.")
+        return self
+
+
+class DiagnosticContextUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: Literal["scope", "refresh", "selection"]
+    expected_revision: int = Field(ge=1)
+    lock_ids: list[str] = Field(min_length=1, max_length=100)
+    source_version: str | None = Field(default=None, max_length=64)
+    allow_unkept: bool = False
+    confirmed: bool = False
 
 
 class SelectionRequest(BaseModel):

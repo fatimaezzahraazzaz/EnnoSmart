@@ -1,0 +1,16 @@
+{
+  "version": "EXEMPLE-NON-ACTIF — à valider par l'administrateur",
+  "note": "Valeurs proposées par l'audit 128698bb (section G) pour huit consultants. Aucune n'est active : ENNOSCHOLAR_V4_BUDGET_POLICY_FILE doit pointer vers une copie validée, et ENNOSCHOLAR_V4_FINANCE_ENABLED=true après la migration. null = pas de plafond à ce niveau (dépense enregistrée seulement). Montants en USD estimés au catalogue tarifaire, pas des montants facturés.",
+  "alert_ratios": [0.7, 0.9],
+  "levels": {
+    "organization": {"total": null, "day": null, "month": 240.0},
+    "consultant": {"total": null, "day": 5.0, "month": 30.0},
+    "dossier": {"total": 10.0, "day": null, "month": null},
+    "task": {"total": 4.0, "day": null, "month": null}
+  },
+  "overrides": {
+    "consultant": {},
+    "dossier": {},
+    "task": {}
+  }
+}

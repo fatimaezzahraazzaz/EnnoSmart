@@ -87,10 +87,11 @@ def test_related_work_claims_are_tagged_background_but_own_contributions_are_not
     section = t.state["outline"]["sections"][0]
     t.state["writing_focus"] = {"section_id": section["id"], "article_ids": ids}
     packet = memory_of({"input": model_context(t.state, t, 18000)})["section_drafting"]["packet"]
-    identities = {row["article_id"]: row for row in packet["identities"]}
+    # Section dossier: each source carries its identity; card claims travel with their proofs.
+    identities = {row["id"]: row for row in packet["sources"]}
     assert identities[ids[0]]["short_name"] == "TemplateNet" and identities[ids[0]]["first_author"] == "Qian"
     assert identities[ids[1]]["first_author"] == "Pelissier"
-    problem = next(a for a in packet["articles"] if a["id"] == ids[0])["analysis"]["problem"][0]
+    problem = next(c for c in packet["proof_backed_claims"] if c["article_id"] == ids[0] and c["field"] == "problem")
     assert problem["subject"] == "background"
 
 
@@ -201,15 +202,16 @@ def test_repeated_identical_claim_retrieval_is_bounded_and_the_section_is_still_
     def model(n, kw):
         offered.append(sorted(tool["name"] for tool in kw["tools"]))
         outputs.extend(item["output"] for item in kw["input"] if item.get("type") == "function_call_output")
+        if kw.get("tool_choice") == {"type": "function", "name": "write_section"}:
+            return Model(ids, [])(n, kw)
         if n <= 6:  # repeats the exact same four pages, without advancing
             return [{"type": "function_call", "name": "get_analysis_claims", "call_id": f"c{n}_{k}",
                 "arguments": json.dumps({"article_id": ids[k], "fields": None, "offset": 0})} for k in range(4)]
         return Model(ids, [])(n, kw)
     result = agent(Client(model)).run(t.state)
     assert not result["partial"], result["reason"]
-    assert result["tool_counts"]["get_analysis_claims"] == 24  # 16 executed, then 8 duplicate refusals
-    assert all("get_analysis_claims" in names for names in offered)
-    assert any("Cette page de fiche a déjà été relue" in output for output in outputs)
+    assert result["tool_counts"]["get_analysis_claims"] <= 16
+    assert offered[-1] == ["write_section"]
     assert CLAIM_READS_PER_SECTION == 4
 
 
@@ -247,7 +249,7 @@ def test_a_follow_up_question_reuses_existing_cards_and_an_explicit_reread_still
     assert "analyze_article" in follow_up("Relis le texte intégral de Work1 pour approfondir sa méthode.")
 
 
-def test_cached_and_reasoning_tokens_are_recorded_without_changing_the_price():
+def test_cached_and_reasoning_tokens_are_priced_by_category_without_counting_reasoning_twice():
     t, ids = rich_corpus(4)
     seven_section_plan(t, ids)
     seed_argumentation(t, ids)
@@ -256,12 +258,21 @@ def test_cached_and_reasoning_tokens_are_recorded_without_changing_the_price():
 
     class DetailedClient(Client):
         def create(self, **kw):
+            if kw.get("tool_choice") == {"type": "function", "name": "set_turn_goal"}:
+                return super().create(**kw)
             self.calls.append(kw)
             return Stream(NS(output=self.callback(len(self.calls), kw), output_text="", status="completed",
                 usage={"input_tokens": 1000, "output_tokens": 200, "input_tokens_details": {"cached_tokens": 600},
                     "output_tokens_details": {"reasoning_tokens": 150}}))
     result = agent(DetailedClient(model)).run(t.state)
     usage = result["usage"]
-    assert usage["cached_input_tokens"] == 600*result["rounds"] and usage["reasoning_tokens"] == 150*result["rounds"]
-    expected = result["rounds"]*(1000*CONFIG.input_price+200*CONFIG.output_price)/1e6
+    # The understanding call of the fake (10 input, 5 output tokens, no cache) is counted too.
+    # Prices come from the versioned catalogue (audit 128698bb: cache reads were priced as
+    # ordinary input). Reasoning tokens are inside output tokens and are not added again.
+    from agents.EnnoScholarV4.pricing import resolve
+    price = resolve(CONFIG)
+    usage = {**usage, "estimated_cost_usd": usage["estimated_cost_usd"]-result["understanding_calls"]*(10*price.input+5*price.output)/1e6}
+    completed_calls = result["timings"]["llm_calls"]-result["understanding_calls"]
+    assert usage["cached_input_tokens"] == 600*completed_calls and usage["reasoning_tokens"] == 150*completed_calls
+    expected = completed_calls*(400*price.input+600*price.cache_read+200*price.output)/1e6
     assert abs(usage["estimated_cost_usd"]-expected) < 1e-9

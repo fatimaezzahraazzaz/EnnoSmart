@@ -36,7 +36,8 @@ def test_discovery_request_reviews_unseen_candidates_before_reading_new_finalist
     seen, read, hints = {}, [], {}
 
     def respond(n, kw):
-        hints[n] = kw["instructions"]
+        # The round instruction is the last input item (stable instructions for the cache).
+        hints[n] = kw["instructions"] + " " + kw["input"][-1].get("content", "")
         for item in kw["input"]:
             if item.get("type") == "function_call_output":
                 out = json.loads(item["output"])

@@ -51,25 +51,36 @@ def export_document(state,version_id,fmt):
     figures=[figure for figure in revision.get('figures',[]) if figure['section_id'] in drafted_ids]
     ids=list(dict.fromkeys([aid for _,s in sections for d in s.get('drafts',[])[-1:] for aid in d['article_ids']]+[
         state['evidence'][eid]['article_id'] for f in figures for eid in f['evidence_ids']]))
-    evidence_ids=list(dict.fromkeys([eid for _,s in sections for d in s.get('drafts',[])[-1:] for eid in d['evidence_ids']]+[eid for f in figures for eid in f['evidence_ids']]))
     for aid in ids:
         if aid not in state.get('articles',{}):
             raise ValueError("Référence de la version enregistrée absente du stockage.")
-    references={aid:i+1 for i,aid in enumerate(ids)}; proof_numbers={eid:i+1 for i,eid in enumerate(evidence_ids)}
-    def citations(text):
-        for aid,num in references.items():
-            text=text.replace('['+aid+']',f'[{num}]')
-        for eid,num in proof_numbers.items():
-            text=text.replace('['+eid+']',f'[P{num}]')
-        if re.search(r'\[(?:paper_|ev_)[\w-]+\]',text):
-            raise ValueError("Citation non résolue dans la version exportée.")
-        return text
+    # Same rendering as the workspace, from the drafts' raw identifiers: one heading per
+    # section, grouped numbered citations, known metadata only.
+    from .citation_render import render_manuscript, format_reference
+    metadata={aid:{**state['articles'].get(aid,{}),**revision.get('article_metadata',{}).get(aid,{})} for aid in state.get('articles',{})}
+    rendered=render_manuscript(state,[s for _,s in sections],metadata,state.get('evidence',{}))
+    references={row['article_id']:row['number'] for row in rendered['references']}
+    proof_numbers={row['evidence_id']:row['number'] for row in rendered['proofs']}
+    for aid in ids:
+        if aid not in references:
+            references[aid]=len(references)+1
+            rendered['references'].append({'number':references[aid],'article_id':aid,'text':format_reference(metadata[aid])})
+    for figure in figures:
+        for eid in figure['evidence_ids']:
+            if eid not in proof_numbers:
+                proof_numbers[eid]=f"P{len(proof_numbers)+1}"
+                e=state['evidence'][eid]
+                rendered['proofs'].append({'number':proof_numbers[eid],'evidence_id':eid,'reference':references.get(e['article_id']),
+                    'section':e.get('section'),'page_number':e.get('page_number'),'quote':e.get('exact_quote','')[:500]})
     items=[('title',outline.get('title',"État de l'art scientifique"))]
     figure_number=0
     for num,section in sections:
         title=re.sub(r'^\s*\d+[.)]\s+','',section['title'])
         items.append(('heading',(1,f"{num} {title}")))
-        for kind,value in blocks(citations(section['drafts'][-1]['text'])):
+        body=rendered['sections'][section['id']]
+        if re.search(r'\[(?:paper_|ev_|projet:)[\w-]+\]',body):
+            raise ValueError("Citation non résolue dans la version exportée.")
+        for kind,value in blocks(body):
             if kind=='heading':
                 value=(min(4,value[0]+1),value[1])
             items.append((kind,value))
@@ -82,15 +93,21 @@ def export_document(state,version_id,fmt):
                     caption+=' Schéma ou graphique de synthèse généré à partir des sources citées.'
                 else:
                     caption+=f" Source : {figure['source_url']} ; {figure['source_version']} ; licence {figure['license_url']}."
-                caption+=' Preuves : '+', '.join(f'P{proof_numbers[e]}' for e in figure['evidence_ids'])+'.'
+                caption+=' Preuves : '+', '.join(proof_numbers[e] for e in figure['evidence_ids'])+'.'
                 items.append(('caption',caption))
     items.append(('heading',(1,'Références bibliographiques')))
-    for aid,num in references.items():
-        a=revision.get('article_metadata',{}).get(aid) or state['articles'][aid]; url='https://doi.org/'+a['doi'] if a.get('doi') else 'https://arxiv.org/abs/'+a['arxiv_id'] if a.get('arxiv_id') else a.get('url','')
-        items.append(('paragraph',f"[{num}] {', '.join(a.get('authors',[])) or 'Auteurs non confirmés'}. {a.get('year') or 'Année non confirmée'}. {a['title']}. {a.get('journal','')}. {url}"))
+    for row in sorted(rendered['references'],key=lambda r:r['number']):
+        items.append(('paragraph',f"[{row['number']}] {row['text']}"))
+    if rendered['project_sources']:
+        items.append(('heading',(1,'Sources du projet (EnnoDiagnostic)')))
+        for row in rendered['project_sources']:
+            location=' ; '.join(str(v) for v in (row.get('document_name'),row.get('section_title'),
+                f"p. {row['page']}" if row.get('page') else None) if v)
+            note=f" (localisateur du diagnostic : {row['stored_section_title']})" if row.get('stored_section_title') else ''
+            items.append(('paragraph',f"{row['number']}. {location}{note}. Extrait : « {row['quote']} »"))
     items.append(('heading',(1,'Traçabilité des preuves')))
-    for eid,num in proof_numbers.items():
-        e=state.get('evidence',{}).get(eid)
+    for row in rendered['proofs']:
+        e=state.get('evidence',{}).get(row['evidence_id'])
         if not e:
             raise ValueError('Preuve enregistrée absente du stockage.')
         location=e.get('section') or 'Section non identifiée'
@@ -100,7 +117,7 @@ def export_document(state,version_id,fmt):
             location+=f" ; page imprimée {e['printed_page']}"
         quote=e['exact_quote'][:500]
         label='Extrait exact abrégé' if len(e['exact_quote'])>500 else 'Extrait exact'
-        items.append(('paragraph',f"P{num}. Référence [{references[e['article_id']]}] ; {e.get('source_version','version inconnue')} ; {location} ; {e['source_url']}. {label} : « {quote} »"))
+        items.append(('paragraph',f"{row['number']}. Référence [{references[e['article_id']]}] ; {e.get('source_version','version inconnue')} ; {location} ; {e['source_url']}. {label} : « {quote} »"))
     return render_docx(items) if fmt=='docx' else render_pdf(items)
 
 

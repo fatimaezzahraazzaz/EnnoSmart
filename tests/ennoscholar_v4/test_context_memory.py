@@ -6,6 +6,7 @@ No network, no OpenAI call.
 """
 import copy
 import json
+from agents.EnnoScholarV4.context import SECTION_CONTEXT_CHARS
 import re
 import time
 from dataclasses import replace
@@ -231,16 +232,20 @@ def test_a_real_bug_resume_after_two_sections_fits_the_context_budget():
     for entry in log:
         assert entry["size"] <= CONFIG.max_context_chars
         memory = entry["memory"]
-        assert len(json.dumps(memory, ensure_ascii=False)) <= 18000
+        # A section's memory holds its exact proofs (SECTION_CONTEXT_CHARS, within max_context_chars).
+        assert len(json.dumps(memory, ensure_ascii=False)) <= SECTION_CONTEXT_CHARS
         assert not {"argumentation_focus", "candidate_index", "writing_context", "user_message_sources"} & set(memory)
-        assert memory["section_drafting"]["packet"]["articles"] and memory["section_drafting"]["packet"]["evidence"]
+        packet = memory["section_drafting"]["packet"]
+        assert packet["proof_backed_claims"] and packet["evidence"]
+        sent = {e["evidence_id"] for e in packet["evidence"]}
+        assert all(set(c["evidence_ids"]) <= sent for c in packet["proof_backed_claims"])
         assert "sans modifier celles qui sont terminées" in json.dumps(memory["consultant_instructions"], ensure_ascii=False)
     request = log[0]["memory"]
     # Durable cards are untouched by the bounded transmission.
     from agents.EnnoScholarV4.store import ArticleStore
     stored = ArticleStore(state, CONFIG.max_articles).registry
     assert {aid: stored[aid].analysis for aid in ids} == cards
-    assert request["section_drafting"]["packet"]["articles"][0]["analysis_available"]["results"] == 12
+    assert request["section_drafting"]["packet"]["sources"][0]["claims_available"]["results"] == 12
 
 
 def test_a_reproduces_the_old_failure_when_budgets_are_enforced_strictly():
@@ -299,16 +304,15 @@ def test_c_bounded_contexts_never_reduce_permanent_cards_and_details_stay_retrie
     assert len(json.dumps(inputs, ensure_ascii=False)) <= 9000
     # The partial view announces what exists.
     sent = json.dumps(packet, ensure_ascii=False)
-    first = next(a for a in packet["articles"])
-    assert first["analysis_available"]["technical_mechanism"] == 8 and first["analysis_available"]["results"] == 12
-    assert first["analysis_available"]["limitations"] == 5 and first["analysis_available"]["tables_figures"] == 3
+    first = next(a for a in packet["sources"] if a.get("claims_available"))
+    assert first["claims_available"]["technical_mechanism"] == 8 and first["claims_available"]["results"] == 12
+    assert first["claims_available"]["limitations"] == 5 and first["claims_available"]["tables_figures"] == 3
     # Whole claims only: every transmitted statement is a complete stored statement.
     stored = {c["statement"] for aid in ids for v in t.registry[aid].analysis.values() if isinstance(v, list)
         for c in v if isinstance(c, dict) and "statement" in c}
-    for article in packet["articles"]:
-        for value in article["analysis"].values():
-            if isinstance(value, list) and value and isinstance(value[0], dict):
-                assert all(claim["statement"] in stored for claim in value)
+    assert packet["proof_backed_claims"] and all(claim["statement"] in stored for claim in packet["proof_backed_claims"])
+    # A claim never travels without its exact proofs.
+    assert all(set(c["evidence_ids"]) <= {e["evidence_id"] for e in packet["evidence"]} for c in packet["proof_backed_claims"])
     # Lossless, deterministic retrieval by identifiers: every claim, number and proof.
     for aid in ids:
         page, offset, claims, proofs = None, 0, [], {}
@@ -356,11 +360,12 @@ def test_d_consultant_instructions_scope_status_and_separation_from_facts():
     seven_section_plan(t, ids)
     state = t.state
     facts_before = copy.deepcopy({aid: t.registry[aid].analysis for aid in ids})
+    # Standing instructions say so (run 8cb4d68a: a one-off question had become a project rule).
     messages = [
-        ("m1", "Concentre-toi uniquement sur les maillages volumiques."),
-        ("m2", "Ne modifie pas les deux premières sections."),
-        ("m3", "Dans la section 3, insiste davantage sur les résultats numériques."),
-        ("m4", "Finalement, pour la section 3, mets plutôt l'accent sur les limites expérimentales."),
+        ("m1", "Pour ce dossier, concentre-toi uniquement sur les maillages volumiques."),
+        ("m2", "Pour la suite, ne modifie pas les deux premières sections."),
+        ("m3", "Dans la section 3, insiste désormais davantage sur les résultats numériques."),
+        ("m4", "Finalement, pour la section 3, mets désormais plutôt l'accent sur les limites expérimentales."),
     ]
     for mid, text in messages:
         state.setdefault("messages", []).append({"id": mid, "role": "user", "content": text})
@@ -392,6 +397,12 @@ def test_d_consultant_instructions_scope_status_and_separation_from_facts():
     assert "résultats numériques" not in text and "maillages volumiques." not in text
     # A repeated capture of the same message adds nothing.
     assert capture_instructions(state, state["messages"][-1], t.registry) == []
+    # Without a standing marker, an instruction serves its own request only.
+    state["messages"].append({"id": "m5", "role": "user", "content": "Développe davantage la section 4."})
+    capture_instructions(state, state["messages"][-1], t.registry)
+    assert "Développe davantage la section 4." in instructions_for(4)[0]
+    state["messages"].append({"id": "m6", "role": "user", "content": "Continue la rédaction."})
+    assert "Développe davantage la section 4." not in instructions_for(4)[0]
 
 
 def test_e_interrupted_at_three_resumes_at_four_without_touching_saved_sections():
@@ -444,14 +455,15 @@ def test_f_large_corpus_keeps_every_record_while_each_task_context_stays_bounded
             state.pop(key)
     assert set(contexts) == {"section", "argumentation", "planning", "selection", "conversation"}
     packet = contexts["section"]["section_drafting"]["packet"]
-    assert {a["id"] for a in packet["articles"]} <= set(section["article_ids"])
+    assert {a["id"] for a in packet["sources"]} <= set(section["article_ids"])
     assert "candidate_index" not in contexts["section"]
     # A whole drafting run on the large corpus: each request bounded, every section saved.
     log = []
     result = agent(Client(Model(ids, log))).run(state)
     assert not result["partial"], (result["reason"], result["writing_progress"])
     assert all(entry["size"] <= CONFIG.max_context_chars for entry in log)
-    assert max(len(json.dumps(entry["memory"], ensure_ascii=False)) for entry in log) <= 18000
+    assert max(len(json.dumps(entry["memory"], ensure_ascii=False)) for entry in log) <= SECTION_CONTEXT_CHARS
+    assert all(len(json.dumps(entry["memory"], ensure_ascii=False)) <= 18000 for entry in log if entry["task"] != "section")
     # Nothing permanent was dropped: all notices, cards and proofs remain retrievable.
     assert len(t.registry) == 324 and len(state["evidence"]) >= 24*32
     for aid in (ids[0], ids[-1]):
@@ -489,7 +501,7 @@ def test_g_comparison_of_detailed_works_takes_bounded_windows_with_exact_proof_r
     # The saved comparison is not repeated in the next request.
     later = log[log.index(comparisons[-1])+1]
     assert later["tool_outputs"] and all('"packet"' not in output and len(output) < 4000 for output in later["tool_outputs"])
-    assert all(entry["size"] <= 30000 for entry in log)
+    assert all(entry["size"] <= (CONFIG.max_context_chars if entry["task"] == "section" else 30000) for entry in log)
     assert result["writing_progress"]["status"] == "draft_complete"
     from agents.EnnoScholarV4.store import ArticleStore
     assert {aid: ArticleStore(state, CONFIG.max_articles).registry[aid].analysis for aid in ids} == cards

@@ -30,6 +30,25 @@ FIRST_N = re.compile(r"\b(?:les\s+)?(deux|trois|quatre|cinq|six|sept|\d+)\s+prem
 SECTION_NUMBERS = re.compile(r"\bsections?\s+((?:\d+\s*(?:,|et|à|a|-|–)?\s*)+)", re.I)
 THIS_SECTION = re.compile(r"\b(?:cette|la\s+présente|la\s+presente)\s+section\b", re.I)
 SENTENCE = re.compile(r"[^.!?\n]+[.!?]?")
+# Duration of an instruction. By default an instruction serves the request that states it
+# (run 8cb4d68a: « Donne-moi le détail des deux articles, uniquement à partir des preuves
+# enregistrées » was kept as a standing project rule because of « uniquement »). It becomes
+# a standing rule only when the consultant says so: for this dossier, for what follows, in
+# all (next) sections, from now on, systematically, always, until further notice.
+PERSISTENT = re.compile(
+    r"\b(?:pour\s+(?:tout\s+)?(?:ce|le|notre|mon)\s+(?:dossier|projet|état\s+de\s+l['’]art|etat\s+de\s+l['’]art|manuscrit)|"
+    r"(?:pour|dans)\s+(?:toute\s+)?la\s+suite(?:\s+de\s+notre\s+travail)?|"
+    r"(?:dans|pour)\s+(?:toutes\s+)?(?:les\s+)?(?:prochaines|futures|autres|toutes\s+les)\s+(?:sections|réponses|reponses|rédactions|redactions)|"
+    r"dans\s+toutes\s+les\s+sections|pour\s+toutes\s+les\s+sections|dans\s+tout\s+(?:le\s+|l['’])?(?:document|manuscrit|état\s+de\s+l['’]art)|"
+    r"(?:à|a)\s+partir\s+de\s+maintenant|désormais|desormais|dorénavant|dorenavant|systématiquement|systematiquement|"
+    r"(?:à|a)\s+chaque\s+fois|chaque\s+fois\s+que|jusqu['’](?:à|a)\s+nouvel\s+ordre|en\s+permanence|"
+    r"de\s+(?:façon|facon|manière|maniere)\s+(?:permanente|générale|generale|systématique|systematique)|"
+    r"(?:garde|conserve|retiens|applique)\s+(?:cette|ces)\s+(?:règles?|regles?|consignes?|conventions?|préférences?|preferences?)|"
+    r"toujours|jamais|from\s+now\s+on|going\s+forward|for\s+the\s+rest|always|never)\b", re.I)
+# Legacy review only: a sentence that orders this request's task (verb of the task itself).
+REQUEST_TASK = re.compile(r"^\s*(?:en\s+utilisant\b.*?,\s*)?(?:donne|compare|complète|complete|approfondis|révise|revise|"
+    r"rédige|redige|cherche|recherche|analyse|détaille|detaille|présente|presente|liste|résume|resume|explique|trouve|"
+    r"lis|lance|propose|reprends|continue|ne\s+te\s+limite)\b|\?\s*$", re.I)
 
 
 def _now():
@@ -73,7 +92,23 @@ def classify(state, registry, sentence):
         "plan" if re.search(r"\bplan\b", sentence, re.I) else
         "writing" if re.search(r"rédig|redig|rédac|redac|section|écri|ecri|style|ton\b|paragraphe", sentence, re.I) else "project")
     return {"scope": scope, "target_ids": sections or articles,
-        "kind": "decision" if DECISION.search(sentence) else "preference"}
+        "kind": "decision" if DECISION.search(sentence) else "preference",
+        "duration": "persistent" if PERSISTENT.search(sentence) else "request"}
+
+
+def current_message_id(state):
+    users = [m for m in state.get("messages", []) if m.get("role") == "user"]
+    return users[-1].get("id") if users else None
+
+
+def applies_now(state, row):
+    """Active and in force for the current request: a standing rule, an instruction of the
+    current message, or a record captured before durations existed (kept until the
+    consultant reviews it: legacy_review proposes, it never changes anything itself)."""
+    if row.get("status") != "active":
+        return False
+    duration = row.get("duration")
+    return duration in (None, "persistent") or row.get("source_message_id") == current_message_id(state)
 
 
 def capture_instructions(state, message, registry=None):
@@ -124,14 +159,40 @@ def relevant_instructions(state, task, *, section_id=None, article_ids=(), limit
         "final": {"project", "writing", "article"}}.get(task, {"project"})
     rows = []
     for row in state.get("consultant_instructions", []):
-        if row["status"] != "active" or row["scope"] not in scopes:
+        if not applies_now(state, row) or row["scope"] not in scopes:
             continue
         if row["scope"] == "section" and task == "section" and section_id not in row["target_ids"]:
             continue
         if row["scope"] == "article" and article_ids and not set(row["target_ids"]) & set(article_ids):
             continue
-        rows.append({k: row[k] for k in ("id", "text", "scope", "target_ids", "kind", "order", "source_message_id")})
+        rows.append({**{k: row[k] for k in ("id", "text", "scope", "target_ids", "kind", "order", "source_message_id")},
+            "duration": row.get("duration") or "unreviewed"})
     return rows[-limit:]
+
+
+def legacy_review(state):
+    """Records captured before durations existed, classified by the current rule (nothing
+    is changed): the proposal shown to the consultant before any targeted cleanup."""
+    order = {m["id"]: i for i, m in enumerate(state.get("messages", []))}
+    rows = []
+    for row in state.get("consultant_instructions", []):
+        if row.get("status") != "active" or row.get("duration"):
+            continue
+        persistent = bool(PERSISTENT.search(row["text"]))
+        rows.append({"id": row["id"], "text": row["text"], "scope": row["scope"], "message_index": order.get(row["source_message_id"]),
+            "proposal": "keep_persistent" if persistent else "request_only" if REQUEST_TASK.search(row["text"]) else "confirm"})
+    return rows
+
+
+def apply_review(state, decisions):
+    """Consultant-approved cleanup: {instruction_id: "request" | "persistent"}. The record
+    stays (text, origin, order); only its duration is set, with the review date."""
+    for row in state.get("consultant_instructions", []):
+        if row["id"] in decisions:
+            if decisions[row["id"]] not in {"request", "persistent"}:
+                raise ValueError("Durée inconnue : request ou persistent.")
+            row.update(duration=decisions[row["id"]], duration_reviewed_at=_now())
+    return [row for row in state.get("consultant_instructions", []) if row["id"] in decisions]
 
 
 def instruction_packet(state, task, **targets):

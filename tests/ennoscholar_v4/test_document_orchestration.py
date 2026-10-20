@@ -63,8 +63,15 @@ def draft_call(number, kwargs, ids, eids):
     memory = json.loads(kwargs["input"][0]["content"].split(" : ", 1)[1])
     packet = memory["section_drafting"]["packet"]
     assert packet["argument_blueprint"]["axes"][0]["steps"]
-    assert packet["articles"][0]["analysis"]["method"]
-    assert packet["evidence"] and packet["table_evidence_index"]
+    if "revision" in packet:
+        # A targeted revision keeps its own packet: the exact draft and its sources.
+        assert packet["articles"] and packet["evidence"]
+    else:
+        # Card claims travel with their exact proofs (section dossier).
+        assert any(c["field"] == "method" for c in packet["proof_backed_claims"])
+        sent = {e["evidence_id"] for e in packet["evidence"]}
+        assert all(set(c["evidence_ids"]) <= sent for c in packet["proof_backed_claims"])
+        assert packet["evidence"] and packet["table_evidence_index"]
     section_id = memory["section_drafting"]["focus"]["section_id"]
     text = f"Méthode et limites vérifiées, section {section_id} [{ids[1]}] [{eids[1]}]."
     return call("write_section", {"section_id": section_id, "action": "save",

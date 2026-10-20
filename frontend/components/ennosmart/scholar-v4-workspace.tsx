@@ -86,7 +86,7 @@ function ManuscriptSection({ section, number, data, sid, disabled, act, ask }: {
   const evidenceIds = [...new Set([...(draft.evidence_ids || []), ...figures.flatMap(f => f.evidence_ids)])]
   return <article id={`scholar-section-${section.id}`} className="border-t py-7 scroll-mt-4" aria-label={section.title}>
     <h3 className="mb-5 text-lg font-semibold">{number}. {section.title.replace(/^\s*\d+[.)]\s+/, "")}</h3>
-    <Markdown text={draft.text} />
+    <Markdown text={data.rendering?.sections[section.id] ?? draft.text} />
     {figures.map(figure => <div key={figure.id}><Figure sid={sid} figure={figure} /><div className="flex flex-wrap gap-2"><Button variant="ghost" size="sm" disabled={disabled} onClick={() => ask(`Modifie la figure « ${figure.title} » de la section « ${section.title} » à partir des preuves enregistrées avec create_scientific_visual.`)}>Réviser cette figure dans le chat</Button><Button variant="ghost" size="sm" disabled={disabled} onClick={() => act({ action: "remove_figure", figure_id: figure.id })}>Retirer la figure</Button></div></div>)}
     <div className="mt-5 flex flex-wrap gap-2">
       <Button variant="outline" size="sm" disabled={disabled} onClick={() => ask(`Approfondis la section ${number} « ${section.title} » en réutilisant les analyses et preuves enregistrées. Sauvegarde uniquement cette révision locale.`)}>Réviser cette section dans le chat</Button>
@@ -164,7 +164,14 @@ export default function ScholarV4Workspace({ sid, updatedAt, running, ask, onCha
     <nav aria-label="Sections rédigées" className="mb-5 flex flex-wrap gap-2">{saved.map(({ section, number }) => <a key={section.id} href={`#scholar-section-${section.id}`} className="rounded-full border px-3 py-1 text-xs hover:bg-muted">{number}. {section.title}</a>)}</nav>
     {error && <p role="alert" className="mb-3 text-destructive">{error}</p>}
     {saved.map(({ section, number }) => <ManuscriptSection key={section.id} section={section} number={number} data={data} sid={sid} disabled={disabled} act={act} ask={ask} />)}
-    {articleIds.length > 0 && <section className="border-t py-6"><h3 className="mb-3 text-lg font-semibold">Références bibliographiques</h3><ol className="list-decimal space-y-2 pl-6 text-sm">{articleIds.map(id => {
+    {data.rendering && data.rendering.references.length > 0 ? <section className="border-t py-6"><h3 className="mb-3 text-lg font-semibold">Références bibliographiques</h3><ol className="space-y-2 text-sm">{data.rendering.references.map(row => {
+      const url = safeUrl(row.doi ? `https://doi.org/${row.doi}` : row.arxiv_id ? `https://arxiv.org/abs/${row.arxiv_id}` : row.url || "")
+      const label = row.text.replace(/\s*https?:\/\/\S+$/, "")
+      return <li key={row.article_id}>[{row.number}] {label}{url && <> <a href={url} target="_blank" rel="noopener noreferrer" className="break-all text-primary underline">{url}</a></>}</li>
+    })}</ol>
+      {data.rendering.project_sources.length > 0 && <details className="mt-4"><summary className="cursor-pointer font-medium">Sources du projet citées (EnnoDiagnostic)</summary><ul className="mt-2 space-y-2">{data.rendering.project_sources.map(row => <li key={row.canonical_evidence_id}><span className="font-medium">{row.number}.</span> {[row.document_name, row.section_title, row.page ? `p. ${row.page}` : ""].filter(Boolean).join(" ; ")}{row.stored_section_title && <span className="text-muted-foreground"> (localisateur du diagnostic : {row.stored_section_title})</span>}<p className="mt-1 whitespace-pre-wrap text-muted-foreground">« {row.quote} »</p></li>)}</ul></details>}
+      {data.rendering.proofs.length > 0 && <details className="mt-4"><summary className="cursor-pointer font-medium">Passages des publications cités (P)</summary><ul className="mt-2 space-y-2">{data.rendering.proofs.map(row => <li key={row.evidence_id}><span className="font-medium">{row.number}.</span> Référence [{row.reference}] ; {row.section || "section non identifiée"}{row.page_number ? ` ; page PDF ${row.page_number}` : ""}<p className="mt-1 whitespace-pre-wrap text-muted-foreground">« {row.quote} »</p></li>)}</ul></details>}
+    </section> : articleIds.length > 0 && <section className="border-t py-6"><h3 className="mb-3 text-lg font-semibold">Références bibliographiques</h3><ol className="list-decimal space-y-2 pl-6 text-sm">{articleIds.map(id => {
       const article = data.articles.find(a => a.id === id)
       if (!article) return null
       const url = safeUrl(article.doi ? `https://doi.org/${article.doi}` : article.arxiv_id ? `https://arxiv.org/abs/${article.arxiv_id}` : article.url)

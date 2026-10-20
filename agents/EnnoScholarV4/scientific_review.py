@@ -115,6 +115,24 @@ def deterministic_review(state, toolkit, outline=None):
         for problem in check_attribution(raw, draft["article_ids"], toolkit):
             issue("unsupported_attribution", f"Attribution non vérifiable ({', '.join(problem['names'])}) : « {problem['sentence'][:200]} »",
                 section["id"])
+        # Agent 1 -> Agent 2: a section tied to locks whose project work units exist should
+        # confront the publications with that work (reported, not blocking: the semantic
+        # quality of the comparison remains a human review).
+        from .provenance_check import draft_confrontation
+        confrontation = draft_confrontation(state, section, draft) if state.get("mode") == "diagnostic_linked" else None
+        if state.get("mode") == "diagnostic_linked" and "provenance" not in draft:
+            # Saved before typed provenance: not the same thing as a missing confrontation.
+            issue("legacy_provenance_unrecorded", "Brouillon antérieur à la provenance typée : confrontation au projet "
+                "non mesurable sans réécriture.", section["id"])
+        if confrontation and confrontation["units_available"] and not confrontation["units_cited"]:
+            issue("project_confrontation_missing", "Section liée à des verrous sans citation des travaux du projet "
+                "(démarches, méthodes, paramètres, résultats) disponibles dans le diagnostic.", section["id"])
+        elif confrontation and confrontation["units_cited"] and not confrontation["comparison_claims"]:
+            issue("project_comparison_missing", "Travaux du projet cités sans phrase reliant une publication et le projet.",
+                section["id"])
+        if confrontation and confrontation["outside_section_locks"]:
+            issue("project_fact_outside_section_locks", "Preuve projet rattachée à un autre verrou que ceux de la section : "
+                "vérifier que le rapprochement est explicite.", section["id"], confrontation["outside_section_locks"][0])
         for fact in draft.get("numeric_claims", []):
             try:
                 validate_number(fact, toolkit)
@@ -125,11 +143,21 @@ def deterministic_review(state, toolkit, outline=None):
                 validate_calculation(calculation,toolkit)
             except ValueError as exc:
                 issue("invalid_calculation",str(exc),section["id"])
+        # Reported values located in a proof cited in their paragraph (recomputed for drafts
+        # saved before the numeric trace existed); any other value is flagged, never matched.
+        from .provenance_check import numeric_trace, PROJECT_MARKER
+        traced, untraced = numeric_trace(toolkit, raw, set(draft.get("evidence_ids", [])),
+            set(draft.get("project_evidence_ids", [])) | set(PROJECT_MARKER.findall(raw)))
+        for row in untraced[:3]:
+            issue("numeric_value_without_proof", f"Valeur {row['value']} sans preuve citée qui la contient dans son paragraphe : "
+                f"« …{row['context'][:120]}… »", section["id"])
+        traced_values = {(row["paragraph"], Decimal(row["value"].replace(",", "."))) for row in traced}
         # Flag unattributed experimental numbers rather than claiming semantic proof.
-        for paragraph in re.split(r"\n\s*\n", raw):
+        for index, paragraph in enumerate(p for p in re.split(r"\n\s*\n", raw) if p.strip()):
             numbers=re.findall(r"(\d+(?:[.,]\d+)?)\s*%",paragraph)
             values={Decimal(f["value"].replace(",",".")) for f in draft.get("numeric_claims",[]) if re.fullmatch(r"\d+(?:[.,]\d+)?",f["value"])}
             values.update(Decimal(c["result"].replace(",",".")) for c in draft.get("calculations",[]) if c["unit"]=="%" and re.fullmatch(r"\d+(?:[.,]\d+)?",c["result"]))
+            values.update(value for position, value in traced_values if position == index)
             if any(Decimal(n.replace(",",".")) not in values for n in numbers):
                 issue("numeric_mapping_missing", "Résultat en pourcentage sans cellule source explicitement liée.",section["id"])
     coverage = literature_coverage(state, toolkit.registry)

@@ -142,14 +142,19 @@ def test_resume_at_four_of_seven_corrects_the_metric_and_finishes_without_interm
     sections = state["outline"]["sections"]
     # Resumed at section 5, then 6 and 7 in the same run.
     order = [entry["section"] for entry in log]
-    assert order[0].startswith("Section 5") and order[-2].startswith("Section 6") and order[-1].startswith("Section 7")
+    assert order[0].startswith("Section 5")
+    # Independent sections finish while section 5 is being corrected; their
+    # completion order is deliberately not a sequential scheduling contract.
+    assert any(title.startswith("Section 6") for title in order)
+    assert any(title.startswith("Section 7") for title in order)
     assert {s["id"]: s["drafts"] for s in sections[:4]} == saved
     assert all(len(s["drafts"]) == 1 for s in sections)
     number = sections[4]["drafts"][-1]["numeric_claims"][0]
     assert (number["value"], number["unit"], number["metric"], number["column"], number["table_number"],
         number["article_id"]) == ("0.79", "s", "Prediction", "Graphnet", "2", ids[0])
     # The refusal named the source; the correction came from it.
-    assert "Métriques acceptées" in log[1]["last_output"] and rows[("Prediction", "0.68 s", "0.79 s")] in log[1]["last_output"]
+    correction = next(entry for entry in log[1:] if entry["section"].startswith("Section 5"))
+    assert "Métriques acceptées" in correction["last_output"] and rows[("Prediction", "0.68 s", "0.79 s")] in correction["last_output"]
     # Drafts saved without an intermediate approval; final human approval untouched.
     assert "validation humaine" not in result["answer"] and "Plan en attente" not in result["answer"]
     assert "approbation finale" in result["answer"]

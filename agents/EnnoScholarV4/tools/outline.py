@@ -21,6 +21,8 @@ class SectionInput(BaseModel):
     missing_information: list[str] = Field(default_factory=list, max_length=30)
     project_connection: str = Field(default="", max_length=3000)
     figure_suggestions: list[str] = Field(default_factory=list, max_length=20)
+    lock_ids: list[str] = Field(default_factory=list, max_length=20,
+        description="Mode lié : verrous traités par cette section (une section peut en couvrir plusieurs) ; [] en Express.")
 
 
 class ArticleRole(BaseModel):
@@ -34,7 +36,7 @@ SectionInput.model_rebuild()
 
 class OutlineArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    action: Literal["read", "create", "rename", "add", "delete", "move", "merge", "associate", "update", "dissociate"]
+    action: Literal["read", "create", "replace", "rename", "add", "delete", "move", "merge", "associate", "update", "dissociate"]
     title: str | None = Field(max_length=500)
     section_id: str | None
     target_section_id: str | None
@@ -43,6 +45,8 @@ class OutlineArgs(BaseModel):
     article_ids: list[str] | None = Field(max_length=80)
     offset: int = Field(default=0,ge=0)
     limit: int = Field(default=8,ge=1,le=20)
+    consultant_message: str | None = Field(default=None, max_length=3000,
+        description="Message naturel au consultant accompagnant le plan : choix, nuances, lacunes, question utile pour poursuivre.")
 
 
 def resolve_section(state, identifier):
@@ -54,6 +58,28 @@ def resolve_section(state, identifier):
     if len(matches) != 1:
         raise ValueError("Section ambiguë ou introuvable. Lire le plan pour obtenir son identifiant stable.")
     return matches[0]
+
+
+def validate_sections(state, sections, registry):
+    """Shared validation for independently saved parts and the final outline."""
+    link = state.get("diagnostic_link") or {}
+    for section in sections:
+        locks = section.get("lock_ids", [])
+        if locks and state.get("mode") != "diagnostic_linked":
+            raise ValueError("Conversation Express : lock_ids doit être [].")
+        if set(locks)-set(link.get("selected_lock_ids", [])):
+            raise ValueError(f"Verrous inconnus : {sorted(set(locks)-set(link.get('selected_lock_ids', [])))}. Verrous sélectionnés : {link.get('selected_lock_ids')}.")
+        if any(aid not in registry for aid in section["article_ids"]):
+            raise ValueError("Association avec un article inconnu interdite.")
+        if any(r["article_id"] not in section["article_ids"] for r in section.get("article_roles", [])):
+            raise ValueError("Le rôle d'une publication exige son association à la section.")
+        relations = {r["id"] for r in state.get("scientific_relations", [])}
+        if not set(section.get("relation_ids", [])) <= relations:
+            raise ValueError("Relation scientifique inconnue.")
+        for eid in section.get("evidence_ids", []):
+            proof = state.get("evidence", {}).get(eid)
+            if not proof or proof["article_id"] not in section["article_ids"]:
+                raise ValueError("Preuve inconnue ou hors de la section.")
 
 
 def manage_outline(state, args, registry):
@@ -71,6 +97,15 @@ def manage_outline(state, args, registry):
             raise ValueError("Un plan exige au moins une section.")
         if sections:
             raise ValueError("Un plan existe déjà. Modifier ses sections pour préserver leurs identifiants.")
+        proposed["title"] = args.title or current["title"]
+        proposed["sections"] = [{"id": "section_" + uuid.uuid4().hex, **s.model_dump(), "drafts": []} for s in args.sections]
+    elif args.action == "replace":
+        # A whole new argumentative structure for a plan without drafts; the
+        # previous version stays in outline_versions.
+        if not args.sections:
+            raise ValueError("Un plan exige au moins une section.")
+        if any(s.get("drafts") for s in sections):
+            raise ValueError("Des sections ont déjà des brouillons : modifier le plan par update, add, delete, move ou merge pour conserver leurs versions.")
         proposed["title"] = args.title or current["title"]
         proposed["sections"] = [{"id": "section_" + uuid.uuid4().hex, **s.model_dump(), "drafts": []} for s in args.sections]
     elif args.action == "add":
@@ -112,22 +147,11 @@ def manage_outline(state, args, registry):
                 raise ValueError("update exige exactement une section argumentée, sans modifier son identité ou ses brouillons.")
             section.update(args.sections[0].model_dump())
         state.setdefault("focus", {})["section_id"] = section["id"] if section in sections else ""
-    for section in proposed["sections"]:
-        if any(aid not in registry for aid in section["article_ids"]):
-            raise ValueError("Association avec un article inconnu interdite.")
-        if any(r["article_id"] not in section["article_ids"] for r in section.get("article_roles", [])):
-            raise ValueError("Le rôle d'une publication exige son association à la section.")
-        relations = {r["id"] for r in state.get("scientific_relations", [])}
-        if not set(section.get("relation_ids", [])) <= relations:
-            raise ValueError("Relation scientifique inconnue.")
-        for eid in section.get("evidence_ids", []):
-            proof = state.get("evidence", {}).get(eid)
-            if not proof or proof["article_id"] not in section["article_ids"]:
-                raise ValueError("Preuve inconnue ou hors de la section.")
+    validate_sections(state, proposed["sections"], registry)
     state.setdefault("outline_versions", []).append(copy.deepcopy(current))
     proposed["version"] = current["version"] + 1
     proposed["plan_revision"] = current.get("plan_revision", current["version"]) + 1
-    proposed["status"] = "proposed" if args.action == "create" else "modified"
+    proposed["status"] = "proposed" if args.action in {"create", "replace"} else "modified"
     proposed.pop("approval", None)
     state["outline"] = proposed
     state.setdefault("document", {})["review_stale"] = True

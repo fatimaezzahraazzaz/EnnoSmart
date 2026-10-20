@@ -284,3 +284,95 @@ La reconstruction du contexte confirme que le texte de la section disparaissait 
 Le diagnostic détaillé, le tableau des treize tours, les limites de journalisation, la méthode de calcul du coût et les résultats du rejeu sur copie figurent dans [le rapport du run 9dff3e0c](ennoscholar-v4-revision-ciblee-9dff3e0c.md). Aucun document réel n'a été révisé par ces vérifications ; toutes les sections et leurs versions restent conservées dans la base d'origine.
 
 Validation finale de cette correction : **379 tests réussis** (V4, V3 et V3.1), dont sept nouveaux cas dans `test_targeted_revision.py`. Le rejeu simulé après correction enregistre uniquement une nouvelle version de la section 5 en un tour, sans altérer les versions antérieures. Le backend doit être redémarré pour charger ces changements avant le prochain essai réel.
+
+## Parcours lié à EnnoDiagnostic — 17 octobre 2026
+
+La version fonctionnelle ci-dessus a été sauvegardée avant intégration dans `sauv-sans-agent-1`, commit `7cbcdd9eed0015a3410d8add932d42da29f8a413`, poussé et vérifié sur GitHub. Le développement non commité se trouve sur `feature/ennoscholar-v4-diagnostic-link`.
+
+Le nouveau parcours distingue explicitement Express et conversation liée, conserve un snapshot stable du diagnostic, les décisions humaines, les verrous sélectionnés et le périmètre actif. Il récupère localement les données existantes avec les permissions projet habituelles et ne relance pas EnnoDiagnostic. Le contexte transmis est borné ; la mémoire complète et les preuves restent récupérables. Le changement de verrou et l’actualisation explicite préservent les recherches et versions documentaires.
+
+Validation de l’intégration : **406 tests réussis**, dont 27 nouveaux cas hors ligne ; contrôle TypeScript, compilation de production et vérification navigateur sur données synthétiques réussis. La révision ciblée de la section 5 reste réalisable en un tour simulé dans une conversation liée, avec conservation des autres sections et versions. Aucun plafond, modèle ou tarif n’a été modifié.
+
+Le détail de la sauvegarde, du parcours, de l’adaptateur, des preuves, des mesures de tokens, des tests et des limites avant essai réel figure dans [le bilan de l’intégration EnnoDiagnostic](ennoscholar-v4-diagnostic-link.md).
+
+
+### Validation de la liaison sur diagnostics réels
+
+Les diagnostics 17 et 48 d’une archive locale ont été lus sans restauration et copiés dans des SQLite temporaires isolées. Les corrections ciblées traitent les preuves anciennes `excerpt`/`text`, leurs collisions d’identifiants, les cartes/sections, les relations explicites aux verrous et le maintien d’une vue projet concise dans les comparaisons. Les observations générales et les citations non vérifiées ne deviennent pas automatiquement des résultats du verrou actif.
+
+**424 tests réussis**, dont 18 nouveaux cas ; aucune modification de la base active, des modèles, tarifs ou budgets, d’EnnoDiagnostic ou de la branche de sauvegarde. Voir [le bilan des corrections](ennoscholar-v4-diagnostic-link-corrections.md) pour les deux contextes préparés, la distinction des sources et les limites du prochain essai réel.
+
+
+## Compréhension, couverture des verrous et plan — 17 octobre 2026
+
+Le run réel `5768bedd` (conversation liée, quatre verrous, demande de plan) s'est terminé par la synthèse de secours.
+
+Causes confirmées par la trace :
+
+- deux analyses de 145 s ont consommé le temps disponible ;
+- la publication a été coupée par l'échéance de 600 s ;
+- aucune étape de plan n'existait ;
+- le paquet diagnostic ne contenait aucun fait technique, d'où 8 lectures `get_project_context` (pages jusqu'à 41 k caractères) ;
+- la couverture n'était pas suivie par verrou ;
+- Semantic Scholar a répondu 429.
+
+Les corrections ajoutent :
+
+- `set_turn_goal`, la lecture du message par le modèle ;
+- `lock_coverage` ;
+- un contexte technique projet étiqueté « non rattaché au verrou » ;
+- des pages projet allégées pour le modèle ;
+- une étape plan qui rend le plan enregistré sans synthèse ;
+- `manage_outline(replace)` et `lock_ids` par section ;
+- une garde de durée mesurée des appels ;
+- le retrait des outils sans entrée possible.
+
+Aucun budget, délai, modèle ou tarif n'est modifié. Le détail, les mesures et les limites figurent dans [le bilan conversation, verrous et plan](ennoscholar-v4-conversation-plan-verrous.md).
+
+
+## Parcours découverte → sélection → plan — 17 octobre 2026
+
+L'audit du run `d8606428` a confirmé quatre causes de perte :
+
+- les fenêtres des recherches parallèles étaient compactées à une notice ;
+- un identifiant inconnu bloquait tout le lot de décisions ;
+- le plan était forcé sans sélection et pouvait être détourné ;
+- un faux arrêt de tokens était causé par un comptage en octets.
+
+Les corrections P0-1 à P0-4 et P1-6 portent sur ces points :
+
+- décisions validées avant écriture ;
+- estimation des requêtes à 3 octets par token ;
+- sélection alternée par verrou avant le plan, et plan forcé ;
+- plafond de 80 réparti entre verrous ou axes non cherchés, sans être relevé ;
+- présentation de tous les résultats avec des résumés courts ;
+- compaction qui raccourcit les résumés avant de retirer des notices.
+
+443 tests passent. Détails dans [le bilan du parcours de sélection](ennoscholar-v4-parcours-selection.md).
+
+
+## Performance, lots 1 et 2 — 18 octobre 2026
+
+Changements :
+
+- consignes et outils stables par tâche, la consigne du tour étant placée en fin d'entrée, et `prompt_cache_key` (désactivable) ;
+- références courtes des preuves dans les analyses (−19 % de tokens sur les fiches réelles recomptées) ;
+- journalisation des durées et des tailles ;
+- profondeur de lecture décidée par le modèle (un plan `core` ne lit pas de texte intégral) ;
+- jusqu'à 3 analyses en parallèle avec écritures séquentielles, réservations cumulées et limite de débit ;
+- budget de temps calculé sur le chemin critique.
+
+Mesuré hors ligne : 3 analyses + synthèse en 351 s au lieu de 587 à 660 s. 457 tests passent. Détails dans [le bilan performance](ennoscholar-v4-performance-lots-1-2.md).
+
+
+## Plan rapide et fiable — 18 octobre 2026
+
+Changements :
+
+- compréhension (`set_turn_goal` forcé) avant toute étape automatique ;
+- sélection juste après les recherches, avec au plus une ronde de lacune ;
+- plan généré par parties en parallèle, avec un budget de temps dédié ;
+- plan provisoire sans appel au modèle quand le temps manque ;
+- recherches d'un tour en parallèle.
+
+Rejeu exact de `e7bae458` : plan enregistré en 168 s au lieu d'un timeout à 600 s ; 0 s d'argumentation automatique au lieu de 342 s. 471 tests passent. Détails dans [le bilan plan rapide et fiable](ennoscholar-v4-plan-rapide-fiable.md).

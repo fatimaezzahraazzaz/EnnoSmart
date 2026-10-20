@@ -15,6 +15,39 @@ PLAN_BEFORE_WRITING = re.compile(r"\bplan\b.{0,100}\bavant\s+de\s+(?:rédig|redi
 SECTION_REQUEST = re.compile(
     r"(?:rédig|redig|approfond|développ|developp|révis|revis|amélior|amelior).{0,45}"
     r"(?:la\s+)?section\s+(\d+|section_[a-f0-9]+)", re.I)
+# « la première section », « la deuxième section », « la dernière section » (run dcf5d05b:
+# « rédiger la première section » opened a draft of all eleven sections).
+ORDINAL_WORDS = {"premi": 1, "1re": 1, "1ère": 1, "1ere": 1, "deuxi": 2, "second": 2, "2e": 2, "2ème": 2, "troisi": 3, "3e": 3,
+    "3ème": 3, "quatri": 4, "4e": 4, "cinqui": 5, "5e": 5, "sixi": 6, "6e": 6, "septi": 7, "7e": 7, "huiti": 8, "8e": 8,
+    "neuvi": 9, "9e": 9, "dixi": 10, "10e": 10, "derni": -1}
+ORDINAL_SECTION_REQUEST = re.compile(
+    r"(?:rédig|redig|écri|ecri|approfond|développ|developp|révis|revis|amélior|amelior|produi|commenc).{0,60}?"
+    r"\b(?:la|le)\s+(premi[eè]re|1(?:re|ère|ere)|deuxi[eè]me|seconde?|2(?:e|ème)|troisi[eè]me|3(?:e|ème)|quatri[eè]me|4e|"
+    r"cinqui[eè]me|5e|sixi[eè]me|6e|septi[eè]me|7e|huiti[eè]me|8e|neuvi[eè]me|9e|dixi[eè]me|10e|derni[eè]re)\s+(?:sous-)?section\b",
+    re.I)
+
+
+def requested_section(state, request):
+    """The single plan section a request names (« la section 3 », « la première section »,
+    « la dernière section »), or None."""
+    sections = state.get("outline", {}).get("sections", [])
+    if not sections:
+        return None
+    match = SECTION_REQUEST.search(request)
+    if match:
+        try:
+            return resolve_section(state, match.group(1))["id"]
+        except ValueError:
+            return None
+    match = ORDINAL_SECTION_REQUEST.search(request)
+    if not match:
+        return None
+    word = match.group(1).casefold()
+    position = next((value for key, value in ORDINAL_WORDS.items() if word.startswith(key)), None)
+    if position is None:
+        return None
+    position = len(sections) if position == -1 else position
+    return sections[position-1]["id"] if 1 <= position <= len(sections) else None
 SHORT_GO_AHEAD = re.compile(r"^\W*(?:(?:maintenant|ok|okay|bien|parfait|d['’]accord|c['’]est\s+bon|vas-y|allez)\W+)*"
     r"(?:tu\s+peux\s+|on\s+peut\s+|peux-tu\s+)?(?:rédig|redig)\w*(?:\s+(?:le|l['’]|tout|maintenant|le\s+document|l['’]état\s+de\s+l['’]art))*\W*$", re.I)
 RESUME_REQUEST = re.compile(r"\b(?:reprends|reprendre|poursuis|poursuivre|continue|continuer)\b"
@@ -57,11 +90,12 @@ def begin_writing(state, request):
     """Open or resume a draft request; never synthesize a human approval."""
     document = state.setdefault("document", {})
     prior = document.get("writing_progress", {})
-    section_match = SECTION_REQUEST.search(request)
+    single = requested_section(state, request)
+    section_match = bool(single)
     multi = bool(MULTI_SECTION_REQUEST.search(request) and WRITING_ACTION.search(request) and
         not PLAN_BEFORE_WRITING.search(request) and not SINGLE_SECTION_ONLY.search(request))
     if multi:
-        section_match = None
+        section_match = False
     full = multi or bool(FULL_REQUEST.search(request)) and not bool(PLAN_BEFORE_WRITING.search(request))
     # A short go-ahead (« Maintenant rédige », « OK, tu peux rédiger ») once a plan
     # exists starts drafting from the saved cards, without another validation.
@@ -79,7 +113,7 @@ def begin_writing(state, request):
         return prior
     outline = state.get("outline", {})
     if section_match:
-        section = resolve_section(state, section_match.group(1))
+        section = resolve_section(state, single)
         targets = [section["id"]]
         baseline = {section["id"]: (section.get("drafts") or [{}])[-1].get("id")}
         mode = "section"
@@ -89,17 +123,25 @@ def begin_writing(state, request):
         targets = requested_range(state, request) if multi else [section["id"] for section in outline.get("sections", [])]
         baseline = {}
         mode = "full"
+    return open_writing(state, mode, targets, baseline)
+
+
+def open_writing(state, mode="full", targets=None, baseline=None):
+    """A new drafting progress (full draft by default: every plan section, or the
+    plan first when none exists). Used for explicit requests, never for a plan request."""
+    outline = state.get("outline", {})
+    targets = [section["id"] for section in outline.get("sections", [])] if targets is None else targets
     progress = {"id": "writing_" + uuid.uuid4().hex, "mode": mode,
         "target_ids": targets, "plan_revision": outline.get("plan_revision"),
-        "baseline_draft_ids": baseline, "saved_draft_ids": {}, "errors": [], "section_status": {},
+        "baseline_draft_ids": baseline or {}, "saved_draft_ids": {}, "errors": [], "section_status": {},
         "status": "running" if targets else "awaiting_plan",
         "approval_required": not bool(outline.get("approval"))}
-    document["writing_progress"] = progress
+    state.setdefault("document", {})["writing_progress"] = progress
     refresh_writing(state)
     return progress
 
 
-def refresh_writing(state):
+def refresh_writing(state, *, final=False):
     progress = state.get("document", {}).get("writing_progress")
     if not progress:
         return None
@@ -129,7 +171,7 @@ def refresh_writing(state):
     if progress["target_ids"] and len(saved) == len(progress["target_ids"]):
         progress["status"] = "draft_complete"
     elif progress["status"] not in {"plan_changed", "awaiting_plan"}:
-        progress["status"] = "running"
+        progress["status"] = "partial" if final else "running"
     return progress
 
 

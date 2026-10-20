@@ -27,11 +27,26 @@ def source_fingerprint(source):
     return hashlib.sha256((source["url"]+"\n"+source["text"]).encode()).hexdigest()
 
 
+# Snapshots are content-addressed and never edited in place; hashing a whole document
+# for each of its passages made a section context take up to 15 s (session 23236f69).
+_FINGERPRINTS = {}
+
+
+def _fingerprint(source):
+    key = (id(source), len(source.get("text", "")), len(source.get("chunks", [])), source.get("url"))
+    cached = _FINGERPRINTS.get(key)
+    if cached is None or cached[0] is not source:
+        if len(_FINGERPRINTS) > 4096:
+            _FINGERPRINTS.clear()
+        cached = _FINGERPRINTS[key] = (source, source_fingerprint(source))
+    return cached[1]
+
+
 def exact_source_valid(evidence, snapshots):
     source = snapshots.get(evidence.get("source_fingerprint"))
     if not source or source["article_id"] != evidence["source_article_id"] or source["url"] != evidence["source_url"]:
         return False
-    if source_fingerprint(source) != evidence["source_fingerprint"]:
+    if _fingerprint(source) != evidence["source_fingerprint"]:
         return False
     if source.get("schema_version") == 2:
         version = source["document_version"]

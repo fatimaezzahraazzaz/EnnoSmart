@@ -44,30 +44,35 @@ def ids_by_title(t):
 def test_providers_alternate_by_their_own_rank_in_the_first_window():
     t = toolkit(observed_batch())
     result = search(t)
-    providers = [t.registry[a["id"]].sources[0] for a in result["articles"]]
+    # The two notices matching the query's distinctive concepts lead the window;
+    # the others keep the providers' alternating order.
+    providers = [t.registry[a["id"]].sources[0] for a in result["articles"][2:]]
     assert providers[:4] == ["openalex", "semantic_scholar", "openalex", "semantic_scholar"]
     assert t.sources.search.call_count == 1
 
 
-def test_titles_beyond_the_window_are_indexed_not_presented():
+def test_relevant_notices_beyond_the_old_eight_result_window_are_presented_first():
+    # Run 6f5f57f4: DDPM-Polycube (22nd) and DL-Polycube (27th) were collected but
+    # only their titles were indexed. Every result now has a short abstract and the
+    # query's concepts order the window.
     t = toolkit(observed_batch())
     result = search(t)
     ids = ids_by_title(t)
-    indexed = {row["id"] for row in result["batch_index"]}
-    assert {ids["DL-Polycube"], ids["DDPM-Polycube"]} <= indexed
-    # 29 results fit in one search's share (half of the remaining limit).
-    assert result["batch_index_total"] == 29-len(result["articles"])
+    assert {a["id"] for a in result["articles"][:2]} == {ids["DL-Polycube"], ids["DDPM-Polycube"]}
+    assert all(a.get("abstract") for a in result["articles"])
+    assert len(result["articles"]) == 24 and result["batch_index_total"] == 29-24
     assert all("abstract" not in row for row in result["batch_index"])
     t.delivered([result["window_id"]])
-    assert ids["DL-Polycube"] not in t.store.exposed
+    assert ids["DL-Polycube"] in t.store.exposed
 
 
 def test_local_search_follows_the_model_query_and_enables_a_decision():
     t = toolkit(observed_batch())
     first = search(t)
     t.delivered([first["window_id"]])
+    # Already presented by the search itself; the local search still finds them first.
     found = t.execute("search_collected_articles", {"query": "hexahedral polycube diffusion", "limit": 8,
-        "exclude_presented": True, "family": None}, time.monotonic()+30)
+        "exclude_presented": False, "family": None}, time.monotonic()+30)
     ids = ids_by_title(t)
     assert [a["id"] for a in found["articles"][:2]] == [ids["DDPM-Polycube"], ids["DL-Polycube"]]
     assert found["retrieval"]["scores_are_scientific_ranking"] is False

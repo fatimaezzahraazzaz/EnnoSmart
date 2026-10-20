@@ -53,7 +53,10 @@ def test_relevant_results_at_ranks_27_35_44_65_stay_reachable_without_false_stor
     # Not stored results are announced as such (a bounded sample of titles), with
     # the provider pagination that retrieves every one of them.
     assert unstored["total"] >= len(missing) and len(unstored["titles"]) <= 15
-    assert "3DMeshNet" in {row["title"].split(":")[0] for row in unstored["titles"]}
+    # The query's concepts decide what the search's share keeps: every relevant
+    # result (ranks 27, 35, 44 and 65) is stored; generic notices wait for pagination.
+    assert not missing and "3DMeshNet" in stored_titles(t)
+    assert all(row["title"].startswith("Generic learning study") for row in unstored["titles"])
     assert unstored["stored"] is False
     assert not {row["title"] for row in unstored["titles"]} & {a.title for a in t.registry.values()}
     page = unstored["by_provider"]["semantic_scholar"]["next_offset"]

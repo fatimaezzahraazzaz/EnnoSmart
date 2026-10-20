@@ -91,9 +91,10 @@ def test_interrupted_drafting_reports_its_cause_and_resumes_at_the_next_section(
         cancelled=lambda: sum(e["tool"] == "writing_progress" and e["status"] == "completed"
             and bool(e.get("section_id")) for e in events) >= 3)
     assert first["partial"] and first["reason"] == "cancelled"
-    assert "3/7" in first["answer"] and "interruption" in first["answer"].lower()
     saved = {section["id"]: section["drafts"][-1]["id"] for section in state["outline"]["sections"] if section["drafts"]}
-    assert len(saved) == 3
+    # Completed siblings are settled at interruption rather than discarded.
+    assert 3 <= len(saved) < 7
+    assert f"{len(saved)}/7" in first["answer"] and "interruption" in first["answer"].lower()
     state["messages"].append({"role": "user", "content": "Continue la rédaction des sections restantes."})
     resumed = agent(Client(writer(ids, eids, log))).run(state)
     assert not resumed["partial"], resumed["reason"]

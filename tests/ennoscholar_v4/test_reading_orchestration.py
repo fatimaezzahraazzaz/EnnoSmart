@@ -144,7 +144,7 @@ def test_token_and_cost_limits_keep_their_exact_resource_reason_without_llm_call
         assert state["scientific_reading"]["remaining_article_ids"] == ["paper_depth"]
 
 
-def test_elapsed_time_during_a_request_preserves_the_undelivered_reading(monkeypatch):
+def test_elapsed_time_during_a_request_preserves_the_received_analysis(monkeypatch):
     from types import SimpleNamespace
     from agents.EnnoScholarV4 import agent as module
     clock = [0.]
@@ -156,5 +156,7 @@ def test_elapsed_time_during_a_request_preserves_the_undelivered_reading(monkeyp
         return save_packet(packet, n)
     result = ScholarChatAgent(replace(toolkit.config, timeout_seconds=1), client=Client(respond), sources=toolkit.sources).run(state)
     assert result["partial"] and result["reason"] == "timeout"
-    assert state["automatic_reading_focus"]["article_id"] == "paper_depth"
-    assert not state["articles"]["paper_depth"]["analysis"]
+    # The response has actually finished: local settlement validates it even when
+    # the coordinator observes the deadline before consuming its future.
+    assert state["articles"]["paper_depth"]["analysis"]
+    assert any(t["kind"] == "reading" and t["status"] == "saved" for t in state["task_results"].values())

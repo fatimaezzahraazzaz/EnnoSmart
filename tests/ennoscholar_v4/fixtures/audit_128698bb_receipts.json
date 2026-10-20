@@ -1,0 +1,768 @@
+{
+ "source": "Codex audit ennoscholar-finance-128698bb (calls.json), 2026-10-19: token counters and audit amounts only, no request or response text.",
+ "reference_prices": {
+  "model": "gpt-5.6-sol",
+  "input": 4.0,
+  "cache_read": 0.4,
+  "cache_write": 5.0,
+  "output": 20.0
+ },
+ "receipts": [
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_eaa4e38439974dc4a451376ead613321",
+   "status": "saved",
+   "response_id": "resp_0a25fbad0d9c9841016ad5f1e8ccc887d289e75a2c79974a2d",
+   "usage": {
+    "input_tokens": 14387,
+    "output_tokens": 1505,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 13911
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 113
+    }
+   },
+   "audit_app_cost": 0.087648,
+   "audit_standard_cost": 0.101559
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_12b8c3f6142c4dec81d265ba97ea65a1",
+   "status": "saved",
+   "response_id": "resp_05150ee0c409faca016ad5f21d73a087d2aba51a6b607e260f",
+   "usage": {
+    "input_tokens": 14258,
+    "output_tokens": 2156,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 13776
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 241
+    }
+   },
+   "audit_app_cost": 0.100152,
+   "audit_standard_cost": 0.113928
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_6337176ac6574cdb96ab5a065dfd9cbc",
+   "status": "saved",
+   "response_id": "resp_0c35aab17b7dae66016ad5f25ae7ec87d283ec853d32613cc4",
+   "usage": {
+    "input_tokens": 15638,
+    "output_tokens": 1364,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 15159
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 136
+    }
+   },
+   "audit_app_cost": 0.089832,
+   "audit_standard_cost": 0.104991
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_f4dfa245a4c44476bac90342266c658f",
+   "status": "refused",
+   "response_id": "resp_0a8b395baa625d4c016ad5f25c5ed087d2bb51fed4a57a0e83",
+   "usage": {
+    "input_tokens": 14522,
+    "output_tokens": 1558,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 14045
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 126
+    }
+   },
+   "audit_app_cost": 0.089248,
+   "audit_standard_cost": 0.103293
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_f4dfa245a4c44476bac90342266c658f",
+   "status": "saved",
+   "response_id": "resp_0a8b395baa625d4c016ad5f2b8340487d2bc7b0b619e13489a",
+   "usage": {
+    "input_tokens": 14376,
+    "output_tokens": 1475,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 13899
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 40
+    }
+   },
+   "audit_app_cost": 0.087004,
+   "audit_standard_cost": 0.100903
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_e07bd29adee544159f7a4e37ec6eeacb",
+   "status": "saved",
+   "response_id": "resp_0da44ac5095de1d4016ad5f285570c87d2819f58353270e722",
+   "usage": {
+    "input_tokens": 13002,
+    "output_tokens": 1923,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 12459
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 252
+    }
+   },
+   "audit_app_cost": 0.090468,
+   "audit_standard_cost": 0.102927
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "understanding",
+   "target": "7f0c32c925ce444e8558062c3ee43639",
+   "status": "generated",
+   "response_id": "resp_0102abea97ffa2af016ad5f1de071487d2b1d6050179611c8f",
+   "usage": {
+    "input_tokens": 7649,
+    "output_tokens": 131,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 7466
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    }
+   },
+   "audit_app_cost": 0.033216,
+   "audit_standard_cost": 0.040682
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_5bac8b34362c495c9e95cc0f57644484",
+   "status": "saved",
+   "response_id": "resp_0ba27f4003c166ee016ad5f1ea048c87d2aa7e2fb584375a43",
+   "usage": {
+    "input_tokens": 12388,
+    "output_tokens": 2209,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 11953
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 119
+    }
+   },
+   "audit_app_cost": 0.093732,
+   "audit_standard_cost": 0.105685
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_60faecd1492548409125a57b87144800",
+   "status": "saved",
+   "response_id": "resp_041a1e4daca31a72016ad5f1eb250887d2aebaf726967483ec",
+   "usage": {
+    "input_tokens": 11852,
+    "output_tokens": 1973,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 11421
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 183
+    }
+   },
+   "audit_app_cost": 0.086868,
+   "audit_standard_cost": 0.098289
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_f5065a1339c54c5a823a77343c748957",
+   "status": "saved",
+   "response_id": "resp_0e366da96fa86db3016ad5f21ac4b087d2a3c2386ecc17dd81",
+   "usage": {
+    "input_tokens": 12024,
+    "output_tokens": 2140,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 11590
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 132
+    }
+   },
+   "audit_app_cost": 0.090896,
+   "audit_standard_cost": 0.102486
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_50171eead4ea444ab1c1fecde6ada93f",
+   "status": "refused",
+   "response_id": "resp_02ec706b28c14f5d016ad5f21c1c2c87d2a7d489d18f4e5877",
+   "usage": {
+    "input_tokens": 12436,
+    "output_tokens": 2157,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 12002
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 324
+    }
+   },
+   "audit_app_cost": 0.092884,
+   "audit_standard_cost": 0.104886
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_50171eead4ea444ab1c1fecde6ada93f",
+   "status": "saved",
+   "response_id": "resp_02ec706b28c14f5d016ad5f2877df487d29faf84472c50d127",
+   "usage": {
+    "input_tokens": 14691,
+    "output_tokens": 1802,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 14212
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 27
+    }
+   },
+   "audit_app_cost": 0.094804,
+   "audit_standard_cost": 0.109016
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_25616f4460044a67b08b7ac93f1c9f8e",
+   "status": "refused",
+   "response_id": "resp_033eba506f026dfe016ad5f259323c87d2bd2e3205aea352d4",
+   "usage": {
+    "input_tokens": 12311,
+    "output_tokens": 1592,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 11873
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 169
+    }
+   },
+   "audit_app_cost": 0.081084,
+   "audit_standard_cost": 0.092957
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_25616f4460044a67b08b7ac93f1c9f8e",
+   "status": "saved",
+   "response_id": "resp_033eba506f026dfe016ad5f2b6e42087d28e161fa668fa4e6d",
+   "usage": {
+    "input_tokens": 14450,
+    "output_tokens": 1531,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 13967
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 81
+    }
+   },
+   "audit_app_cost": 0.08842,
+   "audit_standard_cost": 0.102387
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_a2014040754741988478f556d4cb45c6",
+   "status": "generated",
+   "response_id": "resp_0511c9949849fab8016ad5f2e37de887d28a483cae523eb1e8",
+   "usage": {
+    "input_tokens": 15690,
+    "output_tokens": 629,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 15384
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 48
+    }
+   },
+   "audit_app_cost": 0.07534,
+   "audit_standard_cost": 0.090724
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_a2014040754741988478f556d4cb45c6",
+   "status": "generated",
+   "response_id": "resp_021b90d1912285a1016ad5f2f88d3887d2a2a94ef2c07731b5",
+   "usage": {
+    "input_tokens": 26286,
+    "output_tokens": 418,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 15363
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 78
+    }
+   },
+   "audit_app_cost": 0.113504,
+   "audit_standard_cost": 0.128867
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_a2014040754741988478f556d4cb45c6",
+   "status": "generated",
+   "response_id": "resp_021b90d1912285a1016ad5f30b4fc487d295ea8ab3abbe8fc5",
+   "usage": {
+    "input_tokens": 22203,
+    "output_tokens": 446,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 21897
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 111
+    }
+   },
+   "audit_app_cost": 0.097732,
+   "audit_standard_cost": 0.119629
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_a2014040754741988478f556d4cb45c6",
+   "status": "generated",
+   "response_id": "resp_09bc8f3f5cd9fcd4016ad5f31bf69c87d2a84e510c90136d9e",
+   "usage": {
+    "input_tokens": 25575,
+    "output_tokens": 435,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 15313
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 58
+    }
+   },
+   "audit_app_cost": 0.111,
+   "audit_standard_cost": 0.126313
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_a2014040754741988478f556d4cb45c6",
+   "status": "generated",
+   "response_id": "resp_07558fc4dd476353016ad5f32f8f2487d2a63137a933f8e0fa",
+   "usage": {
+    "input_tokens": 27140,
+    "output_tokens": 296,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 15313
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 67
+    }
+   },
+   "audit_app_cost": 0.11448,
+   "audit_standard_cost": 0.129793
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_a2014040754741988478f556d4cb45c6",
+   "status": "generated",
+   "response_id": "resp_07558fc4dd476353016ad5f33d8c9887d282b2c8062684bd4a",
+   "usage": {
+    "input_tokens": 23449,
+    "output_tokens": 303,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 23143
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 65
+    }
+   },
+   "audit_app_cost": 0.099856,
+   "audit_standard_cost": 0.122999
+  },
+  {
+   "execution": "a14536021b304459871f44b5488128b9",
+   "run": "91590987 (13/14, plafond de tokens)",
+   "kind": "section",
+   "target": "section_a2014040754741988478f556d4cb45c6",
+   "status": "saved",
+   "response_id": "resp_07558fc4dd476353016ad5f34b294c87d28c4282347b1ac2ac",
+   "usage": {
+    "input_tokens": 19288,
+    "output_tokens": 3198,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 18799
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 215
+    }
+   },
+   "audit_app_cost": 0.141112,
+   "audit_standard_cost": 0.159911
+  },
+  {
+   "execution": "e1feaf7a3c024c02a040d997345d604e",
+   "run": "d46f6f20 (tentative interrompue)",
+   "kind": "understanding",
+   "target": "eb983962e5ed41b2a470866b26669fce",
+   "status": "generated",
+   "response_id": "resp_070597513ee78fd1016ad6091f2ea887d287efae8a77a1e420",
+   "usage": {
+    "input_tokens": 5006,
+    "output_tokens": 136,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 4823
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    }
+   },
+   "audit_app_cost": 0.022744,
+   "audit_standard_cost": 0.027567
+  },
+  {
+   "execution": "c1deb6a3c5a84910865c2cd048a6fe5d",
+   "run": "128698bb (section 7, succès)",
+   "kind": "understanding",
+   "target": "8ab62b91bb7d4113b7571faa9b6f3c69",
+   "status": "generated",
+   "response_id": "resp_0792ef3ea4655ae0016ad60affba7487d2834671222f6648b7",
+   "usage": {
+    "input_tokens": 4837,
+    "output_tokens": 133,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 4654
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    }
+   },
+   "audit_app_cost": 0.022008,
+   "audit_standard_cost": 0.026662
+  },
+  {
+   "execution": "c1deb6a3c5a84910865c2cd048a6fe5d",
+   "run": "128698bb (section 7, succès)",
+   "kind": "reading",
+   "target": "paper_9812a1f783142ceb8bf4",
+   "status": "saved",
+   "response_id": "resp_037d24c89d7f3e5a016ad60b2588f087d29282bffeab891bf7",
+   "usage": {
+    "input_tokens": 6788,
+    "output_tokens": 2370,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 6511
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 48
+    }
+   },
+   "audit_app_cost": 0.074552,
+   "audit_standard_cost": 0.081063
+  },
+  {
+   "execution": "c1deb6a3c5a84910865c2cd048a6fe5d",
+   "run": "128698bb (section 7, succès)",
+   "kind": "reading",
+   "target": "paper_e41c0d6864c27137d9f5",
+   "status": "saved",
+   "response_id": "resp_0919a37abf099633016ad60b3a481c87d2b9370dc88dbaf57e",
+   "usage": {
+    "input_tokens": 6828,
+    "output_tokens": 2056,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 6549
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    }
+   },
+   "audit_app_cost": 0.068432,
+   "audit_standard_cost": 0.074981
+  },
+  {
+   "execution": "c1deb6a3c5a84910865c2cd048a6fe5d",
+   "run": "128698bb (section 7, succès)",
+   "kind": "reading",
+   "target": "paper_414c65597612f559177b",
+   "status": "saved",
+   "response_id": "resp_09af13fdaebebc26016ad60b74e61487d2b438a204fe94b58d",
+   "usage": {
+    "input_tokens": 6788,
+    "output_tokens": 2351,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 6513
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 70
+    }
+   },
+   "audit_app_cost": 0.074172,
+   "audit_standard_cost": 0.080685
+  },
+  {
+   "execution": "c1deb6a3c5a84910865c2cd048a6fe5d",
+   "run": "128698bb (section 7, succès)",
+   "kind": "reading",
+   "target": "paper_e41c0d6864c27137d9f5",
+   "status": "saved",
+   "response_id": "resp_057d1efb315bdd40016ad60b79a2a087d2990378697a398cfa",
+   "usage": {
+    "input_tokens": 6584,
+    "output_tokens": 1986,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 6305
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 0
+    }
+   },
+   "audit_app_cost": 0.066056,
+   "audit_standard_cost": 0.072361
+  },
+  {
+   "execution": "c1deb6a3c5a84910865c2cd048a6fe5d",
+   "run": "128698bb (section 7, succès)",
+   "kind": "conversation",
+   "target": "3",
+   "status": "generated",
+   "response_id": "resp_0919a37abf099633016ad60b7d6a1487d2b206edb5c11e48d0",
+   "usage": {
+    "input_tokens": 24613,
+    "output_tokens": 482,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 24550
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 87
+    }
+   },
+   "audit_app_cost": 0.108092,
+   "audit_standard_cost": 0.132642
+  },
+  {
+   "execution": "c1deb6a3c5a84910865c2cd048a6fe5d",
+   "run": "128698bb (section 7, succès)",
+   "kind": "argumentation",
+   "target": "6",
+   "status": "generated",
+   "response_id": "resp_057d1efb315bdd40016ad60ba7c48c87d2891fe139b20f1ba7",
+   "usage": {
+    "input_tokens": 9158,
+    "output_tokens": 188,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 8889
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 17
+    }
+   },
+   "audit_app_cost": 0.040392,
+   "audit_standard_cost": 0.049281
+  },
+  {
+   "execution": "c1deb6a3c5a84910865c2cd048a6fe5d",
+   "run": "128698bb (section 7, succès)",
+   "kind": "argumentation",
+   "target": "7",
+   "status": "generated",
+   "response_id": "resp_057d1efb315bdd40016ad60bb0921487d2a315503aecd3d737",
+   "usage": {
+    "input_tokens": 6944,
+    "output_tokens": 196,
+    "input_tokens_details": {
+     "cached_tokens": 6370,
+     "cache_write_tokens": 305
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 40
+    }
+   },
+   "audit_app_cost": 0.031696,
+   "audit_standard_cost": 0.009069
+  },
+  {
+   "execution": "c1deb6a3c5a84910865c2cd048a6fe5d",
+   "run": "128698bb (section 7, succès)",
+   "kind": "section",
+   "target": "section_e51459b208284e3f8919de194b39d43f",
+   "status": "generated",
+   "response_id": "resp_057d1efb315bdd40016ad60bb962a087d2b785285056a02480",
+   "usage": {
+    "input_tokens": 16607,
+    "output_tokens": 472,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 16240
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 34
+    }
+   },
+   "audit_app_cost": 0.075868,
+   "audit_standard_cost": 0.092108
+  },
+  {
+   "execution": "c1deb6a3c5a84910865c2cd048a6fe5d",
+   "run": "128698bb (section 7, succès)",
+   "kind": "section",
+   "target": "section_e51459b208284e3f8919de194b39d43f",
+   "status": "generated",
+   "response_id": "resp_07e19b4aaae3e143016ad60bc7113c87d2bd66e621148a0c08",
+   "usage": {
+    "input_tokens": 24948,
+    "output_tokens": 211,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 15396
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 48
+    }
+   },
+   "audit_app_cost": 0.104012,
+   "audit_standard_cost": 0.119408
+  },
+  {
+   "execution": "c1deb6a3c5a84910865c2cd048a6fe5d",
+   "run": "128698bb (section 7, succès)",
+   "kind": "section",
+   "target": "section_e51459b208284e3f8919de194b39d43f",
+   "status": "generated",
+   "response_id": "resp_07e19b4aaae3e143016ad60bce287c87d2a12af57b178a7171",
+   "usage": {
+    "input_tokens": 16378,
+    "output_tokens": 229,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 16011
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 40
+    }
+   },
+   "audit_app_cost": 0.070092,
+   "audit_standard_cost": 0.086103
+  },
+  {
+   "execution": "c1deb6a3c5a84910865c2cd048a6fe5d",
+   "run": "128698bb (section 7, succès)",
+   "kind": "section",
+   "target": "section_e51459b208284e3f8919de194b39d43f",
+   "status": "generated",
+   "response_id": "resp_07e19b4aaae3e143016ad60bd55fd887d2a38626e371a52047",
+   "usage": {
+    "input_tokens": 15818,
+    "output_tokens": 149,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 15451
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 65
+    }
+   },
+   "audit_app_cost": 0.066252,
+   "audit_standard_cost": 0.081703
+  },
+  {
+   "execution": "c1deb6a3c5a84910865c2cd048a6fe5d",
+   "run": "128698bb (section 7, succès)",
+   "kind": "section",
+   "target": "section_e51459b208284e3f8919de194b39d43f",
+   "status": "refused",
+   "response_id": "resp_07e19b4aaae3e143016ad60bdcd6a087d2b1ca0312baa332e0",
+   "usage": {
+    "input_tokens": 12405,
+    "output_tokens": 2922,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 11855
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 103
+    }
+   },
+   "audit_app_cost": 0.10806,
+   "audit_standard_cost": 0.119915
+  },
+  {
+   "execution": "c1deb6a3c5a84910865c2cd048a6fe5d",
+   "run": "128698bb (section 7, succès)",
+   "kind": "section",
+   "target": "section_e51459b208284e3f8919de194b39d43f",
+   "status": "saved",
+   "response_id": "resp_07e19b4aaae3e143016ad60c0a67dc87d29731faed295898f2",
+   "usage": {
+    "input_tokens": 15693,
+    "output_tokens": 2905,
+    "input_tokens_details": {
+     "cached_tokens": 0,
+     "cache_write_tokens": 15098
+    },
+    "output_tokens_details": {
+     "reasoning_tokens": 85
+    }
+   },
+   "audit_app_cost": 0.120872,
+   "audit_standard_cost": 0.13597
+  }
+ ]
+}

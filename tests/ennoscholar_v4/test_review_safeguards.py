@@ -27,7 +27,9 @@ def test_absent_claims_refuse_save_without_changing_existing_draft_or_cards():
         action="save", instructions="x", text=text, article_ids=ids, evidence_ids=[eid], claims=claims)
     assert result.get("saved") is False
     assert result["claims_not_in_text"] == [c["statement"] for c in claims]
-    assert result["rejected_claims"] == claims
+    # Returned exactly as declared (with their typed provenance defaults).
+    assert [{k: c[k] for k in ("statement", "evidence_ids", "origin")} for c in result["rejected_claims"]] == claims
+    assert all(c["kind"] == "scientific" and c["project_evidence_ids"] == [] for c in result["rejected_claims"])
     assert t.state["outline"] == before
     assert all(t.registry[aid].analysis == cards[aid] for aid in ids)
 
@@ -151,6 +153,18 @@ def test_more_than_four_distinct_claim_reads_remain_available(mode):
 
     result = agent(Client(model)).run(t.state)
     assert not result["partial"], result["reason"]
+    if mode == "fields":
+        # Audit 128698bb: once every claim of the card has reached this section (packet and
+        # earlier pages), get_analysis_claims is no longer offered; each read before that was served.
+        from agents.EnnoScholarV4.writing_context import claim_key
+        from agents.EnnoScholarV4.context import analysis_projection
+        delivered = {k for keys in t.state["section_received_claims"].values() for k in keys}
+        view = analysis_projection(t.registry[ids[0]].analysis, evidence=t.evidence)
+        offered_rounds = sum("get_analysis_claims" in tools for tools in offered[:5])
+        assert offered_rounds == 5 or all(claim_key(c) in delivered for v in view.values()
+            if isinstance(v, list) and v and isinstance(v[0], dict) for c in v)
+        assert len(received) >= min(offered_rounds, 5)-1
+        return
     assert "get_analysis_claims" in offered[4]
     assert len(received) == 5
     if mode == "pages":

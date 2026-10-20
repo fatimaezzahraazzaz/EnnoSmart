@@ -5,6 +5,7 @@ from .evidence import exact_source_valid
 
 
 def active_article_ids(state, registry):
+    from .references import current_order
     document = state.get("document", {})
     section = next((s for s in state.get("outline", {}).get("sections", [])
         if s["id"] == document.get("active_section_id")), {})
@@ -12,7 +13,7 @@ def active_article_ids(state, registry):
     ids = [*state.get("current_turn_article_ids", []), *([focused] if focused else []),
         *section.get("article_ids", []), *[aid for aid, article in registry.items() if article.selected],
         *state.get("evaluation", {}).get("recommended_article_ids", []),
-        *(state.get("displayed_article_ids") or state.get("last_response", {}).get("cited_article_ids", []))]
+        *current_order(state)[0]]
     # Works put on hold by the consultant wait unless named, focused or in this section.
     held = set(state.get("held_article_ids", [])) - {*state.get("current_turn_article_ids", []), focused,
         *section.get("article_ids", [])}
@@ -31,7 +32,21 @@ def section_article_ids(state, registry, section):
     ids = [*section.get("article_ids", []), *related]
     if not ids:
         ids = active_article_ids(state, registry)
-    return list(dict.fromkeys(aid for aid in ids if aid in registry and registry[aid].selection_override is not False))
+    ids = [aid for aid in ids if aid in registry and registry[aid].selection_override is not False]
+    # A record without card whose twin (same work, same document, same card schema) was
+    # read is written from the twin's card: one reading per document. The plan keeps its
+    # own ids; the substitution is recorded for traceability.
+    from .scientific_reading import reading_twins
+    twins = {aid: group for group in reading_twins(state, registry).values() for aid in group}
+    resolved = []
+    for aid in ids:
+        if not registry[aid].analysis and aid in twins:
+            reader = next((other for other in twins[aid] if other != aid and registry[other].analysis), None)
+            if reader:
+                state.setdefault("reading_aliases", {})[aid] = reader
+                aid = reader
+        resolved.append(aid)
+    return list(dict.fromkeys(resolved))
 
 
 # Under a tight window, these card fields are deferred first (retrievable with
@@ -152,8 +167,256 @@ def revision_context(state, toolkit, section, budget):
     return packet
 
 
+# Card fields a section argues with, in the order their proof-backed claims are packed:
+# what the work found, how, under which conditions, and where it stops.
+SECTION_FIELDS = ("results", "method", "technical_mechanism", "experimental_setup", "parameters", "limitations",
+    "comparisons", "datasets_materials", "validation_protocol", "conditions_of_validity", "metrics", "tables_figures",
+    "contribution", "problem", "objective", "generalization", "hypotheses", "equations", "open_questions")
+
+
+def usable_proofs(toolkit, article, cache=None):
+    """Evidence of a card that can support a draft: stored, delivered to the model
+    earlier (shown), and still exact against its source version."""
+    cache = {} if cache is None else cache
+    if "__shown__" not in cache:
+        cache["__shown__"] = set(toolkit.shown_evidence)
+    shown = cache["__shown__"]
+    rows = {}
+    for eid in {e["evidence_id"] for e in article.analysis.get("evidence", [])} | {
+            eid for v in article.analysis.values() if isinstance(v, list) for c in v if isinstance(c, dict)
+            for eid in c.get("evidence_ids", [])}:
+        if eid not in cache:
+            # Validity of the passage only; ownership is checked per article below.
+            row = toolkit.evidence.get(eid)
+            cache[eid] = row if (row and eid in shown and exact_source_valid(row, toolkit.snapshots)) else None
+        if cache[eid] and cache[eid]["article_id"] == article.id:
+            rows[eid] = cache[eid]
+    return rows
+
+
+def source_readiness(state, toolkit, ids):
+    """Documentary state of each source of a section, never inferred from an abstract:
+    analysed (a card with usable exact proofs), card_without_proofs, to_analyse (a
+    reading can still run), unavailable (nothing readable: a documented limit)."""
+    tasks = {t["article_id"]: t for t in state.get("scientific_reading", {}).get("tasks", [])}
+    rows, cache = {}, {}
+    for aid in ids:
+        article = toolkit.registry.get(aid)
+        if not article or article.selection_override is False:
+            continue
+        task = tasks.get(aid) or {}
+        if article.analysis:
+            status = "analysed" if usable_proofs(toolkit, article, cache) else "card_without_proofs"
+        elif not article.abstract and not article.fulltext.get("text"):
+            status = "unavailable"
+        elif task.get("exhausted") or task.get("status") in {"source_unavailable", "needs_review"}:
+            status = "unavailable"
+        else:
+            status = "to_analyse"
+        rows[aid] = {"status": status, "basis": article.analysis_basis or ("fulltext" if article.fulltext.get("text") else
+            "abstract" if article.abstract else "metadata"), "reading": {k: task.get(k) for k in
+            ("status", "core_covered", "coverage_sufficient", "remaining_passages") if task.get(k) is not None}}
+    return rows
+
+
+def section_dossier(state, toolkit, section, budget):
+    """The scientific side of one section: its question, its sources and their state,
+    then proof-backed claims (a card claim always travels with its exact passages,
+    never without them), round-robin across works and fields. Secondary context
+    (previous sections, relations) takes what remains. Durable cards are untouched."""
+    from .context import evidence_projection, analysis_projection
+    from .attribution import article_identity, claim_subject
+    outline = state.get("outline", {})
+    ids = section_article_ids(state, toolkit.registry, section)
+    readiness = source_readiness(state, toolkit, ids)
+    terms = section_terms(section)
+    packet = {"title": outline.get("title"), "plan_revision": outline.get("plan_revision"),
+        "plan_status": outline.get("status", "proposed"),
+        "section": {k: section.get(k) for k in ("id", "title", "scientific_objective", "lock_ids", "article_ids",
+            "article_roles", "experimental_results", "limitations", "missing_information", "project_connection") if section.get(k)},
+        "sources": [], "proof_backed_claims": [], "evidence": [], "table_evidence_index": [],
+        "guidance": "Résultats, méthodes et limites des publications : uniquement ceux de proof_backed_claims, en citant "
+            "[paper_ID] et les [ev_…] de leurs preuves dans la même phrase. Faits du projet : diagnostic_context, cités "
+            "[projet:evidence_id]. Une comparaison cite les deux. Une source unavailable ou to_analyse est une limite "
+            "documentaire à nommer, jamais un résultat. analysis_basis=abstract n'est pas une lecture intégrale."}
+    # Sources start compact (identity and state); their details are added after the proofs.
+    details = {}
+    for aid, row in readiness.items():
+        article = toolkit.registry[aid]
+        identity = {k: v for k, v in article_identity(article).items() if v and k not in {"authors", "article_id"}}
+        packet["sources"].append({"id": aid, "title": article.title[:120], "year": article.year,
+            **{k: identity[k] for k in ("short_name", "first_author") if k in identity},
+            "status": row["status"], "analysis_basis": row["basis"]})
+        details[aid] = {"title": article.title[:220], **({"method_names": identity["method_names"]} if identity.get("method_names") else {}),
+            "reading": row["reading"], **({"abstract": article.abstract[:300]} if row["status"] != "analysed" and article.abstract else {})}
+    size = lambda: len(json.dumps(packet, ensure_ascii=False))
+    proof_cache = {}
+    queues = []
+    for aid, row in readiness.items():
+        if row["status"] != "analysed":
+            continue
+        article = toolkit.registry[aid]
+        proofs = usable_proofs(toolkit, article, proof_cache)
+        view = analysis_projection(article.analysis, evidence=toolkit.evidence)
+        claims = []
+        for field in SECTION_FIELDS:
+            value = view.get(field)
+            if not (isinstance(value, list) and value and isinstance(value[0], dict)):
+                continue
+            for claim in rank_claims(value, terms):
+                if claim.get("evidence_ids") and all(eid in proofs for eid in claim["evidence_ids"]):
+                    claims.append((field, claim))
+        # Alternate fields so results and limits are not crowded out by many method claims.
+        by_field = {}
+        for field, claim in claims:
+            by_field.setdefault(field, []).append(claim)
+        order = [(field, by_field[field][i]) for i in range(max((len(v) for v in by_field.values()), default=0))
+            for field in SECTION_FIELDS if field in by_field and i < len(by_field[field])]
+        queues.append((aid, proofs, order, len(claims)))
+    included = set()
+    shown_claims = {aid: 0 for aid, *_ in queues}
+    # Other exact passages already delivered for these analysed works. Table rows come
+    # first (numeric claims are checked against their cells; long claims must not crowd
+    # them out), then the proof-backed claims, then quantified and other passages.
+    extra = {aid: [] for aid, *_ in queues}
+    for eid in reversed(toolkit.shown_evidence):
+        row = toolkit.evidence.get(eid)
+        if row and row["article_id"] in extra and exact_source_valid(row, toolkit.snapshots):
+            extra[row["article_id"]].append(row)
+    for rows in extra.values():
+        rows.sort(key=lambda e: (not isinstance(e.get("table"), dict), not re.search(r"\d", e.get("exact_quote", ""))))
+
+    def add_extra(limit, tables_only):
+        for index in range(max((len(v) for v in extra.values()), default=0)):
+            for rows in extra.values():
+                if index >= len(rows) or rows[index]["evidence_id"] in included:
+                    continue
+                if tables_only and not isinstance(rows[index].get("table"), dict):
+                    continue
+                packet["evidence"].append(evidence_projection(rows[index]))
+                if size() > limit:
+                    packet["evidence"].pop()
+                else:
+                    included.add(rows[index]["evidence_id"])
+    add_extra(budget*.3, True)
+    for index in range(max((len(q[2]) for q in queues), default=0)):
+        for aid, proofs, order, _ in queues:
+            if index >= len(order):
+                continue
+            field, claim = order[index]
+            added = [eid for eid in claim["evidence_ids"] if eid not in included]
+            packet["proof_backed_claims"].append({"article_id": aid, "field": field, "statement": claim["statement"],
+                "evidence_ids": claim["evidence_ids"], **({"subject": claim["subject"]} if claim.get("subject") else {})})
+            packet["evidence"].extend(evidence_projection(proofs[eid]) for eid in added)
+            if size() > budget*.75:
+                packet["proof_backed_claims"].pop()
+                del packet["evidence"][len(packet["evidence"])-len(added):]
+                continue
+            included.update(added)
+            shown_claims[aid] += 1
+    for aid, proofs, order, total in queues:
+        source = next(s for s in packet["sources"] if s["id"] == aid)
+        source.update(claims_with_proofs=total, claims_shown=shown_claims[aid])
+        details[aid]["claims_available"] = {k: len(v) for k, v in toolkit.registry[aid].analysis.items()
+            if isinstance(v, list) and v and isinstance(v[0], dict) and k not in {"evidence"}}
+    add_extra(budget*.9, False)
+    for eid in included:
+        proof = toolkit.evidence[eid]
+        if isinstance(proof.get("table"), dict):
+            packet["table_evidence_index"].append({"evidence_id": eid, "article_id": proof["article_id"],
+                "table": {k: proof["table"].get(k) for k in ("number", "caption", "row", "headers") if proof["table"].get(k)}})
+    # Source details (full title, method names, reading state, card counts), when room is left.
+    for source in packet["sources"]:
+        before = dict(source)
+        source.update(details[source["id"]])
+        if size() > budget*.92:
+            source.clear()
+            source.update(before)
+    # Secondary context, within what is left: the saved storyline of this section first.
+    from .argumentation import blueprint_status
+    blueprint = state.get("argument_blueprint", {})
+    if blueprint and not blueprint_status(state, toolkit.registry)["stale"]:
+        packet["argument_blueprint"] = {"id": blueprint["id"], "version": blueprint["version"],
+            "axes": [{"axis": axis["axis"], "scientific_problem": axis["scientific_problem"],
+                "transition": axis["transition"], "steps": [{**step, "statement": step["statement"][:600]}
+                    for step in axis["steps"][:12]]} for axis in blueprint["axes"] if
+                axis.get("section_id") == section.get("id") or
+                (not axis.get("section_id") and set(aid for step in axis["steps"] for aid in step["article_ids"]) & set(ids))][:3]}
+        fact_ids = {fid for axis in packet["argument_blueprint"]["axes"] for step in axis["steps"] for fid in step["project_fact_ids"]}
+        from .diagnostic_link import project_facts_view
+        packet["project_facts"] = [fact for fact in project_facts_view(state) if fact["id"] in fact_ids]
+        if size() > budget:
+            packet["argument_blueprint"] = {"id": blueprint["id"], "version": blueprint["version"],
+                "axes": [{"axis": a["axis"], "step_evidence_ids": [st["evidence_ids"] for st in a["steps"]]}
+                    for a in packet["argument_blueprint"]["axes"]]}
+            packet["project_facts"] = [{k: f[k] for k in ("id", "statement") if k in f} for f in packet["project_facts"]]
+    # What the other sections establish (manuscript memory): transitions refer to it and
+    # the synthesis builds on it instead of re-reading and repeating the same results.
+    synthesis = bool(re.search(r"\b(?:synth[eè]se|conclusions?|perspectives|bilan|summary|outlook)\b", section.get("title", ""), re.I))
+    packet["manuscript_map"] = manuscript_map(state, toolkit, section, budget*(.3 if synthesis else .12))
+    for relation in state.get("scientific_relations", []):
+        if set(relation["article_ids"]) <= set(ids) and not relation.get("stale"):
+            packet.setdefault("relations", []).append({k: v for k, v in relation.items() if k != "experimental_results"})
+            if size() > budget:
+                packet["relations"].pop()
+                break
+    packet["transmission_partial"] = any(s.get("claims_shown", 0) < s.get("claims_with_proofs", 0) for s in packet["sources"])
+    # What is really missing, computed locally before the model is called: claims of the
+    # cards not yet transmitted to this section (here or earlier), sources without card,
+    # abstract-only cards and core dimensions never examined. Nothing else is to fetch.
+    delivered = set(state.get("section_received_claims", {}).get(section.get("id"), [])) | {
+        claim_key(c) for c in packet["proof_backed_claims"]}
+    gaps = retrieval_gaps(state, toolkit, readiness, delivered)
+    packet["retrieval_gaps"] = gaps
+    packet["retrieval"] = ("get_analysis_claims(article_id, fields, offset) transmet les affirmations listées dans "
+        "retrieval_gaps.claims_not_transmitted ; analyze_article(read, evidence_ids) relit un passage exact."
+        if not gaps["complete"] else "Toutes les affirmations probantes des fiches de cette section sont transmises "
+        "(retrieval_gaps vide) : rédiger et sauvegarder à partir de ce paquet, sans relire les fiches.")
+    return packet
+
+
+def claim_key(claim):
+    """Identity of a card claim as transmitted (statement and its proofs)."""
+    from .task_results import fingerprint
+    return fingerprint([claim.get("statement"), sorted(claim.get("evidence_ids", []))])
+
+
+def retrieval_gaps(state, toolkit, readiness, delivered):
+    from .context import analysis_projection
+    tasks = {t["article_id"]: t for t in state.get("scientific_reading", {}).get("tasks", [])}
+    gaps = {"claims_not_transmitted": {}, "sources_without_card": [], "abstract_only": [], "dimensions_not_examined": {}}
+    for aid, row in readiness.items():
+        if row["status"] != "analysed":
+            gaps["sources_without_card"].append(aid)
+            continue
+        view = analysis_projection(toolkit.registry[aid].analysis, evidence=toolkit.evidence)
+        # A count per work keeps the packet small; get_analysis_claims returns the claims themselves.
+        missing = sum(claim_key(c) not in delivered for value in view.values()
+            if isinstance(value, list) and value and isinstance(value[0], dict) for c in value)
+        if missing:
+            gaps["claims_not_transmitted"][aid] = missing
+        if row["basis"] == "abstract":
+            gaps["abstract_only"].append(aid)
+        dims = [name for name, value in (tasks.get(aid, {}).get("dimensions") or {}).items() if value.get("status") == "not_examined"]
+        if dims:
+            gaps["dimensions_not_examined"][aid] = dims
+    gaps["complete"] = not any(gaps[k] for k in ("claims_not_transmitted", "sources_without_card", "dimensions_not_examined"))
+    return gaps
+
+
+def section_packet(inputs):
+    """The section packet actually sent in a request (None outside section drafting)."""
+    for item in inputs:
+        content = item.get("content") if isinstance(item, dict) and item.get("role") == "developer" else None
+        if isinstance(content, str) and content.startswith("Mémoire scientifique"):
+            try:
+                return (json.loads(content.split(" : ", 1)[1]).get("section_drafting") or {}).get("packet")
+            except (ValueError, IndexError, AttributeError):
+                return None
+    return None
+
+
 def writing_context(state, toolkit, section=None, budget=7000):
-    from .context import evidence_projection, article_projection
     outline = state.get("outline", {})
     if section is None:
         section = next((s for s in outline.get("sections", [])
@@ -161,114 +424,70 @@ def writing_context(state, toolkit, section=None, budget=7000):
     progress = state.get("document", {}).get("writing_progress", {})
     if progress.get("mode") == "section" and section.get("id") in progress.get("target_ids", []) and section.get("drafts"):
         return revision_context(state, toolkit, section, budget)
-    ids = section_article_ids(state, toolkit.registry, section)
-    packet = {"title": outline.get("title"), "plan_revision": outline.get("plan_revision"),
-        "plan_status": outline.get("status", "proposed"), "section": section_projection(section,800,compact=True),
-        "preceding_argument": [{"id": s["id"], "title": s["title"],
-            "established_text": (s.get("drafts") or [{}])[-1].get("text", "")[:500],
-            "article_ids": s["article_ids"]} for s in outline.get("sections", [])[:next(
-                (i for i,s in enumerate(outline.get("sections", [])) if s.get("id")==section.get("id")),0)]][-6:],
-        "articles": [article_projection(toolkit.registry[aid], 400, summary=True) for aid in ids if aid in toolkit.registry],
-        "relations": [{k:v for k,v in r.items() if k != "experimental_results"}
-            for r in state.get("scientific_relations", []) if set(r["article_ids"]) <= set(ids)],
-        "figures": [{k:f[k] for k in ("id","kind","title","section_id","evidence_ids")} for f in state.get("scientific_figures",[]) if f["section_id"]==section.get("id")],
-        "evidence": [], "evidence_available": 0,
-        "guidance": "Contexte borné ; sources, anciennes versions et preuves exactes restent en stockage. Relire passages/tableaux ciblés si nécessaire. "
-            "analysis_available indique toutes les affirmations sauvegardées de chaque fiche (paramètres, équations, protocoles, résultats, limites) : "
-            "get_article(ID) transmet la fiche complète et analyze_article(read, evidence_ids) ses preuves exactes, sans nouvelle recherche. "
-            "Le plan doit être validé par le consultant ; aucune approbation du modèle."}
-    # Canonical identity of each publication (title, first author, own method
-    # names): the draft is checked against it before saving.
-    from .attribution import article_identity
-    packet["identities"] = [{k: v for k, v in article_identity(toolkit.registry[aid]).items() if v and k != "authors"}
-        for aid in ids if aid in toolkit.registry]
-    from .argumentation import blueprint_status
-    blueprint = state.get("argument_blueprint", {})
-    status = blueprint_status(state, toolkit.registry)
-    if blueprint and not status["stale"]:
-        packet["argument_blueprint"] = {"id": blueprint["id"], "version": blueprint["version"],
-            "axes": [{"axis": axis["axis"], "scientific_problem": axis["scientific_problem"],
-                "transition": axis["transition"], "steps": [{**step, "statement": step["statement"][:600]}
-                    for step in axis["steps"][:12]]} for axis in blueprint["axes"] if
-                axis.get("section_id") == section.get("id") or
-                (not axis.get("section_id") and set(aid for step in axis["steps"] for aid in step["article_ids"]) & set(ids))][:3]}
-        fact_ids = {fid for axis in packet["argument_blueprint"]["axes"] for step in axis["steps"]
-            for fid in step["project_fact_ids"]}
-        packet["project_facts"] = [fact for fact in state.get("project_facts", []) if fact["id"] in fact_ids]
-    # Keep multiple claims per field when the section needs them; the durable
-    # card remains complete even if this particular reading window is bounded.
-    terms = section_terms(section)
-    for article in packet["articles"]:
-        from .context import analysis_projection
-        aid = article["id"]
-        # The claims closest to this section come first; whole statements, so
-        # numbers, units and conditions are never cut. The others stay retrievable.
-        article["analysis"] = {field: (rank_claims(value, terms)[:3] if isinstance(value, list) and value and isinstance(value[0], dict) else value)
-            for field, value in analysis_projection(toolkit.registry[aid].analysis, evidence=toolkit.evidence).items()}
-        article["analysis_available"] = {k: len(v) for k,v in toolkit.registry[aid].analysis.items()
-            if isinstance(v,list) and v and k not in {"evidence","method_families","analysis_limits"}}
-    for key in ("preceding_argument","figures","relations"):
-        while len(json.dumps(packet,ensure_ascii=False))>budget*.7 and packet[key]:
-            packet[key].pop()
-    if len(json.dumps(packet,ensure_ascii=False))>budget*.7:
-        packet["section"] = {"id":section.get("id"),"title":section.get("title"),"article_ids":ids}
-    # Reserve room for exact proof passages before reducing scientific cards.
-    # A long analysis must not crowd every source quotation out of the window.
-    target = max(0, budget-1600)
-    for claim_cap in (2, 1):
-        if len(json.dumps(packet,ensure_ascii=False)) <= target:
-            break
-        for article in packet["articles"]:
-            for value in article.get("analysis", {}).values():
-                if isinstance(value, list) and len(value) > claim_cap:
-                    del value[claim_cap:]
-    for article in packet["articles"]:
-        if len(json.dumps(packet,ensure_ascii=False)) <= target:
-            break
-        article["abstract"] = article.get("abstract", "")[:180]
-    for article in reversed(packet["articles"]):
-        # Fewer whole claims rather than shortened ones: drop the least related
-        # fields of the last works first; analysis_available still counts them.
-        for field in DEFERRABLE_FIELDS:
-            if len(json.dumps(packet,ensure_ascii=False)) <= target:
+    return section_dossier(state, toolkit, section, budget)
+
+
+def _sentences(text):
+    from .attribution import sentences
+    return [x for x in sentences(re.sub(r"^\s*#{1,6}\s+[^\n]*\n", "", text or "")) if len(x) > 40]
+
+
+def section_memory(state, section):
+    """Compact memory of one saved section: its role, what it establishes, its limits and
+    links (written by the model at save time), its sources and the project work it cites.
+    Drafts saved without such a summary get an extract of their own first and last
+    sentences, labelled as such. Never a new fact: the proofs stay in the draft."""
+    draft = (section.get("drafts") or [None])[-1]
+    if not draft:
+        return None
+    stored = (state.get("manuscript_memory") or {}).get(section["id"])
+    if stored and stored.get("draft_id") == draft["id"]:
+        return stored
+    rows = _sentences(draft.get("raw_text") or draft.get("text"))
+    return {"section_id": section["id"], "draft_id": draft["id"], "origin": "extract_of_saved_text",
+        "established": rows[-1:] if rows else [], "opening": rows[:1], "article_ids": draft.get("article_ids", []),
+        "project_units": sorted({f"{r['lock_id']}:{r['unit']}" for r in draft.get("project_relations", []) if r.get("unit")})}
+
+
+def record_section_memory(state, section, draft, summary):
+    """Store the model's own summary of a saved section (manuscript memory)."""
+    memory = state.setdefault("manuscript_memory", {})
+    memory[section["id"]] = {"section_id": section["id"], "draft_id": draft["id"], "origin": "writer_summary",
+        **{k: summary.get(k) for k in ("role", "established", "limits", "links") if summary.get(k)},
+        "article_ids": draft.get("article_ids", []),
+        "project_units": sorted({f"{r['lock_id']}:{r['unit']}" for r in draft.get("project_relations", []) if r.get("unit")})}
+    return memory[section["id"]]
+
+
+def manuscript_map(state, toolkit, section, budget):
+    """Every other section of the plan, in order: its state, and for saved ones what it
+    establishes, its limits and sources (short identities). Bounded; the sections nearest
+    to this one come first when room runs out."""
+    sections = state.get("outline", {}).get("sections", [])
+    progress = state.get("document", {}).get("writing_progress") or {}
+    position = next((i for i, s in enumerate(sections) if s.get("id") == section.get("id")), 0)
+    order = sorted((i for i, s in enumerate(sections) if s.get("id") != section.get("id")), key=lambda i: abs(i-position))
+    rows = {}
+    for i in order:
+        other = sections[i]
+        memory = section_memory(state, other)
+        if memory:
+            names = [toolkit.registry[a].title.split(":")[0][:60] for a in memory.get("article_ids", []) if a in toolkit.registry]
+            row = {"number": i+1, "title": other["title"][:160], "status": "saved",
+                **{k: memory[k] for k in ("role", "established", "limits", "links", "opening") if memory.get(k)},
+                "sources": names[:6], **({"project_units": memory["project_units"]} if memory.get("project_units") else {}),
+                **({"memory_origin": memory["origin"]} if memory.get("origin") != "writer_summary" else {})}
+        else:
+            row = {"number": i+1, "title": other["title"][:160],
+                "status": "blocked" if other["id"] in progress.get("blocked", {}) else "not_written",
+                **({"cause": progress["blocked"][other["id"]][:200]} if other["id"] in progress.get("blocked", {}) else {})}
+        rows[i] = row
+        if len(json.dumps(list(rows.values()), ensure_ascii=False)) > budget:
+            rows.pop(i)
+            rows[i] = {"number": i+1, "title": other["title"][:120], "status": row["status"]}
+            if len(json.dumps(list(rows.values()), ensure_ascii=False)) > budget:
+                rows.pop(i)
                 break
-            if article.get("analysis", {}).pop(field, None) is not None:
-                article.setdefault("deferred_fields", []).append(field)
-    while len(json.dumps(packet,ensure_ascii=False)) > target and len(packet["articles"]) > 1:
-        packet["articles"].pop()
-    pinned = set(section.get("evidence_ids", []))
-    pinned.update(e for d in section.get("drafts", [])[-1:] for e in d.get("evidence_ids", []))
-    proofs = [toolkit.evidence[e] for e in reversed(toolkit.shown_evidence) if e in toolkit.evidence
-        and toolkit.evidence[e]["article_id"] in ids and exact_source_valid(toolkit.evidence[e], toolkit.snapshots)]
-    proofs.sort(key=lambda e: (e["evidence_id"] not in pinned, not bool(e.get("table"))))
-    packet["table_evidence_index"] = [{"evidence_id": proof["evidence_id"],
-        "article_id": proof["article_id"], "table": {key: proof["table"].get(key)
-            for key in ("number", "caption", "row", "headers") if proof["table"].get(key)}}
-        for proof in proofs if isinstance(proof.get("table"), dict)][:12]
-    groups = {aid: [e for e in proofs if e["article_id"]==aid] for aid in ids}
-    packet["evidence_available"] = len(proofs)
-    for i in range(max((len(g) for g in groups.values()), default=0)):
-        for group in groups.values():
-            if i >= len(group):
-                continue
-            projected = evidence_projection(group[i])
-            packet["evidence"].append(projected)
-            if len(json.dumps(packet,ensure_ascii=False))>budget:
-                packet["evidence"].pop()
-    # Trim context, never the durable manuscript or exact source quotation.
-    for key in ("preceding_argument", "relations", "figures"):
-        while len(json.dumps(packet,ensure_ascii=False))>budget and packet[key]:
-            packet[key].pop()
-    while len(json.dumps(packet,ensure_ascii=False))>budget and packet["evidence"]:
-        packet["evidence"].pop()
-    while len(json.dumps(packet,ensure_ascii=False))>budget and len(packet["articles"])>1:
-        packet["articles"].pop()
-    if len(json.dumps(packet,ensure_ascii=False))>budget and packet.get("argument_blueprint"):
-        packet["argument_blueprint"] = {"id": packet["argument_blueprint"]["id"],
-            "version": packet["argument_blueprint"]["version"],
-            "axes": [{"axis": axis["axis"], "step_ids": [step["evidence_ids"] for step in axis["steps"]]}
-                for axis in packet["argument_blueprint"]["axes"]]}
-    if len(json.dumps(packet,ensure_ascii=False))>budget:
-        packet["section"] = {"id":section.get("id"),"title":section.get("title"),"article_ids":ids}
-    packet["transmission_partial"] = len(packet["evidence"]) < len(proofs)
-    return packet
+    return {"sections": [rows[i] for i in sorted(rows)], "sections_total": len(sections)-1,
+        "guidance": "Ce que les autres sections établissent déjà : y renvoyer brièvement au lieu de répéter leurs "
+            "résultats ; la synthèse s'appuie sur cette carte et nomme les sections non rédigées comme limites."}

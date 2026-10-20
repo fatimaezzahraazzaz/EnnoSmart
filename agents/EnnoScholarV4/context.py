@@ -21,13 +21,19 @@ class ActiveReadingContextError(ValueError):
 # relations, plan, drafts, decisions) is never reduced; only what is transmitted
 # for the current task is chosen here, everything else stays retrievable by tools.
 COMMON_KEYS = {"topic", "summary", "focus", "outline", "corpus_total", "guidance", "writing_progress", "scientific_scope",
-    "consultant_instructions", "context_task", "retrieval", "argument_blueprint_status", "selected_articles"}
+    "consultant_instructions", "context_task", "retrieval", "argument_blueprint_status", "selected_articles", "diagnostic_context",
+    "turn_goal", "lock_coverage", "conversation_focus"}
 TASK_KEYS = {
-    "reading": COMMON_KEYS | {"automatic_scientific_reading", "scientific_reading_status"},
+    # Reading one article needs its passages, not the project or the lock ledger.
+    "reading": (COMMON_KEYS - {"diagnostic_context", "lock_coverage"}) | {"automatic_scientific_reading", "scientific_reading_status"},
     "argumentation": COMMON_KEYS | {"argumentation_focus", "user_message_sources", "project_facts", "scientific_reading_status"},
-    "section": COMMON_KEYS | {"section_drafting", "section_sources_status"},
+    # A section works from its own dossier (sources, proof-backed claims, project work units):
+    # corpus-wide views (selected articles, lock coverage, reading ledger) stay in storage.
+    "section": {"topic", "outline", "scientific_scope", "consultant_instructions", "context_task", "diagnostic_context",
+        "turn_goal", "writing_progress", "section_drafting", "conversation_focus"},
     "planning": COMMON_KEYS | {"conversation_science", "conversation_guidance", "argument_blueprint", "project_facts",
-        "scientific_reading_status", "coverage_review", "displayed_article_order"},
+        "scientific_reading_status", "coverage_review", "displayed_article_order", "plan_sources", "plan_sources_total", "recent_searches", "plan_part",
+        "other_plan_sources"},
     "selection": COMMON_KEYS | {"selection_candidates", "selection_candidates_total", "recent_searches", "coverage_review",
         "displayed_article_order", "candidate_index", "candidate_index_total"},
     "recovery": COMMON_KEYS | {"scientific_reading_recovery", "scientific_reading_status", "candidate_index",
@@ -37,10 +43,56 @@ TASK_KEYS = {
 # the task's own packet is reduced last, by rebuilding it smaller (never clipped).
 OPTIONAL_ORDER = ("recent_searches", "candidate_index", "coverage_review", "displayed_article_order", "argument_blueprint",
     "project_facts", "scientific_reading_status", "section_sources_status", "summary", "focus", "candidate_articles",
-    "selected_articles", "scientific_scope", "outline")
+    "selected_articles", "plan_sources", "scientific_scope", "outline")
+# Views removed before the scientific packet of a request shrinks (final fitting).
+SECONDARY_ORDER = ("recent_searches", "coverage_review", "scientific_reading_status", "writing_context", "lock_coverage",
+    "selected_articles", "candidate_articles", "source_material", "evidence", "outline", "summary", "focus",
+    "scientific_scope", "argument_blueprint_status", "writing_progress", "displayed_article_order", "project_facts",
+    "user_message_sources", "diagnostic_context")
 TASK_PACKET = {"section": "section_drafting", "argumentation": "argumentation_focus", "reading": "automatic_scientific_reading",
     "planning": "conversation_science", "selection": "selection_candidates", "recovery": "scientific_reading_recovery"}
 READING_ROWS = 12
+
+
+def diagnostic_task_locks(state, task):
+    """Locks whose project dossier a task needs, or None for the general packet."""
+    if task == "planning":
+        return list((state.get("plan_part") or {}).get("lock_ids") or [])
+    if task == "section":
+        from .tools.outline import resolve_section
+        try:
+            section = resolve_section(state, state["writing_focus"]["section_id"])
+        except (KeyError, ValueError):
+            return []
+        return list(section.get("lock_ids") or [])
+    if task == "argumentation":
+        return list((state.get("turn_goal") or {}).get("lock_ids") or [])
+    return None
+
+
+# Room for the project dossier of one task (whole records; omissions are counted).
+DOSSIER_CHARS = {"planning": 9000, "section": 9000, "argumentation": 4500}
+# Memory of one plan part (a lock or an axis, generated in parallel), within the
+# unchanged max_context_chars: its sources with their cards and the project's work units.
+PLAN_PART_CONTEXT_CHARS = 26000
+# Memory of one section request, within the unchanged max_context_chars: exact proof
+# passages (1.2-1.9 k characters each) are the section's input, not optional detail
+# (run b52f582a: 0 complete passage transmitted in 9 section requests at 18 000).
+SECTION_CONTEXT_CHARS = 40000
+
+
+# Below this size a multi-lock dossier would keep lock titles only (run d71d17b0: 716 chars).
+DOSSIER_FLOOR = 4500
+
+
+def dossier_budget(task, budget):
+    return max(DOSSIER_FLOOR, min(DOSSIER_CHARS[task], int(budget*.4)))
+
+
+def lock_dossier(state, lock_ids, budget):
+    from .diagnostic_link import lock_dossier as build
+    # A lock's part keeps its own facts; general project context is added when room is left.
+    return build(state, lock_ids or None, budget)
 
 
 def context_task(state, final=False):
@@ -74,6 +126,9 @@ def fit_focused(memory, messages, budget, task, state, toolkit, section=None, ke
         return len(json.dumps(memory, ensure_ascii=False)) + sum(len(m["content"]) for m in messages)
     if size() <= budget:
         return memory, messages
+    if memory.get("diagnostic_context") and task not in DOSSIER_CHARS:
+        from .diagnostic_link import active_packet
+        memory["diagnostic_context"] = active_packet(state, 1200)
     messages = messages[-1:]
     packet_key = TASK_PACKET.get(task)
     for key in OPTIONAL_ORDER:
@@ -97,6 +152,12 @@ def fit_focused(memory, messages, budget, task, state, toolkit, section=None, ke
             memory["argumentation_focus"]["packet"] = bounded_argument_packet(argument_packet(state, toolkit,
                 focus.get("article_ids"), claim_offsets=focus.get("claim_offsets")), max(1500, min(int(current*factor), current-excess-256)),
                 proof_mode="reference")
+        elif task == "planning" and memory.get("conversation_science", {}).get("papers"):
+            from .argumentation import argument_packet, bounded_argument_packet
+            current = len(json.dumps(memory["conversation_science"], ensure_ascii=False))
+            ids = [paper["id"] for paper in memory["conversation_science"]["papers"]]
+            memory["conversation_science"] = bounded_argument_packet(argument_packet(state, toolkit, ids),
+                max(1500, min(int(current*factor), current-excess-256)))
         elif task == "selection" and "selection_candidates" not in keep and len(memory.get("selection_candidates", [])) > 3:
             memory["selection_candidates"] = memory["selection_candidates"][:max(3, int(len(memory["selection_candidates"])*factor))]
         else:
@@ -104,6 +165,12 @@ def fit_focused(memory, messages, budget, task, state, toolkit, section=None, ke
         factor -= .2
     if size() > budget and memory.get("consultant_instructions"):
         memory["consultant_instructions"]["items"] = memory["consultant_instructions"]["items"][-5:]
+    if size() > budget and task in DOSSIER_CHARS and memory.get("diagnostic_context"):
+        # Last resort: the project dossier is rebuilt smaller (whole records, counted
+        # omissions), never replaced by lock identifiers alone (run d71d17b0: 716 chars).
+        current = len(json.dumps(memory["diagnostic_context"], ensure_ascii=False))
+        memory["diagnostic_context"] = lock_dossier(state, diagnostic_task_locks(state, task),
+            max(DOSSIER_FLOOR, current-(size()-budget)-256))
     return memory, messages
 
 
@@ -187,8 +254,100 @@ def article_projection(article, abstract_limit=800, *, summary=False):
     if summary and len(row.get("authors",[]))>5:
         row["authors_total"]=len(row["authors"]); row["authors"]=row["authors"][:5]; row["authors_truncated"]=True
     if article.assessment:
-        row["assessment"] = {k: v for k, v in article.assessment.items() if k in {"decision", "justification", "basis"}}
+        row["assessment"] = {k: v for k, v in article.assessment.items() if k in {"decision", "justification", "basis"} or
+            (k in {"lock_ids", "contribution"} and v)}
     return row
+
+
+def targeted_ids(state, toolkit):
+    """Analysed publications this request targets (turn_goal references), in dialogue order,
+    and whether they are the only ones (exclusive) or come first (primary)."""
+    refs = (state.get("turn_goal") or {}).get("references") or {}
+    if refs.get("ambiguous") or refs.get("scope") not in {"exclusive", "primary"}:
+        return [], None
+    ids = [aid for aid in refs.get("article_ids") or [] if aid in toolkit.registry and toolkit.registry[aid].analysis]
+    return ids, refs["scope"] if ids else None
+
+
+# Dimensions a detailed answer is built from (methods, protocols, results, limits). The other
+# fields of a card (problem, objective, relevance…) stay readable page by page.
+TARGET_FIELDS = ("method", "technical_mechanism", "equations", "parameters", "experimental_setup", "validation_protocol",
+    "datasets_materials", "results", "metrics", "tables_figures", "comparisons", "limitations", "conditions_of_validity",
+    "contribution")
+
+
+def focus_fields(science_packet, targets, fields=TARGET_FIELDS):
+    """The targeted works restricted to the requested dimensions, in the card's order."""
+    import copy as _copy
+    packet = _copy.deepcopy(science_packet)
+    for paper in packet["papers"]:
+        if paper["id"] not in targets:
+            continue
+        order = [field for field in paper.get("claim_order", []) if field in fields]
+        kept = {field: value for field, value in paper["analysis"].items() if not isinstance(value, list) or field in fields}
+        paper["deferred_fields"] = {field: len(value) for field, value in paper["analysis"].items()
+            if isinstance(value, list) and value and field not in fields}
+        paper["analysis"], paper["claim_order"] = kept, order
+        used = {eid for value in kept.values() if isinstance(value, list) for claim in value if isinstance(claim, dict)
+            for eid in claim.get("evidence_ids", [])}
+        paper["proofs"] = [e for e in paper["proofs"] if e["evidence_id"] in used] or paper["proofs"][:1]
+        paper["claim_total"] = len(order)
+        # Header metadata of a targeted work stays in the reading ledger and the card.
+        for key in ("scientific_families", "analysis_available", "source_version"):
+            paper.pop(key, None)
+    return packet
+
+
+def targeted_packet(science_packet, limit, targets):
+    """The scientific packet of the targeted publications, never one of them dropped.
+
+    Exact quotations first; when they cannot carry every target with its claims, proof
+    locators (evidence ids with section/page; quotations kept in the store and re-checked
+    at publication) carry more claims of each target. Run 8cb4d68a: the final request had
+    no LDPoly proof and only the last HoliTracer page."""
+    from .argumentation import bounded_argument_packet
+    if targets:
+        # The requested dimensions of the targeted works first; their project context and other
+        # records are secondary to their own claims and proofs.
+        science_packet = focus_fields(science_packet, targets)
+
+    def coverage(packet):
+        papers = {p["id"]: p for p in packet.get("papers", [])}
+        return [sum(len(v) for v in papers[aid]["analysis"].values() if isinstance(v, list)) if aid in papers else -1
+            for aid in targets]
+    exact = bounded_argument_packet(science_packet, limit)
+    if not targets:
+        return exact
+    covered = coverage(exact)
+    if min(covered, default=0) > 0 and not any(exact["omitted_claims"].get(aid) for aid in targets):
+        return exact
+    candidates = [(covered, exact), (coverage(reference := bounded_argument_packet(science_packet, limit, proof_mode="reference")), reference)]
+    if science_packet.get("project_context") or science_packet.get("project_facts"):
+        # The project side (recoverable with get_project_context) yields when the targeted works'
+        # own claims need the room (run 8cb4d68a: 3 claims per work, the rest was project context).
+        lean = {k: v for k, v in science_packet.items() if k not in {"project_context", "project_facts"}}
+        lean["project_context_deferred"] = "Contexte projet récupérable avec get_project_context."
+        for mode in ("exact", "reference"):
+            lean_packet = bounded_argument_packet(lean, limit, proof_mode=mode)
+            candidates.append((coverage(lean_packet), lean_packet))
+    best = max(candidates, key=lambda row: (min(row[0], default=0), sum(row[0])))
+    grow = limit
+    while min(best[0], default=0) <= 0 and grow < limit*2:
+        # Floor: every targeted work keeps at least its header, one claim and its proof locator.
+        grow = int(grow*1.25)
+        lean = {k: v for k, v in science_packet.items() if k not in {"project_context", "project_facts"}}
+        packet = bounded_argument_packet(lean, grow, proof_mode="reference")
+        best = max([best, (coverage(packet), packet)], key=lambda row: (min(row[0], default=0), sum(row[0])))
+    return best[1]
+
+
+def packet_coverage(packet, targets):
+    """Claims and proofs of each targeted publication actually present in a packet."""
+    papers = {p["id"]: p for p in (packet or {}).get("papers", [])}
+    return {aid: {"claims_sent": sum(len(v) for v in papers[aid]["analysis"].values() if isinstance(v, list)) if aid in papers else 0,
+        "proofs_sent": len(papers[aid].get("proofs", [])) if aid in papers else 0,
+        "claims_not_sent": (packet or {}).get("omitted_claims", {}).get(aid, 0) if aid in papers else None}
+        for aid in targets}
 
 
 def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=()):
@@ -196,7 +355,9 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
     active_reading = None
     science_packet = None
     task = context_task(state, final)
-    order = state.get("displayed_article_ids") or state.get("last_response", {}).get("cited_article_ids", [])
+    # « le deuxième », « ces articles »: the last exchange's own order, not an older table (run ce08ad31).
+    from .references import current_order, focus_block
+    order, order_source = current_order(state)
     from .writing_context import active_article_ids, section_projection, writing_context
     selected = active_article_ids(state, toolkit.registry)
     outline=state.get("outline",{})
@@ -206,12 +367,37 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
             "sections":section_index,"sections_total":len(outline.get("sections",[])),"index_partial":len(outline.get("sections",[]))>12},
         "displayed_article_order": [{"number": i+1, "id": aid, "title": toolkit.registry[aid].title}
             for i, aid in enumerate(order) if aid in toolkit.registry],
+        "displayed_article_order_source": order_source,
+        # Small, protected: the request, its resolved publications, constraints and scope.
+        # Never removed by the reductions below (run ce08ad31 lost the goal before publishing).
+        "conversation_focus": focus_block(state, toolkit.registry, compact=task not in {"conversation", "final"}),
         "corpus_total": len(toolkit.registry), "selected_articles": [article_projection(toolkit.registry[aid],
             500 if final else 160, summary=True) for aid in selected if aid in toolkit.registry],
         "recent_searches": [{k: v for k, v in s.items() if k in {"query", "family", "warnings"}}
             for s in state.get("recent_searches", [])[-8:]],
         "discovered_url_count": len(state.get("web_sources", [])),
         "guidance": "Les notices complètes, anciens messages et passages exacts restent dans les outils. Une URL découverte n'est pas un texte lu."}
+    from .diagnostic_link import active_packet, project_facts_view
+    if state.get("mode") == "diagnostic_linked":
+        dossier_locks = diagnostic_task_locks(state, task)
+        if dossier_locks is not None:
+            # A plan part, a section or a comparison receives the project facts of its
+            # own locks (trials, results, parameters, verbatim evidence), sized for the
+            # task and protected from the optional-view reductions below.
+            memory["diagnostic_context"] = lock_dossier(state, dossier_locks, dossier_budget(task, budget))
+        else:
+            memory["diagnostic_context"] = active_packet(state, min(4200, max(1200, budget//4)))
+        from .turn import lock_coverage
+        memory["lock_coverage"] = lock_coverage(state, toolkit.registry)
+        part_lock = (state.get("plan_part") or {}).get("lock_ids") if task == "planning" else None
+        if part_lock and memory["lock_coverage"]:
+            # One lock's part needs its own row; the others stay counted.
+            coverage = memory["lock_coverage"]
+            memory["lock_coverage"] = {**coverage, "locks": [r for r in coverage["locks"] if r["lock_id"] in part_lock],
+                "other_locks": [{"lock_id": r["lock_id"], "status": r["status"], "retained_total": r["retained_total"]}
+                    for r in coverage["locks"] if r["lock_id"] not in part_lock]}
+    if state.get("turn_goal"):
+        memory["turn_goal"] = {k: state["turn_goal"][k] for k in ("deliverable", "lock_ids", "reading_depth", "understanding")}
     if final:
         # Keep a compact bibliography and dedicate the synthesis room to the
         # already-saved scientific claims, relations and their exact proofs.
@@ -220,9 +406,14 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
              "access_status","analysis_basis","verified","assessment"}} for row in memory["selected_articles"]]
         from .argumentation import argument_packet, bounded_argument_packet
         analyzed = [aid for aid in selected if aid in toolkit.registry and toolkit.registry[aid].analysis]
+        targets, scope = targeted_ids(state, toolkit)
+        if targets:
+            # The synthesis room goes to the publications the request is about.
+            analyzed = targets if scope == "exclusive" else list(dict.fromkeys([*targets, *analyzed]))
         if analyzed:
             science_packet = argument_packet(state, toolkit, analyzed)
-            memory["conversation_science"] = bounded_argument_packet(science_packet, int(budget*.78))
+            # An exclusive request has little else to carry: its works take most of the same budget.
+            memory["conversation_science"] = targeted_packet(science_packet, int(budget*(.85 if scope == "exclusive" else .78)), targets)
             memory["conversation_science"]["guidance"] = (
                 "Ces fiches et relations sont des résultats déjà enregistrés. Expliquer réellement "
                 "les méthodes, mécanismes, protocoles, résultats et limites étayés ; distinguer "
@@ -243,8 +434,17 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
         memory["writing_context"] = writing_context(state, toolkit, budget=min(6500, budget//3))
     progress = state.get("document", {}).get("writing_progress")
     if progress:
-        memory["writing_progress"] = {k: progress.get(k) for k in
-            ("id", "mode", "target_ids", "saved_draft_ids", "status", "approval_required", "errors")}
+        # A bounded view: counts per section and only the active section's latest refusal.
+        # The full error history stays in the durable progress (audit 91590987: 15 055
+        # characters of errors had pushed every proof out of a section's request).
+        active = (state.get("writing_focus") or {}).get("section_id")
+        errors = progress.get("errors") or []
+        memory["writing_progress"] = {**{k: progress.get(k) for k in ("id", "mode", "status", "approval_required")},
+            "sections_total": len(progress.get("target_ids") or []), "saved_total": len(progress.get("saved_draft_ids") or {}),
+            "blocked_section_ids": list((progress.get("blocked") or {}))[:12],
+            "refusals_by_section": {sid: n for sid, n in __import__("collections").Counter(e.get("section_id") for e in errors).items() if sid},
+            **({"active_section_last_refusal": next((e.get("message", "")[:700] for e in reversed(errors)
+                if e.get("section_id") == active), None)} if active and any(e.get("section_id") == active for e in errors) else {})}
     section = None
     if task == "section":
         from .tools.outline import resolve_section
@@ -252,7 +452,7 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
         memory["section_drafting"] = {"focus": state["writing_focus"],
             "packet": writing_context(state, toolkit, section,
                 budget=max(2000, budget-1800) if progress and progress.get("mode") == "section" and section.get("drafts")
-                else min(14000, int(budget*.72)))}
+                else max(6000, budget-dossier_budget("section", budget)-3500))}
         memory["section_sources_status"] = reading_digest(state, state["writing_focus"].get("article_ids", []))
         memory["retrieval"] = ("Le paquet est une vue bornée de la mémoire permanente. analysis_available donne le nombre "
             "d'affirmations sauvegardées par champ : get_analysis_claims(article_id, fields, offset) les transmet toutes, avec "
@@ -320,8 +520,13 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
         # Selection checkpoint: the presented candidates with their abstracts, so
         # the model judges them from the notices themselves, not from titles.
         focus = state["selection_focus"]
-        memory["selection_candidates"] = [{k: v for k, v in article_projection(toolkit.registry[aid], 500, summary=True).items()
-            if k != "analysis"} for aid in focus["candidate_ids"] if aid in toolkit.registry]
+        earlier = set(focus.get("earlier_candidate_ids", []))
+        memory["selection_candidates"] = [{**{k: v for k, v in article_projection(toolkit.registry[aid], 500, summary=True).items()
+            if k != "analysis"}, **({"collected_in_earlier_message": True} if aid in earlier else {}),
+            # Facts about how the work was found, to weigh with its content; not a score.
+            "discovery": {"queries": len(toolkit.registry[aid].matched_queries), "providers": toolkit.registry[aid].sources[:4],
+                "citations": toolkit.registry[aid].citation_count}}
+            for aid in focus["candidate_ids"] if aid in toolkit.registry]
         memory["selection_candidates_total"] = focus.get("presented_total", len(memory["selection_candidates"]))
     if not final and state.get("reading_recovery_focus"):
         from .scientific_reading import recovery_context
@@ -361,12 +566,43 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
             for row in memory["selected_articles"]]
         memory.pop("candidate_index", None)
         memory.pop("candidate_articles", None)
-    if task in {"conversation", "planning"}:
-        analyzed = [aid for aid in selected if aid in toolkit.registry and toolkit.registry[aid].analysis]
+    if task == "planning":
+        # The plan is built from the analysis: retained works with their abstracts,
+        # selection reasons and lock attribution, next to the saved cards.
+        from .turn import plan_sources, part_sources
+        part = state.get("plan_part")
+        if part and part["kind"] in {"lock", "axis"}:
+            # One part of a plan generated in parallel: its own sources with their saved
+            # cards (methods, results, limits), and every other source as a reference.
+            memory["plan_sources"], memory["other_plan_sources"] = part_sources(state, toolkit.registry, part,
+                int(budget*.4), toolkit.evidence)
+        else:
+            memory["plan_sources"] = plan_sources(state, toolkit.registry)
+            # Every source stays visible (run d71d17b0: 4 of 8 finalists): abstracts
+            # shrink first, then disappear, before any source would be dropped.
+            for chars in (300, 160, 0):
+                if len(json.dumps(memory["plan_sources"], ensure_ascii=False)) <= budget*.35:
+                    break
+                memory["plan_sources"] = plan_sources(state, toolkit.registry, abstract_chars=chars)
+        memory["plan_sources_total"] = len(memory["plan_sources"])+len(memory.get("other_plan_sources", []))
+        if part:
+            # One part of a plan generated in parallel (a lock, an axis or the framing).
+            memory["plan_part"] = part
+    if task == "conversation" or task == "planning" and not state.get("plan_part"):
+        # A plan part carries its own sources' cards (plan_sources); the cards of works
+        # outside the plan (earlier, off-topic analyses) do not travel with it.
+        plan_ids = set(r["id"] for r in memory.get("plan_sources", [])) if task == "planning" else None
+        analyzed = [aid for aid in selected if aid in toolkit.registry and toolkit.registry[aid].analysis
+            and (plan_ids is None or aid in plan_ids)]
+        targets, scope = targeted_ids(state, toolkit) if task == "conversation" else ([], None)
+        if targets:
+            # The same stable packet of the targeted works in every round of the request,
+            # from their saved cards (not from the last tool page only).
+            analyzed = targets if scope == "exclusive" else list(dict.fromkeys([*targets, *analyzed]))
         if analyzed:
             from .argumentation import argument_packet, bounded_argument_packet
             science_packet = argument_packet(state, toolkit, analyzed)
-            memory["conversation_science"] = bounded_argument_packet(science_packet, int(budget*.65))
+            memory["conversation_science"] = targeted_packet(science_packet, int(budget*(.85 if scope == "exclusive" else .65)), targets)
             for row in memory["selected_articles"]:
                 row.pop("analysis", None)
             memory["conversation_guidance"] = (
@@ -412,10 +648,12 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
                 memory["evidence"].pop()
                 break
         if science_packet is not None:
-            saved_ids = {e["evidence_id"] for paper in science_packet["papers"] for e in paper["proofs"]}
+            # Only proofs actually transmitted in the bounded packet count as sent.
+            saved_ids = {e["evidence_id"] for paper in memory.get("conversation_science", {}).get("papers", [])
+                for e in paper.get("proofs", [])}
             memory["evidence"] = [e for e in memory["evidence"] if e["evidence_id"] not in saved_ids]
             essential = [e for e in essential if e["evidence_id"] not in saved_ids]
-            saved_articles = {p["id"] for p in science_packet["papers"]}
+            saved_articles = {p["id"] for p in memory.get("conversation_science", {}).get("papers", [])}
             memory["source_material"] = [row for row in memory["source_material"] if row["article_id"] not in saved_articles]
             memory["source_guidance"] = "Les preuves des fiches structurées sont transmises dans conversation_science ; les autres passages restent récupérables dans les outils."
     if task in TASK_KEYS:
@@ -461,8 +699,9 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
             # The old draft, all source identities and current instructions take
             # the same memory share; unrelated document previews are recoverable.
             memory = {k: v for k, v in memory.items() if k in {
-                "section_drafting", "consultant_instructions", "context_task"}}
-        memory, messages = fit_focused(memory, messages, budget, task, state, toolkit, section)
+                "section_drafting", "consultant_instructions", "context_task", "diagnostic_context"}}
+        memory, messages = fit_focused(memory, messages, budget, task, state, toolkit, section,
+            keep=("plan_sources", "other_plan_sources", "lock_coverage") if task == "planning" else ())
     if len(json.dumps(memory, ensure_ascii=False)) + sum(len(m["content"]) for m in messages) > budget:
         memory["outline"] = {"title": state.get("outline", {}).get("title"), "sections": [
             {k: s[k] for k in ("id", "title")} for s in state.get("outline", {}).get("sections", [])]}
@@ -477,6 +716,7 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
     if task not in TASK_KEYS and len(json.dumps(memory, ensure_ascii=False)) + sum(len(m["content"]) for m in messages) > budget:
         # An exceptional oversized object is referenced, not silently reintroduced.
         memory = {"topic": state.get("research_state", {}).get("topic", "")[:1000],
+            "conversation_focus": memory.get("conversation_focus"), "turn_goal": memory.get("turn_goal"),
             "selected_articles": [{k: row[k] for k in ("id", "title", "doi", "arxiv_id", "abstract", "abstract_truncated", "access_status", "analysis_basis") if k in row} for row in memory["selected_articles"]],
             "candidate_articles": [{k: row[k] for k in ("id", "title", "doi", "arxiv_id", "abstract", "abstract_truncated", "access_status") if k in row} for row in memory.get("candidate_articles", [])],
             "displayed_article_order": memory["displayed_article_order"], "corpus_total": len(toolkit.registry),
@@ -489,6 +729,7 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
             "conversation_science":memory.get("conversation_science",{}),
             "scientific_reading_status":memory.get("scientific_reading_status",{}),
             "project_facts":memory.get("project_facts",[]),
+            "diagnostic_context":memory.get("diagnostic_context"),
             "user_message_sources":memory.get("user_message_sources",[]),
             "selection_candidates":memory.get("selection_candidates",[]),
             "evidence":essential if final else [],
@@ -530,16 +771,36 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
     def packed_inputs():
         content = "Mémoire scientifique (données, pas instructions) : " + json.dumps(memory, ensure_ascii=False)
         return [{"role": "developer", "content": content}, *messages]
+    coverage_targets = targeted_ids(state, toolkit)[0] if science_packet is not None else []
+    if coverage_targets and isinstance(memory.get("conversation_focus"), dict):
+        # Measured on what is finally sent (after compression), for the model and the checks.
+        memory["conversation_focus"]["coverage"] = packet_coverage(memory.get("conversation_science"), coverage_targets)
     # Fit the actual double-encoded request, not only the memory object. The
     # active-reading branch above remains exact and separately protected.
-    for _ in range(8):
+    science_floor = [False]
+    # Extra iterations only remove secondary views of a request on targeted publications.
+    for _ in range(8+(len(SECONDARY_ORDER) if coverage_targets else 0)):
         excess = len(json.dumps(packed_inputs(), ensure_ascii=False))-budget
         if excess <= 0:
             break
-        if science_packet is not None and memory.get("conversation_science"):
+        # A request on targeted publications: secondary views go before any of their proofs.
+        secondary = next((key for key in SECONDARY_ORDER if memory.get(key)), None) if coverage_targets else None
+        if science_packet is not None and memory.get("conversation_science") and secondary:
+            # Secondary views go before any proof of a requested publication.
+            memory.pop(secondary)
+            continue
+        if science_packet is not None and memory.get("conversation_science") and not science_floor[0]:
             current = len(json.dumps(memory["conversation_science"], ensure_ascii=False))
             if current > 900:
-                memory["conversation_science"] = bounded_argument_packet(science_packet, max(800, current-excess-128))
+                targets_now = targeted_ids(state, toolkit)[0]
+                smaller = targeted_packet(science_packet, max(800, current-excess-128), targets_now)
+                kept = lambda packet: {p["id"] for p in packet.get("papers", [])} & set(targets_now)
+                if targets_now and kept(smaller) < kept(memory["conversation_science"]):
+                    # Floor: a targeted work is never removed to save room (its claims and
+                    # proofs are what the request asks for); the other reductions continue.
+                    science_floor[0] = True
+                    continue
+                memory["conversation_science"] = smaller
                 continue
         if len(messages) > 1:
             messages.pop(0)
@@ -549,9 +810,13 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
             current = len(json.dumps(memory, ensure_ascii=False)) + sum(len(m["content"]) for m in messages)
             # Candidate windows are already registered: their notices stay in place.
             memory, messages = fit_focused(memory, messages, max(1000, current-excess-256), task, state, toolkit, section,
-                keep=("candidate_articles", "selection_candidates", "window_id", "selection_window"))
+                keep=("candidate_articles", "selection_candidates", "window_id", "selection_window",
+                    # The plan's bibliography is its input: older messages go first.
+                    *(("plan_sources", "other_plan_sources", "lock_coverage") if task == "planning" else ())))
         else:
             break
+    if coverage_targets and isinstance(memory.get("conversation_focus"), dict):
+        memory["conversation_focus"]["coverage"] = packet_coverage(memory.get("conversation_science"), coverage_targets)
     return packed_inputs()
 
 
@@ -564,11 +829,14 @@ def compact_exchange(exchange, toolkit, budget):
     # Native source URLs are already durable. Function calls/results remain paired.
     compacted = [item for item in compacted if item.get("type") not in {"message", "web_search_call", "reasoning"}]
 
-    def resize(result, cap):
+    def resize(result, cap, abstract_chars):
+        # Candidate windows keep every notice with a shorter abstract before any
+        # notice is dropped: several parallel searches must not shrink each other's
+        # windows to one notice (run d8606428). Passages and title lists keep their caps.
         for key in ("articles", "matrix"):
             if isinstance(result.get(key), list):
                 originals = result[key]
-                result[key] = [article_projection(toolkit.registry[row["id"]], 1600, summary=True)
+                result[key] = [article_projection(toolkit.registry[row["id"]], abstract_chars, summary=True)
                     if isinstance(row, dict) and row.get("id") in toolkit.registry else row for row in originals[:cap]]
                 if len(originals) > cap:
                     result["transmission_omitted"] = len(originals)-cap
@@ -580,16 +848,16 @@ def compact_exchange(exchange, toolkit, budget):
                     if result.get("delivery"):
                         result["delivery"]["offered"] = len(result[key])
                         result["delivery"]["remaining_in_batch"] = result["delivery"]["batch_total"]-len(result[key])
-        if isinstance(result.get("batch_index"), list) and len(result["batch_index"]) > cap*5:
+        if isinstance(result.get("batch_index"), list) and len(result["batch_index"]) > min(cap, 4)*5:
             # Titles stay recoverable with search_collected_articles and get_article.
-            result["batch_index"] = result["batch_index"][:cap*5]
+            result["batch_index"] = result["batch_index"][:min(cap, 4)*5]
             result["batch_index_partial"] = True
         for row in result.get("reading", []):
             aid = row.get("article", {}).get("id")
             if aid in toolkit.registry:
                 row["article"] = article_projection(toolkit.registry[aid], 300, summary=True)
             original = row.get("passages", [])
-            row["passages"] = original[:cap]
+            row["passages"] = original[:min(cap, 4)]
             row["next_offset"] = max(0, row.get("next_offset", len(original))-(len(original)-len(row["passages"])))
             # Keep the original window intact. Delivery checks the actual payload,
             # so omitted passages cannot become presented through a shortened ID list.
@@ -600,11 +868,12 @@ def compact_exchange(exchange, toolkit, budget):
         return result
 
     results = []
-    for cap in (4, 2, 1):
+    from .store import WINDOW_ARTICLES, WINDOW_ABSTRACT
+    for cap, chars in ((WINDOW_ARTICLES, WINDOW_ABSTRACT), (WINDOW_ARTICLES, 220), (WINDOW_ARTICLES, 120), (4, 120), (2, 120), (1, 120)):
         results = []
         for item in compacted:
             if item.get("type") == "function_call_output":
-                data = resize(json.loads(item["output"]), cap)
+                data = resize(json.loads(item["output"]), cap, chars)
                 item["output"] = json.dumps(data, ensure_ascii=False)
                 results.append(data)
         if len(json.dumps(compacted, ensure_ascii=False)) <= budget:

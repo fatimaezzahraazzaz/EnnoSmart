@@ -190,10 +190,12 @@ def test_section_context_keeps_multiple_result_claims_when_room_is_available():
             "evidence_ids": [eid], "origin": "source_statement", "basis": "fulltext"}
         for index, eid in enumerate(proofs[:2], 1)]
     packet = writing_context(t.state, t, t.state["outline"]["sections"][0], budget=14000)
-    projected = next(row for row in packet["articles"] if row["id"] == aid)
-    assert len(projected["analysis"]["results"]) == 2
-    assert projected["analysis_available"]["results"] == 2
-    assert packet["evidence"]
+    # Both result claims travel with their exact proofs.
+    results = [c for c in packet["proof_backed_claims"] if c["article_id"] == aid and c["field"] == "results"]
+    assert len(results) == 2
+    assert next(s for s in packet["sources"] if s["id"] == aid)["claims_available"]["results"] == 2
+    sent = {e["evidence_id"] for e in packet["evidence"]}
+    assert packet["evidence"] and all(set(c["evidence_ids"]) <= sent for c in results)
 
 
 def test_finalization_keeps_numeric_proofs_and_saved_plan_when_historical_memory_is_huge():
@@ -209,7 +211,9 @@ def test_finalization_keeps_numeric_proofs_and_saved_plan_when_historical_memory
 def test_read_later_section_handles_unwritten_preceding_sections():
     t,ids=drafted_document()
     packet=call(t,"write_section",section_id="2",action="read",instructions="Write methods",text=None,article_ids=ids,evidence_ids=[])
-    assert packet["writing_context"]["preceding_argument"][0]["established_text"]==""
+    # The manuscript map names the unwritten preceding section instead of inventing its content.
+    previous = next(row for row in packet["writing_context"]["manuscript_map"]["sections"] if row["number"] == 1)
+    assert previous["status"] == "not_written" and "established" not in previous
     write(t,"2",f"Comparison remains conditional [{ids[1]}].",ids,t.shown_evidence)
     review=call(t,"review_document",action="read",section_id="2")
     assert review["sections"][0]["draft_id"] is None

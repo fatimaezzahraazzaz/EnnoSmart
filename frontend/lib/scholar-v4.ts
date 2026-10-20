@@ -25,7 +25,12 @@ export type Article = {
 export type Message = { id: string; role: "user" | "assistant"; content: string; citations?: Citation[]; run_id?: string; partial?: boolean
   primary_article_ids?: string[] | null; displayed_article_ids?: string[] | null; complementary_count?: number | null; discovered_sources_count?: number | null; fallback?: boolean
   library_counts?: Record<string, number> | null; coverage_sufficient?: boolean | null; publication_accepted?: boolean | null; research_status?: "sufficient" | "incomplete" | "not_assessed" | null }
-export type SessionSummary = { id: string; title: string; created_at: string; updated_at: string; active_run_id: string | null; articles_total: number; selected_count: number }
+export type DiagnosticProject = { project: { id: number; name: string; organisme: string; year: string; subproject_name?: string }; diagnostic_id: number; diagnostic_date: string; diagnostic_status: string; source_version: string }
+export type DiagnosticLock = { id: string; title: string; decision: string; justification: string | null }
+export type DiagnosticContext = DiagnosticProject & { locks: DiagnosticLock[]; selected_lock_ids: string[]; active_lock_ids: string[]; revision: number }
+export type SessionCreation = { mode?: "express" | "diagnostic_linked"; title?: string; project_id?: number; diagnostic_id?: number; source_version?: string; selected_lock_ids?: string[]; confirmed?: boolean; allow_unkept?: boolean }
+export type ContextPage = { items: Record<string, unknown>[]; total: number; next_offset: number | null; source_changed?: boolean; source_type: string; source_version: string; history?: Record<string, unknown>[] }
+export type SessionSummary = { id: string; title: string; created_at: string; updated_at: string; active_run_id: string | null; articles_total: number; selected_count: number; mode?: "express" | "diagnostic_linked"; diagnostic_context?: DiagnosticContext }
 export type Session = SessionSummary & { messages: Message[]; articles: Article[]; recommended_article_ids: string[]; research_state: Record<string, unknown>; summary: string; writing_progress?: WritingProgress
   outline?: { sections?: { id: string; title: string }[] }; held_article_ids?: string[]; consultant_decisions?: ConsultantDecision[] }
 export type ConsultantDecision = { article_id?: string; decision?: Decision; order?: string[]; origin: string; at: string; exact_quote?: string }
@@ -39,7 +44,11 @@ export type Run = { id: string; session_id: string; status: "queued" | "running"
 
 const json = (body: unknown, method = "POST"): RequestInit => ({ method, body: JSON.stringify(body) })
 export const listSessions = () => scholarV4Request<SessionSummary[]>("/sessions")
-export const createSession = () => scholarV4Request<Session>("/sessions", json({}))
+export const createSession = (options: SessionCreation = {}) => scholarV4Request<Session>("/sessions", json(options))
+export const listDiagnosticProjects = () => scholarV4Request<DiagnosticProject[]>("/diagnostic-projects")
+export const getDiagnosticProject = (id: number) => scholarV4Request<DiagnosticContext>(`/diagnostic-projects/${id}`)
+export const getProjectContext = (sid: string, kind = "facts", offset = 0, scope = "active") => scholarV4Request<ContextPage>(`/sessions/${encodeURIComponent(sid)}/project-context?kind=${kind}&offset=${offset}&limit=5&scope=${scope}`)
+export const updateProjectContext = (sid: string, options: { action: "scope" | "selection" | "refresh"; expected_revision: number; lock_ids: string[]; source_version?: string; confirmed?: boolean; allow_unkept?: boolean }) => scholarV4Request<Session>(`/sessions/${encodeURIComponent(sid)}/project-context`, json(options, "PATCH"))
 export const getSession = (id: string, signal?: AbortSignal) => scholarV4Request<Session>(`/sessions/${encodeURIComponent(id)}`, { signal })
 export const sendMessage = (sessionId: string, message: string) => scholarV4Request<Run>("/chat", json({ session_id: sessionId, message }))
 export const getRun = (id: string, signal?: AbortSignal) => scholarV4Request<Run>(`/runs/${encodeURIComponent(id)}`, { signal })
@@ -76,6 +85,14 @@ export type ScientificDocument = {
   versions: {id: string; revision: number; created_at: string; approval?: {origin: string}}[]
   articles: Article[]
   evidence: Record<string, {evidence_id: string; article_id: string; exact_quote: string; source_url: string; source_version?: string; version_status?: string; page_number?: number; printed_page?: string; section?: string; table?: {number?: string; unit?: string; dataset?: string; headers?: string[]; row?: string[]}}>
+  rendering?: ManuscriptRendering
+}
+// Readable bodies and numbered apparatus derived from the drafts' raw identifiers (same as the exports).
+export type ManuscriptRendering = {
+  sections: Record<string, string>
+  references: {number: number; article_id: string; text: string; title?: string; authors?: string[]; year?: number; journal?: string; doi?: string; arxiv_id?: string; url?: string}[]
+  proofs: {number: string; evidence_id: string; reference?: number; section?: string; page_number?: number; quote: string}[]
+  project_sources: {number: string; canonical_evidence_id: string; aliases: string[]; document_name?: string; section_title?: string; stored_section_title?: string; spans?: string[]; page?: number; quote: string}[]
 }
 export const getDocument = (sid: string, signal?: AbortSignal) => scholarV4Request<ScientificDocument>(`/sessions/${encodeURIComponent(sid)}/document`, {signal})
 export const changeDocument = (sid: string, payload: Record<string, unknown>) => scholarV4Request<Session>(`/sessions/${encodeURIComponent(sid)}/document`, json(payload))

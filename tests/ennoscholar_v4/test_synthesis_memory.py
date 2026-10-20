@@ -58,7 +58,7 @@ def test_writing_reaches_the_complete_saved_card_without_new_search():
     section = {"id": "section_1", "title": "Méthodes", "article_ids": [aid], "drafts": []}
     packet = writing_context(state, toolkit, section, budget=14000)
     card = toolkit.registry[aid].analysis
-    assert packet["articles"][0]["analysis_available"]["method"] == len(card["method"])
+    assert packet["sources"][0]["claims_available"]["method"] == len(card["method"])
     full = toolkit.execute("get_article", {"identifiers": [aid]}, time.monotonic()+30)["articles"][0]
     assert len(full["analysis"]["method"]) == len(card["method"])
     assert len(full["analysis"]["results"]) == len(card["results"])

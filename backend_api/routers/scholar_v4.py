@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, File, Form, 
 
 from core.deps import get_current_user
 from agents.EnnoScholarV4.config import ConfigurationError
-from agents.EnnoScholarV4.models import ChatRequest, SessionCreate, SelectionRequest, OrderRequest
+from agents.EnnoScholarV4.models import ChatRequest, SessionCreate, SelectionRequest, OrderRequest, DiagnosticContextUpdate
 from agents.EnnoScholarV4.service import get_service, SessionNotFound, SessionBusy
 from agents.EnnoScholarV4.manuscript import DocumentAction
 from fastapi.responses import Response
@@ -44,7 +44,34 @@ def chat(payload: ChatRequest, user=Depends(get_current_user)):
 
 @router.post("/sessions", status_code=201)
 def create_session(payload: SessionCreate, user=Depends(get_current_user)):
-    return invoke(lambda: get_service().create(int(user.id), payload.title))
+    return invoke(lambda: get_service().create(int(user.id), payload.title, options=payload))
+
+
+@router.get("/diagnostic-projects")
+def diagnostic_projects(user=Depends(get_current_user)):
+    return invoke(lambda: get_service().diagnostic_projects(int(user.id)))
+
+
+@router.get("/diagnostic-projects/{project_id}")
+def diagnostic_preview(project_id: int, user=Depends(get_current_user)):
+    return invoke(lambda: get_service().diagnostic_preview(int(user.id), project_id))
+
+
+@router.get("/sessions/{session_id}/project-context")
+def project_context(session_id: str = identifier(), kind: Literal["facts", "locks", "evidence", "synthesis"] = "facts",
+                    offset: int = Query(0, ge=0), limit: int = Query(5, ge=1, le=20), scope: Literal["active", "general", "all"] = "active", user=Depends(get_current_user)):
+    return invoke(lambda: get_service().project_context(int(user.id), session_id, kind, offset, limit, scope))
+
+
+@router.patch("/sessions/{session_id}/project-context")
+def update_project_context(payload: DiagnosticContextUpdate, session_id: str = identifier(), user=Depends(get_current_user)):
+    return invoke(lambda: get_service().update_project_context(int(user.id), session_id, payload))
+
+
+@router.get("/spending")
+def spending(limit: int = Query(100, ge=1, le=500), user=Depends(get_current_user)):
+    # The authenticated consultant's own ledger and balances only.
+    return invoke(lambda: get_service().spending(int(user.id), limit))
 
 
 @router.get("/sessions")

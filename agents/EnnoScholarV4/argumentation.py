@@ -14,14 +14,34 @@ import uuid
 
 from .context import analysis_projection, evidence_projection
 from .evidence import exact_source_valid, snapshot
+from .diagnostic_link import project_facts_view
+
+
+PROJECT_OBSERVATION = re.compile(r"\b(?:notre|nos|mon|mes)\s+(?:projet|prototype|essai|expérience|résultat|mesure|donnée|méthode)|"
+    r"\bdans\s+(?:notre|mon)\s+projet", re.I)
+# The current request explicitly asks to take up project observations of an earlier message.
+EARLIER_OBSERVATIONS = re.compile(r"\b(?:enregistr\w*|repren\w*|reprise|récupér\w*|recuper\w*|ajout\w*|consign\w*)\b.{0,80}"
+    r"\b(?:faits?|observations?|résultats?|données|mesures?|essais?)\b.{0,80}"
+    r"\b(?:précédent\w*|antérieur\w*|ancien\w*|dernier\w*|déjà\s+(?:donn|indiqu|décri|fourni)\w*)", re.I | re.S)
 
 
 def project_observation_source(state):
+    """The consultant message whose project observations this request records, if any.
+
+    The current request decides (run 2b9ef013: a comparison request recorded the facts of
+    an earlier drafting message). Earlier messages are context; one of them is used only
+    when the current request explicitly asks to take up its observations."""
     recorded = {fact["source_id"] for fact in state.get("project_facts", [])}
-    for message in reversed(state.get("messages", [])[-8:]):
-        if (message.get("role") == "user" and message.get("id") not in recorded and
-                re.search(r"\b(?:notre|nos|mon|mes)\s+(?:projet|prototype|essai|expérience|résultat|mesure|donnée|méthode)|\bdans\s+(?:notre|mon)\s+projet", message.get("content", ""), re.I)):
-            return message["id"]
+    users = [m for m in state.get("messages", []) if m.get("role") == "user"]
+    if not users:
+        return None
+    current = users[-1]
+    if current.get("id") not in recorded and PROJECT_OBSERVATION.search(current.get("content", "")):
+        return current["id"]
+    if EARLIER_OBSERVATIONS.search(current.get("content", "")):
+        for message in reversed(users[-8:-1]):
+            if message.get("id") not in recorded and PROJECT_OBSERVATION.search(message.get("content", "")):
+                return message["id"]
     return None
 
 
@@ -196,7 +216,7 @@ def argument_packet(state, toolkit, ids=None, *, claim_offsets=None):
             "proofs": proofs, "claim_order": order, "claim_offset": start,
             "claim_total": len(all_claims), "unavailable_claims": unavailable})
     all_active = active_articles(state, toolkit.registry)
-    return {"scientific_question": state.get("scientific_scope", {}).get("scientific_question") or
+    packet = {"scientific_question": state.get("scientific_scope", {}).get("scientific_question") or
             state.get("research_state", {}).get("scientific_question", ""),
         "papers": papers,
         "active_paper_index": [{"id": aid, "title": toolkit.registry[aid].title[:180],
@@ -207,7 +227,7 @@ def argument_packet(state, toolkit, ids=None, *, claim_offsets=None):
             set(row["article_ids"]) <= set(ids) and relation_current(toolkit, row)],
         "research_gaps": [copy.deepcopy(row) for row in state.get("research_gaps", []) if set(row["article_ids"]) <= set(ids)],
         "project_facts": [{**fact, "source_current": project_fact_valid(state, toolkit.registry, fact)}
-            for fact in state.get("project_facts", [])],
+            for fact in project_facts_view(state)],
         "existing_blueprint": {"id": state.get("argument_blueprint", {}).get("id"),
             "axes": [{"axis": axis["axis"], "article_ids": list(dict.fromkeys(
                 aid for step in axis["steps"] for aid in step["article_ids"]))}
@@ -215,6 +235,10 @@ def argument_packet(state, toolkit, ids=None, *, claim_offsets=None):
         "outline_sections": [{"id": sec["id"], "title": sec["title"], "article_ids": sec["article_ids"]}
             for sec in state.get("outline", {}).get("sections", [])],
         "guidance": "Comparer les affirmations et leurs conditions exactes, pas une liste de titres. Distinguer source_statement, inference et comparative_inference, les incertitudes, les textes intégraux et les abstracts. Aucune supériorité entre protocoles incompatibles. Les faits projet restent distincts des publications ; aucun verrou CIR n’est présumé."}
+    if state.get("mode") == "diagnostic_linked":
+        from .diagnostic_link import comparison_project_packet
+        packet["project_context"] = comparison_project_packet(state)
+    return packet
 
 
 # Exact-proof locators for comparison/blueprint windows: the quotation stays in the
@@ -240,13 +264,42 @@ def bounded_argument_packet(packet, limit=10000, *, proof_mode="exact"):
     result.update(papers=[], next_claim_offsets={}, omitted_claims={}, transmission_partial=False,
         omitted_article_ids=[], deferred_information={}, other_information_partial=False, blocked_by_context=False)
     result["reading_scope"] = "Targeted scientific sections; never an exhaustive whole-document assertion."
+    if original.get("project_context"):
+        # Keep the project side inside the existing window, reserving room for
+        # scientific papers. The large full project_facts list is recoverable.
+        context = copy.deepcopy(original["project_context"])
+        while size(context) > max(1000, limit*.30) and context.get("observations"):
+            context["observations"].pop()
+            context["partial"] = True
+        if size(context) > max(1000, limit*.30):
+            context.pop("missing_information", None)
+            context.pop("main_objective", None)
+            context["active_locks"] = [{"id": x} for x in context["active_lock_ids"]]
+        result["project_context"] = context
+        shown = {fid for row in context.get("observations", []) for fid in row["project_fact_ids"]}
+        result["project_facts"] = list({fact["id"]: {k: fact[k] for k in ("id", "source_type", "source_fact_id", "scope", "lock_ids")}
+            for fact in original.get("project_facts", []) if fact["id"] in shown}.values())
+        result["project_facts"].extend(fact for fact in original.get("project_facts", []) if fact.get("source_type") != "diagnostic_snapshot")
+        result["project_facts_total"] = len(original.get("project_facts", []))
+        if len(result["project_facts"]) < result["project_facts_total"]:
+            result["deferred_information"]["project_facts"] = result["project_facts_total"]-len(result["project_facts"])
     if proof_mode == "reference":
         # Counted before the claims are fitted, so the window limit stays exact.
         result["proof_mode"] = ("references : citations exactes conservées et déjà validées pour chaque affirmation ; "
             "citer les evidence_ids, les chiffres sont revérifiés à l'enregistrement")
     # Whole optional records are deferred, never clipped into misleading claims.
     for key in ("existing_blueprint", "outline_sections", "active_paper_index", "project_facts", "research_gaps", "relations"):
-        if size(result) <= limit*.20:
+        if key == "project_facts" and original.get("project_context"):
+            while size(result) > limit*.20+size(result["project_context"]):
+                old = next((f for f in reversed(result["project_facts"]) if f.get("source_type") != "diagnostic_snapshot"), None)
+                if old is None:
+                    break
+                result["project_facts"].remove(old)
+            result["deferred_information"]["project_facts"] = result["project_facts_total"]-len(result["project_facts"])
+            if not result["deferred_information"]["project_facts"]:
+                result["deferred_information"].pop("project_facts")
+            continue
+        if size(result) <= limit*.20 + (size(result["project_context"]) if original.get("project_context") else 0):
             break
         value = result.get(key)
         if value:
@@ -339,6 +392,10 @@ def bounded_argument_packet(packet, limit=10000, *, proof_mode="exact"):
             "active_paper_total": original.get("active_paper_total", len(original["papers"])),
             "next_claim_offsets": {}, "omitted_claims": {},
             "guidance": "Scientific packet cannot fit: request a smaller article batch. Durable claims and exact evidence are unchanged."}
+        if original.get("project_context"):
+            result["project_context"] = {"diagnostic_id": original["project_context"]["diagnostic_id"],
+                "active_lock_ids": original["project_context"]["active_lock_ids"], "partial": True,
+                "retrieval": original["project_context"]["retrieval"]}
     return result
 
 
@@ -349,11 +406,11 @@ def source_signature(state, registry):
     payload = {"articles": [{"id": aid, "source_version": registry[aid].source_version,
         "analysis": registry[aid].analysis, "source_fingerprint": snapshot(registry[aid])["fingerprint"]} for aid in ids],
         "relations": state.get("scientific_relations", []), "gaps": state.get("research_gaps", []),
-        "project_facts": state.get("project_facts", []),
+        "project_facts": project_facts_view(state),
         "project_source_versions": [{"source_id": fact["source_id"],
             "current_version": registry[fact["source_id"]].source_version if fact["source_type"] == "uploaded_project_document"
                 and fact["source_id"] in registry else fact["source_version"]}
-            for fact in state.get("project_facts", [])],
+            for fact in project_facts_view(state)],
         # Draft saves increment the outline version but do not change its plan.
         "outline_plan_revision": state.get("outline", {}).get("plan_revision"),
         "scientific_scope": state.get("scientific_scope", {})}
@@ -361,6 +418,8 @@ def source_signature(state, registry):
 
 
 def project_fact_valid(state, registry, fact):
+    if fact["source_type"] == "diagnostic_snapshot":
+        return any(row == fact for row in project_facts_view(state, {fact.get("source_fact_id")}))
     if fact["source_type"] == "consultant_message":
         return any(message.get("id") == fact["source_id"] and message.get("role") == "user" and
             fact["exact_quote"] in message.get("content", "") for message in state.get("messages", []))
@@ -376,7 +435,7 @@ def blueprint_status(state, registry):
     covered = {aid for axis in blueprint.get("axes", []) for step in axis["steps"] for aid in step["article_ids"]}
     return {"exists": bool(blueprint), "version": blueprint.get("version"),
         "stale": bool(blueprint and (blueprint.get("stale") or blueprint.get("source_signature") != source_signature(state, registry)
-            or any(not project_fact_valid(state, registry, fact) for fact in state.get("project_facts", [])))),
+            or any(not project_fact_valid(state, registry, fact) for fact in project_facts_view(state)))),
         "complete": bool(blueprint and active and active <= covered),
         "uncovered_article_ids": sorted(active-covered),
         "axes": [{"axis": row["axis"], "steps": len(row["steps"])} for row in blueprint.get("axes", [])]}
@@ -387,7 +446,7 @@ def save_blueprint(state, toolkit, args):
         raise ValueError("Le blueprint scientifique exige au moins un axe argumentatif.")
     active = set(active_articles(state, toolkit.registry))
     relations = {row["id"]: row for row in state.get("scientific_relations", []) if relation_current(toolkit, row)}
-    project = {row["id"]: row for row in state.get("project_facts", [])}
+    project = {row["id"]: row for row in project_facts_view(state)}
     sections = {row["id"] for row in state.get("outline", {}).get("sections", [])}
     saved = args.model_dump()
     saved.pop("action", None)
@@ -422,6 +481,9 @@ def save_blueprint(state, toolkit, args):
                 raise ValueError("Une comparaison doit reprendre une relation scientifique enregistrée.")
             if step["kind"] == "project_confrontation" and (not eids or not step["project_fact_ids"]):
                 raise ValueError("La confrontation exige une preuve publiée et un fait projet distinct.")
+            if step["kind"] == "project_confrontation" and any(project[fid].get("scope") == "project_context_not_linked_to_lock"
+                    for fid in step["project_fact_ids"]) and not step["uncertainty"].strip():
+                raise ValueError("Un fait projet général n'est pas attribué au verrou actif : expliciter cette incertitude.")
             if step["kind"] == "partial_resolution" and not step["relation_ids"]:
                 raise ValueError("Une résolution partielle doit s'appuyer sur une relation enregistrée.")
     old = state.get("argument_blueprint")
@@ -448,3 +510,25 @@ def save_blueprint(state, toolkit, args):
     state["argument_blueprint"] = saved
     return {"saved": True, "id": saved["id"], "version": saved["version"],
         "axes": len(saved["axes"]), "status": blueprint_status(state, toolkit.registry)}
+
+
+COMPARISON_DIMENSIONS = {"methods": ("method", "technical_mechanism"),
+    "protocol": ("experimental_setup", "validation_protocol", "datasets_materials"),
+    "results": ("results", "metrics"), "limits": ("limitations", "conditions_of_validity")}
+
+
+def comparable_dimensions(toolkit, ids):
+    """Dimension -> works documenting it with valid exact proofs (two or more works only).
+    Empty: no relation can be demonstrated between these works from their cards."""
+    from .writing_context import usable_proofs
+    from .context import analysis_projection
+    documented = {}
+    for aid in ids:
+        article = toolkit.registry[aid]
+        proofs = usable_proofs(toolkit, article, {})
+        view = analysis_projection(article.analysis, evidence=toolkit.evidence)
+        for name, fields in COMPARISON_DIMENSIONS.items():
+            if any(isinstance(c, dict) and c.get("evidence_ids") and all(e in proofs for e in c["evidence_ids"])
+                    for field in fields for c in (view.get(field) or [])):
+                documented.setdefault(name, []).append(aid)
+    return {name: members for name, members in documented.items() if len(members) >= 2}

@@ -193,6 +193,33 @@ absent des identités transmises exige, dans la même phrase, la preuve [ev_…]
 l'écris pas. N'ajoute aux fiches aucune connaissance extérieure non prouvée."""
 SYSTEM += "\n" + ATTRIBUTION
 
+# Appended after the indexed lines below, so the task ranges stay unchanged.
+UNDERSTANDING = """Compréhension : lis chaque message comme un collègue scientifique, dans son contexte (messages, plan, bibliographie
+affichée, verrous actifs, décisions). Une formulation libre ou imprécise suffit : résous « ce verrou », « les autres »,
+« le deuxième », « ce plan » par ce contexte ; ne demande une précision que si deux lectures mènent à des actions
+coûteuses différentes. set_turn_goal enregistre ta compréhension (livrable, verrous, profondeur) et l'orchestration s'y
+adapte : une demande de plan n'ouvre pas de rédaction, une explication ne relance pas de recherche. search_needed dit
+si de nouvelles publications doivent être cherchées : les lectures et comparaisons attendent alors ta sélection.
+comparison_requested garde l'obligation de comparer quand le livrable est une rédaction (« rédige et compare »).
+article_ids fixe les publications visées par le message, dans l'ordre du dialogue : conversation_focus.active_publications
+résout « ces articles », « les deux », « le deuxième » depuis le dernier échange (pas depuis une ancienne liste affichée) ;
+une publication nommée explicitement les remplace. article_scope=exclusive borne lectures et analyses à elles ; open pour
+une recherche ouverte. constraints reprend les interdictions explicites (aucune recherche, aucun téléchargement, aucune
+réanalyse, aucune modification du manuscrit). references_ambiguous=true seulement si plusieurs ensembles restent plausibles."""
+SEARCH_STRATEGY = """Stratégie de recherche : pars de la difficulté précise (verrou, essais, paramètres et échecs du projet) et traduis-la
+en vocabulaire scientifique : synonymes, noms de méthodes, familles voisines, travaux fondateurs ; varie les formulations
+d'une requête à l'autre et exploite les publications déjà trouvées (find_similar_articles, références) plutôt que de répéter.
+En mode lié, chaque verrou actif reçoit une couverture explicite : lock_ids sur les recherches et les décisions ; un verrou
+sans résultat pertinent est signalé comme lacune, jamais oublié ni présenté comme une nouveauté."""
+PLAN_GUIDE = """Plan d'état de l'art : une structure argumentative propre au sujet, issue de l'analyse (verrous, publications
+retenues, fiches, contexte projet), jamais un gabarit. Chaque section porte sa question scientifique, ses verrous, ses
+publications et leur rôle (réutilisables entre sections), les méthodes et résultats à exploiter, la confrontation au
+projet (faits liés au verrou distincts du contexte général) et les limites ou manques. Si la recherche est partielle,
+propose un plan provisoire qui nomme les lacunes et demande comment poursuivre."""
+CONVERSATION = """Réponds naturellement, comme un assistant scientifique : explique, nuance, propose, pose la question utile ou
+accomplis directement la tâche. Les validations protègent les affirmations publiées, pas la conversation ordinaire."""
+SYSTEM += "\n" + "\n".join((UNDERSTANDING, SEARCH_STRATEGY, PLAN_GUIDE, CONVERSATION))
+
 # A focused request (one forced tool, its own context) receives the rules of its
 # task only; the full guide stays for free conversation and final publication.
 # Ranges index SYSTEM lines (end excluded); tests pin their anchor sentences.
@@ -205,6 +232,8 @@ TASK_LINES = {
     "section": (*_CORE, (23, 24), (41, 46), (140, 148), (154, 165), (179, 184)),
     "selection": (*_CORE, (11, 31)),
     "recovery": (*_CORE, (11, 36)),
+    # Reading the consultant's message before any automatic stage.
+    "understanding": (*_CORE, (1, 11)),
 }
 
 
@@ -212,4 +241,6 @@ def instructions_for(task):
     if task not in TASK_LINES:
         return SYSTEM
     lines = [line for start, end in TASK_LINES[task] for line in _LINES[start:end]]
-    return "\n".join([*lines, ATTRIBUTION])
+    extra = {"planning": (PLAN_GUIDE,), "selection": (SEARCH_STRATEGY,), "recovery": (SEARCH_STRATEGY,),
+        "understanding": (UNDERSTANDING, CONVERSATION)}.get(task, ())
+    return "\n".join([*lines, ATTRIBUTION, *extra])

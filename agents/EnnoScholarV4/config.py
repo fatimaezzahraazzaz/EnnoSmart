@@ -42,12 +42,28 @@ class ScholarV4Config:
     recent_messages: int = 8
     max_message_context_chars: int = 6000
     max_articles: int = 2000
-    input_price: float = 2.0
-    output_price: float = 10.0
+    # USD per million tokens. 0 = the versioned catalogue (pricing_catalog.json, or
+    # ENNOSCHOLAR_V4_PRICING_FILE) for this model and tier; see pricing.resolve.
+    input_price: float = 0.0
+    output_price: float = 0.0
+    cache_read_price: float = 0.0
+    cache_write_price: float = 0.0
+    service_tier: str = "default"
+    pricing_file: str = ""
     web_call_price: float = 0.01
     # Reserve the documented hosted search context ceiling before each request.
     web_token_reserve: int = 128000
     request_timeout_seconds: float = 90
+    # Persistent spending controller (finance.py). Off until an administrator has
+    # applied the migration and validated a budget policy; when on, every provider
+    # call is reserved in the ledger first and refused if a budget is exhausted.
+    finance_enabled: bool = False
+    organization_id: str = "default"
+    budget_policy_file: str = ""
+    # Model per task (comprehension, selection, reading, comparison, plan, writing,
+    # local repair, review). Empty = config.model for every task (current behaviour);
+    # see routing.py. JSON object {"reading": "model", ...}.
+    task_models: str = ""
 
     @property
     def max_response_rounds(self):
@@ -86,8 +102,17 @@ class ScholarV4Config:
             raise ConfigurationError("ENNOSCHOLAR_V4_REASONING_EFFORT doit être low, medium, high ou xhigh.")
         for name in ("max_tool_calls", "max_research_rounds", "max_tool_rounds", "max_finalization_attempts", "finalization_reserved_seconds", "finalization_reserved_tokens", "finalization_reserved_cost_usd", "finalization_context_chars", "max_search_results", "max_deep_analysis", "max_web_calls", "max_tokens", "max_pdf_bytes", "max_extracted_chars", "max_pdf_pages", "max_download_seconds", "max_pdf_download_seconds", "max_download_attempts", "max_retry_attempts", "workers", "timeout_seconds", "max_cost_usd",
                      "max_output_tokens", "max_context_chars", "recent_messages", "max_message_context_chars", "max_articles",
-                     "input_price", "output_price", "web_call_price", "web_token_reserve", "request_timeout_seconds"):
+                     "web_call_price", "web_token_reserve", "request_timeout_seconds"):
             if getattr(self, name) <= 0:
                 raise ConfigurationError(f"ENNOSCHOLAR_V4_{name.upper()} doit être positif.")
-        if self.model != "gpt-6.1-sol" and not (os.getenv("ENNOSCHOLAR_V4_INPUT_PRICE") and os.getenv("ENNOSCHOLAR_V4_OUTPUT_PRICE")):
-            raise ConfigurationError("Un autre modèle nécessite ses tarifs ENNOSCHOLAR_V4_INPUT_PRICE et OUTPUT_PRICE (USD / million de tokens).")
+        for name in ("input_price", "output_price", "cache_read_price", "cache_write_price"):
+            if getattr(self, name) < 0:
+                raise ConfigurationError(f"ENNOSCHOLAR_V4_{name.upper()} ne peut pas être négatif.")
+        # Every model used (main and per task) needs an attested price before any call.
+        from .pricing import resolve, PriceUnknown
+        from .routing import task_models
+        try:
+            for model in {self.model, *task_models(self).values()}:
+                resolve(self, model)
+        except (PriceUnknown, ValueError) as exc:
+            raise ConfigurationError(str(exc)) from None

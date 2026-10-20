@@ -19,6 +19,8 @@ SELF_REFERENCE = re.compile(r"\b(?:in\s+this\s+(?:work|paper|study|article)|we\s
 METHOD_NAME = re.compile(r"\b(?:[A-Za-z][a-z0-9]*[a-z][A-Z][A-Za-z0-9]*|[A-Z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*-[A-Z][A-Za-z0-9]*)(?:-[A-Za-z0-9]+)*\b")
 ET_AL = re.compile(r"\b([A-ZÀ-Ý][\w'’\-]+)\s+(?:\*?et\s+al\.?\*?|et\s+coll\.?|and\s+colleagues)")
 MARKER = re.compile(r"\[(ev_[\w-]+)\]")
+# A project proof (EnnoDiagnostic passage) cited in a draft: [projet:evidence_id].
+PROJECT_MARKER = re.compile(r"\[projet:([\w-]+)\]")
 SENTENCE = re.compile(r"(?<!et al\.)(?<!et coll\.)(?<=[.!?;])\s+(?=[*«(\[A-ZÀ-Ý0-9])|\n+")
 
 
@@ -75,28 +77,67 @@ def _proof_text(row):
         *map(str, table.get("headers") or []), *map(str, table.get("row") or [])]))
 
 
+def generic_title_names(toolkit):
+    """Names written like a method in the titles of several distinct works of the library
+    (« LiDAR », « UAV »): a sensor or a topic, never the identity of one publication
+    (run dcf5d05b: « LiDAR » was attributed to one article). Derived from the library."""
+    registry = getattr(toolkit, "registry", {}) or {}
+    cache = getattr(toolkit, "_generic_names", None)
+    if cache is not None and cache[0] == len(registry):
+        return cache[1]
+    works = {}
+    for aid, article in registry.items():
+        for name in dict.fromkeys(METHOD_NAME.findall(article.title or "")):
+            works.setdefault(_key(name), set()).add(getattr(article, "canonical_work_id", "") or aid)
+    generic = set()
+    for key, owners in works.items():
+        if len(owners) >= 2:
+            generic |= {key, key[:-1] if key.endswith("s") else key + "s"}
+    try:
+        toolkit._generic_names = (len(registry), generic)
+    except AttributeError:
+        pass
+    return generic
+
+
 def check_attribution(text, article_ids, toolkit):
     """Issues of a draft text: unknown names without an exact supporting passage in the
     same sentence, and sentences naming one publication but citing only another's evidence."""
     identities = [article_identity(toolkit.registry[aid]) for aid in article_ids if aid in toolkit.registry]
     allowed = set()
     owners = {}
+    generic = generic_title_names(toolkit)
     for identity in identities:
         for name in [*identity["method_names"], *identity["authors"]]:
             allowed |= _variants(name)
         for name in [identity["short_name"], identity["first_author"], *identity["method_names"]]:
-            if name:
+            if name and not (_variants(name) & generic and name != identity["first_author"]):
                 for key in _variants(name):
                     owners.setdefault(key, set()).add(identity["article_id"])
     issues = []
+    from .diagnostic_link import diagnostic_evidence
+    state = getattr(toolkit, "state", None) or {}
+    project = diagnostic_evidence(state)
+    # A name already introduced with its exact supporting passage earlier in the draft can be
+    # used again (« la simplification de type Douglas-Peucker » after its sourced definition).
+    introduced = set()
     for sentence, paragraph in ((s, p) for p in re.split(r"\n\s*\n", text) for s in sentences(p)):
         cited = [toolkit.evidence[eid] for eid in MARKER.findall(sentence) if eid in toolkit.evidence]
-        quotes = " ".join(_proof_text(row) for row in cited)
-        names = [*METHOD_NAME.findall(MARKER.sub("", re.sub(r"\[paper_[\w-]+\]", "", sentence))),
+        # A name the project's own cited passage contains (an architecture tested in the
+        # project) is supported by that project proof, not attributed to a publication.
+        quotes = " ".join([*(_proof_text(row) for row in cited),
+            *(_key(project[pid].get("quote") or "") for pid in PROJECT_MARKER.findall(sentence) if pid in project)])
+        names = [*METHOD_NAME.findall(PROJECT_MARKER.sub("", MARKER.sub("", re.sub(r"\[paper_[\w-]+\]", "", sentence)))),
             *ET_AL.findall(sentence)]
         cited_ids = set(MARKER.findall(sentence))
         context = {row["article_id"] for row in cited} & set(article_ids)
         here = allowed.union(*(own_card_names(toolkit.registry[aid], toolkit.evidence, cited_ids) for aid in context))
+        if not cited_ids and not PROJECT_MARKER.findall(sentence):
+            # An uncited sentence is supported by the exact passages its paragraph cites (the
+            # citation closes the paragraph), as numeric values are (same-paragraph rule).
+            quotes = " ".join([quotes, *(_proof_text(toolkit.evidence[eid]) for eid in MARKER.findall(paragraph)
+                if eid in toolkit.evidence), *(_key(project[pid].get("quote") or "")
+                for pid in PROJECT_MARKER.findall(paragraph) if pid in project)])
         if not cited_ids:
             # A paragraph-final citation can support a component of the work
             # explicitly named in this sentence. This exception uses only its
@@ -107,8 +148,11 @@ def check_attribution(text, article_ids, toolkit):
             here |= set().union(*(own_card_names(toolkit.registry[aid], toolkit.evidence,
                 {eid for eid in paragraph_ids if eid in toolkit.evidence and toolkit.evidence[eid]["article_id"] == aid})
                 for aid in named_owners))
+        supported = [name for name in dict.fromkeys(names) if any(v and v in quotes for v in _variants(name))]
         unknown = [name for name in dict.fromkeys(names)
-            if not _variants(name) & here and not any(v and v in quotes for v in _variants(name))]
+            if not _variants(name) & here and name not in supported and not _variants(name) & introduced]
+        for name in supported:
+            introduced |= _variants(name)
         if unknown:
             issues.append({"code": "unsupported_name", "sentence": sentence[:300], "names": unknown})
             continue

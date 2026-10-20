@@ -389,3 +389,34 @@ def test_library_categories_and_publication_coverage_are_independent(setup):
     assert client.get(f"/scholar-v4/sessions/{sid}/articles?category=made_up").status_code == 422
     auth(app, 2)
     assert client.get(f"/scholar-v4/sessions/{sid}/articles?category=retained_complementary").status_code == 404
+
+
+@pytest.mark.parametrize("task_status", ["generated", "saved"])
+def test_task_receipt_is_committed_independently_before_worker_failure(setup, task_status):
+    import threading
+    app, client, service, factory = setup
+    auth(app)
+    sid = client.post("/scholar-v4/sessions", json={}).json()["id"]
+    ready, release = threading.Event(), threading.Event()
+    receipt = {"id": "part_one", "kind": "plan_part", "status": task_status,
+        "content": {"sections": [{"title": "Méthodes", "article_ids": []}]},
+        "saved": {"saved": True, "artifact_id": "part_one"} if task_status == "saved" else None,
+        "refusal": None, "evidence_ids": [], "attempts": []}
+    class InterruptedAgent:
+        def run(self, data, emit, cancelled):
+            data["task_results"] = {"part_one": copy.deepcopy(receipt)}
+            emit({"tool": "task_result", "status": "completed", "task_id": "part_one", "task_status": task_status})
+            ready.set()
+            release.wait(3)
+            raise RuntimeError("worker lost after receipt checkpoint")
+    service.agent_factory = InterruptedAgent
+    try:
+        rid = client.post("/scholar-v4/chat", json={"session_id": sid, "message": "Plan"}).json()["id"]
+        assert ready.wait(2)
+        with factory() as db:
+            assert db.get(ScholarV4Session, sid).data["task_results"]["part_one"] == receipt
+    finally:
+        release.set()
+    assert wait_run(client, rid)["status"] == "failed"
+    with factory() as db:
+        assert db.get(ScholarV4Session, sid).data["task_results"]["part_one"] == receipt

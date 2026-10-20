@@ -55,6 +55,60 @@ def escaped(value):
     return str(value).replace("|", "\\|").replace("[", "").replace("]", "").replace("\n", " ")
 
 
+def canonical(toolkit, aid):
+    article = toolkit.registry.get(aid)
+    return (article.canonical_work_id or aid) if article else aid
+
+
+def reference_mismatch(toolkit, ids, evidence_ids=()):
+    """Local check before publication (run ce08ad31): when the request targets resolved
+    publications, the answer must treat them, and an exclusive request must not be about
+    other works. Two records of one work count as one. None when the answer fits."""
+    goal = toolkit.state.get("turn_goal") or {}
+    refs = goal.get("references") or {}
+    targets = refs.get("article_ids") or []
+    if getattr(toolkit, "saving_section", False) or goal.get("deliverable") in {"draft", "plan", "plan_revision"}:
+        # A manuscript section cites its plan sources, not the works named for the chat answer
+        # (run dcf5d05b replay: the first section was refused for not citing the turn's ten works).
+        return None
+    if not targets or refs.get("ambiguous") or refs.get("scope") not in {"exclusive", "primary"}:
+        return None
+    cited = {canonical(toolkit, aid) for aid in ids}
+    wanted = {canonical(toolkit, aid): aid for aid in targets}
+    missing = [aid for key, aid in wanted.items() if key not in cited]
+    others = [aid for aid in ids if canonical(toolkit, aid) not in wanted]
+    # Each targeted work with stored, valid proofs is treated from them (run 8cb4d68a: LDPoly had
+    # six valid proofs and none reached the final request). The correction stays local: the
+    # available evidence ids are returned, no new reading is needed.
+    cited_by = {}
+    for eid in evidence_ids:
+        row = toolkit.evidence.get(eid)
+        if row:
+            cited_by.setdefault(canonical(toolkit, row["article_id"]), []).append(eid)
+    unproven = {}
+    for key, aid in wanted.items():
+        if key in cited and not cited_by.get(key):
+            available = [e["evidence_id"] for e in (toolkit.registry[aid].analysis or {}).get("evidence", [])
+                if e["evidence_id"] in toolkit.shown_evidence and exact_source_valid(e, toolkit.snapshots)]
+            if available:
+                unproven[aid] = available[:8]
+    if not missing and not unproven and not (refs["scope"] == "exclusive" and len(others) >= len(wanted)):
+        return None
+    if not missing and not others:
+        return {"message": "Chaque publication visée doit être présentée à partir de ses preuves enregistrées : citer "
+            "les evidence_ids disponibles (" + "; ".join(f"{aid} → {', '.join(eids)}" for aid, eids in unproven.items())
+            + ") dans les phrases qui les utilisent.", "target_article_ids": targets, "missing_article_ids": [],
+            "other_article_ids": [], "available_evidence_ids": unproven}
+    title = lambda aid: (toolkit.registry[aid].title if aid in toolkit.registry else aid)[:90]
+    return {"message": "La réponse doit porter sur les publications visées par la demande "
+        + "; ".join(f"[{aid}] {title(aid)}" for aid in targets)
+        + (f". Non traitées : {', '.join(missing)}" if missing else "")
+        + (f". Hors demande : {', '.join(others)} — ne les présenter que comme contexte secondaire" if others else "")
+        + ". Corriger la réponse à partir de leurs fiches et preuves déjà transmises (aucune nouvelle lecture), ou dire "
+        "précisément ce qui manque.", "target_article_ids": targets, "missing_article_ids": missing,
+        "other_article_ids": others}
+
+
 def publish(toolkit, args, deadline):
     ids = list(dict.fromkeys(args.article_ids))
     attempt = {"draft": args.answer, "article_ids": ids, "evidence_ids": args.evidence_ids,
@@ -96,6 +150,9 @@ def publish(toolkit, args, deadline):
                 invalid_article_ids=[r["article_id"] for r in checked["articles"] if not r["valid"]], bibliography=checked)
         if len({toolkit.store.article(aid).canonical_work_id or aid for aid in ids}) != len(ids):
             return reject("duplicate_work", "Plusieurs versions du même travail sont citées : conserver un représentant et expliquer sa version.")
+        off_target = reference_mismatch(toolkit, ids, args.evidence_ids)
+        if off_target:
+            return reject("off_target_publications", off_target["message"], **{k: v for k, v in off_target.items() if k != "message"})
         for eid in args.evidence_ids:
             e = toolkit.evidence.get(eid)
             if not e or eid not in toolkit.shown_evidence or e["article_id"] not in ids:
@@ -195,8 +252,15 @@ def publish(toolkit, args, deadline):
         if displayed:
             toolkit.state["displayed_article_ids"] = list(displayed)
         order = list(toolkit.state.get("displayed_article_ids", []))
+        refs = (toolkit.state.get("turn_goal") or {}).get("references") or {}
+        targets = [aid for aid in refs.get("article_ids") or [] if aid in ids or canonical(toolkit, aid) in
+            {canonical(toolkit, x) for x in ids}]
         toolkit.finished = {"answer": text, "citations": list(used.values()), "cited_article_ids": ids,
             "displayed_article_ids": order, "primary_article_ids": list(displayed or ids),
+            # What this answer was about (the request's targets first), and whether it set a new
+            # displayed list: « le deuxième » next turn refers to this, not to an older table.
+            "discussed_article_ids": list(dict.fromkeys([*[a for a in targets if a in ids], *(displayed or ids)])),
+            "displayed_list_current": displayed is not None,
             "cited_evidence_ids": list(dict.fromkeys(args.evidence_ids)), "coverage_sufficient": args.coverage_sufficient,
             "remaining_uncertainties": args.remaining_uncertainties, "bibliography": checked}
         toolkit.state["last_response"] = {k: v for k, v in toolkit.finished.items() if k != "answer"}

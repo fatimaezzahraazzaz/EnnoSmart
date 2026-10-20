@@ -41,6 +41,30 @@ def interleave_by_provider(rows):
     return ordered
 
 
+def lexical_order(query, articles):
+    """Order notices by the query's distinctive concepts (title counts double),
+    keeping the given order among equals. A presentation order only: it decides
+    what is shown first, never what is relevant."""
+    terms = query_terms(query)
+    if terms and len(articles) >= 5:
+        # Words present in most notices ("deep", "learning", "road") cannot order them.
+        frequency = {t: sum(t in set(tokens(a.title + " " + a.abstract)) for a in articles) for t in terms}
+        terms = {t for t in terms if frequency[t] <= .4*len(articles)} or terms
+    if not terms:
+        return list(articles), 0
+    def overlap(article):
+        title = set(tokens(article.title))
+        return 2*len(terms & title) + len(terms & (set(tokens(article.abstract)) - title))
+    scored = [(overlap(a), i, a) for i, a in enumerate(articles)]
+    matched = [a for score, _, a in sorted((s for s in scored if s[0]), key=lambda s: (-s[0], s[1]))]
+    return matched + [a for score, _, a in scored if not score], len(matched)
+
+
+# Every result of a search is presented with a short abstract (the full notice
+# stays one get_article away), instead of 8 long abstracts and bare titles.
+WINDOW_ARTICLES, WINDOW_ABSTRACT, WINDOW_CHARS = 24, 420, 20000
+
+
 def legacy(article):
     return LegacyArticle.model_validate(article.model_dump())
 
@@ -174,35 +198,25 @@ class ArticleStore:
         exact = [a for a in candidates if normalized and normalized in
                  [a.id.casefold(), a.doi.casefold(), a.arxiv_id.casefold(), a.title.casefold()]]
         remaining = [a for a in candidates if a not in exact]
-        terms = query_terms(query)
-        if terms and len(remaining) >= 5:
-            # Words present in most stored notices ("deep", "learning", "neural")
-            # cannot order the window; the distinctive concepts of the query do.
-            frequency = {t: sum(t in set(tokens(a.title + " " + a.abstract)) for a in remaining) for t in terms}
-            distinctive = {t for t in terms if frequency[t] <= .4*len(remaining)}
-            terms = distinctive or terms
-        matched = []
-        if terms:
-            # Lexical overlap only orders the presentation window so that the
-            # model's own query reaches the corresponding stored notices.
-            def overlap(article):
-                title = set(tokens(article.title))
-                return 2*len(terms & title) + len(terms & (set(tokens(article.abstract)) - title))
-            scored = [(overlap(a), i, a) for i, a in enumerate(remaining)]
-            matched = [a for score, _, a in sorted((s for s in scored if s[0]), key=lambda s: (-s[0], s[1]))]
-            remaining = matched + [a for score, _, a in scored if not score]
-        return (exact + remaining)[:limit], {"method": "stored_candidates_lexical_order" if terms else "stored_candidates",
-            "matched": len(candidates), "query_term_matches": len(matched), "scores_are_scientific_ranking": False,
+        # Lexical overlap only orders the presentation window so that the
+        # model's own query reaches the corresponding stored notices.
+        remaining, matched = lexical_order(query, remaining)
+        return (exact + remaining)[:limit], {"method": "stored_candidates_lexical_order" if query_terms(query) else "stored_candidates",
+            "matched": len(candidates), "query_term_matches": matched, "scores_are_scientific_ranking": False,
             **({"family_filter_ignored": family, "known_families": sorted({f for a in self.registry.values() for f in a.scientific_families})[:20]}
                 if family_ignored else {})}
 
-    def window(self, rows, query, purpose="retrieval"):
+    def window(self, rows, query, purpose="retrieval", ordered=False, abstract_limit=WINDOW_ABSTRACT, maximum=WINDOW_ARTICLES):
         # Bound transmission, not collection or scientific ranking. Omitted records
         # stay unexposed and can be retrieved through search_collected_articles.
+        # Provider results are ordered by the query's concepts (provider order kept
+        # among equals); local searches arrive already ordered over the corpus.
+        if not ordered:
+            rows, _ = lexical_order(query, rows)
         offered = []
-        for article in rows[:8]:
-            row = compact(article, 1600)
-            if offered and len(json.dumps([*offered, row], ensure_ascii=False)) > 20000:
+        for article in rows[:maximum]:
+            row = compact(article, abstract_limit)
+            if offered and len(json.dumps([*offered, row], ensure_ascii=False)) > WINDOW_CHARS:
                 break
             offered.append(row)
         window = {"window_id": "window_" + uuid.uuid4().hex, "query": query, "purpose": purpose,
@@ -210,7 +224,8 @@ class ArticleStore:
         self.windows.append(window)
         result = {"window_id": window["window_id"], "articles": offered,
             "delivery": {"offered": len(offered), "batch_total": len(rows), "remaining_in_batch": len(rows)-len(offered),
-                "guidance": "Toutes les notices et abstracts sont conservés. Pour les fenêtres suivantes : search_collected_articles(exclude_presented=true), ou get_article par ID/titre. Les fenêtres ne constituent pas un classement scientifique."}}
+                "guidance": "Résumés abrégés (abstract_truncated) : get_article(identifiers) donne la notice complète avant une décision serrée. "
+                    "Toutes les notices et abstracts sont conservés. Pour les fenêtres suivantes : search_collected_articles(exclude_presented=true), ou get_article par ID/titre. Les fenêtres ne constituent pas un classement scientifique."}}
         unseen = [a for a in rows[len(offered):] if a.id not in self.examined]
         if unseen:
             # Titles only: the model can request any of these notices by ID. They

@@ -94,6 +94,20 @@ def provider_query(provider, query):
     return _arxiv(tree) or query
 
 
+# arXiv has no relevance quorum: every AND term must appear in the title or abstract.
+# Six required terms returned nothing in the real runs (e7bae458, d71d17b0).
+ARXIV_REQUIRED_TERMS = 4
+
+
+def arxiv_plain_query(terms):
+    """A plain query for arXiv: short queries require every term; longer ones require
+    their first two concepts and at least one of the others, ranked by arXiv relevance."""
+    field = lambda term: f"ti:{term} OR abs:{term}"
+    if len(terms) <= ARXIV_REQUIRED_TERMS:
+        return " AND ".join(f"({field(term)})" for term in terms)
+    return " AND ".join(f"({field(term)})" for term in terms[:2]) + " AND (" + " OR ".join(field(t) for t in terms[2:]) + ")"
+
+
 def title_key(value):
     return " ".join(re.sub(r"[^\w\s]", " ", unicodedata.normalize("NFKC", value).casefold()).split())
 
@@ -140,7 +154,7 @@ class V4ScientificSearch(ScientificSearch):
                 terms = re.findall(r'"[^"\n]+"|[\w-]+', query)
                 terms = [term for term in terms if term.casefold() not in {"a", "an", "the", "for", "of", "in", "on", "with", "and", "using", "based"}]
                 if terms:
-                    params = {**params, "search_query": " AND ".join(f"(ti:{term} OR abs:{term})" for term in terms)}
+                    params = {**params, "search_query": arxiv_plain_query(terms)}
         import httpx
         for attempt in range(self.retries):
             try:
@@ -176,6 +190,16 @@ class V4ScientificSearch(ScientificSearch):
 
 
 class ScientificSources:
+    _local = __import__("threading").local()
+
+    @property
+    def last_provider_stats(self):
+        return getattr(ScientificSources._local, "stats", None)
+
+    @last_provider_stats.setter
+    def last_provider_stats(self, value):
+        ScientificSources._local.stats = value
+
     def __init__(self, timeout=15, client=None, config=None):
         # Construct a private adapter instance. Never use the V2 singleton or config env overrides.
         import os
@@ -279,6 +303,28 @@ class ScientificSources:
         self.client.search_offset = 0
         # Registry verification is performed on examined/final articles, not hundreds of candidates.
         return articles, warnings
+
+    def abstracts(self, articles, deadline):
+        """Abstracts of notices collected without one, read from their DOI records
+        (OpenAlex, Semantic Scholar). Only the provider's text for the same title is
+        returned; nothing is generated. {article_id: (abstract, provider)}."""
+        def one(article):
+            for row in self.client.lookup_doi(article.doi, deadline=min(deadline, time.monotonic()+10)):
+                same = title_key(row.title) == title_key(article.title) or (
+                    title_key(row.title)[:60] and title_key(article.title).startswith(title_key(row.title)[:60]))
+                if row.abstract and same:
+                    return article.id, (row.abstract, getattr(row, "source", None) or (getattr(row, "sources", None) or ["provider"])[0])
+            return article.id, None
+        found = {}
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for future in [pool.submit(one, a) for a in articles if a.doi]:
+                try:
+                    aid, value = future.result(timeout=max(.1, deadline-time.monotonic()))
+                except Exception:
+                    continue
+                if value:
+                    found[aid] = value
+        return found
 
     def metadata(self, identifier, deadline, check=lambda: None):
         identifier = identifier.strip()

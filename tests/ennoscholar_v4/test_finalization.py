@@ -27,6 +27,11 @@ class Client:
     @property
     def responses(self): return self
     def create(self, **kw):
+        if kw.get("tool_choice") == {"type": "function", "name": "set_turn_goal"}:
+            # The understanding call: this fake declares no goal, so the agent applies
+            # its documented fallback (the earlier behaviour these tests describe).
+            self.understanding = getattr(self, "understanding", 0)+1
+            return Stream(NS(output=[], output_text="", status="completed", usage={"input_tokens": 10, "output_tokens": 5}))
         self.calls.append(copy.deepcopy(kw))
         output = self.callback(len(self.calls), kw)
         return Stream(NS(output=output, output_text="", status="completed", usage={"input_tokens": 100, "output_tokens": 100}))
@@ -262,7 +267,8 @@ def test_seventy_notices_68_abstracts_without_finalists_reach_model_and_support_
                 "limit_per_source": 35, "offset": 0, "family": "volumetric"}, n)
         if n == 2:
             assert kwargs["tool_choice"] == "auto"
-            assert len(seen) == 8 and all(a.get("abstract") for a in seen.values())
+            # Every result of the search is presented with a short abstract (24 per window).
+            assert len(seen) == 24 and all(a.get("abstract") for a in seen.values())
             assert all(name in json.dumps(kwargs["input"]) for name in chosen)
             memory = json.loads(kwargs["input"][0]["content"].split(" : ", 1)[1])
             index = {row["title"]: row["id"] for row in memory["candidate_index"]}
@@ -305,7 +311,7 @@ def test_successive_windows_can_deliver_all_68_abstracts_without_collecting_agai
     for _ in range(10):
         result = t.execute("search_collected_articles", {"query": "", "limit": 12, "exclude_presented": True, "family": None}, float("inf"))
         offered.update(a["id"] for a in result["articles"] if a.get("abstract"))
-        assert len(result["articles"]) <= 8
+        assert len(result["articles"]) <= 12
         t.delivered([result["window_id"]])
     assert len(t.registry) == 70 and len(t.store.exposed) == 70 and len(offered) == 68
     assert not t.sources.mock_calls

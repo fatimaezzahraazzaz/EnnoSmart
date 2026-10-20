@@ -16,6 +16,10 @@ from .session import ScholarV4Session, ScholarV4Run, sync_records
 
 logger = logging.getLogger(__name__)
 TERMINAL = {"completed", "partial", "failed", "cancelled"}
+# Cancellation reads two run/session columns at most this often (deadlines are checked
+# on every event by the agent); ownership and project access are re-verified less often.
+CANCEL_CHECK_SECONDS = 1.0
+ACCESS_CHECK_SECONDS = 30.0
 
 
 class SessionNotFound(LookupError):
@@ -42,12 +46,23 @@ class ScholarV4Service:
         row = db.scalar(select(ScholarV4Session).where(ScholarV4Session.id == sid, ScholarV4Session.owner_id == owner))
         if row is None:
             raise SessionNotFound("Conversation introuvable.")
+        if row.data.get("mode") == "diagnostic_linked":
+            from .diagnostic_link import permitted_project
+            permitted_project(db, owner, row.data["diagnostic_link"]["snapshot"]["project"]["id"])
         return row
 
-    def create(self, owner, title="Nouvelle conversation"):
+    def create(self, owner, title="Nouvelle conversation", *, options=None):
         with self.session_factory() as db:
+            data = {"messages": [], "articles": {}, "research_state": {}, "summary": "", "project_id": None, "selected_verrous": [], "focus": {}, "outline_versions": [], "mode": "express"}
+            if options and options.mode == "diagnostic_linked":
+                from .diagnostic_link import source_snapshot, make_link
+                snapshot = source_snapshot(db, owner, options.project_id, options.diagnostic_id)
+                if snapshot["source_version"] != options.source_version:
+                    raise SessionBusy("Le diagnostic a changé. Rechargez les verrous avant confirmation.")
+                data.update(mode="diagnostic_linked", project_id=options.project_id,
+                            diagnostic_link=make_link(snapshot, options.selected_lock_ids, options.allow_unkept))
             row = ScholarV4Session(id=uuid.uuid4().hex, owner_id=owner, title=title,
-                data={"messages": [], "articles": {}, "research_state": {}, "summary": "", "project_id": None, "selected_verrous": [], "focus": {}, "outline_versions": []})
+                data=data)
             db.add(row)
             db.commit()
             return self.session_read(row)
@@ -56,6 +71,10 @@ class ScholarV4Service:
         result = {"id": row.id, "title": row.title, "created_at": iso(row.created_at), "updated_at": iso(row.updated_at),
             "active_run_id": row.active_run_id, "articles_total": len(row.data.get("articles", {})),
             "selected_count": sum(bool(a.get("selected")) for a in row.data.get("articles", {}).values())}
+        result["mode"] = row.data.get("mode", "express")
+        if result["mode"] == "diagnostic_linked":
+            from .diagnostic_link import summary
+            result["diagnostic_context"] = summary(row.data["diagnostic_link"])
         if detailed:
             stored = row.data.get("articles", {})
             pinned = list(dict.fromkeys([*row.data.get("evaluation", {}).get("recommended_article_ids", []),
@@ -90,7 +109,79 @@ class ScholarV4Service:
         with self.session_factory() as db:
             rows = db.scalars(select(ScholarV4Session).where(ScholarV4Session.owner_id == owner)
                 .order_by(ScholarV4Session.updated_at.desc()).limit(100)).all()
-            return [self.session_read(row, False) for row in rows]
+            from fastapi import HTTPException
+            result = []
+            for row in rows:
+                try:
+                    self.owned(db, owner, row.id)
+                except HTTPException:
+                    continue
+                result.append(self.session_read(row, False))
+            return result
+
+    def diagnostic_projects(self, owner):
+        from .diagnostic_link import list_projects
+        with self.session_factory() as db:
+            return list_projects(db, owner)
+
+    def diagnostic_preview(self, owner, project_id):
+        from .diagnostic_link import source_snapshot, make_link, summary
+        with self.session_factory() as db:
+            source = source_snapshot(db, owner, project_id)
+            return summary({"snapshot": source, "revision": 1, "selected_lock_ids": [], "active_lock_ids": []})
+
+    def project_context(self, owner, sid, kind="facts", offset=0, limit=5, scope="active"):
+        from .diagnostic_link import retrieve, source_snapshot
+        with self.session_factory() as db:
+            row = self.owned(db, owner, sid)
+            result = retrieve(row.data, kind, offset, limit, scope=scope)
+            result["history"] = row.data["diagnostic_link"].get("history", [])
+            old = row.data["diagnostic_link"]["snapshot"]
+            try:
+                latest = source_snapshot(db, owner, old["project"]["id"])
+                result["source_changed"] = latest["source_version"] != old["source_version"]
+            except ValueError:
+                result["source_changed"] = True
+            return result
+
+    def update_project_context(self, owner, sid, payload):
+        from .diagnostic_link import source_snapshot, set_scope, validate_selection
+        with self.session_factory() as db:
+            row = self.owned(db, owner, sid)
+            if row.active_run_id:
+                raise SessionBusy("Attendre la fin du tour avant de changer le contexte.")
+            data = copy.deepcopy(row.data)
+            link = data.get("diagnostic_link")
+            if data.get("mode") != "diagnostic_linked" or not link:
+                raise ValueError("Conversation Express : créer une conversation liée distincte.")
+            if payload.expected_revision != link["revision"]:
+                raise SessionBusy("Le périmètre a changé. Rechargez la conversation.")
+            if payload.action != "scope":
+                if not payload.confirmed:
+                    raise ValueError("Confirmer explicitement la nouvelle sélection ou l'actualisation.")
+                source = link["snapshot"]
+                if payload.action == "refresh":
+                    source = source_snapshot(db, owner, source["project"]["id"])
+                    if source["source_version"] != payload.source_version:
+                        raise SessionBusy("Rechargez le diagnostic avant de confirmer l'actualisation.")
+                ids = validate_selection(source, payload.lock_ids, payload.allow_unkept)
+                link["history"].append({"action": "selection", "previous_selected_lock_ids": link["selected_lock_ids"][:],
+                                        "selected_lock_ids": ids[:], "origin": "authenticated_human", "at": iso(datetime.utcnow())})
+                if payload.action == "refresh":
+                    link["source_history"].append(copy.deepcopy(link["snapshot"]))
+                    link["history"].append({"action": "refresh", "previous_source_version": link["snapshot"]["source_version"],
+                                            "source_version": source["source_version"], "at": iso(datetime.utcnow()),
+                                            "previous_selected_lock_ids": link["selected_lock_ids"][:]})
+                    link["snapshot"] = source
+                link["selected_lock_ids"] = ids
+            set_scope(data, payload.lock_ids)
+            changed = db.execute(update(ScholarV4Session).where(ScholarV4Session.id == sid,
+                ScholarV4Session.owner_id == owner, ScholarV4Session.active_run_id.is_(None),
+                ScholarV4Session.updated_at == row.updated_at).values(data=data, updated_at=datetime.utcnow()))
+            if changed.rowcount != 1:
+                raise SessionBusy("Modification concurrente : rechargez la conversation.")
+            db.commit()
+        return self.read(owner, sid)
 
     def document_action(self, owner, sid, payload):
         import copy
@@ -185,6 +276,7 @@ class ScholarV4Service:
         from .scientific_scope import literature_coverage
         from .scientific_review import deterministic_review
         from .toolkit import ScholarTools
+        from .citation_render import render_manuscript
         with self.session_factory() as db:
             data = self.owned(db, owner, sid).data
             registry = {aid: Article.model_validate(a) for aid, a in data.get("articles", {}).items()}
@@ -198,7 +290,9 @@ class ScholarV4Service:
                 "review": deterministic_review(copy.deepcopy(data), ScholarTools(copy.deepcopy(data), None, self.config)),
                 "versions": [{k:v for k,v in r.items() if k not in {"outline", "figures", "article_metadata"}} for r in data.get("document_versions", [])],
                 "articles": [a.compact() for a in registry.values()],
-                "evidence": {eid:data["evidence"][eid] for eid in used if eid in data.get("evidence", {})}}
+                "evidence": {eid:data["evidence"][eid] for eid in used if eid in data.get("evidence", {})},
+                # Same citation rendering as the exports, from the drafts' raw identifiers.
+                "rendering": render_manuscript(data, data.get("outline", {}).get("sections", []))}
 
     def export_document(self,owner,sid,version_id,fmt):
         from .document_export import export_document
@@ -491,8 +585,49 @@ class ScholarV4Service:
                         run.data = {**run.data, "reason": "worker_interrupted", "answer": "Recherche interrompue ou délai dépassé. Les échanges précédents sont conservés ; relancez votre demande."}
                 db.commit()
 
+    def finance_engine(self):
+        bind = getattr(self.session_factory, "kw", {}).get("bind")
+        if bind is None:
+            with self.session_factory() as db:
+                bind = db.get_bind()
+        return bind
+
+    def meter(self, owner, sid, rid, data):
+        """Spending controller of one run (None when disabled). Identities come from the
+        authenticated owner, the permitted project of the conversation and the server's
+        organisation setting, never from the request body."""
+        if not self.config.finance_enabled:
+            return None
+        from .config import ConfigurationError
+        from .finance import BudgetPolicy, Ledger, Meter, SpendScope, installed
+        engine = self.finance_engine()
+        if not installed(engine):
+            raise ConfigurationError("Contrôleur financier activé sans ses tables : appliquer la migration "
+                "20261019_ennoscholar_v4_finance.sql (ou finance.migrate) avant d'activer ENNOSCHOLAR_V4_FINANCE_ENABLED.")
+        dossier = (f"project:{data['project_id']}" if data.get("mode") == "diagnostic_linked" and data.get("project_id")
+            else f"conversation:{sid}")
+        return Meter(Ledger(engine, BudgetPolicy.from_file(self.config.budget_policy_file)),
+            SpendScope(self.config.organization_id, int(owner), dossier, rid, sid), self.config)
+
+    def spending(self, owner, limit=100):
+        """The consultant's own ledger rows and balances (no other consultant's data)."""
+        if not self.config.finance_enabled:
+            return {"enabled": False, "calls": [], "balances": []}
+        from .finance import BudgetPolicy, Ledger, SpendScope
+        ledger = Ledger(self.finance_engine(), BudgetPolicy.from_file(self.config.budget_policy_file))
+        rows = ledger.history(consultant_id=int(owner), limit=min(max(1, limit), 500))
+        scope = SpendScope(self.config.organization_id, int(owner), "-")
+        return {"enabled": True, "policy": ledger.policy.describe(), "calls": [{k: (v.isoformat()+"Z" if hasattr(v, "isoformat") else v)
+            for k, v in row.items() if k not in {"usage", "counter_keys", "reserved_nano", "settled_nano"}} for row in rows],
+            "balances": [b for b in ledger.balances(scope) if b["budget"].startswith(("consultant:", "organization:"))]}
+
     def start(self, owner, request):
         self.config.validate()
+        if self.config.finance_enabled:
+            from .finance import installed
+            from .config import ConfigurationError
+            if not installed(self.finance_engine()):
+                raise ConfigurationError("Contrôleur financier activé sans ses tables : appliquer la migration avant usage.")
         if not self.slots.acquire(blocking=False):
             raise SessionBusy("Les recherches V4 sont occupées. Réessayez dans un instant.")
         try:
@@ -529,6 +664,7 @@ class ScholarV4Service:
             if row is None:
                 raise SessionNotFound("Recherche introuvable.")
             sid = row.session_id
+            self.owned(db, owner, sid)
         self.recover_expired(owner, sid)
         with self.session_factory() as db:
             row = db.get(ScholarV4Run, rid)
@@ -542,6 +678,7 @@ class ScholarV4Service:
             if row is None:
                 raise SessionNotFound("Recherche introuvable.")
             if row.status not in TERMINAL:
+                self.owned(db, owner, row.session_id)
                 row.cancel_requested = True
                 db.commit()
         return self.run(owner, rid)
@@ -556,10 +693,35 @@ class ScholarV4Service:
                 run = db.get(ScholarV4Run, rid)
                 run.status = "running"
                 db.commit()
+            checked = {"at": None, "access_at": time.monotonic(), "stop": False}
             def cancelled():
+                # Called on every streamed event. Loading the session row parses its
+                # whole JSON (about 8 MB in run b52f582a): a frequent check reads two
+                # small columns at most once per CANCEL_CHECK_SECONDS; ownership and
+                # project access (which need the row) are re-verified less often.
+                now = time.monotonic()
+                if checked["stop"]:
+                    return True
+                if checked["at"] is not None and now-checked["at"] < CANCEL_CHECK_SECONDS:
+                    return False
+                checked["at"] = now
+                from fastapi import HTTPException
                 with self.session_factory() as db:
-                    run = db.get(ScholarV4Run, rid)
-                    return run is None or run.cancel_requested or run.status in TERMINAL
+                    run = db.execute(select(ScholarV4Run.cancel_requested, ScholarV4Run.status)
+                        .where(ScholarV4Run.id == rid, ScholarV4Run.owner_id == owner)).first()
+                    session = db.execute(select(ScholarV4Session.owner_id, ScholarV4Session.active_run_id)
+                        .where(ScholarV4Session.id == sid)).first()
+                    # A stale worker (lease taken over by a newer run) stops as well.
+                    stop = (run is None or run.cancel_requested or run.status in TERMINAL or session is None
+                        or session.owner_id != owner or session.active_run_id != rid)
+                    if not stop and now-checked["access_at"] >= ACCESS_CHECK_SECONDS:
+                        checked["access_at"] = now
+                        try:
+                            self.owned(db, owner, sid)
+                        except (HTTPException, SessionNotFound):
+                            stop = True
+                checked["stop"] = stop
+                return stop
             def activity(event):
                 with self.session_factory() as db:
                     run = db.get(ScholarV4Run, rid)
@@ -573,7 +735,7 @@ class ScholarV4Service:
                             "find_similar_articles", "compare_articles", "identify_research_gaps", "finalize_response",
                             "write_section", "manage_outline", "create_scientific_visual", "review_document",
                             "review_literature_coverage", "scientific_reading", "record_project_facts",
-                            "build_argument_blueprint", "argumentation", "writing_progress"}:
+                            "build_argument_blueprint", "argumentation", "writing_progress", "task_result"}:
                         session = db.scalar(select(ScholarV4Session).where(ScholarV4Session.id == sid,
                             ScholarV4Session.owner_id == owner).with_for_update())
                         if session.active_run_id == rid:
@@ -583,9 +745,15 @@ class ScholarV4Service:
                                     checkpoint["articles"][aid]["selected"] = article.get("selected", False)
                             checkpoint["selection_decisions"] = session.data.get("selection_decisions", [])
                             session.data = checkpoint
-                            sync_records(db, session)
+                            # Model proposals/receipts need a durable JSON checkpoint,
+                            # not a reindex of every article and draft. Validated saves
+                            # still update dedicated tables in this same transaction.
+                            if event.get("tool") != "responses" and not (
+                                    event.get("tool") == "task_result" and event.get("task_status") != "saved"):
+                                sync_records(db, session)
                     db.commit()
             agent = self.agent_factory() if self.agent_factory else ScholarChatAgent(self.config)
+            agent.meter = self.meter(owner, sid, rid, data)
             result = agent.run(data, emit=activity, cancelled=cancelled)
             self.finish(owner, sid, rid, data, result, "cancelled" if result.get("reason") == "cancelled" else "partial" if result.get("partial") else "completed")
         except Exception as exc:
@@ -612,7 +780,7 @@ class ScholarV4Service:
                 data["selection_decisions"] = row.data.get("selection_decisions", [])
             data.setdefault("messages", []).append({"id": uuid.uuid4().hex, "role": "assistant", "content": result["answer"],
                 "citations": result.get("citations", []), "run_id": rid, "partial": status != "completed",
-                **{key: result.get(key) for key in ("primary_article_ids", "displayed_article_ids", "complementary_count", "discovered_sources_count", "fallback", "library_counts", "coverage_sufficient", "publication_accepted", "research_status")}})
+                **{key: result.get(key) for key in ("primary_article_ids", "discussed_article_ids", "references", "displayed_article_ids", "complementary_count", "discovered_sources_count", "fallback", "library_counts", "coverage_sufficient", "publication_accepted", "research_status")}})
             row.data, row.active_run_id, row.lease_until, row.updated_at = data, None, None, datetime.utcnow()
             run.data = {**run.data, **result}
             run.status, run.updated_at = status, datetime.utcnow()
