@@ -65,6 +65,24 @@ def collect_finished(futures, consume, check):
                 consume(future)
 
 
+
+# What a section repair needs from the refused proposal. Claims, numbers and the argument
+# summary stay in the merge base (local_repair.merge); echoing them doubled the repair
+# input (up to 5 000 characters of claims) without helping to locate the refused passage.
+REPAIR_ECHO_FIELDS = ("action", "section_id", "instructions", "text", "article_ids", "evidence_ids", "project_evidence_ids")
+
+
+def section_proposal(call, attempt):
+    """The refused write_section call as the model must repair it: the complete proposal
+    that was validated (after a paragraph patch, the merged text, not the patch alone:
+    run 95f3507d repaired a title it could not see because only its patch was echoed)."""
+    arguments = attempt.get("arguments")
+    if call.get("name") != "write_section" or not isinstance(arguments, dict) or not arguments.get("text"):
+        return call
+    call["arguments"] = json.dumps({key: arguments[key] for key in REPAIR_ECHO_FIELDS if arguments.get(key) is not None},
+        ensure_ascii=False)
+    return call
+
 class TaskResults:
     def __init__(self, state, config, usage, durations, checkpoint=lambda row: None, call_records=None):
         self.state, self.config, self.usage, self.durations = state, config, usage, durations
@@ -115,7 +133,12 @@ class TaskResults:
         status = getattr(response, "status", "completed") if response is not None else "failed"
         # Scientific refusals are kept verbatim by reject(). Transport exception
         # strings can contain credentials or upstream URLs; retain safe fields.
-        refusal = {"error": "Appel fournisseur non terminé.", "error_type": type(error).__name__} if error is not None else None
+        diagnostic = None
+        if error is not None:
+            from .stops import technical_diagnostic
+            diagnostic = technical_diagnostic(error)
+        refusal = {"error": "Incident technique interne." if diagnostic["category"] == "internal" else "Appel fournisseur non terminé.",
+            "error_type": type(error).__name__, "diagnostic": diagnostic} if error is not None else None
         if response is not None and status != "completed":
             detail = getattr(response, "error", None) or getattr(response, "incomplete_details", None)
             code = detail.get("code") if isinstance(detail, dict) else getattr(detail, "code", None)
@@ -123,7 +146,7 @@ class TaskResults:
             refusal = {"error": f"Responses {status}", "code": code, "reason": reason}
         attempt.update(content=content, usage=copy.deepcopy(raw), duration_seconds=max(0, seconds),
             status="generated" if response is not None and status == "completed" and error is None else "failed",
-            refusal=refusal, error_type=type(error).__name__ if error else None, accounted=True,
+            refusal=refusal, error_type=type(error).__name__ if error else None, diagnostic=diagnostic, accounted=True,
             response_id=getattr(response, "id", None), provider_status=status,
             request_id=getattr(error, "request_id", None) or getattr(response, "_request_id", None),
             http_status=getattr(error, "status_code", None))
@@ -224,8 +247,10 @@ class TaskResults:
         attempt = self.last_refusal(task)
         if attempt is None:
             return []
-        calls = [item for item in attempt["content"] if item.get("type") == "function_call"]
-        return [item for call in calls for item in (copy.deepcopy(call), {
+        calls = [copy.deepcopy(item) for item in attempt["content"] if item.get("type") == "function_call"]
+        if task.get("kind") == "section":
+            calls = [section_proposal(call, attempt) for call in calls]
+        return [item for call in calls for item in (call, {
             "type": "function_call_output", "call_id": call["call_id"],
             "output": json.dumps(attempt["refusal"], ensure_ascii=False)})]
 

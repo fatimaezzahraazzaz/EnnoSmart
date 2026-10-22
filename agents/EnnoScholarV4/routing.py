@@ -1,10 +1,4 @@
-"""Model per task, prepared but neutral by default.
-
-With ``task_models`` empty (the default), every task uses ``config.model`` exactly as
-before. An administrator may later assign a model to a stage after a comparative
-validation (quality of methods, numbers, protocols and uncertainties, then cost); the
-model actually requested is recorded on every receipt and ledger row.
-"""
+"""Stage names remain stable for receipts; exclusive model policy applies to all."""
 from __future__ import annotations
 
 import json
@@ -40,5 +34,6 @@ def task_models(config):
 
 
 def model_for(config, kind):
-    """The model requested for one request kind; config.model unless configured."""
-    return task_models(config).get(STAGE_OF.get(kind, ""), config.model)
+    """All stages, including future kinds, follow the exclusive V4 policy."""
+    from .model_policy import MODEL
+    return MODEL

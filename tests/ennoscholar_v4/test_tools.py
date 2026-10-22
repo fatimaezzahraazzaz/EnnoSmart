@@ -221,7 +221,7 @@ def test_config_requires_key_without_silent_model_substitution(monkeypatch):
     monkeypatch.setenv("ENNOSCHOLAR_V4_MAX_TOOL_ROUNDS", "bad")
     with pytest.raises(ConfigurationError):
         ScholarV4Config.from_env()
-    assert ScholarV4Config().model == "gpt-6.1-sol"
+    assert ScholarV4Config().model == "gpt-6-luna"
 
 
 def test_function_call_result_is_returned_with_matching_call_id():

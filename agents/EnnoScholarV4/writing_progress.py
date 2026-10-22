@@ -126,6 +126,21 @@ def begin_writing(state, request):
     return open_writing(state, mode, targets, baseline)
 
 
+def resume_writing(state, segment):
+    """A continuation of an automatic drafting job resumes the progress the job pinned, by
+    its id, unchanged: same targets, same plan revision (a changed plan is reported as
+    plan_changed, never accepted), and the sections the job set aside stay blocked. None
+    when that progress no longer exists (the run then drafts nothing)."""
+    progress = state.get("document", {}).get("writing_progress")
+    if not progress or not segment or progress.get("id") != segment.get("progress_id"):
+        return None
+    progress["blocked"] = {**progress.get("blocked", {}), **(segment.get("blocked") or {})}
+    progress = refresh_writing(state)
+    if progress["status"] not in {"plan_changed", "draft_complete", "awaiting_plan"}:
+        progress["status"] = "running"
+    return progress
+
+
 def open_writing(state, mode="full", targets=None, baseline=None):
     """A new drafting progress (full draft by default: every plan section, or the
     plan first when none exists). Used for explicit requests, never for a plan request."""
@@ -203,6 +218,11 @@ STOP_LABELS = {"cancelled": "interruption demandée", "timeout": "limite de dur�
     "exploration_token_budget": "limite de tokens atteinte", "token_budget": "limite de tokens atteinte",
     "exploration_cost_budget": "limite de coût atteinte", "cost_budget": "limite de coût atteinte",
     "context_budget": "limite de contexte atteinte",
+    "permission_conflict": "conflit entre l'objectif de rédaction et les permissions du consultant",
+    "tool_configuration_error": "aucun outil compatible avec l'étape demandée",
+    "internal_error": "incident logiciel interne ; diagnostic technique enregistré",
+    "upstream_error": "incident du fournisseur ou du transport API",
+    "configuration_error": "requête ou configuration refusée par le fournisseur",
     "section_save_failed": "sauvegarde refusée après plusieurs corrections de la même section",
     "section_blocked": "toutes les autres sections sont enregistrées ; une section reste à débloquer"}
 
@@ -222,12 +242,26 @@ def writing_answer(state, stop_reason=None):
     header = (f"Brouillon complet enregistré : {len(saved)}/{len(progress['target_ids'])} sections. "
         "L’approbation finale du document reste à faire par le consultant." if progress["status"] == "draft_complete" else
         f"Brouillon partiel enregistré : {len(saved)}/{len(progress['target_ids'])} sections.")
+    if progress["status"] == "draft_complete":
+        # Every section saved is a structural fact, not a scientific verdict: the coverage
+        # and the review are reported separately (editorial.document_quality).
+        from .editorial import document_quality
+        quality = document_quality(state)
+        header += (" Couverture scientifique : " + ("suffisante selon la dernière revue de couverture" if
+            quality["bibliography_sufficient"] else "non établie (" + (f"{len(quality['planned_articles_without_analysis'])} "
+            "publications du plan sans fiche analysée" if quality["planned_articles_without_analysis"] else
+            "aucune revue de couverture suffisante enregistrée") + ")") + " ; revue scientifique du manuscrit : " +
+            ("à jour." if quality["scientific_review_current"] else "à refaire sur cette version."))
     if progress["status"] == "plan_changed":
         header += " Le plan a changé ; confirmer les sections à reprendre."
     elif progress["status"] != "draft_complete":
         if stop_reason:
             header += f" Arrêt : {STOP_LABELS.get(stop_reason, stop_reason)}."
-        header += " Demandez « continue la rédaction » pour reprendre les sections restantes ; les sections enregistrées sont conservées."
+        job = state.get("writing_job") or {}
+        if job.get("status") in {"running", "waiting"} and stop_reason != "cancelled":
+            header += " La rédaction se poursuit automatiquement avec les sections restantes ; les sections enregistrées sont conservées."
+        else:
+            header += " Demandez « continue la rédaction » pour reprendre les sections restantes ; les sections enregistrées sont conservées."
     body = [header]
     if saved:
         body.append("Sections enregistrées : " + ", ".join(section["title"] for _, section in saved) + ". Le manuscrit exact est disponible dans l’artefact.")
@@ -235,6 +269,7 @@ def writing_answer(state, stop_reason=None):
     for sid, section in blocked:
         body.append(f"Section non enregistrée : « {section['title']} ». Cause : {progress['blocked'][sid]} "
             "Son contenu n’a pas été validé ; les autres sections ont été poursuivies.")
-    if progress["errors"] and not blocked:
-        body.append("Dernière erreur de sauvegarde : " + progress["errors"][-1]["message"])
+    unresolved = [e for e in progress["errors"] if e.get("section_id") not in progress["saved_draft_ids"]]
+    if unresolved and not blocked and progress["status"] != "draft_complete":
+        body.append("Dernière erreur de sauvegarde : " + unresolved[-1]["message"])
     return "\n\n".join(body)

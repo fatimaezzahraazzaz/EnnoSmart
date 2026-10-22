@@ -332,19 +332,19 @@ def test_prefix_fingerprints_measure_what_a_cache_could_reuse_without_retaining_
     assert prefix_probe(third, probe2)["compared_with_previous"]["shared_prefix_bytes"] == 0
 
 
-def test_model_routing_is_neutral_by_default_and_validated_when_configured():
+def test_model_routing_is_exclusively_luna_even_when_legacy_overrides_are_configured():
     from dataclasses import replace
     from agents.EnnoScholarV4.config import ConfigurationError, ScholarV4Config
     from agents.EnnoScholarV4.routing import model_for, STAGES
     config = ScholarV4Config(api_key="mock", model="gpt-5.6-sol")
-    assert {model_for(config, kind) for stage in STAGES.values() for kind in stage} == {"gpt-5.6-sol"}
+    assert {model_for(config, kind) for stage in STAGES.values() for kind in stage} == {"gpt-6-luna"}
     routed = replace(config, task_models=json.dumps({"understanding": "gpt-5.6-luna"}))
     routed.validate()
-    assert model_for(routed, "understanding") == "gpt-5.6-luna" and model_for(routed, "reading") == "gpt-5.6-sol"
-    with pytest.raises(ConfigurationError):
-        replace(config, task_models=json.dumps({"lecture": "gpt-5.6-luna"})).validate()
-    with pytest.raises(ConfigurationError):
-        replace(config, task_models=json.dumps({"reading": "modele-sans-tarif"})).validate()
+    assert model_for(routed, "understanding") == model_for(routed, "reading") == "gpt-6-luna"
+    for old in ({"lecture": "gpt-5.6-luna"}, {"reading": "modele-sans-tarif"}):
+        normalized = replace(config, task_models=json.dumps(old))
+        normalized.validate()
+        assert normalized.task_models == ""
 
 
 def test_each_receipt_records_the_model_requested_its_price_and_the_prefix_probe():

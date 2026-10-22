@@ -1,0 +1,2034 @@
+{
+ "version": 1,
+ "assessor": "Claude (assistant de développement), 2026-10-22, à partir des titres et abstracts stockés",
+ "protocol": "Grilles écrites à partir des demandes réelles avant la lecture des notices ; notes attribuées sans consulter les classements d'EnnoScholar. Jugement d'un seul évaluateur, non validé par un expert du domaine.",
+ "domains": {
+  "mesh": {
+   "need": "Génération automatique de maillages volumiques 3D en mécanique à l'aide de l'IA (5 articles, méthodes, résultats, limites).",
+   "grades": {
+    "3": "Une méthode d'apprentissage génère (ou construit la structure de) un maillage volumique 3D — tétraédrique, hexaédrique, structuré ou par polycube — comme sortie, démontré en 3D.",
+    "2": "L'IA pilote une génération volumique 3D (champ de taille, estimateur d'erreur, décomposition en blocs) ou génère des maillages volumiques dans une application spécialisée (anatomie, capteur).",
+    "1": "Connexe : IA pour maillage 2D, surface, adaptation/raffinement ou lissage d'un maillage existant, évaluation de qualité ; maillage volumique 3D sans IA ; pipelines où l'IA ne fait que segmenter.",
+    "0": "Hors sujet : surrogates, solveurs neuronaux, génération graphique de surfaces texturées, autres domaines."
+   },
+   "judgments": {
+    "title:study of 3d finite element tetrahedral mesh automatic generation for complex regions": {
+     "grade": 1,
+     "title": "Study of 3D finite element tetrahedral mesh automatic generation for complex regions"
+    },
+    "doi:10.1111/mice.12708": {
+     "grade": 1,
+     "title": "Computer‐vision‐based differential remeshing for updating the geometry of finite element model"
+    },
+    "arxiv:2210.05735": {
+     "grade": 3,
+     "title": "TetGAN: A Convolutional Neural Network for Tetrahedral Mesh Generation"
+    },
+    "doi:10.48550/arxiv.2106.01326": {
+     "grade": 1,
+     "title": "Robust Voxelization and Visualization by Improved Tetrahedral Mesh Generation"
+    },
+    "doi:10.3389/fbioe.2023.1244291": {
+     "grade": 1,
+     "title": "Automatic generation of subject-specific finite element models of the spine from magnetic resonance images"
+    },
+    "arxiv:2310.06852": {
+     "grade": 0,
+     "title": "DeepCrysTet: A Deep Learning Approach Using Tetrahedral Mesh for Predicting Properties of Crystalline Materials"
+    },
+    "title:automatic generation of patient specific 3d models of organs using an unified deep learning approach": {
+     "grade": 1,
+     "title": "Automatic generation of patient-specific 3D models of organs using an unified deep learning approach"
+    },
+    "title:indirect quadrangular mesh generation and validation of curved finite elements": {
+     "grade": 1,
+     "title": "Indirect quadrangular mesh generation and validation of curved finite elements"
+    },
+    "title:automatic cardiac mri image segmentation and mesh automatic cardiac mri image segmentation and mesh generation generation": {
+     "grade": 1,
+     "title": "Automatic Cardiac MRI Image Segmentation and Mesh Automatic Cardiac MRI Image Segmentation and Mesh Generation Generation"
+    },
+    "arxiv:2403.04225": {
+     "grade": 0,
+     "title": "3DTextureTransformer: Geometry Aware Texture Generation for Arbitrary Mesh Topology"
+    },
+    "doi:10.1109/tmi.2023.3294128": {
+     "grade": 2,
+     "title": "Patient-Specific Heart Geometry Modeling for Solid Biomechanics Using Deep Learning"
+    },
+    "doi:10.21203/rs.3.rs-2183936/v1": {
+     "grade": 1,
+     "title": "Highly Adaptive and Fast Tetrahedral Mesh Generator for Multi-Compartment Human Head Model with Deep Brain Structures with EEG Application"
+    },
+    "doi:10.1016/0010-4485(94)90025-6": {
+     "grade": 1,
+     "title": "Finite-element mesh generation from constructive-solid-geometry models"
+    },
+    "doi:10.1007/s00366-026-02379-1": {
+     "grade": 1,
+     "title": "A survey of AI methods for geometry preparation and mesh generation in engineering simulation"
+    },
+    "arxiv:2511.03890": {
+     "grade": 2,
+     "title": "Shape Deformation Networks for Automated Aortic Valve Finite Element Meshing from 3D CT Images"
+    },
+    "doi:10.1007/s10518-023-01726-7": {
+     "grade": 1,
+     "title": "Automated image-based generation of finite element models for masonry buildings"
+    },
+    "doi:10.1007/s00366-025-02161-9": {
+     "grade": 3,
+     "title": "DL-Polycube: deep learning enhanced generalized polycube method for high-quality hexahedral mesh generation and volumetric spline construction"
+    },
+    "arxiv:2210.03158": {
+     "grade": 3,
+     "title": "Neural Volumetric Mesh Generator"
+    },
+    "doi:10.48550/arxiv.2410.18852": {
+     "grade": 3,
+     "title": "DL-Polycube: Deep learning enhanced polycube method for high-quality hexahedral mesh generation and volumetric spline construction"
+    },
+    "doi:10.1007/s00366-025-02248-3": {
+     "grade": 3,
+     "title": "DDPM-Polycube: a denoising diffusion probabilistic model for polycube-based hexahedral mesh generation and volumetric spline construction"
+    },
+    "doi:10.1007/s00366-023-01925-5": {
+     "grade": 1,
+     "title": "Medial hex-meshing: high-quality all-hexahedral mesh generation based on medial mesh"
+    },
+    "doi:10.3389/fbioe.2022.1059003": {
+     "grade": 1,
+     "title": "Robust automatic hexahedral cartilage meshing framework enables population-based computational studies of the knee"
+    },
+    "arxiv:2203.15155": {
+     "grade": 2,
+     "title": "Learning to Synthesize Volumetric Meshes from Vision-based Tactile Imprints"
+    },
+    "arxiv:2604.04474": {
+     "grade": 0,
+     "title": "MAVEN: A Mesh-Aware Volumetric Encoding Network for Simulating 3D Flexible Deformation"
+    },
+    "doi:10.1038/s41598-025-18823-z": {
+     "grade": 1,
+     "title": "A neural poly-vector based non-orthogonal frame field generation method for quad meshing"
+    },
+    "doi:10.48550/arxiv.2203.07843": {
+     "grade": 1,
+     "title": "Locally refined quad meshing for linear elasticity problems based on convolutional neural networks"
+    },
+    "doi:10.1007/s00366-022-01677-8": {
+     "grade": 1,
+     "title": "Engineering with Computers / Locally refined quad meshing for linear elasticity problems based on convolutional neural networks"
+    },
+    "doi:10.48550/arxiv.2407.01560": {
+     "grade": 3,
+     "title": "3DMeshNet: A Three-Dimensional Differential Neural Network for Structured Mesh Generation"
+    },
+    "doi:10.3390/math12182933": {
+     "grade": 1,
+     "title": "Graph Neural Networks for Mesh Generation and Adaptation in Structural and Fluid Mechanics"
+    },
+    "doi:10.48550/arxiv.2402.09446": {
+     "grade": 1,
+     "title": "MeshAC: A 3D Mesh Generation and Adaptation Package for Multiscale Coupling Methods"
+    },
+    "doi:10.1016/j.cja.2021.05.018": {
+     "grade": 1,
+     "title": "A mesh optimization method using machine learning technique and variational mesh adaptation"
+    },
+    "doi:10.1016/j.cma.2019.112790": {
+     "grade": 0,
+     "title": "An Energy Approach to the Solution of Partial Differential Equations in Computational Mechanics via Machine Learning: Concepts, Implementation and Applications"
+    },
+    "doi:10.1007/s00466-023-02434-4": {
+     "grade": 0,
+     "title": "Deep learning in computational mechanics: a review"
+    },
+    "doi:10.1002/pamm.70233": {
+     "grade": 0,
+     "title": "Global Graph Surrogates and Neural Graph Elements for Computational Mechanics"
+    },
+    "doi:10.1016/j.engfracmech.2025.111778": {
+     "grade": 0,
+     "title": "Machine learning for computational fracture and damage mechanics— Status and perspectives"
+    },
+    "doi:10.48550/arxiv.2505.23663": {
+     "grade": 2,
+     "title": "AMBER: Adaptive Mesh Generation by Iterative Mesh Resolution Prediction"
+    },
+    "arxiv:2512.10439": {
+     "grade": 1,
+     "title": "HypeR Adaptivity: Joint $hr$-Adaptive Meshing via Hypergraph Multi-Agent Deep Reinforcement Learning"
+    },
+    "doi:10.48550/arxiv.2609.32358": {
+     "grade": 0,
+     "title": "Application of Machine Learning to the Computation of Parameters in the SUPG Method for Unstructured and Anisotropic Meshes"
+    },
+    "doi:10.1111/mice.70113": {
+     "grade": 0,
+     "title": "Single‐image 3D particle reconstruction via generative AI‐empowered large vision models"
+    },
+    "doi:10.48550/arxiv.2303.08133": {
+     "grade": 0,
+     "title": "MeshDiffusion: Score-based Generative 3D Mesh Modeling"
+    },
+    "doi:10.3389/fbioe.2026.1761981": {
+     "grade": 1,
+     "title": "Generative tissue modeling for customized biomechanical analysis: a data-driven synthesis framework of simulation-ready 3D shapes"
+    },
+    "doi:10.1109/tnnls.2024.3438368": {
+     "grade": 0,
+     "title": "Conditional Generative Models for Simulation of EMG During Naturalistic Movements"
+    },
+    "doi:10.1109/csrswtc71154.2026.11669727": {
+     "grade": 0,
+     "title": "A Generative 3D Modeling and BVH-Accelerated SBR Framework for Efficient RCS Simulation from Single Images"
+    },
+    "doi:10.1145/3664647.3681241": {
+     "grade": 0,
+     "title": "GenUDC: High Quality 3D Mesh Generation With Unsigned Dual Contouring Representation"
+    },
+    "doi:10.48550/arxiv.2508.14122": {
+     "grade": 1,
+     "title": "3D Cardiac Anatomy Generation Using Mesh Latent Diffusion Models"
+    },
+    "arxiv:2410.17802": {
+     "grade": 0,
+     "title": "GenUDC: High Quality 3D Mesh Generation with Unsigned Dual Contouring Representation"
+    },
+    "doi:10.48550/arxiv.2408.01600": {
+     "grade": 0,
+     "title": "Physics-Informed Geometry-Aware Neural Operator"
+    },
+    "doi:10.48550/arxiv.2406.14161": {
+     "grade": 2,
+     "title": "Iterative Sizing Field Prediction for Adaptive Mesh Generation From Expert Demonstrations"
+    },
+    "doi:10.29304/jqcsm.2025.17.32468": {
+     "grade": 0,
+     "title": "Numerical Approximation of Laplace's Equation Using the Finite Element Method"
+    },
+    "doi:10.1016/j.proeng.2017.09.798": {
+     "grade": 1,
+     "title": "Anisotropic geometry-conforming d -simplicial meshing via isometric embeddings"
+    },
+    "doi:10.48550/arxiv.2607.17318": {
+     "grade": 0,
+     "title": "FEVessel: Mesh-Independent Analysis of 3D Pressure Vessels with the Label-Free Pretrained Finite Element Method"
+    },
+    "doi:10.48550/arxiv.2609.22955": {
+     "grade": 0,
+     "title": "The Zipped Finite Element Method on polyhedral meshes"
+    },
+    "title:texture based segmentation and finite element mesh generation for heterogeneous biological image data": {
+     "grade": 1,
+     "title": "Texture-Based Segmentation and Finite Element Mesh Generation for Heterogeneous Biological Image Data"
+    },
+    "doi:10.48550/arxiv.2603.12820": {
+     "grade": 3,
+     "title": "NeurFrame: Learning Continuous Frame Fields for Structured Mesh Generation"
+    },
+    "arxiv:2503.13541": {
+     "grade": 3,
+     "title": "DDPM-Polycube: A Denoising Diffusion Probabilistic Model for Polycube-Based Hexahedral Mesh Generation and Volumetric Spline Construction"
+    },
+    "doi:10.1007/978-3-030-87231-1_47": {
+     "grade": 2,
+     "title": "Distortion Energy for Deep Learning-Based Volumetric Finite Element Mesh Generation for Aortic Valves"
+    },
+    "arxiv:2604.17266": {
+     "grade": 3,
+     "title": "Scalable DDPM-Polycube: An Extended Diffusion-Based Method for Hexahedral Mesh and Volumetric Spline Construction"
+    },
+    "doi:10.1007/s10596-017-9654-z": {
+     "grade": 1,
+     "title": "Engineering applications of 2D and 3D finite element mesh generation in hydrogeology and water resources"
+    },
+    "doi:10.1109/fendt63052.2024.11070141": {
+     "grade": 1,
+     "title": "Three-dimensional finite element mesh generation method for industrial CT images"
+    },
+    "doi:10.1007/s44379-025-00013-3": {
+     "grade": 1,
+     "title": "Non-iterative generation of optimized meshes for finite element simulations with deep learning"
+    },
+    "doi:10.1111/cgf.14899": {
+     "grade": 1,
+     "title": "HexBox: Interactive Box Modeling of Hexahedral Meshes"
+    },
+    "doi:10.1109/tmi.2025.3599937": {
+     "grade": 0,
+     "title": "SynthAorta: A 3D Mesh Dataset of Parametrized Physiological Healthy Aortas"
+    },
+    "doi:10.1177/14759217251330518": {
+     "grade": 0,
+     "title": "A new bearing fault diagnosis method based on digital twin-assisted domain adaptation transfer learning"
+    },
+    "doi:10.3929/ethz-b-000475269": {
+     "grade": 0,
+     "title": "Towards the integration of computational methods in spinal surgical planning: A combination of deep learning, statistical, and finite element methods"
+    },
+    "doi:10.4103/atmr.atmr_103_25": {
+     "grade": 0,
+     "title": "Dynamic Transfer Learning with Real-time Finite Element Analysis for Adaptive and Optimized Three-dimensional Printed Maxillofacial Implant Design"
+    },
+    "doi:10.1016/j.finel.2021.103645": {
+     "grade": 0,
+     "title": "An efficient multiphysics solid shell based finite element approach for modeling thin sheet metal forming processes"
+    },
+    "doi:10.1117/12.3006973": {
+     "grade": 0,
+     "title": "In-silico CT lung phantom generated from finite-element mesh"
+    },
+    "doi:10.48550/arxiv.2609.26426": {
+     "grade": 0,
+     "title": "DeepFEAv2: Deep Learning for Transient Finite Element Analysis Beyond Structured Meshes"
+    },
+    "doi:10.3390/app14093564": {
+     "grade": 0,
+     "title": "A Generative Deep Learning Approach for Improving the Mechanical Performance of Structural Components"
+    },
+    "doi:10.48550/arxiv.2506.13573": {
+     "grade": 0,
+     "title": "Integrated Pipeline for Monocular 3D Reconstruction and Finite Element Simulation in Industrial Applications"
+    },
+    "doi:10.48550/arxiv.2506.08280": {
+     "grade": 2,
+     "title": "Snap-and-tune: combining deep learning and test-time optimization for high-fidelity cardiovascular volumetric meshing"
+    },
+    "doi:10.1515/cdbme-2024-2115": {
+     "grade": 1,
+     "title": "Generation of Shape Models of Calcified TAVR populations for Solid Mechanics Simulations by means of Deep Learning"
+    },
+    "doi:10.3389/fphys.2021.716597": {
+     "grade": 1,
+     "title": "An Implementation of Patient-Specific Biventricular Mechanics Simulations With a Deep Learning and Computational Pipeline"
+    },
+    "doi:10.32604/cmes.2023.028130": {
+     "grade": 0,
+     "title": "Deep Learning Applied to Computational Mechanics: A Comprehensive Review, State of the Art, and the Classics"
+    },
+    "doi:10.1109/tvcg.2020.3030344": {
+     "grade": 0,
+     "title": "Deep Volumetric Ambient Occlusion"
+    },
+    "doi:10.1117/12.3085008": {
+     "grade": 0,
+     "title": "Finite element and physics-informed neural network fusion for elasticity mechanics solving techniques"
+    },
+    "doi:10.1007/s10237-026-02100-7": {
+     "grade": 0,
+     "title": "A multi-fidelity poroelastic finite element and machine learning framework for characterizing respiratory mechanics in porcine lungs"
+    },
+    "doi:10.1364/boe.523716": {
+     "grade": 0,
+     "title": "Probabilistic volumetric speckle suppression in OCT using deep learning"
+    },
+    "doi:10.1016/j.media.2021.102222": {
+     "grade": 1,
+     "title": "A Deep-Learning Approach For Direct Whole-Heart Mesh Reconstruction"
+    },
+    "arxiv:2006.05353": {
+     "grade": 0,
+     "title": "MeshWalker: Deep Mesh Understanding by Random Walks"
+    },
+    "arxiv:1903.04015": {
+     "grade": 0,
+     "title": "NormalNet: Learning-based Normal Filtering for Mesh Denoising"
+    },
+    "doi:10.47749/t/unicamp.2025.1520494": {
+     "grade": 1,
+     "title": "Generation of finite element meshes using computed tomography data of rock samples"
+    },
+    "doi:10.1007/978-3-031-52448-6_14": {
+     "grade": 1,
+     "title": "Deep Learning-Based Pulmonary Artery Surface Mesh Generation"
+    },
+    "doi:10.1007/978-3-030-78191-0_49": {
+     "grade": 2,
+     "title": "Weakly Supervised Deep Learning for Aortic Valve Finite Element Mesh Generation from 3D CT Images"
+    },
+    "doi:10.1177/00219983261420534": {
+     "grade": 1,
+     "title": "Watertight conforming mesh generation of continuous fiber-reinforced composites from μ-CT images via deep learning and boolean repair"
+    },
+    "doi:10.1109/tbme.2025.3642160": {
+     "grade": 0,
+     "title": "Deep Learning-Based Surrogate Model of Subject-Specific Finite-Element Analysis for Vertebrae"
+    },
+    "doi:10.1007/s00521-023-09119-2": {
+     "grade": 3,
+     "title": "Faster and efficient tetrahedral mesh generation using generator neural networks for 2D and 3D geometries"
+    },
+    "doi:10.1109/igarss55030.2025.11242439": {
+     "grade": 0,
+     "title": "Evaluating Neural Kernel Surface Reconstruction for Extracting Mesh Geometry from Pointclouds for Volumetric Analysis of Sorghum Panicles"
+    },
+    "arxiv:2401.08398": {
+     "grade": 0,
+     "title": "High-Quality Mesh Blendshape Generation from Face Videos via Neural Inverse Rendering"
+    },
+    "doi:10.1111/cgf.14981": {
+     "grade": 0,
+     "title": "Neural Impostor: Editing Neural Radiance Fields with Explicit Shape Manipulation"
+    },
+    "doi:10.48550/arxiv.2605.26003": {
+     "grade": 1,
+     "title": "Towards 3D heart mesh generation using contactless radar imaging and physics-informed neural network"
+    },
+    "doi:10.6082/f9cch-3yq48": {
+     "grade": 0,
+     "title": "Structured Neural Representations for 3D Shape and Scene Editing"
+    },
+    "arxiv:2310.05391": {
+     "grade": 0,
+     "title": "Neural Impostor: Editing Neural Radiance Fields with Explicit Shape Manipulation"
+    },
+    "doi:10.1109/tpami.2025.3600473": {
+     "grade": 0,
+     "title": "NeuMesh++: Toward Versatile and Efficient Volumetric Editing With Disentangled Neural Mesh-Based Implicit Field"
+    },
+    "doi:10.48550/arxiv.2405.20283": {
+     "grade": 2,
+     "title": "TetSphere Splatting: Representing High-Quality Geometry with Lagrangian Volumetric Meshes"
+    },
+    "doi:10.52202/079017-0303": {
+     "grade": 0,
+     "title": "Meta 3D AssetGen: Text-to-Mesh Generation with High-Quality Geometry, Texture, and PBR Materials"
+    },
+    "arxiv:2302.03830": {
+     "grade": 0,
+     "title": "TetCNN: Convolutional Neural Networks on Tetrahedral Meshes"
+    },
+    "doi:10.1109/aitest66680.2025.00034": {
+     "grade": 0,
+     "title": "Decoding 3D Geometry: Deep Networks for Mesh Classification"
+    },
+    "doi:10.1145/3478513.3480568": {
+     "grade": 1,
+     "title": "Interactive all-hex meshing via cuboid decomposition"
+    },
+    "doi:10.1016/j.cagd.2026.102550": {
+     "grade": 1,
+     "title": "Element-saving hexahedral 3-refinement templates"
+    },
+    "arxiv:1907.11559": {
+     "grade": 0,
+     "title": "Bayesian Volumetric Autoregressive generative models for better semisupervised learning"
+    },
+    "doi:10.1145/3366786": {
+     "grade": 1,
+     "title": "Algebraic Representations for Volumetric Frame Fields"
+    },
+    "arxiv:1608.05895": {
+     "grade": 0,
+     "title": "VoxResNet: Deep Voxelwise Residual Networks for Volumetric Brain Segmentation"
+    },
+    "doi:10.1111/cgf.15278": {
+     "grade": 0,
+     "title": "Survey of Inter‐Prediction Methods for Time‐Varying Mesh Compression"
+    },
+    "arxiv:2209.05280": {
+     "grade": 1,
+     "title": "Non-iterative generation of an optimal mesh for a blade passage using deep reinforcement learning"
+    },
+    "doi:10.2172/2997308": {
+     "grade": 2,
+     "title": "Replace Human Intelligence with Fast and Smart Geometric Reasoning and Graph Neural Network to Accelerate Next Gen ModSim Workflows"
+    },
+    "arxiv:2310.20065": {
+     "grade": 2,
+     "title": "LinFlo-Net: A two-stage deep learning method to generate simulation ready meshes of the heart"
+    },
+    "doi:10.48550/arxiv.2607.12157": {
+     "grade": 1,
+     "title": "CORTET: Robust generation of simulation-ready tetrahedral meshes of the fetal cerebral cortex"
+    },
+    "doi:10.1002/cnm.3783": {
+     "grade": 0,
+     "title": "Efficient approximation of cardiac mechanics through reduced‐order modeling with deep learning‐based operator approximation"
+    },
+    "doi:10.48550/arxiv.2603.26030": {
+     "grade": 0,
+     "title": "Constitutive parameterized deep energy method for solid mechanics problems with random material parameters"
+    },
+    "doi:10.52403/ijshr.20230413": {
+     "grade": 0,
+     "title": "Advances in Finite Element Modeling of Breast Tissue Mechanics: Applications and Challenges"
+    },
+    "title:methodology for plausibility checking of structural mechanics simulations using deep learning on existing simulation data": {
+     "grade": 0,
+     "title": "Methodology for plausibility checking of structural mechanics simulations using deep learning on existing simulation data"
+    },
+    "doi:10.1007/s11831-022-09740-9": {
+     "grade": 0,
+     "title": "Eighty Years of the Finite Element Method: Birth, Evolution, and Future"
+    },
+    "doi:10.1109/dac63849.2025.11132601": {
+     "grade": 1,
+     "title": "NeuralMesh: Neural Network For FEM Mesh Generation in 2.5D/3D Chiplet Thermal Simulation"
+    },
+    "arxiv:2506.13573": {
+     "grade": 0,
+     "title": "Integrated Pipeline for Monocular 3D Reconstruction and Finite Element Simulation in Industrial Applications"
+    },
+    "arxiv:2004.04180": {
+     "grade": 0,
+     "title": "Leveraging 2D Data to Learn Textured 3D Mesh Generation"
+    },
+    "arxiv:2108.08017": {
+     "grade": 0,
+     "title": "Deep Hybrid Self-Prior for Full 3D Mesh Generation"
+    },
+    "doi:10.48550/arxiv.2507.03087": {
+     "grade": 1,
+     "title": "Mechanics Simulation with Implicit Neural Representations of Complex Geometries"
+    },
+    "title:a strategy for mapping unstructured mesh computational mechanics programs onto distributed memory parallel architectures": {
+     "grade": 0,
+     "title": "A strategy for mapping unstructured mesh computational mechanics programs onto distributed memory parallel architectures"
+    },
+    "doi:10.1007/s11831-026-10747-9": {
+     "grade": 0,
+     "title": "Physics-Informed Neural Networks in Computational Mechanics: A Critical Review of Stability, Generalization, and Multi-Scale Applications"
+    },
+    "doi:10.3390/ma18153509": {
+     "grade": 0,
+     "title": "Innovative Strategies in Hernia Mesh Design: Materials, Mechanics, and Modeling"
+    },
+    "doi:10.4103/atmr.atmr_139_25": {
+     "grade": 0,
+     "title": "Adaptive Neural Rendering for Dynamic Advanced Life Support Team Training: A Continuous Volumetric Framework for Real-time Simulation Scenario Adaptation"
+    },
+    "doi:10.48550/arxiv.2308.07358": {
+     "grade": 1,
+     "title": "Conformal Predictions Enhanced Expert-guided Meshing with Graph Neural Networks"
+    },
+    "arxiv:2505.23663": {
+     "grade": 2,
+     "title": "AMBER: Adaptive Mesh Generation by Iterative Mesh Resolution Prediction"
+    },
+    "arxiv:2303.09431": {
+     "grade": 0,
+     "title": "NeRFMeshing: Distilling Neural Radiance Fields into Geometrically-Accurate 3D Meshes"
+    },
+    "doi:10.1063/5.0169306": {
+     "grade": 1,
+     "title": "Developing a novel structured mesh generation method based on deep neural networks"
+    },
+    "arxiv:1811.11424": {
+     "grade": 0,
+     "title": "MeshNet: Mesh Neural Network for 3D Shape Representation"
+    },
+    "doi:10.2172/2583249": {
+     "grade": 1,
+     "title": "Grain2Mesh: Mesh Generation for Grain-Scale Nonlinear Elasticity Modeling"
+    },
+    "arxiv:2011.01437": {
+     "grade": 2,
+     "title": "Learning Deformable Tetrahedral Meshes for 3D Reconstruction"
+    },
+    "doi:10.3390/app11209411": {
+     "grade": 0,
+     "title": "Mesh-Free Surrogate Models for Structural Mechanic FEM Simulation: A Comparative Study of Approaches"
+    },
+    "doi:10.1016/j.jocs.2022.101559": {
+     "grade": 1,
+     "title": "Mesh generation and multi-scale simulation of a contracting muscle–tendon complex"
+    },
+    "doi:10.48550/arxiv.2610.10862": {
+     "grade": 0,
+     "title": "A mesh-based neural energy method for the simulation of heterogeneous composites"
+    },
+    "doi:10.48550/arxiv.2605.09284": {
+     "grade": 0,
+     "title": "Semi-Supervised Neural Super-Resolution for Mesh-Based Simulations"
+    },
+    "doi:10.1111/cgf.14779": {
+     "grade": 0,
+     "title": "A Survey of Indicators for Mesh Quality Assessment"
+    },
+    "doi:10.48550/arxiv.2503.00814": {
+     "grade": 1,
+     "title": "PINN-MG: A physics-informed neural network for mesh generation"
+    },
+    "arxiv:2007.10973": {
+     "grade": 0,
+     "title": "Neural Mesh Flow: 3D Manifold Mesh Generation via Diffeomorphic Flows"
+    },
+    "doi:10.3724/sp.j.1089.2023-00696": {
+     "grade": 1,
+     "title": "StruMNet: A Structural Mesh Generation Method Integrating Neural Networks and Partial Differential Equations"
+    },
+    "title:patient specific mesh generation": {
+     "grade": 0,
+     "title": "Patient specific mesh generation"
+    },
+    "doi:10.1504/ijhm.2022.10045584": {
+     "grade": 0,
+     "title": "Solution of structural mechanics problems by machine learning"
+    },
+    "arxiv:2606.08287": {
+     "grade": 0,
+     "title": "Mesh Graph Neural Network Framework for Accelerating Finite Element Simulation for Arbitrary Geometries"
+    },
+    "doi:10.1137/22m1510613": {
+     "grade": 1,
+     "title": "Learning Robust Marking Policies for Adaptive Mesh Refinement"
+    },
+    "arxiv:2107.10507": {
+     "grade": 1,
+     "title": "Evaluating the Quality of Finite Element Meshes with Machine Learning"
+    },
+    "doi:10.1007/10704282_127": {
+     "grade": 1,
+     "title": "The Mesh-matching Algorithm: A New Automatic 3D Mesh Generator for Finite Element Analysis"
+    },
+    "arxiv:2406.08440": {
+     "grade": 1,
+     "title": "Adaptive Swarm Mesh Refinement using Deep Reinforcement Learning with Local Rewards"
+    },
+    "doi:10.48550/arxiv.2606.02475": {
+     "grade": 1,
+     "title": "Physics-Informed Residuals for Adaptive Mesh Refinement in Finite-Difference PDE Solvers"
+    },
+    "doi:10.2514/6.2021-1239": {
+     "grade": 1,
+     "title": "Smart Adaptive Mesh Refinement with NEMoSys"
+    },
+    "title:deep reinforcement learning for adaptive mesh refinement a training parameter study": {
+     "grade": 1,
+     "title": "Deep Reinforcement Learning for Adaptive Mesh Refinement: A Training Parameter Study"
+    },
+    "title:an adaptive mesh refinement technique for dynamics of solids": {
+     "grade": 0,
+     "title": "An adaptive mesh refinement technique for dynamics of solids"
+    },
+    "doi:10.1016/j.jcp.2022.111531": {
+     "grade": 1,
+     "title": "Machine Learning based refinement strategies for polyhedral grids with applications to Virtual Element and polyhedral Discontinuous Galerkin methods"
+    },
+    "doi:10.1007/11758532_98": {
+     "grade": 0,
+     "title": "The Application of Agents to Parallel Mesh Refinements in Domain Decomposition Based Parallel Fully Automatic hp Adaptive Finite Element Codes"
+    },
+    "doi:10.1371/journal.pone.0235145": {
+     "grade": 0,
+     "title": "A publicly available virtual cohort of four-chamber heart meshes for cardiac electro-mechanics simulations"
+    },
+    "doi:10.1002/nme.6747": {
+     "grade": 1,
+     "title": "Automatic feature‐preserving size field for three‐dimensional mesh generation"
+    },
+    "doi:10.1002/nme.70366": {
+     "grade": 0,
+     "title": "Deep Energy Method for Large Deformation Analysis of Isotropic and Inhomogeneous Hyperelastic Ellipsoidal Pressurized Structures"
+    },
+    "doi:10.1080/21681163.2019.1591722": {
+     "grade": 0,
+     "title": "Editorial Message from the Editor-in-Chief"
+    },
+    "doi:10.2139/ssrn.7177079": {
+     "grade": 0,
+     "title": "GPU-Resident Point Location on Adaptive Tetrahedral Meshes via a Mesh-Aligned Multi-Level Octree"
+    },
+    "arxiv:2004.07016": {
+     "grade": 1,
+     "title": "MeshingNet: A New Mesh Generation Method based on Deep Learning"
+    },
+    "arxiv:2009.11701": {
+     "grade": 0,
+     "title": "The Deep Learning Galerkin Method for the General Stokes Equations"
+    },
+    "arxiv:2609.26426": {
+     "grade": 0,
+     "title": "DeepFEAv2: Deep Learning for Transient Finite Element Analysis Beyond Structured Meshes"
+    },
+    "doi:10.1145/336154.336167": {
+     "grade": 1,
+     "title": "Improving the surface cycle structure for hexahedral mesh generation"
+    },
+    "doi:10.4203/ctr.2.3": {
+     "grade": 1,
+     "title": "Recent advances towards reducing the meshing and re-meshing burden in computational sciences"
+    },
+    "doi:10.1177/03064190261481976": {
+     "grade": 0,
+     "title": "A research-led, competition-oriented teaching method for finite element analysis in solid mechanics"
+    },
+    "doi:10.1016/j.cma.2004.12.030": {
+     "grade": 0,
+     "title": "Adaptive Solid Wave Propagation - Influences of Boundary Conditions in High-Speed Train Applications"
+    },
+    "doi:10.1007/978-3-030-87312-7_27": {
+     "grade": 0,
+     "title": "What machine learning can do for computational solid mechanics"
+    },
+    "title:boundary element methods in engineering proceedings of the international symposium on boundary element methods advances in solid and fluid mechanics east hartford connecticut usa october 2 4 1989": {
+     "grade": 0,
+     "title": "Boundary element methods in engineering : proceedings of the International Symposium on Boundary Element Methods: Advances in Solid and Fluid Mechanics, East Hartford, Connecticut, USA, October 2-4, 1"
+    },
+    "doi:10.1016/j.cma.2026.119365": {
+     "grade": 0,
+     "title": "A non-overlapping Schwarz hybrid finite element–neural operator framework for solid mechanics on irregular domains"
+    },
+    "doi:10.1016/j.cma.2025.117806": {
+     "grade": 0,
+     "title": "Adaptive finite element interpolated neural networks"
+    },
+    "doi:10.5539/apr.v6n3p21": {
+     "grade": 1,
+     "title": "Case Based Reasoning Support for Adaptive Finite Element Analysis: Mesh Selection for an Integrated System"
+    },
+    "doi:10.5821/dissertation-2117-346652": {
+     "grade": 0,
+     "title": "Error estimation and adaptivity for PGD solutions"
+    },
+    "doi:10.3390/jmmp9060202": {
+     "grade": 0,
+     "title": "Physics-Informed Preform Design for Flashless 3D Forging via Material Point Backtracking and Finite Element Simulations"
+    },
+    "doi:10.1109/icra48891.2023.10160986": {
+     "grade": 0,
+     "title": "DefGraspNets: Grasp Planning on 3D Fields with Graph Neural Nets"
+    },
+    "doi:10.1371/journal.pcbi.1011055": {
+     "grade": 0,
+     "title": "Shape-driven deep neural networks for fast acquisition of aortic 3D pressure and velocity flow fields"
+    },
+    "doi:10.1111/cgf.70556": {
+     "grade": 0,
+     "title": "Skinning a Parameterization of Three‐Dimensional Space for Neural Network Cloth"
+    },
+    "doi:10.3390/jcs8100387": {
+     "grade": 0,
+     "title": "Predicting Mechanical Properties from Microstructure Images in Fiber-Reinforced Polymers Using Convolutional Neural Networks"
+    },
+    "doi:10.1016/j.commatsci.2020.109850": {
+     "grade": 0,
+     "title": "Three-dimensional convolutional neural network (3D-CNN) for heterogeneous material homogenization"
+    },
+    "doi:10.48550/arxiv.2610.12141": {
+     "grade": 0,
+     "title": "Extending convolutional neural networks to finite-volume meshes for fine-scale reconstruction of wall-bounded turbulence"
+    },
+    "doi:10.1016/j.medengphy.2024.104136": {
+     "grade": 1,
+     "title": "Automated 2D and 3D Finite Element Overclosure Adjustment and Mesh Morphing Using Generalized Regression Neural Networks"
+    },
+    "doi:10.1016/j.mbm.2025.100130": {
+     "grade": 0,
+     "title": "Prognostic assessment of osteolytic lesions and mechanical properties of bones bearing breast cancer using neural network and finite element analysis☆"
+    },
+    "doi:10.1016/j.jcp.2025.114547": {
+     "grade": 0,
+     "title": "Unfitted finite element interpolated neural networks"
+    },
+    "doi:10.1007/s00366-024-02034-7": {
+     "grade": 0,
+     "title": "LatticeGraphNet: a two-scale graph neural operator for simulating lattice structures"
+    },
+    "doi:10.1002/nme.7126": {
+     "grade": 0,
+     "title": "An element‐based formulation for ES‐FEM and FS‐FEM models for implementation in standard solid mechanics finite element codes for 2D and 3D static analysis"
+    },
+    "doi:10.1016/j.cagd.2019.101812": {
+     "grade": 0,
+     "title": "Polyhedral finite elements for nonlinear solid mechanics using tetrahedral subdivisions and dual-cell aggregation"
+    },
+    "doi:10.1016/j.cma.2017.06.014": {
+     "grade": 0,
+     "title": "A new polyhedral element for the analysis of hexahedral-dominant finite element models and its application to nonlinear solid mechanics problems"
+    },
+    "doi:10.1002/pamm.202000177": {
+     "grade": 0,
+     "title": "A polyhedral element formulation based on the scaled boundary method for the analysis of nonlinear problems in solid mechanics"
+    },
+    "doi:10.48550/arxiv.2609.35878": {
+     "grade": 0,
+     "title": "PoliVEM: a Python-driven virtual element framework for computational solid mechanics"
+    },
+    "doi:10.1007/s00366-024-02004-z": {
+     "grade": 1,
+     "title": "The generation of tetrahedral meshes for NURBS-enhanced FEM"
+    },
+    "doi:10.1142/s0219876223420100": {
+     "grade": 0,
+     "title": "A node-based smoothed finite element method (NS-FEM) for free and forced vibration analysis of three-dimensional (3D) structures"
+    },
+    "doi:10.55592/cilamce2025.v5i.14218": {
+     "grade": 0,
+     "title": "PyCrack: Finite element software for linear elastic fracture mechanics analysis"
+    },
+    "doi:10.1007/bf01198735": {
+     "grade": 1,
+     "title": "Tetrahedral finite element mesh generation from NURBS solid models"
+    },
+    "doi:10.1371/journal.pone.0293193": {
+     "grade": 1,
+     "title": "Generation of 3D finite element mesh of layered geological bodies in intersecting fault zones"
+    },
+    "arxiv:2606.05768": {
+     "grade": 0,
+     "title": "Electrolyte Bonding Engineering for Highly Uniform GeTe-based CBRAM and Parallel Hebbian Learning in Selector-free Hopfield Networks"
+    },
+    "arxiv:2506.20936": {
+     "grade": 0,
+     "title": "PhysRig: Differentiable Physics-Based Skinning and Rigging Framework for Realistic Articulated Object Modeling"
+    },
+    "arxiv:2503.05031": {
+     "grade": 0,
+     "title": "Enhancing Alzheimer's Diagnosis: Leveraging Anatomical Landmarks in Graph Convolutional Neural Networks on Tetrahedral Meshes"
+    },
+    "doi:10.1103/physrevlett.120.166101": {
+     "grade": 0,
+     "title": "Growth Mechanism and Origin of High $sp^3$ Content in Tetrahedral Amorphous Carbon"
+    },
+    "doi:10.1145/3829340.3842214": {
+     "grade": 0,
+     "title": "ADELE - Adaptive Delaunay Grids for High-Fidelity Mesh-Native Reconstruction"
+    },
+    "arxiv:2511.16273": {
+     "grade": 0,
+     "title": "TetraSDF: Analytic Isosurface Extraction with Multi-resolution Tetrahedral Grid"
+    },
+    "doi:10.1109/access.2019.2956882": {
+     "grade": 0,
+     "title": "Ground Truth Force Distribution for Learning-Based Tactile Sensing: A Finite Element Approach"
+    },
+    "doi:10.1103/physrevb.95.094203": {
+     "grade": 0,
+     "title": "Machine-learning based interatomic potential for amorphous carbon"
+    },
+    "title:tetrahedral mesh for needle insertion": {
+     "grade": 1,
+     "title": "Tetrahedral mesh for needle insertion"
+    },
+    "arxiv:2311.16042": {
+     "grade": 0,
+     "title": "Weakly-Supervised 3D Reconstruction of Clothed Humans via Normal Maps"
+    },
+    "arxiv:1901.11082": {
+     "grade": 0,
+     "title": "DDSL: Deep Differentiable Simplex Layer for Learning Geometric Signals"
+    },
+    "doi:10.1016/j.cma.2026.119073": {
+     "grade": 0,
+     "title": "Salt cavern simulations with a stabilized mixed finite element formulation for low-order tetrahedral elements"
+    },
+    "doi:10.1016/j.jmrt.2026.02.204": {
+     "grade": 0,
+     "title": "Revealing interstitial energetics in Ti-23Nb-0.7Ta-2Zr gum metal base alloy via universal machine learning interatomic potentials"
+    },
+    "doi:10.1016/j.cma.2009.07.001": {
+     "grade": 0,
+     "title": "A face-based smoothed finite element method (FS-FEM) for visco-elastoplastic analyses of 3D solids using tetrahedral mesh"
+    },
+    "doi:10.48550/arxiv.2406.01996": {
+     "grade": 0,
+     "title": "Bayesian Mesh Optimization for Graph Neural Networks to Enhance Engineering Performance Prediction"
+    },
+    "doi:10.1108/ec-03-2023-0126": {
+     "grade": 0,
+     "title": "An innovative mesh generation algorithm of conformal rectangle geometry for 3D planar circuits"
+    },
+    "doi:10.1145/3731159": {
+     "grade": 1,
+     "title": "NeurCross: A Neural Approach to Computing Cross Fields for Quad Mesh Generation"
+    },
+    "doi:10.1117/12.2681295": {
+     "grade": 0,
+     "title": "Study on the GPU-driven mesh generation algorithm for machining simulation"
+    },
+    "doi:10.48550/arxiv.2502.12985": {
+     "grade": 0,
+     "title": "PartSDF: Part-Based Implicit Neural Representation for Composite 3D Shape Parametrization and Optimization"
+    },
+    "doi:10.1111/cgf.14986": {
+     "grade": 1,
+     "title": "A Robust Grid‐Based Meshing Algorithm for Embedding Self‐Intersecting Surfaces"
+    },
+    "doi:10.1109/acdsa65407.2025.11165827": {
+     "grade": 0,
+     "title": "Text-to-3D Generation for Digital Twins in Food Industry: A Point-E Model Application"
+    },
+    "doi:10.1371/journal.pcbi.1007756": {
+     "grade": 1,
+     "title": "3D mesh processing using GAMer 2 to enable reaction-diffusion simulations in realistic cellular geometries"
+    },
+    "title:3d noffset mixed element mesh generator approach": {
+     "grade": 1,
+     "title": "3D NOffset mixed-element mesh generator approach"
+    },
+    "doi:10.1145/3528223.3530103": {
+     "grade": 0,
+     "title": "Approximate convex decomposition for 3D meshes with collision-aware concavity and tree search"
+    },
+    "doi:10.1063/5.0172020": {
+     "grade": 2,
+     "title": "A long short-term memory neural network-based error estimator for three-dimensional dynamically adaptive mesh generation"
+    },
+    "doi:10.1101/534479": {
+     "grade": 1,
+     "title": "GAMer 2: A System for 3D Mesh Processing of Cellular Electron Micrographs"
+    },
+    "doi:10.1111/cgf.70005": {
+     "grade": 0,
+     "title": "Dynamic Cutting Simulation Using Elastic Snapping for Mesh Quality Optimization"
+    },
+    "arxiv:1711.07566": {
+     "grade": 0,
+     "title": "Neural 3D Mesh Renderer"
+    },
+    "doi:10.48550/arxiv.2505.20457": {
+     "grade": 2,
+     "title": "Learned Adaptive Mesh Generation"
+    },
+    "doi:10.48550/arxiv.2512.10439": {
+     "grade": 1,
+     "title": "HypeR Adaptivity: Joint hr-Adaptive Meshing via Hypergraph Multi-Agent Deep Reinforcement Learning"
+    },
+    "doi:10.3390/sym13020254": {
+     "grade": 0,
+     "title": "A Novel Meshing Method Based on Adaptive Size Function and Moving Mesh for Electromagnetic Finite Element Analysis"
+    },
+    "doi:10.37082/ijirmps.v14.i1.232923": {
+     "grade": 0,
+     "title": "AI enabled learning and development for Finite Element Analysis used in Mechanical structures"
+    },
+    "doi:10.48550/arxiv.2408.10838": {
+     "grade": 0,
+     "title": "Multilevel CNNs for Parametric PDEs based on Adaptive Finite Elements"
+    },
+    "doi:10.1007/978-3-030-50420-5_14": {
+     "grade": 1,
+     "title": "MeshingNet: A New Mesh Generation Method Based on Deep Learning"
+    },
+    "arxiv:2609.20309": {
+     "grade": 0,
+     "title": "Hypernetwork-Parameterized Spatially Adaptive Neural Operators for PDE Learning"
+    },
+    "arxiv:2212.01428": {
+     "grade": 1,
+     "title": "MeshDQN: A Deep Reinforcement Learning Framework for Improving Meshes in Computational Fluid Dynamics"
+    },
+    "doi:10.1007/s00466-023-02370-3": {
+     "grade": 1,
+     "title": "Unstructured surface mesh smoothing method based on deep reinforcement learning"
+    },
+    "doi:10.1016/j.jcp.2025.114306": {
+     "grade": 1,
+     "title": "Automatic mesh generation for optimal CFD of a blade passage using deep reinforcement learning"
+    },
+    "arxiv:2506.08280": {
+     "grade": 2,
+     "title": "Snap-and-tune: combining deep learning and test-time optimization for high-fidelity cardiovascular volumetric meshing"
+    },
+    "doi:10.1109/tmi.2025.3562756": {
+     "grade": 0,
+     "title": "An End-to-End Deep Learning Generative Framework for Refinable Shape Matching and Generation"
+    },
+    "arxiv:2303.02879": {
+     "grade": 0,
+     "title": "A Review of Deep Learning-Powered Mesh Reconstruction Methods"
+    }
+   }
+  },
+  "sar": {
+   "need": "Débruitage (despeckling) d'images SAR d'intensité réelles avec peu de données propres de référence ; fondements nécessaires.",
+   "grades": {
+    "3": "Despeckling profond entraînable sans référence propre (auto-/semi-supervisé, données réelles ou quasi réelles, généralisation au SAR réel).",
+    "2": "Despeckling profond supervisé (données synthétiques), approches plug-and-play, méthodes de référence (NL-SAR, PPB, SAR-BM3D, MuLoG) et propriétés fondamentales du speckle.",
+    "1": "Filtres classiques non locaux ou variationnels secondaires, thèses générales, débruitage multiplicatif générique, amélioration Sentinel-1.",
+    "0": "Autres tâches SAR (classification, détection, changement)."
+   },
+   "judgments": {
+    "doi:10.48550/arxiv.2308.05975": {
+     "grade": 2,
+     "title": "Purely Speckled Intensity Images Need for SAR Despeckling with SDS-SAR"
+    },
+    "title:deep learning based compression and despeckling of sar images": {
+     "grade": 2,
+     "title": "Deep learning-based compression and despeckling of SAR images"
+    },
+    "doi:10.1109/jstars.2024.3355220": {
+     "grade": 2,
+     "title": "ANED-Net: Adaptive Noise Estimation and Despeckling Network for SAR Image"
+    },
+    "doi:10.3390/rs16173222": {
+     "grade": 2,
+     "title": "SAR Image Despeckling Based on Denoising Diffusion Probabilistic Model and Swin Transformer"
+    },
+    "doi:10.1109/tgrs.2025.3531957": {
+     "grade": 2,
+     "title": "Just Project! Multichannel Despeckling, the Easy Way"
+    },
+    "doi:10.1109/tgrs.2023.3237466": {
+     "grade": 3,
+     "title": "Multitemporal Speckle Reduction With Self-Supervised Deep Neural Networks"
+    },
+    "doi:10.48550/arxiv.2607.22719": {
+     "grade": 2,
+     "title": "$γ$-Bridge: A Look-Parametric Diffusion Bridge"
+    },
+    "doi:10.48550/arxiv.2605.29088": {
+     "grade": 1,
+     "title": "A Deep Learning Iterative Framework for Sentinel-1 Stripmap Enhancement Based on Azimuth Doppler Decomposition"
+    },
+    "doi:10.48550/arxiv.2407.05087": {
+     "grade": 1,
+     "title": "Linear Attention Based Deep Nonlocal Means Filtering for Multiplicative Noise Removal"
+    },
+    "doi:10.1109/tgrs.2021.3065461": {
+     "grade": 3,
+     "title": "Speckle2Void: Deep Self-Supervised SAR Despeckling With Blind-Spot Convolutional Neural Networks"
+    },
+    "doi:10.1109/tgrs.2021.3128621": {
+     "grade": 3,
+     "title": "As If by Magic: Self-Supervised Training of Deep Despeckling Networks With MERLIN"
+    },
+    "doi:10.1109/lgrs.2025.3637133": {
+     "grade": 3,
+     "title": "Self-Supervised SAR Despeckling by Integrating Denoiser Prior With Attributed Scattering Center"
+    },
+    "title:merlin seg self supervised despeckling for label efficient semantic segmentation": {
+     "grade": 2,
+     "title": "MERLIN-Seg: Self-supervised despeckling for label-efficient semantic segmentation"
+    },
+    "title:merlin a self supervised strategy to train deep despeckling networks": {
+     "grade": 3,
+     "title": "MERLIN: A self-supervised strategy to train deep despeckling networks"
+    },
+    "arxiv:2006.15037": {
+     "grade": 3,
+     "title": "SAR2SAR: a self-supervised despeckling algorithm for SAR images"
+    },
+    "title:self supervised learning of deep despeckling networks with merlin ensuring the statistical independence of the real and imaginary parts": {
+     "grade": 3,
+     "title": "Self-supervised learning of deep despeckling networks with MERLIN: ensuring the statistical independence of the real and imaginary parts"
+    },
+    "doi:10.1109/ojsp.2022.3229618": {
+     "grade": 0,
+     "title": "Self-Supervised Learning Based Anomaly Detection in Synthetic Aperture Radar Imaging"
+    },
+    "doi:10.70675/f1c5b676za625z4b96z8ff6z76fb16477452": {
+     "grade": 1,
+     "title": "Deep learning for SAR imagery: from denoising to scene understanding. (Apprentissage profond pour l'imagerie SAR: du débruitage à l'interprétation de scène)"
+    },
+    "doi:10.48550/arxiv.2210.16038": {
+     "grade": 0,
+     "title": "Deep Learning-Based Anomaly Detection in Synthetic Aperture Radar Imaging"
+    },
+    "doi:10.70675/a76f5e67zbf5ez41f2z9ce4zccac4af706f7": {
+     "grade": 1,
+     "title": "Deep learning for remote sensing images and their interpretation. (Apprentissage profond pour l'interprétation des images satellitaires)"
+    },
+    "doi:10.15421/142505": {
+     "grade": 1,
+     "title": "On Anisotropic Variational Model for SAR Image Despeckling"
+    },
+    "doi:10.22456/2175-2745.150936": {
+     "grade": 2,
+     "title": "SAR Images Despeckling Using Convolutional Neural Networks with Stochastic Distances"
+    },
+    "doi:10.48550/arxiv.2608.11271": {
+     "grade": 1,
+     "title": "Hardware-Aware Deployment of Joint SAR Compression and Despeckling on FPGA"
+    },
+    "doi:10.1088/1361-6501/ae8686": {
+     "grade": 2,
+     "title": "Frequency-enhanced diffusion prior network for joint SAR image despeckling and super-resolution"
+    },
+    "doi:10.3390/rs17152716": {
+     "grade": 1,
+     "title": "SAR Images Despeckling Using Subaperture Decomposition and Non-Local Low-Rank Tensor Approximation"
+    },
+    "doi:10.1080/10106049.2026.2622761": {
+     "grade": 1,
+     "title": "A fusion-based despeckling approach for multi-temporal SAR images using non-adaptive diffusion and thresholding method"
+    },
+    "doi:10.48550/arxiv.2511.05890": {
+     "grade": 2,
+     "title": "SAR-FAH: A Frequency-Adaptive Hybrid Network based on Neural ODEs for Structural-Preserving SAR Despeckling"
+    },
+    "doi:10.3390/rs17203460": {
+     "grade": 0,
+     "title": "FAWT-Net: Attention-Matrix Despeckling and Haar Wavelet Reconstruction for Small-Scale SAR Ship Detection"
+    },
+    "doi:10.1145/3748636.3763221": {
+     "grade": 2,
+     "title": "Expert Guided Diffusion for Synthetic Aperture Radar Despeckling"
+    },
+    "doi:10.1016/j.isprsjprs.2024.11.003": {
+     "grade": 3,
+     "title": "Contrastive learning for real SAR image despeckling"
+    },
+    "doi:10.1109/jstars.2023.3345538": {
+     "grade": 3,
+     "title": "Robust SAR Image Despeckling by Deep Learning From Near-Real Datasets"
+    },
+    "doi:10.1109/radarconf2458775.2024.10549364": {
+     "grade": 0,
+     "title": "FACTUAL: A Novel Framework for Contrastive Learning Based Robust SAR Image Classification"
+    },
+    "doi:10.1109/icivc61627.2024.10837306": {
+     "grade": 0,
+     "title": "Supervised Contrastive Learning for Long-tailed SAR-AIRcraft Image Classification"
+    },
+    "doi:10.1109/icassp48485.2024.10447792": {
+     "grade": 2,
+     "title": "Deep Unrolling Network for SAR Image Despeckling"
+    },
+    "doi:10.3390/electronics13030490": {
+     "grade": 2,
+     "title": "Synthetic Aperture Radar Image Despeckling Based on a Deep Learning Network Employing Frequency Domain Decomposition"
+    },
+    "doi:10.1109/lgrs.2024.3352544": {
+     "grade": 2,
+     "title": "PolMERLIN: Self-Supervised Polarimetric Complex SAR Image Despeckling With Masked Networks"
+    },
+    "doi:10.1109/jstars.2024.3464735": {
+     "grade": 0,
+     "title": "Contrastive Learning With Context-Augmented Transformer for Change Detection in SAR Images"
+    },
+    "doi:10.1109/tgrs.2024.3397325": {
+     "grade": 2,
+     "title": "Trans-NLM Network for SAR Image Despeckling"
+    },
+    "doi:10.1109/lgrs.2023.3345137": {
+     "grade": 2,
+     "title": "A Practical SAR Despeckling Method Combining Swin Transformer and Residual CNN"
+    },
+    "doi:10.3390/rs11131532": {
+     "grade": 2,
+     "title": "Deep Learning for SAR Image Despeckling"
+    },
+    "doi:10.3390/rs10020196": {
+     "grade": 2,
+     "title": "Learning a Dilated Residual Network for SAR Image Despeckling"
+    },
+    "doi:10.1109/jstars.2021.3132027": {
+     "grade": 2,
+     "title": "SAR Image Despeckling Using Continuous Attention Module"
+    },
+    "doi:10.1038/s41598-025-34106-z": {
+     "grade": 2,
+     "title": "Spatial frequency domain information aggregation network for radar image despeckling"
+    },
+    "doi:10.1109/igarss55030.2025.11313903": {
+     "grade": 1,
+     "title": "Deep Learning for Enhancing Sentinel-1 Imagery"
+    },
+    "doi:10.1364/josa.66.001145": {
+     "grade": 2,
+     "title": "Some fundamental properties of speckle*"
+    },
+    "doi:10.1109/tip.2009.2029593": {
+     "grade": 2,
+     "title": "Iterative Weighted Maximum Likelihood Denoising With Probabilistic Patch-Based Weights"
+    },
+    "doi:10.1109/tgrs.2011.2161586": {
+     "grade": 2,
+     "title": "A Nonlocal SAR Image Denoising Algorithm Based on LLMMSE Wavelet Shrinkage"
+    },
+    "doi:10.1137/060671814": {
+     "grade": 2,
+     "title": "A Variational Approach to Removing Multiplicative Noise"
+    },
+    "arxiv:2007.02075": {
+     "grade": 3,
+     "title": "Speckle2Void: Deep Self-Supervised SAR Despeckling with Blind-Spot Convolutional Neural Networks"
+    },
+    "doi:10.1109/tgrs.2024.3404364": {
+     "grade": 1,
+     "title": "A New Nonlocal Iterative Trilateral Filter for SAR Images Despeckling"
+    },
+    "doi:10.1109/tgrs.2016.2520309": {
+     "grade": 1,
+     "title": "Scattering-Based Nonlocal Means SAR Despeckling"
+    },
+    "doi:10.1109/lgrs.2013.2271650": {
+     "grade": 1,
+     "title": "Fast Adaptive Nonlocal SAR Despeckling"
+    },
+    "doi:10.1109/tgrs.2013.2280278": {
+     "grade": 1,
+     "title": "Robust Polarimetric SAR Despeckling Based on Nonlocal Means and Distributed Lee Filter"
+    },
+    "doi:10.1109/tgrs.2021.3127109": {
+     "grade": 1,
+     "title": "Nonlocal Model-Free Denoising Algorithm for Single- and Multichannel SAR Data"
+    },
+    "doi:10.1109/igarss52108.2023.10281707": {
+     "grade": 1,
+     "title": "Non-Local SAR Image Despeckling Based on Sparse Representation"
+    },
+    "doi:10.1109/igarss.2013.6723198": {
+     "grade": 1,
+     "title": "Nonlocal-Lee filter for SAR image despeckling based on hybrid patch similarity"
+    },
+    "doi:10.1007/s00034-017-0704-5": {
+     "grade": 1,
+     "title": "SAR Image Despeckling by Using Nonlocal Sparse Coding Model"
+    },
+    "doi:10.1109/lgrs.2011.2112331": {
+     "grade": 1,
+     "title": "SAR Image Despeckling Using Bayesian Nonlocal Means Filter With Sigma Preselection"
+    },
+    "doi:10.1080/01431161.2023.2173029": {
+     "grade": 2,
+     "title": "A self-attention multi-scale convolutional neural network method for SAR image despeckling"
+    },
+    "doi:10.1117/12.832169": {
+     "grade": 1,
+     "title": "Classification based nonlocal means despeckling for SAR image"
+    },
+    "doi:10.3390/rs12061006": {
+     "grade": 2,
+     "title": "Nonlocal CNN SAR Image Despeckling"
+    },
+    "doi:10.1109/jstars.2021.3071864": {
+     "grade": 3,
+     "title": "SAR2SAR: A Semi-Supervised Despeckling Algorithm for SAR Images"
+    },
+    "doi:10.3390/rs13040764": {
+     "grade": 2,
+     "title": "Contourlet-CNN for SAR Image Despeckling"
+    },
+    "doi:10.51153/kjcis.v2i1.16": {
+     "grade": 1,
+     "title": "A Study of SAR Despeckling Methods"
+    },
+    "doi:10.1109/jstars.2022.3195093": {
+     "grade": 1,
+     "title": "Fast Patchwise Nonlocal SAR Image Despeckling Using Joint Intensity and Structure Measures"
+    },
+    "doi:10.1109/jstars.2023.3266823": {
+     "grade": 1,
+     "title": "Despeckling Multitemporal Polarimetric SAR Data Based on Tensor Decomposition"
+    },
+    "doi:10.1109/jstars.2021.3097119": {
+     "grade": 1,
+     "title": "Learning an SAR Image Despeckling Model Via Weighted Sparse Representation"
+    },
+    "doi:10.1109/tgrs.2014.2352555": {
+     "grade": 2,
+     "title": "NL-SAR: A Unified Nonlocal Framework for Resolution-Preserving (Pol)(In)SAR Denoising"
+    },
+    "doi:10.1109/tgrs.2020.3042694": {
+     "grade": 3,
+     "title": "deSpeckNet: Generalizing Deep Learning-Based SAR Image Despeckling"
+    },
+    "doi:10.1109/tip.2017.2713946": {
+     "grade": 2,
+     "title": "MuLoG, or How to Apply Gaussian Denoisers to Multi-Channel SAR Speckle Reduction?"
+    }
+   }
+  },
+  "battery": {
+   "need": "Récupérer le lithium des batteries lithium-ion usagées sans entraîner les autres métaux (nickel…) : verrou ou solutions existantes ?",
+   "grades": {
+    "3": "Récupération ou séparation sélective du lithium vis-à-vis de Ni/Co/Mn dans les batteries usagées ou leurs lixiviats (lixiviation sélective, extraction précoce, extraction par solvant, membranes, électrochimie).",
+    "2": "Récupération du lithium avec données de séparation mais sans Ni (LFP), pertes de lithium, revues ciblées sur les membranes ou l'extraction du lithium.",
+    "1": "Recyclage des batteries en général, récupération Co/Ni, élimination d'impuretés, revues générales.",
+    "0": "Hors sujet (latérites, autres minerais, autres domaines)."
+   },
+   "judgments": {
+    "doi:10.1007/s12598-023-02290-4": {
+     "grade": 3,
+     "title": "Selective lithium recovery from black powder of spent lithium‐ion batteries via sulfation reaction: phase conversion and impurities influence"
+    },
+    "doi:10.1021/acsami.0c00420": {
+     "grade": 3,
+     "title": "Conversion Mechanisms of Selective Extraction of Lithium from Spent Lithium-ion batteries by Sulfation Roasting."
+    },
+    "doi:10.1038/s41598-024-67761-9": {
+     "grade": 3,
+     "title": "Early-stage recovery of lithium from spent batteries via CO2-assisted leaching optimized by response surface methodology"
+    },
+    "doi:10.1016/j.seppur.2017.02.010": {
+     "grade": 3,
+     "title": "Solvent extraction fractionation of Li-ion battery leachate containing Li, Ni, and Co"
+    },
+    "doi:10.1016/j.seppur.2020.117258": {
+     "grade": 3,
+     "title": "Separation of lithium and transition metals from leachate of spent lithium-ion batteries by solvent extraction method with Versatic 10"
+    },
+    "doi:10.1016/j.seppur.2023.124143": {
+     "grade": 3,
+     "title": "Complete and selective recovery of lithium from EV lithium-ion batteries: Modeling and optimization using oxalic acid as a leaching agent"
+    },
+    "doi:10.2139/ssrn.4373136": {
+     "grade": 3,
+     "title": "Complete and Selective Recovery of Lithium from Ev Lithium-Ion Batteries: Modeling and Optimization Using Oxalic Acid as a Leaching Agent"
+    },
+    "doi:10.1149/ma2026-01562726mtgabs": {
+     "grade": 1,
+     "title": "Recycling and Upcycling of NMC Cathodes from Black Mass Using Flame-Assisted Spray Pyrolysis (FASP)"
+    },
+    "doi:10.1149/ma2024-022243mtgabs": {
+     "grade": 1,
+     "title": "From NMC to NMC – Challenges of Direct Recycling"
+    },
+    "doi:10.1038/s44359-024-00010-4": {
+     "grade": 1,
+     "title": "The evolution of lithium-ion battery recycling"
+    },
+    "doi:10.1038/s41467-022-31850-y": {
+     "grade": 0,
+     "title": "Tracing the origin of lithium in Li-ion batteries using lithium isotopes"
+    },
+    "doi:10.1039/d3cs00898c": {
+     "grade": 1,
+     "title": "Recycling of spent lithium-ion batteries for a sustainable future: recent advancements"
+    },
+    "doi:10.1021/acs.est.5c05864": {
+     "grade": 3,
+     "title": "High-Selectivity Separation of Lithium from Spent Lithium-Ion Battery Leachates Using Surface-Modified Commercial Nanofiltration Membranes"
+    },
+    "doi:10.1021/acs.est.4c06033": {
+     "grade": 3,
+     "title": "Toward a Circular Lithium Economy with Electrodialysis: Upcycling Spent Battery Leachates with Selective and Bipolar Ion-Exchange Membranes"
+    },
+    "doi:10.1088/2515-7655/acaa57": {
+     "grade": 1,
+     "title": "Roadmap for a sustainable circular economy in lithium-ion and future battery technologies"
+    },
+    "doi:10.1016/j.cej.2023.145822": {
+     "grade": 1,
+     "title": "A comprehensive review of the reclamation of resources from spent lithium-ion batteries"
+    },
+    "doi:10.1002/aenm.202506741": {
+     "grade": 1,
+     "title": "Stage‐Specific Roles of Deep Eutectic Solvents in Recycling of Spent Lithium‐Ion Batteries"
+    },
+    "doi:10.3390/batteries10010027": {
+     "grade": 1,
+     "title": "An Overview of the Sustainable Recycling Processes Used for Lithium-Ion Batteries"
+    },
+    "title:a comparison of two graphite recycling streams spent lithium ion battery and lithium ion battery factory anode scrap": {
+     "grade": 1,
+     "title": "A Comparison of Two Graphite Recycling Streams: Spent Lithium-ion Battery and Lithium-ion Battery Factory Anode Scrap"
+    },
+    "doi:10.3390/met15101085": {
+     "grade": 3,
+     "title": "Selective Lithium Extraction via Chlorination Roasting and Subsequent Valuable Metal Leaching from Spent Lithium-Ion Batteries"
+    },
+    "doi:10.1038/s41598-021-02019-2": {
+     "grade": 2,
+     "title": "Study on valuable metal incorporation in the Fe–Al precipitate during neutralization of LIB leach solution"
+    },
+    "doi:10.1038/s41598-023-48247-6": {
+     "grade": 1,
+     "title": "Fe3+ and Al3+ removal by phosphate and hydroxide precipitation from synthetic NMC Li-ion battery leach solution"
+    },
+    "doi:10.1016/j.wasman.2026.115443": {
+     "grade": 2,
+     "title": "Two-step complexation-ion exchange for separation of iron, aluminum and lithium from spent LiFePO4 materials."
+    },
+    "doi:10.3390/membranes15040097": {
+     "grade": 1,
+     "title": "Nickel and Cobalt Recovery from Spent Lithium-Ion Batteries via Electrodialysis Metathesis"
+    },
+    "doi:10.1016/j.cej.2021.132703": {
+     "grade": 1,
+     "title": "A promising regeneration of waste carbon residue from spent Lithium-ion batteries via low-temperature fluorination roasting and water leaching"
+    },
+    "doi:10.3390/met11101641": {
+     "grade": 1,
+     "title": "Thermodynamic Analysis and Experimental Investigation of Al and F Removal from Sulfuric Acid Leachate of Spent LiFePO4 Battery Powder"
+    },
+    "doi:10.1039/c9ra02331c": {
+     "grade": 1,
+     "title": "Impurity removal with highly selective and efficient methods and the recycling of transition metals from spent lithium-ion batteries"
+    },
+    "doi:10.1007/s40831-026-01568-y": {
+     "grade": 2,
+     "title": "Translating Selective Lithium Leaching from LFP to Industrial Black Mass: Experimental Validation and Statistical Quantification"
+    },
+    "doi:10.1038/s41598-026-43332-y": {
+     "grade": 3,
+     "title": "Selective extraction of lithium from acidic chloride leachates of spent batteries"
+    },
+    "doi:10.37099/mtu.dc.etdr/1338": {
+     "grade": 1,
+     "title": "Lithium-ion Battery Recycling Using Mineral Processing Methods"
+    },
+    "doi:10.3390/cryst13060858": {
+     "grade": 1,
+     "title": "Thermodynamic Analysis and Experimental Optimization for the Purification of Ni-Co-Mn Mixed Sulfate Solution from the Recovery Process of Lithium-Ion Batteries"
+    },
+    "doi:10.3390/ma13030801": {
+     "grade": 1,
+     "title": "Progress and Status of Hydrometallurgical and Direct Recycling of Li-Ion Batteries and Beyond"
+    },
+    "title:a closed loop recycling process for the end of life electric vehicle li ion batteries": {
+     "grade": 1,
+     "title": "A Closed Loop Recycling Process for the End-of-Life Electric Vehicle Li-ion Batteries"
+    },
+    "title:evaluation of precipitation processes for the removal of iron from chloride based copper and nickel leach solutions": {
+     "grade": 0,
+     "title": "Evaluation of precipitation processes for the removal of iron from chloride-based copper and nickel leach solutions"
+    },
+    "doi:10.1016/j.ceja.2021.100223": {
+     "grade": 1,
+     "title": "Extracting lithium from the H2SO4 leaching solution of bauxitic claystone via co-precipitation methods without addition of Al source"
+    },
+    "doi:10.47820/recima21.v7i8.8856": {
+     "grade": 0,
+     "title": "SELECTIVE SEPARATION OF NICKEL AND COBALT VIA CO(III) PATHWAYS: A CRITICAL REVIEW OF REDOX CONTROL, SPECIATION, AND PROCESS INTEGRATION"
+    },
+    "doi:10.66104/3r2y1s96": {
+     "grade": 0,
+     "title": "SULFURIC ACID REGENERATION FROM NICKEL LATERITE PROCESSING: TECHNOLOGIES, PROCESS CHEMISTRY, SCALE-UP CHALLENGES, AND CIRCULAR ECONOMY PERSPECTIVES"
+    },
+    "doi:10.66104/x7rh8151": {
+     "grade": 0,
+     "title": "QUANTIFICATION OF BACL₂-REMOBILIZABLE NICKEL IN ATMOSPHERIC SULFURIC LEACHING RESIDUES FROM FERRUGINOUS NICKEL ORES USING BARIUM CHLORIDE AS A SULFATE PROBE"
+    },
+    "doi:10.47820/recima21.v7i9.8955": {
+     "grade": 0,
+     "title": "FROM MINE TO SALEABLE PRODUCT: A FEASIBILITY FRAMEWORK FOR ATMOSPHERIC LEACHING OF NICKEL LATERITES - A CRITICAL REVIEW"
+    },
+    "doi:10.1016/j.scca.2026.100240": {
+     "grade": 1,
+     "title": "Advances in green electrochemical pathways for sustainable mineral and metal processing"
+    },
+    "doi:10.3389/frmst.2026.1766669": {
+     "grade": 2,
+     "title": "Membrane-based extraction of critical materials from spent batteries and other mineral wastes"
+    },
+    "doi:10.1021/acssusresmgt.5c00218": {
+     "grade": 2,
+     "title": "Efficient and Sustainable: Direct Electrochemical Recovery of Lithium from Spent LiFePO4 Batteries"
+    },
+    "title:from lithium ores to battery cells ore to precursor transformations extraction of li2so4 from spodumene and electrode balancing": {
+     "grade": 0,
+     "title": "From Lithium Ores to Battery Cells: Ore-to-Precursor Transformations, Extraction of Li2SO4 from β-Spodumene, and Electrode Balancing"
+    },
+    "doi:10.3390/en19132979": {
+     "grade": 0,
+     "title": "Sustainable Global Lithium Use in Energy: Challenges, Innovations, and Integration Strategies"
+    },
+    "doi:10.33915/etd.12878": {
+     "grade": 0,
+     "title": "Selective Recovery of Critical Minerals (Ni, Zn, Co, and Mn) From Acid Mine Drainage Utilizing Ion Exchange and Selective Precipitation Processes"
+    },
+    "doi:10.3990/1.9789036552790": {
+     "grade": 0,
+     "title": "Ionic liquid-based metal recovery from aqueous industrial process and waste streams"
+    },
+    "doi:10.2172/1976084": {
+     "grade": 0,
+     "title": "Multi-Sourced Collaboration for the Production and Refining of Rare Elements and Critical Metals (Final Technical Report)"
+    },
+    "doi:10.1038/s41467-024-54503-8": {
+     "grade": 3,
+     "title": "High performance, pH-resistant membranes for efficient lithium recovery from spent batteries"
+    },
+    "doi:10.1002/adfm.202408685": {
+     "grade": 3,
+     "title": "Positively‐Coated Nanofiltration Membranes for Lithium Recovery from Battery Leachates and Salt‐Lakes: Ion Transport Fundamentals and Module Performance"
+    },
+    "doi:10.3390/ma17205113": {
+     "grade": 2,
+     "title": "Selective Precipitation of REE-Rich Aluminum Phosphate with Low Lithium Losses from Lithium Enriched Slag Leachate"
+    },
+    "doi:10.1016/j.hydromet.2023.106041": {
+     "grade": 1,
+     "title": "Removal of impurity Metals as Phosphates from Lithium-ion Battery leachates"
+    },
+    "doi:10.1016/j.desal.2023.117142": {
+     "grade": 3,
+     "title": "Lithium recovery from the spent lithium-ion batteries by commercial acid-resistant nanofiltration membranes: A comparative study"
+    },
+    "doi:10.1016/j.cej.2023.145306": {
+     "grade": 3,
+     "title": "Lithium recovery from spent lithium-ion batteries leachate by chelating agents facilitated electrodialysis"
+    },
+    "doi:10.1021/acs.est.5c12432": {
+     "grade": 0,
+     "title": "Dissolution Behavior of Lithium-Ion Battery Cathode Materials in Aquatic Systems: Key Drivers and Molecular Mechanisms."
+    },
+    "doi:10.1149/ma2024-014703mtgabs": {
+     "grade": 3,
+     "title": "Selective Metal Recovery: Innovating Leaching from Lfp-NMC Cathode Mixtures in Lithium-Ion Batteries"
+    },
+    "title:a method for regenerating precursor raw material using waste positive electrode material of lithium ion battery and precursor positive electrode material and lithium ion battery manufactured using raw material regenerated thereby": {
+     "grade": 1,
+     "title": "A method for regenerating precursor raw material using waste positive electrode material of lithium ion battery, and precursor, positive electrode material, and lithium ion battery manufactured using "
+    },
+    "doi:10.3390/met12061056": {
+     "grade": 1,
+     "title": "Solvent Extraction for Separation of 99.9% Pure Cobalt and Recovery of Li, Ni, Fe, Cu, Al from Spent LIBs"
+    },
+    "title:recovery of cobalt from used lithium ion batteries and its leaching kinetics": {
+     "grade": 1,
+     "title": "Recovery of Cobalt from Used Lithium-Ion Batteries and its Leaching Kinetics"
+    },
+    "doi:10.1007/s11663-026-03963-y": {
+     "grade": 2,
+     "title": "Eco-Friendly Hydrometallurgical Recycling of End-of-Life Li-Ion Batteries for High Purity Lithium Carbonate Recovery"
+    },
+    "doi:10.1016/j.mattod.2020.09.001": {
+     "grade": 0,
+     "title": "Energy and environmental aspects in recycling lithium-ion batteries: Concept of Battery Identity Global Passport"
+    },
+    "doi:10.1016/j.jpowsour.2022.231979": {
+     "grade": 1,
+     "title": "A comprehensive review and classification of unit operations with assessment of outputs quality in lithium-ion battery recycling"
+    },
+    "doi:10.1002/cnl2.70018": {
+     "grade": 1,
+     "title": "Strategic Lithium‐Ion Battery Recycling for Global Resource Challenges"
+    },
+    "doi:10.82308/37730": {
+     "grade": 1,
+     "title": "Reductive leaching investigation of lithium nickel-manganese-cobalt oxide cathode materials related to spent battery recycling"
+    },
+    "title:r cup ration des m taux par lixiviation de mat riaux de cathode de batteries lithium ion du type nmc et lfp analyse de leurs interactions synergique metal recovery by leaching cathode materials from lithium ion nmc and lfp batteries analysis of synergistic interactions": {
+     "grade": 1,
+     "title": "Récupération des métaux par lixiviation de matériaux de cathode de batteries lithium-ion du type NMC et LFP : analyse de leurs interactions synergique = Metal recovery by leaching cathode materials fr"
+    },
+    "title:investigation of new recycling strategies for spent li ion batteries based on early li recovery via selective leaching": {
+     "grade": 3,
+     "title": "Investigation of new recycling strategies for spent Li-ion batteries based on early Li recovery via selective leaching"
+    },
+    "title:leaching behaviour of battery metals and impurities during black mass recycling": {
+     "grade": 1,
+     "title": "Leaching behaviour of battery metals and impurities during black mass recycling"
+    },
+    "doi:10.3390/pr13061755": {
+     "grade": 2,
+     "title": "Efficient Ionic Liquid-Based Leaching and Extraction of Metals from NMC Cathodes"
+    },
+    "doi:10.3390/membranes13050509": {
+     "grade": 3,
+     "title": "Application of Hybrid Electrobaromembrane Process for Selective Recovery of Lithium from Cobalt- and Nickel-Containing Leaching Solutions"
+    },
+    "doi:10.1016/j.hydromet.2021.105705": {
+     "grade": 1,
+     "title": "New insights in the leaching kinetics of cathodic materials in acidic chloride media for lithium-ion battery recycling"
+    },
+    "doi:10.1016/j.seppur.2020.118088": {
+     "grade": 1,
+     "title": "Regulating and regenerating the valuable metals from the cathode materials in lithium-ion batteries by nickel-cobalt-manganese co-extraction"
+    },
+    "doi:10.1007/s40242-026-6075-3": {
+     "grade": 3,
+     "title": "Self-inhibited Multivalent Ion Transport of the Porphyrin-functionalized Amorphous Covalent-Organic Framework Membrane for Efficient Lithium Extraction from Battery Cathodes"
+    },
+    "doi:10.1007/978-3-319-95022-8_154": {
+     "grade": 2,
+     "title": "Application of Donnan Dialysis to the Separation and Recovery of Cations During Hydrometallurgical Recycling of Lithium Ion Batteries"
+    },
+    "doi:10.3390/met8050321": {
+     "grade": 1,
+     "title": "Recovery of Valuable Metals from Lithium-Ion Batteries NMC Cathode Waste Materials by Hydrometallurgical Methods"
+    },
+    "doi:10.37190/ppmp/231151": {
+     "grade": 1,
+     "title": "Selective recovery of cobalt and nickel from spent lithium-ion batteries by integrated roasting and chelation-assisted deep eutectic solvent leaching"
+    },
+    "doi:10.3390/met13071213": {
+     "grade": 2,
+     "title": "Lithium Production and Recovery Methods: Overview of Lithium Losses"
+    },
+    "doi:10.3390/met14121441": {
+     "grade": 2,
+     "title": "Deep Eutectic Solvent (TOPO/D2EHPA/Menthol) for Extracting Metals from Synthetic Hydrochloric Acid Leachates of NMC-LTO Batteries"
+    },
+    "doi:10.1016/j.jece.2026.124661": {
+     "grade": 1,
+     "title": "Cobalt recovery from lithium cobalt oxide cathode scraps via green solvents: Process development and life cycle assessment"
+    },
+    "doi:10.3390/batteries12010035": {
+     "grade": 2,
+     "title": "Recovery of High-Purity Lithium Hydroxide Monohydrate from Lithium-Rich Leachate by Anti-Solvent Crystallization: Process Optimization and Impurity Incorporation Mechanisms"
+    },
+    "doi:10.3390/met11121999": {
+     "grade": 1,
+     "title": "Cobalt Recovery from Li-Ion Battery Recycling: A Critical Review"
+    },
+    "doi:10.3390/met15060598": {
+     "grade": 3,
+     "title": "Innovative Integration of Citric Acid Leaching and Electrodialysis for Selective Lithium Recovery from NMC Cathode Material"
+    },
+    "doi:10.3390/batteries11020051": {
+     "grade": 1,
+     "title": "Sustainable Extraction of Critical Minerals from Waste Batteries: A Green Solvent Approach in Resource Recovery"
+    },
+    "doi:10.1088/1402-4896/ae8d9a": {
+     "grade": 1,
+     "title": "Progress in applying radiochemical separation and extraction principles to metal recovery from spent lithium-ion batteries of electric vehicles"
+    },
+    "doi:10.1016/j.seppur.2023.126181": {
+     "grade": 2,
+     "title": "Multicomponent solvent extraction modelling of lithium, cobalt, nickel, and manganese from simulated black mass leachate"
+    },
+    "doi:10.1021/acssuschemeng.3c01238": {
+     "grade": 1,
+     "title": "Recycling of Lithium-Ion Batteries: Effect of Hydrogen Peroxide and a Dosing Method on the Leaching of LCO, NMC Oxides, and Industrial Black Mass"
+    }
+   }
+  },
+  "anomaly": {
+   "need": "Détecter et localiser des défauts inconnus avec beaucoup d'images conformes et très peu de défauts, robustement aux changements d'éclairage et de pièces.",
+   "grades": {
+    "3": "Détection et localisation non supervisée ou few-/zero-shot traitant explicitement le changement de domaine, d'éclairage ou de type de pièce.",
+    "2": "Détection et localisation non supervisée industrielle de référence (sans robustesse explicite) ; jeux de données de robustesse.",
+    "1": "Détection d'anomalies dans d'autres contextes.",
+    "0": "Hors sujet."
+   },
+   "judgments": {
+    "doi:10.48550/arxiv.2506.21398": {
+     "grade": 3,
+     "title": "FastRef:Fast Prototype Refinement for Few-Shot Industrial Anomaly Detection"
+    },
+    "doi:10.1117/12.3042892": {
+     "grade": 1,
+     "title": "Purity analysis of food raw materials using deep learning with anomaly detection algorithms"
+    },
+    "doi:10.1109/aiita69518.2026.11567213": {
+     "grade": 2,
+     "title": "Pseudo Defect Repair Based Edge Consistency Autoencoder Detection Method for Quality Control"
+    },
+    "doi:10.1109/access.2026.3706653": {
+     "grade": 1,
+     "title": "SGPM-Net: A Self-Evolving Generative Memory Framework for Unsupervised Rare Event Detection via Latent Dynamics-Based Augmentation"
+    },
+    "doi:10.62677/ijetaa.2608152": {
+     "grade": 2,
+     "title": "Few-Normal-Shot Tile Anomaly Detection with Lightweight Multiscale Memories"
+    },
+    "doi:10.1016/j.imavis.2026.106204": {
+     "grade": 2,
+     "title": "Caps-ViT: A synthetic-free capsule vision Transformer for reconstruction based anomaly detection and localization"
+    },
+    "doi:10.48550/arxiv.2604.12440": {
+     "grade": 2,
+     "title": "IAD-Unify: Task-Specific Interfaces for Industrial Anomaly Understanding, Segmentation, and Generation"
+    },
+    "title:detekcija anomalij v nenadzorovanih industrijskih okoljih s predobdelavo podatkov": {
+     "grade": 2,
+     "title": "Detekcija anomalij v nenadzorovanih industrijskih okoljih s predobdelavo podatkov"
+    },
+    "doi:10.48550/arxiv.2304.02216": {
+     "grade": 3,
+     "title": "Industrial Anomaly Detection with Domain Shift: A Real-world Dataset and Masked Multi-scale Reconstruction"
+    },
+    "doi:10.1109/cvpr52688.2022.01392": {
+     "grade": 2,
+     "title": "Towards Total Recall in Industrial Anomaly Detection"
+    },
+    "doi:10.48550/arxiv.2106.08265": {
+     "grade": 2,
+     "title": "Towards Total Recall in Industrial Anomaly Detection"
+    },
+    "doi:10.57702/mm9ulkog": {
+     "grade": 2,
+     "title": "Towards Total Recall in Industrial Anomaly Detection"
+    },
+    "doi:10.1109/wacv57701.2024.00020": {
+     "grade": 2,
+     "title": "EfficientAD: Accurate Visual Anomaly Detection at Millisecond-Level Latencies"
+    },
+    "doi:10.1109/wacv61041.2025.00136": {
+     "grade": 3,
+     "title": "AnomalyDINO: Boosting Patch-based Few-Shot Anomaly Detection with DINOv2"
+    },
+    "doi:10.1109/cvpr52729.2023.01878": {
+     "grade": 3,
+     "title": "WinCLIP: Zero-/Few-Shot Anomaly Classification and Segmentation"
+    },
+    "doi:10.1016/j.compind.2023.103990": {
+     "grade": 3,
+     "title": "Industrial anomaly detection with domain shift: A real-world dataset and masked multi-scale reconstruction"
+    },
+    "doi:10.1007/s11263-026-02743-0": {
+     "grade": 2,
+     "title": "The MVTec AD 2 Dataset: Advanced Scenarios for Unsupervised Anomaly Detection"
+    },
+    "doi:10.1016/j.knosys.2024.112650": {
+     "grade": 2,
+     "title": "Multi-scale feature reconstruction network for industrial anomaly detection"
+    },
+    "doi:10.1109/tim.2025.3568982": {
+     "grade": 3,
+     "title": "Robust Industrial Anomaly Detection via Style Shift Estimation and Cascade Distillation"
+    },
+    "doi:10.1016/j.aei.2025.103953": {
+     "grade": 3,
+     "title": "Enhancing aero-engine blade few-shot anomaly detection with visual-language multi-modal models under domain shift conditions"
+    },
+    "doi:10.1145/3704558.3707076": {
+     "grade": 2,
+     "title": "The Object-Centric Anomaly Detection for Aero-engine Blade"
+    },
+    "doi:10.1016/j.rineng.2025.104309": {
+     "grade": 3,
+     "title": "Image-based anomaly detection in low-light industrial environments with feature enhancement"
+    },
+    "doi:10.1016/j.patcog.2026.113666": {
+     "grade": 2,
+     "title": "Visual anomaly detection under complex view-illumination interplay: A large-scale benchmark"
+    },
+    "doi:10.48550/arxiv.2505.10996": {
+     "grade": 2,
+     "title": "Visual Anomaly Detection under Complex View-Illumination Interplay: A Large-Scale Benchmark"
+    },
+    "arxiv:2606.09670": {
+     "grade": 2,
+     "title": "Visual Prompting Meets Feature Reconstruction-Based Anomaly Detection with Dual-Teacher Supervision"
+    },
+    "arxiv:2608.27610": {
+     "grade": 3,
+     "title": "ShiftSplit-AD: Separating Domain Shift from Defects in Foundation-Feature Visual Anomaly Detection"
+    },
+    "doi:10.1016/j.eswa.2024.123830": {
+     "grade": 0,
+     "title": "Dynamic case-based emergency decision-making model under time-varying single-valued neutrosophic set"
+    },
+    "doi:10.1016/j.engappai.2024.109608": {
+     "grade": 0,
+     "title": "Elite-based multi-objective improved iterative local search algorithm for time-dependent vehicle-drone collaborative routing problem with simultaneous pickup and delivery"
+    },
+    "doi:10.1093/jcde/qwaf043": {
+     "grade": 3,
+     "title": "Unsupervised industrial anomaly detection using paired well-lit and low-light images"
+    }
+   }
+  },
+  "road": {
+   "need": "Extraction automatique des contours de chaussées à partir d'images aériennes et de LiDAR : polygones précis, continus, topologiquement valides.",
+   "grades": {
+    "3": "Extraction de contours, bords ou polygones de routes (sortie vectorielle ou frontière) depuis l'aérien et/ou le LiDAR.",
+    "2": "Extraction de routes topologique (graphe, connectivité) ou fusion aérien + LiDAR en raster ; revues ciblées.",
+    "1": "Segmentation routière générique, polygonisation d'autres objets, voies et marquages.",
+    "0": "Hors sujet."
+   },
+   "judgments": {
+    "title:robust road topology extraction from aerial imagery": {
+     "grade": 2,
+     "title": "Robust road topology extraction from aerial imagery"
+    },
+    "doi:10.5194/isprs-archives-xli-b3-567-2016": {
+     "grade": 3,
+     "title": "VECTORIZATION OF ROAD DATA EXTRACTED FROM AERIAL AND UAV IMAGERY"
+    },
+    "doi:10.5194/isprsarchives-xli-b3-567-2016": {
+     "grade": 3,
+     "title": "VECTORIZATION OF ROAD DATA EXTRACTED FROM AERIAL AND UAV IMAGERY"
+    },
+    "doi:10.25258/ijddt.16.72s.28": {
+     "grade": 2,
+     "title": "Topology-Aware Road Network Instance Segmentation in Aerial Imagery via Skeletonization-Guided Diffusion: The SkelConnect-Diffusion"
+    },
+    "doi:10.1109/icpr48806.2021.9412054": {
+     "grade": 2,
+     "title": "Aerial Road Segmentation in the Presence of Topological Label Noise"
+    },
+    "doi:10.1007/s10044-026-01621-2": {
+     "grade": 1,
+     "title": "Mapping the unmapped: deep learning ensembles and novel loss functions for scalable road segmentation from aerial imagery"
+    },
+    "doi:10.3390/ijgi7120458": {
+     "grade": 1,
+     "title": "Towards HD Maps from Aerial Imagery: Robust Lane Marking Segmentation Using Country-Scale Imagery"
+    },
+    "doi:10.48550/arxiv.1810.03570": {
+     "grade": 0,
+     "title": "Bootstrapped CNNs for Building Segmentation on RGB-D Aerial Imagery"
+    },
+    "doi:10.48550/arxiv.1905.01447": {
+     "grade": 1,
+     "title": "Leveraging Crowdsourced GPS Data for Road Extraction from Aerial Imagery"
+    },
+    "doi:10.5194/isprs-annals-iv-4-187-2018": {
+     "grade": 0,
+     "title": "BOOTSTRAPPED CNNS FOR BUILDING SEGMENTATION ON RGB-D AERIAL IMAGERY"
+    },
+    "doi:10.1109/cvpr.2019.00974": {
+     "grade": 3,
+     "title": "Convolutional Recurrent Network for Road Boundary Extraction"
+    },
+    "doi:10.5194/isprsarchives-xl-1-w5-583-2015": {
+     "grade": 2,
+     "title": "AUTOMATIC ROAD EXTRACTION BASED ON INTEGRATION OF HIGH RESOLUTION LIDAR AND AERIAL IMAGERY"
+    },
+    "doi:10.1109/igarss.2015.7326746": {
+     "grade": 2,
+     "title": "Aerial laser scanning and imagery data fusion for road detection in city scale"
+    },
+    "doi:10.3390/rs10081284": {
+     "grade": 2,
+     "title": "Road Centerline Extraction from Very-High-Resolution Aerial Image and LiDAR Data Based on Road Connectivity"
+    },
+    "doi:10.11834/jrs.20187191": {
+     "grade": 0,
+     "title": "Fusion of aerial imagery and airborne LiDAR data for post-earthquake building point extraction"
+    },
+    "doi:10.1016/j.isprsjprs.2013.05.006": {
+     "grade": 0,
+     "title": "Automatic extraction of building roofs using LIDAR data and multispectral imagery"
+    },
+    "doi:10.3390/rs10050743": {
+     "grade": 1,
+     "title": "Semantic Labeling of High Resolution Aerial Imagery and LiDAR Data with Fine Segmentation Network"
+    },
+    "doi:10.12794/metadc12196": {
+     "grade": 1,
+     "title": "Urban surface characterization using LiDAR and aerial imagery."
+    },
+    "doi:10.3390/rs12223764": {
+     "grade": 0,
+     "title": "A Hybrid Attention-Aware Fusion Network (HAFNet) for Building Extraction from High-Resolution Imagery and LiDAR Data"
+    },
+    "doi:10.32920/25412740.v1": {
+     "grade": 1,
+     "title": "Multispectral Lidar-imagery Data Fusion and Multilevel Classification of Lidar Point Clouds for Urban Features Extraction"
+    },
+    "title:automatic skeleton construction from beam like topology optimization results": {
+     "grade": 0,
+     "title": "Automatic skeleton construction from beam-like topology optimization results"
+    },
+    "doi:10.1016/j.isprsjprs.2025.10.005": {
+     "grade": 3,
+     "title": "LDPoly: Latent diffusion for polygonal road outline extraction in large-scale topographic mapping"
+    },
+    "doi:10.3390/rs14092074": {
+     "grade": 2,
+     "title": "A General Spline-Based Method for Centerline Extraction from Different Segmented Road Maps in Remote Sensing Imagery"
+    },
+    "doi:10.3390/rs17183234": {
+     "grade": 0,
+     "title": "Closed and Structural Optimization for 3D Line Segment Extraction in Building Point Clouds"
+    },
+    "doi:10.1080/10106049.2024.2413549": {
+     "grade": 0,
+     "title": "A road generalization method using graph convolutional network based on mesh-line structure unit"
+    },
+    "doi:10.3390/sym17101654": {
+     "grade": 0,
+     "title": "Graph-MambaRoadDet: A Symmetry-Aware Dynamic Graph Framework for Road Damage Detection"
+    },
+    "doi:10.1109/jstars.2020.3023549": {
+     "grade": 2,
+     "title": "Road Extraction Methods in High-Resolution Remote Sensing Images: A Comprehensive Review"
+    },
+    "doi:10.48550/arxiv.2412.06380": {
+     "grade": 0,
+     "title": "Low-Rank Matrix Factorizations with Volume-based Constraints and Regularizations"
+    },
+    "doi:10.1080/14498596.2016.1147392": {
+     "grade": 2,
+     "title": "A framework of road extraction from airborne lidar data and aerial imagery"
+    },
+    "doi:10.1061/(asce)su.1943-5428.0000198": {
+     "grade": 2,
+     "title": "Color Component–Based Road Feature Extraction from Airborne Lidar and Imaging Data Sets"
+    },
+    "doi:10.1109/tgrs.2024.3360963": {
+     "grade": 2,
+     "title": "A Deep Cross-Modal Fusion Network for Road Extraction With High-Resolution Imagery and LiDAR Data"
+    },
+    "doi:10.1109/igarss47720.2021.9554540": {
+     "grade": 1,
+     "title": "Road Extraction and Road Width Estimation Via Fusion of Aerial Optical Imagery, Geospatial Data, and Street-Level Images"
+    },
+    "doi:10.3390/rs13132473": {
+     "grade": 0,
+     "title": "Multiscale Semantic Feature Optimization and Fusion Network for Building Extraction Using High-Resolution Aerial Images and LiDAR Data"
+    },
+    "doi:10.5194/isprs-archives-xliii-b3-2020-533-2020": {
+     "grade": 2,
+     "title": "AUTOMATED ROAD INFORMATION EXTRACTION FROM HIGH RESOLUTION AERIAL LIDAR DATA FOR SMART ROAD APPLICATIONS"
+    },
+    "doi:10.1201/b15159-14": {
+     "grade": 2,
+     "title": "- Road Extraction: A Review of LiDAR-Focused Studies"
+    },
+    "doi:10.1109/icast.2008.4747701": {
+     "grade": 1,
+     "title": "Fusion of high resolution lidar and aerial images for object extraction"
+    },
+    "doi:10.5617/nmi.12134": {
+     "grade": 2,
+     "title": "Enhancing road extraction accuracy with aerial LiDAR products and deep learning"
+    },
+    "doi:10.1145/3534678.3539029": {
+     "grade": 1,
+     "title": "DuARE: Automatic Road Extraction with Aerial Images and Trajectory Data at Baidu Maps"
+    },
+    "doi:10.1109/tgrs.2025.3625550": {
+     "grade": 2,
+     "title": "CFIFNet: A Road Extraction Network Through Cross-Modal Frequency-Domain Interaction and Fusion From High-Resolution Remote Sensing Image and GPS Trajectory/LiDAR"
+    },
+    "doi:10.5194/isprsannals-i-4-227-2012": {
+     "grade": 0,
+     "title": "AERIAL IMAGES AND LIDAR DATA FUSION FOR DISASTER CHANGE DETECTION"
+    },
+    "doi:10.1109/tgrs.2024.3516840": {
+     "grade": 2,
+     "title": "LCIRE-Net: Lightweight Cross-Modal Information Interaction for Road Feature Extraction From Remote Sensing Images and GPS Trajectory/LiDAR"
+    },
+    "doi:10.3390/rs3112364": {
+     "grade": 0,
+     "title": "Fusion of High Resolution Aerial Multispectral and LiDAR Data: Land Cover in the Context of Urban Mosquito Habitat"
+    },
+    "doi:10.1111/j.1477-9730.1999.tb01519.x": {
+     "grade": 0,
+     "title": "GIS: BETWEEN VISIONS AND APPLICATIONS"
+    },
+    "doi:10.48550/arxiv.2309.15625": {
+     "grade": 2,
+     "title": "Leveraging Topology for Domain Adaptive Road Segmentation in Satellite and Aerial Imagery"
+    },
+    "doi:10.1007/978-3-030-58583-9_14": {
+     "grade": 2,
+     "title": "TopoAL: An Adversarial Learning Approach for Topology-Aware Road Segmentation"
+    },
+    "doi:10.1109/access.2026.3691154": {
+     "grade": 2,
+     "title": "HybridTopo: Topology-Aware Supervision and Inference for Connectivity-Preserving Road Network Extraction From Aerial Imagery"
+    },
+    "arxiv:2007.09084": {
+     "grade": 2,
+     "title": "TopoAL: An Adversarial Learning Approach for Topology-Aware Road Segmentation"
+    },
+    "doi:10.1016/j.isprsjprs.2023.10.020": {
+     "grade": 2,
+     "title": "Leveraging topology for domain adaptive road segmentation in satellite and aerial imagery"
+    },
+    "doi:10.1109/wacvw65960.2025.00134": {
+     "grade": 2,
+     "title": "Adaptive Structure-Aware Connectivity-Preserving Loss for Improved Road Segmentation in Remote Sensing Images"
+    },
+    "doi:10.1049/ipr2.12948": {
+     "grade": 1,
+     "title": "DeepRoadNet: A deep residual based segmentation network for road map detection from remote aerial image"
+    },
+    "doi:10.1109/tgrs.2022.3186993": {
+     "grade": 2,
+     "title": "RNGDet: Road Network Graph Detection by Transformer in Aerial Images"
+    },
+    "arxiv:2107.11920": {
+     "grade": 3,
+     "title": "CP-loss: Connectivity-preserving Loss for Road Curb Detection in Autonomous Driving with Aerial Images"
+    },
+    "arxiv:2103.17119": {
+     "grade": 3,
+     "title": "Topo-boundary: A Benchmark Dataset on Topological Road-boundary Detection Using Aerial Images for Autonomous Driving"
+    },
+    "doi:10.48550/arxiv.2605.26862": {
+     "grade": 1,
+     "title": "RoadGIE: Towards A Global-Scale Aerial Benchmark for Generalizable Interactive Road Extraction"
+    },
+    "doi:10.1109/icacs64902.2025.10937794": {
+     "grade": 0,
+     "title": "Hybrid Deep Learning Aerial Framework for Road Scene Objects Segmentation and Classification"
+    },
+    "doi:10.3390/s25247428": {
+     "grade": 2,
+     "title": "TopoRF-Net: Topology-Aware Road Segmentation in Multi-Resolution Remote Sensing via Multi-Receptive Field Adaptation"
+    },
+    "doi:10.1109/iros51168.2021.9636060": {
+     "grade": 3,
+     "title": "CP-loss: Connectivity-preserving Loss for Road Curb Detection in Autonomous Driving with Aerial Images"
+    },
+    "arxiv:2109.07701": {
+     "grade": 2,
+     "title": "SPIN Road Mapper: Extracting Roads from Aerial Images via Spatial and Interaction Space Graph Reasoning for Autonomous Driving"
+    },
+    "doi:10.5194/isprs-annals-v-2-2020-925-2020": {
+     "grade": 3,
+     "title": "AUTOMATIC EXTRACTION OF ROAD CENTERLINES AND EDGE LINES FROM AERIAL IMAGES VIA CNN-BASED REGRESSION"
+    },
+    "doi:10.5194/isprs-archives-xliii-b2-2020-1323-2020": {
+     "grade": 3,
+     "title": "ROAD EXTRACTION AND VECTORIZATION FROM AERIAL IMAGE DATA"
+    },
+    "doi:10.4121/ad3d6742-dbb9-4339-9a0e-d7e1f616d859.v1": {
+     "grade": 1,
+     "title": "Deventer-512: A Multi-Class High-resolution Aerial Imagery Dataset for Seamless Polygonal Vector Map Generation"
+    },
+    "doi:10.4121/ad3d6742-dbb9-4339-9a0e-d7e1f616d859": {
+     "grade": 1,
+     "title": "Deventer-512: A Multi-Class High-resolution Aerial Imagery Dataset for Seamless Polygonal Vector Map Generation"
+    },
+    "arxiv:2609.32856": {
+     "grade": 1,
+     "title": "PolyTopoBench: A Benchmark for Complex Vector Polygon Generation from Remote Sensing Imagery"
+    },
+    "doi:10.5194/isprs-archives-xlviii-2-w9-2025-57-2025": {
+     "grade": 2,
+     "title": "Neural network algorithm based on reinforcement learning for vectorization of aerial and space images"
+    },
+    "doi:10.3390/rs13224700": {
+     "grade": 1,
+     "title": "Building Polygon Extraction from Aerial Images and Digital Surface Models with a Frame Field Learning Framework"
+    },
+    "arxiv:2504.20645": {
+     "grade": 3,
+     "title": "LDPoly: Latent Diffusion for Polygonal Road Outline Extraction in Large-Scale Topographic Mapping"
+    },
+    "doi:10.1109/aims71270.2026.11712787": {
+     "grade": 1,
+     "title": "Unmanned Aerial Vehicle Road Image Segmentation Using Retinex Augmentation And Clahe To Improve Yolov26 Performance"
+    },
+    "doi:10.1016/j.dib.2026.113142": {
+     "grade": 1,
+     "title": "Image–mask–spurious triplets dataset for geometry-aware road extraction from UAV imagery"
+    },
+    "doi:10.1109/icsd60021.2024.10751072": {
+     "grade": 1,
+     "title": "Smart Road Segmentation from Aerial Images"
+    },
+    "doi:10.3390/rs13183630": {
+     "grade": 1,
+     "title": "A Deep Learning-Based Framework for Automated Extraction of Building Footprint Polygons from Very High-Resolution Aerial Imagery"
+    },
+    "arxiv:1804.07028": {
+     "grade": 2,
+     "title": "Automatic Vector-based Road Structure Mapping Using Multi-beam LiDAR"
+    },
+    "doi:10.48550/arxiv.2511.19850": {
+     "grade": 2,
+     "title": "DOGE: Differentiable Bezier Graph Optimization for Road Network Extraction"
+    },
+    "doi:10.1109/igarss52108.2023.10281538": {
+     "grade": 2,
+     "title": "End-To-End Road Graph Extraction Based on Graph Neural Network"
+    },
+    "doi:10.1109/access.2019.2928882": {
+     "grade": 1,
+     "title": "Dense Refinement Residual Network for Road Extraction From Aerial Imagery Data"
+    },
+    "doi:10.1109/cvpr.2018.00496": {
+     "grade": 2,
+     "title": "RoadTracer: Automatic Extraction of Road Networks from Aerial Images"
+    },
+    "doi:10.48550/arxiv.1802.03680": {
+     "grade": 2,
+     "title": "RoadTracer: Automatic Extraction of Road Networks from Aerial Images"
+    },
+    "title:a comparative study of road extraction techniques from aerial imagery a navigational perspective": {
+     "grade": 1,
+     "title": "A comparative study of road extraction techniques from aerial imagery - a navigational perspective"
+    },
+    "arxiv:2406.14941": {
+     "grade": 2,
+     "title": "Brightearth roads: Towards fully automatic road network extraction from satellite imagery"
+    },
+    "arxiv:2403.16051": {
+     "grade": 2,
+     "title": "Segment Anything Model for Road Network Graph Extraction"
+    },
+    "title:deep learning for semantic feature extraction in aerial imagery": {
+     "grade": 1,
+     "title": "Deep learning for semantic feature extraction in aerial imagery"
+    }
+   }
+  }
+ }
+}

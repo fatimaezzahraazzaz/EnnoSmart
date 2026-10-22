@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
+import re
+from .research import NeedProfile
 
 
 class Args(BaseModel):
@@ -21,6 +23,8 @@ DELIVERABLES = ("answer", "literature_search", "plan", "plan_revision", "compari
 
 
 class TurnGoalArgs(Args):
+    requested_article_count: int | None = Field(default=None, ge=1, le=200,
+        description="Nombre de publications demandé explicitement ; null si aucun. Ce nombre n'est pas une preuve de pertinence.")
     deliverable: Literal["answer", "literature_search", "plan", "plan_revision", "comparison", "deep_reading", "draft"] = Field(
         description="Attente du message : answer (discuter, expliquer), literature_search, plan, plan_revision, comparison "
             "(y compris au projet), deep_reading, draft (seulement si la rédaction est demandée).")
@@ -43,16 +47,55 @@ class TurnGoalArgs(Args):
         "plausibles : demander une clarification au lieu de choisir.")
     constraints: list[Literal["no_search", "no_download", "no_reanalysis", "no_manuscript_change"]] | None = Field(
         default=None, max_length=4, description="Interdictions explicites du consultant pour ce message.")
+    research_need: NeedProfile | None = Field(default=None, description="literature_search : besoin scientifique structuré "
+        "(objet, problème, résultat recherché, méthodes acceptables, contexte, contraintes, critères dont les essentiels, "
+        "sens de direct/connexe/fondamental, familles d'approches avec requête, incertitudes), tiré du message seul ; "
+        "null pour les autres livrables ou si le besoin reste celui déjà enregistré.")
 
 
 def _norm(text):
     return " ".join(str(text or "").replace("’", "'").casefold().split())
 
 
+def manuscript_permissions(state, goal, message):
+    """Resolve the narrow, explicit additive request against a model's broad prohibition.
+
+    Preservation is a write scope, not a prohibition of every manuscript operation.
+    A real global prohibition always wins, even against a declared draft goal.
+    """
+    from .writing_progress import MULTI_SECTION_REQUEST, WRITING_ACTION
+    text = _norm(message)
+    explicit_stop = bool(re.search(
+        r"\bne\s+modifi\w*\s+(?:rien\b|pas\s*(?:[.!?]|$))|"
+        r"\bne\s+(?:rédig\w*|redig\w*|écri\w*|ecri\w*|ajout\w*)\s+(?:pas|rien|aucun\w*)|"
+        r"\baucune\s+(?:nouvelle\s+)?(?:rédaction|redaction|section)|"
+        r"\b(?:aucune|sans|pas de)\s+modification\s+(?:(?:de|du|mon|notre|le|ce|au)\s+|l')*"
+        r"(?:manuscrit|document|état\s+de\s+l'art|etat\s+de\s+l'art)|"
+        r"\bne\s+modifi\w*\s+(?:pas\s+)?(?:le\s+|mon\s+|ce\s+)?(?:manuscrit|document|état|etat)|"
+        r"\b(?:do not|don't)\s+(?:write|add|modify)\b", text))
+    preserve = bool(re.search(r"\b(?:conserv\w*|préserv\w*|preserv\w*|garde\w*)\b.{0,100}"
+        r"(?:plan|sections?.{0,30}(?:déjà|deja|existantes?|rédigées|redigees))", text))
+    additive = bool(goal.get("deliverable") == "draft" and WRITING_ACTION.search(text)
+        and MULTI_SECTION_REQUEST.search(text) and preserve and not explicit_stop)
+    if explicit_stop:
+        goal["constraints"] = list(dict.fromkeys([*(goal.get("constraints") or []), "no_manuscript_change"]))
+    if not additive:
+        return None
+    goal["constraints"] = [c for c in goal.get("constraints") or [] if c != "no_manuscript_change"]
+    sections = state.get("outline", {}).get("sections", [])
+    return {"mode": "add_missing_sections", "preserve_plan": True,
+        "protected_section_ids": [s["id"] for s in sections if s.get("drafts")],
+        "target_section_ids": [s["id"] for s in sections if not s.get("drafts")],
+        "basis": "explicit_missing_sections_and_preservation"}
+
+
 def record_goal(state, args, message, registry):
     """Store the model's reading of this message; a scope change needs the consultant's words."""
     from .diagnostic_link import set_scope
     goal = args.model_dump()
+    permissions = manuscript_permissions(state, goal, message)
+    if permissions:
+        goal["manuscript_permissions"] = permissions
     linked = state.get("mode") == "diagnostic_linked"
     link = state.get("diagnostic_link") or {}
     selected = link.get("selected_lock_ids", [])
@@ -72,6 +115,17 @@ def record_goal(state, args, message, registry):
             "pour travailler sur d'autres verrous sélectionnés, utiliser focus_lock_ids avec les mots du consultant.")
     state["turn_goal"] = {**goal, "lock_ids": list(dict.fromkeys(goal["lock_ids"])), "focus_lock_ids": focus,
         "references": goal_references(state, goal, registry)}
+    need = state["turn_goal"].pop("research_need", None)
+    if need and goal.get("deliverable") == "literature_search":
+        # The structured need is kept apart from the turn goal: every relevance judgment
+        # depends on it (need_signature) and a continuation keeps it with the job's goal.
+        if need != state.get("research_need"):
+            if state.get("research_need"):
+                state.setdefault("research_need_history", []).append(state["research_need"])
+            state["research_need"] = need
+    if goal.get("deliverable") == "literature_search" and goal.get("search_needed") is not False:
+        from .research import begin
+        begin(state, message, state["turn_goal"]["references"].get("message_id"))
     result = {"saved": True, "goal": state["turn_goal"]}
     coverage = lock_coverage(state, registry)
     if coverage:
@@ -111,8 +165,12 @@ def goal_references(state, goal, registry):
     ambiguous = bool(goal.get("references_ambiguous")) or (bool(local.get("ambiguous")) and not ids and goal["deliverable"]
         not in {"draft", "plan", "plan_revision", "literature_search"})
     constraints = list(dict.fromkeys([*(goal.get("constraints") or []), *(local.get("constraints") or [])]))
+    permissions = goal.get("manuscript_permissions")
+    if permissions:
+        constraints = [c for c in constraints if c != "no_manuscript_change"]
     return {"article_ids": ids, "scope": scope, "source": source, "resolved_from": resolved_from,
         "message_id": local.get("message_id"), "ambiguous": ambiguous, "constraints": constraints,
+        **({"manuscript_permissions": permissions} if permissions else {}),
         **({"clarification": local.get("clarification"), "candidates": local.get("candidates", [])} if ambiguous else {})}
 
 

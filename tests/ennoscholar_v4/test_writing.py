@@ -80,7 +80,15 @@ def test_argumented_plan_edits_keep_ids_and_human_approval_is_invalidated():
         "scientific_objective":"Explain numerical results","article_roles":[{"article_id":ids[1],"role":"Evaluate reconstruction"}]}]))["outline"]
     approve_outline(t.state,42)
     assert t.state["outline"]["approval"]["origin"]=="authenticated_human"
+    approved=json.loads(json.dumps(t.state["outline"]))
+    # The model only proposes a change to an approved plan: plan, drafts and approval stay intact.
+    proposal=call(t,"manage_outline",**outline_args("dissociate",section_id="1",article_ids=[ids[0]]))
+    assert proposal["saved"] is False and proposal["approval_required"] and t.state["outline"]==approved
+    assert t.state["outline_revision_proposal"]["outline"]["sections"][0]["article_ids"]==ids[1:]
+    # The consultant's own edit (document action) applies and withdraws the approval.
+    t.consultant_edit=True
     edited=call(t,"manage_outline",**outline_args("dissociate",section_id="1",article_ids=[ids[0]]))["outline"]
+    t.consultant_edit=False
     assert edited["sections"][0]["id"]==first["sections"][0]["id"]
     assert edited["status"]=="modified" and "approval" not in edited
     with pytest.raises(Exception):

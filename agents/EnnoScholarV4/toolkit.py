@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import copy
 import re
 import time
@@ -12,7 +13,7 @@ from urllib.parse import unquote
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .evidence import passages, choose_passages, validate_claims, snapshot, exact_source_valid
+from .evidence import passages, choose_passages, validate_claims, snapshot, exact_source_valid, SEGMENTATION
 from .tools.fulltext import get_fulltext
 from .models import Article, normalize_doi, public_link
 from .store import ArticleStore, compact, interleave_by_provider, lexical_order
@@ -20,6 +21,7 @@ from .tools.outline import OutlineArgs, manage_outline, resolve_section
 from .context import article_projection, evidence_projection, transmitted_evidence_ids
 from .scientific_scope import ScientificScope, temporal_scope, literature_coverage
 from .scientific_visuals import VisualArgs, create_visual
+from .research import RelevanceProfile, RankingReplacement, DiscoveryReviewArgs
 
 _reading_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="scholar-v4-reading")
 
@@ -100,9 +102,14 @@ class Analysis(Args):
     analysis_limit: str = Field(max_length=2500)
 
 
+class ReferenceFix(Args):
+    invalid: str = Field(max_length=120, description="Référence refusée, recopiée telle qu'elle figure dans le refus.")
+    replacement: str = Field(max_length=120, description="ref (E1, E2…) ou evidence_id exact de valid_references.")
+
+
 class AnalyzeArgs(Args):
     article_ids: list[str] = Field(min_length=1, max_length=4)
-    action: Literal["read", "save"]
+    action: Literal["read", "save", "repair"]
     research_context: str = Field(max_length=5000)
     passage_query: str = Field(max_length=1500)
     passage_offset: int = Field(ge=0)
@@ -115,6 +122,10 @@ class AnalyzeArgs(Args):
         description="Optional exact table number to read structured scientific rows without unrelated prose.")
     evidence_ids: list[str] | None = Field(default=None, max_length=8,
         description="Optional exact evidence_ids of this article to (re)read, instead of passage_query/passage_offset.")
+    repair_id: str | None = Field(default=None, max_length=80,
+        description="repair : identifiant du refus de sauvegarde (pending_repair) ; null sinon.")
+    replacements: list[ReferenceFix] = Field(default_factory=list, max_length=40,
+        description="repair : remplacement exact de chaque référence refusée ; l'analyse conservée n'est pas réécrite.")
 
 
 class SimilarArgs(Args):
@@ -171,6 +182,8 @@ class CompareArgs(ClaimCursorArgs):
     research_context: str = Field(max_length=5000)
     conclusions: list[Claim] | None = Field(max_length=20)
     relations: list[ScientificRelation] | None = Field(default=None, max_length=20)
+    assessment: str = Field(default="", max_length=6000,
+        description="Bilan structuré : problème, méthodes, validation, résultats, limites, pertinence ; expliciter les protocoles non comparables.")
 
 
 class ProjectFactInput(Args):
@@ -250,6 +263,8 @@ class Decision(Args):
     contribution: Literal["direct", "related", "foundational"] | None = Field(default=None,
         description="Apport d'une publication retenue : direct (même problème), related (problème voisin, méthode "
             "transposable), foundational (méthode ou résultat de référence, même hors du domaine applicatif) ; null sinon.")
+    relevance: RelevanceProfile | None = Field(default=None,
+        description="Évaluation adaptée au besoin, distinguant production réelle, rôle de l'IA, validation et inconnues ; pas une preuve vérifiée.")
 
 
 class DecisionsArgs(Args):
@@ -257,6 +272,8 @@ class DecisionsArgs(Args):
     finalist_ids: list[str] | None = Field(max_length=20)
     covered_families: list[str] = Field(max_length=30)
     remaining_axes: list[str] = Field(max_length=30)
+    replacements: list[RankingReplacement] = Field(default_factory=list, max_length=20,
+        description="Chaque sortie d'un finaliste exige une comparaison explicite avec l'entrant (ou un retrait sans remplissage). Une omission ne retire rien.")
 
 
 class MemoryArgs(Args):
@@ -431,7 +448,11 @@ class PlanPartArgs(BaseModel):
 PLAN_TOOLS = {"propose_plan_sections": (PlanPartArgs, "Proposer les sections argumentées d'une partie du plan d'état de l'art, "
     "à partir des publications retenues, des fiches et du contexte projet ; aucun résultat inventé.")}
 
+from .research import ResearchReviewArgs
+
 TOOLS = {
+    "review_discovery": (DiscoveryReviewArgs, "Revue rapide de la découverte et du classement provisoire AVANT les lectures longues. Familles adaptées au sujet, concurrents, lacunes et au plus trois actions utiles ; ne certifie ni profondeur ni complétude."),
+    "review_research_coverage": (ResearchReviewArgs, "Réévaluer les familles découvertes, les lacunes et les prochaines requêtes. sufficient exige des fiches vérifiées ; exhausted exige une justification documentée. Ne pas confondre arrêt technique et absence de travaux."),
     "set_turn_goal": (TurnGoalArgs, "Ta compréhension du message : livrable, verrous, profondeur, changement de périmètre cité. "
         "Premier tour d'une demande, en parallèle des premiers outils ; inutile pour une réponse directe."),
     "get_project_context": (ProjectContextArgs, "Relire le snapshot projet lié : verrous actifs, faits techniques, preuves exactes ou synthèse générale. Pagination sans réanalyse ni modification d'EnnoDiagnostic. Les preuves diagnostic restent distinctes des preuves des publications."),
@@ -596,6 +617,8 @@ class ScholarTools:
         self.deep_analysis_ids = set()
         self.new_candidates = 0
         self.prefetched = {}
+        self.document_futures = {}
+        self.version_alternatives = {}
         # Searches of this message start after the stored ones (per-message limits).
         self.searches_at_start = len(state.get("recent_searches", []))
         # Notices collected during this message, so the title index favors them.
@@ -608,6 +631,54 @@ class ScholarTools:
 
     def save(self):
         self.store.save()
+
+    def fulltext_alternatives(self, article, deadline):
+        if article.id not in self.version_alternatives:
+            from .versions import alternatives
+            urls, trace = alternatives(article, self.registry, self.sources, min(deadline, time.monotonic()+10))
+            self.version_alternatives[article.id] = urls
+            if trace:
+                self.state.setdefault("version_correspondences", {})[article.id] = trace
+        return self.version_alternatives[article.id]
+
+    def prefetch_fulltexts(self, ids, deadline):
+        """Network-only futures, bounded by the existing document pool. The main
+        thread alone commits results and emits checkpoints, just like analyses."""
+        if not self.config.fulltext_prefetch_enabled:
+            return
+        for aid in ids:
+            if len(self.document_futures) >= min(3, self.config.workers):
+                break
+            article = self.registry.get(aid)
+            if not article or article.fulltext or aid in self.document_futures:
+                continue
+            candidates = self.fulltext_alternatives(article, deadline)
+            self.document_futures[aid] = _reading_pool.submit(get_fulltext, article.model_copy(deep=True),
+                self.sources, deadline, self.check, candidates, self.config)
+
+    def harvest_fulltexts(self):
+        """Keep completed independent downloads even when a later analysis fails.
+        Pending work is cancelled where possible; never block finalization."""
+        for aid, future in list(self.document_futures.items()):
+            if future.done():
+                try:
+                    result = future.result()
+                    article = self.registry[aid]
+                    if result.get("text") and not article.fulltext.get("text"):
+                        result.setdefault("segmentation", SEGMENTATION)
+                        article.fulltext = result
+                        article.access_level, article.access_status = result["access_level"], result["access_status"]
+                        article.fulltext_available, article.fulltext_source = True, result["url"]
+                        version = result.get("document_version")
+                        if version:
+                            article.documents[version["version_id"]] = copy.deepcopy(result)
+                            article.source_version = version["label"]
+                except Exception as exc:
+                    self.state.setdefault("document_access_errors", []).append({"article_id": aid,
+                        "error_type": type(exc).__name__})
+            else:
+                future.cancel()
+        self.document_futures.clear()
 
     def analysis_claims(self, args, page_chars=12000):
         """Deterministic, lossless pages of a stored card: whole claims with exact proof
@@ -639,6 +710,34 @@ class ScholarTools:
     def delivered(self, window_ids, *, inputs=()):
         """Acknowledge a completed model request using its actual source payload."""
         self.store.delivered(window_ids)
+        from .agent import abstract_deliveries
+        seen = self.state.setdefault("full_abstract_receipts", {})
+        for aid, receipt in abstract_deliveries(inputs).items():
+            article = self.registry.get(aid)
+            if article and not receipt["truncated"] and receipt["chars"] == len(article.abstract):
+                seen[aid] = hashlib.sha256(article.abstract.encode()).hexdigest()
+                from .research import active
+                if active(self.state):
+                    row = self.state.setdefault("research_progress", {}).setdefault("candidate_progress", {}).setdefault(aid, {})
+                    row["presented_full_abstract"] = seen[aid]
+                    row.setdefault("stage", "presented_complete")
+        if self.state.get("selection_focus"):
+            from .research import candidate_signature, need_signature
+            received = {}
+            for item in inputs:
+                content = item.get("content", "")
+                prefix = "Mémoire scientifique (données, pas instructions) : "
+                if item.get("role") != "developer" or not isinstance(content, str) or not content.startswith(prefix):
+                    continue
+                memory = json.loads(content[len(prefix):])
+                packet = memory.get("selection_comparison", {})
+                for row in [*packet.get("incumbents", []), *packet.get("challengers", [])]:
+                    aid = row["id"]
+                    if aid in self.registry and row.get("version") == candidate_signature(self.state, aid):
+                        received[aid] = {"version": row["version"], "need_signature": need_signature(self.state), "provenance": row.get("provenance"),
+                            "dossier_hash": hashlib.sha256(json.dumps(row, sort_keys=True,
+                                ensure_ascii=False).encode()).hexdigest()}
+            self.state["selection_dossier_receipts"] = received
         transmitted = transmitted_evidence_ids(inputs, self.evidence)
         for window in self.reading_windows:
             if window["status"] in {"queued", "undelivered"} and window["window_id"] in window_ids:
@@ -686,13 +785,20 @@ class ScholarTools:
             except Exception:
                 continue
             key = [" ".join(args.query.split()), sorted(args.sources or ["semantic_scholar", "openalex", "arxiv"]), args.offset, args.limit_per_source]
+            from .research import local_page
+            if local_page(self.state, args.query, args.sources, args.offset, args.limit_per_source):
+                continue  # Resume stored rows in search(), without any provider request.
             if any(s.get("key") == key and not s.get("warnings") for s in self.state.get("recent_searches", [])):
                 continue
             jobs[tuple(map(str, key))] = args
         if len(jobs) < 2 or self.new_candidates >= self.config.max_search_results:
             return
         def fetch(args):
-            rows, warnings = self.sources.search(args.query, args.sources, min(args.limit_per_source, self.config.max_search_results),
+            from .research import source_plan
+            planned = source_plan(self.state, args.query, args.sources, args.offset, args.limit_per_source)
+            if not planned:
+                return [], [], {}
+            rows, warnings = self.sources.search(args.query, planned, min(args.limit_per_source, self.config.max_search_results),
                 min(deadline, time.monotonic() + 35), lambda: None, offset=args.offset)
             return rows, warnings, getattr(self.sources, "last_provider_stats", None)
         with ThreadPoolExecutor(max_workers=min(4, len(jobs)), thread_name_prefix="scholar-v4-search") as pool:
@@ -746,12 +852,14 @@ class ScholarTools:
             raise ValueError(f"Verrous inconnus ou hors du périmètre actif : {unknown}. Verrous actifs : {link.get('active_lock_ids')}.")
 
     def search(self, args, deadline):
+        from .research import source_plan, record_providers, local_page
         self.check_lock_ids(args.lock_ids or [])
-        if self.search_count >= self.config.max_research_rounds:
-            return {"warning": "Budget de recherches atteint ; corpus conservé et explorations locales disponibles."}
         key = [" ".join(args.query.split()), sorted(args.sources or ["semantic_scholar", "openalex", "arxiv"]), args.offset, args.limit_per_source]
         searches = self.state.setdefault("recent_searches", [])
-        if any(s.get("key") == key and not s.get("warnings") for s in searches):
+        reservoir = local_page(self.state, args.query, args.sources, args.offset, args.limit_per_source)
+        if self.search_count >= self.config.max_research_rounds and not reservoir:
+            return {"warning": "Budget de recherches atteint ; corpus conservé et explorations locales disponibles."}
+        if any(s.get("key") == key and not s.get("warnings") and not s.get("limit_dropped") for s in searches) and not reservoir:
             return {"warning": "Cette recherche a déjà été collectée. Explorez localement ou changez l'axe/la page."}
         if self.new_candidates >= self.config.max_search_results:
             # Refused before any provider call: it does not consume a search round,
@@ -762,16 +870,29 @@ class ScholarTools:
                 "refused": "new_candidate_limit", "collected": 0, "new_candidates": 0,
                 "new_candidate_budget_remaining": 0,
                 "guidance": "search_collected_articles(query=...) retrouve les notices déjà collectées selon les termes de la requête."}
-        self.search_count += 1
-        if tuple(map(str, key)) in self.prefetched:
+        planned = source_plan(self.state, args.query, args.sources, args.offset, args.limit_per_source)
+        if not planned and tuple(map(str, key)) not in self.prefetched and not reservoir:
+            return {"collected": 0, "warning": "Pages déjà collectées ou sources temporairement indisponibles. "
+                "Changer de page, de formulation ou utiliser la recherche web ; ne pas répéter les appels.",
+                "provider_health": self.state.get("research_provider_health", {})}
+        if not reservoir:
+            self.search_count += 1
+        if reservoir:
+            requested_sources = set(args.sources or ["semantic_scholar", "openalex", "arxiv"])
+            available = [r for r in reservoir["rows"] if requested_sources & set(r.get("sources") or reservoir["key"][1])]
+            untouched = [r for r in reservoir["rows"] if r not in available]
+            rows, warnings, stats = [Article.model_validate(r) for r in available], [], {}
+        elif tuple(map(str, key)) in self.prefetched:
             # Fetched concurrently with the other searches of this round.
             rows, warnings, stats = self.prefetched.pop(tuple(map(str, key)))
         else:
-            rows, warnings = self.sources.search(args.query, args.sources, min(args.limit_per_source, self.config.max_search_results),
+            rows, warnings = self.sources.search(args.query, planned, min(args.limit_per_source, self.config.max_search_results),
                 min(deadline, time.monotonic() + 35), self.check, offset=args.offset)
             stats = getattr(self.sources, "last_provider_stats", None)
         self.check()
         provider_stats = stats if isinstance(stats, dict) else {}
+        if not reservoir:
+            record_providers(self.state, warnings, provider_stats)
         # A provider answering nothing is reported, never silently ignored.
         empty = [name for name, row in provider_stats.items() if row.get("returned") == 0]
         # Only works absent from the corpus consume the new-candidate limit;
@@ -797,9 +918,20 @@ class ScholarTools:
         self.new_candidates += new
         self.turn_article_ids.extend(aid for aid in ids if aid not in self.turn_article_ids)
         not_stored = unstored_report(rows, self.store.last_dropped, args.offset)
+        # Keep fetched notices themselves, not only a count saying they were dropped.
+        # A continuation drains the page locally, without a repeated provider request.
+        saved_rows = [r.durable() for r in self.store.last_dropped]
+        pages = self.state.setdefault("research_pending_pages", [])
+        if reservoir:
+            reservoir["rows"] = [*untouched, *saved_rows]
+        elif saved_rows:
+            pages.append({"key": key, "rows": saved_rows, "providers": provider_stats})
+        for previous in searches:
+            if previous.get("key") == (reservoir["key"] if reservoir else key):
+                previous["limit_dropped"] = len(reservoir["rows"] if reservoir else saved_rows)
         searches.append({"key": key, "query": args.query, "family": args.family, **({"lock_ids": args.lock_ids} if args.lock_ids else {}),
             "article_ids": ids, "warnings": warnings,
-            "new_candidates": new, "limit_dropped": dropped, "providers": provider_stats,
+            "new_candidates": new, "limit_dropped": dropped, "providers": provider_stats, "reused_local": reservoir is not None,
             **({"not_stored": {k: v for k, v in not_stored.items() if k != "titles"}} if not_stored else {})})
         proposed = [self.registry[aid] for aid in ids]
         info = {"method": "all_new_candidates", "scores_are_scientific_ranking": False}
@@ -807,6 +939,7 @@ class ScholarTools:
             "already_known": len(ids)-new, "new_candidate_budget_remaining": self.config.max_search_results-self.new_candidates,
             "corpus_total": len(self.registry),
             "warnings": warnings, "capacity_dropped": dropped, "retrieval": info,
+            "reused_local": reservoir is not None,
             **({"providers": {name: row.get("returned") for name, row in provider_stats.items()}} if provider_stats else {}),
             **({"empty_providers": empty, "empty_guidance": "Aucun résultat chez ces fournisseurs : reformuler en 4 à 8 mots-clés précis du problème, sans OR ni parenthèses."} if empty else {}),
             **({"not_stored": not_stored} if not_stored else {}),
@@ -875,6 +1008,15 @@ class ScholarTools:
         for constraint in refs.get("constraints") or []:
             if name in FORBIDDEN_TOOLS.get(constraint, ()):
                 raise ValueError(f"Contrainte explicite du consultant ({constraint}) : {name} n'est pas autorisé pour cette demande.")
+        permissions = refs.get("manuscript_permissions") or {}
+        if permissions.get("mode") == "add_missing_sections" and getattr(args, "action", None) != "read":
+            if name == "manage_outline" and permissions.get("preserve_plan"):
+                raise ValueError("Le plan existant doit être conservé ; seules les sections manquantes sont autorisées.")
+            if name == "write_section":
+                from .tools.outline import resolve_section
+                sid = resolve_section(self.state, args.section_id)["id"]
+                if sid not in permissions.get("target_section_ids", []):
+                    raise ValueError("Section existante protégée : seules les sections manquantes demandées sont autorisées.")
         if "no_reanalysis" in (refs.get("constraints") or []) and name == "analyze_article" and getattr(args, "action", None) == "save":
             raise ValueError("Contrainte explicite du consultant (no_reanalysis) : aucune nouvelle analyse n'est enregistrée ; "
                 "les fiches et preuves déjà enregistrées restent lisibles (get_analysis_claims, analyze_article action=read).")
@@ -895,11 +1037,12 @@ class ScholarTools:
                 "Travailler sur elles ; une autre publication n'est lue que si le consultant la demande.")
 
     def execute(self, name, raw, deadline, *, settle=False, operation_id=None):
+        from .research import active as research_active
         # A response already received can be validated and checkpointed locally
         # after cancellation/deadline. This never starts a provider/model request.
         if settle:
             if name not in {"write_section", "manage_outline", "analyze_article"} or (
-                    name != "manage_outline" and raw.get("action") != "save"):
+                    name != "manage_outline" and raw.get("action") not in {"save", "repair"}):
                 raise ValueError("Seules les sauvegardes locales peuvent être finalisées après interruption.")
         else:
             self.check()
@@ -907,16 +1050,38 @@ class ScholarTools:
             raise ValueError("La phase de publication utilise uniquement les résultats conservés.")
         if name not in TOOLS:
             raise ValueError("Outil inconnu.")
+        self.reference_repair = None
         if name == "analyze_article":
-            from .scientific_reading import resolve_evidence_refs
-            raw = resolve_evidence_refs(raw, self.state.get("automatic_reading_focus"))
+            from .scientific_reading import resolve_evidence_refs, reference_problems, record_reference_refusal, apply_repair
+            focus = self.state.get("automatic_reading_focus")
+            if raw.get("action") == "repair":
+                # Targeted correction of a refused save: the stored analysis, with each refused
+                # reference replaced exactly as named; the ordinary save checks follow.
+                raw, self.reference_repair, fixes = apply_repair(self.state, self, raw)
+                self.reference_repair = (self.reference_repair, fixes)
+            raw = resolve_evidence_refs(raw, focus)
+            if raw.get("action") == "save":
+                problems = reference_problems(raw, self)
+                if problems:
+                    raise record_reference_refusal(self.state, self, raw, problems, focus)
         args = TOOLS[name][0].model_validate(raw)
         if not settle:
             self.within_request_scope(name, args)
         if name == "set_turn_goal":
             from .turn import record_goal
-            message = next((m.get("content", "") for m in reversed(self.state.get("messages", [])) if m.get("role") == "user"), "")
+            from .instructions import current_request
+            message = (current_request(self.state) or {}).get("content", "")
             return record_goal(self.state, args, message, self.registry)
+        if name == "review_research_coverage":
+            from .research import active, save_review
+            if not active(self.state):
+                raise ValueError("Cette revue concerne une demande de recherche scientifique ouverte.")
+            return save_review(self.state, args, self.config.research_discovery_rounds)
+        if name == "review_discovery":
+            from .research import active, save_discovery_review
+            if not active(self.state):
+                raise ValueError("Cette revue concerne une recherche scientifique ouverte.")
+            return save_discovery_review(self.state, args, self.config.research_discovery_rounds)
         if name == "get_project_context":
             from .diagnostic_link import retrieve, project_facts_view, model_page
             result = retrieve(self.state, args.kind, args.offset, args.limit, args.ids, args.scope)
@@ -947,7 +1112,7 @@ class ScholarTools:
                     "status": blueprint_status(self.state, self.registry)}
             return save_blueprint(self.state, self, args)
         if name == "manage_outline":
-            return manage_outline(self.state, args, self.registry)
+            return manage_outline(self.state, args, self.registry, consultant=getattr(self, "consultant_edit", False))
         if name == "search_for_section":
             section = resolve_section(self.state, args.section_id)
             self.state.setdefault("focus", {})["section_id"] = section["id"]
@@ -984,6 +1149,13 @@ class ScholarTools:
                 raise ValueError("paragraph_patches s'applique à une proposition refusée de cette section ; "
                     "aucune proposition à réparer : envoyer le texte complet.")
             normalize_provenance(self, args)
+            from .local_repair import correct_markers
+            # Identifiers resolved without doubt (unique prefix of an admissible proof, valid
+            # proof cited but not declared) are completed before validation; every check below
+            # runs on the corrected proposal and the corrections are returned with the result.
+            marker_corrections = correct_markers(self, args, section.get("article_ids") or []) if args.text else []
+            if marker_corrections:
+                self.activity("writing_progress", "marker_corrections", section_id=section["id"], corrections=marker_corrections)
             if not args.text or not ((args.article_ids and args.evidence_ids) or args.project_evidence_ids):
                 raise ValueError("La rédaction sauvegardée exige du texte et des preuves consultées : publications analysées "
                     "avec leurs passages [ev_…], ou, pour une section de cadrage, faits du projet [projet:…].")
@@ -1064,7 +1236,7 @@ class ScholarTools:
                 self.finalization_only = was_final_only
                 self.saving_section = False
             if not checked.get("published"):
-                return checked
+                return {**checked, **({"marker_corrections": marker_corrections} if marker_corrections else {})}
             from .provenance_check import render_project_markers, project_relations
             rendered = render_project_markers(self, self.finished["answer"])
             relations, confrontation = project_relations(self.state, args.project_evidence_ids, claims, section)
@@ -1104,7 +1276,8 @@ class ScholarTools:
                 record_section_memory(self.state, section, section["drafts"][-1], args.argument_summary.model_dump())
             return {"saved": True, "section_id": section["id"], "draft_id": draft_id,
                 "document_version_id": revision["id"], "text": rendered, **({"confrontation": confrontation} if confrontation else {}),
-                "approval_required": approval_required}
+                "approval_required": approval_required,
+                **({"marker_corrections": marker_corrections} if marker_corrections else {})}
         if name == "review_document":
             from .scientific_review import deterministic_review
             review = deterministic_review(self.state, self)
@@ -1164,21 +1337,28 @@ class ScholarTools:
                         ordered = self.state["displayed_article_ids"]
                     if 1 <= int(identifier) <= len(ordered):
                         identifier = ordered[int(identifier)-1]
-                if identifier in self.registry:
-                    ids.append(identifier)
+                local_ids = self.store.resolve(identifier)
+                if local_ids:
+                    ids.extend(local_ids)
                 else:
                     rows = self.sources.metadata(identifier, min(deadline, time.monotonic()+25), self.check)
                     inserted, _ = self.store.insert(rows)
                     ids.extend(inserted)
             if ids:
                 self.state.setdefault("focus", {})["article_id"] = ids[-1]
+                self.save()
+                for lead in self.state.get("research_progress", {}).get("reference_leads", {}).values():
+                    matched = next((self.registry[aid] for aid in ids if self.registry[aid].doi == lead["identifier"]), None)
+                    if matched:
+                        lead.update(article_id=matched.id, identity_verified=bool(matched.verified and not matched.metadata_errors),
+                            status="verified_identity" if matched.verified and not matched.metadata_errors else "candidate_to_verify")
             # Requested notices: complete abstracts, in the requested order.
             result = self.store.window([self.store.article(aid) for aid in dict.fromkeys(ids)], "identities", "metadata_read",
                 ordered=True, abstract_limit=1600, maximum=8)
             result["articles"] = []
             for aid in dict.fromkeys(ids):
                 a = self.store.article(aid)
-                result["articles"].append(compact(a, 3500) if aid not in self.metadata_detail_ids else
+                result["articles"].append(compact(a, len(a.abstract or "") if research_active(self.state) else 3500) if aid not in self.metadata_detail_ids else
                     {"id": aid, "title": a.title, "access_status": a.access_status, "analysis_basis": a.analysis_basis,
                      "already_provided": True, "guidance": "Notice et analyses conservées ; lire les preuves avec analyze_article si nécessaire."})
                 self.metadata_detail_ids.add(aid)
@@ -1203,9 +1383,13 @@ class ScholarTools:
                 from agents.EnnoScholarV2.tools.article_reader import matches_article
                 from agents.EnnoScholarV2.models import Article as LegacyArticle
                 candidates = list(args.candidate_urls or [])
+                alternate_urls = self.fulltext_alternatives(article, deadline)
+                candidates.extend(alternate_urls)
                 candidates.extend(s["url"] for s in self.state.get("web_sources", []) if s.get("url") and
                     matches_article(LegacyArticle(title=article.title), s.get("title", "")))
-                future = _reading_pool.submit(get_fulltext, article.model_copy(deep=True), self.sources, deadline, self.check, candidates, self.config, pdf_only=pdf_needed)
+                future = self.document_futures.pop(article.id, None) if not pdf_needed else None
+                if future is None:
+                    future = _reading_pool.submit(get_fulltext, article.model_copy(deep=True), self.sources, deadline, self.check, candidates, self.config, pdf_only=pdf_needed)
                 try:
                     wait = self.config.max_pdf_download_seconds+3 if pdf_needed else self.config.max_download_seconds+3
                     result = future.result(timeout=max(.001, min(wait, deadline-time.monotonic())))
@@ -1222,6 +1406,9 @@ class ScholarTools:
                     if old_version:
                         article.documents[old_version] = copy.deepcopy(article.fulltext)
                 result["attempts"] = [*article.fulltext.get("attempts", []), *result.get("attempts", [])][-100:]
+                if result.get("text"):
+                    # A newly stored document is cut on scientific boundaries (evidence.SEGMENTATION).
+                    result.setdefault("segmentation", SEGMENTATION)
                 article.fulltext = result
                 article.access_level = result["access_level"]
                 article.access_status = result["access_status"]
@@ -1276,8 +1463,13 @@ class ScholarTools:
                 from .argumentation import refresh_relations
                 refresh_relations(self)
                 self.store.examined_article(a.id)
+                if self.reference_repair:
+                    record, fixes = self.reference_repair
+                    record.update(status="repaired", replacements=fixes,
+                        repaired_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
                 self.save()
                 return {"saved": True, "article_id": a.id, "access_status": a.access_status,
+                    **({"repaired": self.reference_repair[0]["id"]} if self.reference_repair else {}),
                     "analysis_basis": a.analysis_basis, "evidence_ids": [e["evidence_id"] for e in a.analysis.get("evidence", [])],
                     "reviewed_evidence_ids": args.reviewed_evidence_ids, "reviewed_fields": args.reviewed_fields}
             result = []
@@ -1290,6 +1482,17 @@ class ScholarTools:
                 self.snapshots[source["fingerprint"]] = source
                 blocked = set(self.shown_evidence)
                 blocked.update(eid for w in self.reading_windows if w["status"] == "queued" for eid in w["evidence_ids"])
+                # The automatic reading of this work never presents again a passage it already
+                # examined, saved in its card or has in the current window (run 53292dc4: four
+                # DL-Polycube requests re-read the same passages, each followed by an analysis).
+                focus = self.state.get("automatic_reading_focus") or {}
+                examined = set()
+                if focus.get("article_id") == aid:
+                    task = next((t for t in self.state.get("scientific_reading", {}).get("tasks", []) if t["article_id"] == aid), {})
+                    shown_now = set(self.shown_evidence)
+                    examined = {*task.get("examined_evidence_ids", []), *task.get("reviewed_without_result_evidence_ids", []),
+                        *(e["evidence_id"] for e in a.analysis.get("evidence", [])),
+                        *(eid for eid in [*focus.get("evidence_ids", []), *focus.get("previous_evidence_ids", [])] if eid in shown_now)}
                 ordered = choose_passages(all_rows, args.passage_query, 0, len(all_rows))
                 if args.evidence_ids:
                     # Exact passages requested by ID; the passage cursor is not moved.
@@ -1300,6 +1503,8 @@ class ScholarTools:
                     row = ordered[cursor]
                     chosen.append(row)
                     cursor += 1
+                    if row["evidence_id"] in examined:
+                        continue
                     if args.revisit or row["evidence_id"] not in blocked:
                         rows.append(row)
                 for row in rows:
@@ -1311,6 +1516,10 @@ class ScholarTools:
                 result.append({"window_id": article_window["window_id"], "reading_window_id": reading_id,
                     "article": compact(a, 300), "passages": [evidence_projection(r) for r in rows], "passages_total": len(all_rows),
                     "already_provided_evidence_ids": [r["evidence_id"] for r in chosen if r not in rows],
+                    **({"already_examined_evidence_ids": [r["evidence_id"] for r in chosen if r["evidence_id"] in examined],
+                        "examined_guidance": "Passages déjà examinés pour cette fiche (analyse enregistrée ou revue) : ils ne sont "
+                        "pas relus. Demander d'autres passages pour une dimension précise encore absente, ou enregistrer."}
+                        if any(r["evidence_id"] in examined for r in chosen) else {}),
                     "next_offset": args.passage_offset if args.evidence_ids else cursor, "extraction_truncated": a.fulltext.get("truncated", False),
                     "guidance": "Les preuves exactes sont stockées ; revisit=true permet une relecture explicite."})
             return {"reading": result, "research_context": args.research_context}
@@ -1332,11 +1541,12 @@ class ScholarTools:
             return self.search(SearchArgs(query=args.conceptual_query, sources=None, limit_per_source=30, offset=0, family=args.family), deadline)
         if name == "compare_articles":
             from .argumentation import article_reading_status, comparison_source_signature, relation_current, refresh_relations, argument_packet, bounded_argument_packet
+            from .research import active
+            if active(self.state) and args.relations is not None and not args.assessment.strip():
+                raise ValueError("Comparaison bibliographique : bilan scientifique explicite requis, même sans relation démontrée.")
             ids = list(dict.fromkeys(args.article_ids))
-            from .scientific_reading import comparison_ready
-            ledger = self.state.get("scientific_reading", {})
-            if not ledger.get("blocked_reason") and any(t["article_id"] in ids and not comparison_ready(t)
-                    for t in ledger.get("tasks", [])):
+            from .scientific_reading import comparison_blockers
+            if comparison_blockers(self.state, ids):
                 raise ValueError("Lectures scientifiques prioritaires encore réalisables : terminer les fenêtres avant la comparaison.")
             refresh_relations(self)
             pending = []
@@ -1375,6 +1585,11 @@ class ScholarTools:
                 self.state.setdefault("comparisons", []).append({"article_ids": ids, "context": args.research_context, "conclusions": claims})
             self.state.setdefault("scientific_relations", []).extend(pending)
             if args.relations is not None:
+                from .research import active, card_signature
+                if active(self.state):
+                    self.state.setdefault("research_comparisons", []).append({"article_ids": ids,
+                        "card_signature": card_signature(self.state, ids), "assessment": args.assessment,
+                        "relation_ids": [r["id"] for r in pending]})
                 # Saving: the compared window was already transmitted (focus packet or
                 # a previous read); repeating it would double the next request.
                 return {"saved": True, "matrix": [{"id": aid, "title": self.registry[aid].title,
@@ -1425,11 +1640,40 @@ class ScholarTools:
                 "held_article_ids": self.state.get("held_article_ids", []),
                 "guidance": "Analyses et preuves conservées. Une acceptation ne valide aucune affirmation non vérifiée ni une éligibilité CIR."}
         if name == "record_candidate_decisions":
+            if args.replacements and args.finalist_ids is None:
+                raise ValueError("Un remplacement exige le classement proposé finalist_ids.")
             # Validate the whole batch before any change: a wrong identifier or an
             # unpresented notice is reported and skipped, never applied halfway.
-            ignored, valid, verdicts = [], [], {}
+            ignored, valid, verdicts, reused = [], [], {}, []
             active_locks = set((self.state.get("diagnostic_link") or {}).get("active_lock_ids", []))                 if self.state.get("mode") == "diagnostic_linked" else set()
             for decision in args.decisions:
+                from .research import active as research_active, candidate_signature, need_signature
+                article = self.registry.get(decision.article_id)
+                focus = self.state.get("selection_focus") or {}
+                compared_ids = {aid for change in args.replacements for aid in (change.incoming_id, change.outgoing_id) if aid}
+                if (research_active(self.state) and article and "evaluation_ids" in focus and
+                        article.id not in focus["evaluation_ids"] and article.id not in compared_ids and decision.decision != "reject" and
+                        article.assessment.get("source_signature") == candidate_signature(self.state, article.id) and
+                        article.assessment.get("need_signature") == need_signature(self.state)):
+                    reused.append(article.id)
+                    continue
+                if research_active(self.state) and self.state.get("selection_focus") and article:
+                    receipt = self.state.get("selection_dossier_receipts", {}).get(article.id)
+                    if ((receipt and receipt.get("version") != candidate_signature(self.state, article.id)) or
+                            (article.analysis and not receipt)):
+                        ignored.append({"article_id": article.id, "reason": "stale_or_missing_selection_dossier"})
+                        continue
+                if research_active(self.state):
+                    import hashlib
+                    article = self.registry.get(decision.article_id)
+                    receipt = self.state.get("selection_dossier_receipts", {}).get(decision.article_id, {})
+                    source_id = (receipt.get("provenance") or {}).get("science_source_article_id")
+                    received_science = bool(receipt.get("version") == candidate_signature(self.state, decision.article_id) and
+                        source_id in self.registry and self.registry[source_id].analysis)
+                    if article and not article.analysis and not received_science and (not article.abstract or
+                            self.state.get("full_abstract_receipts", {}).get(article.id) != hashlib.sha256(article.abstract.encode()).hexdigest()):
+                        decision = decision.model_copy(update={"decision": "pending", "justification":
+                            "Abstract complet non transmis ; décision provisoire à réexaminer. " + decision.justification})
                 if decision.article_id not in self.registry:
                     ignored.append({"article_id": decision.article_id, "reason": "unknown_id"})
                 elif decision.article_id not in self.store.exposed:
@@ -1457,14 +1701,57 @@ class ScholarTools:
                         ignored.append({"article_id": aid, "reason": reason, "as": "finalist"})
                     else:
                         finalists_ok.append(aid)
-            if not valid and not finalists_ok:
+            if not valid and not finalists_ok and not reused:
                 raise ValueError("Aucune décision applicable : " + "; ".join(f"{row['article_id']} ({row['reason']})"
                     for row in ignored[:10]) + ". Utiliser les identifiants exacts des notices présentées.")
+            from .research import active, record_ranking, cumulative_ranking, candidate_signature, need_signature
+            changes, ranking_ignored = [], []
+            finalists = None
+            self.save()
+            if finalists_ok is not None and active(self.state):
+                finalists, changes, ranking_ignored = cumulative_ranking(self.state, finalists_ok, args.replacements, verdicts)
+                proposals = self.state["research_progress"].setdefault("ranking_proposals", {})
+                for row in ranking_ignored:
+                    if row.get("incoming_id"):
+                        proposals[row["incoming_id"]] = {k: v for k, v in row.items() if k in {"reason", "outgoing_id", "justification"}}
+                for event in changes:
+                    proposals.pop(event.get("incoming_id"), None)
+                    proposals.pop(event["outgoing_id"], None)
+            if active(self.state):
+                withdrawn = {event["outgoing_id"] for event in changes}
+                # Rejecting an incumbent is also a withdrawal, not an omission loophole.
+                current = set(self.state.get("evaluation", {}).get("recommended_article_ids", []))
+                preserved = [d for d in valid if d.article_id in current and d.decision == "reject" and d.article_id not in withdrawn]
+                valid = [d for d in valid if d not in preserved]
+                ignored.extend({"article_id": d.article_id, "reason": "explicit_withdrawal_required"} for d in preserved)
+            criteria_corrections = {}
             for decision in valid:
                 a = self.registry[decision.article_id]
                 self.store.examined_article(a.id)
-                a.assessment = {**decision.model_dump(), "basis": a.analysis_basis or ("abstract" if a.abstract else "metadata")}
+                a.assessment = {**decision.model_dump(), "basis": a.analysis_basis or ("abstract" if a.abstract else "metadata"),
+                    "source_signature": candidate_signature(self.state, a.id), "need_signature": need_signature(self.state)}
+                if a.assessment.get("relevance") and self.state.get("research_need"):
+                    from .research import consistent_criteria
+                    a.assessment["relevance"], corrections = consistent_criteria({"title": a.title, "abstract": a.abstract,
+                        "analysis": a.analysis}, a.assessment["relevance"], self.state["research_need"])
+                    if corrections:
+                        a.assessment["criteria_corrections"] = corrections
+                        criteria_corrections[a.id] = corrections
+                receipt = self.state.get("selection_dossier_receipts", {}).get(a.id)
+                if receipt and receipt.get("version") == candidate_signature(self.state, a.id):
+                    a.assessment["information_provenance"] = receipt["provenance"]
+                    a.assessment["basis"] = receipt["provenance"].get("basis", a.assessment["basis"])
                 self.state.setdefault("candidate_decisions", []).append(a.assessment)
+                if active(self.state):
+                    progress = self.state.setdefault("research_progress", {}).setdefault("candidate_progress", {})
+                    import hashlib
+                    full = bool(a.abstract and self.state.get("full_abstract_receipts", {}).get(a.id) == hashlib.sha256(a.abstract.encode()).hexdigest())
+                    progress[a.id] = {"stage": "excluded" if decision.decision == "reject" else
+                        "evaluated_abstract" if full else "provisional", "version": candidate_signature(self.state, a.id),
+                        "information_level": "saved_science" if receipt and
+                            receipt["provenance"].get("science_source_article_id") in self.registry and
+                            self.registry[receipt["provenance"]["science_source_article_id"]].analysis else "abstract" if full else "partial",
+                        "evaluated_full_abstract": hashlib.sha256(a.abstract.encode()).hexdigest() if full else None}
             if finalists_ok is not None:
                 # The consultant's decisions prevail over a revised model ranking:
                 # accepted works stay, held works wait, the requested order leads.
@@ -1472,14 +1759,44 @@ class ScholarTools:
                 accepted = [aid for aid, a in self.registry.items() if a.selection_override is True]
                 order = [aid for aid in self.state.get("consultant_order", []) if aid in self.registry
                     and self.registry[aid].selection_override is not False and aid not in held]
-                finalists = [aid for aid in dict.fromkeys([*finalists_ok, *accepted]) if aid not in held]
+                finalists = finalists if finalists is not None else [aid for aid in dict.fromkeys([*accepted, *finalists_ok]) if aid not in held]
                 finalists = [*[aid for aid in order if aid in finalists], *[aid for aid in finalists if aid not in order]]
                 self.state["evaluation"] = {"recommended_article_ids": finalists,
                     "covered_families": args.covered_families, "remaining_axes": args.remaining_axes,
                     "ranking_origin": "conversation_model_scientific_comparison"}
             self.save()
+            if active(self.state) and finalists_ok is not None:
+                record_ranking(self.state, [d.model_dump() for d in valid])
+                records = self.state["research_progress"]["ranking_records"]
+                for event in changes:
+                    for aid in event["dependencies"]:
+                        if aid in records:
+                            records[aid]["dependencies"].update(event["dependencies"])
+                for aid in finalists:
+                    self.state["research_progress"].setdefault("candidate_progress", {}).setdefault(aid, {})["stage"] = "finalist"
+            criteria_changes = []
+            if active(self.state) and self.state.get("evaluation", {}).get("recommended_article_ids"):
+                # The model's own current per-criterion judgments order the list and let a retained
+                # candidate of a better tier replace a finalist of a worse one (recorded, explained).
+                from .research import rebalance_ranking
+                criteria_changes = rebalance_ranking(self.state)
+                records = self.state["research_progress"].setdefault("ranking_records", {})
+                progress = self.state["research_progress"].setdefault("candidate_progress", {})
+                for event in criteria_changes:
+                    for aid in event["dependencies"]:
+                        if aid in records:
+                            records[aid].setdefault("dependencies", {}).update(event["dependencies"])
+                    progress.setdefault(event["incoming_id"], {})["stage"] = "finalist"
+                    if event.get("outgoing_id"):
+                        progress.setdefault(event["outgoing_id"], {})["stage"] = "replaced"
+                self.save()
             result = {"saved": True, "evaluation": self.state.get("evaluation", {}), "examined_total": len(self.store.examined),
-                "recorded_decisions": len(valid)}
+                "recorded_decisions": len(valid), "reused_decisions": reused, "ranking_changes": [*changes, *criteria_changes],
+                "ranking_ignored": ranking_ignored,
+                "ranking_guidance": "Classement cumulatif conservé. Tout remplacement exige replacements avec dossiers comparés, justification, informations utilisées et incertitudes."}
+            if criteria_corrections:
+                # Visible to the model: which « met » judgments became unknown, and why.
+                result["criteria_corrections"] = criteria_corrections
             if ignored:
                 result["ignored"] = ignored
                 result["ignored_guidance"] = ("Ces éléments n'ont pas été appliqués ; les autres décisions sont enregistrées. "

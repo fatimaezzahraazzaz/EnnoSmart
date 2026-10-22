@@ -23,6 +23,7 @@ from .task_results import TaskResults, fingerprint, source_signature, collect_fi
 from .finance import MeteredClient
 from .pricing import resolve as resolve_price, reserve_bound
 from .routing import model_for
+from .stops import ProviderProtocolError, require_tools, technical_diagnostic
 
 # Comparison and blueprint windows per article batch (claims prioritized: methods,
 # mechanisms, results, limits). Not a budget: rounds, tools and costs are unchanged.
@@ -41,6 +42,12 @@ BYTES_PER_TOKEN = 3.0
 # Independent analyses of selected works run concurrently (writes stay sequential).
 # A scheduling limit, not a budget: rounds, tools, tokens, cost and time are unchanged.
 PARALLEL_ANALYSES = 3
+# Part of the request limit kept, in a selection round, for the compacted previous exchange
+# and the round's instruction; the selection memory takes the rest.
+SELECTION_EXCHANGE_RESERVE = 9000
+# Announced in a research segment's answer while its job waits; withdrawn if the job stops.
+CONTINUATION_NOTE = (" La recherche se poursuit automatiquement avec les candidats, décisions et fiches déjà "
+    "enregistrés, dans le même budget global.")
 # Process-wide limit on concurrent background model calls (several runs share the
 # account's rate limits).
 LLM_SLOTS = threading.BoundedSemaphore(6)
@@ -174,14 +181,14 @@ class ScholarChatAgent:
         return model_context(state, toolkit, budget)
 
     def run(self, state, *, emit=lambda event: None, cancelled=lambda: False):
-        from .context import model_context, compact_exchange, ActiveReadingContextError, transmitted_evidence_ids, SECTION_CONTEXT_CHARS, PLAN_PART_CONTEXT_CHARS
+        from .context import model_context, compact_exchange, ActiveReadingContextError, SelectionContextError, transmitted_evidence_ids, SECTION_CONTEXT_CHARS, PLAN_PART_CONTEXT_CHARS
         from .publication import fallback, url_key
         from .scientific_reading import (reading_tasks, next_task, prepare_reading,
             completed as reading_completed, update_coverage, reading_allowance, recovery_context,
             extend_reading_focus, fit_reading_focus, focused_reading_exchange)
         from .argumentation import active_articles, comparison_batches, blueprint_status, project_observation_source, comparison_source_signature
         from .writing_progress import (begin_writing, refresh_writing, next_section, confirmed_save, writing_answer,
-            open_writing, PLAN_BEFORE_WRITING)
+            open_writing, resume_writing, PLAN_BEFORE_WRITING)
         from .turn import call_estimate, plan_answer, provisional_plan, validated, strip_numbering
         from .writing_context import section_article_ids
         from .tools.outline import resolve_section
@@ -201,6 +208,7 @@ class ScholarChatAgent:
         counts, facts, exchange = {}, [], []
         rounds = exploration_rounds = finalization_rounds = attempts = total_tools = native_calls = 0
         phase, stop_reason, answer = "exploration", None, ""
+        failure_diagnostic = None
         budget_refusal = None
         partial, direct_citations, final_result = False, [], None
         turn_existing_attempts = tuple(state.get("finalization_attempts", []))
@@ -217,13 +225,20 @@ class ScholarChatAgent:
             emit(event)
 
         toolkit = ScholarTools(state, self.sources or ScientificSources(config=config), config, check, activity)
-        request_text = state.get("messages", [{}])[-1].get("content", "")
+        # A segment of an automatic drafting job answers the consultant's request that opened
+        # the job (no message is added in the consultant's name), with its goal and progress.
+        from .instructions import capture_instructions, current_request
+        segment = state.get("writing_segment") or None
+        request_message = (current_request(state) if segment else (state.get("messages") or [{}])[-1]) or {}
+        request_text = request_message.get("content", "")
         from .diagnostic_link import scope_from_message, LINKED_GUIDANCE
         scope_from_message(state, request_text)
         linked = state.get("mode") == "diagnostic_linked"
-        available_definitions = lambda document=True: definitions(document, linked=linked)
-        from .instructions import capture_instructions
-        capture_instructions(state, (state.get("messages") or [{}])[-1], toolkit.registry)
+        def available_definitions(document=True):
+            from .research import active
+            return [tool for tool in definitions(document, linked=linked)
+                if tool["name"] != "review_discovery" or active(state)]
+        capture_instructions(state, request_message, toolkit.registry)
         # Task foci are recomputed from durable receipts (comparison offsets,
         # saved drafts, writing progress); a focus left by an interrupted run must
         # not be resent with the next request's context.
@@ -232,7 +247,10 @@ class ScholarChatAgent:
         # A draft detected from the wording is only a proposal until the model has
         # read the message; its previous progress is restored if it is not wanted.
         prior_progress = copy.deepcopy(state.get("document", {}).get("writing_progress"))
-        writing = begin_writing(state, request_text)
+        # A segment resumes the job's pinned progress; an initialisation that was interrupted
+        # (no progress pinned yet) opens it again from the original request.
+        writing = (resume_writing(state, segment) if segment and segment.get("kind") != "research" and segment.get("progress_id")
+            else begin_writing(state, request_text))
         named_articles = [aid for aid, article in toolkit.registry.items()
             if len(article.title.split(":", 1)[0].strip()) >= 5 and
             article.title.split(":", 1)[0].strip().casefold() in request_text.casefold()]
@@ -354,7 +372,10 @@ class ScholarChatAgent:
         # Selection checkpoint: candidates presented in this message must be
         # judged before the exploration rounds run out.
         exposed_before = set(state.get("exposed_article_ids", []))
-        turn_decided = False
+        # A continuation of a research job resumes the decisions its earlier segments made for
+        # the same request: the retained works are read without a new selection round.
+        turn_decided = bool(segment and segment.get("kind") == "research"
+            and state.get("evaluation", {}).get("recommended_article_ids"))
         selection_checkpoints = 0
         state.pop("selection_focus", None)
         if automatic_reading:
@@ -419,6 +440,12 @@ class ScholarChatAgent:
                 found = toolkit.enrich_abstracts(missing, min(deadline, time.monotonic()+12))
                 if found:
                     activity("abstract_lookup", "completed", found=len(found), requested=min(8, len(missing)))
+            from .research import active, triage_pool
+            if active(state):
+                toolkit.save()
+                batch = triage_pool(state)
+                from .research import selection_ids
+                return selection_ids(state, batch), len(toolkit.registry), []
             candidates = selection_candidates()
             earlier = [aid for aid in earlier_candidates() if aid not in candidates]
             pool = [*balanced(candidates)[:24], *earlier][:24]
@@ -473,16 +500,33 @@ class ScholarChatAgent:
             if window["status"] == "queued":
                 window["status"] = "undelivered"
 
+        def analysis_estimate():
+            from .research import active, reading_seconds
+            return reading_seconds(durations) if active(state) else call_estimate(durations, config.timeout_seconds*.2)
+
+        def publication_reserve():
+            from .research import active
+            reserve = config.research_finalization_seconds if active(state) else config.finalization_reserved_seconds
+            return min(reserve, config.timeout_seconds*.4)
+
         def time_left_for(seconds):
             """Whether a call of this expected duration still ends before the time the
             final answer needs: the unchanged publication reserve, or the longest
             generation measured in this run when it is longer (critical path)."""
-            final = max(min(config.finalization_reserved_seconds, config.timeout_seconds*.4),
-                call_estimate(durations, config.timeout_seconds*.2) if durations else 0)
+            from .research import active
+            final = publication_reserve()
+            if not active(state):
+                final = max(final, call_estimate(durations, config.timeout_seconds*.2) if durations else 0)
             return deadline-time.monotonic()-seconds > final
 
         def finalize(reason):
             nonlocal phase, stop_reason, planning_forced, plan_checkpoint, provisional_reason
+            from .research import active, status as research_status
+            if active(state) and phase == "exploration" and reason in {
+                    "synthesis_requested", "publication_refused", "research_objective_reached"}:
+                if not research_status(state)["complete"] and not research_status(state)["partial_stop"]:
+                    state["research_progress"]["review_requested"] = True
+                    return  # Scientific review precedes a voluntary synthesis, never a hard budget stop.
             if (plan_goal and not plan_done and not planning_forced and not plan_checkpoint and phase == "exploration"
                     and not turn_decided and toolkit.search_count and total_tools+2 <= tool_limit() and time_left_for(30)):
                 # New references were searched but none judged yet: the plan is built
@@ -539,7 +583,8 @@ class ScholarChatAgent:
                 "using only the exact passages in automatic_scientific_reading, cited by their ref (E1, E2…). Fill method, mechanisms, equations, parameters, "
                 "experiments, numeric results, tables, figures and limitations only where supported; leave unknown fields empty. "
                 "The new analysis enriches the existing card. Do not claim exhaustive reading."
-                " If a window yields no supported finding, provide reviewed_evidence_ids, reviewed_fields and analysis_limit with empty claims; never invent a fact to advance.")
+                " If a window yields no supported finding, provide reviewed_evidence_ids, reviewed_fields and analysis_limit with empty claims; never invent a fact to advance."
+                " If automatic_scientific_reading.pending_repair exists, only replace its refused references with action=repair (repair_id, replacements); do not re-analyse.")
 
         def reading_kwargs(inputs, focus):
             """The request of one focused analysis, identical in the background and main thread."""
@@ -570,11 +615,11 @@ class ScholarChatAgent:
                         elif stop_calls.is_set():
                             raise StopResearch("cancelled")
                         elif event.type == "error":
-                            raise RuntimeError("ResponsesStreamError")
+                            raise ProviderProtocolError("ResponsesStreamError")
                 finally:
                     stream.close()
                 if response is None:
-                    raise RuntimeError("ResponsesMissingCompletion")
+                    raise ProviderProtocolError("ResponsesMissingCompletion")
                 return response, time.monotonic()-begun
 
         def launch(focus, inputs):
@@ -614,12 +659,19 @@ class ScholarChatAgent:
                 except StopResearch:
                     raise
                 except Exception as exc:
-                    # Rate limit or transport error: this analysis is retried once in the main thread.
-                    activity("responses", "parallel_failed", article_id=entry["focus"]["article_id"], error_type=type(exc).__name__)
+                    # A technical failure is not a scientific refusal. Recovery belongs
+                    # to the job policy, with the same durable spending and goal.
+                    activity("responses", "parallel_failed", article_id=entry["focus"]["article_id"],
+                        diagnostic=technical_diagnostic(exc))
                     tasks.receive(entry["task"], entry["attempt"], error=exc,
                         seconds=time.monotonic()-entry["begun"], reserve=entry["reserve"])
                     task_checkpoint(entry["task"])
-                    return None, None
+                    diagnostic = technical_diagnostic(exc)
+                    if diagnostic["category"] == "provider" and diagnostic["retryable"]:
+                        # Existing one-shot main-thread retry, admitted and charged
+                        # separately. Internal bugs never take this recovery path.
+                        return None, None
+                    raise
 
         def launch_more():
             """Prepare the next independent readings and start their analyses while the
@@ -634,7 +686,7 @@ class ScholarChatAgent:
             slots = READING_SLOTS_WHILE_WRITING if writing and writing_continuation else PARALLEL_ANALYSES
             while (len(speculative) < slots and automatic_reading and selection_ready and not reading_stopped
                     and not goal_pending and exploration_rounds+len(speculative) <= allowance
-                    and time_left_for(call_estimate(durations, config.timeout_seconds*.2))):
+                    and time_left_for(analysis_estimate())):
                 # Do not delay a ready result behind more synchronous downloads.
                 if any(entry["future"].done() for entry in speculative.values()):
                     break
@@ -697,6 +749,7 @@ class ScholarChatAgent:
                 return None, time.monotonic()-begun, exc
 
         def collect_job(future):
+            nonlocal failure_diagnostic
             job = plan_inflight.pop(future)
             task, attempt = job["task"], job["attempt"]
             if future.cancelled():
@@ -714,6 +767,12 @@ class ScholarChatAgent:
             if attempt["status"] == "generated":
                 toolkit.delivered(window_ids(job["inputs"]), inputs=job["inputs"])
             task_checkpoint(task)  # Proposal survives a crash before validation/save.
+            if error is not None:
+                diagnostic = technical_diagnostic(error)
+                if failure_diagnostic is None or diagnostic["category"] == "internal":
+                    failure_diagnostic = diagnostic
+                activity("research", "parallel_failed", diagnostic=diagnostic)
+                return  # Drain every sibling before stopping the segment.
             raw = attempt["usage"] or {}
             activity("responses", "completed" if attempt["status"] == "generated" else "parallel_failed",
                 task=task["kind"], task_id=task["id"], target=task["target"],
@@ -744,6 +803,8 @@ class ScholarChatAgent:
                     plan_inflight[future] = job
                     futures.append(future)
                 collect_finished(futures, collect_job, check)
+                if failure_diagnostic:
+                    raise StopResearch(failure_diagnostic["reason"], failure_diagnostic)
             finally:
                 executor.shutdown(wait=False, cancel_futures=True)
 
@@ -751,6 +812,18 @@ class ScholarChatAgent:
             """Background analyses never processed: real usage when they finished,
             their reservation otherwise. Their reading stays resumable (task pending)."""
             nonlocal total_tools
+            def failed(exc):
+                nonlocal stop_reason, partial, failure_diagnostic
+                if isinstance(exc, StopResearch):
+                    if exc.reason == "budget_refused" and stop_reason != "cancelled":
+                        stop_reason, partial = exc.reason, True
+                    return
+                diagnostic = technical_diagnostic(exc)
+                activity("research", "parallel_failed", diagnostic=diagnostic)
+                if stop_reason not in {"cancelled", "budget_refused"} and (
+                        failure_diagnostic is None or diagnostic["category"] == "internal"):
+                    failure_diagnostic = diagnostic
+                    stop_reason, partial = diagnostic["reason"], True
             stop_calls.set()
             for entry in list(speculative.values()):
                 future = entry["future"]
@@ -780,6 +853,8 @@ class ScholarChatAgent:
                                 tasks.reject(entry["task"], attempt, result)
                         except ValueError as exc:
                             tasks.reject(entry["task"], attempt, {"error": str(exc), "error_type": type(exc).__name__})
+                        except Exception as exc:
+                            failed(exc)
                         finally:
                             if prior_focus and prior_focus["article_id"] != entry["focus"]["article_id"]:
                                 state["automatic_reading_focus"] = prior_focus
@@ -789,6 +864,7 @@ class ScholarChatAgent:
                     tasks.receive(entry["task"], entry["attempt"], error=future.exception(),
                         seconds=time.monotonic()-entry["begun"], reserve=entry["reserve"])
                     task_checkpoint(entry["task"])
+                    failed(future.exception())
                 elif future.cancel():
                     tasks.interrupted(entry["task"], entry["attempt"], 0, 0)
                 else:
@@ -796,7 +872,10 @@ class ScholarChatAgent:
             speculative.clear()
             for future, job in list(plan_inflight.items()):
                 if future.done():
-                    collect_job(future)
+                    try:
+                        collect_job(future)
+                    except Exception as exc:
+                        failed(exc)
                 else:
                     cancelled_before_start = future.cancel()
                     tasks.interrupted(job["task"], job["attempt"],
@@ -830,14 +909,14 @@ class ScholarChatAgent:
             goal = goal if goal is not None else state.get("turn_goal")
             if not goal:
                 return True
-            if goal["deliverable"] == "comparison":
+            if goal["deliverable"] in {"comparison", "literature_search"}:
                 pass
             elif goal["deliverable"] == "draft":
                 # Drafting compares per section (draft_comparison_batch), never through the
                 # corpus-wide comparison and blueprint stages.
                 return False
             elif goal["deliverable"] in {"plan", "plan_revision"} and goal["reading_depth"] == "deep":
-                if not time_left_for(plan_need()+call_estimate(durations, config.timeout_seconds*.2)):
+                if not time_left_for(plan_need()+analysis_estimate()):
                     return False
             else:
                 return False
@@ -897,7 +976,7 @@ class ScholarChatAgent:
                     continue
                 rows = source_readiness(state, toolkit, section_article_ids(state, toolkit.registry, section))
                 ids = [aid for aid, row in rows.items() if row["status"] == "analysed"][:4]
-                if len(ids) < 2 or tuple(ids) in compared_batches:
+                if len(ids) < 2 or tuple(ids) in compared_batches or not comparison_admitted(ids):
                     continue
                 # Comparability known locally: two works must document the same dimension
                 # (methods, protocol, results, limits) with exact proofs. Otherwise no relation
@@ -944,6 +1023,24 @@ class ScholarChatAgent:
             from .references import FORBIDDEN_TOOLS
             refs = (state.get("turn_goal") or {}).get("references") or state.get("conversation_references") or {}
             return {tool for constraint in refs.get("constraints") or [] for tool in FORBIDDEN_TOOLS.get(constraint, ())}
+
+        def comparison_admitted(ids):
+            from .scientific_reading import comparison_blockers
+            blocked = comparison_blockers(state, ids)
+            if not blocked:
+                return True
+            # Persist the known refusal, including its changing documentary state.
+            # This gate is re-evaluated locally on every continuation, without a model.
+            key = "|".join(ids)
+            signature = fingerprint([comparison_source_signature(toolkit.registry, ids),
+                [t for t in state.get("scientific_reading", {}).get("tasks", []) if t["article_id"] in ids]])
+            previous = state.setdefault("comparison_outcomes", {}).get(key, {})
+            if previous.get("prerequisite_signature") != signature:
+                state["comparison_outcomes"][key] = {"article_ids": list(ids), "status": "prerequisites_missing",
+                    "blocked_article_ids": blocked, "prerequisite_signature": signature,
+                    "reason": "Lectures scientifiques prioritaires encore réalisables : comparaison différée avant appel LLM."}
+                activity("argumentation", "deferred", article_ids=ids, blocked_article_ids=blocked)
+            return False
 
         def phase_tools(name):
             """The tool of an argumentation phase, restricted to that phase's action: a
@@ -1073,19 +1170,27 @@ class ScholarChatAgent:
             """paragraph_patches: the refused proposal of this task with only the named
             paragraphs replaced (local_repair.merge); everything else is kept exactly and
             the whole section is validated again by write_section."""
-            if not arguments.get("paragraph_patches"):
+            from .local_repair import merge, correct_marker_arguments
+            if arguments.get("paragraph_patches"):
+                refused = tasks.last_refusal(task)
+                base = (refused or {}).get("arguments") or {}
+                if not base.get("text"):
+                    raise ValueError("Aucune proposition refusée à réparer pour cette section : envoyer le texte complet.")
+                merged, receipt = merge(base, arguments)
+                merged["section_id"], merged["action"] = arguments.get("section_id") or base.get("section_id"), "save"
+                if arguments.get("argument_summary"):
+                    merged["argument_summary"] = arguments["argument_summary"]
+                activity("writing_progress", "local_repair", section_id=merged["section_id"], **receipt)
+                arguments = merged
+            if not arguments.get("text"):
                 return arguments
-            from .local_repair import merge
-            refused = tasks.last_refusal(task)
-            base = (refused or {}).get("arguments") or {}
-            if not base.get("text"):
-                raise ValueError("Aucune proposition refusée à réparer pour cette section : envoyer le texte complet.")
-            merged, receipt = merge(base, arguments)
-            merged["section_id"], merged["action"] = arguments.get("section_id") or base.get("section_id"), "save"
-            if arguments.get("argument_summary"):
-                merged["argument_summary"] = arguments["argument_summary"]
-            activity("writing_progress", "local_repair", section_id=merged["section_id"], **receipt)
-            return merged
+            # Identifiers resolved without doubt are completed here, so the proposal kept in
+            # the attempt (base of a later repair) is the one actually validated.
+            section = resolve_section(state, task["target"])
+            arguments, corrections = correct_marker_arguments(toolkit, arguments, section.get("article_ids") or [])
+            if corrections:
+                activity("writing_progress", "marker_corrections", section_id=section["id"], corrections=corrections)
+            return arguments
 
         def section_refusal(arguments, result):
             """The exact refusal plus the paragraphs responsible for it (local diagnosis)."""
@@ -1218,6 +1323,10 @@ class ScholarChatAgent:
             # (run ce08ad31: the right pair was understood, then fifteen readings of four
             # other works were scheduled from the general recommendations).
             refs = goal.get("references") or {}
+            if deliverable == "draft" and "no_manuscript_change" in (refs.get("constraints") or []):
+                raise StopResearch("permission_conflict", {"category": "permissions", "retryable": False,
+                    "required_tool": "write_section", "forbidden_tools": sorted(forbidden_tools()),
+                    "reason": "L'objectif de rédaction contredit une interdiction explicite de modifier le manuscrit."})
             targets = [aid for aid in refs.get("article_ids") or [] if aid in toolkit.registry]
             # A draft works from its plan sections' own sources (run dcf5d05b: the ten works of the
             # turn replaced the five sources of the requested introduction).
@@ -1308,7 +1417,7 @@ class ScholarChatAgent:
                 if depth == "none":
                     # Memory only (« uniquement les analyses déjà enregistrées »): no new reading.
                     reading = False
-                argumentation_requested = deliverable == "comparison" or (plan_goal and depth == "deep")
+                argumentation_requested = deliverable in {"comparison", "literature_search"} or (plan_goal and depth == "deep")
             if reading and not automatic_reading:
                 reading_tasks(state, toolkit.registry, requested_fields, priority_ids, scope_ids=reading_scope[0])
                 analysis_round_allowance = max(analysis_round_allowance, reading_allowance(state, config.max_deep_analysis))
@@ -1531,7 +1640,11 @@ class ScholarChatAgent:
             kwargs = dict(model=config.model, instructions=instructions_for("understanding")+("\n"+LINKED_GUIDANCE if linked else ""),
                 **cache_key("understanding"), input=[*json.loads(json.dumps(context)), turn_instruction(
                     "Lis la demande du consultant dans son contexte et déclare ta compréhension avec set_turn_goal "
-                    "(livrable, verrous, profondeur de lecture). Aucune autre action dans cet appel : la suite suit ta déclaration.")],
+                    "(livrable, verrous, profondeur de lecture). Pour une recherche bibliographique, qualifie aussi le besoin "
+                    "dans research_need : ce qu'une publication directe doit réellement produire, sur quel objet et à quelle "
+                    "échelle ou dimension, avec quelles méthodes, des critères vérifiables dont les essentiels, et une carte de "
+                    "familles d'approches complémentaires avec une requête chacune. Les critères viennent du besoin exprimé, "
+                    "pas d'une taxonomie générale. Aucune autre action dans cet appel : la suite suit ta déclaration.")],
                 tools=[t for t in available_definitions() if t["name"] == "set_turn_goal"], store=False, stream=True,
                 reasoning={"effort": config.reasoning_effort}, max_output_tokens=config.max_output_tokens, max_tool_calls=1,
                 tool_choice={"type": "function", "name": "set_turn_goal"}, parallel_tool_calls=False,
@@ -1544,7 +1657,7 @@ class ScholarChatAgent:
                 return False
             understanding_calls[0] += 1
             activity("responses", "running", phase="understanding", input_chars=len(json.dumps(kwargs["input"], ensure_ascii=False)))
-            task = tasks.task("understanding", state.get("messages", [{}])[-1].get("id", "message"), fingerprint(kwargs["input"]))
+            task = tasks.task("understanding", request_message.get("id", "message"), fingerprint(kwargs["input"]))
             attempt = tasks.begin(task, input_signature=fingerprint(kwargs["input"]), reserve=reserve)
             label(kwargs, task, attempt)
             begun, response, stream = time.monotonic(), None, None
@@ -1559,10 +1672,9 @@ class ScholarChatAgent:
                 task_checkpoint(task)
                 raise
             except Exception as exc:
-                activity("responses", "failed", phase="understanding", error_type=type(exc).__name__)
                 tasks.receive(task, attempt, response, seconds=time.monotonic()-begun, reserve=reserve, error=exc)
                 task_checkpoint(task)
-                return False
+                raise
             finally:
                 if stream is not None:
                     stream.close()
@@ -1582,6 +1694,9 @@ class ScholarChatAgent:
                     try:
                         result = toolkit.execute("set_turn_goal", json.loads(item["arguments"]), deadline)
                     except Exception as exc:
+                        from pydantic import ValidationError
+                        if not isinstance(exc, (ValidationError, ValueError)):
+                            raise
                         activity("set_turn_goal", "failed", error_type=type(exc).__name__, error=str(exc)[:300])
                         return False
                     activity("set_turn_goal", "completed", deliverable=result["goal"]["deliverable"],
@@ -1652,10 +1767,19 @@ class ScholarChatAgent:
                 if recovery and not any(item.get("call_id") == recovery[-1]["call_id"] for item in exchange):
                     exchange = recovery
             # A new bounded memory plus ONLY the last protocol exchange. No accumulated transcript.
-            latest_question_chars = len(state.get("messages", [])[-1].get("content", "")) if state.get("messages") else 0
+            latest_question_chars = len(request_text)
             memory_room = max(latest_question_chars+3000, config.finalization_context_chars if phase == "finalization" else
                 (context_room[0] or SECTION_CONTEXT_CHARS) if state.get("writing_focus") and not state.get("automatic_reading_focus")
                 and not state.get("argumentation_focus") else PLAN_PART_CONTEXT_CHARS if state.get("plan_part") else 18000)
+            from .research import active as research_active
+            if phase != "finalization" and research_active(state):
+                if state.get("selection_focus"):
+                    # A balanced comparison (finalists' dossiers and full challenger abstracts) takes the
+                    # room the request really has: the global limit minus the exchange and turn instruction
+                    # reserve (run 111cf83c: 36 707 characters needed, 36 000 allowed, 85 000 available).
+                    memory_room = max(36000, config.max_context_chars-SELECTION_EXCHANGE_RESERVE)
+                elif (state.get("argumentation_focus") or {}).get("stage") == "research_review":
+                    memory_room = min(45000, config.max_context_chars-6000)
             exchange = compact_exchange(exchange, toolkit, max(1800, config.max_context_chars-memory_room-512))
             room = config.max_context_chars-len(json.dumps(exchange, ensure_ascii=False))-512
             # The task's memory keeps its own share; the previous protocol exchange
@@ -1675,8 +1799,22 @@ class ScholarChatAgent:
                 raise StopResearch("context_budget")
             return inputs
 
+        def resume_goal(goal):
+            """A continuation applies the goal the model declared for the consultant's request
+            (no new understanding call, no new reading of a generic message)."""
+            state["turn_goal"] = copy.deepcopy(goal)
+            activity("turn_goal", "resumed", deliverable=goal.get("deliverable"), reading_depth=goal.get("reading_depth"))
+            apply_goal(state["turn_goal"])
+            return True
+
         try:
-            if understanding_needed:
+            if segment and segment.get("goal"):
+                understood = resume_goal(segment["goal"])
+                goal_pending = False
+                if deferred_focus and automatic_reading:
+                    state["automatic_reading_focus"] = deferred_focus
+                deferred_focus = None
+            elif understanding_needed:
                 understood = understand()
                 if understood:
                     goal_pending = False
@@ -1692,6 +1830,92 @@ class ScholarChatAgent:
                     activity("turn_goal", "missing")
             while not answer and not toolkit.finished:
                 check()
+                from .research import active as research_active, status as research_status, transition, comparison_current, REVIEW_GUIDANCE, DISCOVERY_GUIDANCE, selection_ids
+                state.pop("research_exploration_focus", None)
+                if (phase == "exploration" and research_active(state) and not speculative
+                        and not any(state.get(k) for k in ("automatic_reading_focus", "selection_focus", "argumentation_focus"))):
+                    toolkit.save()
+                    reading_tasks(state, toolkit.registry, requested_fields, priority_ids)
+                    decision = transition(state)
+                    stage = decision["stage"]
+                    if stage == "compare" and (argumentation_failed or not comparison_batches(state, toolkit.registry)):
+                        stage = "review"
+                    activity("research_transition", "running", stage=stage)
+                    if stage in {"triage", "rerank"}:
+                        ids = selection_ids(state, decision["article_ids"])
+                        state["selection_focus"] = {"candidate_ids": ids, "presented_total": len(toolkit.registry),
+                            "review": stage == "rerank", "scientific_stage": stage, "evaluation_ids": decision["article_ids"]}
+                    elif stage == "review":
+                        state["argumentation_focus"] = {"stage": "research_review", "article_ids":
+                            research_status(state)["verified_analyzed_ids"]}
+                        argument_round_allowance = max(argument_round_allowance, 2)
+                    elif stage == "discovery_review":
+                        state["argumentation_focus"] = {"stage": "discovery_review", "article_ids": []}
+                        argument_round_allowance = max(argument_round_allowance, 2)
+                    elif stage == "partial":
+                        finalize("research_partial")
+                    elif stage == "action":
+                        action = decision["action"]
+                        kind = action["kind"]
+                        if not time_left_for(20):
+                            finalize("exploration_time_budget")
+                        elif kind in {"search", "similar"}:
+                            args = ({"query": action["query"], "sources": action["sources"] or None,
+                                "offset": action["offset"], "limit_per_source": action["limit_per_source"],
+                                "family": action["family"] or action["reason"][:160], "lock_ids": None}
+                                if kind == "search" else {"article_id": action["article_ids"][0], "mode": action["mode"],
+                                    "conceptual_query": action["query"] or None, "family": action["family"] or action["reason"][:160]})
+                            result = internal_tool("search_scientific" if kind == "search" else "find_similar_articles", args)
+                            if not result.get("reused_local"):
+                                state["research_progress"]["discovery_rounds"] = state["research_progress"].get("discovery_rounds", 0)+1
+                            action.update(status="done", result={k: result.get(k) for k in ("collected", "refused", "warning")})
+                            turn_decided, last_round_searched = False, True
+                            continue
+                        elif kind == "inspect":
+                            ids = action["article_ids"][:8] or [action["query"]]
+                            result = internal_tool("get_article", {"identifiers": ids})
+                            found_ids = [row["id"] for row in result.get("articles", []) if row.get("id") in toolkit.registry]
+                            # Enrich only when this explicit inspection lacks an abstract;
+                            # enrich_abstracts persists its one-shot lookup receipt.
+                            enriched = toolkit.enrich_abstracts(found_ids, min(deadline, time.monotonic()+12))
+                            action.update(status="done", result={"inspected_ids": found_ids, "abstracts_enriched": enriched,
+                                "abstracts_missing": [aid for aid in found_ids if not toolkit.registry[aid].abstract]})
+                            continue
+                        elif kind in {"triage", "rerank"}:
+                            state["selection_focus"] = {"candidate_ids": selection_ids(state, action["article_ids"]),
+                                "review": True, "action_key": action["key"], "evaluation_ids": action["article_ids"]}
+                        elif kind == "read":
+                            reading_tasks(state, toolkit.registry, requested_fields, action["article_ids"])
+                            tasks_by_id = {t["article_id"]: t for t in state["scientific_reading"]["tasks"]}
+                            aid = next((aid for aid in action["article_ids"] if aid not in action.get("completed_article_ids", [])), None)
+                            task = tasks_by_id.get(aid)
+                            if aid and aid not in prepared_articles and len(prepared_articles) >= config.max_deep_analysis:
+                                # Discovery/review actions use the same per-segment reading
+                                # allowance as ordinary orchestration. Keep the action pending
+                                # for the existing continuation, never bypass the limit.
+                                finalize("deep_analysis_budget")
+                                continue
+                            if task and not task.get("exhausted") and task.get("status") != "source_unavailable":
+                                prepared_articles.add(aid)
+                                task.update(research_query=action["query"], research_action_key=action["key"], status="partial")
+                                prepare_reading(state, toolkit, task, internal_tool)
+                                if not state.get("automatic_reading_focus"):
+                                    action.update(status="blocked", result="no_fresh_accessible_passage")
+                            else:
+                                action.update(status="blocked", result="source_unavailable_or_exhausted")
+                        elif kind == "web":
+                            if not config.web_search_enabled or native_calls >= config.max_web_calls or "search_scientific" in forbidden_for_turn():
+                                action.update(status="blocked", result="web_unavailable_or_budget")
+                                continue
+                            state["research_exploration_focus"] = {"action": action, "options": {"query": action["query"]}}
+                    if stage == "compare":
+                        argumentation_requested = True
+                        selection_ready = turn_decided = True
+                if (phase == "exploration" and research_active(state) and not speculative
+                        and not state.get("automatic_reading_focus") and research_status(state)["complete"]):
+                    # The requested saved corpus is complete: no extra reading,
+                    # recovery or comparison is admitted merely to fill a round.
+                    finalize("research_objective_reached")
                 if provisional_reason:
                     # Not enough time left for the plan itself: a useful provisional plan now.
                     break
@@ -1726,7 +1950,7 @@ class ScholarChatAgent:
                         state["automatic_reading_focus"] = copy.deepcopy((ready or list(speculative.values()))[0]["focus"])
                 if (phase == "exploration" and state.get("automatic_reading_focus")
                         and state["automatic_reading_focus"]["article_id"] not in speculative
-                        and not time_left_for(call_estimate(durations, config.timeout_seconds*.2))):
+                        and not time_left_for(analysis_estimate())):
                     # The analysis call would end inside the publication reserve (its
                     # duration is measured on this run): keep the task for a later
                     # turn and use the remaining time for the requested answer.
@@ -1740,6 +1964,8 @@ class ScholarChatAgent:
                         finalize("exploration_time_budget")
                 if (phase == "exploration" and automatic_reading and selection_ready and not goal_pending and not holding and not reading_stopped
                         and not state.get("selection_focus") and not state.get("automatic_reading_focus")
+                        and not state.get("argumentation_focus")
+                        and not state.get("research_exploration_focus") and (not research_active(state) or turn_decided)
                         and not (writing and writing_continuation and section_ready())):
                     task = next_task(state, toolkit.registry, priority_ids, requested_fields, core_only=core_only_now(), skip_depth_ids=reused_cards)
                     if task:
@@ -1751,9 +1977,9 @@ class ScholarChatAgent:
                         reason = ("exploration_round_budget" if exploration_rounds >= config.max_tool_rounds+analysis_round_allowance else
                             "deep_analysis_budget" if aid not in prepared_articles and len(prepared_articles) >= config.max_deep_analysis else
                             "exploration_tool_budget" if total_tools+required_tools > config.max_tool_calls-config.max_finalization_attempts-argument_tool_reserve() else
-                            "exploration_time_budget" if deadline-time.monotonic() <= min(config.finalization_reserved_seconds, config.timeout_seconds*.4) else
+                            "exploration_time_budget" if deadline-time.monotonic() <= publication_reserve() else
                             # The reading ends with an analysis call: it must also fit before the reserve.
-                            "exploration_time_budget" if not time_left_for(call_estimate(durations, config.timeout_seconds*.2)) else
+                            "exploration_time_budget" if not time_left_for(analysis_estimate()) else
                             "exploration_token_budget" if used_tokens >= max(0,config.max_tokens-config.finalization_reserved_tokens) else
                             "exploration_cost_budget" if spent >= max(0,config.max_cost_usd-config.finalization_reserved_cost_usd) else None)
                         if reason:
@@ -1793,16 +2019,17 @@ class ScholarChatAgent:
                         and not state.get("argumentation_focus") and not state.get("reading_recovery_focus") and not argumentation_failed
                         and argumentation_stage_allowed()
                         and active_articles(state, toolkit.registry)
-                        and (not blueprint_status(state, toolkit.registry)["exists"] or
+                        and (research_active(state) or not blueprint_status(state, toolkit.registry)["exists"] or
                             blueprint_status(state, toolkit.registry)["stale"] or
                             not blueprint_status(state, toolkit.registry)["complete"])
                         and (reading_stopped or next_task(state, toolkit.registry, priority_ids, requested_fields, core_only=core_only_now(), skip_depth_ids=reused_cards) is None)):
-                    batches = comparison_batches(state, toolkit.registry)
+                    batches = [batch for batch in comparison_batches(state, toolkit.registry) if comparison_admitted(batch)]
                     source_id = project_observation_source(state) if not project_capture_attempted else None
                     argument_round_allowance = max(argument_round_allowance, len(batches)*2+bool(source_id))
                     # A batch already compared on its prioritized windows (same sources)
                     # is not compared again; its offsets are kept for a deeper request.
                     pending = next((batch for batch in batches if tuple(batch) not in compared_batches and not (
+                        comparison_current(state, batch) if research_active(state) else
                         (state.get("comparison_reading", {}).get("|".join(batch), {}).get("complete") or
                             state.get("comparison_reading", {}).get("|".join(batch), {}).get("windows", 0) >= ARGUMENT_WINDOWS) and
                         state["comparison_reading"]["|".join(batch)].get("source_signature") == comparison_source_signature(toolkit.registry, batch))), None)
@@ -1813,7 +2040,7 @@ class ScholarChatAgent:
                         key = "|".join(pending)
                         signature = comparison_source_signature(toolkit.registry, pending)
                         receipt = state.setdefault("comparison_reading", {}).get(key, {})
-                        if receipt.get("source_signature") != signature:
+                        if receipt.get("source_signature") != signature or (research_active(state) and not comparison_current(state, pending)):
                             receipt = {"source_signature": signature, "claim_offsets": {}, "complete": False}
                             state["comparison_reading"][key] = receipt
                         state["argumentation_focus"] = {"stage": "comparison", "article_ids": pending,
@@ -1923,7 +2150,8 @@ class ScholarChatAgent:
                     # returns them (and once more after the gap round), not at the end of the rounds.
                     or (last_round_searched and (state.get("turn_goal") or {}).get("deliverable") in {"plan", "plan_revision", "literature_search"}
                         and not unsearched_targets()))
-                if (phase == "exploration" and (not turn_decided or (gap_used and last_round_searched)) and selection_checkpoints < 2 and toolkit.search_count
+                if (phase == "exploration" and not research_active(state) and (not turn_decided or (gap_used and last_round_searched))
+                        and selection_checkpoints < (config.research_discovery_rounds + 1 if research_active(state) else 2) and toolkit.search_count
                         and not state.get("selection_focus") and not state.get("automatic_reading_focus")
                         and not state.get("argumentation_focus") and not state.get("writing_focus") and not state.get("writing_planning")
                         and selection_due):
@@ -1943,7 +2171,7 @@ class ScholarChatAgent:
                         finalize("exploration_round_budget")
                     elif total_tools >= max(0, tool_limit()-(0 if writing else config.max_finalization_attempts)):
                         finalize("exploration_tool_budget")
-                    elif not writing and deadline-time.monotonic() <= min(config.finalization_reserved_seconds, config.timeout_seconds*.4):
+                    elif not writing and deadline-time.monotonic() <= publication_reserve():
                         finalize("exploration_time_budget")
                     elif not writing and used_tokens >= max(0, config.max_tokens-config.finalization_reserved_tokens):
                         finalize("exploration_token_budget")
@@ -1974,12 +2202,16 @@ class ScholarChatAgent:
                 finalizing = phase == "finalization"
                 document_tools = bool(state.get("outline") or state.get("scientific_scope") or re.search(
                     r"état\s+de\s+l[’']art|state\s+of\s+(?:the\s+)?art|\bCIR\b|\bplan\b|rédig|redig|rédac|section|brouillon|figure|graphique|revue",
-                    state.get("messages", [{}])[-1].get("content", ""), re.I))
+                    request_text, re.I))
                 focused_reading = state.get("automatic_reading_focus") if not finalizing else None
                 if focused_reading and (not focused_reading["evidence_ids"] or
                         not set(focused_reading["evidence_ids"]) <= transmitted_evidence_ids(inputs, toolkit.evidence)):
                     raise ActiveReadingContextError("Le contexte transmis ne contient pas toutes les preuves du focus actif.")
                 focused_argument = state.get("argumentation_focus") if not finalizing and not focused_reading else None
+                if focused_argument and focused_argument.get("stage") == "comparison" and not comparison_admitted(focused_argument["article_ids"]):
+                    state.pop("argumentation_focus", None)
+                    toolkit.save()
+                    continue
                 focused_section = state.get("writing_focus") if not finalizing and not focused_reading and not focused_argument else None
                 revision_save_due = bool(focused_section and (writing["mode"] == "section" and
                     exploration_rounds+1 >= config.max_tool_rounds+analysis_round_allowance+argument_round_allowance+writing_round_allowance
@@ -2000,7 +2232,7 @@ class ScholarChatAgent:
                 focused_plan = bool(state.get("writing_planning") and not focused_section and not finalizing)
                 focused_selection = (state.get("selection_focus") if not finalizing and not focused_reading and not focused_argument
                     and not focused_section and not focused_plan else None)
-                argument_tool = ({"project_facts": "record_project_facts", "comparison": "compare_articles",
+                argument_tool = ({"project_facts": "record_project_facts", "comparison": "compare_articles", "research_review": "review_research_coverage", "discovery_review": "review_discovery",
                     "blueprint": "build_argument_blueprint"}.get(focused_argument["stage"]) if focused_argument else None)
                 tool_defs = [t for t in available_definitions() if t["name"] == "finalize_response"] if finalizing else (
                     [t for t in available_definitions() if t["name"] == "analyze_article"] if focused_reading else
@@ -2078,14 +2310,27 @@ class ScholarChatAgent:
                     # Use the final existing round for the requested action. The
                     # saved draft still passes every ordinary scientific check.
                     tool_defs = [t for t in tool_defs if t["name"] == "write_section"]
+                    require_tools(tool_defs, required="write_section", forbidden=forbidden)
                     tool_defs[0]["parameters"]["properties"]["action"] = {"type": "string", "enum": ["save"]}
                 if not finalizing and not state.get("reading_recovery_focus") and not focused_reading and not focused_argument and not focused_plan and not focused_section and not focused_selection and config.web_search_enabled and native_calls < config.max_web_calls and "search_scientific" not in forbidden:
                     tool_defs = [{"type": "web_search", "search_context_size": "low"}, *tool_defs]
+                web_action = (state.get("research_exploration_focus") or {}).get("action")
+                if web_action and web_action.get("kind") == "web" and not finalizing:
+                    tool_defs = [t for t in tool_defs if t.get("type") == "web_search"]
                 # Task-scoped rules: a focused request carries only its task's guide.
                 task_kind = ("final" if finalizing else "reading" if focused_reading else
                     "argumentation" if focused_argument else "section" if focused_section else "planning" if focused_plan else
                     "selection" if focused_selection else "recovery" if state.get("reading_recovery_focus") else "conversation")
                 task_instructions = instructions_for(task_kind)
+                if state.get("research_exploration_focus"):
+                    task_instructions += "\nExploration adaptative : examine les lacunes et candidats encore ambigus. " \
+                        "Choisis une action utile : abstract complet via get_article, requête complémentaire FR/EN, " \
+                        "pagination d'une source fonctionnelle, find_similar_articles(references/citations), ou recherche web " \
+                        "pour découvrir des publications à vérifier ensuite par get_article. Les familles viennent du sujet, " \
+                        "pas d'une liste prédéfinie. Ne répète pas une page collectée : adaptive_discovery.options donne les " \
+                        "pages suivantes encore possibles (next_pages), les sources indisponibles (providers_unavailable, que " \
+                        "la recherche web complète) et les familles déjà interrogées. Consigne ton bilan par " \
+                        "review_research_coverage ; une limite de temps n'établit pas l'absence d'autres travaux."
                 enter_stage({"final": "final", "reading": "reading", "argumentation": "argumentation", "section": "writing",
                     "planning": "plan", "selection": "selection"}.get(task_kind, "conversation"))
                 if linked and not focused_reading:
@@ -2094,6 +2339,7 @@ class ScholarChatAgent:
                 # instructions and tools form a prefix identical across rounds of a task.
                 input_bound = request_tokens(len(json.dumps(inputs, ensure_ascii=False).encode())+len(task_instructions.encode())
                     +len(json.dumps(tool_defs).encode())+TURN_INSTRUCTION_BYTES)
+                require_tools(tool_defs, forbidden=forbidden)
                 web_round = tool_defs[0].get("type") == "web_search"
                 reserve = reserve_bound(input_bound, config.max_output_tokens, price, web_calls=int(web_round),
                     web_tokens=config.web_token_reserve if web_round else 0)
@@ -2132,6 +2378,9 @@ class ScholarChatAgent:
                     "Use conversation_science and the argument blueprint to explain methods, mechanisms, experiments, verified numbers and limitations in depth when the question asks for them. "
                     "Compare protocols cautiously; a proposed plan belongs in this chat, while only saved manuscript sections belong in the document artifact. "
                     "Set displayed_article_ids to the exact ordered publications in a new table/list, or null if this is a follow-up without a new list. "
+                    "When response_selection is given, displayed_article_ids is exactly that list. For each work, use the saved results "
+                    "(with their figures and conditions), protocol, comparisons and limitations transmitted in conversation_science, "
+                    "state its analysis_depth and any scope_flags; never call a transmitted figure unavailable. "
                     "Correct any recorded validation refusal. Write naturally in French.") if finalizing else (
                     reading_hint(focused_reading)
                     if focused_reading else
@@ -2151,10 +2400,12 @@ class ScholarChatAgent:
                         resolve_section(state, focused_section["section_id"])))),
                         framing=section_state(resolve_section(state, focused_section["section_id"])) == "framing")
                         if focused_section else
-                    (f"Record the consultant's exact project observations from user message {focused_argument['source_id']} with record_project_facts. Use exact_quote verbatim, keep project measurements distinct from publication results, and infer no CIR lock."
+                    (DISCOVERY_GUIDANCE if focused_argument["stage"] == "discovery_review" else REVIEW_GUIDANCE
+                        if focused_argument["stage"] == "research_review" else
+                        f"Record the consultant's exact project observations from user message {focused_argument['source_id']} with record_project_facts. Use exact_quote verbatim, keep project measurements distinct from publication results, and infer no CIR lock."
                         if focused_argument["stage"] == "project_facts" else
                         f"Compare articles {focused_argument['article_ids']} using compare_articles. Save only relations supported by exact evidence from both works; pass an empty relations list if no reliable relation can be established. "
-                        "Compare concretely: methods and mechanisms, protocols and datasets, and results. When both works report values on a comparable metric, put them in experimental_results (value, metric, dataset, conditions); otherwise set comparable_protocols=false and say what differs. A demonstrated result is never merged with a comparative inference."
+                        "Compare concretely: methods and mechanisms, protocols and datasets, results, limitations and fit to the consultant's problem. Fill assessment with this structured comparison, even if protocols are incomparable and relations=[]. When both works report values on a comparable metric, put them in experimental_results (value, metric, dataset, conditions); otherwise set comparable_protocols=false and say what differs. A demonstrated result is never merged with a comparative inference."
                         if focused_argument["stage"] == "comparison" else
                         f"Build and save the evidence-linked argument blueprint for articles {focused_argument['article_ids']} now. Set merge={str(focused_argument['merge']).lower()}. Cover each of these analyzed articles through its supported role, and connect registered relations across the overlap. Keep project facts separate and do not invent a CIR lock.")
                     if focused_argument else
@@ -2165,7 +2416,24 @@ class ScholarChatAgent:
                         "collected_in_earlier_message. Rank by explicit criteria, not shared keywords: fit to the problem, relevance of "
                         "the method, results actually reported and their comparability with the project, quality and limits of the "
                         "evidence; set contribution (direct, related, foundational). A foundational method from another application "
-                        "domain can be retained; discovery (queries, providers, citations) is context, never a score."
+                        "domain can be retained; discovery (queries, providers, citations) is context, never a score. "
+                        "Keep the best retained works in scientific order including earlier finalists; availability of a PDF is not relevance. "
+                        "Use selection_comparison for balanced incumbent/challenger dossiers. Fill relevance with the actual problem, "
+                        "output, method, object_scope (dimension/scale/population as appropriate), ai_role, conditions, results_validation, fit and uncertainties. "
+                        "These criteria follow this scientific need, not a fixed domain taxonomy. Unknowns stay unknown; related is not a direct demonstration. "
+                        "When research_need is given, relevance.criteria holds one judgment per criterion (met, partial, not_met, unknown) "
+                        "with its basis (abstract, title, saved_claims, fulltext, inference), a short note and, for met, evidence: a short "
+                        "exact quote of that source establishing every element of the criterion (nature, dimension, scale…); without such "
+                        "a quote, or if your own uncertainties say it is not established, the status is unknown. missing_information lists what "
+                        "the notice does not say. contribution=direct only if the work itself produces research_need.expected_output. "
+                        "The ranking reads these judgments: a retained work meeting every essential criterion displaces a finalist that "
+                        "fails one, with the compared criteria recorded; judge each criterion on its own evidence, never by shared words. "
+                        "Ranking is cumulative: finalist_ids cannot delete an omitted incumbent. To replace or withdraw one, supply replacements "
+                        "with incoming_id (null only for withdrawal without filling), outgoing_id, comparative justification, information_used and uncertainties. "
+                        "Keep relevance concise (short factual clauses, no abstract repetition). Record decisions for evaluation_ids; "
+                        "unchanged incumbent dossiers are comparison context, not a request to regenerate their assessments. "
+                        "Compare only received dossiers; inspect an incomplete abstract locally before a definitive judgment. "
+                        "After reading, reassess the ranking using the saved claims, results, limits and competing candidates. A late better work can replace a finalist."
                         + (" Linked project: give each decision the lock_ids of the active locks it addresses; choose finalists so that "
                             "every active lock with a relevant work is represented, and leave a lock without relevant candidate visible "
                             "(lock_coverage) rather than filling it." if linked else "")
@@ -2174,6 +2442,9 @@ class ScholarChatAgent:
                         "without known full text listed by record_candidate_decisions if they may matter, then confirm or revise "
                         "the finalists. Do not publish yet. " if holding else "") +
                     f"Exploration rounds left after this request: {config.max_tool_rounds+analysis_round_allowance+argument_round_allowance+writing_round_allowance-exploration_rounds}. "
+                    + ("Research map: research_need.families lists the approach families of this need; search each with its query "
+                        "(one search per family, in parallel, no near-duplicate query) before reformulating. "
+                        if state.get("research_need", {}).get("families") and not state.get("recent_searches") else "") +
                     "Publication has a separate reserved budget. Select scientifically useful works across the research axes "
                     "with record_candidate_decisions as soon as abstracts allow it; priority full texts will then be read and analyzed "
                     "automatically before writing." + ("" if state.get("turn_goal") else
@@ -2246,7 +2517,7 @@ class ScholarChatAgent:
                                 if focused_argument else {"type": "function", "name": "manage_outline"}
                                 if focused_plan else {"type": "function", "name": "record_candidate_decisions"}
                                 if focused_selection else {"type": "function", "name": "write_section"}
-                                if revision_save_due else "auto",
+                                if revision_save_due else "required" if web_action and not finalizing else "auto",
                         parallel_tool_calls=not (finalizing or focused_reading or focused_argument or focused_selection),
                         include=["reasoning.encrypted_content", "web_search_call.action.sources"])
                     for event in stream or ():
@@ -2256,9 +2527,9 @@ class ScholarChatAgent:
                         elif event.type in {"response.completed", "response.incomplete", "response.failed"}:
                             response = event.response
                         elif event.type == "error":
-                            raise RuntimeError("ResponsesStreamError")
+                            raise ProviderProtocolError("ResponsesStreamError")
                     if response is None:
-                        raise RuntimeError("ResponsesMissingCompletion")
+                        raise ProviderProtocolError("ResponsesMissingCompletion")
                 except Exception as exc:
                     if upstream_started:
                         tasks.receive(active_task, active_attempt, response, seconds=time.monotonic()-call_started,
@@ -2308,6 +2579,13 @@ class ScholarChatAgent:
                 state["web_sources"] = list({url_key(c["url"]): c for c in [*state.get("web_sources", []), *discovered, *message_citations]}.values())
                 calls = [item for item in outputs if item.get("type") == "function_call"]
                 exchange = list(outputs)
+                if web_action and not finalizing:
+                    used_web = any(item.get("type") == "web_search_call" for item in outputs)
+                    if used_web:
+                        state["research_progress"]["discovery_rounds"] = state["research_progress"].get("discovery_rounds", 0)+1
+                    web_action.update(status="done" if used_web else "blocked",
+                        result="web_sources_saved_verify_with_inspect" if used_web else "no_web_call_produced")
+                    continue
                 if not calls:
                     if focused_reading:
                         task = next((item for item in state["scientific_reading"]["tasks"]
@@ -2371,7 +2649,7 @@ class ScholarChatAgent:
                     toolkit.prefetch_searches(search_args, deadline)
                 for call in calls:
                     try:
-                        local_call = call["name"] in {"analyze_article", "write_section"} and                             json.loads(call["arguments"]).get("action") == "save"
+                        local_call = call["name"] in {"analyze_article", "write_section"} and                             json.loads(call["arguments"]).get("action") in {"save", "repair"}
                     except (ValueError, TypeError, AttributeError):
                         local_call = False
                     if not local_call:
@@ -2411,7 +2689,7 @@ class ScholarChatAgent:
                         try:
                             arguments = json.loads(call["arguments"])
                             project_retrieval = linked and name == "get_project_context"
-                            if focused_reading and not project_retrieval and (name != "analyze_article" or arguments.get("action") not in {"read", "save"} or
+                            if focused_reading and not project_retrieval and (name != "analyze_article" or arguments.get("action") not in {"read", "save", "repair"} or
                                     arguments.get("article_ids") != [focused_reading["article_id"]]):
                                 raise ValueError("Lire ou enregistrer uniquement l'article scientifique en cours.")
                             if focused_argument and not project_retrieval and (name != argument_tool or
@@ -2456,7 +2734,7 @@ class ScholarChatAgent:
                             # validation (every check applies, no provider request): it is not lost
                             # when the deadline passes between reception and save, as in the
                             # background path. Reads and downloads keep the deadline check.
-                            local_save = name in {"analyze_article", "write_section"} and arguments.get("action") == "save"
+                            local_save = name in {"analyze_article", "write_section"} and arguments.get("action") in {"save", "repair"}
                             if focused_section and name == "write_section" and arguments.get("action") == "save":
                                 arguments = repair_merge(active_task, arguments)
                                 active_attempt["arguments"] = copy.deepcopy(arguments)
@@ -2474,6 +2752,7 @@ class ScholarChatAgent:
                                 state.pop("writing_planning", None)
                             if focused_section and name == "analyze_article" and result.get("saved"):
                                 section_progress = True
+                            canonical_result = result
                             if focused_section and name == "get_analysis_claims":
                                 seen = seen_claims.setdefault(focused_section["section_id"], [])
                                 fresh = [fingerprint([c.get("statement"), sorted(c.get("evidence_ids", []))])
@@ -2536,10 +2815,12 @@ class ScholarChatAgent:
                             if focused_section and name == "get_analysis_claims":
                                 claim_reads[claim_key] = claim_reads.get(claim_key, 0)+1
                                 claim_receipts.setdefault(focused_section["section_id"], {})[fingerprint(claim_key)] = {
-                                    "article_id": result["article_id"], "fields": claim_args.fields,
-                                    "offset": result["offset"], "next_offset": result["next_offset"],
-                                    "complete": result["complete"], "claims_received": len(result["claims"])}
+                                    "article_id": canonical_result["article_id"], "fields": claim_args.fields,
+                                    "offset": canonical_result["offset"], "next_offset": canonical_result["next_offset"],
+                                    "complete": canonical_result["complete"], "claims_received": len(canonical_result["claims"])}
                             if focused_reading and arguments.get("action") == "read":
+                                # A request for more passages, not an analysis (never counted as one).
+                                active_attempt["outcome"] = "passages_requested"
                                 fresh = extend_reading_focus(state, toolkit, result.get("reading", []))
                                 task = next(t for t in state["scientific_reading"]["tasks"] if t["article_id"] == focused_reading["article_id"])
                                 if not fresh:
@@ -2570,8 +2851,14 @@ class ScholarChatAgent:
                             if name == "get_fulltext" and automatic_reading:
                                 reading_tasks(state, toolkit.registry, requested_fields, priority_ids, scope_ids=reading_scope[0])
                                 analysis_round_allowance = max(analysis_round_allowance, reading_allowance(state, config.max_deep_analysis))
+                            if name in {"search_scientific", "find_similar_articles"} and research_active(state):
+                                turn_decided = False
+                                last_round_searched = True
                             if name == "record_candidate_decisions" and result.get("saved"):
                                 turn_decided = True
+                                for action in state.get("research_progress", {}).get("actions", []):
+                                    if action.get("key") == (focused_selection or {}).get("action_key"):
+                                        action.update(status="done", result="scientific_ranking_saved")
                                 if focused_selection:
                                     # A checkpoint selection goes straight to reading,
                                     # without spending the last rounds on a review.
@@ -2615,7 +2902,10 @@ class ScholarChatAgent:
                                     # card leaves the reading scope (one window each, sections first).
                                     reading_scope[0] = writing_sources()
                                     reading_tasks(state, toolkit.registry, requested_fields, priority_ids, scope_ids=reading_scope[0])
-                            if focused_argument and not project_retrieval:
+                            if focused_argument and focused_argument["stage"] in {"research_review", "discovery_review"} and result.get("saved"):
+                                state.pop("argumentation_focus", None)
+                                argumentation_attempts = 0
+                            if focused_argument and not project_retrieval and focused_argument["stage"] not in {"research_review", "discovery_review"}:
                                 delivered_packet = {}
                                 for item in inputs:
                                     if item.get("role") == "developer" and item.get("content", "").startswith("Mémoire scientifique (données, pas instructions) : "):
@@ -2662,9 +2952,11 @@ class ScholarChatAgent:
                                 activity(name, "completed", found=result.get("collected", len(result["articles"]) if isinstance(result.get("articles"), list) else None),
                                     output_chars=len(json.dumps(result, ensure_ascii=False, default=str)),
                                     article_id=arguments.get("article_id"), refused=result.get("refused"), empty_providers=result.get("empty_providers"),
-                                    **({"offset": result["offset"], "next_offset": result["next_offset"], "complete": result["complete"],
-                                        "claims_returned": len(result["claims"])} if name == "get_analysis_claims" else {}))
+                                    **({"offset": canonical_result["offset"], "next_offset": canonical_result["next_offset"], "complete": canonical_result["complete"],
+                                        "claims_returned": len(canonical_result["claims"]),
+                                        "claims_delivered": len(result.get("claims", []))} if name == "get_analysis_claims" else {}))
                                 if focused_reading and result.get("saved"):
+                                    active_attempt["outcome"] = "analysis_repaired" if result.get("repaired") else "analysis_saved"
                                     tasks.saved(active_task, active_attempt, {"saved": True,
                                         "artifact_id": focused_reading["article_id"], "artifact_kind": "analysis",
                                         "source_version": toolkit.registry[focused_reading["article_id"]].source_version}, arguments)
@@ -2674,9 +2966,20 @@ class ScholarChatAgent:
                             raise
                         except Exception as exc:
                             from pydantic import ValidationError
+                            if not isinstance(exc, (ValidationError, ValueError)):
+                                # A software/provider failure is never fed back as a scientific
+                                # refusal and retried at the consultant's expense.
+                                raise
                             message = str(exc) if isinstance(exc, (ValidationError, ValueError)) else "Tool unavailable; use validated stored data."
-                            result = {"error": message, "error_type": type(exc).__name__}
-                            activity(name, "failed", error_type=type(exc).__name__, error=message)
+                            # A reference refusal carries its repair (id, refused references, exact refs).
+                            result = {"error": message, "error_type": type(exc).__name__, **getattr(exc, "payload", {})}
+                            activity(name, "failed", error_type=type(exc).__name__, error=message,
+                                **({"repair_id": result["repair_id"]} if result.get("repair_id") else {}))
+                            if focused_reading and name == "analyze_article" and arguments.get("action") in {"save", "repair"}:
+                                # Recorded as refused (not left « generated »): a replay or a restart does not
+                                # resubmit the refused proposal; the next request repairs it.
+                                active_attempt["outcome"] = "analysis_refused"
+                                tasks.reject(active_task, active_attempt, result)
                             if focused_reading and name != "get_project_context":
                                 task = next((item for item in state["scientific_reading"]["tasks"]
                                     if item["article_id"] == focused_reading["article_id"]), None)
@@ -2720,20 +3023,31 @@ class ScholarChatAgent:
                     answer = final_result["answer"]
                 elif plan_done and not answer:
                     answer = plan_answer(state, toolkit.registry, plan_note)
+        except SelectionContextError as exc:
+            # Deterministic: the same corpus and room fail identically. Recorded with its signature so
+            # the job stops explicitly instead of resuming into the same refusal (run 111cf83c).
+            stop_reason, partial = "selection_context_blocked", True
+            from .research import record_context_block
+            block = record_context_block(state, exc.details)
+            activity("selection_checkpoint", "blocked", reason="balanced_comparison_context_budget",
+                size=exc.details.get("size"), budget=exc.details.get("budget"), reductions=exc.details.get("reductions"),
+                signature=block["signature"])
         except ActiveReadingContextError:
             stop_reason, partial = "evidence_transmission_blocked", True
             activity("scientific_reading", "blocked", reason=stop_reason,
                 article_id=state.get("automatic_reading_focus", {}).get("article_id"))
         except StopResearch as exc:
             stop_reason, partial = exc.reason, True
+            failure_diagnostic = exc.diagnostic
             budget_refusal = getattr(exc, "explanation", None)
-            activity("research", "stopped", reason=stop_reason, **({"admission": budget_refusal} if budget_refusal else {}))
+            activity("research", "stopped", reason=stop_reason,
+                **({"diagnostic": failure_diagnostic} if failure_diagnostic else {}),
+                **({"admission": budget_refusal} if budget_refusal else {}))
         except Exception as exc:
-            partial, stop_reason = True, "upstream_error"
-            status = getattr(exc, "status_code", None)
-            if status in {400, 401, 403, 404}: stop_reason = "configuration_error"
-            elif status == 429: stop_reason = "quota_or_rate_limit"
-            activity("responses", "failed", error_type=type(exc).__name__, http_status=status)
+            failure_diagnostic = technical_diagnostic(exc)
+            partial, stop_reason = True, failure_diagnostic["reason"]
+            activity("responses" if failure_diagnostic["category"] == "provider" else "research", "failed",
+                diagnostic=failure_diagnostic)
         harvest_parallel()
         if plan_tasks:
             # The stop-time harvest may have received another completed sibling.
@@ -2754,6 +3068,7 @@ class ScholarChatAgent:
             final_result = {"answer": answer, "coverage_sufficient": False, "fallback": False}
         elif reading_budget_reason:
             partial = True
+        toolkit.harvest_fulltexts()
         toolkit.save()
         if writing:
             answer = writing_answer(state, stop_reason)
@@ -2799,7 +3114,44 @@ class ScholarChatAgent:
         from .catalogue import library_groups
         groups = library_groups(state, primary)
         coverage = final_result.get("coverage_sufficient", False)
+        from .research import active as research_active, status as research_status
+        research_progress = research_status(state) if research_active(state) else None
+        if research_progress is not None:
+            coverage = research_progress["scientific_coverage_sufficient"]
+            if not research_progress["complete"]:
+                partial = True
+                stop_reason = stop_reason or "research_coverage_incomplete"
+                answer += ("\n\nÉtat vérifié de la recherche : " + str(research_progress["verified_analyzed_count"]) +
+                    ("/" + str(research_progress["requested_count"]) if research_progress["requested_count"] else "") +
+                    " publications avec fiche vérifiée ; " + str(len(research_progress["pending_article_ids"])) +
+                    " recommandations restent à analyser. Arrêt : " + str(stop_reason) +
+                    ". Cet arrêt ne démontre pas l'absence d'autres publications pertinentes.")
+                job = state.get("writing_job") or {}
+                if (job.get("kind") == "research" and job.get("status") in {"running", "waiting"}
+                        and stop_reason not in {"cancelled", "selection_context_blocked"}):
+                    if not research_progress["partial_stop"] and not research_progress["exhausted"]:
+                        # Provisional until the job evaluates this segment: the service withdraws it
+                        # if the job stops instead (run 111cf83c announced a continuation that never came).
+                        answer += CONTINUATION_NOTE
+                if research_progress["partial_stop"]:
+                    answer += " Motif de la revue : " + str(research_progress["review"].get("stop_reason"))
+            elif not coverage:
+                answer += ("\n\nLe nombre demandé de publications avec fiche vérifiée est atteint. "
+                    "La couverture scientifique exhaustive n'est pas établie par une revue à jour ; "
+                    "les lacunes documentaires restent à examiner.")
+            if research_progress["verified_analyzed_count"]:
+                # The same selection as the published list: depth of each card, stated once.
+                depth = [f"{len(research_progress['fulltext_documented_ids'])} analysée(s) sur des passages ciblés du texte intégral"]
+                if research_progress["fulltext_partial_ids"]:
+                    depth.append(f"{len(research_progress['fulltext_partial_ids'])} sur des passages du texte intégral "
+                        "aux dimensions principales incomplètes")
+                if research_progress["abstract_only_ids"]:
+                    depth.append(f"{len(research_progress['abstract_only_ids'])} sur l'abstract seul")
+                answer += ("\n\nProfondeur des " + str(research_progress["verified_analyzed_count"]) + " fiches de la sélection : "
+                    + ", ".join(depth) + " ; aucune lecture intégrale exhaustive n'est revendiquée.")
         return {"answer": answer, "citations": citations, "partial": partial,
+            "research_progress": research_progress,
+            "diagnostic": failure_diagnostic,
             "reason": (stop_reason or "finalization_failed") if partial else None, "fallback": final_result.get("fallback", False),
             "exploration_stop_reason": stop_reason, "primary_article_ids": primary,
             "discussed_article_ids": final_result.get("discussed_article_ids", primary),

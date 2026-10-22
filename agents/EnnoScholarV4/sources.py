@@ -120,6 +120,15 @@ class V4ScientificSearch(ScientificSearch):
         self.publisher_access = {}
         self.bibliographic_details = {}
         self.document_locations = {}
+        self._paging = __import__("threading").local()
+
+    @property
+    def search_offset(self):
+        return getattr(self._paging, "offset", 0)
+
+    @search_offset.setter
+    def search_offset(self, offset):
+        self._paging.offset = offset
 
     # Semantic Scholar answers 429 to concurrent calls (seen in run 80a58dae):
     # one request at a time, about one per second, like the arXiv lock.
@@ -158,6 +167,14 @@ class V4ScientificSearch(ScientificSearch):
         import httpx
         for attempt in range(self.retries):
             try:
+                trace = getattr(self._paging, "requests", None)
+                if trace is not None:
+                    safe = {k: v for k, v in (params or {}).items() if k in {
+                        "search", "search_query", "start", "page", "per_page", "max_results", "limit", "offset",
+                        "filter", "sort", "sortBy", "sortOrder", "fields"}}
+                    endpoint = urlsplit(url)
+                    trace.append({"endpoint": endpoint.scheme+"://"+endpoint.netloc+endpoint.path,
+                        "params": safe, "attempt": attempt+1})
                 return super()._get(url, params=params, headers=headers, deadline=deadline)
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code not in {429, 500, 502, 503, 504} or attempt+1 >= self.retries:
@@ -288,10 +305,23 @@ class ScientificSources:
         articles, warnings = [], []
         sent = {name: provider_query(name, query) for name in set(chosen)}
         self.last_provider_stats = {name: {"query_sent": q, "returned": None} for name, q in sent.items()}
-        self.client.search_offset = offset
+        stats = self.last_provider_stats
+        def collect(name):
+            # Pagination belongs to this provider invocation, never to the
+            # shared adapter: concurrent query/page prefetches must stay distinct.
+            self.client.search_offset = offset
+            if hasattr(self.client, "_paging"):
+                self.client._paging.requests = []
+            try:
+                return providers[name](sent[name], limit, deadline=deadline)
+            finally:
+                if hasattr(self.client, "_paging"):
+                    stats[name]["effective_requests"] = list(self.client._paging.requests)
+                    del self.client._paging.requests
+                self.client.search_offset = 0
         # Providers run concurrently, each with a deadline and independent rate limits.
         with self.client.turn_cache(), ThreadPoolExecutor(max_workers=3) as pool:
-            futures = {pool.submit(providers[name], sent[name], limit, deadline=deadline): name for name in set(chosen)}
+            futures = {pool.submit(collect, name): name for name in set(chosen)}
             for future in as_completed(futures):
                 check()
                 try:
@@ -299,7 +329,10 @@ class ScientificSources:
                     articles.extend(rows)
                     self.last_provider_stats[futures[future]]["returned"] = len(rows)
                 except Exception as exc:
-                    warnings.append({"source": futures[future], "error": type(exc).__name__, "http_status": getattr(getattr(exc, "response", None), "status_code", None)})
+                    response = getattr(exc, "response", None)
+                    warnings.append({"source": futures[future], "error": type(exc).__name__,
+                        "http_status": getattr(response, "status_code", None),
+                        "retry_after": getattr(response, "headers", {}).get("retry-after") if response is not None else None})
         self.client.search_offset = 0
         # Registry verification is performed on examined/final articles, not hundreds of candidates.
         return articles, warnings

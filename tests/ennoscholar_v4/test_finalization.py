@@ -233,7 +233,17 @@ def test_active_question_survives_oversized_scientific_memory():
     for finalizing in (False, True):
         context = model_context(data, t, 6500, final=finalizing)
         assert context[-1] == {"role": "user", "content": "Approfondis l’article 4."}
-        assert len(json.dumps(context, ensure_ascii=False)) < 7000
+        if finalizing:
+            # The saved card's essential claims are protected (run 53292dc4); the old answer, the long
+            # topic and the other secondary views are what the reduction removes.
+            from agents.EnnoScholarV4.context import FINAL_REST_CHARS
+            memory = json.loads(context[0]["content"].split(" : ", 1)[1])
+            science = len(json.dumps(memory["conversation_science"], ensure_ascii=False))
+            assert memory["conversation_science"]["transmission"]["complete"]
+            assert len(json.dumps(context, ensure_ascii=False)) < science + FINAL_REST_CHARS
+            assert "Old answer" not in context[0]["content"]
+        else:
+            assert len(json.dumps(context, ensure_ascii=False)) < 7000
 
 
 def seventy_notices():

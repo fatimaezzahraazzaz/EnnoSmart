@@ -90,3 +90,19 @@ def sync_records(db, session):
         if outline:
             version = outline.get("version", 0)
             db.merge(ScholarV4Outline(id=f"{sid}:{version}", session_id=sid, version=version, data=outline))
+
+
+def lock_rows(db, session_id=None, run_id=None):
+    """Serialise a read-modify-write of a session's or a run's JSON across threads and
+    processes. A no-op UPDATE takes the row lock (PostgreSQL) or the database write lock
+    (SQLite) before the row is read; it is held until commit or rollback. Always the
+    session before its run, so two writers never wait for each other in opposite orders.
+    Objects already loaded in this database session are expired: the next read is fresh."""
+    from sqlalchemy import update
+    if session_id is not None:
+        db.execute(update(ScholarV4Session).where(ScholarV4Session.id == session_id)
+            .values(lease_until=ScholarV4Session.lease_until).execution_options(synchronize_session=False))
+    if run_id is not None:
+        db.execute(update(ScholarV4Run).where(ScholarV4Run.id == run_id)
+            .values(status=ScholarV4Run.status).execution_options(synchronize_session=False))
+    db.expire_all()

@@ -157,8 +157,17 @@ def test_small_budgets_keep_every_targeted_work_with_its_proofs(budget):
         # Floor: a targeted work is never dropped; at very small budgets the request may exceed the
         # internal target by its minimal packet (one claim and proof locator per targeted work).
         size = len(json.dumps(inputs, ensure_ascii=False))
-        assert size <= max(budget+600, int(budget*1.35)) or (budget < 8000 and size <= budget*2.2), (budget, final, size)
         memory = json.loads(inputs[0]["content"].split(" : ", 1)[1])
+        if final:
+            # Run 53292dc4: the final dossier (every result and limit of each work, with proof locators)
+            # is protected; the rest of the request keeps a fixed share, within the request limit.
+            from agents.EnnoScholarV4.context import FINAL_REST_CHARS
+            science = len(json.dumps(memory["conversation_science"], ensure_ascii=False))
+            assert memory["conversation_science"]["transmission"]["complete"]
+            assert size <= max(budget+600, int(budget*1.35), science+FINAL_REST_CHARS+1500), (budget, size, science)
+            assert size < toolkit.config.max_context_chars-6000
+        else:
+            assert size <= max(budget+600, int(budget*1.35)) or (budget < 8000 and size <= budget*2.2), (budget, final, size)
         papers = {p["id"]: p for p in memory["conversation_science"]["papers"]}
         assert set(papers) == {LDPOLY, HOLITRACER}, (budget, final, list(papers))
         assert all(claims_of(papers[aid]) > 0 for aid in papers)

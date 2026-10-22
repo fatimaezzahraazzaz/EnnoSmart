@@ -30,7 +30,15 @@ export type DiagnosticLock = { id: string; title: string; decision: string; just
 export type DiagnosticContext = DiagnosticProject & { locks: DiagnosticLock[]; selected_lock_ids: string[]; active_lock_ids: string[]; revision: number }
 export type SessionCreation = { mode?: "express" | "diagnostic_linked"; title?: string; project_id?: number; diagnostic_id?: number; source_version?: string; selected_lock_ids?: string[]; confirmed?: boolean; allow_unkept?: boolean }
 export type ContextPage = { items: Record<string, unknown>[]; total: number; next_offset: number | null; source_changed?: boolean; source_type: string; source_version: string; history?: Record<string, unknown>[] }
-export type SessionSummary = { id: string; title: string; created_at: string; updated_at: string; active_run_id: string | null; articles_total: number; selected_count: number; mode?: "express" | "diagnostic_linked"; diagnostic_context?: DiagnosticContext }
+export type SessionSummary = { id: string; title: string; created_at: string; updated_at: string; active_run_id: string | null; articles_total: number; selected_count: number; mode?: "express" | "diagnostic_linked"; diagnostic_context?: DiagnosticContext; writing_job?: WritingJob | null }
+// Automatic full-manuscript drafting (backend writing_job.py): one budget for the whole manuscript.
+// One durable job per conversation: automatic drafting (writing) or automatic literature search (research).
+export type WritingJob = { id: string; kind?: "writing" | "research"; status: "running" | "waiting" | "paused" | "completed" | "cancelled" | "failed" | "stalled" | "budget_exhausted" | "not_applicable" | "executor_unavailable" | "configuration_mismatch" | "superseded" | "exhausted"
+  requested_count?: number | null
+  budget_usd: number; spent_usd: number; remaining_usd: number; spent: { confirmed_usd: number; reserved_usd: number; uncertain_usd: number }
+  segments: { run_id: string; status: string; saved_sections?: string[]; analyzed_count?: number }[]
+  max_segments: number; blocked: Record<string, string>; cancel_requested: boolean; error: string | null; current_run_id: string | null }
+export const jobActive = (job?: WritingJob | null) => Boolean(job && ["running", "waiting"].includes(job.status))
 export type Session = SessionSummary & { messages: Message[]; articles: Article[]; recommended_article_ids: string[]; research_state: Record<string, unknown>; summary: string; writing_progress?: WritingProgress
   outline?: { sections?: { id: string; title: string }[] }; held_article_ids?: string[]; consultant_decisions?: ConsultantDecision[] }
 export type ConsultantDecision = { article_id?: string; decision?: Decision; order?: string[]; origin: string; at: string; exact_quote?: string }
@@ -53,6 +61,8 @@ export const getSession = (id: string, signal?: AbortSignal) => scholarV4Request
 export const sendMessage = (sessionId: string, message: string) => scholarV4Request<Run>("/chat", json({ session_id: sessionId, message }))
 export const getRun = (id: string, signal?: AbortSignal) => scholarV4Request<Run>(`/runs/${encodeURIComponent(id)}`, { signal })
 export const cancelRun = (id: string) => scholarV4Request<Run>(`/runs/${encodeURIComponent(id)}/cancel`, json({}))
+export const resumeWritingJob = (sid: string) => scholarV4Request<{ job: WritingJob | null }>(`/sessions/${encodeURIComponent(sid)}/writing-job/resume`, json({}))
+export const cancelWritingJob = (sid: string) => scholarV4Request<{ job: WritingJob | null }>(`/sessions/${encodeURIComponent(sid)}/writing-job/cancel`, json({}))
 export const selectArticle = (sid: string, aid: string, selected: boolean) => scholarV4Request<Article>(`/sessions/${encodeURIComponent(sid)}/articles/${encodeURIComponent(aid)}`, json({ selected }, "PATCH"))
 export const decideArticle = (sid: string, aid: string, decision: Decision) => scholarV4Request<Article>(`/sessions/${encodeURIComponent(sid)}/articles/${encodeURIComponent(aid)}`, json({ decision }, "PATCH"))
 export const orderArticles = (sid: string, articleIds: string[]) => scholarV4Request<{ recommended_article_ids: string[] }>(`/sessions/${encodeURIComponent(sid)}/articles/order`, json({ article_ids: articleIds }))

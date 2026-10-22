@@ -14,6 +14,22 @@ from fastapi.responses import Response
 
 router = APIRouter(prefix="/scholar-v4", tags=["ennoscholar-v4"])
 logger = logging.getLogger(__name__)
+
+
+@router.on_event("startup")
+def start_writing_job_watchdog():
+    """Automatic drafting jobs are resumed after a backend restart without any request."""
+    from agents.EnnoScholarV4.service import start_watchdog
+    try:
+        start_watchdog()
+    except Exception as exc:
+        logger.warning("EnnoScholar V4 watchdog not started type=%s", type(exc).__name__)
+
+
+@router.on_event("shutdown")
+def stop_writing_job_watchdog():
+    from agents.EnnoScholarV4.service import stop_watchdog
+    stop_watchdog()
 def identifier():
     # FastAPI binds each Path field to its parameter name; never reuse one instance.
     return Path(min_length=8, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
@@ -165,3 +181,18 @@ def run(run_id: str = identifier(), user=Depends(get_current_user)):
 @router.post("/runs/{run_id}/cancel")
 def cancel(run_id: str = identifier(), user=Depends(get_current_user)):
     return invoke(lambda: get_service().cancel(int(user.id), run_id))
+
+
+@router.get("/sessions/{session_id}/writing-job")
+def writing_job(session_id: str = identifier(), user=Depends(get_current_user)):
+    return invoke(lambda: get_service().writing_job(int(user.id), session_id))
+
+
+@router.post("/sessions/{session_id}/writing-job/cancel")
+def cancel_writing_job(session_id: str = identifier(), user=Depends(get_current_user)):
+    return invoke(lambda: get_service().cancel_job(int(user.id), session_id))
+
+
+@router.post("/sessions/{session_id}/writing-job/resume")
+def resume_writing_job(session_id: str = identifier(), user=Depends(get_current_user)):
+    return invoke(lambda: get_service().resume_job(int(user.id), session_id))

@@ -424,6 +424,8 @@ class _Responses:
 
     def create(self, **kwargs):
         from .pricing import resolve, reserve_bound
+        from .model_policy import request_policy
+        kwargs = request_policy(kwargs)
         owner = self.owner
         label = kwargs.pop(MeteredClient.PRIVATE, None) or {}
         config, model = owner.config, kwargs.get("model", owner.config.model)
@@ -448,8 +450,11 @@ class _Responses:
         if label.get("attempt_id"):
             with owner._lock:
                 owner.records[label["attempt_id"]] = record
+        from .prompt_cache import layout
+        sent, cache_layout = layout(kwargs, price, getattr(config, "prompt_cache_mode", "implicit"))
+        record["cache_layout"] = cache_layout
         try:
-            stream = owner._client.responses.create(**kwargs)
+            stream = owner._client.responses.create(**sent)
         except Exception as exc:
             status = getattr(exc, "status_code", None)
             if ticket is not None:
@@ -468,6 +473,19 @@ class _Responses:
 
 def _settle(owner, ticket, record, response, price):
     from .pricing import cost
+    from .model_policy import MODEL, ModelPolicyError
+    import re
+    resolved = getattr(response, "model", None)
+    tier = getattr(response, "service_tier", None)
+    if (resolved and not re.fullmatch(re.escape(MODEL) + r"(?:-\d{4}-\d{2}(?:-\d{2})?)?", resolved)) or tier not in {None, "default"}:
+        record.update(model_resolved=resolved, service_tier=tier, policy_error="provider_model_or_tier_mismatch")
+        if ticket is not None:
+            owner.meter.ledger.unknown(ticket, "provider_model_or_tier_mismatch",
+                {"model_resolved": resolved, "service_tier": tier})
+            record["ledger"]["status"] = "unknown"
+        error = ModelPolicyError("Le fournisseur a retourné un modèle ou mode hors politique V4 ; usage à rapprocher, aucun repli.")
+        error.code = "provider_model_or_tier_mismatch"
+        raise error
     raw = getattr(response, "usage", None)
     raw = raw.model_dump(exclude_none=True) if hasattr(raw, "model_dump") else raw
     web_calls = sum((item.get("type") if isinstance(item, dict) else getattr(item, "type", None)) == "web_search_call"

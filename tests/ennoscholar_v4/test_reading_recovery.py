@@ -264,7 +264,7 @@ def test_download_deadline_diagnosis_reproduces_late_alternative_without_network
     def fetch(url, deadline, *args, **kwargs):
         calls.append((url, round(deadline-clock[0], 3)))
         if url == paper.pdf_url:
-            clock[0] += 35
+            clock[0] = min(clock[0] + 35, deadline)                  # a slow server, cut at its own deadline
             raise TimeoutError("Délai de téléchargement atteint.")
         if url == paper.url:
             clock[0] += 1.5
@@ -278,11 +278,16 @@ def test_download_deadline_diagnosis_reproduces_late_alternative_without_network
         return [paper.model_copy(update={"arxiv_id": "2601.12345"})]
     sources.metadata.side_effect = metadata
     result = fulltext.get_fulltext(paper, sources, 600, config=ScholarV4Config(api_key="mock"))
-    assert calls == [(paper.pdf_url, 35.0), (paper.url, 10.0), ("https://arxiv.org/html/2601.12345", 3.5)]
-    assert not any("/pdf/2601.12345" in url for url, _ in calls)
+    # Diagnosis (earlier policy): the publisher PDF took 35 s and the open arXiv version, found
+    # late, kept 3.5 s, its PDF never tried. Now the remaining time is shared: no URL takes more
+    # than 25 s while others remain, each alternative keeps at least 5 s, and the article's own
+    # deadline (max_download_seconds = 45 s) still bounds the whole.
+    assert [url for url, _ in calls] == [paper.pdf_url, paper.url, "https://arxiv.org/html/2601.12345",
+        "https://arxiv.org/pdf/2601.12345"]
+    assert calls[0][1] <= 25 and all(seconds >= 5 for _, seconds in calls[2:])
+    assert sum(a["seconds"] for a in result["attempts"]) + 5 <= ScholarV4Config(api_key="mock").max_download_seconds
     assert result["text"] == "" and result["access_status"] == "abstract_only"
-    assert [a["seconds"] for a in result["attempts"]] == [35.0, 1.5, 3.5]
-    assert [a["error"] for a in result["attempts"]] == ["TimeoutError", "ValueError", "TimeoutError"]
+    assert [a["error"] for a in result["attempts"]] == ["TimeoutError", "ValueError", "TimeoutError", "TimeoutError"]
 
 
 def test_redirect_diagnosis_confirms_five_hop_limit_with_mocked_transport(monkeypatch):

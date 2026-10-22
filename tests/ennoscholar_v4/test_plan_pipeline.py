@@ -21,8 +21,7 @@ from tests.ennoscholar_v4 import replay_e7bae458 as replay
 
 @pytest.fixture
 def clock(monkeypatch):
-    start = real_time.perf_counter()
-    now = lambda: (real_time.perf_counter()-start)*SCALE
+    now = replay.Clock()
     monkeypatch.setattr(module, "time", NS(monotonic=now))
     return now
 
@@ -230,7 +229,7 @@ def test_the_searches_of_a_round_run_concurrently_with_identical_results(clock, 
         mock = sources()
         base = mock.search.side_effect
         def search(query, *a, **k):
-            real_time.sleep(8/SCALE)
+            clock.wait(8)  # Exact simulated provider time, unaffected by machine load.
             return base(query, *a, **k)
         mock.search.side_effect = search
         return mock

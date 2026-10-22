@@ -39,6 +39,8 @@ class Price:
     # higher price of each category is used, and amounts are marked unverified).
     status: str = "catalog"
     notes: tuple = field(default_factory=tuple)
+    # "explicit": the model accepts explicit cache breakpoints (prompt_cache.layout).
+    prompt_cache: str = ""
 
     @property
     def verified(self):
@@ -69,7 +71,8 @@ def _load(path):
             output=float(row["output"]), long_context_threshold=int(row.get("long_context_threshold") or 0),
             long_input_multiplier=float(row.get("long_input_multiplier", 1)),
             long_output_multiplier=float(row.get("long_output_multiplier", 1)),
-            web_call=float(row.get("web_call", 0)), effective_from=row.get("effective_from", ""), source=row.get("source", ""))
+            web_call=float(row.get("web_call", 0)), effective_from=row.get("effective_from", ""), source=row.get("source", ""),
+            prompt_cache=row.get("prompt_cache", ""))
     return prices
 
 

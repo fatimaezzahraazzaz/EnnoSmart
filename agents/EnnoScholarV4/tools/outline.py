@@ -82,7 +82,7 @@ def validate_sections(state, sections, registry):
                 raise ValueError("Preuve inconnue ou hors de la section.")
 
 
-def manage_outline(state, args, registry):
+def manage_outline(state, args, registry, *, consultant=False):
     current = state.get("outline", {"title": "État de l’art", "version": 0, "sections": []})
     if args.action == "read":
         from ..writing_context import section_projection
@@ -148,6 +148,15 @@ def manage_outline(state, args, registry):
             section.update(args.sections[0].model_dump())
         state.setdefault("focus", {})["section_id"] = section["id"] if section in sections else ""
     validate_sections(state, proposed["sections"], registry)
+    from ..editorial import plan_review
+    editorial = plan_review(proposed)
+    if current.get("approval") and not consultant:
+        # The model never changes a plan the consultant approved: it proposes. The
+        # consultant's own edit (document action) applies and withdraws the approval.
+        state["outline_revision_proposal"] = {"outline": proposed, "editorial_review": editorial,
+            "based_on_revision": current.get("plan_revision"), "consultant_approval_required": True}
+        return {"saved": False, "approval_required": True, "proposal": state["outline_revision_proposal"],
+            "guidance": "Le plan approuvé et ses brouillons restent intacts ; présenter la proposition au consultant."}
     state.setdefault("outline_versions", []).append(copy.deepcopy(current))
     proposed["version"] = current["version"] + 1
     proposed["plan_revision"] = current.get("plan_revision", current["version"]) + 1
@@ -157,4 +166,4 @@ def manage_outline(state, args, registry):
     state.setdefault("document", {})["review_stale"] = True
     from ..manuscript import save_document_revision
     save_document_revision(state)
-    return {"saved": True, "outline": proposed}
+    return {"saved": True, "outline": proposed, "editorial_review": editorial}

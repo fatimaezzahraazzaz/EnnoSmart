@@ -68,7 +68,7 @@ def test_mocked_sources_without_provider_stats_keep_working():
 def test_semantic_scholar_calls_are_serialized_and_paced(monkeypatch):
     from agents.EnnoScholarV2.tools.scientific_search import ScientificSearch
     from agents.EnnoScholarV4 import sources as sources_module
-    client = sources_module.V4ScientificSearch.__new__(sources_module.V4ScientificSearch)
+    client = sources_module.V4ScientificSearch(sources_module.ScholarConfig(), retries=1)
     client.retries, client.search_offset = 1, 0
     calls, sleeps = [], []
     monkeypatch.setattr(ScientificSearch, "_get", lambda self, url, **kw: calls.append(url) or "ok")

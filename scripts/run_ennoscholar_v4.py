@@ -25,8 +25,9 @@ def main():
     config.validate()
     if args.check_config:
         from openai import OpenAI
-        client = OpenAI(api_key=config.api_key, timeout=25, max_retries=0)
-        print("Model access:", client.models.retrieve(config.model).id)
+        from agents.EnnoScholarV4.finance import MeteredClient
+        client = MeteredClient(OpenAI(api_key=config.api_key, timeout=25, max_retries=0), config)
+        print("Model requested:", config.model)
         response = client.responses.create(model=config.model, reasoning={"effort": config.reasoning_effort},
             input="Use the function check with ok=true.", tools=[{"type": "function", "name": "check", "strict": True,
             "parameters": {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"], "additionalProperties": False}}],

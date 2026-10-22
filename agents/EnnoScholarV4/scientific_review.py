@@ -163,6 +163,11 @@ def deterministic_review(state, toolkit, outline=None):
     coverage = literature_coverage(state, toolkit.registry)
     if not coverage["coverage_sufficient"]:
         issue("coverage_incomplete", "Couverture scientifique et temporelle non établie.")
+    # Overlaps and repetitions between sections are editorial signals for the reviewer's
+    # judgment (editorial.py): reported, never merged or rewritten automatically.
+    from .editorial import manuscript_review
+    for row in manuscript_review(state):
+        issue(row["code"], row["message"], row["section_ids"][0])
     current = state.get("scientific_review", {}).get("scientific", {})
     return {"document_revision": state.get("document", {}).get("revision",0), "issues":issues,
         "integrity_passed": not any(i["code"] in {"invalid_evidence","unverified_identity","citation_mapping","invalid_claim_mapping","invalid_number","invalid_calculation","unsupported_attribution"} for i in issues),

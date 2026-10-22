@@ -102,11 +102,14 @@ def test_interrupted_after_two_resumes_without_duplicate_sections():
         cancelled=lambda: sum(e["tool"] == "writing_progress" and e["status"] == "completed"
             and bool(e.get("section_id")) for e in events) >= 2)
     assert first["partial"] and first["writing_progress"]["status"] != "draft_complete"
-    before = [section["drafts"][-1]["id"] for section in state["outline"]["sections"][:2]]
+    # Parallel validated saves can finish out of plan order. Preserve the actual
+    # saved ids, including siblings drained during cancellation.
+    before = {section["id"]: section["drafts"][-1]["id"] for section in state["outline"]["sections"] if section["drafts"]}
+    assert 2 <= len(before) < 6
     state["messages"].append({"role": "user", "content": "Continue la rédaction des sections restantes."})
     resumed = agent(Client(lambda n, kw: draft_call(n, kw, ids, eids))).run(state)
     assert not resumed["partial"]
-    assert [section["drafts"][-1]["id"] for section in state["outline"]["sections"][:2]] == before
+    assert {section["id"]: section["drafts"][-1]["id"] for section in state["outline"]["sections"] if section["id"] in before} == before
     assert all(len(section["drafts"]) == 1 for section in state["outline"]["sections"])
 
 

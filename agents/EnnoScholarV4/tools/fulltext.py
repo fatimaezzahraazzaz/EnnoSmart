@@ -16,6 +16,14 @@ def document_urls(article, candidate_urls=None, pdf_only=False):
     if article.arxiv_id:
         derived.extend(["https://arxiv.org/html/" + article.arxiv_id, "https://arxiv.org/pdf/" + article.arxiv_id])
     originals = [article.pdf_url, *article.work_urls, article.url]
+    # Publisher landing pages derived from the collected PDF location, before
+    # slow PDF transfer. The same identity and scientific-body checks still run.
+    if article.pdf_url and not pdf_only:
+        parsed = urlsplit(article.pdf_url)
+        if parsed.hostname == "link.springer.com" and article.doi:
+            derived.append("https://link.springer.com/article/" + article.doi)
+        elif (parsed.hostname or "").endswith("mdpi.com") and parsed.path.endswith("/pdf"):
+            derived.append(parsed._replace(path=parsed.path[:-4], query="").geturl())
     for url in [*explicit, *originals]:
         if not url:
             continue
@@ -59,7 +67,9 @@ def get_fulltext(article, sources, deadline, check=lambda: None, candidate_urls=
                 # Large PDFs can require >18 seconds. Keep the total article deadline,
                 # reserve time for alternatives when several candidates remain.
                 remaining = deadline-time.monotonic()
-                allowance = remaining if len(urls) == 1 else max(18, min(70 if pdf_only else 35, remaining-5))
+                remaining_urls = sum(u not in seen for u in urls)
+                allowance = remaining if not remaining_urls else min(70 if pdf_only else 25,
+                    max(5, remaining / min(3, remaining_urls + 1)))
                 data, content_type, final_url = fetch_public(url, min(deadline, time.monotonic()+allowance), check, max_bytes=config.max_pdf_bytes)
                 stage = "extraction"
                 if pdf_only and not data.startswith(b"%PDF"):
@@ -87,8 +97,10 @@ def get_fulltext(article, sources, deadline, check=lambda: None, candidate_urls=
                     raise ValueError("UnsupportedFormat")
                 text = "\n\n".join(chunk.text for chunk in chunks)
                 identity_text = source_title + "\n" + (chunks[0].text[:7000] if chunks else "")
-                if len(text) < 500 or not matches_article(LegacyArticle(title=article.title), identity_text):
-                    raise ValueError("IdentityOrTextUnavailable")
+                if len(text) < 500:
+                    raise ValueError("ScientificBodyUnavailable")
+                if not matches_article(LegacyArticle(title=article.title), identity_text):
+                    raise ValueError("DocumentIdentityMismatch")
                 check()
                 stage = "storage"
                 filename = save_pdf(data) if kind == "pdf" else ""

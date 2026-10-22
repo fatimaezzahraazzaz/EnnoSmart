@@ -37,7 +37,7 @@ def interleave_by_provider(rows):
         groups[names[0]].append(row)
     ordered = []
     for rank in range(max((len(g) for g in groups.values()), default=0)):
-        ordered.extend(g[rank] for g in groups.values() if rank < len(g))
+        ordered.extend(groups[name][rank] for name in sorted(groups) if rank < len(groups[name]))
     return ordered
 
 
@@ -103,6 +103,16 @@ class ArticleStore:
             raise ValueError("Article inconnu : utilisez un identifiant retourné par les outils.")
         return self.registry[aid]
 
+    def resolve(self, identifier):
+        """Exact stored identities first; never fuzzy-merge scientific titles."""
+        text = " ".join(identifier.strip().casefold().split())
+        if not text:
+            return []
+        doi = normalize_doi(identifier)
+        return [aid for aid, article in self.registry.items() if (doi and article.doi == doi) or text in {
+            aid.casefold(), " ".join(article.title.casefold().split()), article.arxiv_id.casefold(),
+            article.url.casefold(), ("https://arxiv.org/abs/"+article.arxiv_id).casefold() if article.arxiv_id else ""}]
+
     def insert(self, incoming, family="", max_new=None):
         """max_new bounds NEW records only; notices of known works always merge."""
         ids, dropped = [], 0
@@ -126,6 +136,12 @@ class ArticleStore:
                 if row.verified and (not match.verified or match.metadata_errors):
                     match.title, match.authors, match.year = row.title, row.authors, row.year
                     match.verified, match.metadata_errors = True, list(row.metadata_errors)
+                if (not match.analysis and len(row.abstract) > len(match.abstract) and match.abstract and
+                        " ".join(row.abstract.split()).startswith(" ".join(match.abstract.rstrip(".… ").split()))):
+                    # Same verified bibliographic record, a longer literal prefix;
+                    # preserve the former text for provenance and reopen only this notice.
+                    match.provider_notices.append({"kind": "abstract_enriched", "previous_abstract": match.abstract})
+                    match.abstract = row.abstract
                 for name in ("abstract", "doi", "arxiv_id", "url", "pdf_url", "authors", "year", "journal", "publisher", "publication_date"):
                     if not getattr(match, name) and getattr(row, name):
                         setattr(match, name, getattr(row, name))

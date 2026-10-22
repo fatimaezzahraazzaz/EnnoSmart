@@ -1,52 +1,71 @@
 {
-  "catalog_version": "openai-standard-2026-10-19",
+  "catalog_version": "openai-standard-2026-10-21",
   "unit": "USD per 1 000 000 tokens",
-  "note": "Reference prices read on the provider's public pricing pages on 2026-10-19 (audit 128698bb). They are not a contract: an administrator replaces this file (ENNOSCHOLAR_V4_PRICING_FILE) when the account's prices, tier or date differ. Cache read and cache write tokens are counted inside input tokens by the provider; reasoning tokens are counted inside output tokens.",
+  "note": "Reference prices read on the provider's public pricing and model pages on 2026-10-20 (https://developers.openai.com/api/docs/pricing). They are not a contract: an administrator replaces this file (ENNOSCHOLAR_V4_PRICING_FILE) when the account's prices, tier or date differ. Cache read and cache write tokens are counted inside input tokens by the provider (a write replaces the ordinary input rate, it is not added to it); reasoning tokens are counted inside output tokens. Long context (more than 272 000 input tokens): input, cache read and cache write x2, output x1.5. prompt_cache = explicit: the model accepts prompt_cache_options.mode=explicit and prompt_cache_breakpoint (GPT-5.6 and later).",
   "prices": [
     {
       "provider": "openai",
       "model": "gpt-5.6-sol",
       "tier": "default",
-      "effective_from": "2026-10-19",
+      "effective_from": "2026-10-20",
       "source": "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
       "input": 4.0,
-      "cache_read": 0.40,
+      "cache_read": 0.4,
       "cache_write": 5.0,
       "output": 20.0,
       "long_context_threshold": 272000,
       "long_input_multiplier": 2.0,
       "long_output_multiplier": 1.5,
-      "web_call": 0.01
+      "web_call": 0.01,
+      "prompt_cache": "explicit"
     },
     {
       "provider": "openai",
       "model": "gpt-6.1-sol",
       "tier": "default",
-      "effective_from": "2026-10-19",
-      "source": "https://developers.openai.com/api/docs/pricing",
-      "input": 12.0,
-      "cache_read": 0.60,
-      "cache_write": 15.0,
-      "output": 60.0,
+      "effective_from": "2026-10-20",
+      "source": "https://developers.openai.com/api/docs/models/gpt-6.1-sol",
+      "input": 2.0,
+      "cache_read": 0.1,
+      "cache_write": 2.5,
+      "output": 10.0,
       "long_context_threshold": 272000,
       "long_input_multiplier": 2.0,
       "long_output_multiplier": 1.5,
-      "web_call": 0.01
+      "web_call": 0.01,
+      "prompt_cache": "explicit"
     },
     {
       "provider": "openai",
       "model": "gpt-5.6-luna",
       "tier": "default",
-      "effective_from": "2026-10-19",
+      "effective_from": "2026-10-20",
       "source": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
-      "input": 0.20,
+      "input": 0.2,
       "cache_read": 0.02,
       "cache_write": 0.25,
-      "output": 1.20,
+      "output": 1.2,
       "long_context_threshold": 272000,
       "long_input_multiplier": 2.0,
       "long_output_multiplier": 1.5,
-      "web_call": 0.01
+      "web_call": 0.01,
+      "prompt_cache": "explicit"
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-6-luna",
+      "tier": "default",
+      "effective_from": "2026-10-21",
+      "source": "https://developers.openai.com/api/docs/models/gpt-6-luna",
+      "input": 0.1,
+      "cache_read": 0.01,
+      "cache_write": 0.125,
+      "output": 0.5,
+      "long_context_threshold": 272000,
+      "long_input_multiplier": 2.0,
+      "long_output_multiplier": 1.5,
+      "web_call": 0.01,
+      "prompt_cache": "explicit"
     }
   ]
 }

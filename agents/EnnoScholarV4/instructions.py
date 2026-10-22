@@ -96,9 +96,23 @@ def classify(state, registry, sentence):
         "duration": "persistent" if PERSISTENT.search(sentence) else "request"}
 
 
-def current_message_id(state):
+def current_request(state):
+    """The consultant message the current run answers: the last one, or, for a segment of
+    an automatic drafting job, the request that opened the job (writing_job.py). A
+    continuation never adds a message in the consultant's name, so a one-off instruction
+    of that request (« En anglais. ») keeps applying to every segment."""
     users = [m for m in state.get("messages", []) if m.get("role") == "user"]
-    return users[-1].get("id") if users else None
+    request_id = (state.get("writing_segment") or {}).get("request_message_id")
+    if request_id:
+        found = next((m for m in users if m.get("id") == request_id), None)
+        if found is not None:
+            return found
+    return users[-1] if users else None
+
+
+def current_message_id(state):
+    current = current_request(state)
+    return current.get("id") if current else None
 
 
 def applies_now(state, row):

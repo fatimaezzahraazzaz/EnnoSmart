@@ -133,8 +133,8 @@ def resolve(state, registry, message):
     3. « revenons au premier … » resolves to an earlier answer;
     4. an implicit reference without a single plausible set asks for a clarification.
     No reference: an open request (exploration stays possible)."""
-    users = [m for m in state.get("messages", []) if m.get("role") == "user"]
-    message_id = users[-1].get("id") if users else None
+    from .instructions import current_message_id
+    message_id = current_message_id(state)
     result = {"message_id": message_id, "article_ids": [], "source": "none", "resolved_from": None,
         "ambiguous": False, "constraints": constraints_of(message)}
     named = [aid for aid in named_publications(message, registry)]
@@ -192,14 +192,16 @@ def answer_run(state, ids):
 
 def focus_block(state, registry, budget_chars=3000, compact=False):
     """The small protected block every decision, tool and final context carries."""
-    users = [m for m in state.get("messages", []) if m.get("role") == "user"]
+    from .instructions import current_request
+    current = current_request(state) or {}
+    current_id = current.get("id")
     goal = state.get("turn_goal") or {}
     refs = goal.get("references") or state.get("conversation_references") or {}
-    if refs.get("message_id") and users and refs["message_id"] != users[-1].get("id"):
+    if refs.get("message_id") and current_id and refs["message_id"] != current_id:
         # References resolved for an earlier message never steer the current one.
         refs = {}
     ids = refs.get("article_ids") or []
-    block = {"request": (users[-1]["content"] if users else "")[:400],
+    block = {"request": current.get("content", "")[:400],
         "active_publications": [{"order": i+1, "id": aid, "title": registry[aid].title[:110],
             **({"year": registry[aid].year} if registry[aid].year else {})} for i, aid in enumerate(ids) if aid in registry],
         "references_source": refs.get("source", "none"), "resolved_from": refs.get("resolved_from"),

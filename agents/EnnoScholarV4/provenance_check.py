@@ -203,9 +203,13 @@ def draft_confrontation(state, section, draft):
 
 # A reported value: a percentage, or a decimal number (« 84,7 », « 0.45 »). Integers, years,
 # versions and references to figures/tables/sections are not results to trace.
-NUMBER = re.compile(r"(?<![\w.,/-])(\d+(?:[.,]\d+)?)\s?%|(?<![\w.,/-])(\d+[.,]\d+)(?![\w.,]*\d)(?![.,]?\w)")
+NUMBER = re.compile(r"(?<![\w.,-])(\d+(?:[.,]\d+)?)\s?%|(?<![\w.,/-])(\d+[.,]\d+)(?![\w.,]*\d)(?![.,]?\w)")
 HEADING_NUMBER = re.compile(r"(?m)^(\s*(?:#{1,6}\s*|[-*]\s+)?)(\d+(?:\.\d+)+\.?)(?=\s+\S)")
 REFERENCE_WORD = re.compile(r"(?:section|figure|fig\.|tableau|table|équation|equation|eq\.|chapitre|annexe|version|v)\s*$", re.I)
+STRUCTURAL_REFERENCE = re.compile(
+    r"\b(?:sections?|figures?|tableaux?|tables?|chapitres?|annexes?)\s+"
+    r"\d+(?:\.\d+)+(?:\s*(?:à|to|through|et|and|–|—|-|,)\s*\d+(?:\.\d+)+)*"
+    r"(?![\d.]|\s*%)", re.I)
 
 
 def _value_variants(value):
@@ -240,11 +244,14 @@ def numeric_trace(toolkit, text, evidence_ids, project_ids):
         # Numbering of a heading or of an enumerated item (« ### 3.1 Extraire… », « 2.3. Résultats »)
         # is a position in the document, not a reported value (run dcf5d05b).
         plain = HEADING_NUMBER.sub(lambda m: m.group(1)+" "*len(m.group(2)), plain)
+        plain = STRUCTURAL_REFERENCE.sub(lambda m: " " * len(m.group()), plain)
         for match in NUMBER.finditer(plain):
-            if REFERENCE_WORD.search(plain[:match.start()][-14:]):
+            if not match.group(1) and REFERENCE_WORD.search(plain[:match.start()][-14:]):
                 continue
             value = match.group(1) or match.group(2)
-            found = [(eid, kind) for eid, kind, quote in proofs if any(v in quote for v in _value_variants(value))]
+            found = [(eid, kind) for eid, kind, quote in proofs if any(
+                re.search(r"(?<![\w.,])" + re.escape(v) + r"(?!\d|[.,]\d)", quote)
+                for v in _value_variants(value))]
             if found:
                 trace.append({"paragraph": index, "value": value, "percent": bool(match.group(1)),
                     "evidence_ids": [eid for eid, _ in found], "origins": sorted({kind for _, kind in found})})

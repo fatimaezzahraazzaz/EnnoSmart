@@ -117,3 +117,31 @@ def preflight_run(self, project_id: int, run_id: int):
         return report
     finally:
         db.close()
+
+
+
+@celery_app.task(name="ennosmart.scholar_v4.worker_check")
+def scholar_v4_worker_check():
+    """Proof that this worker runs EnnoScholar V4 tasks, with its configuration as one-way
+    digests (model, prices, cache mode, API key, database), compared by the backend."""
+    from agents.EnnoScholarV4.service import worker_fingerprint
+    return worker_fingerprint()
+
+
+@celery_app.task(
+    name="ennosmart.scholar_v4.drive_writing_job",
+    bind=True,
+    acks_late=True,
+    reject_on_worker_lost=True,
+    max_retries=100,
+)
+def drive_writing_job(self, owner: int, session_id: str, job_id: str):
+    """EnnoScholar V4 automatic drafting: segments of one persistent job (writing_job.py).
+    A task delivered twice is harmless (a segment needs the conversation's run lease). When
+    a segment's lease is still live (a lost worker), the task is retried after it expires
+    instead of being acknowledged: the interrupted calls are then counted as uncertain."""
+    from agents.EnnoScholarV4.service import get_service
+    outcome = get_service().drive_job(int(owner), str(session_id), str(job_id), "celery") or {}
+    if outcome.get("retry_after"):
+        raise self.retry(countdown=float(outcome["retry_after"]))
+    return {"job_id": job_id, "status": outcome.get("status")}

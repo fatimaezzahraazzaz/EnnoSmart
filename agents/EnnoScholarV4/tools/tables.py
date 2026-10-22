@@ -24,21 +24,59 @@ def html_table(table):
     caption = caption_node.get_text(" ", strip=True) if caption_node else ""
     match = re.search(r"\bTable\s+(\d+|[IVXLCDM]+)\b", caption, re.I)
     headers, rows, raw, ambiguous = [], [], [], bool(table.find("table"))
-    for tr in table.find_all("tr"):
+    grid, header_rows, origins = {}, [], {}
+    trs = [tr for tr in table.find_all("tr") if tr.find_parent("table") is table]
+    for ri, tr in enumerate(trs[:500]):
         cells = tr.find_all(["th", "td"], recursive=False)
         if not cells:
             continue
         values = [c.get_text(" ", strip=True) for c in cells]
         raw.append(values)
-        if any(str(c.get("rowspan", "1")) != "1" or str(c.get("colspan", "1")) != "1" for c in cells):
-            ambiguous = True
-        if not rows and any(c.name == "th" for c in cells):
-            if headers:
-                ambiguous = True
-            headers = values
+        in_head = bool(tr.find_parent("thead")) or (not rows and not any(
+            c.name == "td" for c in cells) and (not header_rows or header_rows[-1] == ri-1))
+        if in_head:
+            header_rows.append(ri)
         else:
-            rows.append(values)
-    result = structure(headers, rows, caption, match.group(1) if match else None, ambiguous=ambiguous, raw_rows=raw)
+            rows.append(ri)
+        ci = 0
+        for cell, value in zip(cells, values):
+            while (ri, ci) in grid:
+                ci += 1
+            try:
+                height, width = int(cell.get("rowspan", 1)), int(cell.get("colspan", 1))
+            except (ValueError, TypeError):
+                height = width = 1
+                ambiguous = True
+            if not (1 <= height <= 500 and 1 <= width <= 128 and ci+width <= 128 and ri+height <= len(trs)):
+                ambiguous = True
+                height = width = 1
+            # Data spanning several numerical columns has no unambiguous metric
+            # association. A row label spanning rows is literal and safe to repeat.
+            if not in_head and (width != 1 or (height != 1 and ci != 0)):
+                ambiguous = True
+            for dr in range(height):
+                for dc in range(width):
+                    key = (ri+dr, ci+dc)
+                    if key in grid:
+                        ambiguous = True
+                    grid[key], origins[key] = value, (ri, ci)
+            ci += width
+    width = max((c+1 for r, c in grid), default=0)
+    for ci in range(width):
+        labels, seen = [], set()
+        for ri in header_rows:
+            if (ri, ci) not in grid:
+                ambiguous = True
+                continue
+            origin = origins[ri, ci]
+            if origin not in seen and grid[ri, ci]:
+                labels.append(grid[ri, ci])
+                seen.add(origin)
+        headers.append(" / ".join(labels))
+    rows = [[grid.get((ri, ci)) for ci in range(width)] for ri in rows]
+    result = structure(headers, rows, caption, match.group(1) if match else None,
+        ambiguous=ambiguous or len(trs) > 500, raw_rows=raw)
+    result["cell_origins"] = [[list(origins.get((ri, ci), ())) for ci in range(width)] for ri in range(len(trs[:500]))]
     result["source_format"] = "html"
     result["element_id"] = figure.get("id", "") if figure else table.get("id", "")
     return result

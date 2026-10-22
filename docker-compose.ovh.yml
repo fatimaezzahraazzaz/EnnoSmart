@@ -63,6 +63,9 @@ services:
     restart: unless-stopped
     env_file: .env
     environment: &backend_environment
+      # Exclusive V4 policy; the backend and scholar-worker inherit the same value.
+      ENNOSCHOLAR_V4_MODEL: gpt-6-luna
+      ENNOSCHOLAR_V4_TASK_MODELS: ""
       ENNOSMART_ROOT: /opt/ennosmart
       ENNOSMART_BASE_DIR: /opt/ennosmart
       ENNOSMART_DATA_ROOT: /var/lib/ennosmart

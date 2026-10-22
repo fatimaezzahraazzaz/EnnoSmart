@@ -40,16 +40,18 @@ def passage(i, j, pad=0):
         + " The surrounding discussion details the frame field, the singularity graph and the parametrization." * pad)
 
 
-def rich_corpus(n_articles=4, passages=60, read_windows=4, candidates=0, pad=0, table=None):
+def rich_corpus(n_articles=4, passages=60, read_windows=4, candidates=0, pad=0, table=None, study_scopes=None):
     """Selected works with detailed cards (8 mechanisms, 12 results, 5 limitations,
     3 tables, 32 exact proofs each) and sources only partly traversed."""
     t = tools()
     works = [Article(title=f"Work{i}: learned hexahedral meshing variant {i}", url=f"https://example.org/w{i}",
-        doi=f"10.1234/w{i}", authors=["Author"], year=2024, verified=True, abstract=f"Volumetric meshing study {i}.")
+            doi=f"10.1234/w{i}", authors=["Author"], year=2024, verified=True,
+            abstract=(study_scopes[i] if study_scopes else f"Volumetric meshing study {i}."))
         for i in range(n_articles)]
     ids, _ = t.store.insert(works)
     for i, aid in enumerate(ids):
-        chunks = [{"text": passage(i, j, pad), "section": "Results" if j % 2 else "Method", "page": j+1} for j in range(passages)]
+        chunks = [{"text": (f"Our approach uses {study_scopes[i]}. " if study_scopes else "") + passage(i, j, pad),
+            "section": "Results" if j % 2 else "Method", "page": j+1} for j in range(passages)]
         if table and i == 0:
             # A structured results table of the first work, read before its card is saved.
             chunks.append({"text": table_text(table), "section": "Results", "page": passages+1, "table": table})

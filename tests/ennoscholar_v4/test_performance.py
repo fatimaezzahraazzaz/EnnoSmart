@@ -12,6 +12,8 @@ from types import SimpleNamespace as NS
 from unittest.mock import Mock
 
 import pytest
+import httpx
+from openai import RateLimitError
 
 from agents.EnnoScholarV4 import agent as module
 from agents.EnnoScholarV4.agent import ScholarChatAgent, TURN_INSTRUCTION_PREFIX
@@ -26,8 +28,8 @@ SCALE = 100.0
 
 @pytest.fixture
 def clock(monkeypatch):
-    start = real_time.perf_counter()
-    now = lambda: (real_time.perf_counter()-start)*SCALE
+    from tests.ennoscholar_v4.replay_e7bae458 import Clock
+    now = Clock()
     monkeypatch.setattr(module, "time", NS(monotonic=now))
     return now
 
@@ -44,7 +46,7 @@ class ScaledClient:
     def create(self, **kw):
         if kw.get("tool_choice") == {"type": "function", "name": "set_turn_goal"}:
             self.understanding.append(kw)
-            real_time.sleep(5/SCALE)
+            self.clock.wait(5) if hasattr(self.clock, "wait") else real_time.sleep(5/SCALE)
             output = call("set_turn_goal", self.goal, "goal") if self.goal else []
             return Stream(NS(output=output, output_text="", status="completed", usage={"input_tokens": 3000, "output_tokens": 200}))
         with self.lock:
@@ -54,7 +56,7 @@ class ScaledClient:
             self.max_active = max(self.max_active, self.active)
         try:
             output, seconds, out = self.respond(n, kw)
-            real_time.sleep(seconds/SCALE)
+            self.clock.wait(seconds) if hasattr(self.clock, "wait") else real_time.sleep(seconds/SCALE)
         finally:
             with self.lock:
                 self.active -= 1
@@ -92,7 +94,8 @@ def respond_factory(state, saves=None, fail=()):
             packet = memory(kw)["automatic_scientific_reading"]
             if packet["article_id"] in fail:
                 fail.remove(packet["article_id"])
-                raise RuntimeError("simulated 429")
+                raise RateLimitError("simulated 429", response=httpx.Response(429,
+                    request=httpx.Request("POST", "https://example.invalid/responses")), body=None)
             if saves is not None:
                 saves.append(packet["article_id"])
             return call("analyze_article", {"article_ids": [packet["article_id"]], "action": "save", "research_context": "x",

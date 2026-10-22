@@ -23,6 +23,11 @@ def url_key(url):
 def label_matches(label, article):
     from .sources import title_key
     key, title = title_key(label), title_key(article.title)
+    # An exact DOI label is an identity, not an abbreviated title. Accept only
+    # the publication's own DOI; a different DOI still fails the same validator.
+    literal = label.strip().strip("`")
+    if re.fullmatch(r"(?:https?://(?:dx\.)?doi\.org/)?10\.\d{4,9}/\S+", literal, re.I):
+        return normalize_doi(literal) == normalize_doi(article.doi)
     if label.casefold() in {"doi", "publication", "article", "source"} or re.fullmatch(r"\[?\d+\]?", label):
         return True
     if key == title or (len(key) >= 4 and title.startswith(key + " ")):
@@ -109,6 +114,84 @@ def reference_mismatch(toolkit, ids, evidence_ids=()):
         "other_article_ids": others}
 
 
+_VALUE = re.compile(r"(?<![\w.,])\d+(?:[   ]\d{3})*(?:[.,]\d+)?(?:\s?%)?")
+_PLANE = re.compile(r"\b2\s?D\b|\bdeux dimensions\b|bidimensionn|two[- ]dimensional|\ben 2 dimensions\b|\bplan(?:e|aire)s?\b", re.I)
+
+
+def _values(text):
+    """Reported values of a text, normalised (« 23,35 » = « 23.35 », « 9 900 » = « 9900 »);
+    small integers and years are left out (they identify nothing)."""
+    found = set()
+    for raw in _VALUE.findall(text or ""):
+        value = re.sub(r"[   ]", "", raw).replace(",", ".")
+        digits = re.sub(r"\D", "", value)
+        if "%" in value or "." in value or len(digits) >= 3 and not re.fullmatch(r"(?:19|20)\d{2}", digits):
+            found.add(value.rstrip("%"))
+    return found
+
+
+def response_consistency(toolkit, ids, displayed, text):
+    """A research answer is built on the canonical selection (counter, cards and depth check
+    use the same works), states an explicit restricted study dimension, and reports the saved
+    figures of the works it presents. None when the answer fits; local checks, no new call."""
+    from .research import active, canonical_selection, version_groups
+    state = toolkit.state
+    if not active(state) or getattr(toolkit, "saving_section", False):
+        return None
+    selection = canonical_selection(state)
+    expected = [aid for aid in selection["selected_ids"] if aid in toolkit.registry]
+    if not expected:
+        return None
+    groups = version_groups(state)
+    work = lambda aid: groups.get(aid, aid)
+    shown = list(displayed) if displayed is not None else list(ids)
+    if not shown:
+        # The answer presents no publication (a question about the process, a refusal).
+        return None
+    # Every problem is named in one refusal, so that one correction can fix them all.
+    issues = []
+    if {work(aid) for aid in shown} != {work(aid) for aid in expected}:
+        title = lambda aid: toolkit.registry[aid].title[:90]
+        issues.append({"rejection_code": "selection_mismatch", "message": "La liste affichée doit être la sélection de la "
+            "recherche, la même que le compteur et les fiches : " + "; ".join(f"[{aid}] {title(aid)}" for aid in expected)
+            + ". Les autres candidats restent disponibles dans la bibliothèque et peuvent être mentionnés hors de "
+            "cette liste.", "expected_article_ids": expected,
+            "unexpected_article_ids": [aid for aid in shown if work(aid) not in {work(x) for x in expected}],
+            "missing_article_ids": [aid for aid in expected if work(aid) not in {work(x) for x in shown}]})
+    request = (state.get("turn_goal") or {}).get("understanding", "") + " " + " ".join(
+        m.get("content", "") for m in state.get("messages", [])[-3:] if m.get("role") == "user")
+    if re.search(r"\b3\s?D\b|volumi|tridimension|three[- ]dimensional", request, re.I) and not _PLANE.search(text):
+        from .context import study_scope_flags
+        flagged = {aid: flags for aid in expected if (flags := study_scope_flags(toolkit.registry[aid]))}
+        if flagged:
+            issues.append({"rejection_code": "study_scope_omitted", "message": "Validation explicitement limitée au plan "
+                "(2D) non signalée : " + "; ".join(f"[{aid}] « {flags[0]['quote'][:200]} »" for aid, flags in flagged.items())
+                + ". Préciser la dimension réellement étudiée ; ne pas la présenter comme une démonstration volumique 3D.",
+                "flagged_article_ids": list(flagged)})
+    if not getattr(toolkit, "results_refused", False):
+        answered = _values(text)
+        omitted = {}
+        for aid in expected:
+            analysis = toolkit.registry[aid].analysis or {}
+            claims = [c for f in ("results", "metrics", "tables_figures") for c in analysis.get(f, []) if isinstance(c, dict)
+                and all(eid in toolkit.shown_evidence and eid in toolkit.evidence for eid in c.get("evidence_ids", []))]
+            values = set().union(*(_values(c["statement"]) for c in claims)) if claims else set()
+            if values and not values & answered:
+                omitted[aid] = sorted(values)[:8]
+        if omitted:
+            # Once per run: the saved figures are named; a deliberate omission is then accepted.
+            toolkit.results_refused = True
+            issues.append({"rejection_code": "saved_results_omitted", "message": "Résultats chiffrés enregistrés non "
+                "repris pour : " + "; ".join(f"[{aid}] {', '.join(v)}" for aid, v in omitted.items()) + ". Ils figurent "
+                "dans conversation_science avec leurs preuves : les présenter (avec leurs conditions) au lieu de les "
+                "dire indisponibles.", "omitted_values": omitted})
+    if not issues:
+        return None
+    merged = {k: v for issue in issues for k, v in issue.items() if k not in {"rejection_code", "message"}}
+    return {"rejection_code": issues[0]["rejection_code"], "message": " ".join(i["message"] for i in issues),
+        "issues": [i["rejection_code"] for i in issues], **merged}
+
+
 def publish(toolkit, args, deadline):
     ids = list(dict.fromkeys(args.article_ids))
     attempt = {"draft": args.answer, "article_ids": ids, "evidence_ids": args.evidence_ids,
@@ -123,6 +206,11 @@ def publish(toolkit, args, deadline):
         return result
 
     try:
+        from .research import active, status as research_status
+        if active(toolkit.state) and not getattr(toolkit, "saving_section", False):
+            observed = research_status(toolkit.state)
+            if args.coverage_sufficient and not observed["complete"]:
+                return reject("scientific_review_required", "Résultat partiel : la revue scientifique actuelle ne justifie pas une couverture suffisante.")
         if any(aid not in toolkit.registry for aid in ids):
             return reject("unknown_article", "Référence inconnue : utiliser uniquement les identifiants de la bibliothèque.")
         pending = {}
@@ -156,15 +244,21 @@ def publish(toolkit, args, deadline):
         for eid in args.evidence_ids:
             e = toolkit.evidence.get(eid)
             if not e or eid not in toolkit.shown_evidence or e["article_id"] not in ids:
-                return reject("unread_or_unknown_evidence", "Preuve inconnue, non consultée ou extérieure aux articles cités.")
+                cause = ("inconnue" if not e else "non consultée" if eid not in toolkit.shown_evidence else
+                    f"extérieure aux articles cités (elle appartient à {e['article_id']})")
+                return reject("unread_or_unknown_evidence", f"Preuve {eid} {cause}.", invalid_evidence_ids=[eid])
             if not exact_source_valid(e, toolkit.snapshots):
-                return reject("evidence_integrity", "Citation exacte ou localisation incohérente avec la source conservée.")
+                return reject("evidence_integrity", f"Citation exacte ou localisation de {eid} incohérente avec la source "
+                    "conservée.", invalid_evidence_ids=[eid])
         for article in pending.values():
             if article.id not in toolkit.store.exposed:
                 return reject("unread_article", "Un article analysé doit avoir été effectivement présenté au modèle.")
         displayed = args.displayed_article_ids
         if displayed is not None and (len(displayed) != len(set(displayed)) or not set(displayed) <= set(ids)):
             return reject("invalid_display_order", "L'ordre affiché doit contenir des articles cités uniques.")
+        inconsistent = response_consistency(toolkit, ids, displayed, args.answer)
+        if inconsistent:
+            return reject(inconsistent.pop("rejection_code"), inconsistent.pop("message"), **inconsistent)
         allowed = {url_key(c["url"]) for c in toolkit.state.get("web_sources", [])}
         for aid in ids:
             a = toolkit.store.article(aid)
@@ -207,8 +301,13 @@ def publish(toolkit, args, deadline):
             stable = readable_source_url(url, article) if article else ""
             text = text.replace(url, stable or "Source accessible via la référence bibliographique")
         markers = re.findall(r"\[(paper_[\w]+|ev_[\w]+)\]", text)
-        if any(marker not in ids and marker not in args.evidence_ids for marker in markers):
-            return reject("unknown_marker", "Référence ou preuve non déclarée dans la réponse.")
+        unknown = list(dict.fromkeys(marker for marker in markers if marker not in ids and marker not in args.evidence_ids))
+        if unknown:
+            # The exact markers are named (run 95f3507d: a truncated proof id was refused three
+            # times under a generic message and the model "repaired" the section title instead).
+            return reject("unknown_marker", "Référence ou preuve non déclarée dans la réponse : "
+                + ", ".join(unknown[:8]) + ". Utiliser l'identifiant complet d'une publication de article_ids "
+                "ou d'une preuve de evidence_ids, ou retirer ce marqueur.", unknown_markers=unknown[:20])
         known_dois = {toolkit.store.article(aid).doi for aid in ids if toolkit.store.article(aid).doi}
         known_dois.update(source_dois)
         detected = re.findall(r"10\.\d{4,9}/[^\s<>\[\]|`*]+", unquote(text))

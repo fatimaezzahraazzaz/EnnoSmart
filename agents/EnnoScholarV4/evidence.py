@@ -79,6 +79,102 @@ def exact_source_valid(evidence, snapshots):
         return False
 
 
+# Documents stored from now on are cut on scientific boundaries (paragraphs, sentences, whole
+# tables); documents already read keep their windows so their proofs, cursors and receipts
+# stay valid (a new cut would give new identifiers and repeat their readings).
+SEGMENTATION = "paragraphs_v2"
+SEGMENT_CHARS, PARAGRAPH_CHARS, TABLE_CHARS = 1600, 2000, 3200
+_SENTENCE_END = re.compile(r"(?<=[.!?;])\s+(?=[A-Z0-9(\[«\"])")
+_NUMBERS = re.compile(r"\d+(?:[.,]\d+)?")
+
+
+def _table_like(block):
+    """Rows of short lines carrying several values or cell separators (citations removed):
+    a paragraph of prose with bracketed references is not a table."""
+    lines = [re.sub(r"\[[\d\s,–-]+\]|\\\(.*?\\\)", "", line) for line in block.splitlines() if line.strip()]
+    if len(lines) < 3 or sorted(len(line) for line in lines)[len(lines)//2] > 90:
+        return False
+    return sum(len(_NUMBERS.findall(line)) >= 2 or "|" in line or "\t" in line for line in lines) >= len(lines)*.6
+
+
+def _units(text):
+    """(start, end, header) units: paragraphs; a long paragraph cut at sentence ends; a table
+    kept whole up to TABLE_CHARS, else cut between rows with its first line as header."""
+    units = []
+    for match in re.finditer(r"\S(?:.*?\S)??(?=\s*\n\s*\n|\s*$)", text, re.S):
+        start, end = match.start(), match.end()
+        block = text[start:end]
+        if _table_like(block):
+            if len(block) <= TABLE_CHARS:
+                units.append((start, end, None))
+                continue
+            header = block.splitlines()[0].strip()[:300]
+            piece = start
+            for line in re.finditer(r"[^\n]*\n?", block):
+                if not line.group(0):
+                    continue
+                if start+line.end()-piece > SEGMENT_CHARS and start+line.start() > piece:
+                    units.append((piece, start+line.start(), header if piece > start else None))
+                    piece = start+line.start()
+            units.append((piece, end, header if piece > start else None))
+            continue
+        if len(block) <= PARAGRAPH_CHARS:
+            units.append((start, end, None))
+            continue
+        piece, last = start, start
+        cuts = [start+m.start() for m in _SENTENCE_END.finditer(block)] + [end]
+        for cut in cuts:
+            if cut-piece > SEGMENT_CHARS and last > piece:
+                units.append((piece, last, None))
+                piece = last
+            while cut-piece > PARAGRAPH_CHARS:
+                # A sentence longer than a paragraph: cut at a word boundary.
+                space = text.rfind(" ", piece, piece+SEGMENT_CHARS)
+                space = space if space > piece else piece+SEGMENT_CHARS
+                units.append((piece, space, None))
+                piece = space
+            last = cut
+        if end > piece:
+            units.append((piece, end, None))
+    return units
+
+
+def segments(text):
+    """Packed units of one chunk: (offset, exact quote, table header or None)."""
+    rows, current = [], None
+    for start, end, header in _units(text):
+        if header is not None or (current and (current[2] is not None or end-current[0] > SEGMENT_CHARS)):
+            if current:
+                rows.append(current)
+            current = (start, end, header)
+            if header is not None:
+                rows.append(current)
+                current = None
+            continue
+        current = (current[0], end, None) if current else (start, end, None)
+    if current:
+        rows.append(current)
+    result = []
+    for start, end, header in rows:
+        while start < end and text[start].isspace():
+            start += 1
+        if text[start:end].strip():
+            result.append((start, text[start:end], header))
+    return result
+
+
+SECTION_PRIORITY = re.compile(r"method|approach|model|architecture|experiment|evaluation|result|discussion|limitation|"
+    r"conclusion|ablation|validation|benchmark|performance|méthode|expérience|résultat|limite", re.I)
+SECTION_LAST = re.compile(r"reference|bibliograph|acknowledg|remerciement|funding|author contribution|conflict of interest", re.I)
+
+
+def section_rank(row):
+    """Reading priority of a passage by its section heading (methods, experiments, results,
+    discussion and limits first; reference lists and acknowledgements last)."""
+    section = row.get("section") or ""
+    return 2 if SECTION_LAST.search(section) else 0 if SECTION_PRIORITY.search(section) else 1
+
+
 def passages(article):
     fulltext = article.fulltext
     chunks = fulltext.get("chunks", []) if fulltext.get("text") else (
@@ -92,6 +188,7 @@ def passages(article):
         text = chunk["text"]
         table = chunk.get("table")
         selections = []
+        headers = {}
         if table and table.get("rows") and table["structure_status"] == "verified_cells":
             cursor = 0
             for row_index, row in enumerate(table["rows"]):
@@ -102,6 +199,12 @@ def passages(article):
                     continue
                 cursor = offset+len(quote)
                 selections.append((offset, quote, row_index))
+        elif fulltext.get("text") and fulltext.get("segmentation") == SEGMENTATION:
+            headers = {}
+            for offset, quote, header in segments(text):
+                selections.append((offset, quote, None))
+                if header:
+                    headers[offset] = header
         else:
             selections = [(offset, text[offset:offset+1200], None) for offset in range(0, len(text), 1000)]
         for offset, quote, row_index in selections:
@@ -124,6 +227,11 @@ def passages(article):
                 row["table_row_index"] = row_index
             elif table:
                 row["table_structure_status"] = "ambiguous"
+            if fulltext.get("segmentation") == SEGMENTATION and not row_index and headers.get(offset):
+                # The first line of a table cut between rows travels with each part (metadata,
+                # not quotation); its columns stay unattributed unless the structure is verified.
+                row["table_header"] = headers[offset]
+                row["table_structure_status"] = row.get("table_structure_status") or "ambiguous"
             rows.append(row)
     return rows
 

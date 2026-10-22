@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from .model_policy import MODEL
 
 
 class ConfigurationError(RuntimeError):
@@ -11,7 +12,7 @@ class ConfigurationError(RuntimeError):
 @dataclass(frozen=True)
 class ScholarV4Config:
     enabled: bool = True
-    model: str = "gpt-6.1-sol"
+    model: str = MODEL
     api_key: str = ""
     reasoning_effort: str = "medium"
     max_tool_calls: int = 48
@@ -60,10 +61,38 @@ class ScholarV4Config:
     finance_enabled: bool = False
     organization_id: str = "default"
     budget_policy_file: str = ""
-    # Model per task (comprehension, selection, reading, comparison, plan, writing,
-    # local repair, review). Empty = config.model for every task (current behaviour);
-    # see routing.py. JSON object {"reading": "model", ...}.
+    # Legacy compatibility field, neutralized by the exclusive model policy.
     task_models: str = ""
+    # Provider prompt cache layout (prompt_cache.py): "explicit" caches only the stable
+    # prefix (instructions, tools) of models that support it; "implicit" leaves the
+    # provider's default (on GPT-5.6, a cache write of the whole prefix at 1.25x the input
+    # price on every request); "off" disables writes. Deployments read from_env, where
+    # explicit is the default; a direct construction keeps the request layout unchanged.
+    prompt_cache_mode: str = "implicit"
+    # Automatic full-manuscript drafting (writing_job.py): one budget for the whole
+    # manuscript, never renewed automatically, and bounded segments and repairs.
+    writing_job_enabled: bool = True
+    writing_job_budget_usd: float = 10.0
+    writing_job_max_segments: int = 12
+    writing_job_max_section_attempts: int = 6
+    writing_job_stalled_segments: int = 2
+    # thread (default): this process. celery: the existing worker, verified before use and
+    # never replaced silently. auto: celery when verified, else thread (recorded in the job).
+    writing_job_executor: str = "thread"
+    # Same durable driver and ledger, a research-specific completion policy.
+    # Direct constructions are opt-in (offline clients); the application enables
+    # it from_env. No running process or configuration file is changed here.
+    research_job_enabled: bool = False
+    research_job_budget_usd: float = 4.0
+    research_job_max_segments: int = 6
+    research_discovery_rounds: int = 3
+    research_finalization_seconds: float = 75.0
+    fulltext_prefetch_enabled: bool = False
+
+    def __post_init__(self):
+        # Legacy env, callers and dataclasses.replace cannot reopen stage routing.
+        object.__setattr__(self, "model", MODEL)
+        object.__setattr__(self, "task_models", "")
 
     @property
     def max_response_rounds(self):
@@ -89,6 +118,9 @@ class ScholarV4Config:
             except ValueError:
                 raise ConfigurationError(f"ENNOSCHOLAR_V4_{name.upper()} est invalide.") from None
         values["api_key"] = os.getenv("OPENAI_API_KEY", "").strip()
+        values.setdefault("prompt_cache_mode", "explicit")
+        values.setdefault("research_job_enabled", True)
+        values.setdefault("fulltext_prefetch_enabled", True)
         return cls(**values)
 
     def validate(self):
@@ -98,11 +130,20 @@ class ScholarV4Config:
             raise ConfigurationError("OPENAI_API_KEY est nécessaire pour EnnoScholar V4.")
         if not self.model.strip():
             raise ConfigurationError("Configurez ENNOSCHOLAR_V4_MODEL avec un modèle Responses compatible Web Search.")
-        if self.reasoning_effort not in {"low", "medium", "high", "xhigh", "max"}:
+        if self.reasoning_effort not in {"none", "low", "medium", "high", "xhigh", "max"}:
             raise ConfigurationError("ENNOSCHOLAR_V4_REASONING_EFFORT doit être low, medium, high ou xhigh.")
         for name in ("max_tool_calls", "max_research_rounds", "max_tool_rounds", "max_finalization_attempts", "finalization_reserved_seconds", "finalization_reserved_tokens", "finalization_reserved_cost_usd", "finalization_context_chars", "max_search_results", "max_deep_analysis", "max_web_calls", "max_tokens", "max_pdf_bytes", "max_extracted_chars", "max_pdf_pages", "max_download_seconds", "max_pdf_download_seconds", "max_download_attempts", "max_retry_attempts", "workers", "timeout_seconds", "max_cost_usd",
                      "max_output_tokens", "max_context_chars", "recent_messages", "max_message_context_chars", "max_articles",
                      "web_call_price", "web_token_reserve", "request_timeout_seconds"):
+            if getattr(self, name) <= 0:
+                raise ConfigurationError(f"ENNOSCHOLAR_V4_{name.upper()} doit être positif.")
+        if self.prompt_cache_mode not in {"explicit", "implicit", "off"}:
+            raise ConfigurationError("ENNOSCHOLAR_V4_PROMPT_CACHE_MODE doit valoir explicit, implicit ou off.")
+        if self.writing_job_executor not in {"auto", "celery", "thread"}:
+            raise ConfigurationError("ENNOSCHOLAR_V4_WRITING_JOB_EXECUTOR doit valoir auto, celery ou thread.")
+        for name in ("writing_job_budget_usd", "writing_job_max_segments", "writing_job_max_section_attempts",
+                "writing_job_stalled_segments", "research_job_budget_usd", "research_job_max_segments",
+                "research_discovery_rounds", "research_finalization_seconds"):
             if getattr(self, name) <= 0:
                 raise ConfigurationError(f"ENNOSCHOLAR_V4_{name.upper()} doit être positif.")
         for name in ("input_price", "output_price", "cache_read_price", "cache_write_price"):
@@ -111,6 +152,10 @@ class ScholarV4Config:
         # Every model used (main and per task) needs an attested price before any call.
         from .pricing import resolve, PriceUnknown
         from .routing import task_models
+        if self.service_tier != "default":
+            raise ConfigurationError("EnnoScholar V4 exige Standard (service_tier default).")
+        if self.max_output_tokens > 128000:
+            raise ConfigurationError("gpt-6-luna accepte au maximum 128000 tokens de sortie.")
         try:
             for model in {self.model, *task_models(self).values()}:
                 resolve(self, model)

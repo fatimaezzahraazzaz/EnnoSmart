@@ -32,10 +32,12 @@ def project_observation_source(state):
     an earlier drafting message). Earlier messages are context; one of them is used only
     when the current request explicitly asks to take up its observations."""
     recorded = {fact["source_id"] for fact in state.get("project_facts", [])}
+    from .instructions import current_request
     users = [m for m in state.get("messages", []) if m.get("role") == "user"]
-    if not users:
+    current = current_request(state)
+    if current is None:
         return None
-    current = users[-1]
+    users = users[:users.index(current)+1]
     if current.get("id") not in recorded and PROJECT_OBSERVATION.search(current.get("content", "")):
         return current["id"]
     if EARLIER_OBSERVATIONS.search(current.get("content", "")):

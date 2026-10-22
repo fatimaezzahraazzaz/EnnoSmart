@@ -6,7 +6,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ArrowUp, BookOpen, Check, Copy, FileText, Loader2, Menu, Paperclip, Plus, Square, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { cancelRun, changeDocument, decideArticle, getArticlePage, getDocument, getRun, getSession, isRunning, listSessions, safeUrl, sendMessage, uploadDocument, type Article, type Decision, type Message, type Run, type ScientificDocument, type Session, type SessionSummary } from "@/lib/scholar-v4"
+import { cancelRun, cancelWritingJob, changeDocument, resumeWritingJob, decideArticle, getArticlePage, getDocument, getRun, getSession, isRunning, jobActive, listSessions, safeUrl, sendMessage, uploadDocument, type Article, type Decision, type Message, type Run, type ScientificDocument, type Session, type SessionSummary } from "@/lib/scholar-v4"
 
 import SelectionPanel, { ArticleCard, decisionLabels } from "./scholar-v4-selection"
 import ScholarV4StartDialog from "./scholar-v4-start-dialog"
@@ -126,6 +126,10 @@ export default function EnnoScholarV4Chat({ userId, onOpenAppMenu }: { userId: n
   const requestEpoch = useRef(0)
   const storageKey = `ennoscholar-v4-session:${userId}`
   const running = isRunning(run)
+  const job = session?.writing_job
+  const jobRunning = jobActive(job)
+  const jobLabel = job?.kind === "research" ? "recherche automatique" : "rédaction automatique"
+  const jobProgress = job?.kind === "research" ? `${job.segments.at(-1)?.analyzed_count ?? 0}${job.requested_count ? "/" + job.requested_count : ""} publications vérifiées et analysées, ` : ""
 
   const openSession = useCallback(async (id: string) => {
     const epoch = ++requestEpoch.current
@@ -185,6 +189,25 @@ export default function EnnoScholarV4Chat({ userId, onOpenAppMenu }: { userId: n
     timer = setTimeout(poll, 600)
     return () => { controller.abort(); clearTimeout(timer) }
   }, [run?.id, running, pollRetry])
+
+  // Automatic drafting continues after a run ends: follow its next segment without a new message.
+  useEffect(() => {
+    if (!session || !jobRunning || running) return
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout>
+    const epoch = requestEpoch.current
+    async function follow() {
+      try {
+        const updated = await getSession(session!.id, controller.signal)
+        if (controller.signal.aborted || epoch !== requestEpoch.current) return
+        if (updated.active_run_id) { const next = await getRun(updated.active_run_id, controller.signal); setSession(updated); setRun(next); return }
+        if (jobActive(updated.writing_job)) timer = setTimeout(follow, 2000)
+        else setSession(updated)
+      } catch { if (!controller.signal.aborted) timer = setTimeout(follow, 5000) }
+    }
+    timer = setTimeout(follow, 1500)
+    return () => { controller.abort(); clearTimeout(timer) }
+  }, [session?.id, jobRunning, running])
 
   useEffect(() => {
     if (!session) { setDocumentSummary(null); return }
@@ -290,7 +313,9 @@ export default function EnnoScholarV4Chat({ userId, onOpenAppMenu }: { userId: n
     <div ref={viewport} className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-5" aria-busy={running || loading}>
       {loading ? <p role="status" className="py-12 text-center text-muted-foreground">Chargement de votre conversation…</p> : session?.messages.length ? <div className="mx-auto max-w-3xl space-y-5 sm:space-y-6">{session.messages.map(message => <Response key={message.id} message={message} sessionId={session.id} onExplore={article => setDraft(`Approfondis la publication « ${article.title} » (identifiant ${article.id}) à partir des sources enregistrées, puis cherche son texte si nécessaire.`)} onChanged={refreshSession} />)}</div> : session?.mode === "diagnostic_linked" && session.diagnostic_context ? <div className="mx-auto max-w-2xl py-10"><BookOpen aria-hidden="true" className="mb-5 size-9 text-primary/70" /><h2 className="text-2xl font-semibold">Partons des difficultés de votre projet</h2><p className="mt-3 leading-7 text-muted-foreground">J’ai retrouvé les verrous sélectionnés pour ce projet. Vous pouvez étudier l’ensemble ou commencer par l’un d’eux.</p><ol className="mt-5 list-decimal space-y-3 pl-5">{session.diagnostic_context.locks.filter(v => session.diagnostic_context!.selected_lock_ids.includes(v.id)).map(lock => <li key={lock.id}><strong>{lock.title}</strong>{lock.decision !== "garde" && <span className="ml-2 text-muted-foreground">À valider</span>}</li>)}</ol><Button className="mt-6" variant="outline" onClick={() => askInChat("Recherche les publications utiles aux verrous actifs de ce projet. Utilise les méthodes, paramètres, résultats et preuves du diagnostic pour expliquer leur pertinence, en distinguant les faits du projet et les résultats publiés.")}>Préparer la recherche sur le périmètre actif</Button><p className="mt-3 text-sm text-muted-foreground">Vous pouvez écrire « Je veux commencer seulement par le premier ». Vérifiez puis envoyez le message pour lancer la recherche.</p></div> : <div className="mx-auto grid max-w-xl place-items-center py-10 text-center"><BookOpen aria-hidden="true" className="mb-5 size-9 text-primary/70" /><h2 className="text-2xl font-semibold">Quel problème scientifique explorez-vous ?</h2><p className="mt-3 leading-7 text-muted-foreground">Décrivez votre sujet, partagez un article ou proposez un plan. Nous avancerons à partir de sources vérifiables.</p><button className="mt-7 rounded-xl border p-4 text-left text-sm leading-6 hover:bg-muted focus-visible:outline-primary" onClick={() => setDraft("Je travaille sur la génération automatique de maillages volumiques 3D à l’aide de modèles entraînés pour la mécanique. Recherche les articles scientifiques les plus pertinents, y compris payants. Explique leurs contributions, leurs limites et ce que tu as réellement pu consulter.")}>Trouver des publications sur la génération de maillages volumiques 3D par apprentissage <span aria-hidden="true">→</span></button></div>}
       {session && !loading && <SelectionPanel session={session} disabled={running || busy} onChanged={refreshSession} ask={askInChat} />}
-      {documentSummary?.outline.sections?.length ? <section className="mx-auto mt-5 flex max-w-3xl flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-sm" aria-label="Plan et rédaction"><FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /><strong className="min-w-0 flex-1 truncate">{documentSummary.outline.title || "État de l’art"}</strong><span className="text-xs text-muted-foreground">{savedSections ? `${savedSections}/${documentSummary.outline.sections.length} sections enregistrées` : "Plan proposé"}</span><Button type="button" size="sm" variant="ghost" onClick={() => setWorkspaceOpen(true)}>{savedSections > 0 ? "Lire et modifier le manuscrit" : "Modifier le plan"}</Button>{documentSummary.outline.status !== "approved" && <Button type="button" size="sm" variant="outline" disabled={busy || running} onClick={approvePlan}>Valider le plan</Button>}{session?.writing_progress && session.writing_progress.status !== "draft_complete" && <Button type="button" variant="ghost" size="sm" onClick={() => setDraft("Continue la rédaction des sections restantes.")}>Reprendre</Button>}</section> : null}
+      {documentSummary?.outline.sections?.length ? <section className="mx-auto mt-5 flex max-w-3xl flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-sm" aria-label="Plan et rédaction"><FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /><strong className="min-w-0 flex-1 truncate">{documentSummary.outline.title || "État de l’art"}</strong><span className="text-xs text-muted-foreground">{savedSections ? `${savedSections}/${documentSummary.outline.sections.length} sections enregistrées` : "Plan proposé"}</span><Button type="button" size="sm" variant="ghost" onClick={() => setWorkspaceOpen(true)}>{savedSections > 0 ? "Lire et modifier le manuscrit" : "Modifier le plan"}</Button>{documentSummary.outline.status !== "approved" && <Button type="button" size="sm" variant="outline" disabled={busy || running} onClick={approvePlan}>Valider le plan</Button>}{session?.writing_progress && session.writing_progress.status !== "draft_complete" && !jobRunning && <Button type="button" variant="ghost" size="sm" onClick={() => setDraft("Continue la rédaction des sections restantes.")}>Reprendre</Button>}</section> : null}
+      {jobRunning && job && <p role="status" aria-live="polite" className="mx-auto mt-5 flex max-w-3xl flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-sm"><Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /><span className="min-w-0 flex-1">{job.cancel_requested ? `Arrêt de la ${jobLabel} demandé…` : `${jobLabel[0].toUpperCase() + jobLabel.slice(1)} en cours : segment ${job.segments.length + (job.current_run_id ? 1 : 0)}, ${jobProgress}${job.spent_usd.toFixed(2)} $ engagés sur ${job.budget_usd.toFixed(2)} $ (${job.spent.confirmed_usd.toFixed(2)} $ confirmés, ${job.spent.uncertain_usd.toFixed(2)} $ incertains).`}</span><Button type="button" size="sm" variant="outline" disabled={job.cancel_requested} onClick={async () => { try { await cancelWritingJob(session!.id); await refreshSession() } catch (e) { setError(e instanceof Error ? e.message : "Arrêt indisponible.") } }}>Arrêter la {jobLabel}</Button></p>}
+      {job?.status === "paused" && !running && <p role="status" className="mx-auto mt-5 flex max-w-3xl flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-sm"><span className="min-w-0 flex-1">{jobLabel[0].toUpperCase() + jobLabel.slice(1)} en pause après votre message ({job.spent_usd.toFixed(2)} $ engagés sur {job.budget_usd.toFixed(2)} $). Elle reprendra le même périmètre et les mêmes consignes.</span><Button type="button" size="sm" variant="outline" disabled={busy} onClick={async () => { try { await resumeWritingJob(session!.id); await refreshSession() } catch (e) { setError(e instanceof Error ? e.message : "Reprise indisponible.") } }}>Reprendre la {jobLabel}</Button></p>}
       {running && <p role="status" aria-live="polite" className="mx-auto mt-6 flex max-w-3xl items-center gap-2 text-sm text-muted-foreground"><Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />{run?.cancel_requested ? "Arrêt demandé…" : activityLabels[activity?.tool || ""] || "EnnoScholar prépare sa réponse…"}</p>}
     </div>
     {error && <div role="alert" className="mx-4 mb-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}{running && <button className="ml-3 underline" onClick={() => setPollRetry(n => n + 1)}>Réessayer la connexion</button>}</div>}

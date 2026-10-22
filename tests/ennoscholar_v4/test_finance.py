@@ -33,7 +33,7 @@ def usage(inp, out, read=0, write=0, reasoning=0):
 # --- Correction 1: catalogue and categories ---------------------------------------------
 
 def test_each_token_category_has_its_own_price_and_reasoning_is_not_counted_twice():
-    price = resolve(SOL)
+    price = resolve(SOL, "gpt-5.6-sol")
     assert (price.input, price.cache_read, price.cache_write, price.output) == (4.0, .4, 5.0, 20.0)
     assert cost(usage(1000, 0), price)["usd"] == pytest.approx(.004)                 # ordinary input
     assert cost(usage(1000, 0, read=1000), price)["usd"] == pytest.approx(.0004)     # cache read
@@ -47,12 +47,12 @@ def test_each_token_category_has_its_own_price_and_reasoning_is_not_counted_twic
 
 
 def test_unknown_usage_price_or_model_never_yields_a_precise_amount():
-    price = resolve(SOL)
+    price = resolve(SOL, "gpt-5.6-sol")
     assert cost(None, price) == {"status": "usage_unavailable", "usd": None, "tokens": None, "price": price.describe()}
     assert cost({"output_tokens": 5}, price)["usd"] is None                           # interrupted, no input count
     assert cost(usage(10, 1), None)["status"] == "price_unknown"
     with pytest.raises(PriceUnknown):
-        resolve(replace(SOL, model="modele-inconnu"))
+        resolve(SOL, "modele-inconnu")
     with pytest.raises(PriceUnknown):
         resolve(replace(SOL, service_tier="priority"))                                # tier absent from the catalogue
     # Incoherent counters (more cached than input): every input token at the highest input price, marked unverified.
@@ -62,25 +62,23 @@ def test_unknown_usage_price_or_model_never_yields_a_precise_amount():
 
 def test_configuration_inconsistency_is_resolved_by_the_catalogue_not_by_the_old_2_10_defaults():
     default = ScholarV4Config(api_key="mock")
-    assert default.model == "gpt-6.1-sol"                                             # model unchanged
-    price = resolve(default)
-    assert (price.input, price.output) == (12.0, 60.0) and price.status == "catalog"  # not 2 / 10
-    # The launch profile's explicit 4 / 20 for gpt-5.6-sol equals the catalogue: verified.
-    assert resolve(replace(SOL, input_price=4.0, output_price=20.0)).status == "catalog"
-    # Explicit prices that differ from the catalogue: the higher one, marked as a conflict.
+    assert default.model == "gpt-6-luna"
+    assert (resolve(default).input, resolve(default).output) == (.1, .5)
+    assert resolve(default).status == "catalog"
+    # Historical entries are still queryable, without changing the active selector.
+    assert resolve(default, "gpt-5.6-sol").input == 4
     conflict = resolve(replace(default, input_price=4.0, output_price=20.0))
-    assert conflict.status == "conflict" and (conflict.input, conflict.output) == (12.0, 60.0)
-    # A model outside the catalogue needs its four prices.
-    with pytest.raises(ConfigurationError):
-        replace(SOL, model="autre-modele", input_price=1.0, output_price=2.0).validate()
-    replace(SOL, model="autre-modele", input_price=1.0, output_price=2.0, cache_read_price=.1, cache_write_price=1.2).validate()
+    assert conflict.status == "conflict" and (conflict.input, conflict.output) == (4., 20.)
+    assert replace(default, model="unknown").model == "gpt-6-luna"
+    with pytest.raises(PriceUnknown):
+        resolve(default, "unknown")
 
 
 @pytest.mark.parametrize("run,app,standard", [
     ("128698bb", 1.030556, 1.161951), ("91590987", 1.959280, 2.262225), ("d46f6f20", .022744, .027567)])
 def test_the_audit_receipts_are_reproduced_call_by_call(run, app, standard):
     rows = [r for r in FIXTURE["receipts"] if r["run"].startswith(run)]
-    price = resolve(SOL)
+    price = resolve(SOL, "gpt-5.6-sol")
     for row in rows:
         assert round(cost(row["usage"], price)["usd"], 6) == pytest.approx(row["audit_standard_cost"], abs=1e-6)
         assert round(legacy_cost(row["usage"], 4.0, 20.0), 6) == pytest.approx(row["audit_app_cost"], abs=1e-6)
@@ -89,7 +87,7 @@ def test_the_audit_receipts_are_reproduced_call_by_call(run, app, standard):
 
 
 def test_the_reservation_bound_covers_every_real_receipt_without_assuming_a_cache_hit():
-    price = resolve(SOL)
+    price = resolve(SOL, "gpt-5.6-sol")
     for row in FIXTURE["receipts"]:
         tokens = usage_categories(row["usage"])
         bound = reserve_bound(tokens["input_tokens"], 7000, price)
@@ -106,6 +104,7 @@ def test_receipts_record_categories_versions_and_keep_unknown_usage_reserved():
     attempt = tasks.begin(task)
     row = FIXTURE["receipts"][0]
     response = NS(output=[], status="completed", usage=row["usage"], id="resp_1", model="gpt-5.6-sol-2026-10", service_tier="default")
+    tasks.call_records[attempt["id"]] = {"model_requested": "gpt-5.6-sol"}
     tasks.receive(task, attempt, response, seconds=1)
     tasks.receive(task, attempt, response, seconds=1)                                   # double receipt: counted once
     assert run["estimated_cost_usd"] == pytest.approx(row["audit_standard_cost"], abs=1e-6)
@@ -308,15 +307,15 @@ def call(client):
 def test_settlement_is_single_and_uses_the_real_usage_and_identifiers(tmp_path):
     ledger = Ledger(engine_at(tmp_path))
     row = FIXTURE["receipts"][1]
-    provider = Streaming(NS(usage=row["usage"], output=[], id="resp_9", model="gpt-5.6-sol-2026-10", service_tier="default"))
+    provider = Streaming(NS(usage=row["usage"], output=[], id="resp_9", model="gpt-6-luna-2026-10", service_tier="default"))
     client = metered(ledger, provider)
     stream = call(client)
     stream.close()                                                                         # second close: no double settlement
     entry = ledger.history(limit=1)[0]
-    assert entry["status"] == "settled" and entry["settled_usd"] == pytest.approx(row["audit_standard_cost"], abs=1e-6)
-    assert entry["response_id"] == "resp_9" and entry["model_resolved"] == "gpt-5.6-sol-2026-10" and entry["price_version"]
+    assert entry["status"] == "settled" and entry["settled_usd"] == pytest.approx(cost(row["usage"], resolve(SOL))["usd"], abs=1e-9)
+    assert entry["response_id"] == "resp_9" and entry["model_resolved"] == "gpt-6-luna-2026-10" and entry["price_version"]
     assert not ledger.settle(NS(call_id=entry["call_id"]), 9.0)                            # a late duplicate changes nothing
-    assert client.records["a1"]["cost"]["usd"] == pytest.approx(row["audit_standard_cost"], abs=1e-6)
+    assert client.records["a1"]["cost"]["usd"] == pytest.approx(cost(row["usage"], resolve(SOL))["usd"], abs=1e-9)
 
 
 def test_a_voluntary_interruption_or_missing_usage_keeps_the_reservation(tmp_path):
@@ -328,7 +327,7 @@ def test_a_voluntary_interruption_or_missing_usage_keeps_the_reservation(tmp_pat
 
 
 def test_no_request_leaves_before_its_reservation_and_a_parent_budget_refuses_it(tmp_path):
-    ledger = Ledger(engine_at(tmp_path), BudgetPolicy({"levels": {"organization": {"day": .05},
+    ledger = Ledger(engine_at(tmp_path), BudgetPolicy({"levels": {"organization": {"day": .00001},
         "consultant": {"day": 10.0}}}))
     provider = Streaming(NS(usage=usage(10, 10), output=[], id="r"))
     with pytest.raises(BudgetRefused) as refused:
@@ -349,9 +348,9 @@ def test_the_agent_stops_cleanly_on_a_budget_refusal_without_losing_saved_drafts
         save_section(t, number, ids)
     saved = {s["id"]: [d["id"] for d in s.get("drafts", [])] for s in t.state["outline"]["sections"]}
     t.state["messages"] = [{"id": "m", "role": "user", "content": REQUEST_A}]
-    # Each reservation is the protective bound (~0.49 $ for the understanding call, ~0.65 $ for
+    # Each reservation is the protective bound (~0.16 $ for the understanding call, ~0.22 $ for
     # a section at the default model's catalogue price); settlement keeps only the real cost.
-    ledger = Ledger(engine_at(tmp_path), BudgetPolicy({"levels": {"dossier": {"total": .6}}}))
+    ledger = Ledger(engine_at(tmp_path), BudgetPolicy({"levels": {"dossier": {"total": .005}}}))
     provider = Client(Model(ids, []))
     runner = agent(provider)
     runner.meter = Meter(ledger, scope(), runner.config)

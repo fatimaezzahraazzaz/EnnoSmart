@@ -186,8 +186,11 @@ def test_final_context_includes_every_priority_and_multiple_methods_results():
     state, toolkit, _, _ = analyzed_corpus()
     context = model_context(state, toolkit, 24000, final=True)
     memory = json.loads(context[0]["content"].split(" : ", 1)[1])
-    assert len(json.dumps(context, ensure_ascii=False)) <= 24500
     packet = memory["conversation_science"]
+    from agents.EnnoScholarV4.context import FINAL_REST_CHARS
+    # The essential dossier is protected (run 53292dc4); the rest keeps a fixed share.
+    assert len(json.dumps(context, ensure_ascii=False)) <= max(24500, len(json.dumps(packet, ensure_ascii=False)) + FINAL_REST_CHARS)
+    assert packet["transmission"]["complete"]
     assert {p["id"] for p in packet["papers"]} == set(toolkit.registry)
     for p in packet["papers"]:
         assert len(p["analysis"]["method"]) >= 2
@@ -195,7 +198,7 @@ def test_final_context_includes_every_priority_and_multiple_methods_results():
         assert len(p["analysis"]["limitations"]) >= 2
         assert all(eid in {e["evidence_id"] for e in p["proofs"]}
             for _, c in claim_entries(p["analysis"]) for eid in c["evidence_ids"])
-    assert "not_yet_examined" not in json.dumps(memory["scientific_reading_status"])
+    assert "not_yet_examined" not in json.dumps(memory.get("scientific_reading_status", {}))
 
 
 def test_budget_stop_preserves_partial_progress_and_defers_comparison():
