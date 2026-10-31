@@ -91,6 +91,7 @@ def manage_outline(state, args, registry, *, consultant=False):
             "sections_total":len(current["sections"]), "next_offset":args.offset+args.limit,
             "focus": state.get("focus", {}),"guidance":"Plan complet conservé. Lire les autres sections avec offset ; write_section/read et review_document donnent les brouillons ciblés."}
     proposed = copy.deepcopy(current)
+    next_focus = None
     sections = proposed["sections"]
     if args.action == "create":
         if not args.sections:
@@ -146,8 +147,32 @@ def manage_outline(state, args, registry, *, consultant=False):
             if not args.sections or len(args.sections) != 1:
                 raise ValueError("update exige exactement une section argumentée, sans modifier son identité ou ses brouillons.")
             section.update(args.sections[0].model_dump())
-        state.setdefault("focus", {})["section_id"] = section["id"] if section in sections else ""
+        next_focus = section["id"] if section in sections else ""
     validate_sections(state, proposed["sections"], registry)
+    operation = (state.get('turn_goal') or {}).get('plan_operation') or {}
+    if operation:
+        maximum = operation.get('max_sections')
+        if maximum and len(proposed['sections']) > maximum:
+            raise ValueError(f"Le plan demandé comporte au maximum {maximum} parties ; proposer une révision complète avec replace.")
+        target = operation.get('section_id')
+        if target and (args.action not in {'update', 'rename', 'associate', 'dissociate', 'move'} or
+                resolve_section(state, args.section_id)['id'] != target):
+            raise ValueError('Modifier uniquement la section demandée ; les autres sections restent conservées.')
+        if operation.get('memory_only') and operation.get('preserve_corpus') and operation.get('article_ids'):
+            allowed = set(operation['article_ids'])
+            # Whole-plan edits keep the requested corpus; single-section edits
+            # preserve other sections and can only reuse their authorised sources.
+            edited = proposed['sections'] if not target else [s for s in proposed['sections'] if s['id'] == target]
+            if any(set(s['article_ids'])-allowed for s in edited):
+                raise ValueError('Plan sur le corpus demandé : aucun candidat supplémentaire non demandé.')
+            if not target and not allowed <= {aid for s in edited for aid in s['article_ids']}:
+                raise ValueError('Conserver les publications du corpus demandé dans le plan révisé.')
+        if args.action in {'create', 'replace'} and (operation.get('max_sections') or operation.get('preserve_corpus')):
+            norm = lambda text: ' '.join(text.casefold().split())
+            titles = [norm(s['title']) for s in proposed['sections']]
+            objectives = [norm(s['scientific_objective']) for s in proposed['sections'] if s.get('scientific_objective')]
+            if len(titles) != len(set(titles)) or len(objectives) != len(set(objectives)):
+                raise ValueError('Consolider les sections répétées : titres et objectifs scientifiques distincts requis.')
     from ..editorial import plan_review
     editorial = plan_review(proposed)
     if current.get("approval") and not consultant:
@@ -163,6 +188,8 @@ def manage_outline(state, args, registry, *, consultant=False):
     proposed["status"] = "proposed" if args.action in {"create", "replace"} else "modified"
     proposed.pop("approval", None)
     state["outline"] = proposed
+    if next_focus is not None:
+        state.setdefault('focus', {})['section_id'] = next_focus
     state.setdefault("document", {})["review_stale"] = True
     from ..manuscript import save_document_revision
     save_document_revision(state)

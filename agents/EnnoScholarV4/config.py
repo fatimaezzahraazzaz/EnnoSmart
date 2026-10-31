@@ -29,6 +29,10 @@ class ScholarV4Config:
     max_web_calls: int = 4
     max_tokens: int = 400000
     max_pdf_bytes: int = 15728640
+    max_pdf_disk_bytes: int = 134217728
+    max_pdf_storage_bytes: int = 2147483648
+    min_pdf_free_bytes: int = 268435456
+    pdf_extraction_batch_pages: int = 20
     max_extracted_chars: int = 1000000
     max_pdf_pages: int = 500
     max_download_seconds: float = 45
@@ -88,6 +92,12 @@ class ScholarV4Config:
     research_discovery_rounds: int = 3
     research_finalization_seconds: float = 75.0
     fulltext_prefetch_enabled: bool = False
+    # Engine for searches, selections, analyses and questions. "original" (default, restored 2026-10-23): the V4 of
+    # 2026-10-13 (backup/ennosmart-v4-before-corrections-20261013, commit 8acbad7, module original.py) — one adaptive
+    # conversation where the model plans its searches (providers and native web), judges, records its finalists,
+    # reads and publishes. Plans and drafting keep the current pipeline. "controlled": the research controller added
+    # later (research.transition, reading gate, selection batches, discovery reviews, research jobs), kept for rollback.
+    discovery_mode: str = "original"
 
     def __post_init__(self):
         # Legacy env, callers and dataclasses.replace cannot reopen stage routing.
@@ -124,6 +134,12 @@ class ScholarV4Config:
         return cls(**values)
 
     def validate(self):
+        if not (0 < self.max_pdf_bytes <= self.max_pdf_disk_bytes <= 536870912):
+            raise ConfigurationError("Limites PDF : mémoire <= disque <= 512 Mio, valeurs positives requises.")
+        if not (self.max_pdf_disk_bytes <= self.max_pdf_storage_bytes <= 21474836480) or self.min_pdf_free_bytes < 0:
+            raise ConfigurationError("Quota PDF requis entre la limite par fichier et 20 Gio ; réserve disque positive ou nulle.")
+        if not 1 <= self.pdf_extraction_batch_pages <= 500:
+            raise ConfigurationError("Lot d'extraction PDF incompatible avec la limite de pages.")
         if not self.enabled:
             raise ConfigurationError("EnnoScholar V4 est désactivé (ENNOSCHOLAR_V4_ENABLED).")
         if not self.api_key:
@@ -139,6 +155,8 @@ class ScholarV4Config:
                 raise ConfigurationError(f"ENNOSCHOLAR_V4_{name.upper()} doit être positif.")
         if self.prompt_cache_mode not in {"explicit", "implicit", "off"}:
             raise ConfigurationError("ENNOSCHOLAR_V4_PROMPT_CACHE_MODE doit valoir explicit, implicit ou off.")
+        if self.discovery_mode not in {"original", "controlled"}:
+            raise ConfigurationError("ENNOSCHOLAR_V4_DISCOVERY_MODE doit valoir original ou controlled.")
         if self.writing_job_executor not in {"auto", "celery", "thread"}:
             raise ConfigurationError("ENNOSCHOLAR_V4_WRITING_JOB_EXECUTOR doit valoir auto, celery ou thread.")
         for name in ("writing_job_budget_usd", "writing_job_max_segments", "writing_job_max_section_attempts",
@@ -155,7 +173,7 @@ class ScholarV4Config:
         if self.service_tier != "default":
             raise ConfigurationError("EnnoScholar V4 exige Standard (service_tier default).")
         if self.max_output_tokens > 128000:
-            raise ConfigurationError("gpt-6-luna accepte au maximum 128000 tokens de sortie.")
+            raise ConfigurationError(f"{MODEL} accepte au maximum 128000 tokens de sortie.")
         try:
             for model in {self.model, *task_models(self).values()}:
                 resolve(self, model)

@@ -140,6 +140,12 @@ def response_consistency(toolkit, ids, displayed, text):
         return None
     selection = canonical_selection(state)
     expected = [aid for aid in selection["selected_ids"] if aid in toolkit.registry]
+    provisional = False
+    if not expected:
+        # No card yet: the panel shows the provisional preselection; the answer presents the same works, each with
+        # its reading level (run d964ec6e: four published, five recommended, no reason given).
+        expected = [aid for aid in selection["ranked_ids"] if aid in toolkit.registry]
+        provisional = True
     if not expected:
         return None
     groups = version_groups(state)
@@ -152,8 +158,10 @@ def response_consistency(toolkit, ids, displayed, text):
     issues = []
     if {work(aid) for aid in shown} != {work(aid) for aid in expected}:
         title = lambda aid: toolkit.registry[aid].title[:90]
-        issues.append({"rejection_code": "selection_mismatch", "message": "La liste affichée doit être la sélection de la "
-            "recherche, la même que le compteur et les fiches : " + "; ".join(f"[{aid}] {title(aid)}" for aid in expected)
+        issues.append({"rejection_code": "selection_mismatch", "message": ("La liste affichée doit être la présélection "
+            "provisoire du panneau (aucune fiche encore enregistrée), chacune avec son niveau de lecture : un travail jugé "
+            "insuffisant y reste avec cette réserve explicite : " if provisional else "La liste affichée doit être la sélection de la "
+            "recherche, la même que le compteur et les fiches : ") + "; ".join(f"[{aid}] {title(aid)}" for aid in expected)
             + ". Les autres candidats restent disponibles dans la bibliothèque et peuvent être mentionnés hors de "
             "cette liste.", "expected_article_ids": expected,
             "unexpected_article_ids": [aid for aid in shown if work(aid) not in {work(x) for x in expected}],
@@ -206,6 +214,13 @@ def publish(toolkit, args, deadline):
         return result
 
     try:
+        if (not ids and toolkit.state.get("discovery_mode") == "original" and
+                toolkit.final_verification_incomplete):
+            # A rejected mixed bibliography must not turn into an empty success.
+            # The existing grounded fallback can render the verified subset;
+            # never delete citations from a draft or publish its unchecked claims.
+            from .stops import StopResearch
+            raise StopResearch("bibliography_verification_incomplete")
         from .research import active, status as research_status
         if active(toolkit.state) and not getattr(toolkit, "saving_section", False):
             observed = research_status(toolkit.state)
@@ -220,21 +235,74 @@ def publish(toolkit, args, deadline):
             article = toolkit.store.article(item.article_id).model_copy(deep=True)
             ArticleAnalyzer.save(article, item.analysis, toolkit.evidence, toolkit.shown_evidence, toolkit.snapshots)
             pending[article.id] = article
+        if toolkit.state.get("discovery_mode") == "original":
+            from .research import original_obligations
+            obligations = original_obligations(toolkit.state, toolkit)
+            # Do not turn prose or a downloaded file into an analysis. Ask the
+            # same model to persist the claims it uses, through the existing
+            # validated inline-save path and bounded publication repairs.
+            used_science = {toolkit.evidence[eid]["article_id"] for eid in args.evidence_ids
+                if eid in toolkit.evidence and toolkit.evidence[eid].get("basis") in {"fulltext", "abstract"}}
+            unsaved = [row for row in obligations["pending_analyses"] if row["article_id"] in ids
+                and row["article_id"] in used_science and row["article_id"] not in pending]
+            if unsaved:
+                return reject("analysis_persistence_required", "Ces passages sont exploités scientifiquement, mais leur "
+                    "analyse n'est pas enregistrée. Fournir analyses dans finalize_response, avec seulement les affirmations "
+                    "étayées par les passages réellement lus et leur limite de lecture. Les analyses existantes restent inchangées.",
+                    pending_analysis_article_ids=[row["article_id"] for row in unsaved],
+                    evidence_ids_by_article={row["article_id"]: row["evidence_ids"] for row in unsaved})
         if toolkit.finalization_only and getattr(toolkit, "final_verification_allowed", False):
-            # Publication phase: a cited work actually presented to the model but
-            # never checked gets one bounded registry verification (DOI/arXiv
-            # identity only, no scientific search), instead of rejecting every
-            # reference of a turn that ended before the reading pipeline.
+            # Verify only cited, presented works. Each existing verify call
+            # checks cancellation/deadline and checkpoints its completed record.
+            # Batch size is bounded by those budgets, never a fixed paper count.
+            toolkit.final_verification_ids = list(dict.fromkeys([*toolkit.final_verification_ids, *ids]))
             unchecked = [aid for aid in ids if aid not in toolkit.checked_ids and not toolkit.registry[aid].verified
                 and aid in toolkit.store.exposed
                 and aid not in toolkit.final_verification_attempted
-                and (toolkit.registry[aid].doi or toolkit.registry[aid].arxiv_id)][:6]
-            if unchecked:
-                toolkit.final_verification_attempted.update(unchecked)
-                toolkit.verify(unchecked, deadline)
+                and (toolkit.registry[aid].doi or toolkit.registry[aid].arxiv_id)]
+            try:
+                from .stops import StopResearch
+                for aid in unchecked:
+                    toolkit.final_verification_attempted.add(aid)
+                    try:
+                        toolkit.verify([aid], deadline)
+                    except StopResearch:
+                        raise
+                    except Exception as exc:
+                        # A failed registry request leaves this work unverified;
+                        # other candidates can still be checked in the same budget.
+                        toolkit.activity("verify_bibliography", "failed", article_id=aid,
+                            error_type=type(exc).__name__)
+            finally:
+                progress = toolkit.verify(ids, deadline, local_only=True)
+                attempt["verified_article_ids"] = [r["article_id"] for r in progress["articles"] if r["valid"]]
+                attempt["unverified_article_ids"] = [r["article_id"] for r in progress["articles"] if not r["valid"]]
+                toolkit.final_verification_incomplete = not progress["valid"]
+                toolkit.save()
         checked = toolkit.verify(ids, deadline, local_only=toolkit.finalization_only)
+        saved_inline = set()
+        if toolkit.state.get("discovery_mode") == "original":
+            valid = {row["article_id"] for row in checked["articles"] if row["valid"]}
+            for item in args.analyses or []:
+                if item.article_id not in valid or item.article_id not in toolkit.store.exposed:
+                    continue
+                # Preserve the registry's freshly verified identity. A valid
+                # scientific card is independent of another citation or a
+                # later formatting refusal; the same save validator is applied.
+                article = toolkit.registry[item.article_id].model_copy(deep=True)
+                ArticleAnalyzer.save(article, item.analysis, toolkit.evidence, toolkit.shown_evidence, toolkit.snapshots)
+                toolkit.registry[article.id] = article
+                toolkit.store.examined_article(article.id)
+                saved_inline.add(article.id)
+            if saved_inline:
+                attempt["saved_analysis_ids"] = sorted(saved_inline)
+                toolkit.save()
         if not checked["valid"]:
-            return reject("invalid_bibliography", "Bibliographie non validée : retirer les références incertaines de la réponse principale et les conserver dans la bibliothèque.",
+            return reject("invalid_bibliography", "Certaines références ne sont pas vérifiées ou sont invalides. "
+                "Conserver les références de verified_article_ids dans la réponse partielle ; corriger uniquement les autres. "
+                "Une vérification non terminée peut être reprise, sans recommencer celles déjà réussies.",
+                verified_article_ids=[r["article_id"] for r in checked["articles"] if r["valid"]],
+                unverified_article_ids=[r["article_id"] for r in checked["articles"] if not r["valid"]],
                 invalid_article_ids=[r["article_id"] for r in checked["articles"] if not r["valid"]], bibliography=checked)
         if len({toolkit.store.article(aid).canonical_work_id or aid for aid in ids}) != len(ids):
             return reject("duplicate_work", "Plusieurs versions du même travail sont citées : conserver un représentant et expliquer sa version.")
@@ -330,7 +398,8 @@ def publish(toolkit, args, deadline):
             if "["+eid+"]" not in text:
                 continue
             e = toolkit.evidence[eid]
-            label = e["section"] or "Passage source"
+            from .citation_render import proof_locator
+            label = proof_locator(e, toolkit.snapshots)["section"] or "Passage source"
             if e["page_number"] is not None:
                 label += f", page PDF {e['page_number']}"
                 if e.get("printed_page") and e.get("page_verification") == "margin_text":
@@ -338,17 +407,21 @@ def publish(toolkit, args, deadline):
             source_url = readable_source_url(e["source_url"], toolkit.store.article(e["article_id"]))
             text = text.replace("["+eid+"]", f"[{escaped(label)}]({source_url})" if source_url else escaped(label))
             cite(source_url, label, "evidence")
-        if args.remaining_uncertainties:
-            text += "\n\nLimites de cette réponse : " + " ; ".join(args.remaining_uncertainties)
+        # answer is the public scientific prose. Structured uncertainties and
+        # engine diagnostics remain in last_response and response_history below.
         # Native Web annotation IDs are not Markdown URLs. The verified article
         # and evidence links above remain the public references; retain raw IDs
         # in the draft/trace without displaying an unrenderable API annotation.
         text = re.sub(r" ?cite[^]*", "", text)
-        # Analyses and ordering are committed only after every publication check passes.
+        # Other pipelines retain their existing commit point; original-engine
+        # cards already saved above must not overwrite newly verified metadata.
         for article in pending.values():
-            toolkit.registry[article.id] = article
-            toolkit.store.examined_article(article.id)
+            if article.id not in saved_inline:
+                toolkit.registry[article.id] = article
+                toolkit.store.examined_article(article.id)
         if displayed:
+            from .research import record_original_proposals
+            record_original_proposals(toolkit.state, displayed)
             toolkit.state["displayed_article_ids"] = list(displayed)
         order = list(toolkit.state.get("displayed_article_ids", []))
         refs = (toolkit.state.get("turn_goal") or {}).get("references") or {}
@@ -372,21 +445,32 @@ def publish(toolkit, args, deadline):
         return reject("invalid_analysis_or_evidence", str(exc)[:500])
 
 
-def fallback(toolkit, reason):
-    """No model or provider call: only validated metadata and exact saved claims."""
+def fallback(toolkit, reason, drafting_attempted=True):
+    """No model or provider call: only validated metadata and exact saved claims.
+
+    Execution diagnostics stay in the result/trace, not in the scientific prose.
+    """
     toolkit.finalization_only = True
+    held = set(toolkit.state.get("held_article_ids", []))
+    def eligible(aid):
+        return aid in toolkit.registry and aid not in held and toolkit.registry[aid].selection_override is not False
     proposed = [aid for aid in toolkit.state.get("evaluation", {}).get("recommended_article_ids", [])
-        if aid in toolkit.registry and toolkit.registry[aid].selection_override is not False]
+        if eligible(aid)]
     if not proposed:
         proposed = [a.id for a in toolkit.registry.values() if a.assessment.get("decision") == "retain"
-            and a.selection_override is not False]
+            and eligible(a.id)]
     no_scientific_selection = not proposed
-    if no_scientific_selection:
+    verification_scope = getattr(toolkit, "final_verification_ids", [])
+    if verification_scope:
+        # Preserve only the model's proposed bibliography, not unrelated cached
+        # works that happen to be verified. Local validation below stays strict.
+        proposed = [aid for aid in verification_scope if eligible(aid)]
+    if no_scientific_selection and not verification_scope:
         # Available abstracts can still be shown verbatim without inventing a
         # contribution or claiming GPT selected/read these papers.
-        proposed = [aid for aid in toolkit.store.exposed if toolkit.registry[aid].verified and toolkit.registry[aid].abstract]
+        proposed = [aid for aid in toolkit.store.exposed if eligible(aid) and toolkit.registry[aid].verified and toolkit.registry[aid].abstract]
         if not proposed:
-            proposed = [a.id for a in toolkit.registry.values() if a.verified and a.abstract]
+            proposed = [a.id for a in toolkit.registry.values() if eligible(a.id) and a.verified and a.abstract]
     checks = toolkit.verify([aid for aid in proposed if aid in toolkit.registry], float("inf"), local_only=True)
     valid = [row["article_id"] for row in checks["articles"] if row["valid"]]
     primary, seen = [], set()
@@ -395,46 +479,71 @@ def fallback(toolkit, reason):
         canonical = a.canonical_work_id or aid
         if canonical not in seen:
             primary.append(aid); seen.add(canonical)
-    primary = primary[:8]
-    answer = "La rédaction finale n’a pas pu passer toutes ses vérifications. Voici les résultats déjà validés et conservés ; cette synthèse de secours reste partielle."
+    answer = "Voici les éléments étayés par les sources disponibles. La comparaison reste partielle."
     citations, evidence_ids, details = {}, [], []
+    validity = {}
+    def supported(claim, aid):
+        for eid in claim.get("evidence_ids", []):
+            if eid not in validity:
+                e = toolkit.evidence.get(eid)
+                validity[eid] = bool(e and exact_source_valid(e, toolkit.snapshots))
+            if not validity[eid] or toolkit.evidence[eid]["article_id"] != aid:
+                return False
+        return bool(claim.get("evidence_ids"))
+    def proof_links(claim, article):
+        links = []
+        for eid in claim["evidence_ids"]:
+            e = toolkit.evidence[eid]
+            evidence_ids.append(eid)
+            url = readable_source_url(e["source_url"], article)
+            if public_link(url):
+                from .citation_render import proof_locator
+                label = proof_locator(e, toolkit.snapshots)["section"] or "Passage source"
+                if e.get("page_number") is not None:
+                    label += f", page PDF {e['page_number']}"
+                links.append(f"[{escaped(label)}]({url})")
+                citations[url_key(url)] = {"url": url, "title": label, "cited": True, "source_kind": "evidence"}
+        return " ".join(dict.fromkeys(links))
+    if any(toolkit.store.article(aid).analysis for aid in primary):
+        answer += "\n\nLes éléments ci-dessous proviennent des analyses enregistrées et de leurs preuves exactes ; ils ne constituent pas une nouvelle synthèse comparative."
+    if primary and not no_scientific_selection and not any(toolkit.store.article(aid).analysis for aid in primary):
+        # Run 9c7625c8: five works proposed, none read. A preselection on notices is labelled as such.
+        answer += ("\n\nPrésélection provisoire établie sur les notices et abstracts : aucune fiche d’analyse (méthodes, "
+            "résultats, limites avec preuves) n’a encore été enregistrée pour ces publications ; leur texte intégral n’a pas été analysé.")
     if primary:
         if no_scientific_selection:
             answer += "\n\nLa sélection scientifique n’a pas été achevée. Les notices suivantes sont documentées, mais ne constituent pas un classement des meilleurs travaux."
         answer += "\n\n| N° | Publication | Contribution enregistrée | Accès réellement vérifié |\n|---|---|---|---|\n"
         for i, aid in enumerate(primary):
             a = toolkit.store.article(aid)
-            claims = a.analysis.get("contribution") or a.analysis.get("method") or []
-            supported = [c for c in claims if c.get("evidence_ids") and all(eid in toolkit.evidence and eid in toolkit.shown_evidence and
-                toolkit.evidence[eid]["article_id"] == aid and exact_source_valid(toolkit.evidence[eid], toolkit.snapshots) for eid in c["evidence_ids"])]
-            contribution = supported[0]["statement"] if supported else (
+            claims = [c for field in ("contribution", "method", "technical_mechanism") for c in a.analysis.get(field, [])]
+            available = [c for c in claims if supported(c, aid)]
+            contribution = available[0]["statement"] if available else (
+                "Analyse enregistrée ; les preuves nécessaires à cette restitution ne sont pas validées." if a.analysis else
                 "Extrait du résumé conservé, sans analyse approfondie : « " + a.abstract[:600] + ("…" if len(a.abstract)>600 else "") + " »"
                 if a.abstract else "Notice validée ; contribution détaillée à confirmer.")
+            source_links = proof_links(available[0], a) if available else ""
             url = article_url(a)
             label = f"[{escaped(a.title)}]({url})" if public_link(url) else escaped(a.title)
-            answer += f"| {i+1} | {label} | {escaped(contribution)} | {a.access_status} ; analyse : {a.analysis_basis or 'non effectuée'} |\n"
+            access = ("Analyse de passages du texte intégral" if a.analysis_basis == "fulltext" else
+                "Analyse du résumé" if a.analysis_basis == "abstract" else
+                "Texte extrait, non analysé" if a.fulltext.get("text") else
+                "Résumé disponible, non analysé" if a.abstract else "Notice bibliographique")
+            answer += f"| {i+1} | {label} | {escaped(contribution)} {source_links} | {access} |\n"
             if public_link(url):
                 citations[url_key(url)] = {"url": url, "title": a.title, "cited": True, "source_kind": "recommended_publication"}
-            if i < 3:
-                for category, heading in [("results", "Résultats enregistrés"), ("limitations", "Limites enregistrées")]:
-                    for claim in a.analysis.get(category, [])[:1]:
-                        if not claim.get("evidence_ids") or not all(eid in toolkit.evidence and eid in toolkit.shown_evidence and
-                            toolkit.evidence[eid]["article_id"] == aid and exact_source_valid(toolkit.evidence[eid], toolkit.snapshots) for eid in claim["evidence_ids"]):
-                            continue
-                        explanation = f"\n**{escaped(a.title)} — {heading} :** {claim['statement']}\n"
-                        for eid in claim["evidence_ids"]:
-                            e = toolkit.evidence[eid]; evidence_ids.append(eid)
-                            if public_link(e["source_url"]):
-                                locator = e["section"] or "Passage source"
-                                if e.get("page_number") is not None: locator += f", page PDF {e['page_number']}"
-                                explanation += f"[{escaped(locator)}]({e['source_url']}) "
-                                citations[url_key(e["source_url"])] = {"url": e["source_url"], "title": locator, "cited": True, "source_kind": "evidence"}
-                        details.append(explanation)
+            for category, heading in [("results", "Résultats enregistrés"), ("limitations", "Limites enregistrées")]:
+                claim = next((c for c in a.analysis.get(category, []) if supported(c, aid)), None)
+                if claim:
+                    details.append(f"\n**{escaped(a.title)} — {heading} :** {claim['statement']}\n"+proof_links(claim, a))
         answer += "\n" + "\n".join(details)
         toolkit.state["displayed_article_ids"] = primary
         answer += "\n\nLes autres publications restent dans la bibliothèque. Vous pouvez demander « approfondis l’article 4 » ou « continue la recherche »."
     else:
         answer += "\n\nAucune sélection suffisamment vérifiée n’est disponible pour être citée comme établie. Les notices trouvées restent conservées dans la bibliothèque."
+    if toolkit.state.get("discovery_mode") == "original":
+        from .research import original_progress
+        original_progress(toolkit.state)
     return {"answer": answer, "citations": list(citations.values()), "partial": True, "fallback": True,
         "reason": reason, "primary_article_ids": primary, "displayed_article_ids": list(toolkit.state.get("displayed_article_ids", [])),
         "cited_article_ids": primary, "cited_evidence_ids": list(dict.fromkeys(evidence_ids)), "coverage_sufficient": False}

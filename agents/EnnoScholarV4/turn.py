@@ -23,7 +23,7 @@ DELIVERABLES = ("answer", "literature_search", "plan", "plan_revision", "compari
 
 
 class TurnGoalArgs(Args):
-    requested_article_count: int | None = Field(default=None, ge=1, le=200,
+    requested_article_count: int | None = Field(default=None, ge=1,
         description="Nombre de publications demandé explicitement ; null si aucun. Ce nombre n'est pas une preuve de pertinence.")
     deliverable: Literal["answer", "literature_search", "plan", "plan_revision", "comparison", "deep_reading", "draft"] = Field(
         description="Attente du message : answer (discuter, expliquer), literature_search, plan, plan_revision, comparison "
@@ -45,8 +45,8 @@ class TurnGoalArgs(Args):
         "uniquement sur article_ids ; primary : d'abord elles, d'autres travaux si la demande le justifie ; open : exploration.")
     references_ambiguous: bool | None = Field(default=None, description="true si plusieurs ensembles de publications restent "
         "plausibles : demander une clarification au lieu de choisir.")
-    constraints: list[Literal["no_search", "no_download", "no_reanalysis", "no_manuscript_change"]] | None = Field(
-        default=None, max_length=4, description="Interdictions explicites du consultant pour ce message.")
+    constraints: list[Literal["no_search", "no_download", "no_reanalysis", "no_manuscript_change", "no_drafting"]] | None = Field(
+        default=None, max_length=5, description="Interdictions explicites du consultant pour ce message.")
     research_need: NeedProfile | None = Field(default=None, description="literature_search : besoin scientifique structuré "
         "(objet, problème, résultat recherché, méthodes acceptables, contexte, contraintes, critères dont les essentiels, "
         "sens de direct/connexe/fondamental, familles d'approches avec requête, incertitudes), tiré du message seul ; "
@@ -63,7 +63,7 @@ def manuscript_permissions(state, goal, message):
     Preservation is a write scope, not a prohibition of every manuscript operation.
     A real global prohibition always wins, even against a declared draft goal.
     """
-    from .writing_progress import MULTI_SECTION_REQUEST, WRITING_ACTION
+    from .writing_progress import multi_section_requested
     text = _norm(message)
     explicit_stop = bool(re.search(
         r"\bne\s+modifi\w*\s+(?:rien\b|pas\s*(?:[.!?]|$))|"
@@ -75,10 +75,16 @@ def manuscript_permissions(state, goal, message):
         r"\b(?:do not|don't)\s+(?:write|add|modify)\b", text))
     preserve = bool(re.search(r"\b(?:conserv\w*|préserv\w*|preserv\w*|garde\w*)\b.{0,100}"
         r"(?:plan|sections?.{0,30}(?:déjà|deja|existantes?|rédigées|redigees))", text))
-    additive = bool(goal.get("deliverable") == "draft" and WRITING_ACTION.search(text)
-        and MULTI_SECTION_REQUEST.search(text) and preserve and not explicit_stop)
+    additive = bool(goal.get("deliverable") == "draft" and multi_section_requested(text)
+        and preserve and not explicit_stop)
     if explicit_stop:
-        goal["constraints"] = list(dict.fromkeys([*(goal.get("constraints") or []), "no_manuscript_change"]))
+        from .references import CONSTRAINTS
+        planning = goal.get('deliverable') in {'plan', 'plan_revision'}
+        if planning and not CONSTRAINTS['no_manuscript_change'].search(text):
+            goal['constraints'] = [c for c in goal.get('constraints') or [] if c != 'no_manuscript_change']
+            goal['constraints'].append('no_drafting')
+        else:
+            goal["constraints"] = list(dict.fromkeys([*(goal.get("constraints") or []), "no_manuscript_change"]))
     if not additive:
         return None
     goal["constraints"] = [c for c in goal.get("constraints") or [] if c != "no_manuscript_change"]
@@ -115,7 +121,10 @@ def record_goal(state, args, message, registry):
             "pour travailler sur d'autres verrous sélectionnés, utiliser focus_lock_ids avec les mots du consultant.")
     state["turn_goal"] = {**goal, "lock_ids": list(dict.fromkeys(goal["lock_ids"])), "focus_lock_ids": focus,
         "references": goal_references(state, goal, registry)}
+    if goal['deliverable'] in {'plan', 'plan_revision'}:
+        state['turn_goal']['plan_operation'] = plan_operation(state, message, registry)
     need = state["turn_goal"].pop("research_need", None)
+    need_changed = bool(need and need != state.get("research_need"))
     if need and goal.get("deliverable") == "literature_search":
         # The structured need is kept apart from the turn goal: every relevance judgment
         # depends on it (need_signature) and a continuation keeps it with the job's goal.
@@ -125,13 +134,35 @@ def record_goal(state, args, message, registry):
             state["research_need"] = need
     if goal.get("deliverable") == "literature_search" and goal.get("search_needed") is not False:
         from .research import begin
-        begin(state, message, state["turn_goal"]["references"].get("message_id"))
+        begin(state, message, state["turn_goal"]["references"].get("message_id"), preserve_progress=not need_changed)
     result = {"saved": True, "goal": state["turn_goal"]}
     coverage = lock_coverage(state, registry)
     if coverage:
         result["active_lock_ids"] = link["active_lock_ids"]
         result["lock_coverage"] = coverage
     return result
+
+
+def plan_operation(state, message, registry):
+    """Request-local edit scope and explicit size constraint, not a scientific plan."""
+    from .writing_progress import requested_section
+    goal = state['turn_goal']; outline = state.get('outline') or {}
+    revision = goal['deliverable'] == 'plan_revision' and bool(outline.get('sections'))
+    text = _norm(message)
+    number = r'(\d+|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix)'
+    noun = r'(?:grandes?\s+)?(?:parties?|sections?)'
+    match = re.search(number+r'\s+'+noun+r'\s+(?:au\s+)?max(?:imum)?\b', text)
+    match = match or re.search(r'(?:maximum|au plus|pas plus de)\s+(?:de\s+)?'+number+r'\s+'+noun, text)
+    words = dict(zip('un deux trois quatre cinq six sept huit neuf dix'.split(), range(1,11)))
+    maximum = (int(match.group(1)) if match.group(1).isdigit() else words[match.group(1)]) if match else None
+    targeted = requested_section(state, re.sub(r'\bpartie\b', 'section', re.sub(r'\bmodifi\w*', 'révise', text))) if revision else None
+    refs = goal.get('references') or {}
+    ids = refs.get('article_ids') or list(dict.fromkeys(aid for s in outline.get('sections', []) for aid in s.get('article_ids', [])))
+    return {'kind': 'section_revision' if targeted else 'revision' if revision else 'create',
+        'outline_version': outline.get('version'), 'section_id': targeted, 'max_sections': maximum,
+        'article_ids': [aid for aid in ids if aid in registry and registry[aid].selection_override is not False],
+        'preserve_corpus': bool(refs.get('article_ids')) or goal.get('search_needed') is False,
+        'memory_only': goal.get('search_needed') is False or revision and goal.get('search_needed') is not True}
 
 
 def goal_references(state, goal, registry):
@@ -152,6 +183,10 @@ def goal_references(state, goal, registry):
         resolved_from = local.get("resolved_from") if source == local.get("source") else local.get("message_id")
     else:
         ids, source, resolved_from = list(local.get("article_ids") or []), local.get("source", "none"), local.get("resolved_from")
+        if goal.get("search_needed") is True and goal.get("article_scope") == "open":
+            # null means an open search, not an instruction to close it around
+            # a demonstrative resolved before the model understood the message.
+            ids, source, resolved_from = [], "model", local.get("message_id")
     open_goal = goal["deliverable"] in {"literature_search", "plan"} or goal.get("search_needed") is True
     # A draft or plan uses the targets first and its sections' own sources too.
     scope = goal.get("article_scope") or ("open" if not ids else "primary" if open_goal or goal["deliverable"] in {
@@ -236,10 +271,14 @@ def source_status(article):
     return "retenue sur résumé, non analysée"
 
 
-def plan_source_ids(state, registry, limit=30):
+def plan_source_ids(state, registry, limit=None):
     """Every work the plan may present as selected: finalists first, then the other
     active, retained or analysed works. Pending, rejected or withdrawn ones are not."""
     from .writing_context import active_article_ids
+    operation = (state.get('turn_goal') or {}).get('plan_operation') or {}
+    if operation.get('memory_only') and operation.get('preserve_corpus') and operation.get('article_ids'):
+        return [aid for aid in operation['article_ids'] if aid in registry and registry[aid].selection_override is not False
+            and validated(registry[aid])][:limit]
     ids = list(dict.fromkeys([*state.get("evaluation", {}).get("recommended_article_ids", []),
         *active_article_ids(state, registry),
         *(aid for aid, a in registry.items() if (a.assessment or {}).get("decision") == "retain")]))
@@ -271,7 +310,7 @@ def source_row(article, abstract_chars=500, claims=0, evidence=None):
     return row
 
 
-def plan_sources(state, registry, limit=30, abstract_chars=500):
+def plan_sources(state, registry, limit=None, abstract_chars=500):
     """Works the plan can use: finalists, active works and retained candidates, from abstracts and cards."""
     return [source_row(registry[aid], abstract_chars) for aid in plan_source_ids(state, registry, limit)]
 
@@ -385,6 +424,10 @@ def provisional_plan(state, registry, reason="time"):
     """A useful plan without any model call, when the full plan cannot be produced
     in time. It only arranges what is recorded: retained or analysed publications,
     candidates not yet evaluated (explicitly labelled) and gaps. No result is stated."""
+    operation = (state.get('turn_goal') or {}).get('plan_operation') or {}
+    if operation.get('kind') in {'revision', 'section_revision'} and state.get('outline', {}).get('sections'):
+        return ("La révision n'a pas pu être enregistrée. Le plan précédent est conservé ci-dessous ; "
+            "il ne constitue pas le plan révisé demandé.\n\n" + plan_answer(state, registry))
     from .publication import article_url, escaped
     from .models import public_link
     from .store import query_terms

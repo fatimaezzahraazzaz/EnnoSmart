@@ -42,6 +42,8 @@ class Article(BaseModel):
     provider_notices: list[dict] = Field(default_factory=list)
     related_article_ids: list[str] = Field(default_factory=list)
     scientific_families: list[str] = Field(default_factory=list)
+    # Provider provenance of the notice: provider, rank, query sent (bounded; diagnostic only, never a score).
+    search_hits: list[dict] = Field(default_factory=list)
     assessment: dict = Field(default_factory=dict)
     source_version: str = ""
 
@@ -49,7 +51,7 @@ class Article(BaseModel):
         return {**self.model_dump(), "fulltext": self.fulltext, "documents": self.documents}
 
     def compact(self):
-        row = self.model_dump()
+        row = self.model_dump(exclude={"search_hits"})
         row["abstract"] = self.abstract[:3500]
         return row
 

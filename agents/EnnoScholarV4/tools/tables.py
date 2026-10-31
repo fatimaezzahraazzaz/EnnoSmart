@@ -19,9 +19,10 @@ def structure(headers, rows, caption="", number=None, *, ambiguous=False, raw_ro
 
 
 def html_table(table):
-    figure = table.find_parent(["figure", "table-wrap"])
-    caption_node = figure.find(["figcaption", "caption"]) if figure else table.find("caption")
-    caption = caption_node.get_text(" ", strip=True) if caption_node else ""
+    from .extraction import scientific_text
+    figure = table.find_parent(["figure", "table-wrap"]) or table.find_parent(class_="c-article-table")
+    caption_node = (figure.find(["figcaption", "caption"]) or figure.select_one(".c-article-table__caption, .c-article-table__title")) if figure else table.find("caption")
+    caption = scientific_text(caption_node) if caption_node else ""
     match = re.search(r"\bTable\s+(\d+|[IVXLCDM]+)\b", caption, re.I)
     headers, rows, raw, ambiguous = [], [], [], bool(table.find("table"))
     grid, header_rows, origins = {}, [], {}
@@ -30,7 +31,7 @@ def html_table(table):
         cells = tr.find_all(["th", "td"], recursive=False)
         if not cells:
             continue
-        values = [c.get_text(" ", strip=True) for c in cells]
+        values = [scientific_text(c) for c in cells]
         raw.append(values)
         in_head = bool(tr.find_parent("thead")) or (not rows and not any(
             c.name == "td" for c in cells) and (not header_rows or header_rows[-1] == ri-1))
@@ -94,11 +95,11 @@ def table_text(table):
 
 def pdf_tables(page):
     if not hasattr(page, "find_tables"):
-        return []
+        return horizontal_rule_tables(page)
     try:
         found = page.find_tables()
     except Exception:
-        return []
+        return horizontal_rule_tables(page)
     result = []
     blocks = page.get_text("blocks")
     for table in found.tables:
@@ -138,13 +139,23 @@ def horizontal_rule_tables(page, existing=()):
         for item in drawing["items"]:
             if item[0] == "l":
                 a, b = item[1:3]
-                if abs(a.y-b.y) < 1 and abs(a.x-b.x) > 80:
+                if abs(a.y-b.y) < 1 and abs(a.x-b.x) > 10:
                     rules.append((min(a.x, b.x), max(a.x, b.x), (a.y+b.y)/2))
+    # Some publishers draw one horizontal rule as separate adjoining column segments.
+    merged = []
+    for left, right, y in sorted(rules, key=lambda r: (round(r[2], 1), r[0])):
+        if merged and abs(merged[-1][2]-y) < 1 and left <= merged[-1][1]+2:
+            merged[-1] = (merged[-1][0], max(right, merged[-1][1]), merged[-1][2])
+        else:
+            merged.append((left, right, y))
+    rules = [r for r in merged if r[1]-r[0] > 80]
     lines = [line for block in blocks for line in block["lines"]]
     result = []
     for index, (caption_box, caption, number) in enumerate(captions):
         next_caption = captions[index+1][0][1] if index+1 < len(captions) else page.rect.height
-        candidates = sorted((r for r in rules if 0 <= r[2]-caption_box[3] < 60), key=lambda r: r[2])
+        candidates = sorted((r for r in rules if
+            0 <= r[2]-caption_box[3] < 60 or
+            (caption_box[1]-2 <= r[2] <= caption_box[3] and r[0] > caption_box[0]+20)), key=lambda r: r[2])
         if not candidates:
             continue
         left, right, top = candidates[0]
@@ -166,21 +177,37 @@ def horizontal_rule_tables(page, existing=()):
             if not baselines or abs(center-baselines[-1][0]) > 2:
                 baselines.append((center, []))
             baselines[-1][1].append(cell)
-        if len(baselines) < 3 or baselines[0][0] >= levels[1] or baselines[1][0] <= levels[1]:
+        heading = [row for y, row in baselines if y < levels[1]]
+        body = [row for y, row in baselines if y > levels[1]]
+        if not heading or len(body) < 2:
             continue
-        grid = [sorted(row, key=lambda cell: cell["bbox"][0]) for _, row in baselines]
+        grid = [sorted(row, key=lambda cell: cell["bbox"][0]) for row in body]
+        width = len(heading[0])
+        headers = [""] * width
+        anchors = sorted((c["bbox"][0]+c["bbox"][2])/2 for c in heading[0])
+        boundaries = [left, *[(a+b)/2 for a, b in zip(anchors, anchors[1:])], right]
+        header_ambiguous = False
+        for row in heading:
+            used = set()
+            for cell in row:
+                center = (cell["bbox"][0]+cell["bbox"][2])/2
+                column = next((j for j in range(width) if boundaries[j] <= center <= boundaries[j+1]), None)
+                if column is None or column in used or any(cell["bbox"][0] < a < cell["bbox"][2]
+                    for j, a in enumerate(anchors) if j != column):
+                    header_ambiguous = True
+                    continue
+                used.add(column)
+                headers[column] = " ".join(filter(None, [headers[column], "".join(s["text"] for s in cell["spans"]).strip()]))
         raw = [["".join(s["text"] for s in cell["spans"]).strip() for cell in row] for row in grid]
-        headers = raw[0]
-        width = len(headers)
         clipped = any(top-1 <= line["bbox"][1] and line["bbox"][3] <= bottom+1
                       and line["bbox"][0] < right and line["bbox"][2] > left
                       and (line["bbox"][0] < left-1 or line["bbox"][2] > right+1) for line in lines)
-        ambiguous = clipped or width < 2 or any(len(row) != width for row in grid) or any(not re.search(r"[A-Za-z]", h) for h in headers)
+        ambiguous = header_ambiguous or clipped or width < 2 or any(len(row) != width for row in grid) or any(not re.search(r"[A-Za-z]", h) for h in headers)
         if not ambiguous:
             # A shared gap must separate each pair of columns across ALL rows.
             ambiguous = any(max(row[j]["bbox"][2] for row in grid) >= min(row[j+1]["bbox"][0] for row in grid)
                             for j in range(width-1))
-        item = structure(headers, raw[1:], caption, number, ambiguous=ambiguous, raw_rows=raw)
+        item = structure(headers, raw, caption, number, ambiguous=ambiguous, raw_rows=[headers, *raw])
         item.update(source_format="pdf", bbox=bbox, geometry_method="horizontal_rules_and_aligned_text_cells")
         result.append(item)
     return result

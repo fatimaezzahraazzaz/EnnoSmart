@@ -11,6 +11,17 @@ SECTION = re.compile(r"^(?:(?:\d+(?:\.\d+)*|[IVXLCDM]+)(?:[-.][A-Z])?[.\s]+)?(?:
 BODY = "article, .article.fulltext-view, .highwire-markup .fulltext-view, .fulltext, #fulltext, .ltx_document, [role='doc-body']"
 
 
+def scientific_heading(line):
+    """Recognize literal scientific headings, including supplementary captions."""
+    heading = re.sub(r"^(?:\d+(?:\.\d+)*|[IVXLCDM]+)[.\s]+", "", line.strip()).strip()
+    ordinary = r"Abstract|Introduction|Methods|Methodology|Materials and methods|Experiments?(?: and results)?|Experimental results|Results(?: and discussion)?|Discussion|Conclusions?|Limitations?(?: and future work)?|References|Acknowledg(?:e)?ments?|Reporting summary"
+    supplementary = (r"(?:Supplementary|Supporting)\s+(?:Text|Information|Materials?|Methods|Results|Data)(?:\s*[:.—–-].*)?|"
+        r"(?:Appendix|Appendices|Annexe?s?)(?:\s+[A-Z0-9]+)?(?:\s*[:.—–-].*)?|"
+        r"(?:(?:Extended\s+Data|Supplementary|Supporting)\s+(?:Table|Fig(?:ure)?\.?)\s*[A-Z]?\d+[A-Za-z]?\b.*|"
+        r"(?:Table|Fig(?:ure)?\.?)\s*S\s*\d+[A-Za-z]?\b.*)")
+    return line.strip() if re.fullmatch(f"(?:{ordinary}|{supplementary})", heading, re.I) else None
+
+
 def bounded(chunks, config):
     retained, used, truncated = [], 0, False
     for chunk in chunks:
@@ -25,10 +36,22 @@ def bounded(chunks, config):
 
 
 class ScientificChunk(TextChunk):
+    page_char_offset: int = 0
     printed_page: str | None = None
     pdf_page_label: str | None = None
     page_verification: str = "not_verified"
     table: dict | None = None
+    equation: str | None = None
+
+
+def scientific_text(node):
+    """Keep one literal math representation, preferably the source's TeX annotation."""
+    node = BeautifulSoup(str(node), "html.parser")
+    for math in node.find_all("math"):
+        annotation = math.find("annotation", attrs={"encoding": re.compile(r"(?:x-tex|latex)", re.I)})
+        text = annotation.get_text() if annotation else math.get("alttext") or math.get_text(" ", strip=True)
+        math.replace_with(text)
+    return node.get_text(" ", strip=True)
 
 
 def page_coordinates(page):
@@ -48,17 +71,27 @@ def page_coordinates(page):
     return printed, label, "margin_text" if printed else "not_verified"
 
 
-def pdf_chunks(data, config=None, page_start=1, page_limit=None):
+def pdf_chunks(data, config=None, page_start=1, page_limit=None, *, progress=None,
+        page_offsets=None, deadline=None, check=lambda: None):
     import fitz
+    import time
+    from pathlib import Path
     config = config or ScholarV4Config.from_env()
+    progress = progress if progress is not None else {}
+    page_offsets = page_offsets or {}
     chunks, used, section = [], 0, ""
-    with fitz.open(stream=data, filetype="pdf") as document:
+    opened = fitz.open(str(data)) if isinstance(data, (str, Path)) else fitz.open(stream=data, filetype="pdf")
+    with opened as document:
         if document.needs_pass:
             raise ValueError("PDF protégé par un mot de passe.")
         if not 1 <= page_start <= len(document):
             raise ValueError("Page PDF hors du document.")
         end = min(len(document), page_start-1+(page_limit or config.max_pdf_pages))
-        for index in range(end):
+        progress.update(page_count=len(document), page_extraction={})
+        for index in range(page_start-1, end):
+            if deadline is not None and time.monotonic() >= deadline:
+                break
+            check()
             page = document[index]
             text = page.get_text()
             from .tables import pdf_tables, table_text
@@ -69,51 +102,68 @@ def pdf_chunks(data, config=None, page_start=1, page_limit=None):
                     value = " ".join("".join(span["text"] for span in line["spans"]).split())
                     positions.setdefault(value, []).append(line["bbox"])
             printed, label, verification = page_coordinates(page)
-            buffer = []
+            buffer, raw_chunks = [], []
             def flush():
-                nonlocal used, buffer
-                if not buffer:
-                    return
+                nonlocal buffer
                 raw = "\n".join(buffer).strip()
-                remaining = config.max_extracted_chars-used
-                if remaining > 0:
-                    retained = raw[:remaining]
-                    chunks.append(ScientificChunk(page=index+1, section=section, text=retained,
+                if raw:
+                    raw_chunks.append(ScientificChunk(page=index+1, section=section, text=raw,
                         printed_page=printed, pdf_page_label=label, page_verification=verification))
-                    used += len(retained)
                 buffer = []
             for line in text.splitlines():
-                heading = re.sub(r"^(?:\d+(?:\.\d+)*|[IVXLCDM]+)[.\s]+", "", line.strip()).strip()
-                is_heading = bool(re.fullmatch(r"Abstract|Introduction|Methods|Methodology|Materials and methods|Experiments?(?: and results)?|Experimental results|Results(?: and discussion)?|Discussion|Conclusions?|Limitations?(?: and future work)?|References|Acknowledg(?:e)?ments?|Reporting summary|Extended Data Fig\. \d+\s*\|.*", heading, re.I))
+                is_heading = bool(scientific_heading(line))
                 if is_heading:
                     boxes = positions.get(" ".join(line.split()), [])
                     box = boxes.pop(0) if boxes else None
                     if box and any(t["bbox"][0]-1 <= box[0] and box[2] <= t["bbox"][2]+1
                                    and t["bbox"][1]-1 <= box[1] and box[3] <= t["bbox"][3]+1 for t in tables):
-                        is_heading = False  # A table column named Methods is not a section.
+                        is_heading = False
                 if is_heading:
-                    if index >= page_start-1:
-                        flush()
+                    flush()
                     section = line.strip()
-                if index >= page_start-1:
-                    buffer.append(line)
-            if index >= page_start-1:
-                flush()
-                for table in tables:
-                    raw = table_text(table)
-                    remaining = config.max_extracted_chars-used
-                    if remaining < len(raw):
-                        return chunks, True
-                    # Table position is known; do not infer a section from a different column.
-                    chunks.append(ScientificChunk(page=index+1, section="", text=raw, table=table,
-                        printed_page=printed, pdf_page_label=label, page_verification=verification))
-                    used += len(raw)
-                if used >= config.max_extracted_chars:
-                    return chunks, True
-        return chunks, page_start != 1 or end < len(document)
+                buffer.append(line)
+            flush()
+            for table in tables:
+                raw_chunks.append(ScientificChunk(page=index+1, section="", text=table_text(table), table=table,
+                    printed_page=printed, pdf_page_label=label, page_verification=verification))
+            offset = int(page_offsets.get(str(index+1), 0))
+            cursor, consumed, reason = 0, offset, ""
+            for chunk in raw_chunks:
+                start, cursor = cursor, cursor+len(chunk.text)
+                if cursor <= offset:
+                    continue
+                skip = max(0, offset-start)
+                remaining = config.max_extracted_chars-used
+                if remaining <= 0 or chunk.table and (skip or len(chunk.text) > remaining):
+                    reason = "table_exceeds_batch" if chunk.table and len(chunk.text) > config.max_extracted_chars else "character_budget"
+                    break
+                value = chunk.text[skip:skip+remaining]
+                if skip+len(value) < len(chunk.text) and value and not value[-1].isspace() and not chunk.text[skip+len(value)].isspace():
+                    # Never turn the prefix of a number/unit into a standalone
+                    # scientific result at an extraction boundary.
+                    boundary = max((m.end() for m in re.finditer(r'\s+', value)), default=0)
+                    value = value[:boundary]
+                    if not value:
+                        reason = 'token_exceeds_batch'
+                        break
+                chunks.append(chunk.model_copy(update={"text": value, "page_char_offset": start+skip}))
+                used += len(value)
+                consumed = start+skip+len(value)
+                if skip+len(value) < len(chunk.text):
+                    reason = "character_budget"
+                    break
+            status = "partial" if reason else "complete" if raw_chunks else "unavailable"
+            progress["page_extraction"][str(index+1)] = {"status": status, "next_offset": consumed,
+                **({"reason": reason or "no_extractable_text"} if status != "complete" else {})}
+            if reason or used >= config.max_extracted_chars:
+                break
+        complete = {int(p) for p, row in progress["page_extraction"].items() if row["status"] == "complete"}
+        progress["extraction_complete"] = len(complete) == len(document)
+        progress["next_page"] = next((p for p in range(page_start, len(document)+1) if p not in complete), None)
+        return chunks, not progress["extraction_complete"]
 
 
-def html_document(data, url, config=None):
+def html_document(data, url, config=None, *, allow_partial=False):
     config = config or ScholarV4Config.from_env()
     article, _, _ = metadata_document(data, url)
     soup = BeautifulSoup(data, "html.parser")
@@ -122,9 +172,21 @@ def html_document(data, url, config=None):
     body = soup.select_one(BODY)
     if body is None:
         return article, [], False
+    if re.search(r'abstract|resume|résumé', str(body.get('id', ''))+' '+ ' '.join(body.get('class', [])), re.I):
+        return article, [], False
+    for node in body.select('.abstract, .ltx_abstract, #abstract, [role="doc-abstract"], section.abstract'):
+        node.decompose()
     chunks, buffer, section, headings = [], [], "", {}
-    for node in body.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "table"]):
-        if node.find_parent("table"):
+    for node in body.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "table", "math", "figcaption"]):
+        if node.find_parent("table") or node.find_parent("figcaption") or (node.name == "math" and node.find_parent(["p", "li"])):
+            continue
+        if (node.name == "table" and any(str(c).startswith("ltx_equation") for c in node.get("class", []))) or node.name == "math":
+            if buffer:
+                chunks.append(TextChunk(section=section, text="\n".join(buffer)))
+                buffer = []
+            text = scientific_text(node)
+            if text:
+                chunks.append(ScientificChunk(section=section, text=text, equation=text))
             continue
         if node.name == "table":
             from .tables import html_table, table_text
@@ -134,7 +196,7 @@ def html_document(data, url, config=None):
             table = html_table(node)
             chunks.append(ScientificChunk(section=section, text=table_text(table), table=table))
             continue
-        text = node.get_text(" ", strip=True)
+        text = scientific_text(node)
         if node.name.startswith("h"):
             if buffer:
                 chunks.append(TextChunk(section=section, text="\n".join(buffer)))
@@ -148,10 +210,15 @@ def html_document(data, url, config=None):
             buffer.append(text)
     if buffer:
         chunks.append(TextChunk(section=section, text="\n".join(buffer)))
-    if sum(bool(SECTION.match(c.section)) for c in chunks) < 2 or sum(len(c.text) for c in chunks) < 1000:
+    chunks = [c for c in chunks if not re.match(r'abstract\b|résumé\b', c.section, re.I)]
+    if sum(len(c.text) for c in chunks) < 1000:
+        return article, [], False
+    partial = len({c.section for c in chunks if SECTION.match(c.section)}) < 2
+    core = any(re.search(r'\b(?:methods?|methodology|materials and methods|results?|experiments?|discussion|limitations?|conclusions?)\b', c.section, re.I) for c in chunks)
+    if partial and not (allow_partial and core):
         return article, [], False
     retained, truncated = bounded(chunks, config)
-    return article, retained, truncated
+    return article, retained, truncated or partial
 
 
 def xml_document(data, url, config=None):

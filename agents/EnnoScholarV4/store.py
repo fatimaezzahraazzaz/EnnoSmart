@@ -150,13 +150,16 @@ class ArticleStore:
                     for value in getattr(row, name):
                         if value not in values:
                             values.append(value)
+                # Every provider hit of the same work is kept (bounded), so its provenance and ranks stay diagnosable.
+                match.search_hits = [*match.search_hits, *[h for h in row.search_hits if h not in match.search_hits]][-24:]
                 match.external_ids = {**row.external_ids, **match.external_ids}
                 if row.publisher_access != "unknown":
                     match.publisher_access = row.publisher_access
                 match.citation_count = max(match.citation_count, row.citation_count)
                 row = match
             else:
-                if len(self.registry) >= self.maximum or (max_new is not None and self.last_new_count >= max_new):
+                requested = self.state.get("discovery_mode") == "original" and self.state.get("research_progress", {}).get("requested_count")
+                if (not requested and len(self.registry) >= self.maximum) or (max_new is not None and self.last_new_count >= max_new):
                     dropped += 1
                     self.last_dropped.append(row)
                     continue
@@ -190,7 +193,7 @@ class ArticleStore:
         self.save()
         return list(dict.fromkeys(ids)), dropped
 
-    def search(self, query, limit=8, exclude_presented=True, family=None, ids=None):
+    def search(self, query, limit=8, exclude_presented=True, family=None, ids=None, offset=0):
         candidates = list(self.registry.values())
         blocked = set(self.exposed)
         blocked.update(aid for window in self.windows if window["status"] == "queued" for aid in window["article_ids"])
@@ -217,7 +220,8 @@ class ArticleStore:
         # Lexical overlap only orders the presentation window so that the
         # model's own query reaches the corresponding stored notices.
         remaining, matched = lexical_order(query, remaining)
-        return (exact + remaining)[:limit], {"method": "stored_candidates_lexical_order" if query_terms(query) else "stored_candidates",
+        return (exact + remaining)[offset:offset+limit], {"method": "stored_candidates_lexical_order" if query_terms(query) else "stored_candidates",
+            "offset": offset, "next_offset": min(len(candidates), offset+limit), "total": len(candidates),
             "matched": len(candidates), "query_term_matches": matched, "scores_are_scientific_ranking": False,
             **({"family_filter_ignored": family, "known_families": sorted({f for a in self.registry.values() for f in a.scientific_families})[:20]}
                 if family_ignored else {})}
@@ -227,6 +231,12 @@ class ArticleStore:
         # stay unexposed and can be retrieved through search_collected_articles.
         # Provider results are ordered by the query's concepts (provider order kept
         # among equals); local searches arrive already ordered over the corpus.
+        if self.state.get("discovery_mode") == "original" and purpose == "retrieval" and maximum == WINDOW_ARTICLES:
+            # Original engine: eight notices, abstracts up to 1 600 characters.
+            # Alternate providers while keeping each one's native order; other
+            # notices stay reachable through the existing local tools.
+            rows = interleave_by_provider(rows) if not ordered else rows
+            maximum, abstract_limit, ordered = 8, 1600, True
         if not ordered:
             rows, _ = lexical_order(query, rows)
         offered = []

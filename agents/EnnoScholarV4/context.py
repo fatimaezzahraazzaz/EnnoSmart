@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import uuid
 from .evidence import exact_source_valid
@@ -210,7 +211,9 @@ def scientific_dossier(state, aid):
             if assessment else None,
         "assessment": {"decision": assessment.get("decision"),
             "contribution": assessment.get("contribution"), "justification": assessment.get("justification", "")[:600],
-            "justification_truncated": len(assessment.get("justification", "")) > 600}, "saved_claims": claims,
+            "justification_truncated": len(assessment.get("justification", "")) > 600,
+            **({"contribution_consistency": assessment["contribution_consistency"]}
+                if assessment.get("contribution_consistency") else {})}, "saved_claims": claims,
         "provenance": {"basis": source.get("analysis_basis") or ("abstract" if abstract else "metadata"),
             "science_source_article_id": source_id, "verified_version_ids": versions,
             "reading_coverage": analysis.get("reading_coverage"), "assessment_is_model_judgment": True,
@@ -278,11 +281,11 @@ def fit_focused(memory, messages, budget, task, state, toolkit, section=None, ke
                 focus.get("article_ids"), claim_offsets=focus.get("claim_offsets")), max(1500, min(int(current*factor), current-excess-256)),
                 proof_mode="reference")
         elif task == "planning" and memory.get("conversation_science", {}).get("papers"):
-            from .argumentation import argument_packet, bounded_argument_packet
+            from .argumentation import argument_packet
             current = len(json.dumps(memory["conversation_science"], ensure_ascii=False))
             ids = [paper["id"] for paper in memory["conversation_science"]["papers"]]
-            memory["conversation_science"] = bounded_argument_packet(argument_packet(state, toolkit, ids),
-                max(1500, min(int(current*factor), current-excess-256)))
+            memory["conversation_science"] = targeted_packet(argument_packet(state, toolkit, ids, active_only=True),
+                max(1500, min(int(current*factor), current-excess-256)), ids)
         elif task == "selection" and "selection_candidates" not in keep:
             if memory.get("selection_comparison"):
                 if not fit_selection(memory, state):
@@ -314,7 +317,12 @@ def transmitted_evidence_ids(items, evidence):
             eid = value.get("evidence_id")
             if isinstance(eid, str) and eid in evidence:
                 projected = evidence_projection(evidence[eid])
-                if all(key in value and value[key] == field for key, field in projected.items()):
+                if all(key in value and (value[key] == field or
+                        # An archived proof can acquire a stricter display/view
+                        # reservation from its source table, without changing
+                        # its immutable source receipt. Never accept a downgrade.
+                        key == "table_structure_status" and field is None and value[key] == "ambiguous")
+                        for key, field in projected.items()):
                     received.add(eid)
             for child in value.values():
                 walk(child)
@@ -337,12 +345,74 @@ def transmitted_evidence_ids(items, evidence):
     return received
 
 
-def analysis_projection(analysis, *, claims=None, statement_chars=None, evidence=None):
+def table_qualifications(analysis, evidence, snapshots):
+    """Link an earlier broad DTW summary to its explicit, cell-backed qualification.
+
+    This only exposes an existing correction: no new scientific conclusion is
+    generated, no durable claim/proof is removed, and ambiguous cells never qualify.
+    """
+    if not evidence or snapshots is None:
+        return {}
+    corrections = []
+    for field in ('results', 'comparisons'):
+        for claim in analysis.get(field, []):
+            text = claim.get('statement', '')
+            if not re.search(r'\bDTW\b', text, re.I) or not re.search(r'\bmais\b|nuanc|ne .*pas|\bhowever\b|\bnot\b', text, re.I):
+                continue
+            if not claim.get('evidence_ids') or any(eid not in evidence or not exact_source_valid(evidence[eid], snapshots)
+                    for eid in claim['evidence_ids']):
+                continue
+            rows = [evidence[eid] for eid in claim['evidence_ids']
+                if (evidence[eid].get('table') or {}).get('structure_status') == 'verified_cells']
+            groups = {}
+            for proof in rows:
+                table = proof['table']
+                key = (proof.get('article_id'), proof.get('document_sha256'), proof.get('source_url'), table.get('number'))
+                groups.setdefault(key, []).append(proof)
+            for key, proofs in groups.items():
+                # More than one scenario and more than one winning model are
+                # necessary before qualifying any blanket "best DTW" wording.
+                winners, scenarios = set(), set()
+                try:
+                    for proof in proofs:
+                        table = proof['table']; cells = table['row']; headers = table['headers']
+                        if len(cells) != len(headers) or not re.search(r'\bDTWs?\b', table.get('caption', ''), re.I):
+                            raise ValueError('Not a comparable DTW row')
+                        values = [float(v.replace(',', '.')) for v in cells[1:]]
+                        if not all(math.isfinite(v) for v in values):
+                            raise ValueError('Non-finite cells')
+                        winners.update(headers[i+1] for i,v in enumerate(values) if v == min(values))
+                        scenarios.add(cells[0])
+                except (ValueError, KeyError, TypeError):
+                    continue
+                if len(scenarios) > 1 and len(winners) > 1 and all(w.casefold() in text.casefold() for w in winners):
+                    corrections.append((key, claim))
+    qualified = {}
+    for field in ('results', 'comparisons'):
+        for index, claim in enumerate(analysis.get(field, [])):
+            text = claim.get('statement', '')
+            if not re.search(r'\bDTW\b', text, re.I) or not re.search(r'meilleur|\bbest\b', text, re.I):
+                continue
+            if any((evidence.get(eid, {}).get('table') or {}).get('structure_status') == 'verified_cells'
+                    for eid in claim.get('evidence_ids', [])):
+                continue
+            for key, correction in corrections:
+                if correction is claim or not re.search(r'(?:tableau|table)\s*'+re.escape(str(key[3]))+r'\b', text, re.I):
+                    continue
+                if not any((evidence.get(eid, {}).get('article_id'), evidence.get(eid, {}).get('document_sha256'),
+                        evidence.get(eid, {}).get('source_url')) == key[:3] for eid in claim.get('evidence_ids', [])):
+                    continue
+                qualified[field, index] = {'statement': correction['statement'], 'evidence_ids': correction['evidence_ids']}
+    return qualified
+
+
+def analysis_projection(analysis, *, claims=None, statement_chars=None, evidence=None, active_only=False, snapshots=None):
     """Model view of a card. With the evidence store, claims backed only by
     related-work passages are tagged subject="background" (a prior work described
     by this publication, not its own contribution)."""
     from .attribution import claim_subject
     result = {}
+    qualifications = table_qualifications(analysis, evidence, snapshots)
     for name in ANALYSIS_FIELDS:
         value = analysis.get(name)
         if not value:
@@ -351,8 +421,11 @@ def analysis_projection(analysis, *, claims=None, statement_chars=None, evidence
             result[name] = [{"statement": item["statement"][:statement_chars] if statement_chars else item["statement"],
                 "evidence_ids": item["evidence_ids"], "origin": item.get("origin", "source_statement"),
                 "basis": item.get("basis", analysis.get("analysis_basis")),
-                **({"subject": "background"} if evidence is not None and claim_subject(item, evidence) == "background" else {})}
-                for item in (value[:claims] if claims else value)]
+                **({"subject": "background"} if evidence is not None and claim_subject(item, evidence) == "background" else {}),
+                **({'interpretation_status': 'qualified_by_verified_cells', 'qualification': qualifications[name,index]}
+                    if (name,index) in qualifications else {})}
+                for index,item in enumerate(value[:claims] if claims else value)
+                if not active_only or (name,index) not in qualifications]
         elif isinstance(value, list):
             # Always a copy: a bounded view is trimmed in place, the card never.
             result[name] = list(value[:claims] if claims else value)
@@ -361,14 +434,39 @@ def analysis_projection(analysis, *, claims=None, statement_chars=None, evidence
     return result
 
 
-def evidence_projection(evidence):
+def evidence_projection(evidence, snapshots=None):
     row = {name: evidence.get(name) for name in ("evidence_id", "article_id", "exact_quote", "section",
         "page_number", "source_url", "source_version", "basis", "document_version_id", "document_sha256",
         "source_identifiers", "version_status", "printed_page", "pdf_page_label", "page_verification", "table", "table_structure_status")}
+    if evidence.get("equation"):
+        row["equation"] = evidence["equation"]
     if not row["version_status"]:
         row["source_version"], row["version_status"] = "legacy_unverified", "legacy_unverified"
     if evidence.get("table_header"):
         row["table_header"] = evidence["table_header"]
+    # Old page-sized proofs may predate the table-specific evidence rows. Their
+    # exact source snapshot already contains the extraction reservations. Expose
+    # those as view metadata, never rewrite the archived quote/fingerprint.
+    source = (snapshots or {}).get(evidence.get("source_fingerprint"), {})
+    if source.get("article_id") == evidence.get("article_id"):
+        explicit = (evidence.get("table") or {}).get("number")
+        reservations = {}
+        for chunk in source.get("chunks", []):
+            table = chunk.get("table") or {}
+            number = table.get("number")
+            if not number or (explicit and str(number) != str(explicit)):
+                continue
+            if not explicit and not re.search(r"\bTable(?:au)?\s+"+re.escape(str(number))+r"\b",
+                    evidence.get("exact_quote", ""), re.I):
+                continue
+            reservations[str(number)] = {"number": number, "structure_status": table.get("structure_status", "ambiguous"),
+                "source_fingerprint": evidence["source_fingerprint"],
+                "restriction": "Cell/column association is not verified; do not assign numerical results."
+                    if table.get("structure_status") != "verified_cells" else "Verified extracted cells of this table only."}
+        if reservations:
+            row["table_restrictions"] = list(reservations.values())
+            if any(t["structure_status"] != "verified_cells" for t in reservations.values()):
+                row["table_structure_status"] = "ambiguous"
     return row
 
 
@@ -764,7 +862,8 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
                 "other_locks": [{"lock_id": r["lock_id"], "status": r["status"], "retained_total": r["retained_total"]}
                     for r in coverage["locks"] if r["lock_id"] not in part_lock]}
     if state.get("turn_goal"):
-        memory["turn_goal"] = {k: state["turn_goal"][k] for k in ("deliverable", "lock_ids", "reading_depth", "understanding")}
+        memory["turn_goal"] = {k: state["turn_goal"][k] for k in ("deliverable", "lock_ids", "reading_depth", "understanding", 'plan_operation')
+            if k in state['turn_goal']}
     if state.get("research_need") and research_active(state):
         # The structured need: every selection, comparison and review judges against these criteria.
         memory["research_need"] = state["research_need"]
@@ -814,7 +913,15 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
     # The last section touched is useful to a conversation about the document,
     # not to a reading, comparison or another section's drafting.
     if state.get("document", {}).get("active_section_id") and task in {"conversation", "final"}:
-        memory["writing_context"] = writing_context(state, toolkit, budget=min(6500, budget//3))
+        # A previous revision is not this conversation's active writing task. A
+        # compact preview suffices; the exact draft remains available by section ID.
+        active_section = next((s for s in outline.get("sections", [])
+            if s["id"] == state["document"]["active_section_id"]), {})
+        draft = (active_section.get("drafts") or [{}])[-1]
+        text = draft.get("raw_text") or draft.get("text", "")
+        memory["writing_context"] = {"section_id": active_section.get("id"), "title": active_section.get("title"),
+            "draft_id": draft.get("id"), "text": text[:min(1500, budget//6)],
+            "text_truncated": len(text) > min(1500, budget//6), "retrieval": "write_section(action=read, section_id)"}
     progress = state.get("document", {}).get("writing_progress")
     if progress:
         # A bounded view: counts per section and only the active section's latest refusal.
@@ -941,6 +1048,13 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
                 "contract": "Classement cumulatif : comparer aux finalistes. Toute sortie exige replacements, "
                     "informations utilisées et incertitudes. Une omission ne retire aucun finaliste. "
                     "Les jugements de pertinence ne sont pas des preuves scientifiques."}
+            if focus.get("pair_reviews"):
+                # Same tier, different contributions: the model compares the two dossiers (their relevance
+                # profiles are already in incumbents/challengers) on these dimensions, never on keywords.
+                from .research import COMPARISON_DIMENSIONS
+                memory["selection_comparison"]["same_tier_reviews"] = [{"challenger_id": p["challenger_id"],
+                    "finalist_ids": p["finalist_ids"], "tier": p["tier"], "tier_label": p["label"],
+                    "dimensions": list(COMPARISON_DIMENSIONS)} for p in focus["pair_reviews"]]
             # Each exact abstract is sent once. Both kinds of dossier point to
             # the same notice projection instead of duplicating its first 900 chars.
             for dossier in [*memory["selection_comparison"]["incumbents"], *memory["selection_comparison"]["challengers"]]:
@@ -1020,20 +1134,30 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
         if part:
             # One part of a plan generated in parallel (a lock, an axis or the framing).
             memory["plan_part"] = part
+        operation = (state.get('turn_goal') or {}).get('plan_operation') or {}
+        if operation.get('kind') in {'revision', 'section_revision'}:
+            # The previous structure is input to the edit, not optional chat history.
+            memory['outline']['sections'] = [{
+                **{k:s.get(k) for k in ('id','title','article_ids')},
+                'scientific_objective':s.get('scientific_objective','')[:120]}
+                for s in state['outline']['sections']]
+            memory['outline']['index_partial'] = False
+            memory['outline']['retrieval'] = 'manage_outline(read, offset, limit) donne les détails conservés.'
     if task == "conversation" or task == "planning" and not state.get("plan_part"):
         # A plan part carries its own sources' cards (plan_sources); the cards of works
         # outside the plan (earlier, off-topic analyses) do not travel with it.
-        plan_ids = set(r["id"] for r in memory.get("plan_sources", [])) if task == "planning" else None
+        plan_ids = [r["id"] for r in memory.get("plan_sources", [])] if task == "planning" else None
         analyzed = [aid for aid in selected if aid in toolkit.registry and toolkit.registry[aid].analysis
             and (plan_ids is None or aid in plan_ids)]
-        targets, scope = targeted_ids(state, toolkit) if task == "conversation" else ([], None)
+        targets, scope = targeted_ids(state, toolkit) if task == "conversation" else (
+            (list(plan_ids), 'exclusive') if (state.get('turn_goal') or {}).get('plan_operation', {}).get('memory_only') else ([], None))
         if targets:
             # The same stable packet of the targeted works in every round of the request,
             # from their saved cards (not from the last tool page only).
             analyzed = targets if scope == "exclusive" else list(dict.fromkeys([*targets, *analyzed]))
         if analyzed:
             from .argumentation import argument_packet, bounded_argument_packet
-            science_packet = argument_packet(state, toolkit, analyzed)
+            science_packet = argument_packet(state, toolkit, analyzed, active_only=task == 'planning')
             memory["conversation_science"] = targeted_packet(science_packet, int(budget*(.85 if scope == "exclusive" else .65)), targets)
             for row in memory["selected_articles"]:
                 row.pop("analysis", None)
@@ -1057,12 +1181,12 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
                 continue
             for e in toolkit.registry[aid].analysis.get("evidence", [])[:4]:
                 if e["evidence_id"] in toolkit.shown_evidence and exact_source_valid(e, toolkit.snapshots):
-                    by_article[aid].append(evidence_projection(e))
+                    by_article[aid].append(evidence_projection(e, toolkit.snapshots))
         # Also keep passages actually read but not yet incorporated into a saved analysis.
         for eid in sorted(reversed(toolkit.shown_evidence), key=lambda eid: not bool(toolkit.evidence.get(eid, {}).get("table"))):
             e = toolkit.evidence.get(eid)
             if e and e["article_id"] in selected and exact_source_valid(e, toolkit.snapshots) and not any(r["evidence_id"] == eid for r in by_article[e["article_id"]]):
-                by_article[e["article_id"]].append(evidence_projection(e))
+                by_article[e["article_id"]].append(evidence_projection(e, toolkit.snapshots))
         memory["source_material"] = [{"article_id": aid, "structured_analysis_saved": bool(toolkit.registry[aid].analysis),
             "abstract_passages_shown": sum(e["basis"] == "abstract" for e in rows),
             "body_passages_shown": sum(e["basis"] == "fulltext" for e in rows),
@@ -1161,7 +1285,7 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
             memory = {k: v for k, v in memory.items() if k in {
                 "section_drafting", "consultant_instructions", "context_task", "diagnostic_context"}}
         memory, messages = fit_focused(memory, messages, budget, task, state, toolkit, section,
-            keep=("plan_sources", "other_plan_sources", "lock_coverage") if task == "planning" else ())
+            keep=("plan_sources", "other_plan_sources", "lock_coverage", "outline") if task == "planning" else ())
     if len(json.dumps(memory, ensure_ascii=False)) + sum(len(m["content"]) for m in messages) > budget:
         memory["outline"] = {"title": state.get("outline", {}).get("title"), "sections": [
             {k: s[k] for k in ("id", "title")} for s in state.get("outline", {}).get("sections", [])]}
@@ -1248,7 +1372,8 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
         if excess <= 0:
             break
         # A request on targeted publications: secondary views go before any of their proofs.
-        secondary = next((key for key in SECONDARY_ORDER if memory.get(key) and not (final_protected and key == "selected_articles")),
+        secondary = next((key for key in SECONDARY_ORDER if memory.get(key) and not (final_protected and key == "selected_articles")
+            and not (task == 'planning' and key == 'outline')),
             None) if coverage_targets or final_protected else None
         if science_packet is not None and memory.get("conversation_science") and secondary:
             # Secondary views go before any proof of a requested publication.
@@ -1284,7 +1409,7 @@ def model_context(state, toolkit, budget, *, final=False, supplied_article_ids=(
             memory, messages = fit_focused(memory, messages, max(1000, current-excess-256), task, state, toolkit, section,
                 keep=("candidate_articles", "selection_candidates", "window_id", "selection_window",
                     # The plan's bibliography is its input: older messages go first.
-                    *(("plan_sources", "other_plan_sources", "lock_coverage") if task == "planning" else ())))
+                    *(("plan_sources", "other_plan_sources", "lock_coverage", "outline") if task == "planning" else ())))
         else:
             break
     if coverage_targets and isinstance(memory.get("conversation_focus"), dict):
@@ -1333,6 +1458,14 @@ def compact_exchange(exchange, toolkit, budget):
         # Candidate windows keep every notice with a shorter abstract before any
         # notice is dropped: several parallel searches must not shrink each other's
         # windows to one notice (run d8606428). Passages and title lists keep their caps.
+        if isinstance(result.get("claims"), list) and len(result["claims"]) > cap:
+            original = result["claims"]
+            result["claims"] = original[:cap]
+            result["transmission_omitted_claims"] = result.get("transmission_omitted_claims", 0) + len(original)-cap
+            result["complete"] = False
+            result["next_offset"] = result.get("offset", 0)+len(result["claims"])
+            needed = {eid for c in result["claims"] for eid in c.get("evidence_ids", [])}
+            result["evidence"] = [e for e in result.get("evidence", []) if e.get("evidence_id") in needed]
         for key in ("articles", "matrix"):
             if isinstance(result.get(key), list):
                 originals = result[key]
@@ -1397,6 +1530,7 @@ def compact_exchange(exchange, toolkit, budget):
     while len(json.dumps(packed(), ensure_ascii=False)) > budget and len(results) > 1:
         results.pop(0)
     if len(json.dumps(packed(), ensure_ascii=False)) > budget:
-        data = {"tool_results": [{k: v for k, v in r.items() if k in {"saved", "published", "error", "rejection_code", "window_id"}}
+        data = {"tool_results": [{k: v for k, v in r.items() if k in {"saved", "published", "error", "rejection_code", "window_id",
+            "article_id", "offset", "transmission_omitted_claims"}}
             for r in results if isinstance(r, dict)], "guidance": data["guidance"]}
     return packed()

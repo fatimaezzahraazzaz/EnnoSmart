@@ -71,6 +71,15 @@ def rank_claims(claims, terms):
     return sorted(claims, key=lambda c: -len(terms & set(re.findall(r"[a-zà-ÿ0-9]{5,}", str(c.get("statement", "")).casefold()))))
 
 
+def section_fields(section):
+    """Use the existing card fields in the order needed by this section."""
+    topic = section.get("title", "") + " " + section.get("scientific_objective", "")
+    if re.search(r"architect|mécanism|mecanism|mechanism|représentation|representation|apprentissage", topic, re.I):
+        first = ("technical_mechanism", "parameters", "method", "equations", "experimental_setup")
+        return (*first, *(f for f in SECTION_FIELDS if f not in first))
+    return SECTION_FIELDS
+
+
 def section_projection(section, text_chars=1800, compact=False):
     row = {k: v for k, v in section.items() if k != "drafts"}
     if compact:
@@ -113,29 +122,34 @@ def revision_context(state, toolkit, section, budget):
             "Une mention dans une preuve ne démontre pas que ce travail est la contribution de l'article. "
             "Ne pas relire toutes les fiches : récupérer seulement une preuve manquante par son evidence_id."}
     primary = []
+    packet["proof_backed_claims"] = []
+    terms = section_terms(section)
+    queues = []
     for aid in ids:
         article = toolkit.registry[aid]
-        view = analysis_projection(article.analysis, evidence=toolkit.evidence)
-        candidates = [(field, claim) for field in ("technical_mechanism", "method", "contribution")
-            for claim in view.get(field, []) if claim_subject(claim, toolkit.evidence) == "this_work"
+        view = analysis_projection(article.analysis, evidence=toolkit.evidence, active_only=True, snapshots=toolkit.snapshots)
+        candidates = [(field, claim) for field in section_fields(section)
+            for claim in rank_claims(view.get(field, []), terms) if isinstance(claim, dict)
+            and claim_subject(claim, toolkit.evidence) == "this_work"
             and all(eid in toolkit.shown_evidence and eid in toolkit.evidence
                 and toolkit.evidence[eid]["article_id"] == aid
                 and exact_source_valid(toolkit.evidence[eid], toolkit.snapshots) for eid in claim["evidence_ids"])]
-        # Prefer a complete claim requiring fewer separate passages; never relabel
-        # a related-work claim as the article's own method to save space.
-        chosen = min(candidates, key=lambda row: len(row[1]["evidence_ids"]), default=None)
+        # Prefer this section's fields and lexical terms; never relabel a
+        # related-work claim as the article's own method to save space.
+        chosen = next(iter(candidates), None)
         packet["articles"].append({"id": aid, "title": article.title,
             "analysis": {chosen[0]: [chosen[1]]} if chosen else {},
             "claims_available": sum(len(v) for v in view.values() if isinstance(v, list))})
         if chosen:
             primary.extend(chosen[1]["evidence_ids"])
+        queues.append((aid, candidates))
     proofs = {eid: row for eid, row in toolkit.evidence.items() if row["article_id"] in ids
         and eid in toolkit.shown_evidence and exact_source_valid(row, toolkit.snapshots)}
     for name in dict.fromkeys(n for issue in issues for n in issue["names"]):
         for eid, row in proofs.items():
             if any(key and key in _proof_text(row) for key in _variants(name)):
                 packet["source_mentions"].append({"name": name, "subject": claim_subject({"evidence_ids": [eid]}, toolkit.evidence),
-                    "proof": proof_reference(row)})
+                    "proof": proof_reference(row, toolkit.snapshots)})
                 break
     for eid in draft["evidence_ids"]:
         if eid in proofs and isinstance(proofs[eid].get("table"), dict):
@@ -145,25 +159,45 @@ def revision_context(state, toolkit, section, budget):
     if blueprint:
         packet["argument_blueprint"] = {"id": blueprint.get("id"), "axes": [
             {"axis": a["axis"], "steps": a["steps"][:1]} for a in blueprint.get("axes", [])[:1]]}
+    packet["transmission_partial"] = False
+    packet["retrieval_gaps"] = retrieval_gaps(state, toolkit, source_readiness(state, toolkit, ids), set())
+    packet["retrieval"] = "Les affirmations ci-dessus sont disponibles maintenant ; leurs evidence_ids permettent " \
+        "une relecture locale exacte avec analyze_article(read). get_analysis_claims(fields, offset) récupère " \
+        "les autres affirmations pertinentes. Une lecture historique n'assure pas sa présence dans cet appel."
     size = lambda: len(json.dumps(packet, ensure_ascii=False))
     for optional in ("argument_blueprint", "table_evidence_index"):
         if size() > budget-4500:
             packet[optional] = {} if optional == "argument_blueprint" else []
     if size() > budget:
         raise ActiveReadingContextError("Le texte intégral de la section et ses identités dépassent le contexte de révision disponible.")
+    # Compact claims retain their proof IDs; full quotes are loaded selectively below.
+    # Alternate works so one large card cannot hide the other comparison partner.
+    for index in range(max((len(rows) for _, rows in queues), default=0)):
+        for aid, rows in queues:
+            if index >= len(rows):
+                continue
+            field, claim = rows[index]
+            row = {"article_id": aid, "field": field, "statement": claim["statement"],
+                "evidence_ids": claim["evidence_ids"]}
+            packet["proof_backed_claims"].append(row)
+            if size() > min(budget*.65, budget-3500):
+                packet["proof_backed_claims"].pop()
+            else:
+                primary.extend(claim["evidence_ids"])
     # Whole exact passages, not substrings. Reverse order balances the earlier
     # works that the ordinary card packet used to favour at the expense of later ones.
     extra = [row["proof"]["evidence_id"] for row in packet.get("source_mentions", [])]
-    for eid in dict.fromkeys([*reversed(primary), *extra, *draft["evidence_ids"]]):
+    for eid in dict.fromkeys([*primary, *extra, *draft["evidence_ids"]]):
         if eid not in proofs:
             continue
         # These passages have already been delivered and validated. Repeat their
         # exact text and locator, without duplicating the stored version metadata.
-        packet["evidence"].append({k: proofs[eid][k] for k in (
-            "evidence_id", "article_id", "exact_quote", "section", "page_number", "basis", "table") if k in proofs[eid]})
+        packet["evidence"].append(evidence_projection(proofs[eid], toolkit.snapshots))
         if size() > budget:
             packet["evidence"].pop()
     packet["transmission_partial"] = not set(primary) <= {e["evidence_id"] for e in packet["evidence"]}
+    available = {claim_key(c) for c in packet["proof_backed_claims"]}
+    packet["retrieval_gaps"] = retrieval_gaps(state, toolkit, source_readiness(state, toolkit, ids), available)
     return packet
 
 
@@ -257,9 +291,10 @@ def section_dossier(state, toolkit, section, budget):
             continue
         article = toolkit.registry[aid]
         proofs = usable_proofs(toolkit, article, proof_cache)
-        view = analysis_projection(article.analysis, evidence=toolkit.evidence)
+        view = analysis_projection(article.analysis, evidence=toolkit.evidence, active_only=True, snapshots=toolkit.snapshots)
         claims = []
-        for field in SECTION_FIELDS:
+        fields = section_fields(section)
+        for field in fields:
             value = view.get(field)
             if not (isinstance(value, list) and value and isinstance(value[0], dict)):
                 continue
@@ -271,7 +306,7 @@ def section_dossier(state, toolkit, section, budget):
         for field, claim in claims:
             by_field.setdefault(field, []).append(claim)
         order = [(field, by_field[field][i]) for i in range(max((len(v) for v in by_field.values()), default=0))
-            for field in SECTION_FIELDS if field in by_field and i < len(by_field[field])]
+            for field in fields if field in by_field and i < len(by_field[field])]
         queues.append((aid, proofs, order, len(claims)))
     included = set()
     shown_claims = {aid: 0 for aid, *_ in queues}
@@ -293,12 +328,13 @@ def section_dossier(state, toolkit, section, budget):
                     continue
                 if tables_only and not isinstance(rows[index].get("table"), dict):
                     continue
-                packet["evidence"].append(evidence_projection(rows[index]))
+                packet["evidence"].append(evidence_projection(rows[index], toolkit.snapshots))
                 if size() > limit:
                     packet["evidence"].pop()
                 else:
                     included.add(rows[index]["evidence_id"])
-    add_extra(budget*.3, True)
+    if section_fields(section)[0] == "results":
+        add_extra(budget*.3, True)
     for index in range(max((len(q[2]) for q in queues), default=0)):
         for aid, proofs, order, _ in queues:
             if index >= len(order):
@@ -307,7 +343,7 @@ def section_dossier(state, toolkit, section, budget):
             added = [eid for eid in claim["evidence_ids"] if eid not in included]
             packet["proof_backed_claims"].append({"article_id": aid, "field": field, "statement": claim["statement"],
                 "evidence_ids": claim["evidence_ids"], **({"subject": claim["subject"]} if claim.get("subject") else {})})
-            packet["evidence"].extend(evidence_projection(proofs[eid]) for eid in added)
+            packet["evidence"].extend(evidence_projection(proofs[eid], toolkit.snapshots) for eid in added)
             if size() > budget*.75:
                 packet["proof_backed_claims"].pop()
                 del packet["evidence"][len(packet["evidence"])-len(added):]
@@ -361,17 +397,19 @@ def section_dossier(state, toolkit, section, budget):
                 packet["relations"].pop()
                 break
     packet["transmission_partial"] = any(s.get("claims_shown", 0) < s.get("claims_with_proofs", 0) for s in packet["sources"])
-    # What is really missing, computed locally before the model is called: claims of the
-    # cards not yet transmitted to this section (here or earlier), sources without card,
-    # abstract-only cards and core dimensions never examined. Nothing else is to fetch.
-    delivered = set(state.get("section_received_claims", {}).get(section.get("id"), [])) | {
-        claim_key(c) for c in packet["proof_backed_claims"]}
+    # Gaps describe this packet, not past calls: earlier claims may have left the
+    # bounded context. The model chooses which missing details this section needs.
+    delivered = {claim_key(c) for c in packet["proof_backed_claims"]}
     gaps = retrieval_gaps(state, toolkit, readiness, delivered)
     packet["retrieval_gaps"] = gaps
-    packet["retrieval"] = ("get_analysis_claims(article_id, fields, offset) transmet les affirmations listées dans "
-        "retrieval_gaps.claims_not_transmitted ; analyze_article(read, evidence_ids) relit un passage exact."
-        if not gaps["complete"] else "Toutes les affirmations probantes des fiches de cette section sont transmises "
-        "(retrieval_gaps vide) : rédiger et sauvegarder à partir de ce paquet, sans relire les fiches.")
+    packet["retrieval"] = ("Lacunes du contexte actuel, pas de l'historique. Récupérer seulement les détails utiles : "
+        "get_analysis_claims(article_id, fields, offset) ; passage exact local : analyze_article(read, evidence_ids).")
+    for optional in ("manuscript_map", "argument_blueprint", "project_facts", "relations"):
+        if size() <= budget:
+            break
+        if optional in packet:
+            packet.pop(optional)
+            packet.setdefault("deferred_context_keys", []).append(optional)
     return packet
 
 
@@ -389,7 +427,7 @@ def retrieval_gaps(state, toolkit, readiness, delivered):
         if row["status"] != "analysed":
             gaps["sources_without_card"].append(aid)
             continue
-        view = analysis_projection(toolkit.registry[aid].analysis, evidence=toolkit.evidence)
+        view = analysis_projection(toolkit.registry[aid].analysis, evidence=toolkit.evidence, active_only=True, snapshots=toolkit.snapshots)
         # A count per work keeps the packet small; get_analysis_claims returns the claims themselves.
         missing = sum(claim_key(c) not in delivered for value in view.values()
             if isinstance(value, list) and value and isinstance(value[0], dict) for c in value)
@@ -414,6 +452,31 @@ def section_packet(inputs):
             except (ValueError, IndexError, AttributeError):
                 return None
     return None
+
+
+def current_claim_keys(inputs):
+    """Claims actually present after compaction, never the historical delivery ledger."""
+    keys = set()
+    def walk(value):
+        if isinstance(value, dict):
+            if value.get("statement") and value.get("evidence_ids"):
+                keys.add(claim_key(value))
+            for child in value.values():
+                walk(child)
+        elif isinstance(value, list):
+            for child in value:
+                walk(child)
+    for item in inputs:
+        content = item.get("output") if item.get("type") == "function_call_output" else (
+            item.get("content") if item.get("role") == "developer" else None)
+        if isinstance(content, str):
+            if content.startswith("Mémoire scientifique"):
+                content = content.split(" : ", 1)[-1]
+            try:
+                walk(json.loads(content))
+            except (ValueError, TypeError):
+                pass
+    return keys
 
 
 def writing_context(state, toolkit, section=None, budget=7000):

@@ -112,7 +112,7 @@ const EnnoScholarV2Chat = dynamic(
 )
 
 const EnnoScholarV4Chat = dynamic(
-  () => import("@/components/ennosmart/ennoscholar-v4-chat"),
+  () => import("@/components/ennosmart/scholar-engine-selector"),
   { ssr: false, loading: agentPageLoading },
 )
 

@@ -37,6 +37,7 @@ NON_RETRYABLE = {"internal_error", "permission_conflict", "tool_configuration_er
 # Below this remainder no segment is started: the understanding call and one section
 # reservation would not fit, and a segment that cannot save anything only spends.
 MIN_SEGMENT_USD = 0.5
+MIN_RESEARCH_SEGMENT_USD = 0.05
 STOP_MESSAGES = {
     "completed": "Rédaction automatique terminée : toutes les sections demandées sont enregistrées.",
     "cancelled": "Rédaction automatique annulée à votre demande. Les sections enregistrées sont conservées.",
@@ -153,6 +154,7 @@ def segment_directive(job):
     return {"job_id": job["id"], "kind": job.get("kind", "writing"),
         "request_message_id": job["request_message_id"], "progress_id": pinned.get("id"),
         "target_ids": list(pinned.get("target_ids") or []), "plan_revision": pinned.get("plan_revision"),
+        "mode": pinned.get("mode"), "baseline_draft_ids": copy.deepcopy(pinned.get("baseline_draft_ids", {})),
         "goal": copy.deepcopy(job.get("goal")), "blocked": dict(job.get("blocked") or {})}
 
 
@@ -172,6 +174,9 @@ def scope_problem(segment, state):
     if progress.get("id") != segment.get("progress_id") or progress.get("target_ids") != segment.get("target_ids"):
         return ("Rédaction automatique interrompue : la progression de rédaction a été remplacée depuis la demande ; "
             "aucune section n'a été ajoutée ni retirée du périmètre initial.")
+    if ((segment.get("mode") is not None and progress.get("mode") != segment["mode"]) or
+            ("baseline_draft_ids" in segment and progress.get("baseline_draft_ids", {}) != segment["baseline_draft_ids"])):
+        return "Rédaction interrompue : le mode ou les versions initiales des sections ont changé."
     if (state.get("outline") or {}).get("plan_revision") != segment.get("plan_revision"):
         return "Rédaction automatique interrompue : le plan a changé depuis la demande ; confirmez les sections à reprendre."
     return None
@@ -181,7 +186,14 @@ def can_start_segment(job):
     """(True, None) or (False, final status) before a new segment is opened."""
     if job.get("cancel_requested"):
         return False, "cancelled"
-    if remaining(job) < MIN_SEGMENT_USD:
+    minimum = MIN_SEGMENT_USD
+    if job.get("kind") == "research" and job.get("segments"):
+        # A research segment is capped by what remains (segment_config, per-call admission): the threshold only has to
+        # cover a segment like the ones measured (real trial 442d1365: one 0.045 USD segment, 0.405 USD left, refused
+        # by the fixed 0.5 USD threshold). Writing jobs keep the fixed threshold.
+        measured = max(committed(s.get("spent") or EMPTY) for s in job["segments"])
+        minimum = min(MIN_SEGMENT_USD, max(MIN_RESEARCH_SEGMENT_USD, 1.5*measured))
+    if remaining(job) < minimum:
         return False, "budget_exhausted"
     if len(job["segments"]) >= job["max_segments"]:
         return False, "segment_limit"
@@ -238,7 +250,8 @@ def evaluate(job, state, run_id, run_status, run_data, saved_before):
     # Pin before interpreting the outcome, including on interrupted first segments.
     if pinned is None and progress and progress.get("mode") == "full" and progress.get("target_ids"):
         job["progress"] = {"id": progress["id"], "target_ids": list(progress["target_ids"]),
-            "plan_revision": progress.get("plan_revision")}
+            "plan_revision": progress.get("plan_revision"), "mode": progress["mode"],
+            "baseline_draft_ids": copy.deepcopy(progress.get("baseline_draft_ids", {}))}
         job["goal"] = copy.deepcopy(state.get("turn_goal"))
         job["initializing"] = False
         pinned = job["progress"]
@@ -272,11 +285,15 @@ def evaluate(job, state, run_id, run_status, run_data, saved_before):
             return stop(job, "not_applicable", error=None)
         # The scope the continuations resume exactly: this progress, its targets and plan.
         job["progress"] = {"id": progress["id"], "target_ids": list(progress["target_ids"]),
-            "plan_revision": progress.get("plan_revision")}
+            "plan_revision": progress.get("plan_revision"), "mode": progress["mode"],
+            "baseline_draft_ids": copy.deepcopy(progress.get("baseline_draft_ids", {}))}
         job["goal"] = copy.deepcopy(state.get("turn_goal"))
     elif not progress or progress.get("id") != pinned["id"] or progress.get("target_ids") != pinned["target_ids"]:
         return stop(job, "failed", error="Rédaction automatique arrêtée : la progression de rédaction a changé "
             "(nouvelle demande ou nouveau périmètre) ; aucune section n'a été ajoutée au périmètre initial.")
+    problem = scope_problem(segment_directive(job), state)
+    if problem:
+        return stop(job, "failed", error=problem)
     if progress.get("status") == "draft_complete":
         return stop(job, "completed")
     if (progress.get("status") == "plan_changed" or progress.get("plan_revision") != job["progress"]["plan_revision"]

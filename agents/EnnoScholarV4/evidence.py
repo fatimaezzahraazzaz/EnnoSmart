@@ -60,6 +60,8 @@ def exact_source_valid(evidence, snapshots):
             return False
     try:
         chunk = source["chunks"][evidence["chunk_index"]]
+        if evidence.get("equation") != chunk.get("equation"):
+            return False
         start = evidence["char_offset"]
         if evidence.get("table") or evidence.get("table_row_index") is not None:
             table = chunk.get("table")
@@ -77,6 +79,74 @@ def exact_source_valid(evidence, snapshots):
                 chunk.get("page_verification", "not_verified") == evidence.get("page_verification", "not_verified"))))
     except (IndexError, KeyError, TypeError):
         return False
+
+
+def reusable_science(article, snapshots, evidence=None):
+    """Copy stored science only with an exact work/document/proof association.
+
+    Session decisions and topic relevance are not bibliographic knowledge. No
+    delivery receipt is copied: the receiving model must still read its proofs.
+    """
+    from .models import normalize_doi
+    data = copy.deepcopy(article.durable())
+    doi = normalize_doi(article.doi)
+    arxiv = re.sub(r"v\d+$", "", article.arxiv_id)
+    if not (doi or arxiv) or article.metadata_errors:
+        return None
+
+    def matches(version):
+        from .provenance import open_version_matches
+        ids = version.get("identifiers", {})
+        digest = version.get("document_sha256", "")
+        return bool(re.fullmatch(r"[a-f0-9]{64}", digest) and version.get("version_id") == "document_"+digest and
+            ((doi and normalize_doi(ids.get("doi", "")) == doi) or
+             (arxiv and re.sub(r"v\d+$", "", ids.get("arxiv", "")) == arxiv) or open_version_matches(version, article)))
+
+    data.update(selected=False, selection_override=None, assessment={}, scientific_families=[],
+        matched_queries=[], search_hits=[], related_article_ids=[], canonical_work_id=article.id)
+    data["fulltext"] = data["fulltext"] if matches(data["fulltext"].get("document_version", {})) else {}
+    data["documents"] = {k: d for k, d in data["documents"].items()
+        if k == d.get("document_version", {}).get("version_id") and matches(d.get("document_version", {}))}
+    if not data["fulltext"].get("text") and data["documents"]:
+        documents = [d for d in data["documents"].values() if d.get("text")]
+        if documents:
+            data["fulltext"] = copy.deepcopy(max(documents, key=lambda d: (
+                not d.get("truncated", True), len(d["text"]))))
+    # Failed retrievals are documentary history, never evidence of access. Only
+    # verified identities may transfer them between authorised conversations.
+    if article.verified and not data["fulltext"] and not article.fulltext.get("text"):
+        data["fulltext"] = {"attempts": copy.deepcopy(article.fulltext.get("attempts", []))}
+    valid, analysis_valid = {}, set()
+    standalone = list((evidence or {}).values()) if isinstance(evidence, dict) else list(evidence or [])
+    for proof, analysed in [*[(p, False) for p in standalone], *[(p, True) for p in article.analysis.get("evidence", [])]]:
+        source = snapshots.get(proof.get("source_fingerprint"), {})
+        identified = matches(source.get("document_version", {})) if proof.get("basis") == "fulltext" else (
+            source.get("basis") == "abstract" and source.get("text") == article.abstract)
+        if (proof.get("article_id") == article.id and source.get("article_id") == article.id and
+                identified and exact_source_valid(proof, snapshots)):
+            valid[proof["evidence_id"]] = copy.deepcopy(proof)
+            if analysed:
+                analysis_valid.add(proof["evidence_id"])
+    analysis = copy.deepcopy(article.analysis)
+    for field, value in list(analysis.items()):
+        if field in {"relevance", "relevance_to_current_topic"}:
+            analysis[field] = []
+        elif isinstance(value, list) and value and isinstance(value[0], dict) and "statement" in value[0]:
+            analysis[field] = [c for c in value if c.get("evidence_ids") and set(c["evidence_ids"]) <= analysis_valid]
+    used = {eid for value in analysis.values() if isinstance(value, list) for c in value
+        if isinstance(c, dict) and "statement" in c for eid in c.get("evidence_ids", [])}
+    data["analysis"] = {**analysis, "evidence": [valid[eid] for eid in sorted(used)]} if used else {}
+    data["analysis_basis"] = ("fulltext" if all(valid[eid].get("basis") == "fulltext" for eid in used) else "abstract") if used else None
+    if data["analysis"]:
+        data["analysis"]["analysis_basis"] = data["analysis_basis"]
+    data["access_level"] = "fulltext" if data["fulltext"].get("text") else "abstract_only" if article.abstract else "metadata_only"
+    data["access_status"] = "fulltext_analyzed" if used and data["analysis_basis"] == "fulltext" else (
+        "fulltext_extracted" if data["fulltext"].get("text") else data["access_level"])
+    data["fulltext_available"] = True if data["fulltext"].get("text") else None
+    data["fulltext_source"] = data["fulltext"].get("url", "")
+    proofs = valid
+    sources = {p["source_fingerprint"]: copy.deepcopy(snapshots[p["source_fingerprint"]]) for p in proofs.values()}
+    return data, sources, proofs
 
 
 # Documents stored from now on are cut on scientific boundaries (paragraphs, sentences, whole
@@ -222,6 +292,8 @@ def passages(article):
                 "page_verification": chunk.get("page_verification", "not_verified"),
                 "exact_quote": quote, "text": quote, "basis": "fulltext" if fulltext.get("text") else "abstract",
                 "chunk_index": index, "char_offset": offset}
+            if chunk.get("equation"):
+                row["equation"] = chunk["equation"]
             if table and row_index is not None:
                 row["table"] = {**{k: v for k, v in table.items() if k not in {"rows", "raw_rows"}}, "row": table["rows"][row_index]}
                 row["table_row_index"] = row_index
@@ -244,7 +316,11 @@ def choose_passages(rows, query, offset=0, limit=8):
         def score(row):
             return sum(term in (row["section"] + " " + row["text"] + " " + json.dumps(row.get("table", {}))).casefold() for term in terms)
         matched = [row for row in rows if score(row)]
-        rows = sorted(matched or rows, key=lambda r: (-score(r), r["chunk_index"], r["char_offset"], r["evidence_id"]))
+        structural = bool(terms & {"metric", "metrics", "métrique", "métriques", "formula", "formulas", "formule", "formules", "equation", "equations", "équation", "équations", "table", "tableau", "tableaux"})
+        rows = sorted(matched or rows, key=lambda r: (
+            bool(re.search(r"references|bibliograph|acknowledg", r["section"], re.I)),
+            -bool(structural and (r.get("table") or r.get("equation") or re.search(r"\\(?:frac|sum|arg|math|hat)\b", r["text"]))),
+            -score(r), r["chunk_index"], r["char_offset"], r["evidence_id"]))
     return rows[offset:offset + limit]
 
 

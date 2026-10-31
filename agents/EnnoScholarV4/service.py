@@ -8,12 +8,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import or_, select, update, func
 
 from .config import ScholarV4Config
 from .models import Article
 from .job_ledger import JobMeter, close_open_entries
-from .session import ScholarV4Session, ScholarV4Run, lock_rows, sync_records
+from .session import ScholarV4Session, ScholarV4Run, ScholarV4Article, lock_rows, sync_records
 
 logger = logging.getLogger(__name__)
 TERMINAL = {"completed", "partial", "failed", "cancelled"}
@@ -116,6 +116,112 @@ class ScholarV4Service:
             db.commit()
             return self.session_read(row)
 
+    def article_memory(self, owner, sid, query, *, exact=False, limit=8, offset=0, include_index=False):
+        """Read stored documents/science, authorised by owner AND current project access.
+
+        Search only metadata first; fetch documents/snapshots for the chosen works.
+        This is a read of existing V4 tables, with no new cache or shared decisions.
+        """
+        from fastapi import HTTPException
+        from .models import normalize_doi
+        from .store import query_terms, lexical_order, interleave_by_provider
+        from .evidence import reusable_science
+        import re
+        query = query.strip()[:1500]
+        if not query:
+            return []
+        table = ScholarV4Article
+        title = func.lower(table.data["title"].as_string())
+        abstract = func.lower(table.data["abstract"].as_string())
+        arxiv = func.lower(table.data["arxiv_id"].as_string())
+        if exact:
+            value = query.casefold()
+            doi = normalize_doi(query)
+            requested_arxiv = re.sub(r"^(?:https?://arxiv.org/(?:abs|pdf|html)/|arxiv:)", "", value).removesuffix(".pdf")
+            arxiv_value = re.sub(r"v\d+$", "", requested_arxiv)
+            condition = or_(*([table.doi == doi] if doi else []), arxiv == arxiv_value,
+                title == value, table.article_id == query, table.data["url"].as_string() == query)
+        else:
+            terms = sorted(query_terms(query))[:16]
+            if not terms:
+                return []
+            condition = or_(*(or_(title.contains(t, autoescape=True), abstract.contains(t, autoescape=True)) for t in terms))
+        with self.session_factory() as db:
+            self.owned(db, owner, sid)
+            records = db.execute(select(table.session_id, table.article_id, table.doi,
+                table.data["title"].as_string(), table.data["abstract"].as_string(),
+                table.data["arxiv_id"].as_string()).join(ScholarV4Session, ScholarV4Session.id == table.session_id)
+                .where(ScholarV4Session.owner_id == owner, table.session_id != sid, condition)
+                .order_by(table.updated_at.desc(), table.id)).all()
+            notices = [Article(id=str(i), title=r[3] or "", abstract=r[4] or "", sources=[r[0]]) for i, r in enumerate(records)]
+            ordered, _ = lexical_order(query, notices)
+            # Retrieval diversity, not scientific ranking: each authorised
+            # conversation gets a turn; every remaining work stays addressable.
+            ordered = interleave_by_provider(ordered) if not exact else ordered
+            candidates, variants, sources = [], {}, {}
+            for notice in ordered:
+                source_sid, aid, *_ = records[int(notice.id)]
+                if source_sid not in sources:
+                    try:
+                        sources[source_sid] = self.owned(db, owner, source_sid)
+                    except SessionNotFound:
+                        sources[source_sid] = None
+                    except HTTPException as exc:
+                        if exc.status_code not in {403, 404}:
+                            raise
+                        sources[source_sid] = None
+                source = sources[source_sid]
+                if source is None:
+                    continue
+                raw = source.data.get("articles", {}).get(aid)
+                if not raw or not (raw.get("analysis") or raw.get("fulltext") or raw.get("documents")):
+                    continue
+                if exact and re.fullmatch(r"\d{4}\.\d{4,5}v\d+", requested_arxiv) and (
+                        raw.get("fulltext", {}).get("document_version", {}).get("identifiers", {}).get("arxiv") != requested_arxiv):
+                    # A cached v2 cannot answer an explicit request for v3.
+                    continue
+                if aid not in variants:
+                    candidates.append({"id": aid, "title": raw["title"][:180],
+                        "analysis_available": bool(raw.get("analysis")),
+                        "fulltext_available": bool(raw.get("fulltext", {}).get("text"))})
+                    variants[aid] = []
+                variants[aid].append((source_sid, raw))
+            result, cursor = [], max(0, offset)
+            while cursor < len(candidates):
+                aid = candidates[cursor]["id"]
+                cursor += 1
+                packets = []
+                for source_sid, raw in variants[aid]:
+                    source = sources[source_sid].data
+                    candidate = Article.model_validate(copy.deepcopy(raw))
+                    from .provenance import restore_bibliographic_correspondence
+                    restore_bibliographic_correspondence(candidate)
+                    clean = reusable_science(candidate, source.get("source_snapshots", {}), source.get("evidence", {}))
+                    if clean and (clean[0].get("analysis") or not raw.get("analysis") and (
+                            clean[0]["fulltext"].get("text") or clean[0]["fulltext"].get("attempts"))):
+                        packets.append({"article": clean[0], "snapshots": clean[1], "evidence": clean[2], "session_id": source_sid})
+                if packets:
+                    # Choose the richest valid document of this same work, not
+                    # merely the latest conversation's failed download.
+                    packet = max(packets, key=lambda p: (bool(p["article"]["fulltext"].get("text")),
+                        bool(p["article"].get("analysis")), len(p["article"]["fulltext"].get("text", ""))))
+                    from .tools.fulltext import merge_attempts
+                    history = merge_attempts(*[
+                        [{**a, "source_session_id": a.get("source_session_id", p["session_id"])}
+                            for a in p["article"]["fulltext"].get("attempts", [])] for p in packets])
+                    if history:
+                        packet["article"]["fulltext"]["attempts"] = history
+                    candidates[cursor-1].update(analysis_available=bool(packet["article"]["analysis"]),
+                        fulltext_available=bool(packet["article"]["fulltext"].get("text")))
+                    result.append(packet)
+                if len(result) >= min(8, max(1, limit)):
+                    break
+            if not include_index:
+                return result
+            return {"articles": result, "candidate_index": candidates[max(0, offset):max(0, offset)+24],
+                "total": len(candidates), "offset": max(0, offset), "next_offset": cursor,
+                "has_more": cursor < len(candidates)}
+
     def session_read(self, row, detailed=True):
         result = {"id": row.id, "title": row.title, "created_at": iso(row.created_at), "updated_at": iso(row.updated_at),
             "active_run_id": row.active_run_id, "articles_total": len(row.data.get("articles", {})),
@@ -123,12 +229,18 @@ class ScholarV4Service:
         result["mode"] = row.data.get("mode", "express")
         from .writing_job import public
         result["writing_job"] = public(row.data.get("writing_job"))
+        if row.data.get("discovery_mode") == "original":
+            from .research import original_progress
+            result["research_progress"] = original_progress({**row.data,
+                "research_progress": dict(row.data.get("research_progress", {}))})
         if result["mode"] == "diagnostic_linked":
             from .diagnostic_link import summary
             result["diagnostic_context"] = summary(row.data["diagnostic_link"])
         if detailed:
             stored = row.data.get("articles", {})
-            pinned = list(dict.fromkeys([*row.data.get("evaluation", {}).get("recommended_article_ids", []),
+            pinned = list(dict.fromkeys([*row.data.get("displayed_article_ids", []),
+                *row.data.get("evaluation", {}).get("recommended_article_ids", []),
+                *[aid for aid, a in stored.items() if a.get("selection_override") is True],
                 *[aid for aid, a in stored.items() if a.get("selected")], *row.data.get("held_article_ids", []),
                 *list(stored)[-24:]]))
             result.update(messages=row.data.get("messages", []), articles=[Article.model_validate(stored[aid]).compact()
@@ -152,6 +264,7 @@ class ScholarV4Service:
             result["argument_blueprint_status"] = blueprint_status(row.data,
                 {aid: Article.model_validate(article) for aid, article in stored.items() if aid in status_ids})
             result["displayed_article_ids"] = row.data.get("displayed_article_ids", [])
+            result["consultant_order"] = row.data.get("consultant_order", [])
             result["held_article_ids"] = row.data.get("held_article_ids", [])
             result["consultant_decisions"] = row.data.get("consultant_decisions", [])[-30:]
         return result
@@ -721,7 +834,7 @@ class ScholarV4Service:
             # paused job is replaced by an explicit new drafting or research request.
             return (not job or job.get("status") != "running") and bool(
                 self.config.writing_job_enabled and wants_full_draft(data, message) or
-                self.config.research_job_enabled and wants_research(message))
+                self.config.research_job_enabled and getattr(self.config, "discovery_mode", "free") == "controlled" and wants_research(message))
 
     def open_run(self, owner, sid, message, *, job_id=None, executor=None):
         """Claim the session's run lease (one active run per conversation) and record the
@@ -758,7 +871,7 @@ class ScholarV4Service:
                 message_row = {"id": uuid.uuid4().hex, "role": "user", "content": message}
                 data["messages"] = [*data.get("messages", []), message_row]
                 kind = ("writing" if self.config.writing_job_enabled and wants_full_draft(data, message) else
-                    "research" if self.config.research_job_enabled and wants_research(message) else None)
+                    "research" if self.config.research_job_enabled and getattr(self.config, "discovery_mode", "free") == "controlled" and wants_research(message) else None)
                 if job and job["status"] == "waiting" and kind is None:
                     # The consultant writes during the job: it pauses and resumes only on request.
                     job.update(status="paused", paused_by_message_id=message_row["id"], updated_at=now())
@@ -911,6 +1024,7 @@ class ScholarV4Service:
                 agent = self.agent_factory() if self.agent_factory else ScholarChatAgent(config)
                 agent.config = config
                 agent.meter = meter
+                agent.article_memory = lambda query, **kw: self.article_memory(owner, sid, query, **kw)
                 result = agent.run(data, emit=activity, cancelled=cancelled)
             self.finish(owner, sid, rid, data, result, "cancelled" if result.get("reason") == "cancelled" else "partial" if result.get("partial") else "completed")
         except Exception as exc:

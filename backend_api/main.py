@@ -53,6 +53,8 @@ from routers import scholar_v2
 from routers import scholar_v3
 from routers import scholar_v31
 from routers import scholar_v4
+if os.getenv("ENNOSCHOLAR_V5_TEST_ENABLED") == "1":
+    from routers import scholar_v5
 from routers import cir_final_consultant
 from routers import cir_memory
 from routers import improvement
@@ -95,8 +97,12 @@ def create_app() -> FastAPI:
             content={"detail": str(exc), "code": "LLM_CAPACITY_TIMEOUT"},
         )
 
-    Base.metadata.create_all(bind=engine)
-    ensure_runtime_schema()
+    if os.getenv("ENNOSCHOLAR_V5_TEST_ENABLED") == "1" and os.getenv("ENNOSCHOLAR_V5_LOCAL_V4_DATABASE") == "1":
+        from agents.EnnoScholarV5.startup import create_local_v5_schema
+        create_local_v5_schema(engine, Base.metadata)
+    else:
+        Base.metadata.create_all(bind=engine)
+        ensure_runtime_schema()
 
     @app.on_event("startup")
     async def configure_request_thread_capacity() -> None:
@@ -118,6 +124,8 @@ def create_app() -> FastAPI:
     app.include_router(scholar_v3.router)
     app.include_router(scholar_v31.router)
     app.include_router(scholar_v4.router)
+    if os.getenv("ENNOSCHOLAR_V5_TEST_ENABLED") == "1":
+        app.include_router(scholar_v5.router)
 
     app.include_router(cir_final_consultant.router)
     app.include_router(cir_memory.router)

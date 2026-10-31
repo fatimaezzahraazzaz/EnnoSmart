@@ -13,7 +13,7 @@ FULL_REQUEST = re.compile(
     r"(?:rédig|redig).{0,50}état\s+de\s+l[’']art.{0,50}(?:complet|entier|intégral|integral)", re.I)
 PLAN_BEFORE_WRITING = re.compile(r"\bplan\b.{0,100}\bavant\s+de\s+(?:rédig|redig|écri|ecri)|\bne\s+(?:rédige|redige|rédiger|rediger)\s+pas\b", re.I)
 SECTION_REQUEST = re.compile(
-    r"(?:rédig|redig|approfond|développ|developp|révis|revis|amélior|amelior).{0,45}"
+    r"(?:rédig|redig|approfond|développ|developp|révis|revis|amélior|amelior|modifi|remplac|corrig).{0,45}"
     r"(?:la\s+)?section\s+(\d+|section_[a-f0-9]+)", re.I)
 # « la première section », « la deuxième section », « la dernière section » (run dcf5d05b:
 # « rédiger la première section » opened a draft of all eleven sections).
@@ -69,6 +69,30 @@ SECTION_START = re.compile(rf"(?:à\s+partir\s+de|(?:reprend|recommenc)\w*\s+(?:
 SECTION_END = re.compile(rf"{UNTIL}\s+la\s+section\s+{SECTION_ID}", re.I)
 
 
+def multi_section_requested(request):
+    """Require a positive writing action in the same clause as its plural target.
+
+    A mention of later sections, or the participle « déjà rédigée », is not an
+    instruction to write them. Keep explicit ranges and remaining-section requests.
+    """
+    action = re.compile(r"\b(?:rédig(?:e|er|ez|eons)|redig(?:e|er|ez|eons)|écri(?:s|re|vez)|"
+        r"ecri(?:s|re|vez)|reprends?|reprendre|poursuis|poursuivre|continue[rz]?|termin(?:e|er|ez)|"
+        r"achève[rz]?|acheve[rz]?|finalis(?:e|er|ez)|write)\b", re.I)
+    for clause in re.split(r"[.!?;\n]|,\s*(?=sans\b|ne\b)", request):
+        for match in action.finditer(clause):
+            prefix = clause[:match.start()]
+            if re.search(r"\b(?:sans|ne|pas|éviter\s+de|eviter\s+de)\s+(?:\w+\s+){0,3}$", prefix, re.I):
+                continue
+            if re.search(r"\b(?:avant\s+de|afin\s+de|pour(?:\s+\w+){0,4}|puissions|puisse|pourrons|pourra|seront)\s*$", prefix, re.I):
+                continue  # A future purpose/condition is not an additional writing order.
+            tail = clause[match.end():]
+            if re.match(r"\s+(?:pas|plus|jamais)\b", tail, re.I):
+                continue
+            if MULTI_SECTION_REQUEST.search(tail):
+                return True
+    return False
+
+
 def requested_range(state, request):
     """Plan sections bounded by the request ("à partir de la section 2", "sections 3 à 5"); all by default."""
     sections = state.get("outline", {}).get("sections", [])
@@ -92,7 +116,7 @@ def begin_writing(state, request):
     prior = document.get("writing_progress", {})
     single = requested_section(state, request)
     section_match = bool(single)
-    multi = bool(MULTI_SECTION_REQUEST.search(request) and WRITING_ACTION.search(request) and
+    multi = bool(multi_section_requested(request) and
         not PLAN_BEFORE_WRITING.search(request) and not SINGLE_SECTION_ONLY.search(request))
     if multi:
         section_match = False
@@ -151,9 +175,41 @@ def open_writing(state, mode="full", targets=None, baseline=None):
         "baseline_draft_ids": baseline or {}, "saved_draft_ids": {}, "errors": [], "section_status": {},
         "status": "running" if targets else "awaiting_plan",
         "approval_required": not bool(outline.get("approval"))}
+    from .instructions import current_request
+    progress["request_message_id"] = (current_request(state) or {}).get("id")
     state.setdefault("document", {})["writing_progress"] = progress
     refresh_writing(state)
     return progress
+
+
+def check_write_scope(state, section_id=None, *, plan_change=False):
+    """Check the active request and a job's pinned scope before any manuscript write."""
+    progress = state.get("document", {}).get("writing_progress") or {}
+    from .instructions import current_request
+    current = current_request(state) or {}
+    request = current.get("content", "")
+    target = requested_section(state, request)
+    if target and (not multi_section_requested(request) or SINGLE_SECTION_ONLY.search(request)):
+        if plan_change:
+            raise ValueError("Révision ciblée : le plan doit rester inchangé.")
+        if section_id is not None and section_id != target:
+            raise ValueError("Écriture hors du périmètre de la section explicitement demandée.")
+    if not progress:
+        return
+    if progress.get("request_message_id") and current.get("id") != progress["request_message_id"]:
+        return  # An old completed progress does not authorize/restrict a later request.
+    segment = state.get("writing_segment")
+    if segment:
+        from .writing_job import scope_problem
+        problem = scope_problem(segment, state)
+        if problem:
+            raise ValueError(problem)
+    if progress.get("plan_revision") != state.get("outline", {}).get("plan_revision"):
+        raise ValueError("Le plan a changé ; la portée de rédaction doit être confirmée.")
+    if plan_change and progress.get("mode") == "section":
+        raise ValueError("Révision ciblée : le plan et les autres sections doivent rester inchangés.")
+    if section_id is not None and section_id not in progress.get("target_ids", []):
+        raise ValueError("Écriture hors du périmètre des sections demandées.")
 
 
 def refresh_writing(state, *, final=False):
@@ -208,6 +264,8 @@ def confirmed_save(state, section_id, draft_id, text):
     current = (section.get("drafts") or [{}])[-1]
     if current.get("id") != draft_id or current.get("text") != text:
         raise ValueError("La sauvegarde confirmée ne correspond pas au brouillon enregistré.")
+    if progress["mode"] == "section" and draft_id == progress.get("baseline_draft_ids", {}).get(section_id):
+        raise ValueError("La révision exige une nouvelle version de la section demandée.")
     refresh_writing(state)
     return progress
 
@@ -235,7 +293,12 @@ def writing_answer(state, stop_reason=None):
     saved = [(sid, sections[sid]) for sid in progress["target_ids"]
         if sid in progress["saved_draft_ids"] and sid in sections]
     if progress["mode"] == "section" and progress["status"] == "draft_complete":
-        return f"La section « {saved[0][1]['title']} » a été enregistrée. Sa version actuelle est disponible dans l’artefact."
+        action = "mise à jour" if progress.get("baseline_draft_ids", {}).get(saved[0][0]) else "enregistrée"
+        return f"La section « {saved[0][1]['title']} » a été {action}. Sa version actuelle est disponible dans l’artefact."
+    if progress["mode"] == "section":
+        title = sections[progress["target_ids"][0]]["title"]
+        previous = " La version précédente est conservée." if any(progress.get("baseline_draft_ids", {}).values()) else ""
+        return f"La rédaction de la section « {title} » n’a pas été enregistrée." + previous
     # Drafts requested by the consultant are saved without an intermediate approval;
     # the approval status stays in the data (approval_required) for the final
     # human validation and is not repeated in every progress message.

@@ -171,7 +171,8 @@ def refresh_task(task, article):
             "parameters": ("parameters",), "experimental_protocol": ("experimental_setup", "validation_protocol", "datasets_materials"),
             "results": ("results",), "metrics": ("metrics",),
             "limits": ("limitations", "conditions_of_validity")}.items()}
-    tables = article.fulltext.get("tables") or []
+    tables = [*(article.fulltext.get("tables") or []),
+        *(c["table"] for c in article.fulltext.get("chunks", []) if c.get("table"))]
     ambiguous_tables = [t.get("number") for t in tables if isinstance(t, dict) and t.get("structure_status") == "ambiguous"]
     task["result_availability"] = {
         "source": "retrieved" if task["basis"] == "fulltext" else "not_retrieved",
@@ -297,6 +298,20 @@ def comparison_blockers(state, article_ids):
         return []  # Existing policy: explicit, documented partial comparison.
     return [t["article_id"] for t in ledger.get("tasks", [])
         if t["article_id"] in article_ids and not comparison_ready(t)]
+
+
+def resume_orphaned_windows(state, keep=()):
+    """At the start of a segment nothing is being analysed: a window prepared before the previous segment ended
+    (its focus is not carried over) would leave its task « awaiting_analysis » forever, transition() asking
+    « read » and nothing read (offline replay of run 9c7625c8: job stalled). Such a task becomes « partial »
+    again; prepare_reading() then restores the same window from task["pending"] (never a new one). Only at
+    segment start: during a segment, background analyses legitimately wait with their own windows."""
+    resumed = []
+    for task in state.get("scientific_reading", {}).get("tasks", []):
+        if task.get("status") == "awaiting_analysis" and task.get("pending") and task["article_id"] not in keep:
+            task["status"] = "partial"
+            resumed.append(task["article_id"])
+    return resumed
 
 
 def next_task(state, registry, priority_ids=(), required_fields=(), core_only=False, skip_depth_ids=()):
@@ -787,7 +802,7 @@ def reading_context(state, toolkit, *, focus=None):
             if not article.analysis.get(name)],
         # Short references cut the analysis output (an evidence_id is ~15 tokens);
         # the save maps them back to the exact evidence before any check.
-        "passages": [{**evidence_projection(toolkit.evidence[eid]), "ref": ref}
+        "passages": [{**evidence_projection(toolkit.evidence[eid], toolkit.snapshots), "ref": ref}
             for ref, eid in evidence_refs(focus).items() if eid in toolkit.evidence],
         "pending_passages": len(focus.get("queued_evidence_ids", [])),
         "scientific_question": next((t.get("research_query") for t in state.get("scientific_reading", {}).get("tasks", [])

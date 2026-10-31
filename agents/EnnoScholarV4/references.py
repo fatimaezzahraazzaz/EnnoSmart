@@ -40,7 +40,8 @@ COUNT = re.compile(r"\b(?:les|des|aux|ces)\s+(deux|2|trois|3|quatre|4)\b(?=\s+" 
 NUMBERS = {"deux": 2, "2": 2, "trois": 3, "3": 3, "quatre": 4, "4": 4}
 CONSTRAINTS = {
     "no_search": re.compile(r"\b(?:aucune?|sans|pas\s+de|ne\s+(?:fais|lance|effectue)\s+(?:aucune?|pas\s+de))\s+"
-        r"(?:nouvelle\s+)?(?:recherche|découverte)|\bne\s+(?:cherche|recherche)\s+pas\b|no\s+new\s+search", re.I),
+        r"(?:nouvelle\s+)?(?:recherche|découverte)|\bne\s+(?:cherche|recherche)\s+pas\b|"
+        r"\bsans\s+(?:effectuer|faire|lancer)\s+(?:de\s+)?(?:nouvelle\s+)?recherche\b|no\s+new\s+search", re.I),
     "no_download": re.compile(r"\b(?:aucun|sans|pas\s+de)\s+(?:nouveau\s+)?téléchargement|\bne\s+télécharge\s+pas\b", re.I),
     "no_reanalysis": re.compile(r"\b(?:aucune?|sans|pas\s+de|ni)\s+(?:nouvelle\s+)?(?:ré-?analyse|reanalyse|analyse\s+nouvelle|"
         r"nouvelle\s+analyse)|\buniquement\s+(?:les\s+)?(?:analyses|fiches)\s+(?:et\s+preuves\s+)?déjà|"
@@ -49,6 +50,8 @@ CONSTRAINTS = {
         r"(?:déjà\s+)?enregistrées|sans\s+relancer\s+(?:de\s+)?(?:nouvelle\s+)?analyse", re.I),
     "no_manuscript_change": re.compile(r"\b(?:aucune|sans|pas\s+de)\s+modification\s+(?:de\s+)?(?:mon|du|l['’]|notre)\s*"
         r"(?:état|etat|manuscrit|document|plan)|\bne\s+modifie\s+(?:pas|rien)\b", re.I),
+    "no_drafting": re.compile(r"\bne\s+(?:rédige|redige|rédigez|redigez|écris|ecris)\s+(?:pas|rien)\b|"
+        r"\bsans\s+(?:encore\s+)?(?:rédiger|rediger|rédaction|redaction)\b", re.I),
 }
 
 # Tools each explicit constraint excludes (before the request, and refused by the toolkit).
@@ -60,6 +63,7 @@ FORBIDDEN_TOOLS = {
     # in the toolkit (within_request_scope), since the same tool serves both.
     "no_reanalysis": (),
     "no_manuscript_change": ("write_section", "manage_outline", "create_scientific_visual"),
+    "no_drafting": ("write_section", "create_scientific_visual"),
 }
 
 
@@ -121,7 +125,36 @@ def named_publications(message, registry):
 
 
 def constraints_of(message):
-    return [name for name, pattern in CONSTRAINTS.items() if pattern.search(message or "")]
+    text = message or ""
+    constraints = [name for name, pattern in CONSTRAINTS.items() if pattern.search(text)]
+    if (re.search(r"\b(?:plan|manuscrit|document|état\s+de\s+l['’]art)\b", text, re.I) and
+            re.search(r"\bsans\s+(?:(?:le|la|les)\s+)?(?:modifier|changer|réécrire|reecrire)\b", text, re.I)):
+        constraints = list(dict.fromkeys([*constraints, "no_manuscript_change"]))
+    return constraints
+
+
+def opens_literature_search(message):
+    """An explicit request for publications, rather than a reference to old works.
+
+    Reuse the research request/object recognition; do not interpret scientific merit.
+    « ces travaux » later in that request denotes the works to discover.
+    """
+    text = message or ""
+    if "no_search" in constraints_of(text):
+        return False
+    # Lexical fallback only. Discovery can be expressed across clauses, or refer
+    # to an unfinished selection instead of repeating the word « articles ».
+    publication = re.search(r"\b(?:articles?|publications?|papers?|travaux|littérature|literature)\b", text, re.I)
+    action = re.search(r"\b(?:recherch\w*|cherch\w*|trouv\w*|search|find|identify)\b", text, re.I)
+    continuation = re.search(r"\b(?:poursui\w*|repren\w*|reprends|continu\w*|compl[ée]t\w*)\b", text, re.I)
+    unfinished = re.search(r"\b(?:recherche|s[ée]lection|bibliographie|manquants?|autres)\b", text, re.I)
+    question = re.search(r"\b(?:existe|existent|connais|connaissez)\b", text, re.I)
+    # A past search mentioned while revising a section is not a new search.
+    past = re.search(r"\b(?:d[ée]j[àa]\s+(?:trouv[ée]s?|recherch[ée]s?)|(?:avons|avez|a)\s+(?:trouv[ée]|recherch[ée]))\b", text, re.I)
+    return bool((publication and action and (not past or continuation or re.search(r"\bnouvea(?:ux|u|lles?)\b", text, re.I))) or
+        (continuation and unfinished and (publication or re.search(r"\brecherche\b|\bmanquants?\b", text, re.I))) or
+        (action and re.search(r"\b(?:autres|manquants?)\b", text, re.I)) or
+        (question and publication and re.search(r"\bd['’]autres\b|\br[ée]cent", text, re.I)))
 
 
 def resolve(state, registry, message):
@@ -140,6 +173,20 @@ def resolve(state, registry, message):
     named = [aid for aid in named_publications(message, registry)]
     if named:
         return {**result, "article_ids": named, "source": "current_message", "resolved_from": message_id}
+    # Explicit article numbers address the same conversational list as ordinals.
+    # This resolves references only; the model still interprets accept/reject.
+    numbered = re.findall(r"\b(?:articles?|publications?|papiers?)\s+(\d+(?:\s*(?:,|et|and|&)\s*"
+        r"(?:(?:l['’]|les?\s+)?(?:articles?|publications?|papiers?)\s+)?\d+)*)\b", message or "", re.I)
+    if numbered:
+        positions = list(dict.fromkeys(int(n) for group in numbered for n in re.findall(r"\d+", group)))
+        order, source = current_order(state)
+        if not order or any(n < 1 or n > len(order) or order[n-1] not in registry for n in positions):
+            return {**result, "ambiguous": True, "source": source, "candidates": order,
+                "clarification": "Les numéros demandés ne correspondent pas tous aux publications du dernier échange."}
+        ids = [order[n-1] for n in positions]
+        return {**result, "article_ids": ids, "source": source, "resolved_from": answer_run(state, ids)}
+    if opens_literature_search(message or ""):
+        return result
     implicit = (IMPLICIT.search(message or "") or ORDINAL.search(message or "") or EARLIER.search(message or "")
         or (POSSESSIVE.search(message or "") and not OWN_SET.search(message or "")))
     if not implicit:

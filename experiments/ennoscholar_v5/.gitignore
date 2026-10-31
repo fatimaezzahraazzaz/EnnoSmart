@@ -1,0 +1,5 @@
+.deps/
+.artifacts/
+__pycache__/
+# V5 offline tests are kept under version control (the root rule **/test_*.py ignores them).
+!tests/test_*.py

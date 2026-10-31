@@ -43,6 +43,47 @@ def format_reference(meta):
     return ". ".join(p for p in parts if p) + ("" if url else ".")
 
 
+def proof_locator(row, snapshots=None):
+    """A display-only correction from a literal heading in the archived passage.
+
+    Never mutate source evidence: its section is part of the source fingerprint.
+    No page number, bibliographic identity or passage text is inferred.
+    """
+    locator = {"section": row.get("section"), "page_number": row.get("page_number", row.get("page"))}
+    if (row.get("section") or "").strip().casefold() == "references":
+        from .tools.extraction import scientific_heading
+        def leading_heading(text):
+            line = next((line for line in text.splitlines()
+                if line.strip() and not re.fullmatch(r"\s*\d+\s*", line)), "")
+            return scientific_heading(line)
+        # Continuation pages may have no heading of their own. Reuse only a
+        # literal preceding heading in this exact, verified source snapshot.
+        from .evidence import exact_source_valid
+        if snapshots and leading_heading(row.get("exact_quote", "")) is None and exact_source_valid(row, snapshots):
+            source = snapshots[row["source_fingerprint"]]
+            previous = None
+            for chunk in source.get("chunks", [])[:row.get("chunk_index", -1)+1]:
+                found = leading_heading(chunk.get("text", ""))
+                # A table/figure caption identifies its own passage, not every
+                # later page. Only section headings carry across chunks.
+                if found and not re.search(r"\b(?:Table|Fig(?:ure)?\.?)\s*[A-Z]?\d", found, re.I):
+                    previous = (found, chunk.get("page"))
+            if previous and previous[0].casefold() != "references":
+                locator.update(section=previous[0], display_correction={"stored_section": row["section"],
+                    "basis": "literal_preceding_heading_in_exact_source_snapshot", "evidence_id": row.get("evidence_id"),
+                    "source_fingerprint": row.get("source_fingerprint"), "heading_page_number": previous[1]})
+        for line in row.get("exact_quote", "").splitlines():
+            if not line.strip() or re.fullmatch(r"\s*\d+\s*", line):
+                continue
+            heading = scientific_heading(line)
+            if heading and heading.casefold() != "references":
+                locator.update(section=heading, display_correction={"stored_section": row["section"],
+                    "basis": "literal_heading_in_exact_quote", "evidence_id": row.get("evidence_id"),
+                    "source_fingerprint": row.get("source_fingerprint")})
+            break  # Only an explicit leading heading; no title inference from body prose.
+    return locator
+
+
 def render_manuscript(state, sections, article_metadata=None, evidence=None):
     """Readable bodies and numbered apparatus for the drafted sections, in plan order."""
     from .diagnostic_link import diagnostic_evidence, passage_index
@@ -87,7 +128,7 @@ def render_manuscript(state, sections, article_metadata=None, evidence=None):
     for eid, n in proofs.items():
         row = evidence[eid]
         proof_rows.append({"number": f"P{n}", "evidence_id": eid, "reference": references.get(row["article_id"]),
-            "section": row.get("section"), "page_number": row.get("page_number"), "quote": row.get("exact_quote", "")[:500]})
+            **proof_locator(row, state.get("source_snapshots")), "quote": row.get("exact_quote", "")[:500]})
     source_rows = []
     for cid, n in sources.items():
         row = project.get(cid, {})

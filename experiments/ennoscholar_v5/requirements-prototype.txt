@@ -1,0 +1,7 @@
+# Versions actually exercised; do not install into the running V4 environment.
+langgraph==1.2.11
+langgraph-checkpoint==4.3.1
+langgraph-checkpoint-postgres==3.1.2
+langgraph-checkpoint-sqlite==3.1.2
+pytest==9.1.1
+websockets==16.0

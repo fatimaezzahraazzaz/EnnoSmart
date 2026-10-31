@@ -181,7 +181,7 @@ def comparison_batches(state, registry):
         if len(ids[offset:offset+4]) >= 2]
 
 
-def argument_packet(state, toolkit, ids=None, *, claim_offsets=None):
+def argument_packet(state, toolkit, ids=None, *, claim_offsets=None, active_only=False):
     ids = active_articles(state, toolkit.registry) if ids is None else ids
     ids = list(dict.fromkeys(aid for aid in ids if aid in toolkit.registry and
         toolkit.registry[aid].selection_override is not False))
@@ -189,7 +189,8 @@ def argument_packet(state, toolkit, ids=None, *, claim_offsets=None):
     papers = []
     for aid in ids:
         article = toolkit.registry[aid]
-        projection = analysis_projection(article.analysis, evidence=toolkit.evidence)
+        projection = analysis_projection(article.analysis, evidence=toolkit.evidence,
+            active_only=active_only, snapshots=toolkit.snapshots if active_only else None)
         all_claims = list(claim_entries(projection))
         start = max(0, min(claim_offsets.get(aid, 0), len(all_claims)))
         analysis = {k: v for k, v in projection.items() if not isinstance(v, list) or not v or not isinstance(v[0], dict)}
@@ -206,11 +207,11 @@ def argument_packet(state, toolkit, ids=None, *, claim_offsets=None):
         for eid in dict.fromkeys(proof_ids):
             # Omit null metadata only; exact quotes, known provenance and table
             # conditions stay intact. Original receipts remain in the source store.
-            proofs.append({k: v for k, v in evidence_projection(toolkit.evidence[eid]).items() if v is not None and v != {}})
+            proofs.append({k: v for k, v in evidence_projection(toolkit.evidence[eid], toolkit.snapshots).items() if v is not None and v != {}})
         if not proofs:
             anchor = next((e for e in article.analysis.get("evidence", []) if e["evidence_id"] in toolkit.shown_evidence and exact_source_valid(e, toolkit.snapshots)), None)
             if anchor:
-                proofs.append({k: v for k, v in evidence_projection(anchor).items() if v is not None and v != {}})
+                proofs.append({k: v for k, v in evidence_projection(anchor, toolkit.snapshots).items() if v is not None and v != {}})
         papers.append({"id": aid, "title": article.title, "year": article.year, "doi": article.doi,
             "source_version": article.source_version, "scientific_families": article.scientific_families,
             "reading_status": article_reading_status(state, article), "analysis": analysis,
@@ -246,13 +247,15 @@ def argument_packet(state, toolkit, ids=None, *, claim_offsets=None):
 # Exact-proof locators for comparison/blueprint windows: the quotation stays in the
 # evidence store (already validated against each saved claim, and re-checked when a
 # relation is saved); the window carries whole claims and where their proofs are.
-PROOF_REFERENCE_KEYS = ("evidence_id", "article_id", "section", "page_number", "printed_page", "basis", "table_structure_status")
+PROOF_REFERENCE_KEYS = ("evidence_id", "article_id", "section", "page_number", "printed_page", "basis", "table_structure_status", "table_restrictions")
 
 
-def proof_reference(evidence):
+def proof_reference(evidence, snapshots=None):
+    if snapshots is not None:
+        evidence = evidence_projection(evidence, snapshots)
     row = {k: evidence.get(k) for k in PROOF_REFERENCE_KEYS if evidence.get(k) not in (None, "", {})}
     if isinstance(evidence.get("table"), dict):
-        row["table"] = {k: evidence["table"].get(k) for k in ("number", "caption") if evidence["table"].get(k)}
+        row["table"] = {k: evidence["table"].get(k) for k in ("number", "caption", "structure_status") if evidence["table"].get(k)}
     row["exact_quote_stored"] = True
     return row
 
@@ -266,6 +269,22 @@ def bounded_argument_packet(packet, limit=10000, *, proof_mode="exact"):
     result.update(papers=[], next_claim_offsets={}, omitted_claims={}, transmission_partial=False,
         omitted_article_ids=[], deferred_information={}, other_information_partial=False, blocked_by_context=False)
     result["reading_scope"] = "Targeted scientific sections; never an exhaustive whole-document assertion."
+    conversation_project_room = 0
+    if original.get("project_facts") and not original.get("project_context"):
+        # Express conversations can document a project too. Keep a bounded
+        # project side, just as for a linked diagnostic, rather than deleting
+        # every fact before asking the model to confront it with the literature.
+        # Whole facts retain their exact quotation and current-source status.
+        result["project_facts"] = []
+        for fact in original["project_facts"]:
+            result["project_facts"].append(fact)
+            if size(result["project_facts"]) > max(1000, limit*.30):
+                result["project_facts"].pop()
+        result["project_facts_total"] = original.get("project_facts_total", len(original["project_facts"]))
+        deferred = result["project_facts_total"]-len(result["project_facts"])
+        if deferred:
+            result["deferred_information"]["project_facts"] = deferred
+        conversation_project_room = size(result["project_facts"])
     if original.get("project_context"):
         # Keep the project side inside the existing window, reserving room for
         # scientific papers. The large full project_facts list is recoverable.
@@ -291,6 +310,8 @@ def bounded_argument_packet(packet, limit=10000, *, proof_mode="exact"):
             "citer les evidence_ids, les chiffres sont revérifiés à l'enregistrement")
     # Whole optional records are deferred, never clipped into misleading claims.
     for key in ("existing_blueprint", "outline_sections", "active_paper_index", "project_facts", "research_gaps", "relations"):
+        if key == "project_facts" and conversation_project_room:
+            continue
         if key == "project_facts" and original.get("project_context"):
             while size(result) > limit*.20+size(result["project_context"]):
                 old = next((f for f in reversed(result["project_facts"]) if f.get("source_type") != "diagnostic_snapshot"), None)
@@ -301,7 +322,7 @@ def bounded_argument_packet(packet, limit=10000, *, proof_mode="exact"):
             if not result["deferred_information"]["project_facts"]:
                 result["deferred_information"].pop("project_facts")
             continue
-        if size(result) <= limit*.20 + (size(result["project_context"]) if original.get("project_context") else 0):
+        if size(result) <= limit*.20 + (size(result["project_context"]) if original.get("project_context") else conversation_project_room):
             break
         value = result.get(key)
         if value:

@@ -1,5 +1,6 @@
 """Exclusive V4 provider policy. Historical receipts are never normalized here."""
-MODEL = "gpt-6-luna"
+# Original model of the V4 of 2026-10-13 (restored 2026-10-23 at the consultant's request; gpt-6-luna before).
+MODEL = "gpt-6.1-sol"
 
 
 class ModelPolicyError(ValueError):
@@ -18,9 +19,9 @@ def request_policy(kwargs):
     sent["service_tier"] = "default"
     effort = (sent.get("reasoning") or {}).get("effort", "medium")
     if effort not in {"none", "low", "medium", "high", "xhigh", "max"}:
-        raise ModelPolicyError("reasoning.effort incompatible avec gpt-6-luna.")
+        raise ModelPolicyError(f"reasoning.effort incompatible avec {MODEL}.")
     if sent.get("max_output_tokens", 1) > 128000:
-        raise ModelPolicyError("gpt-6-luna : max_output_tokens dépasse 128000.")
+        raise ModelPolicyError(f"{MODEL} : max_output_tokens dépasse 128000.")
     extra = sent.get("extra_body") or {}
     if any(key in extra for key in ("model", "service_tier", "reasoning", "max_output_tokens")):
         raise ModelPolicyError("Un extra_body ne peut pas remplacer la politique LLM V4.")

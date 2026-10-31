@@ -1961,3 +1961,22 @@ export async function scholarV4Blob(path: string): Promise<Blob> {
   }
   return response.blob()
 }
+
+/** Independent V5 endpoints using the existing authentication. */
+export function scholarV5Request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  return apiRequest<T>(`/scholar-v5${path}`, options)
+}
+
+/** Private V5 document assets use the same token renewal as JSON requests. */
+export async function scholarV5Blob(path: string): Promise<Blob> {
+  let token = getAccessToken()
+  if (!token) throw new Error("Utilisateur non authentifié.")
+  const request = () => fetch(`${API_BASE_URL}/scholar-v5${path}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" })
+  let response = await request()
+  if (response.status === 401) { token = await renewAccessToken(); if (token) response = await request() }
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.detail || "Document indisponible.")
+  }
+  return response.blob()
+}

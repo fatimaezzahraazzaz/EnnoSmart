@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 import time
 import unicodedata
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote, unquote, urlsplit
 
 from agents.EnnoScholarV2.config import ScholarConfig
@@ -94,22 +94,46 @@ def provider_query(provider, query):
     return _arxiv(tree) or query
 
 
-# arXiv has no relevance quorum: every AND term must appear in the title or abstract.
-# Six required terms returned nothing in the real runs (e7bae458, d71d17b0).
-ARXIV_REQUIRED_TERMS = 4
-
-
 def arxiv_plain_query(terms):
-    """A plain query for arXiv: short queries require every term; longer ones require
-    their first two concepts and at least one of the others, ranked by arXiv relevance."""
-    field = lambda term: f"ti:{term} OR abs:{term}"
-    if len(terms) <= ARXIV_REQUIRED_TERMS:
-        return " AND ".join(f"({field(term)})" for term in terms)
-    return " AND ".join(f"({field(term)})" for term in terms[:2]) + " AND (" + " OR ".join(field(t) for t in terms[2:]) + ")"
+    """A plain query for arXiv, as in the V4 of 2026-10-13 (restored 2026-10-23): every concept of the model's query
+    is required in the title or the abstract (quoted phrases count as one concept), ranked by arXiv relevance. The
+    model chooses its words; boolean queries are translated by provider_query instead."""
+    return " AND ".join(f"(ti:{term} OR abs:{term})" for term in dict.fromkeys(terms))
+
+
+class LocalWaitTimeout(TimeoutError):
+    """The collection deadline passed while waiting for our own pacing slot: no request was sent,
+    so this is neither a network failure nor a provider refusal."""
+
+
+def failure_category(exc):
+    """local_wait (our pacing, nothing sent), provider_refused (an HTTP answer: 429, 5xx, 4xx),
+    network (transport error or timeout on the wire), other."""
+    import httpx
+    if isinstance(exc, LocalWaitTimeout):
+        return "local_wait"
+    if isinstance(exc, httpx.HTTPStatusError):
+        return "provider_refused"
+    if isinstance(exc, (httpx.TransportError, httpx.TimeoutException, ConnectionError, TimeoutError)):
+        return "network"
+    return "other"
+
+
+def title_text(value):
+    """Visible registry title, preserving inline scientific indices and symbols."""
+    import html
+    from bs4 import BeautifulSoup
+    value = html.unescape(value or "")
+    value = re.sub(r"\s*<(sub|sup)\b[^>]*>\s*(.*?)\s*</\1>",
+        lambda m: BeautifulSoup(m[2], "html.parser").get_text("", strip=True), value, flags=re.I | re.S)
+    if re.search(r"</?[a-z][^>]*>", value, re.I):
+        value = BeautifulSoup(value, "html.parser").get_text(" ", strip=True)
+    return " ".join(unicodedata.normalize("NFKC", value).split())
 
 
 def title_key(value):
-    return " ".join(re.sub(r"[^\w\s]", " ", unicodedata.normalize("NFKC", value).casefold()).split())
+    return " ".join(re.sub(r"[^\w\s]", lambda m: m[0] if unicodedata.category(m[0]) == "Sm" else " ",
+        title_text(value).casefold()).split())
 
 
 class V4ScientificSearch(ScientificSearch):
@@ -140,7 +164,7 @@ class V4ScientificSearch(ScientificSearch):
             with V4ScientificSearch._semantic_lock:
                 delay = max(0, V4ScientificSearch._semantic_next_request-time.monotonic())
                 if deadline is not None and time.monotonic()+delay >= deadline:
-                    raise TimeoutError("Délai de collecte atteint avant disponibilité Semantic Scholar.")
+                    raise LocalWaitTimeout("Délai de collecte atteint avant disponibilité Semantic Scholar (aucune requête envoyée).")
                 time.sleep(delay)
                 V4ScientificSearch._semantic_next_request = time.monotonic()+1.1
                 return self._get_paced(url, params=params, headers=headers, deadline=deadline)
@@ -270,13 +294,18 @@ class ScientificSources:
                 article.verification_sources = [*article.verification_sources, registry_url + doi]
                 if normalize_doi(record.get("DOI", "")) != doi or (expected_title and title_key(exact) != title_key(expected_title)):
                     article.verified = False
-                    article.metadata_errors.append("DOI/title mismatch")
+                    self.verification_receipt(article, record, "conflict", expected_title)
+                    if "DOI/title mismatch" not in article.metadata_errors:
+                        article.metadata_errors.append("DOI/title mismatch")
                     return article
                 if article.title and title_key(article.title) != title_key(exact):
                     article.verified = False
-                    article.metadata_errors.append("DOI/title mismatch")
+                    self.verification_receipt(article, record, "conflict", expected_title)
+                    if "DOI/title mismatch" not in article.metadata_errors:
+                        article.metadata_errors.append("DOI/title mismatch")
                     return article
-                article.title = exact
+                observed_title = article.title
+                article.title = title_text(exact)
                 article.authors = [" ".join(filter(None, [a.get("given"), a.get("family")])) for a in record.get("author", [])]
                 date = (record.get("published") or record.get("issued") or {}).get("date-parts", [[]])[0]
                 article.year = date[0] if date else article.year
@@ -288,7 +317,12 @@ class ScientificSources:
                     from bs4 import BeautifulSoup
                     article.abstract = BeautifulSoup(record["abstract"], "html.parser").get_text(" ", strip=True)
                 article.verified = bool(exact and article.authors and article.year)
-                article.metadata_errors = [error for error in article.metadata_errors if error != "DOI registry unavailable; verify original publication page"]
+                if article.verified:
+                    resolved = [error for error in article.metadata_errors if error in {
+                        "DOI/title mismatch", "DOI registry unavailable; verify original publication page"}]
+                    self.verification_receipt(article, record, "verified", expected_title,
+                        observed_title=observed_title, resolved_errors=resolved)
+                    article.metadata_errors = [error for error in article.metadata_errors if error not in resolved]
             elif not article.verified:
                 # A DOI registry outage must not silently validate a publisher/title association.
                 article.metadata_errors.append("DOI registry unavailable; verify original publication page")
@@ -296,6 +330,19 @@ class ScientificSources:
             article.verified = False
             article.metadata_errors.append("Expected title differs from retrieved title")
         return article
+
+    @staticmethod
+    def verification_receipt(article, record, status, expected_title="", *, observed_title=None, resolved_errors=()):
+        """Reuse the notice history; current errors and resolved conflicts stay distinct."""
+        receipt = {"kind": "bibliographic_verification", "status": status,
+            "doi": article.doi, "registry_doi": record.get("DOI"),
+            "observed_title": article.title if observed_title is None else observed_title,
+            "registry_title": (record.get("title") or [""])[0], "expected_title": expected_title,
+            "resolved_errors": list(resolved_errors), "conflict_status": "resolved" if resolved_errors else
+                "active" if status == "conflict" else "none", "method": "exact_normalized_registry_title"}
+        if not any(all(old.get(k) == v for k, v in receipt.items()) for old in article.provider_notices):
+            receipt["checked_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            article.provider_notices.append(receipt)
 
     def search(self, query, sources, limit, deadline, check=lambda: None, offset=0):
         providers = {"semantic_scholar": self.client.semantic, "openalex": self.client.openalex, "arxiv": self.client.arxiv}
@@ -321,18 +368,28 @@ class ScientificSources:
                 self.client.search_offset = 0
         # Providers run concurrently, each with a deadline and independent rate limits.
         with self.client.turn_cache(), ThreadPoolExecutor(max_workers=3) as pool:
-            futures = {pool.submit(collect, name): name for name in set(chosen)}
-            for future in as_completed(futures):
+            # Completion speed is not scientific relevance. Keep concurrency, but
+            # assemble the same provider buckets in a stable order.
+            futures = {name: pool.submit(collect, name) for name in sorted(set(chosen))}
+            for name, future in futures.items():
                 check()
                 try:
                     rows = [self.normalize(row, query) for row in future.result()]
+                    for rank, row in enumerate(rows):
+                        # Provenance kept on the notice: which provider returned it, at which rank, for which
+                        # query actually sent (diagnoses later losses: returned but not stored, or never returned).
+                        row.search_hits = [{"provider": name, "rank": offset+rank+1, "query_sent": sent[name][:300],
+                            "query": query[:300], "offset": offset}]
                     articles.extend(rows)
-                    self.last_provider_stats[futures[future]]["returned"] = len(rows)
+                    self.last_provider_stats[name]["returned"] = len(rows)
+                    self.last_provider_stats[name]["returned_titles"] = [row.title[:120] for row in rows][:60]
                 except Exception as exc:
                     response = getattr(exc, "response", None)
-                    warnings.append({"source": futures[future], "error": type(exc).__name__,
+                    category = failure_category(exc)
+                    warnings.append({"source": name, "error": type(exc).__name__, "category": category,
                         "http_status": getattr(response, "status_code", None),
                         "retry_after": getattr(response, "headers", {}).get("retry-after") if response is not None else None})
+                    self.last_provider_stats[name]["failure_category"] = category
         self.client.search_offset = 0
         # Registry verification is performed on examined/final articles, not hundreds of candidates.
         return articles, warnings
